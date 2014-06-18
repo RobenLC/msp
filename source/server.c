@@ -11,7 +11,7 @@
 
 int main(int argc, char *argv[])
 {
-    int listenfd = 0, connfd = 0, n;
+    int listenfd = 0, connfd = 0, n = 0, i = 0;
     struct sockaddr_in serv_addr; 
 
     char sendBuff[1025];
@@ -35,6 +35,10 @@ int main(int argc, char *argv[])
         connfd = accept(listenfd, (struct sockaddr*)NULL, NULL); 
 				n = read(connfd, recvBuff, 1024);
 				printf("\n Receive %d char \n", n);
+				for (i = 0; i < n; i++) {
+						if (i < 1024)
+								printf("%c", recvBuff[i]);
+				}
 
         ticks = time(NULL);
         snprintf(sendBuff, sizeof(sendBuff), "%.24s\r\n", ctime(&ticks));
