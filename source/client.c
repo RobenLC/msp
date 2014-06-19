@@ -14,18 +14,36 @@ int main(int argc, char *argv[])
     int sockfd = 0, n = 0, i = 0;
     char recvBuff[1024];
     char sendBuff[1024];
+    char *pi = 0;
     struct sockaddr_in serv_addr; 
 
-    if(argc != 2)
+    if(argc < 2)
     {
         printf("\n Usage: %s <ip of server> \n",argv[0]);
         return 1;
-    } 
+    }
+    
+    if (argc > 2) {
+    		pi = argv[2];
+    }
 		
-		for (i = 0; i < 1024; i++) {
-				sendBuff[i] = 0x41;
+		printf(" start: \n ");
+		if (pi) {
+				i = 0;
+				while (*pi != '\0'){
+						sendBuff[i] = *pi;
+						printf("%c", sendBuff[i]);
+						pi++; i++;
+				}
 		}
-	
+		else {
+				for (i = 0; i < 1024; i++) {
+						sendBuff[i] = 0x41;
+						printf("%c", sendBuff[i]);
+				}
+		}
+		printf("\n end");
+		
     memset(recvBuff, '0',sizeof(recvBuff));
     if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
@@ -50,7 +68,7 @@ int main(int argc, char *argv[])
        return 1;
     } 
 
-		n = write(sockfd, sendBuff, sizeof(sendBuff)-1);
+		n = write(sockfd, sendBuff, i-1);
 		printf("\n Send %d %c to server \n", n, 0x41);
 
     while ( (n = read(sockfd, recvBuff, sizeof(recvBuff)-1)) > 0)
