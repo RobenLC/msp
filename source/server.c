@@ -35,16 +35,17 @@ int main(int argc, char *argv[])
         connfd = accept(listenfd, (struct sockaddr*)NULL, NULL); 
 				n = read(connfd, recvBuff, 1024);
 				printf("\n Receive %d char \n", n);
-				printf(" start len: %d\n ", n);
+				printf(" start len: %d\n \"", n);
 				for (i = 0; i < n; i++) {
 						if (i < 1024)
 								printf("%c", recvBuff[i]);
 				}
+				
+				printf("\"\n end\n\n");
 				recvBuff[i+1] = '\0';
-				printf("\n end");
 				
         ticks = time(NULL);
-        snprintf(sendBuff, sizeof(sendBuff), "%.24s+ %s \r\n", ctime(&ticks), recvBuff);
+        snprintf(sendBuff, sizeof(sendBuff), "%.24s+ \"%s\" \r\n", ctime(&ticks), recvBuff);
         write(connfd, sendBuff, strlen(sendBuff)); 
 
         close(connfd);

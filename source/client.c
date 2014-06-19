@@ -27,7 +27,7 @@ int main(int argc, char *argv[])
     		pi = argv[2];
     }
 		
-		printf(" start: \n ");
+		printf(" start: \n \"");
 		if (pi) {
 				i = 0;
 				while (*pi != '\0'){
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 						printf("%c", sendBuff[i]);
 				}
 		}
-		printf("\n end");
+		printf("\"\n end");
 		
     memset(recvBuff, '0',sizeof(recvBuff));
     if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
