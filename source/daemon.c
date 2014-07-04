@@ -52,7 +52,8 @@ int sockserver(void)
         ticks = time(NULL);
         snprintf(sendBuff, sizeof(sendBuff), "%.24s+ \"%s\" \r\n", ctime(&ticks), recvBuff);
         write(connfd, sendBuff, strlen(sendBuff)); 
-
+				fprintf(fp, " %s\n ", sendBuff);
+				
         close(connfd);
         sleep(1);
         
