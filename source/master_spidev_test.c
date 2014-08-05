@@ -39,6 +39,8 @@ static uint8_t mode;
 static uint8_t bits = 8; 
 static uint32_t speed = 1000000; 
 static uint16_t delay; 
+static uint16_t command = 0; 
+static uint8_t loop = 0; 
  
 static void transfer(int fd) 
 { 
@@ -82,7 +84,71 @@ static void transfer(int fd)
     puts(""); 
     printf(" error count: %d\n", errcnt);
 } 
- 
+
+#if 1
+static void tx_command(
+	int fd, 
+	uint8_t *ex_rx, 
+	uint8_t *ex_tx, 
+	int ex_size)
+{
+	int ret;
+	uint8_t *tx;
+	uint8_t *rx;
+	int size;
+
+	tx = ex_tx;
+	rx = ex_rx;
+	size = ex_size;
+	
+	struct spi_ioc_transfer tr = {
+		.tx_buf = (unsigned long)tx,
+		.rx_buf = (unsigned long)rx,
+		.len = size,
+		.delay_usecs = delay,
+		.speed_hz = speed,
+		.bits_per_word = bits,
+	};
+	
+	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
+	if (ret < 1)
+		pabort("can't send spi message");
+}
+
+static void tx_data(int fd)
+{
+	int ret;
+	uint8_t tx[] = {
+		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+		0x40, 0x00, 0x00, 0x00, 0x00, 0x95,
+		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+		0xDE, 0xAD, 0xBE, 0xEF, 0xBA, 0xAD,
+		0xF0, 0x0D,
+	};
+	uint8_t rx[ARRAY_SIZE(tx)] = {0, };
+	struct spi_ioc_transfer tr = {
+		.tx_buf = (unsigned long)tx,
+		.rx_buf = (unsigned long)rx,
+		.len = ARRAY_SIZE(tx),
+		.delay_usecs = delay,
+		.speed_hz = speed,
+		.bits_per_word = bits,
+	};
+	
+	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
+	if (ret < 1)
+		pabort("can't send spi message");
+
+	for (ret = 0; ret < ARRAY_SIZE(tx); ret++) {
+		if (!(ret % 6))
+			puts("");
+		printf("%.2X ", rx[ret]);
+	}
+	puts("");
+}
+#endif
 static void print_usage(const char *prog)   //?????打印?助信息 
 { 
     printf("Usage: %s [-DsbdlHOLC3]\n", prog); 
@@ -95,7 +161,9 @@ static void print_usage(const char *prog)   //?????打印?助信息
          "  -O --cpol     clock polarity\n" 
          "  -L --lsb      least significant bit first\n" 
          "  -C --cs-high  chip select active high\n" 
-         "  -3 --3wire    SI/SO signals shared\n"); 
+         "  -3 --3wire    SI/SO signals shared\n"
+         "  -m --command  command mode\n"
+         "  -w --while(1) infinite loop\n"); 
     exit(1); 
 } 
  
@@ -107,6 +175,8 @@ static void parse_opts(int argc, char *argv[])
             { "speed",   1, 0, 's' }, 
             { "delay",   1, 0, 'd' }, 
             { "bpw",     1, 0, 'b' }, 
+						{ "command", 1, 0, 'm' }, 
+						{ "whloop",  1, 0, 'w' }, 
             { "loop",    0, 0, 'l' }, 
             { "cpha",    0, 0, 'H' }, 
             { "cpol",    0, 0, 'O' }, 
@@ -119,16 +189,18 @@ static void parse_opts(int argc, char *argv[])
         }; 
         int c; 
  
-        c = getopt_long(argc, argv, "D:s:d:b:lHOLC3NR", lopts, NULL); 
+        c = getopt_long(argc, argv, "D:s:d:b:m:w:lHOLC3NR", lopts, NULL); 
  
         if (c == -1) 
             break; 
  
         switch (c) { 
         case 'D':   //??名 
+       			printf(" -D %s \n", optarg);
             device = optarg; 
             break; 
         case 's':   //速率 
+        		printf(" -s %s \n", optarg);
             speed = atoi(optarg); 
             break; 
         case 'd':   //延??? 
@@ -161,6 +233,14 @@ static void parse_opts(int argc, char *argv[])
         case 'R':   //?机拉低?平停止?据?? 
             mode |= SPI_READY; 
             break; 
+        case 'm':   //command input
+        		printf(" -m %s \n", optarg);
+            command = strtoul(optarg, NULL, 16);
+            break;
+        case 'w':   //command input
+        		printf(" -w %s \n", optarg);
+            loop = atoi(optarg);
+            break;
         default:    //??的?? 
             print_usage(argv[0]); 
             break; 
@@ -172,7 +252,10 @@ int main(int argc, char *argv[])
 { 
     int ret = 0; 
     int fd; 
- 
+ 		uint8_t cmd_tx[16] = {0x53, 0x80,};
+		uint8_t cmd_rx[16] = {0,};
+		int cmd_size = 2;
+		
     parse_opts(argc, argv); //解析????的?? 
  
     fd = open(device, O_RDWR);  //打???文件 
@@ -215,8 +298,21 @@ int main(int argc, char *argv[])
     printf("spi mode: %d\n", mode); 
     printf("bits per word: %d\n", bits); 
     printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000); 
- 
-    	transfer(fd);   //???? 
+
+		if (command) {
+			cmd_tx[0] = command & 0xff;
+			cmd_tx[1] = (command >> 8) & 0xff;
+			//printf("\n tx:%x %x \n", cmd_tx[0], cmd_tx[1]);
+		}
+		
+		tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+		
+		while (loop) {
+			tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+		}
+    	
+    //printf("\n rx:%x %x \n", cmd_rx[0], cmd_rx[1]);
+    	//transfer(fd); 
  
     close(fd);  //???? 
  
