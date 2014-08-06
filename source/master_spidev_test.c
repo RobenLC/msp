@@ -319,7 +319,8 @@ int main(int argc, char *argv[])
 		}
 		
 		//tx_command(fd, cmd_rx, cmd_tx, cmd_size);
-   	
+
+		/* Tx/Rx buffer alloc */   	
    	buffsize = 1*1024*1024;
    	tx_buff = malloc(buffsize);
    	if (tx_buff) {
@@ -330,8 +331,8 @@ int main(int argc, char *argv[])
    		printf(" rx buff alloc success!!\n");
    	}
    	
+   	/* open target file which will be transmitted */
    	printf(" open file %s \n", data_path);
-   	//
    	fpd = fopen(data_path, "r");
    	
    	if (!fpd) {
@@ -339,26 +340,25 @@ int main(int argc, char *argv[])
    		return ret;
    	}
    	printf(" %s file open succeed \n", data_path);
-   	
+   	/* read the file into Tx buffer */
    	fsize = fread(tx_buff, 1, buffsize, fpd);
-   	
    	printf(" [%s] size: %d \n", data_path, fsize);
-    //printf("\n rx:%x %x \n", cmd_rx[0], cmd_rx[1]);
-    	//transfer(fd); 
+    	
+    /* transmit the file piece by piece */
+    #define PKT_SIZE 1024
     int usize;
     uint8_t *ptr;
     usize = fsize;
     ptr = tx_buff;
-
     while (usize) {
     	printf(" remain:%d ", usize);
-    	tx_data(fd, rx_buff, ptr, 1024);
+    	tx_data(fd, rx_buff, ptr, PKT_SIZE);
     	
-    	ptr += 1024;
-    	if (usize < 1024)
+    	ptr += PKT_SIZE;
+    	if (usize < PKT_SIZE)
     		usize = 0;
     	else
-    		usize -= 1024;
+    		usize -= PKT_SIZE;
     	
     }
     
