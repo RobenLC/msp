@@ -34,7 +34,8 @@ static void pabort(const char *s)
     abort(); 
 } 
  
-static const char *device = "/dev/spidev1.1"; 
+static const char *device = "/dev/spidev32765.0"; 
+static const char *data_path = "/root/tx/1.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
 static uint32_t speed = 1000000; 
@@ -115,23 +116,17 @@ static void tx_command(
 		pabort("can't send spi message");
 }
 
-static void tx_data(int fd)
+static void tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size)
 {
-	int ret;
-	uint8_t tx[] = {
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0x40, 0x00, 0x00, 0x00, 0x00, 0x95,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xDE, 0xAD, 0xBE, 0xEF, 0xBA, 0xAD,
-		0xF0, 0x0D,
-	};
-	uint8_t rx[ARRAY_SIZE(tx)] = {0, };
+	int ret, i, errcnt; 
+
+	uint8_t tg;
+	uint8_t *tx = tx_buff;
+	uint8_t *rx = rx_buff;
 	struct spi_ioc_transfer tr = {
 		.tx_buf = (unsigned long)tx,
 		.rx_buf = (unsigned long)rx,
-		.len = ARRAY_SIZE(tx),
+		.len = ex_size,
 		.delay_usecs = delay,
 		.speed_hz = speed,
 		.bits_per_word = bits,
@@ -140,12 +135,21 @@ static void tx_data(int fd)
 	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
 	if (ret < 1)
 		pabort("can't send spi message");
-
-	for (ret = 0; ret < ARRAY_SIZE(tx); ret++) {
-		if (!(ret % 6))
-			puts("");
-		printf("%.2X ", rx[ret]);
-	}
+		
+  //  errcnt = 0; i = 0;
+  //  for (ret = 0; ret < ex_size; ret++) { //打印接收??? 
+  //      if (!(ret % 6))     //6??据?一簇打印 
+  //          puts(""); 
+	//			tg = (ret - 0) & 0xff;
+	//			if (rx[ret] != tg) {
+	//    		errcnt++;
+	//    		i = 1;
+	//			}
+  //      printf("%.2X:%.2X/%d ", rx[ret], tg, i); 
+	//			i  = 0;
+  //  } 
+  //  puts(""); 
+  //  printf(" error count: %d\n", errcnt);
 	puts("");
 }
 #endif
@@ -163,7 +167,8 @@ static void print_usage(const char *prog)   //?????打印?助信息
          "  -C --cs-high  chip select active high\n" 
          "  -3 --3wire    SI/SO signals shared\n"
          "  -m --command  command mode\n"
-         "  -w --while(1) infinite loop\n"); 
+         "  -w --while(1) infinite loop\n"
+         "  -p --path     data path\n"); 
     exit(1); 
 } 
  
@@ -176,6 +181,7 @@ static void parse_opts(int argc, char *argv[])
             { "delay",   1, 0, 'd' }, 
             { "bpw",     1, 0, 'b' }, 
 						{ "command", 1, 0, 'm' }, 
+						{ "path   ", 1, 0, 'p' },
 						{ "whloop",  1, 0, 'w' }, 
             { "loop",    0, 0, 'l' }, 
             { "cpha",    0, 0, 'H' }, 
@@ -189,7 +195,7 @@ static void parse_opts(int argc, char *argv[])
         }; 
         int c; 
  
-        c = getopt_long(argc, argv, "D:s:d:b:m:w:lHOLC3NR", lopts, NULL); 
+        c = getopt_long(argc, argv, "D:s:d:b:m:w:p:lHOLC3NR", lopts, NULL); 
  
         if (c == -1) 
             break; 
@@ -241,6 +247,10 @@ static void parse_opts(int argc, char *argv[])
         		printf(" -w %s \n", optarg);
             loop = atoi(optarg);
             break;
+        case 'p':   //command input
+        		printf(" -p %s \n", optarg);
+            data_path = optarg;
+            break;
         default:    //??的?? 
             print_usage(argv[0]); 
             break; 
@@ -255,6 +265,9 @@ int main(int argc, char *argv[])
  		uint8_t cmd_tx[16] = {0x53, 0x80,};
 		uint8_t cmd_rx[16] = {0,};
 		int cmd_size = 2;
+		uint8_t *tx_buff, *rx_buff;
+		FILE *fpd;
+		int fsize, buffsize;
 		
     parse_opts(argc, argv); //解析????的?? 
  
@@ -302,18 +315,57 @@ int main(int argc, char *argv[])
 		if (command) {
 			cmd_tx[0] = command & 0xff;
 			cmd_tx[1] = (command >> 8) & 0xff;
-			//printf("\n tx:%x %x \n", cmd_tx[0], cmd_tx[1]);
+			printf("\n tx:%x %x \n", cmd_tx[0], cmd_tx[1]);
 		}
 		
-		tx_command(fd, cmd_rx, cmd_tx, cmd_size);
-		
-		while (loop) {
-			tx_command(fd, cmd_rx, cmd_tx, cmd_size);
-		}
-    	
+		//tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+   	
+   	buffsize = 1*1024*1024;
+   	tx_buff = malloc(buffsize);
+   	if (tx_buff) {
+   		printf(" tx buff alloc success!!\n");
+   	}
+   	rx_buff = malloc(buffsize);
+   	if (rx_buff) {
+   		printf(" rx buff alloc success!!\n");
+   	}
+   	
+   	printf(" open file %s \n", data_path);
+   	//
+   	fpd = fopen(data_path, "r");
+   	
+   	if (!fpd) {
+   		printf(" %s file open failed \n", data_path);
+   		return ret;
+   	}
+   	printf(" %s file open succeed \n", data_path);
+   	
+   	fsize = fread(tx_buff, 1, buffsize, fpd);
+   	
+   	printf(" [%s] size: %d \n", data_path, fsize);
     //printf("\n rx:%x %x \n", cmd_rx[0], cmd_rx[1]);
     	//transfer(fd); 
- 
+    int usize;
+    uint8_t *ptr;
+    usize = fsize;
+    ptr = tx_buff;
+
+    while (usize) {
+    	printf(" remain:%d ", usize);
+    	tx_data(fd, rx_buff, ptr, 1024);
+    	
+    	ptr += 1024;
+    	if (usize < 1024)
+    		usize = 0;
+    	else
+    		usize -= 1024;
+    	
+    }
+    
+    fclose(fpd);
+ 		free(tx_buff);
+ 		free(rx_buff);
+ 		
     close(fd);  //???? 
  
     return ret; 
