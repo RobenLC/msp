@@ -10,22 +10,22 @@
  
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
  
-#define	SPI_CPHA	0x01			/* clock phase */
-#define	SPI_CPOL	0x02			/* clock polarity */
-#define	SPI_MODE_0	(0|0)			/* (original MicroWire) */
-#define	SPI_MODE_1	(0|SPI_CPHA)
-#define	SPI_MODE_2	(SPI_CPOL|0)
-#define	SPI_MODE_3	(SPI_CPOL|SPI_CPHA)
-#define	SPI_CS_HIGH	0x04			/* chipselect active high? */
-#define	SPI_LSB_FIRST	0x08			/* per-word bits-on-wire */
-#define	SPI_3WIRE	0x10			/* SI/SO signals shared */
-#define	SPI_LOOP	0x20			/* loopback mode */
-#define	SPI_NO_CS	0x40			/* 1 dev/bus, no chipselect */
-#define	SPI_READY	0x80			/* slave pulls low to pause */
-#define	SPI_TX_DUAL	0x100			/* transmit with 2 wires */
-#define	SPI_TX_QUAD	0x200			/* transmit with 4 wires */
-#define	SPI_RX_DUAL	0x400			/* receive with 2 wires */
-#define	SPI_RX_QUAD	0x800			/* receive with 4 wires */
+#define SPI_CPHA  0x01          /* clock phase */
+#define SPI_CPOL  0x02          /* clock polarity */
+#define SPI_MODE_0  (0|0)            /* (original MicroWire) */
+#define SPI_MODE_1  (0|SPI_CPHA)
+#define SPI_MODE_2  (SPI_CPOL|0)
+#define SPI_MODE_3  (SPI_CPOL|SPI_CPHA)
+#define SPI_CS_HIGH 0x04          /* chipselect active high? */
+#define SPI_LSB_FIRST 0x08          /* per-word bits-on-wire */
+#define SPI_3WIRE 0x10          /* SI/SO signals shared */
+#define SPI_LOOP  0x20          /* loopback mode */
+#define SPI_NO_CS 0x40          /* 1 dev/bus, no chipselect */
+#define SPI_READY 0x80          /* slave pulls low to pause */
+#define SPI_TX_DUAL 0x100         /* transmit with 2 wires */
+#define SPI_TX_QUAD 0x200         /* transmit with 4 wires */
+#define SPI_RX_DUAL 0x400         /* receive with 2 wires */
+#define SPI_RX_QUAD 0x800         /* receive with 4 wires */
 #define BUFF_SIZE  2048
 
 static void pabort(const char *s) 
@@ -73,14 +73,14 @@ static void transfer(int fd)
     for (ret = 0; ret < BUFF_SIZE; ret++) { //打印接收??? 
         if (!(ret % 6))     //6??据?一簇打印 
             puts(""); 
-	tg = (ret - 0) & 0xff;
-	if (rx[ret] != tg) {
-	    errcnt++;
-	    i = 1;
-	}
+  tg = (ret - 0) & 0xff;
+  if (rx[ret] != tg) {
+        errcnt++;
+        i = 1;
+    }
 
         printf("%.2X:%.2X/%d ", rx[ret], tg, i); 
-	i  = 0;
+  i  = 0;
     } 
     puts(""); 
     printf(" error count: %d\n", errcnt);
@@ -88,69 +88,69 @@ static void transfer(int fd)
 
 #if 1
 static void tx_command(
-	int fd, 
-	uint8_t *ex_rx, 
-	uint8_t *ex_tx, 
-	int ex_size)
+  int fd, 
+  uint8_t *ex_rx, 
+  uint8_t *ex_tx, 
+  int ex_size)
 {
-	int ret;
-	uint8_t *tx;
-	uint8_t *rx;
-	int size;
+  int ret;
+  uint8_t *tx;
+  uint8_t *rx;
+  int size;
 
-	tx = ex_tx;
-	rx = ex_rx;
-	size = ex_size;
-	
-	struct spi_ioc_transfer tr = {
-		.tx_buf = (unsigned long)tx,
-		.rx_buf = (unsigned long)rx,
-		.len = size,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};
-	
-	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
-	if (ret < 1)
-		pabort("can't send spi message");
+  tx = ex_tx;
+  rx = ex_rx;
+  size = ex_size;
+    
+  struct spi_ioc_transfer tr = {
+        .tx_buf = (unsigned long)tx,
+        .rx_buf = (unsigned long)rx,
+        .len = size,
+        .delay_usecs = delay,
+        .speed_hz = speed,
+        .bits_per_word = bits,
+    };
+    
+  ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
+  if (ret < 1)
+      pabort("can't send spi message");
 }
 
 static void tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size)
 {
-	int ret, i, errcnt; 
+  int ret, i, errcnt; 
 
-	uint8_t tg;
-	uint8_t *tx = tx_buff;
-	uint8_t *rx = rx_buff;
-	struct spi_ioc_transfer tr = {
-		.tx_buf = (unsigned long)tx,
-		.rx_buf = (unsigned long)rx,
-		.len = ex_size,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};
-	
-	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
-	if (ret < 1)
-		pabort("can't send spi message");
-		
+  uint8_t tg;
+  uint8_t *tx = tx_buff;
+  uint8_t *rx = rx_buff;
+  struct spi_ioc_transfer tr = {
+        .tx_buf = (unsigned long)tx,
+        .rx_buf = (unsigned long)rx,
+        .len = ex_size,
+        .delay_usecs = delay,
+        .speed_hz = speed,
+        .bits_per_word = bits,
+    };
+    
+  ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
+  if (ret < 1)
+      pabort("can't send spi message");
+        
   //  errcnt = 0; i = 0;
   //  for (ret = 0; ret < ex_size; ret++) { //打印接收??? 
   //      if (!(ret % 6))     //6??据?一簇打印 
   //          puts(""); 
-	//			tg = (ret - 0) & 0xff;
-	//			if (rx[ret] != tg) {
-	//    		errcnt++;
-	//    		i = 1;
-	//			}
+    //          tg = (ret - 0) & 0xff;
+    //          if (rx[ret] != tg) {
+    //          errcnt++;
+    //          i = 1;
+    //            }
   //      printf("%.2X:%.2X/%d ", rx[ret], tg, i); 
-	//			i  = 0;
+    //          i  = 0;
   //  } 
   //  puts(""); 
   //  printf(" error count: %d\n", errcnt);
-	puts("");
+  puts("");
 }
 #endif
 static void print_usage(const char *prog)   //?????打印?助信息 
@@ -180,9 +180,9 @@ static void parse_opts(int argc, char *argv[])
             { "speed",   1, 0, 's' }, 
             { "delay",   1, 0, 'd' }, 
             { "bpw",     1, 0, 'b' }, 
-						{ "command", 1, 0, 'm' }, 
-						{ "path   ", 1, 0, 'p' },
-						{ "whloop",  1, 0, 'w' }, 
+                        { "command", 1, 0, 'm' }, 
+                        { "path   ", 1, 0, 'p' },
+                        { "whloop",  1, 0, 'w' }, 
             { "loop",    0, 0, 'l' }, 
             { "cpha",    0, 0, 'H' }, 
             { "cpol",    0, 0, 'O' }, 
@@ -202,11 +202,11 @@ static void parse_opts(int argc, char *argv[])
  
         switch (c) { 
         case 'D':   //??名 
-       			printf(" -D %s \n", optarg);
+                printf(" -D %s \n", optarg);
             device = optarg; 
             break; 
         case 's':   //速率 
-        		printf(" -s %s \n", optarg);
+              printf(" -s %s \n", optarg);
             speed = atoi(optarg); 
             break; 
         case 'd':   //延??? 
@@ -240,15 +240,15 @@ static void parse_opts(int argc, char *argv[])
             mode |= SPI_READY; 
             break; 
         case 'm':   //command input
-        		printf(" -m %s \n", optarg);
+              printf(" -m %s \n", optarg);
             command = strtoul(optarg, NULL, 16);
             break;
         case 'w':   //command input
-        		printf(" -w %s \n", optarg);
+              printf(" -w %s \n", optarg);
             loop = atoi(optarg);
             break;
         case 'p':   //command input
-        		printf(" -p %s \n", optarg);
+              printf(" -p %s \n", optarg);
             data_path = optarg;
             break;
         default:    //??的?? 
@@ -262,13 +262,13 @@ int main(int argc, char *argv[])
 { 
     int ret = 0; 
     int fd; 
- 		uint8_t cmd_tx[16] = {0x53, 0x80,};
-		uint8_t cmd_rx[16] = {0,};
-		int cmd_size = 2;
-		uint8_t *tx_buff, *rx_buff;
-		FILE *fpd;
-		int fsize, buffsize;
-		
+      uint8_t cmd_tx[16] = {0x53, 0x80,};
+      uint8_t cmd_rx[16] = {0,};
+      int cmd_size = 2;
+      uint8_t *tx_buff, *rx_buff;
+      FILE *fpd;
+      int fsize, buffsize;
+        
     parse_opts(argc, argv); //解析????的?? 
  
     fd = open(device, O_RDWR);  //打???文件 
@@ -312,38 +312,53 @@ int main(int argc, char *argv[])
     printf("bits per word: %d\n", bits); 
     printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000); 
 
-		if (command) {
-			cmd_tx[0] = command & 0xff;
-			cmd_tx[1] = (command >> 8) & 0xff;
-			printf("\n tx:%x %x \n", cmd_tx[0], cmd_tx[1]);
-		}
-		
-		//tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+    /* spi work sequence start here */
+    /* 1. check control_pin ready or not */
+    /* to be done */
+    
+    /* 2. send request status command and check */
+    command = 0x8053;
+    if (command) {
+        cmd_tx[0] = command & 0xff;
+        cmd_tx[1] = (command >> 8) & 0xff;
+        printf("\n tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+    }
+    tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+    /* to be done */
+    printf("\n tx:%x %x \n", cmd_rx[1], cmd_rx[0]);
+      
+    /* prepare transmitting */
+    /* Tx/Rx buffer alloc */       
+    buffsize = 1*1024*1024;
+    tx_buff = malloc(buffsize);
+    if (tx_buff) {
+        printf(" tx buff alloc success!!\n");
+    }
+    rx_buff = malloc(buffsize);
+    if (rx_buff) {
+        printf(" rx buff alloc success!!\n");
+    }
+       
+    /* open target file which will be transmitted */
+    printf(" open file %s \n", data_path);
+    fpd = fopen(data_path, "r");
+       
+    if (!fpd) {
+        printf(" %s file open failed \n", data_path);
+        return ret;
+    }
+    printf(" %s file open succeed \n", data_path);
+    /* read the file into Tx buffer */
+    fsize = fread(tx_buff, 1, buffsize, fpd);
+    printf(" [%s] size: %d \n", data_path, fsize);
 
-		/* Tx/Rx buffer alloc */   	
-   	buffsize = 1*1024*1024;
-   	tx_buff = malloc(buffsize);
-   	if (tx_buff) {
-   		printf(" tx buff alloc success!!\n");
-   	}
-   	rx_buff = malloc(buffsize);
-   	if (rx_buff) {
-   		printf(" rx buff alloc success!!\n");
-   	}
-   	
-   	/* open target file which will be transmitted */
-   	printf(" open file %s \n", data_path);
-   	fpd = fopen(data_path, "r");
-   	
-   	if (!fpd) {
-   		printf(" %s file open failed \n", data_path);
-   		return ret;
-   	}
-   	printf(" %s file open succeed \n", data_path);
-   	/* read the file into Tx buffer */
-   	fsize = fread(tx_buff, 1, buffsize, fpd);
-   	printf(" [%s] size: %d \n", data_path, fsize);
-    	
+    /* 3. send request transmitting command and check */
+    /* to be done */
+    
+    /* 4. check control_pin ready or not */
+    /* to be done */
+    
+    /* 5. trasmitting */                
     /* transmit the file piece by piece */
     #define PKT_SIZE 1024
     int usize;
@@ -351,21 +366,23 @@ int main(int argc, char *argv[])
     usize = fsize;
     ptr = tx_buff;
     while (usize) {
-    	printf(" remain:%d ", usize);
-    	tx_data(fd, rx_buff, ptr, PKT_SIZE);
-    	
-    	ptr += PKT_SIZE;
-    	if (usize < PKT_SIZE)
-    		usize = 0;
-    	else
-    		usize -= PKT_SIZE;
-    	
+        printf(" remain:%d ", usize);
+        tx_data(fd, rx_buff, ptr, PKT_SIZE);
+        
+        ptr += PKT_SIZE;
+        if (usize < PKT_SIZE)
+            usize = 0;
+        else
+            usize -= PKT_SIZE;
     }
+
+    /* 6. pull down the control_pin to notice the end of transmitting */
+    /* to be done */
     
     fclose(fpd);
- 		free(tx_buff);
- 		free(rx_buff);
- 		
+    free(tx_buff);
+    free(rx_buff);
+         
     close(fd);  //???? 
  
     return ret; 
