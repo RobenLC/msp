@@ -257,7 +257,51 @@ static void parse_opts(int argc, char *argv[])
         } 
     } 
 } 
+#if 0
+int main(int argc, char *argv[]) 
+{ 
+    uint32_t bitset;
+    int sel;
+    int fd, ret; 
+    
+    fd = open(device, O_RDWR);  //¥´???¤å¥ó 
+    if (fd < 0) 
+        pabort("can't open device"); 
+    
+    if (argc > 1) {
+        printf(" [1]:%s \n", argv[1]);
+        sel = atoi(argv[1]);
+    }
  
+    if (sel == 3) {
+        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
+        if (ret == -1) 
+            pabort("can't SPI_IOC_REL_CTL_PIN"); 
+        return;
+    }
+    ret = 0;
+    
+    while (1) {
+        if (!(ret % 100000)) {
+            
+            if (sel == 1) {
+                printf(" Tx bitset %d \n", bitset);
+                ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+                if (bitset == 1)
+                    bitset = 0;
+                else
+                    bitset = 1;            
+            }
+            else {
+                printf(" Rx bitset %d \n", bitset);
+                ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN            
+            }
+        }
+          
+        ret++;
+    }
+}
+#else
 int main(int argc, char *argv[]) 
 { 
     int ret = 0; 
@@ -313,20 +357,44 @@ int main(int argc, char *argv[])
     printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000); 
 
     /* spi work sequence start here */
+    uint32_t temp32;
+    uint32_t stage;
+    stage = 1;
+    printf(" \n*****[%d]*****\n", stage++);
     /* 1. check control_pin ready or not */
-    /* to be done */
-    
+    uint32_t getbit;
+    getbit = 1;
+    temp32 = 2;
+    while (getbit == 1) {
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
+        if (ret == -1) 
+            pabort("can't SPI_IOC_RD_CTL_PIN"); 
+        if (temp32 != getbit) {
+            printf("wait for slave power up, ctl_pin = %d \n", getbit);
+            temp32 = getbit;
+        }
+    }
+    printf(" \n*****[%d]*****\n", stage++);
     /* 2. send request status command and check */
-    command = 0x8053;
+    command = 0x5380;
     if (command) {
         cmd_tx[0] = command & 0xff;
         cmd_tx[1] = (command >> 8) & 0xff;
-        printf("\n tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
     }
-    tx_command(fd, cmd_rx, cmd_tx, cmd_size);
-    /* to be done */
-    printf("\n tx:%x %x \n", cmd_rx[1], cmd_rx[0]);
-      
+    
+    uint32_t getcmd;
+    getcmd = 0;
+    temp32 = 1;
+    while (getcmd != 0x5380) {
+        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+        getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
+        if (temp32 != getcmd) {
+            printf(" get status:0x%x\n", getcmd);
+            temp32 = getcmd;
+        }
+    }
+
     /* prepare transmitting */
     /* Tx/Rx buffer alloc */       
     buffsize = 1*1024*1024;
@@ -351,13 +419,44 @@ int main(int argc, char *argv[])
     /* read the file into Tx buffer */
     fsize = fread(tx_buff, 1, buffsize, fpd);
     printf(" [%s] size: %d \n", data_path, fsize);
-
+    
+    printf(" \n*****[%d]*****\n", stage++); 
     /* 3. send request transmitting command and check */
     /* to be done */
-    
+    command = 0x7290;
+    if (command) {
+        cmd_tx[0] = command & 0xff;
+        cmd_tx[1] = (command >> 8) & 0xff;
+        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+    }
+
+    getcmd = 0;
+    temp32 = 1;
+    while (getcmd != 0x7290) {
+        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+        getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
+        if (temp32 != getcmd) {
+            printf(" get status:0x%x\n", getcmd);
+            temp32 = getcmd;
+        }
+    }
+
+    printf(" \n*****[%d]*****\n", stage++);
     /* 4. check control_pin ready or not */
-    /* to be done */
-    
+    getbit = 1;
+    temp32 = 2;
+    while (getbit == 1) {
+        
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
+        if (ret == -1) 
+            pabort("can't SPI_IOC_RD_CTL_PIN"); 
+        if (temp32 != getbit) {
+            printf("wait for slave ready for tx, ctl_pin = %d \n", getbit);
+            temp32 = getbit;
+        }
+    }
+
+    printf(" \n*****[%d]*****\n", stage++);    
     /* 5. trasmitting */                
     /* transmit the file piece by piece */
     #define PKT_SIZE 1024
@@ -366,7 +465,7 @@ int main(int argc, char *argv[])
     usize = fsize;
     ptr = tx_buff;
     while (usize) {
-        printf(" remain:%d ", usize);
+        printf(" r:%d ", usize);
         tx_data(fd, rx_buff, ptr, PKT_SIZE);
         
         ptr += PKT_SIZE;
@@ -376,8 +475,33 @@ int main(int argc, char *argv[])
             usize -= PKT_SIZE;
     }
 
+    printf(" \n*****[%d]*****\n", stage++);
     /* 6. pull down the control_pin to notice the end of transmitting */
-    /* to be done */
+    uint32_t bitset;
+    bitset = 0;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    
+    printf(" \n*****[%d]*****\n", stage++);
+    /* 7. request status to back to command mode */
+    command = 0x5380;
+    if (command) {
+        cmd_tx[0] = command & 0xff;
+        cmd_tx[1] = (command >> 8) & 0xff;
+        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+    }
+    
+    getcmd = 0;
+    temp32 = 1;
+    while (getcmd != 0x5380) {
+        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+        getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
+        if (temp32 != getcmd) {
+            printf(" get status:0x%x\n", getcmd);
+            temp32 = getcmd;
+        }
+    }
+    
+    printf(" \n*****[%d]*****\n", stage++);
     
     fclose(fpd);
     free(tx_buff);
@@ -387,3 +511,4 @@ int main(int argc, char *argv[])
  
     return ret; 
 } 
+#endif
