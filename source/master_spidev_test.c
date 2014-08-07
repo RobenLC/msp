@@ -35,7 +35,7 @@ static void pabort(const char *s)
 } 
  
 static const char *device = "/dev/spidev32765.0"; 
-static const char *data_path = "/root/tx/1.jpg"; 
+static const char *data_path = "/root/tx/rx.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
 static uint32_t speed = 1000000; 
@@ -357,6 +357,9 @@ int main(int argc, char *argv[])
     printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000); 
 
     /* spi work sequence start here */
+    
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
+    
     uint32_t temp32;
     uint32_t stage;
     stage = 1;
@@ -387,6 +390,7 @@ int main(int argc, char *argv[])
     getcmd = 0;
     temp32 = 1;
     while (getcmd != 0x5380) {
+        usleep(1000);
         tx_command(fd, cmd_rx, cmd_tx, cmd_size);
         getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
         if (temp32 != getcmd) {
@@ -433,6 +437,7 @@ int main(int argc, char *argv[])
     getcmd = 0;
     temp32 = 1;
     while (getcmd != 0x7290) {
+        usleep(1000);
         tx_command(fd, cmd_rx, cmd_tx, cmd_size);
         getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
         if (temp32 != getcmd) {
@@ -461,11 +466,23 @@ int main(int argc, char *argv[])
     /* transmit the file piece by piece */
     #define PKT_SIZE 1024
     int usize;
+    int count;
+    uint32_t bitset;
+    
+    count = 0;
     uint8_t *ptr;
     usize = fsize;
     ptr = tx_buff;
     while (usize) {
-        printf(" r:%d ", usize);
+        count++;
+        usleep(1);
+        
+        //bitset = 0;
+        //ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+        //usleep(1);
+        //bitset = 1;
+        //ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+        printf(" %d r:%d ",count, usize);
         tx_data(fd, rx_buff, ptr, PKT_SIZE);
         
         ptr += PKT_SIZE;
@@ -474,10 +491,12 @@ int main(int argc, char *argv[])
         else
             usize -= PKT_SIZE;
     }
-
+    bitset = 0;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    
     printf(" \n*****[%d]*****\n", stage++);
     /* 6. pull down the control_pin to notice the end of transmitting */
-    uint32_t bitset;
+    
     bitset = 0;
     ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
     
@@ -493,6 +512,7 @@ int main(int argc, char *argv[])
     getcmd = 0;
     temp32 = 1;
     while (getcmd != 0x5380) {
+        usleep(1000);
         tx_command(fd, cmd_rx, cmd_tx, cmd_size);
         getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
         if (temp32 != getcmd) {
@@ -501,6 +521,12 @@ int main(int argc, char *argv[])
         }
     }
     
+    printf(" \n*****[%d]*****\n", stage++);
+    /* 8. release the ctl_pin */
+    ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
+    if (ret == -1) 
+        pabort("can't SPI_IOC_REL_CTL_PIN"); 
+   
     printf(" \n*****[%d]*****\n", stage++);
     
     fclose(fpd);
