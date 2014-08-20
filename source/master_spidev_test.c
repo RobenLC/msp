@@ -257,13 +257,14 @@ static void parse_opts(int argc, char *argv[])
         } 
     } 
 } 
-#if 0
+#if 1
 int main(int argc, char *argv[]) 
 { 
     uint32_t bitset;
-    int sel;
+    int sel, arg;
     int fd, ret; 
-    
+    arg = 0;
+
     fd = open(device, O_RDWR);  //¥´???¤å¥ó 
     if (fd < 0) 
         pabort("can't open device"); 
@@ -272,14 +273,31 @@ int main(int argc, char *argv[])
         printf(" [1]:%s \n", argv[1]);
         sel = atoi(argv[1]);
     }
- 
-    if (sel == 3) {
-        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
-        if (ret == -1) 
-            pabort("can't SPI_IOC_REL_CTL_PIN"); 
+    if (argc > 2) {
+        printf(" [2]:%s \n", argv[2]);
+        arg = atoi(argv[2]);
+    }
+	
+    if (sel == 3) { /* set cs pin */
+        bitset = arg;
+        ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);   //SPI_IOC_WR_CS_PIN
+        printf("Set CS pin: %d\n", arg);
+        return;
+    }
+    if (sel == 4) { /* set RDY pin */
+        bitset = arg;
+        ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("Set RDY pin: %d\n", arg);
+        return;
+    }
+    if (sel == 5) { /* get RDY pin */
+        bitset = 0;
+        ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("Get RDY pin: %d\n", bitset);
         return;
     }
     ret = 0;
+	
     
     while (1) {
         if (!(ret % 100000)) {
