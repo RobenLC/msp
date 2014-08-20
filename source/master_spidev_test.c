@@ -35,7 +35,7 @@ static void pabort(const char *s)
 } 
  
 static const char *device = "/dev/spidev32765.0"; 
-static const char *data_path = "/root/tx/rx.jpg"; 
+static const char *data_path = "/root/tx/1.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
 static uint32_t speed = 1000000; 
@@ -312,7 +312,8 @@ int main(int argc, char *argv[])
       uint8_t *tx_buff, *rx_buff;
       FILE *fpd;
       int fsize, buffsize;
-        
+      uint32_t bitset;
+      
     parse_opts(argc, argv); //解析????的?? 
  
     fd = open(device, O_RDWR);  //打???文件 
@@ -366,9 +367,9 @@ int main(int argc, char *argv[])
     printf(" \n*****[%d]*****\n", stage++);
     /* 1. check control_pin ready or not */
     uint32_t getbit;
-    getbit = 1;
+    getbit = 0;
     temp32 = 2;
-    while (getbit == 1) {
+    while (getbit == 0) {
         ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
         if (ret == -1) 
             pabort("can't SPI_IOC_RD_CTL_PIN"); 
@@ -377,25 +378,41 @@ int main(int argc, char *argv[])
             temp32 = getbit;
         }
     }
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 2. send request status command and check */
-    command = 0x5380;
-    if (command) {
-        cmd_tx[0] = command & 0xff;
-        cmd_tx[1] = (command >> 8) & 0xff;
-        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
-    }
     
+
+    getbit = 1;
+    temp32 = 2;
     uint32_t getcmd;
     getcmd = 0;
-    temp32 = 1;
-    while (getcmd != 0x5380) {
-        usleep(1000);
-        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+
+    command = 0x5380;
+    cmd_tx[0] = command & 0xff;
+    cmd_tx[1] = (command >> 8) & 0xff;
+    printf(" \n*****[%d]*****\n", stage++);
+    /* 2. check slave ready or not */
+    while (getcmd != 0x8053) {
+
+        while (getbit == 1) {
+            ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
+            if (ret == -1) 
+                pabort("can't SPI_IOC_RD_CTL_PIN"); 
+            if (temp32 != getbit) {
+                printf("wait for slave power up, ctl_pin = %d \n", getbit);
+                temp32 = getbit;
+            }
+        }
+        
+        tx_command(fd, cmd_rx, cmd_tx, 2);
         getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
         if (temp32 != getcmd) {
             printf(" get status:0x%x\n", getcmd);
             temp32 = getcmd;
+        }
+        if (getcmd == 0x0538) {
+            command = 0x0538;
+            cmd_tx[0] = command & 0xff;
+            cmd_tx[1] = (command >> 8) & 0xff;
+            printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
         }
     }
 
@@ -428,30 +445,58 @@ int main(int argc, char *argv[])
     /* 3. send request transmitting command and check */
     /* to be done */
     command = 0x7290;
-    if (command) {
-        cmd_tx[0] = command & 0xff;
-        cmd_tx[1] = (command >> 8) & 0xff;
-        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
-    }
+    cmd_tx[0] = command & 0xff;
+    cmd_tx[1] = (command >> 8) & 0xff;
+    printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+
 
     getcmd = 0;
     temp32 = 1;
-    while (getcmd != 0x7290) {
-        usleep(1000);
-        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+    while (1) {
+        while (getbit == 1) {
+            ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
+            if (ret == -1) 
+                pabort("can't SPI_IOC_RD_CTL_PIN"); 
+            if (temp32 != getbit) {
+                printf("wait for slave power up, ctl_pin = %d \n", getbit);
+                temp32 = getbit;
+            }
+        }
+        
+        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+        tx_command(fd, cmd_rx, cmd_tx, 2);
+        
+        if (getcmd == 0x9072) {
+            bitset = 0;
+            ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+            break;
+        }        
+        
         getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
+        printf(" get status:0x%x\n", getcmd);
         if (temp32 != getcmd) {
             printf(" get status:0x%x\n", getcmd);
             temp32 = getcmd;
         }
+        if (getcmd == 0x0729) {
+            command = 0x0729;
+            cmd_tx[0] = command & 0xff;
+            cmd_tx[1] = (command >> 8) & 0xff;
+            printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+        }
     }
 
+    usleep(10);
+    bitset = 1;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    usleep(10);    
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
+    
     printf(" \n*****[%d]*****\n", stage++);
     /* 4. check control_pin ready or not */
     getbit = 1;
     temp32 = 2;
     while (getbit == 1) {
-        
         ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
         if (ret == -1) 
             pabort("can't SPI_IOC_RD_CTL_PIN"); 
@@ -467,66 +512,79 @@ int main(int argc, char *argv[])
     #define PKT_SIZE 1024
     int usize;
     int count;
-    uint32_t bitset;
     
     count = 0;
     uint8_t *ptr;
-    usize = fsize;
+    usize = 0;
     ptr = tx_buff;
-    while (usize) {
+    while (usize < fsize) {
         count++;
-        usleep(1);
+
+        getbit = 0;
+        while (getbit == 0) {
+            ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
+        }
         
-        //bitset = 0;
-        //ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
-        //usleep(1);
-        //bitset = 1;
-        //ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+        usize += PKT_SIZE;
         printf(" %d r:%d ",count, usize);
         tx_data(fd, rx_buff, ptr, PKT_SIZE);
         
         ptr += PKT_SIZE;
-        if (usize < PKT_SIZE)
-            usize = 0;
-        else
-            usize -= PKT_SIZE;
     }
-    bitset = 0;
-    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
     
     printf(" \n*****[%d]*****\n", stage++);
     /* 6. pull down the control_pin to notice the end of transmitting */
-    
     bitset = 0;
     ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    usleep(100);
+    bitset = 1;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
+    usleep(100);
     
     printf(" \n*****[%d]*****\n", stage++);
     /* 7. request status to back to command mode */
     command = 0x5380;
-    if (command) {
-        cmd_tx[0] = command & 0xff;
-        cmd_tx[1] = (command >> 8) & 0xff;
-        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
-    }
+    cmd_tx[0] = command & 0xff;
+    cmd_tx[1] = (command >> 8) & 0xff;
+    printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
     
     getcmd = 0;
     temp32 = 1;
-    while (getcmd != 0x5380) {
-        usleep(1000);
-        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+    while (getcmd != 0x8053) {
+        getbit = 1;
+        while (getbit == 1) {
+            ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
+            if (ret == -1) 
+                pabort("can't SPI_IOC_RD_CTL_PIN"); 
+            if (temp32 != getbit) {
+                printf("wait for slave power up, ctl_pin = %d \n", getbit);
+                temp32 = getbit;
+            }
+        }
+        tx_command(fd, cmd_rx, cmd_tx, 2);
         getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
         if (temp32 != getcmd) {
             printf(" get status:0x%x\n", getcmd);
             temp32 = getcmd;
         }
+        if (getcmd == 0x0538) {
+            command = 0x0538;
+            cmd_tx[0] = command & 0xff;
+            cmd_tx[1] = (command >> 8) & 0xff;
+            printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+        }
     }
     
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 8. release the ctl_pin */
-    ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
-    if (ret == -1) 
-        pabort("can't SPI_IOC_REL_CTL_PIN"); 
-   
+    bitset = 0;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    usleep(100);
+    bitset = 1;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    usleep(10);    
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
+    
     printf(" \n*****[%d]*****\n", stage++);
     
     fclose(fpd);

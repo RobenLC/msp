@@ -35,7 +35,7 @@ static void pabort(const char *s)
 } 
  
 static const char *device = "/dev/spidev32765.0"; 
-static const char *data_path = "/root/rx/1.jpg"; 
+static const char *data_path = "/root/rx/1-1.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
 static uint32_t speed = 1000000; 
@@ -120,20 +120,15 @@ static void tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size, int
 {
     #define PKT_SIZE 1024
     int ret, i, errcnt; 
-    int pn, remain;
+    int remain;
 
-    pn = ex_size / PKT_SIZE;
-    pn = num;
-
-    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * 289);
-    //struct spi_ioc_transfer tr[2];
-    
-    //memset(tr, 0, sizeof(tr));
+    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
     
     uint8_t tg;
     uint8_t *tx = tx_buff;
     uint8_t *rx = rx_buff;  
-    for (i = 0; i < 289; i++) {
+
+    for (i = 0; i < num; i++) {
         tr[i].tx_buf = (unsigned long)tx;
         tr[i].rx_buf = (unsigned long)rx;
         tr[i].len = PKT_SIZE;
@@ -144,35 +139,14 @@ static void tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size, int
         tx += PKT_SIZE;
         rx += PKT_SIZE;
     }
-                                             
-  //struct spi_ioc_transfer tr = {
-  //      .tx_buf = (unsigned long)tx,
-  //      .rx_buf = (unsigned long)rx,
-  //      .len = ex_size,
-  //      .delay_usecs = delay,
-  //      .speed_hz = speed,
-  //      .bits_per_word = bits,
-  //  };
     
-  ret = ioctl(fd, SPI_IOC_MESSAGE(289), tr);
+  ret = ioctl(fd, SPI_IOC_MESSAGE(num), tr);
   if (ret < 1)
       pabort("can't send spi message");
-  //free(tr);
-  //  errcnt = 0; i = 0;
-  //  for (ret = 0; ret < ex_size; ret++) { //打印接收??? 
-  //      if (!(ret % 6))     //6??据?一簇打印 
-  //          puts(""); 
-    //          tg = (ret - 0) & 0xff;
-    //          if (rx[ret] != tg) {
-    //          errcnt++;
-    //          i = 1;
-    //            }
-  //      printf("%.2X:%.2X/%d ", rx[ret], tg, i); 
-    //          i  = 0;
-  //  } 
-  //  puts(""); 
-  //  printf(" error count: %d\n", errcnt);
-  //puts("");
+
+  printf("tx/rx len: %d\n", ret);
+
+  free(tr);
 }
 #endif
 static void print_usage(const char *prog)   //?????打印?助信息 
@@ -279,12 +253,14 @@ static void parse_opts(int argc, char *argv[])
         } 
     } 
 } 
-#if 0
+#if 1
 int main(int argc, char *argv[]) 
 { 
     uint32_t bitset;
     int sel;
     int fd, ret; 
+    int buffsize;
+    uint8_t *tx_buff, *rx_buff;
     
     fd = open(device, O_RDWR);  //打???文件 
     if (fd < 0) 
@@ -294,13 +270,118 @@ int main(int argc, char *argv[])
         printf(" [1]:%s \n", argv[1]);
         sel = atoi(argv[1]);
     }
- 
+
+    buffsize = 1*1024*1024;
+    tx_buff = malloc(buffsize);
+    if (tx_buff) {
+        printf(" tx buff alloc success!!\n");
+    }
+    rx_buff = malloc(buffsize);
+    if (rx_buff) {
+        printf(" rx buff alloc success!!\n");
+    }
+    
     if (sel == 3) {
         ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
         if (ret == -1) 
             pabort("can't SPI_IOC_REL_CTL_PIN"); 
         return;
     }
+    if (sel == 4) {
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 11, __u32), &bits);	//SPI_IOC_RD_SLVE_READY _IOR(SPI_IOC_MAGIC, 11, __u32)
+        if (ret == -1) 
+            pabort("can't SPI_IOC_RD_SLVE_READY"); 
+	printf("rd slve rdy %d\n",bits);
+        return;
+    }
+    if (sel == 5) {
+	bits = 1;
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 11, __u32), &bits);	//SPI_IOC_RD_SLVE_READY _IOR(SPI_IOC_MAGIC, 11, __u32)
+	if (bits == 1) bits = 0;
+	else bits = 1;
+        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 11, __u32), &bits);	//SPI_IOC_WD_SLVE_READY _IOW(SPI_IOC_MAGIC, 11, __u32)
+        if (ret == -1) 
+            pabort("can't SPI_IOC_WD_SLVE_READY"); 
+	printf("WD slve rdy %d\n",bits);
+        return;
+    }
+    if (sel == 6){/* 6 slave rx cmd */
+	uint8_t *p8;
+	uint32_t slv = 0;
+	uint32_t pin = 1;
+	uint32_t rdy = 1;
+	uint32_t dat = 1;
+	bitset = 1;
+	ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &dat);   //SPI_IOC_WR_DATA_MODE
+	if (ret) printf("set data mode error\n");
+	else printf("set data mode: %d\n", dat);
+	ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 10, __u32), &slv);	//SPI_IOC_RD_SLVE_MODE
+	printf("slv: %d \n", slv);
+	printf("rx one cmd \n");
+	ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_WD_CTL_PIN
+	if (ret) printf("set ctl pin error\n");
+	else printf("set ctl pin: %d\n", pin);
+        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 11, __u32), &rdy);	//SPI_IOC_WD_SLVE_READY _IOW(SPI_IOC_MAGIC, 11, __u32)
+	if (ret) printf("set slve rdy error\n");
+	else printf("set slve rdy: %d\n", rdy);
+	tx_command(fd, rx_buff, tx_buff, 2);
+	p8 = rx_buff;
+	printf("rx 0x%x 0x%x \n", p8[0], p8[1]);
+	return;
+    }
+    if (sel == 7) {/* 7 master tx cmd */
+	uint8_t *p8;
+	uint32_t pin = 0;
+	ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_RD_CTL_PIN
+	if (ret) 
+        	pabort("can't SPI_IOC_RD_SLVE_READY"); 
+	printf("slve ctl pin: %d\n",pin);
+	pin = 1;
+	ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_WD_CTL_PIN
+	if (ret) printf("set ctl pin error\n");
+	else printf("set ctl pin: %d\n", pin);
+	tx_buff[0] = 0xa8;
+	tx_buff[1] = 0x52;
+	printf("tx cmd 0x%x 0x%x \n", tx_buff[0], tx_buff[1]);
+	tx_command(fd, rx_buff, tx_buff, 2);
+	p8 = rx_buff;
+	printf("rx 0x%x 0x%x \n", p8[0], p8[1]);
+	
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_RD_CTL_PIN
+        if (ret) 
+            pabort("can't SPI_IOC_RD_SLVE_READY"); 
+	printf("slve ctl pin: %d\n",pin);
+
+	return;
+    }
+    if (sel == 8){
+	uint8_t *p8;
+	uint32_t pin = 0;
+	ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_WD_CTL_PIN
+	if (ret) printf("set ctl pin error\n");
+	else printf("set ctl pin: %d\n", pin);
+
+	tx_buff[0] = 0xaa;
+	tx_buff[1] = 0xff;
+	printf("tx cmd 0x%x 0x%x \n", tx_buff[0], tx_buff[1]);
+	tx_command(fd, rx_buff, tx_buff, 2);
+	p8 = rx_buff;
+	printf("rx 0x%x 0x%x \n", p8[0], p8[1]);
+	return;
+    }
+    if (sel == 9){
+	return;
+    }
+    if (sel == 10){
+	return;
+    }
+    if (sel == 11){
+	return;
+    }
+    if (sel == 12){
+	return;
+    }
+	
     ret = 0;
     
     while (1) {
@@ -335,6 +416,8 @@ int main(int argc, char *argv[])
       FILE *fpd;
       int fsize, buffsize;
         
+    uint32_t getbit;
+
     parse_opts(argc, argv); //解析????的?? 
  
     fd = open(device, O_RDWR);  //打???文件 
@@ -378,61 +461,74 @@ int main(int argc, char *argv[])
     printf("bits per word: %d\n", bits); 
     printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000); 
 
+    uint32_t bitset;
+    bitset = 0;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    
     /* spi work sequence start here */
     uint32_t temp32;
     uint32_t stage;
     stage = 1;
     printf(" \n*****[%d]*****\n", stage++);
     /* 1. pull down ctl_pin to notice master */
-    uint32_t bitset;
-    bitset = 0;
+    bitset = 1;
     ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
     
     printf(" \n*****[%d]*****\n", stage++);
-    /* 2. check status for command mode */
-    command = 0x5380;
-    if (command) {
-        cmd_tx[0] = command & 0xff;
-        cmd_tx[1] = (command >> 8) & 0xff;
-        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
-    }
-    
-    uint32_t getcmd;
-    getcmd = 0;
-    temp32 = 1;
-    while (getcmd != 0x5380) {
-        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
-        getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
-        if (temp32 != getcmd) {
-            printf(" get status:0x%x\n", getcmd);
-            temp32 = getcmd;
-        }
-    }
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 3. release the ctl_pin */
-    ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
-    if (ret == -1) 
-        pabort("can't SPI_IOC_REL_CTL_PIN"); 
+    /* 2. reply request */
 
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 4. check status for data mode */
-    command = 0x7290;
-    if (command) {
-        cmd_tx[0] = command & 0xff;
-        cmd_tx[1] = (command >> 8) & 0xff;
-        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
-    }
-    
+    uint32_t getcmd;
+    int cntdown;
     getcmd = 0;
     temp32 = 1;
-    while (getcmd != 0x7290) {
-        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+    cmd_tx[0] = 0;
+    cmd_tx[1] = 0;
+    while (1) {
+        tx_command(fd, cmd_rx, cmd_tx, 2);
         getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
+        
+        if (getcmd == 0x0729) {
+            ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
+            usleep(10);
+            cntdown = 10000;
+            getbit = 2;
+            while(cntdown) {
+                ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
+                if (getbit == 0)
+                    break;
+                cntdown--;
+                usleep(1);
+            }
+            
+            while(cntdown) {
+                ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN    
+                if (getbit == 1)
+                    break;
+                cntdown --;
+                usleep(1);
+            }
+            if (cntdown)
+                break;
+        }
+        
+        command = getcmd;               
+        cmd_tx[0] = (command >> 4) & 0xff;
+        cmd_tx[1] = ((command >> 12) & 0x0f) | ((command << 4) & 0xf0);
+        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+        
         if (temp32 != getcmd) {
             printf(" get status:0x%x\n", getcmd);
             temp32 = getcmd;
         }
+        printf(" get status:0x%x\n", getcmd);
     }
+    
+    printf(" \n*****[%d]*****\n", stage++);
+    /* 4. enable data mode and pull low to wait for data mode */
+    bitset = 1;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    bitset = 0;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
     
     printf(" \n*****[%d]*****\n", stage++);
     /* 5. prepare the buffer for data tx mode */
@@ -447,11 +543,6 @@ int main(int argc, char *argv[])
     if (rx_buff) {
         printf(" rx buff alloc success!!\n");
     }
-
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 6. pull down the ctl_pin*/
-    bitset = 1;
-    ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     
     printf(" \n*****[%d]*****\n", stage++);
     /* 7. do the transmiting */
@@ -461,44 +552,21 @@ int main(int argc, char *argv[])
     uint8_t *ptr;
     ptr = rx_buff;
     
-  
-    uint32_t getbit;
     getbit = 1;
     temp32 = 2;
     while (usize < 883882) {
-
         count++;
         tx_data(fd, ptr, tx_buff, P_SIZE, 2);     
         usize += P_SIZE;
         ptr += P_SIZE;
         printf(" %d r:%d \n", count, usize);
-
-        bitset = 0;
-        ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-                
-        //while (getbit == 1) {
-        //    getbit = 1;
-        //    ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
-        //    if (ret == -1) 
-        //        pabort("can't SPI_IOC_RD_CTL_PIN"); 
-        //    if (temp32 != getbit) {
-        //        printf("ctl_pin = %d \n", getbit);
-        //        temp32 = getbit;
-        //    }
-        //}
     }
     
-    while (getbit == 1) {
-        getbit = 1;
-        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
-        if (ret == -1) 
-            pabort("can't SPI_IOC_RD_CTL_PIN"); 
-        if (temp32 != getbit) {
-            printf("ctl_pin = %d \n", getbit);
-            temp32 = getbit;
-        }
-    }
-        
+    bitset = 0;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    bitset = 1;
+    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+    
     printf(" \n*****[%d]*****\n", stage++);
     /* 8. save the rx_buff into FILE */
     /* open target file which will be transmitted */
@@ -517,18 +585,35 @@ int main(int argc, char *argv[])
 
     printf(" \n*****[%d]*****\n", stage++);
     /* 9. check status for return of command mode */
-    command = 0x5380;
-    if (command) {
-        cmd_tx[0] = command & 0xff;
-        cmd_tx[1] = (command >> 8) & 0xff;
-        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
-    }
-    
     getcmd = 0;
     temp32 = 1;
-    while (getcmd != 0x5380) {
-        tx_command(fd, cmd_rx, cmd_tx, cmd_size);
+    cmd_tx[0] = 0;
+    cmd_tx[1] = 0;
+    while (1) {
+        tx_command(fd, cmd_rx, cmd_tx, 2);
         getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
+        
+        getbit = 2;
+        ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
+        if (getbit == 0) {
+            cntdown = 1000;
+            while(cntdown) {
+                getbit = 2;
+                ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN    
+                if (getbit == 1)
+                    break;
+                cntdown --;
+                usleep(10);
+            }
+            if (cntdown)
+                break;
+        }
+        
+        command = getcmd;               
+        cmd_tx[0] = (command >> 4) & 0xff;
+        cmd_tx[1] = ((command >> 12) & 0x0f) | ((command << 4) & 0xf0);
+        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
+        
         if (temp32 != getcmd) {
             printf(" get status:0x%x\n", getcmd);
             temp32 = getcmd;
