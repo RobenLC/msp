@@ -56,7 +56,7 @@ static void transfer(int fd)
     uint8_t *rx;
     rx = malloc(BUFF_SIZE);
 
-    struct spi_ioc_transfer tr = {  //?明并初始化spi_ioc_transfer?构体 
+    struct spi_ioc_transfer tr = {  
         .tx_buf = (unsigned long)tx, 
         .rx_buf = (unsigned long)rx, 
         .len = BUFF_SIZE,
@@ -65,13 +65,13 @@ static void transfer(int fd)
         .bits_per_word = bits, 
     }; 
     
-    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);   //ioctl默?操作,???据 
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
     if (ret < 1) 
         pabort("can't send spi message"); 
  
     errcnt = 0; i = 0;
-    for (ret = 0; ret < BUFF_SIZE; ret++) { //打印接收??? 
-        if (!(ret % 6))     //6??据?一簇打印 
+    for (ret = 0; ret < BUFF_SIZE; ret++) {
+        if (!(ret % 6))
             puts(""); 
   tg = (ret - 0) & 0xff;
   if (rx[ret] != tg) {
@@ -149,7 +149,7 @@ static void tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size, int
   free(tr);
 }
 #endif
-static void print_usage(const char *prog)   //?????打印?助信息 
+static void print_usage(const char *prog) 
 { 
     printf("Usage: %s [-DsbdlHOLC3]\n", prog); 
     puts("  -D --device   device to use (default /dev/spidev1.1)\n" 
@@ -171,7 +171,7 @@ static void print_usage(const char *prog)   //?????打印?助信息
 static void parse_opts(int argc, char *argv[]) 
 { 
     while (1) { 
-        static const struct option lopts[] = {  //??命令表 
+        static const struct option lopts[] = {
             { "device",  1, 0, 'D' }, 
             { "speed",   1, 0, 's' }, 
             { "delay",   1, 0, 'd' }, 
@@ -226,7 +226,7 @@ static void parse_opts(int argc, char *argv[])
         case 'C':   //片?高?平 
             mode |= SPI_CS_HIGH; 
             break; 
-        case '3':   //3???模式 
+        case '3':
             mode |= SPI_3WIRE; 
             break; 
         case 'N':   //?片? 
@@ -257,7 +257,7 @@ static void parse_opts(int argc, char *argv[])
 int main(int argc, char *argv[]) 
 { 
     uint32_t bitset;
-    int sel;
+    int sel, arg;
     int fd, ret; 
     int buffsize;
     uint8_t *tx_buff, *rx_buff;
@@ -270,7 +270,11 @@ int main(int argc, char *argv[])
         printf(" [1]:%s \n", argv[1]);
         sel = atoi(argv[1]);
     }
-
+    if (argc > 2) {
+        printf(" [2]:%s \n", argv[2]);
+        arg = atoi(argv[2]);
+    }
+	
     buffsize = 1*1024*1024;
     tx_buff = malloc(buffsize);
     if (tx_buff) {
@@ -281,92 +285,33 @@ int main(int argc, char *argv[])
         printf(" rx buff alloc success!!\n");
     }
     
-    if (sel == 3) {
-        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
-        if (ret == -1) 
-            pabort("can't SPI_IOC_REL_CTL_PIN"); 
+    if (sel == 3) { /*set RDY pin*/
+        bitset = arg;
+        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("Set RDY: %d\n", arg);
         return;
     }
-    if (sel == 4) {
-        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 11, __u32), &bits);	//SPI_IOC_RD_SLVE_READY _IOR(SPI_IOC_MAGIC, 11, __u32)
-        if (ret == -1) 
-            pabort("can't SPI_IOC_RD_SLVE_READY"); 
-	printf("rd slve rdy %d\n",bits);
+    if (sel == 4) { /* get RDY pin */
+        bitset = 0;
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);	//SPI_IOC_RD_CTL_PIN
+        printf("Get RDY: %d\n", bitset);
         return;
     }
-    if (sel == 5) {
-	bits = 1;
-        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 11, __u32), &bits);	//SPI_IOC_RD_SLVE_READY _IOR(SPI_IOC_MAGIC, 11, __u32)
-	if (bits == 1) bits = 0;
-	else bits = 1;
-        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 11, __u32), &bits);	//SPI_IOC_WD_SLVE_READY _IOW(SPI_IOC_MAGIC, 11, __u32)
-        if (ret == -1) 
-            pabort("can't SPI_IOC_WD_SLVE_READY"); 
-	printf("WD slve rdy %d\n",bits);
+    if (sel == 5) { /* get CS pin */
+        bitset = 0;
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);	//SPI_IOC_RD_CS_PIN
+        printf("Get CS: %d\n", bitset);
         return;
     }
     if (sel == 6){/* 6 slave rx cmd */
-	uint8_t *p8;
-	uint32_t slv = 0;
-	uint32_t pin = 1;
-	uint32_t rdy = 1;
-	uint32_t dat = 1;
-	bitset = 1;
-	ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &dat);   //SPI_IOC_WR_DATA_MODE
-	if (ret) printf("set data mode error\n");
-	else printf("set data mode: %d\n", dat);
-	ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 10, __u32), &slv);	//SPI_IOC_RD_SLVE_MODE
-	printf("slv: %d \n", slv);
-	printf("rx one cmd \n");
-	ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_WD_CTL_PIN
-	if (ret) printf("set ctl pin error\n");
-	else printf("set ctl pin: %d\n", pin);
-        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 11, __u32), &rdy);	//SPI_IOC_WD_SLVE_READY _IOW(SPI_IOC_MAGIC, 11, __u32)
-	if (ret) printf("set slve rdy error\n");
-	else printf("set slve rdy: %d\n", rdy);
-	tx_command(fd, rx_buff, tx_buff, 2);
-	p8 = rx_buff;
-	printf("rx 0x%x 0x%x \n", p8[0], p8[1]);
 	return;
     }
     if (sel == 7) {/* 7 master tx cmd */
-	uint8_t *p8;
-	uint32_t pin = 0;
-	ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_RD_CTL_PIN
-	if (ret) 
-        	pabort("can't SPI_IOC_RD_SLVE_READY"); 
-	printf("slve ctl pin: %d\n",pin);
-	pin = 1;
-	ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_WD_CTL_PIN
-	if (ret) printf("set ctl pin error\n");
-	else printf("set ctl pin: %d\n", pin);
-	tx_buff[0] = 0xa8;
-	tx_buff[1] = 0x52;
-	printf("tx cmd 0x%x 0x%x \n", tx_buff[0], tx_buff[1]);
-	tx_command(fd, rx_buff, tx_buff, 2);
-	p8 = rx_buff;
-	printf("rx 0x%x 0x%x \n", p8[0], p8[1]);
-	
-        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_RD_CTL_PIN
-        if (ret) 
-            pabort("can't SPI_IOC_RD_SLVE_READY"); 
-	printf("slve ctl pin: %d\n",pin);
 
 	return;
     }
     if (sel == 8){
-	uint8_t *p8;
-	uint32_t pin = 0;
-	ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &pin);	//SPI_IOC_WD_CTL_PIN
-	if (ret) printf("set ctl pin error\n");
-	else printf("set ctl pin: %d\n", pin);
 
-	tx_buff[0] = 0xaa;
-	tx_buff[1] = 0xff;
-	printf("tx cmd 0x%x 0x%x \n", tx_buff[0], tx_buff[1]);
-	tx_command(fd, rx_buff, tx_buff, 2);
-	p8 = rx_buff;
-	printf("rx 0x%x 0x%x \n", p8[0], p8[1]);
 	return;
     }
     if (sel == 9){
