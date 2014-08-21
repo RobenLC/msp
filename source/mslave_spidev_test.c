@@ -303,18 +303,28 @@ int main(int argc, char *argv[])
         printf("Get CS: %d\n", bitset);
         return;
     }
-    if (sel == 6){/* 6 slave rx cmd */
+    if (sel == 6){/* set data mode test */
+        bitset = arg;
+        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set data mode: %d\n", arg);
 	return;
     }
-    if (sel == 7) {/* 7 master tx cmd */
-
+    if (sel == 7) {/* get data mode test */
+        bitset = 0;
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);	//SPI_IOC_RD_DATA_MODE
+        printf("Get data mode: %d\n", bitset);
 	return;
     }
-    if (sel == 8){
-
+    if (sel == 8){ /* set slve ready */
+        bitset = arg;
+        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set slve ready: %d\n", arg);
 	return;
     }
-    if (sel == 9){
+    if (sel == 9){ /* get slve ready */
+        bitset = 0;
+        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 11, __u32), &bitset);	//SPI_IOC_RD_SLVE_READY
+        printf("Get slve ready: %d\n", bitset);
 	return;
     }
     if (sel == 10){
