@@ -2,6 +2,7 @@
 #include <unistd.h> 
 #include <stdio.h> 
 #include <stdlib.h> 
+#include <string.h> 
 #include <getopt.h> 
 #include <fcntl.h> 
 #include <sys/ioctl.h> 
@@ -87,7 +88,7 @@ static void transfer(int fd)
 } 
 
 #if 1
-static void tx_command(
+static int tx_command(
   int fd, 
   uint8_t *ex_rx, 
   uint8_t *ex_tx, 
@@ -114,9 +115,49 @@ static void tx_command(
   ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
   if (ret < 1)
       pabort("can't send spi message");
+  return ret;
 }
 
-static void tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size, int num)
+static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz)
+{
+    int pkt_size;
+    int ret, i, errcnt; 
+    int remain;
+
+    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
+    
+    uint8_t tg;
+    uint8_t *tx = tx_buff;
+    uint8_t *rx = rx_buff;  
+    pkt_size = pksz;
+    remain = maxsz;
+
+    for (i = 0; i < num; i++) {
+        remain -= pkt_size;
+        if (remain < 0) break;
+
+        tr[i].tx_buf = (unsigned long)tx;
+        tr[i].rx_buf = (unsigned long)rx;
+        tr[i].len = pkt_size;
+        tr[i].delay_usecs = delay;
+        tr[i].speed_hz = speed;
+        tr[i].bits_per_word = bits;
+        
+        tx += pkt_size;
+        rx += pkt_size;
+    }
+    
+  ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
+  if (ret < 1)
+      pabort("can't send spi message");
+
+  printf("tx/rx len: %d\n", ret);
+
+  free(tr);
+  return ret;
+}
+
+static void _tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size, int num)
 {
     #define PKT_SIZE 1024
     int ret, i, errcnt; 
@@ -253,14 +294,64 @@ static void parse_opts(int argc, char *argv[])
         } 
     } 
 } 
+static int chk_reply(char * rx, char *ans, int sz)
+{
+	int i;
+	for (i=2; i < sz; i++)
+		if (rx[i] != ans[i]) 
+			break;
+
+	if (i < sz)
+		return i;
+	else
+		return 0;
+}
+FILE *find_save(char *dst, char *tmple)
+{
+	int i;
+	FILE *f;
+	for (i =0; i < 1000; i++) {
+		sprintf(dst, tmple, i);
+		f = fopen(dst, "r");
+		if (!f) {
+			printf("open file [%s] failed \n", dst);
+			break;
+		} else
+			printf("open file [%s] succeed \n", dst);
+	}
+	f = fopen(dst, "w");
+	return f;
+}
+
+static int data_process(char *rx, char *tx, FILE *fp, int fd, int pktsz, int num)
+{
+	int ret;
+	int wtsz;
+	int trunksz;
+	trunksz = 1024 * num;
+
+		ret = tx_data(fd, rx, tx, num, pktsz, 1024*1024);
+		printf("%d rx %d\n", fd, ret);
+		wtsz = fwrite(rx, 1, ret, fp);
+		printf("%d wt %d\n", fd, wtsz);
+
+
+}
+
 #if 1
 int main(int argc, char *argv[]) 
 { 
+static char spi0[] = "/dev/spidev32765.0"; 
+static char spi1[] = "/dev/spidev32766.0"; 
+static char data_save[] = "/root/rx/%d.jpg"; 
+static char path[256];
+
     uint32_t bitset;
-    int sel, arg;
+    int sel, arg0, arg1 = 0;
     int fd, ret; 
     int buffsize;
-    uint8_t *tx_buff, *rx_buff;
+    uint8_t *tx_buff[2], *rx_buff[2];
+    FILE *fp;
     
     fd = open(device, O_RDWR);  //¥´???¤å¥ó 
     if (fd < 0) 
@@ -272,66 +363,221 @@ int main(int argc, char *argv[])
     }
     if (argc > 2) {
         printf(" [2]:%s \n", argv[2]);
-        arg = atoi(argv[2]);
+        arg0 = atoi(argv[2]);
+    }
+    if (argc > 3) {
+        printf(" [3]:%s \n", argv[3]);
+        arg1 = atoi(argv[3]);
     }
 	
-    buffsize = 1*1024*1024;
-    tx_buff = malloc(buffsize);
-    if (tx_buff) {
-        printf(" tx buff alloc success!!\n");
+    buffsize = 5*1024*1024;
+    tx_buff[0] = malloc(buffsize);
+    if (tx_buff[0]) {
+        printf(" tx buff 0 alloc success!!\n");
     }
-    rx_buff = malloc(buffsize);
-    if (rx_buff) {
-        printf(" rx buff alloc success!!\n");
+    rx_buff[0] = malloc(buffsize);
+    if (rx_buff[0]) {
+        printf(" rx buff 0 alloc success!!\n");
     }
-    
+    tx_buff[1] = malloc(buffsize);
+    if (tx_buff[1]) {
+        printf(" tx buff 1 alloc success!!\n");
+    }
+    rx_buff[1] = malloc(buffsize);
+    if (rx_buff[1]) {
+        printf(" rx buff 1 alloc success!!\n");
+    }
+        int fd0, fd1;
+        fd0 = open(spi0, O_RDWR);
+        if (fd0 < 0) 
+            printf("can't open device[%s]\n", spi0); 
+        else 
+            printf("open device[%s]\n", spi0); 
+        fd1 = open(spi1, O_RDWR);
+        if (fd1 < 0) 
+                printf("can't open device[%s]\n", spi1); 
+        else 
+            printf("open device[%s]\n", spi1); 
+
+	fp = find_save(path, data_save);
+	if (!fp)
+		printf("find save dst failed ret:%d\n", fp);
+	else
+		printf("find save dst succeed ret:%d\n", fp);
+
+        int fm[2] = {fd0, fd1};
+		
+	char rxans[512];
+	char tx[512];
+	char rx[512];
+	int i;
+	for (i = 0; i < 512; i++) {
+		rxans[i] = i & 0x95;
+		tx[i] = i & 0x95;
+	}
+
+    	if (sel == 14){ /* dual band data mode test ex[14]*/
+		#define TSIZE (2*1024*1024)
+		#define PKTSZ  51200
+		int pipefd[2];
+		char *tbuff, *tmp, buf;
+		int sz, wtsz;
+		int pid;
+		tbuff = malloc(TSIZE);
+
+		if (tbuff)
+			printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
+		else 
+			goto end;
+
+		tmp = tbuff;
+		
+		sz = TSIZE;
+		pipe(pipefd);
+
+		pid = fork();
+		
+		if (pid) {
+			printf("p1 %d created!\n", pid);
+			sleep(3);
+			char str[256] = "/root/p0.log";
+
+			close(pipefd[1]); // close the write-end of the pipe, I'm not going to use it
+	       	while (read(pipefd[0], &buf, 1) > 0) // read while EOF
+	       	       write(1, &buf, 1);
+		       write(1, "\n", 1);
+           		close(pipefd[0]); // close the read-end of the pipe
+           		
+			#if 0
+			#elif 0
+			data_process(rx_buff[0], tx_buff[0], fp, fm[0], arg0, arg1);
+			#else
+			while(1) {
+				ret = tx_data(fm[0], tbuff, tx_buff[0], 20, PKTSZ, 1024*1024);
+				printf("%d rx %d\n", fd0, ret);
+				tbuff += ret;						
+				if (ret != (PKTSZ * 20))
+					break;
+			}
+			#endif
+		} else {
+			char str[256] = "/root/p1.log";
+			printf("main process!\n");
+			sleep(3);
+
+			close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
+		       write(pipefd[1], str, strlen(str)); // send the content of argv[1] to the reader
+		       close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
+		       wait(NULL); // wait for the child process to exit before I do the same
+		       
+			#if 0
+			#elif 0
+			data_process(rx_buff[0], tx_buff[0], fp, fm[1], arg0, arg1);
+			#else
+			while(1) {
+				ret = tx_data(fm[1], tbuff, tx_buff[0], 20, PKTSZ, 1024*1024);
+				printf("%d rx %d\n", fd1, ret);
+				tbuff += ret;
+				if (ret != (PKTSZ * 20))
+					break;
+			}
+			#endif
+		}
+
+		sz = tbuff - tmp;
+		wtsz = fwrite(tmp, 1, sz, fp);
+		printf("file write %d/%d to fid %d \n", wtsz, sz, fp);
+
+		free(tbuff);
+		goto end;
+	}			
+    	if (sel == 13){ /* data mode test ex[13 1024 100]*/
+		data_process(rx_buff[0], tx_buff[0], fp, fm[1], arg0, arg1);
+		goto end;
+	}				
+
+    if (sel == 12){ /* data mode test */
+	int pid;
+	pid = fork();
+	if (pid) {
+		printf("p1 %d created!\n", pid);
+		pid = fork();
+		if (pid)
+			printf("p2 %d created!\n", pid);
+		else
+			while(1);
+	} else {
+		while(1);
+	}
+
+	goto end;
+    }		
+    if (sel == 11){ /* cmd mode test */
+	tx[0] = 0xaa;
+	tx[1] = 0x55;
+	ret = tx_command(fd0, rx, tx, 512);
+	printf("reply 0x%x 0x%x \n", tx[0], tx[1]);
+	ret = chk_reply(rx, rxans, 512);
+	printf("check receive data ret: %d\n", ret);
+	while (1) {
+        	bitset = 1;
+	        ret = ioctl(fd1, _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);	//SPI_IOC_RD_CS_PIN
+       	 printf("Get fd1 CS: %d\n", bitset);
+		 if (bitset == 0) break;
+		 sleep(3);
+	}
+	goto end;
+    }
+
     if (sel == 3) { /*set RDY pin*/
-        bitset = arg;
-        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("Set RDY: %d\n", arg);
-        return;
+        bitset = arg0;
+        ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("Set RDY: %d\n", arg0);
+	goto end;
     }
     if (sel == 4) { /* get RDY pin */
         bitset = 0;
-        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);	//SPI_IOC_RD_CTL_PIN
+        ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);	//SPI_IOC_RD_CTL_PIN
         printf("Get RDY: %d\n", bitset);
-        return;
+	goto end;
     }
     if (sel == 5) { /* get CS pin */
         bitset = 0;
-        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);	//SPI_IOC_RD_CS_PIN
+        ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);	//SPI_IOC_RD_CS_PIN
         printf("Get CS: %d\n", bitset);
-        return;
+	goto end;
     }
     if (sel == 6){/* set data mode test */
-        bitset = arg;
-        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set data mode: %d\n", arg);
-	return;
+        bitset = arg0;
+        ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set data mode: %d\n", arg0);
+	goto end;
     }
     if (sel == 7) {/* get data mode test */
         bitset = 0;
-        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);	//SPI_IOC_RD_DATA_MODE
+        ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);	//SPI_IOC_RD_DATA_MODE
         printf("Get data mode: %d\n", bitset);
-	return;
+	goto end;
     }
     if (sel == 8){ /* set slve ready */
-        bitset = arg;
-        ret = ioctl(fd, _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-        printf("Set slve ready: %d\n", arg);
-	return;
+        bitset = arg0;
+        ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set slve ready: %d\n", arg0);
+	goto end;
     }
     if (sel == 9){ /* get slve ready */
         bitset = 0;
-        ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 11, __u32), &bitset);	//SPI_IOC_RD_SLVE_READY
+        ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 11, __u32), &bitset);	//SPI_IOC_RD_SLVE_READY
         printf("Get slve ready: %d\n", bitset);
-	return;
+	goto end;
     }
     if (sel == 10){
-	return;
-    }
-    if (sel == 11){
-	return;
+	fp = find_save(path, data_save);
+	if (!fp)
+		printf("find save dst failed ret:%d\n", fp);
+	else
+		printf("find save dst succeed ret:%d\n", fp);
+	goto end;
     }
     if (sel == 12){
 	return;
@@ -358,6 +604,14 @@ int main(int argc, char *argv[])
           
         ret++;
     }
+end:
+
+	free(tx_buff[0]);
+	free(rx_buff[0]);
+	free(tx_buff[1]);
+	free(rx_buff[1]);
+
+	fclose(fp);
 }
 #else
 int main(int argc, char *argv[]) 
