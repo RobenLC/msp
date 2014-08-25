@@ -480,12 +480,19 @@ static char path[256];
 					write(pipefd[1], "e", 1); // send the content of argv[1] to the reader	
 					break;
 				}
-				while (buf == 'c') {
-			       	ret = read(pipefs[0], &buf, 1); 
-		       		printf("p0 wait ret:%d\n", ret);
+				while (1) {
+					if (buf == 'e') break;
+			   	    	ret = read(pipefs[0], &buf, 1); 
+		       			printf("p0 wait ret:%d, buf:%c\n", ret, buf);
 					if (ret) break;
 				}
 				
+			}
+
+			while (1) {
+       			printf("p0 wait END ret:%d, buf:%c\n", ret, buf);
+				if (buf == 'e') break;
+		   	    	ret = read(pipefs[0], &buf, 1); 
 			}
 			close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
            		close(pipefs[0]); // close the read-end of the pipe
@@ -518,9 +525,10 @@ static char path[256];
 				else
 					wtsz = PKTSZ;
 
-				while (buf == 'c') {
-			       	ret = read(pipefd[0], &buf, 1);
-		       		printf("p1 wait ret:%d\n", ret);
+				while (1) {
+					if (buf == 'e') break;
+				       	ret = read(pipefd[0], &buf, 1);
+		       			printf("p1 wait ret:%d, buf:%c\n", ret, buf);
 					if (ret) break;
 				}
 
@@ -539,6 +547,11 @@ static char path[256];
 				}
 			}
 
+			while (1) {
+	       		printf("p1 wait END ret:%d, buf:%c\n", ret, buf);
+				if (buf == 'e') break;			       	
+				ret = read(pipefd[0], &buf, 1);
+			}
            		close(pipefd[0]); // close the read-end of the pipe
 		       close(pipefs[1]); // close the write-end of the pipe, thus sending EOF to the
 		       			
