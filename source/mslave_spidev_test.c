@@ -338,7 +338,6 @@ static int data_process(char *rx, char *tx, FILE *fp, int fd, int pktsz, int num
 
 }
 
-#if 1
 int main(int argc, char *argv[]) 
 { 
 static char spi0[] = "/dev/spidev32765.0"; 
@@ -417,14 +416,16 @@ static char path[256];
 	}
 
     	if (sel == 14){ /* dual band data mode test ex[14]*/
-		#define TSIZE (2*1024*1024)
-		#define PKTSZ  51200
+		#define TSIZE (32*1024*1024)
+		#define PKTSZ  61440
 		int pipefd[2];
-		char *tbuff, *tmp, buf;
+		int pipefs[2];
+		char *tbuff, *tmp, buf='c';
 		int sz, wtsz;
 		int pid;
-		tbuff = malloc(TSIZE);
-
+		//tbuff = malloc(TSIZE);
+		tbuff = rx_buff[0];
+		
 		if (tbuff)
 			printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
 		else 
@@ -434,6 +435,7 @@ static char path[256];
 		
 		sz = TSIZE;
 		pipe(pipefd);
+		pipe(pipefs);
 
 		pid = fork();
 		
@@ -441,54 +443,107 @@ static char path[256];
 			printf("p1 %d created!\n", pid);
 			sleep(3);
 			char str[256] = "/root/p0.log";
-
-			close(pipefd[1]); // close the write-end of the pipe, I'm not going to use it
-	       	while (read(pipefd[0], &buf, 1) > 0) // read while EOF
-	       	       write(1, &buf, 1);
-		       write(1, "\n", 1);
-           		close(pipefd[0]); // close the read-end of the pipe
-           		
+		       
 			#if 0
 			#elif 0
 			data_process(rx_buff[0], tx_buff[0], fp, fm[0], arg0, arg1);
 			#else
 			while(1) {
-				ret = tx_data(fm[0], tbuff, tx_buff[0], 20, PKTSZ, 1024*1024);
-				printf("%d rx %d\n", fd0, ret);
+				ret = tx_data(fm[0], tbuff, tx_buff[0], 15, PKTSZ, 1024*1024);
+				printf("[p0]%d rx %d\n", fd0, ret);
 				tbuff += ret;						
-				if (ret != (PKTSZ * 20))
+				if (ret != (PKTSZ * 15))
 					break;
 			}
 			#endif
+
+			close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
+			close(pipefs[1]); // close the write-end of the pipe, I'm not going to use it
+
+			while (1) {
+				sz = tbuff - tmp;
+				if (sz < PKTSZ)
+					wtsz = sz;
+				else
+					wtsz = PKTSZ;
+				
+				ret = fwrite(tmp, 1, wtsz, fp);
+				printf("[p0]file write %d/%d to fid %d \n", ret, sz, fp);
+
+				tmp += ret;
+
+				//sleep(1); // delay for test
+				
+				write(pipefd[1], "c", 1); // send the content of argv[1] to the reader
+
+				if (tmp >= tbuff) {
+					write(pipefd[1], "e", 1); // send the content of argv[1] to the reader	
+					break;
+				}
+				while (buf == 'c') {
+			       	ret = read(pipefs[0], &buf, 1); 
+		       		printf("p0 wait ret:%d\n", ret);
+					if (ret) break;
+				}
+				
+			}
+			close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
+           		close(pipefs[0]); // close the read-end of the pipe
+			
 		} else {
 			char str[256] = "/root/p1.log";
 			printf("main process!\n");
 			sleep(3);
 
-			close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
-		       write(pipefd[1], str, strlen(str)); // send the content of argv[1] to the reader
-		       close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
-		       wait(NULL); // wait for the child process to exit before I do the same
-		       
 			#if 0
 			#elif 0
 			data_process(rx_buff[0], tx_buff[0], fp, fm[1], arg0, arg1);
 			#else
 			while(1) {
-				ret = tx_data(fm[1], tbuff, tx_buff[0], 20, PKTSZ, 1024*1024);
-				printf("%d rx %d\n", fd1, ret);
+				ret = tx_data(fm[1], tbuff, tx_buff[0], 15, PKTSZ, 1024*1024);
+				printf("[p1]%d rx %d\n", fd1, ret);
 				tbuff += ret;
-				if (ret != (PKTSZ * 20))
+				if (ret != (PKTSZ * 15))
 					break;
 			}
 			#endif
+			
+			close(pipefd[1]); // close the write-end of the pipe, I'm not going to use it
+			close(pipefs[0]); // close the read-end of the pipe, I'm not going to use it
+			
+			while (1) {
+				sz = tbuff - tmp;
+				if (sz < PKTSZ)
+					wtsz = sz;
+				else
+					wtsz = PKTSZ;
+
+				while (buf == 'c') {
+			       	ret = read(pipefd[0], &buf, 1);
+		       		printf("p1 wait ret:%d\n", ret);
+					if (ret) break;
+				}
+
+				ret = fwrite(tmp, 1, wtsz, fp);
+				printf("[p1]file write %d/%d to fid %d \n", ret, sz, fp);
+
+				tmp += ret;
+
+				//sleep(1); // delay for test
+				
+		       	write(pipefs[1], "c", 1); // send the content of argv[1] to the reader
+		       	
+				if (tmp >= tbuff) {
+					write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
+					break;		       	
+				}
+			}
+
+           		close(pipefd[0]); // close the read-end of the pipe
+		       close(pipefs[1]); // close the write-end of the pipe, thus sending EOF to the
+		       			
 		}
 
-		sz = tbuff - tmp;
-		wtsz = fwrite(tmp, 1, sz, fp);
-		printf("file write %d/%d to fid %d \n", wtsz, sz, fp);
-
-		free(tbuff);
 		goto end;
 	}			
     	if (sel == 13){ /* data mode test ex[13 1024 100]*/
@@ -613,230 +668,4 @@ end:
 
 	fclose(fp);
 }
-#else
-int main(int argc, char *argv[]) 
-{ 
-    int ret = 0; 
-    int fd; 
-      uint8_t cmd_tx[16] = {0x53, 0x80,};
-      uint8_t cmd_rx[16] = {0,};
-      int cmd_size = 2;
-      uint8_t *tx_buff, *rx_buff;
-      FILE *fpd;
-      int fsize, buffsize;
-        
-    uint32_t getbit;
 
-    parse_opts(argc, argv); //秆猂?????? 
- 
-    fd = open(device, O_RDWR);  //ゴ???ゅン 
-    if (fd < 0) 
-        pabort("can't open device"); 
- 
-    /*
-     * spi mode //?竚spi??家Α
-     */ 
-    ret = ioctl(fd, SPI_IOC_WR_MODE, &mode);    //?家Α 
-    if (ret == -1) 
-        pabort("can't set spi mode"); 
- 
-    ret = ioctl(fd, SPI_IOC_RD_MODE, &mode);    //?家Α 
-    if (ret == -1) 
-        pabort("can't get spi mode"); 
- 
-    /*
-     * bits per word    //?竚–?ぶ
-     */ 
-    ret = ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bits);   //? –?ぶ 
-    if (ret == -1) 
-        pabort("can't set bits per word"); 
- 
-    ret = ioctl(fd, SPI_IOC_RD_BITS_PER_WORD, &bits);   //? –?ぶ 
-    if (ret == -1) 
-        pabort("can't get bits per word"); 
- 
-    /*
-     * max speed hz     //?竚硉瞯
-     */ 
-    ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?硉瞯 
-    if (ret == -1) 
-        pabort("can't set max speed hz"); 
- 
-    ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?硉瞯 
-    if (ret == -1) 
-        pabort("can't get max speed hz"); 
-    //ゴ家Α,–ぶ㎝硉瞯獺 
-    printf("spi mode: %d\n", mode); 
-    printf("bits per word: %d\n", bits); 
-    printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000); 
-
-    uint32_t bitset;
-    bitset = 0;
-    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
-    
-    /* spi work sequence start here */
-    uint32_t temp32;
-    uint32_t stage;
-    stage = 1;
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 1. pull down ctl_pin to notice master */
-    bitset = 1;
-    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
-    
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 2. reply request */
-
-    uint32_t getcmd;
-    int cntdown;
-    getcmd = 0;
-    temp32 = 1;
-    cmd_tx[0] = 0;
-    cmd_tx[1] = 0;
-    while (1) {
-        tx_command(fd, cmd_rx, cmd_tx, 2);
-        getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
-        
-        if (getcmd == 0x0729) {
-            ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
-            usleep(10);
-            cntdown = 10000;
-            getbit = 2;
-            while(cntdown) {
-                ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
-                if (getbit == 0)
-                    break;
-                cntdown--;
-                usleep(1);
-            }
-            
-            while(cntdown) {
-                ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN    
-                if (getbit == 1)
-                    break;
-                cntdown --;
-                usleep(1);
-            }
-            if (cntdown)
-                break;
-        }
-        
-        command = getcmd;               
-        cmd_tx[0] = (command >> 4) & 0xff;
-        cmd_tx[1] = ((command >> 12) & 0x0f) | ((command << 4) & 0xf0);
-        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
-        
-        if (temp32 != getcmd) {
-            printf(" get status:0x%x\n", getcmd);
-            temp32 = getcmd;
-        }
-        printf(" get status:0x%x\n", getcmd);
-    }
-    
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 4. enable data mode and pull low to wait for data mode */
-    bitset = 1;
-    ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-    bitset = 0;
-    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
-    
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 5. prepare the buffer for data tx mode */
-    /* prepare transmitting */
-    /* Tx/Rx buffer alloc */       
-    buffsize = 1*1024*1024;
-    tx_buff = malloc(buffsize);
-    if (tx_buff) {
-        printf(" tx buff alloc success!!\n");
-    }
-    rx_buff = malloc(buffsize);
-    if (rx_buff) {
-        printf(" rx buff alloc success!!\n");
-    }
-    
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 7. do the transmiting */
-    #define P_SIZE (1024 * 289)
-    int count = 0;
-    int usize = 0;
-    uint8_t *ptr;
-    ptr = rx_buff;
-    
-    getbit = 1;
-    temp32 = 2;
-    while (usize < 883882) {
-        count++;
-        tx_data(fd, ptr, tx_buff, P_SIZE, 2);     
-        usize += P_SIZE;
-        ptr += P_SIZE;
-        printf(" %d r:%d \n", count, usize);
-    }
-    
-    bitset = 0;
-    ioctl(fd, _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-    bitset = 1;
-    ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
-    
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 8. save the rx_buff into FILE */
-    /* open target file which will be transmitted */
-    fsize = usize;
-    printf(" open file %s \n", data_path);
-    fpd = fopen(data_path, "w");
-       
-    if (!fpd) {
-        printf(" %s file open failed \n", data_path);
-        return ret;
-    }
-    printf(" %s file open succeed \n", data_path);
-    /* write Rx buffer into file */
-    fwrite(rx_buff, 1, fsize, fpd);
-    printf(" [%s] size: %d \n", data_path, fsize);
-
-    printf(" \n*****[%d]*****\n", stage++);
-    /* 9. check status for return of command mode */
-    getcmd = 0;
-    temp32 = 1;
-    cmd_tx[0] = 0;
-    cmd_tx[1] = 0;
-    while (1) {
-        tx_command(fd, cmd_rx, cmd_tx, 2);
-        getcmd = cmd_rx[0] | (cmd_rx[1] << 8);
-        
-        getbit = 2;
-        ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN
-        if (getbit == 0) {
-            cntdown = 1000;
-            while(cntdown) {
-                getbit = 2;
-                ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &getbit);   //SPI_IOC_RD_CTL_PIN    
-                if (getbit == 1)
-                    break;
-                cntdown --;
-                usleep(10);
-            }
-            if (cntdown)
-                break;
-        }
-        
-        command = getcmd;               
-        cmd_tx[0] = (command >> 4) & 0xff;
-        cmd_tx[1] = ((command >> 12) & 0x0f) | ((command << 4) & 0xf0);
-        printf(" tx:%x %x \n", cmd_tx[1], cmd_tx[0]);
-        
-        if (temp32 != getcmd) {
-            printf(" get status:0x%x\n", getcmd);
-            temp32 = getcmd;
-        }
-    }
-
-    printf(" \n*****[%d]*****\n", stage++);
-    
-    fclose(fpd);
-    free(tx_buff);
-    free(rx_buff);
-         
-    close(fd);  //???? 
- 
-    return ret; 
-} 
-#endif
