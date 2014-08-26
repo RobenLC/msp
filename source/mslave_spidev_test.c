@@ -6,6 +6,7 @@
 #include <getopt.h> 
 #include <fcntl.h> 
 #include <sys/ioctl.h> 
+#include <sys/mman.h> 
 #include <linux/types.h> 
 #include <linux/spi/spidev.h> 
  
@@ -374,18 +375,22 @@ static char path[256];
     if (tx_buff[0]) {
         printf(" tx buff 0 alloc success!!\n");
     }
+	memset(tx_buff[0], 0, buffsize);
     rx_buff[0] = malloc(buffsize);
     if (rx_buff[0]) {
         printf(" rx buff 0 alloc success!!\n");
     }
+	memset(rx_buff[0], 0, buffsize);
     tx_buff[1] = malloc(buffsize);
     if (tx_buff[1]) {
         printf(" tx buff 1 alloc success!!\n");
     }
+	memset(tx_buff[1], 0, buffsize);
     rx_buff[1] = malloc(buffsize);
     if (rx_buff[1]) {
         printf(" rx buff 1 alloc success!!\n");
     }
+	memset(rx_buff[1], 0, buffsize);
         int fd0, fd1;
         fd0 = open(spi0, O_RDWR);
         if (fd0 < 0) 
@@ -420,12 +425,16 @@ static char path[256];
 		#define PKTSZ  61440
 		int pipefd[2];
 		int pipefs[2];
-		char *tbuff, *tmp, buf='c';
-		int sz, wtsz;
+		char *tbuff, *tmp, buf='c', *dstBuff, *dstmp;
+		char lastaddr[48];
+		int sz, wtsz, lsz;
+		char *addr;
 		int pid;
 		//tbuff = malloc(TSIZE);
 		tbuff = rx_buff[0];
-		
+		dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+		dstmp = dstBuff;
+
 		if (tbuff)
 			printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
 		else 
@@ -433,130 +442,138 @@ static char path[256];
 
 		tmp = tbuff;
 		
-		sz = TSIZE;
+		sz = 0;
 		pipe(pipefd);
 		pipe(pipefs);
 
 		pid = fork();
 		
 		if (pid) {
-			printf("p1 %d created!\n", pid);
+			printf("main process !\n", pid);
 			sleep(3);
 			char str[256] = "/root/p0.log";
-		       
-			#if 0
-			#elif 0
-			data_process(rx_buff[0], tx_buff[0], fp, fm[0], arg0, arg1);
-			#else
-			while(1) {
-				ret = tx_data(fm[0], tbuff, tx_buff[0], 15, PKTSZ, 1024*1024);
-				printf("[p0]%d rx %d\n", fd0, ret);
-				tbuff += ret;						
-				if (ret != (PKTSZ * 15))
-					break;
-			}
-			#endif
-
+			
 			close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
 			close(pipefs[1]); // close the write-end of the pipe, I'm not going to use it
-
-			while (1) {
-				sz = tbuff - tmp;
-				if (sz < PKTSZ)
-					wtsz = sz;
-				else
-					wtsz = PKTSZ;
-				
-				ret = fwrite(tmp, 1, wtsz, fp);
-				printf("[p0]file write %d/%d to fid %d \n", ret, sz, fp);
-
-				tmp += ret;
-
-				//sleep(1); // delay for test
-				
-				write(pipefd[1], "c", 1); // send the content of argv[1] to the reader
-
-				if (tmp >= tbuff) {
-					write(pipefd[1], "e", 1); // send the content of argv[1] to the reader	
+			   
+			while(1) {
+				ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
+				//printf("[p0]%d rx %d\n", fd0, ret);
+				msync(dstBuff, ret, MS_SYNC);
+				dstBuff += ret + PKTSZ;
+				if (ret != PKTSZ) {
+					dstBuff -= PKTSZ;
+					if (ret == 1) ret = 0;
+					lsz = ret;
+					write(pipefd[1], "e", 1); // send the content of argv[1] to the reader
+					sprintf(lastaddr, "%d", dstBuff);
+					printf("write e addr:%x str:%s \n", dstBuff, lastaddr);
+					write(pipefd[1], lastaddr, 32); 
 					break;
 				}
-				while (1) {
-					if (buf == 'e') break;
-			   	    	ret = read(pipefs[0], &buf, 1); 
-		       			printf("p0 wait ret:%d, buf:%c\n", ret, buf);
-					if (ret) break;
-				}
-				
+				write(pipefd[1], "c", 1); // send the content of argv[1] to the reader
+				//printf("main process write c \n");	
 			}
 
+			wtsz = 0;
 			while (1) {
-       			printf("p0 wait END ret:%d, buf:%c\n", ret, buf);
-				if (buf == 'e') break;
-		   	    	ret = read(pipefs[0], &buf, 1); 
+				ret = read(pipefs[0], &buf, 1); 
+				printf("read %d, buf:%c \n", ret, buf);
+				if (buf == 'c')
+					wtsz++;	
+				else if (buf == 'e') {
+					ret = read(pipefs[0], lastaddr, 32); 
+					addr = (char *)atoi(lastaddr);
+					printf("main process wait wtsz:%d, lastaddr:%x/%x\n", wtsz, addr, dstBuff);
+					break;
+				}
 			}
+
+			if (dstBuff > addr) {
+				printf("memcpy from %x to %x sz:%d\n", dstBuff-lsz, addr, lsz);
+				msync(dstBuff-lsz, lsz, MS_SYNC);
+				#if 0
+				memcpy(addr, dstBuff-lsz, lsz);
+				#else
+				memcpy(tbuff, dstBuff-lsz, lsz);
+				memcpy(addr, tbuff, lsz);
+				#endif
+				addr += lsz;
+				memset(addr, 0, PKTSZ);
+				sz = addr - dstmp;
+				msync(dstmp, sz, MS_SYNC);
+				ret = fwrite(dstmp, 1, sz, fp);
+				printf("write file size %d/%d \n", sz, ret);
+			}
+			
 			close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
            		close(pipefs[0]); // close the read-end of the pipe
-			
+
 		} else {
 			char str[256] = "/root/p1.log";
-			printf("main process!\n");
+			printf("p1 process created!\n");
 			sleep(3);
 
-			#if 0
-			#elif 0
-			data_process(rx_buff[0], tx_buff[0], fp, fm[1], arg0, arg1);
-			#else
-			while(1) {
-				ret = tx_data(fm[1], tbuff, tx_buff[0], 15, PKTSZ, 1024*1024);
-				printf("[p1]%d rx %d\n", fd1, ret);
-				tbuff += ret;
-				if (ret != (PKTSZ * 15))
-					break;
-			}
-			#endif
-			
 			close(pipefd[1]); // close the write-end of the pipe, I'm not going to use it
 			close(pipefs[0]); // close the read-end of the pipe, I'm not going to use it
 			
-			while (1) {
-				sz = tbuff - tmp;
-				if (sz < PKTSZ)
-					wtsz = sz;
-				else
-					wtsz = PKTSZ;
-
-				while (1) {
-					if (buf == 'e') break;
-				       	ret = read(pipefd[0], &buf, 1);
-		       			printf("p1 wait ret:%d, buf:%c\n", ret, buf);
-					if (ret) break;
+			dstBuff += PKTSZ;
+			while(1) {
+				ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
+				//printf("[p1]%d rx %d\n", fd1, ret);
+				msync(dstBuff, ret, MS_SYNC);
+				dstBuff += ret + PKTSZ;
+				if (ret != PKTSZ) {
+					dstBuff -= PKTSZ;
+					if (ret == 1) ret = 0;
+					lsz = ret;
+			       	write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
+					sprintf(lastaddr, "%d", dstBuff);
+					printf("write e addr:%x str:%s \n", dstBuff, lastaddr);
+					write(pipefs[1], lastaddr, 32); // send the content of argv[1] to the reader
+					break;
 				}
+				write(pipefs[1], "c", 1); // send the content of argv[1] to the reader
+				//printf("p1 process write c \n");
+			}
 
-				ret = fwrite(tmp, 1, wtsz, fp);
-				printf("[p1]file write %d/%d to fid %d \n", ret, sz, fp);
-
-				tmp += ret;
-
-				//sleep(1); // delay for test
-				
-		       	write(pipefs[1], "c", 1); // send the content of argv[1] to the reader
-		       	
-				if (tmp >= tbuff) {
-					write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
-					break;		       	
+			wtsz = 0;
+			while (1) {
+				ret = read(pipefd[0], &buf, 1); 
+				printf("read %d, buf:%c \n", ret, buf);
+				if (buf == 'c')
+					wtsz++;	
+				else if (buf == 'e') {
+					ret = read(pipefd[0], lastaddr, 32); 
+					addr = (char *)atoi(lastaddr);
+					printf("p1 process wait wtsz:%d, lastaddr:%x/%x\n", wtsz, addr, dstBuff);
+					break;
 				}
 			}
 
-			while (1) {
-	       		printf("p1 wait END ret:%d, buf:%c\n", ret, buf);
-				if (buf == 'e') break;			       	
-				ret = read(pipefd[0], &buf, 1);
+			if (dstBuff > addr) {
+				printf("memcpy from %x to %x sz:%d\n", dstBuff-lsz, addr, lsz);
+				msync(dstBuff-lsz, lsz, MS_SYNC);
+				#if 0
+				memcpy(addr, dstBuff-lsz, lsz);
+				#else
+				memcpy(tbuff, dstBuff-lsz, lsz);
+				memcpy(addr, tbuff, lsz);
+				#endif
+				addr += lsz;
+				memset(addr, 0, PKTSZ);
+				sz = addr - dstmp;
+				msync(dstmp, sz, MS_SYNC);
+				ret = fwrite(dstmp, 1, sz, fp);
+				printf("write file size %d/%d \n", sz, ret);
 			}
+
            		close(pipefd[0]); // close the read-end of the pipe
 		       close(pipefs[1]); // close the write-end of the pipe, thus sending EOF to the
-		       			
+	
 		}
 
+		munmap(dstmp, TSIZE);
 		goto end;
 	}			
     	if (sel == 13){ /* data mode test ex[13 1024 100]*/
