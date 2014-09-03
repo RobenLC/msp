@@ -75,14 +75,14 @@ static void transfer(int fd)
     for (ret = 0; ret < BUFF_SIZE; ret++) {
         if (!(ret % 6))
             puts(""); 
-  tg = (ret - 0) & 0xff;
-  if (rx[ret] != tg) {
-        errcnt++;
-        i = 1;
-    }
+        tg = (ret - 0) & 0xff;
+        if (rx[ret] != tg) {
+              errcnt++;
+              i = 1;
+        }
 
         printf("%.2X:%.2X/%d ", rx[ret], tg, i); 
-  i  = 0;
+        i  = 0;
     } 
     puts(""); 
     printf(" error count: %d\n", errcnt);
@@ -148,14 +148,14 @@ static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz
         rx += pkt_size;
     }
     
-  ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
-  if (ret < 0)
-      pabort("can't send spi message");
-
-  printf("tx/rx len: %d\n", ret);
-
-  free(tr);
-  return ret;
+    ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
+    if (ret < 0)
+        pabort("can't send spi message");
+    
+    printf("tx/rx len: %d\n", ret);
+    
+    free(tr);
+    return ret;
 }
 
 static void _tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size, int num)
@@ -182,13 +182,13 @@ static void _tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size, in
         rx += PKT_SIZE;
     }
     
-  ret = ioctl(fd, SPI_IOC_MESSAGE(num), tr);
-  if (ret < 1)
-      pabort("can't send spi message");
-
-  printf("tx/rx len: %d\n", ret);
-
-  free(tr);
+    ret = ioctl(fd, SPI_IOC_MESSAGE(num), tr);
+    if (ret < 1)
+        pabort("can't send spi message");
+    
+    printf("tx/rx len: %d\n", ret);
+    
+    free(tr);
 }
 #endif
 static void print_usage(const char *prog) 
@@ -218,9 +218,9 @@ static void parse_opts(int argc, char *argv[])
             { "speed",   1, 0, 's' }, 
             { "delay",   1, 0, 'd' }, 
             { "bpw",     1, 0, 'b' }, 
-                        { "command", 1, 0, 'm' }, 
-                        { "path   ", 1, 0, 'p' },
-                        { "whloop",  1, 0, 'w' }, 
+            { "command", 1, 0, 'm' }, 
+            { "path   ", 1, 0, 'p' },
+            { "whloop",  1, 0, 'w' }, 
             { "loop",    0, 0, 'l' }, 
             { "cpha",    0, 0, 'H' }, 
             { "cpol",    0, 0, 'O' }, 
@@ -331,10 +331,10 @@ static int data_process(char *rx, char *tx, FILE *fp, int fd, int pktsz, int num
     int trunksz;
     trunksz = 1024 * num;
 
-        ret = tx_data(fd, rx, tx, num, pktsz, 1024*1024);
-        printf("%d rx %d\n", fd, ret);
-        wtsz = fwrite(rx, 1, ret, fp);
-        printf("%d wt %d\n", fd, wtsz);
+    ret = tx_data(fd, rx, tx, num, pktsz, 1024*1024);
+    printf("%d rx %d\n", fd, ret);
+    wtsz = fwrite(rx, 1, ret, fp);
+    printf("%d wt %d\n", fd, wtsz);
 
 
 }
