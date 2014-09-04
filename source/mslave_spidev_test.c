@@ -152,7 +152,7 @@ static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz
     if (ret < 0)
         pabort("can't send spi message");
     
-    printf("tx/rx len: %d\n", ret);
+    //printf("tx/rx len: %d\n", ret);
     
     free(tr);
     return ret;
@@ -425,6 +425,13 @@ static char path[256];
         rxans[i] = i & 0x95;
         tx[i] = i & 0x95;
     }
+    if (sel == 16){ /* tx hold test ex[16 0 0]*/
+	arg1 = arg1%2;
+       bitset = arg0;
+	ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+	printf("Set spi%d Tx Hold: %d\n", arg1, bitset);
+        goto end;
+    }
 
     if (sel == 15){ /* single band data mode test ex[14]*/
         int wtsz;
@@ -462,9 +469,10 @@ static char path[256];
         int pipefc[2];
         char *tbuff, *tmp, buf='c', *dstBuff, *dstmp;
         char lastaddr[48];
-        int sz, wtsz, lsz;
+        int sz = 0, wtsz = 0, lsz = 0;
         char *addr;
-        int pid;
+        int pid = 0;
+        int txhldsz = 0;
         //tbuff = malloc(TSIZE);
         tbuff = rx_buff[0];
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -523,17 +531,58 @@ static char path[256];
                 close(pipefs[0]); // close the read-end of the pipe
                 close(pipefc[1]); // close the write-end of the pipe, thus sending EOF to the reader
                 
+                txhldsz = 5;
+                
                 while (1) {
+                    sleep(3);					
                     ret = read(pipefc[0], &buf, 1); 
                     printf("********//read %d, buf:%c//********\n", ret, buf);
-                    if ((buf    == '0') || (buf == '1'))
+                    if ((buf == '0') || (buf == '1')) {
                         wtsz++;
-                    else if (buf == 'e') {
+                        if (wtsz == txhldsz) {
+                            printf("********//spi slave send signal to hold the data transmitting(%d/%d)//********\n", wtsz, txhldsz);
+
+                            bitset = 1;
+                            ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                            printf("Set spi0 Tx Hold: %d\n", bitset);
+
+                            bitset = 1;
+                            ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                            printf("Set spi1 Tx Hold: %d\n", bitset);
+
+				lsz = 10;
+
+				while(lsz) {
+              	              bitset = 0;
+       	                     ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+	                            printf("Set RDY: %d\n", bitset);
+                            	sleep(2);
+                            
+                     	       bitset = 1;
+              	              ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+       	                     printf("Set RDY: %d\n", bitset);
+					sleep(2);
+					lsz --;
+				}
+				
+                            bitset = 0;
+                            ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                            printf("Set spi0 Tx Hold: %d\n", bitset);
+
+                            bitset = 0;
+                            ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                            printf("Set spi1 Tx Hold: %d\n", bitset);
+							
+                        }   
+                    } else if (buf == 'e') {
                         ret = read(pipefc[0], lastaddr, 32); 
                         sz = atoi(lastaddr);
                         printf("********//main monitor, write count:%d, sz:%d str:%s//********\n", wtsz, sz, lastaddr);
                         break;
+                    } else {
+                        printf("********//main monitor, get buff:%c, ERROR!!!!//********\n", buf);
                     }
+                    
                 }
                 close(pipefc[0]); // close the read-end of the pipe
 
@@ -548,7 +597,7 @@ static char path[256];
                 while(1) {
                     //ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
                     ret = tx_data(fm[0], dstBuff, NULL, 1, PKTSZ, 1024*1024);
-                    //printf("[p0]rx %d\n", ret);
+                    printf("[p0]rx %d - %d\n", ret, wtsz++);
                     msync(dstBuff, ret, MS_SYNC);
                     dstBuff += ret + PKTSZ;
                     if (ret != PKTSZ) {
@@ -622,7 +671,7 @@ static char path[256];
             while(1) {
                 //ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
                 ret = tx_data(fm[1], dstBuff, NULL, 1, PKTSZ, 1024*1024);
-                //printf("[p1]rx %d\n", ret);
+                printf("[p1]rx %d - %d\n", ret, wtsz++);
                 msync(dstBuff, ret, MS_SYNC);
                 dstBuff += ret + PKTSZ;
                 if (ret != PKTSZ) {
