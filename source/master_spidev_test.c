@@ -2,12 +2,16 @@
 #include <unistd.h> 
 #include <stdio.h> 
 #include <stdlib.h> 
+#include <string.h>
 #include <getopt.h> 
 #include <fcntl.h> 
 #include <sys/ioctl.h> 
+#include <sys/mman.h> 
 #include <linux/types.h> 
 #include <linux/spi/spidev.h> 
- 
+#include <sys/times.h> 
+#include <time.h>
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
  
 #define SPI_CPHA  0x01          /* clock phase */
@@ -35,10 +39,10 @@ static void pabort(const char *s)
 } 
  
 static const char *device = "/dev/spidev32765.0"; 
-static const char *data_path = "/root/tx/1.jpg"; 
+char data_path[256] = "/root/tx/1.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
-static uint32_t speed = 1000000; 
+static uint32_t speed = 10000000; 
 static uint16_t delay; 
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
@@ -87,7 +91,19 @@ static void transfer(int fd)
 } 
 
 #if 1
-static void tx_command(
+static int chk_reply(char * rx, char *ans, int sz)
+{
+	int i;
+	for (i=2; i < sz; i++)
+		if (rx[i] != ans[i]) 
+			break;
+
+	if (i < sz)
+		return i;
+	else
+		return 0;
+}
+static int tx_command(
   int fd, 
   uint8_t *ex_rx, 
   uint8_t *ex_tx, 
@@ -114,9 +130,49 @@ static void tx_command(
   ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
   if (ret < 1)
       pabort("can't send spi message");
+  return ret;
 }
 
-static void tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size)
+static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz)
+{
+    int pkt_size;
+    int ret, i, errcnt; 
+    int remain;
+
+    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
+    
+    uint8_t tg;
+    uint8_t *tx = tx_buff;
+    uint8_t *rx = rx_buff;  
+    pkt_size = pksz;
+    remain = maxsz;
+
+    for (i = 0; i < num; i++) {
+        remain -= pkt_size;
+        if (remain < 0) break;
+
+        tr[i].tx_buf = (unsigned long)tx;
+        tr[i].rx_buf = (unsigned long)rx;
+        tr[i].len = pkt_size;
+        tr[i].delay_usecs = delay;
+        tr[i].speed_hz = speed;
+        tr[i].bits_per_word = bits;
+        
+        tx += pkt_size;
+        rx += pkt_size;
+    }
+    
+  ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
+  if (ret < 1)
+      pabort("can't send spi message");
+
+  //printf("tx/rx len: %d\n", ret);
+
+  free(tr);
+  return ret;
+}
+
+static void _tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size)
 {
   int ret, i, errcnt; 
 
@@ -249,7 +305,8 @@ static void parse_opts(int argc, char *argv[])
             break;
         case 'p':   //command input
               printf(" -p %s \n", optarg);
-            data_path = optarg;
+		strcpy(data_path, optarg);
+            //data_path = optarg;
             break;
         default:    //??的?? 
             print_usage(argv[0]); 
@@ -260,10 +317,17 @@ static void parse_opts(int argc, char *argv[])
 #if 1
 int main(int argc, char *argv[]) 
 { 
+static char spi0[] = "/dev/spidev32765.0"; 
+static char spi1[] = "/dev/spidev32765.1"; 
     uint32_t bitset;
-    int sel, arg;
+    int sel, arg0, arg1, arg2;
     int fd, ret; 
-    arg = 0;
+    arg0 = 0;
+	arg1 = 0;
+	arg2 = 0;
+
+	/* scanner default setting */
+	mode |= SPI_CPOL;     
 
     fd = open(device, O_RDWR);  //打???文件 
     if (fd < 0) 
@@ -275,29 +339,390 @@ int main(int argc, char *argv[])
     }
     if (argc > 2) {
         printf(" [2]:%s \n", argv[2]);
-        arg = atoi(argv[2]);
+        arg0 = atoi(argv[2]);
+    }
+    if (argc > 3) {
+        printf(" [3]:%s \n", argv[3]);
+        arg1 = atoi(argv[3]);
+    }
+    if (argc > 4) {
+        printf(" [4]:%s \n", argv[4]);
+        arg2 = atoi(argv[4]);
     }
 	
+        uint8_t *tx_buff, *rx_buff;
+        FILE *fpd;
+        int fsize, buffsize;
+        buffsize = 16*1024*1024;
+        tx_buff = malloc(buffsize);
+        if (tx_buff) {
+            printf(" tx buff alloc success!!\n");
+        }
+        rx_buff = malloc(buffsize);
+        if (rx_buff) {
+            printf(" rx buff alloc success!!\n");
+        }
+
+	if (((sel == 9) ||(sel == 11)) && (argc > 3))
+		strcpy(data_path, argv[3]);
+        /* open target file which will be transmitted */
+        printf(" open file %s \n", data_path);
+        fpd = fopen(data_path, "r");
+       
+        if (!fpd) {
+            printf(" %s file open failed \n", data_path);
+            goto end;
+        }
+	
+        printf(" %s file open succeed \n", data_path);
+        /* read the file into Tx buffer */
+        //fsize = fread(tx_buff, 1, buffsize, fpd);
+        //printf(" [%s] size: %d \n", data_path, fsize);
+
+        int fd0, fd1;
+        fd0 = open(spi0, O_RDWR);
+        if (fd0 < 0) {
+            printf("can't open device[%s]\n", spi0); 
+		goto end;
+        }
+        else 
+            printf("open device[%s]\n", spi0); 
+        fd1 = open(spi1, O_RDWR);
+        if (fd1 < 0) {
+                printf("can't open device[%s]\n", spi1); 
+		goto end;
+        }
+        else 
+            printf("open device[%s]\n", spi1); 
+
+       int fm[2] = {fd0, fd1};
+	char rxans[512];
+	char tx[512];
+	char rx[512];
+	int i;
+	for (i = 0; i < 512; i++) {
+		rxans[i] = i & 0x95;
+		tx[i] = i & 0x95;
+	}
+    if (sel == 12) { /* command mode */
+	int pid = 0;
+	pid = fork();
+	printf("pid: %d \n", pid);
+	
+	goto end;
+
+	}
+    if (sel == 11) { /* dual channel data mode ex:[11 50 file_path 12288]*/
+	#define TSIZE (256*1024*1024)
+	#define PKTSZ  61440
+
+	if (arg0)
+		speed = arg0 * 1000000;
+    /*
+     * max speed hz     //?置速率
+     */ 
+    ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?速率 
+    if (ret == -1) 
+        pabort("can't set max speed hz"); 
+ 
+    ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?速率 
+    if (ret == -1) 
+        pabort("can't get max speed hz"); 
+    //打印模式,每字多少位和速率信息 
+    printf("spi mode: %d\n", mode); 
+    printf("bits per word: %d\n", bits); 
+    printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000); 
+	
+        bitset = 0;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+        int pksize = 1024;
+        int pknum = 60;
+        int trunksz, remainsz, pkcnt;
+	char *srcBuff, *srctmp;
+	char * tbuff;
+	int pid;
+	if ((arg2) && (arg2 <= PKTSZ) && !(arg2%pksize) && !(PKTSZ%arg2)) {
+		pksize = arg2;
+	}
+	pknum = PKTSZ / pksize;
+	printf("pksize:%d pknum:%d \n", pksize, pknum);
+	struct tms time;
+	struct timespec curtime;
+	unsigned long long cur, tnow, lnow, past, tbef, lpast;
+	
+        trunksz = pknum * pksize;
+
+        pkcnt = 0;
+	tbuff = tx_buff;
+	
+	clock_gettime(CLOCK_REALTIME, &curtime);
+	printf("%llu, %llu \n", curtime.tv_sec, curtime.tv_nsec);
+	times(&time);
+	printf("%llu %llu %llu %llu \n", time.tms_utime, time.tms_stime, time.tms_cutime, time.tms_cstime);
+
+
+	srcBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+	srctmp = srcBuff;
+
+        fsize = fread(srcBuff, 1, TSIZE, fpd);
+        printf(" [%s] size: %d, read to share memory\n", data_path, fsize);
+
+        remainsz = fsize;
+/*
+	memcpy(srcBuff, tx_buff, fsize);
+	printf(" [%s] size: %d, copy to share memory\n", data_path, fsize);
+*/
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("Set RDY pin: %d\n", bitset);
+
+	pid = fork();
+	printf("pid: %d \n", pid);
+
+	if (pid) {
+		clock_gettime(CLOCK_REALTIME, &curtime);
+		cur = curtime.tv_sec;
+		tnow = curtime.tv_nsec;
+		lnow = cur * 1000000000+tnow;
+		printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+		while (1) {
+	
+	            	if (remainsz < trunksz) {
+				if (remainsz < pksize)
+					pknum = 1;
+				else {
+					pknum = remainsz / pksize;
+					 if (remainsz % pksize)
+						pknum += 1;
+				}
+				remainsz = 0;
+	            	} else {
+				remainsz -= trunksz * 2;
+			}
+
+			ret = tx_data(fm[0], NULL, srcBuff, pknum, pksize, 1024*1024);
+			//printf("[p0] tx %d fd%d\n", ret, 0);
+			srcBuff += ret + PKTSZ;
+
+			pkcnt++;
+
+			if (remainsz <= 0) break;
+		}
+
+	}else {
+		remainsz -= trunksz;
+		
+		clock_gettime(CLOCK_REALTIME, &curtime);
+		cur = curtime.tv_sec;
+		tnow = curtime.tv_nsec;
+		lnow = cur * 1000000000+tnow;
+		printf("[p1] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+		
+
+		
+		srcBuff += trunksz;
+		while (1) {
+			if (remainsz <= 0) break;
+			
+	            	if (remainsz < trunksz) {
+				if (remainsz < pksize)
+					pknum = 1;
+				else {
+					pknum = remainsz / pksize;
+					 if (remainsz % pksize)
+						pknum += 1;
+				}
+				remainsz = 0;
+	            	} else {
+				remainsz -= trunksz * 2;
+			}
+
+			ret = tx_data(fm[1], NULL, srcBuff, pknum, pksize, 1024*1024);
+			//printf("[p1] tx %d fd%d\n", ret, 1);
+			srcBuff += ret + PKTSZ;
+		}
+
+	}
+
+
+	clock_gettime(CLOCK_REALTIME, &curtime);
+	past = curtime.tv_sec;
+	tbef = curtime.tv_nsec;		
+	lpast = past * 1000000000+tbef;	
+
+	printf("time cose: %llu s, bandwidth: %llu Mbits/s \n", (lpast - lnow)/1000000000, ((fsize*8)/((lpast - lnow)/1000000000)) /1000000 );
+	
+	sleep(3);
+
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset,pkcnt);
+
+	sleep(1);
+	
+        bitset = 0;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
+
+	munmap(srctmp, TSIZE);
+	goto end;
+    }
+
+    if (sel == 10) { /* command mode */
+	while (1) {
+	        bitset = 0;
+       	 ioctl(fd0, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        	 printf("Get RDY pin: %d\n", bitset);
+		if (bitset == 1)
+			break;
+		sleep(3);
+	}
+
+	tx[0] = 0x53;
+	tx[1] = 0x80;
+	ret = tx_command(fd0, rx, tx, 512);
+	printf("Send cmd 0x%x 0x%x ret:%d\n", tx[0], tx[1], ret);
+	ret = chk_reply(rx, rxans, 512);
+	printf("check reply ret: %d \n", ret);
+
+	if (ret == 0) {
+		bitset = 0;
+        	ioctl(fd1, _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);   //SPI_IOC_WR_CS_PIN
+        	printf("Set CS pin: %d\n", bitset);
+	}
+        goto end;
+    }
+		
+    if (sel == 9) { /* tx data use dual band [9 100 filename] */
+
+        int pksize = 1024;
+        int pknum = arg0;
+        int trunksz, remainsz, pkcnt;
+	char * tbuff;
+        trunksz = pknum * pksize;
+        remainsz = fsize;
+        pkcnt = 0;
+	tbuff = tx_buff;
+
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("Set RDY pin: %d\n", bitset);
+
+        while (1) {
+            	if (remainsz < trunksz) {
+			if (remainsz < pksize)
+				pknum = 1;
+			else {
+				pknum = remainsz / pksize;
+				 if (remainsz % pksize)
+					pknum += 1;
+			}
+			remainsz = 0;
+            	} else {
+			remainsz -= trunksz;
+		}
+	        ret = tx_data(fm[pkcnt%2], NULL, tbuff, pknum, pksize, 1024*1024);
+       	 //printf("tx ret:%d fd%d\n", ret, pkcnt%2);
+
+		tbuff += pknum * pksize;
+		
+		 pkcnt++;
+		 if (!remainsz) break;
+        }
+
+	sleep(3);
+
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("Set RDY pin: %d\n", bitset);
+
+        bitset = 0;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("Set RDY pin: %d\n", bitset);
+
+        goto end;
+    }
+	
+    if (sel == 8) { /* tx data */
+        ret = tx_data(fm[arg2], rx_buff, tx_buff, arg0, arg1, 1024*1024);
+        printf("tx len: %d num: %d fd%d pksz:%d\n", ret, arg0, arg2, arg1);
+        goto end;
+    }
     if (sel == 3) { /* set cs pin */
-        bitset = arg;
-        ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);   //SPI_IOC_WR_CS_PIN
-        printf("Set CS pin: %d\n", arg);
-        return;
+        bitset = arg0;
+        ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);   //SPI_IOC_WR_CS_PIN
+        printf("Set CS pin: %d\n", arg0);
+        goto end;
     }
     if (sel == 4) { /* set RDY pin */
-        bitset = arg;
-        ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("Set RDY pin: %d\n", arg);
-        return;
+        bitset = arg0;
+        ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("Set RDY pin: %d\n", arg0);
+        goto end;
     }
     if (sel == 5) { /* get RDY pin */
         bitset = 0;
-        ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("Get RDY pin: %d\n", bitset);
-        return;
+        goto end;
     }
-    ret = 0;
+    if (sel == 6) { /* read File */
+    /* prepare transmitting */
+    /* Tx/Rx buffer alloc */       
+        uint8_t *tx_buff, *rx_buff;
+        FILE *fpd;
+        int fsize, buffsize;
+        buffsize = 1*1024*1024;
+        tx_buff = malloc(buffsize);
+        if (tx_buff) {
+            printf(" tx buff alloc success!!\n");
+        }
+        rx_buff = malloc(buffsize);
+        if (rx_buff) {
+            printf(" rx buff alloc success!!\n");
+        }
+       
+        /* open target file which will be transmitted */
+        printf(" open file %s \n", data_path);
+        fpd = fopen(data_path, "r");
+       
+        if (!fpd) {
+            printf(" %s file open failed \n", data_path);
+            goto end;
+        }
 	
+        printf(" %s file open succeed \n", data_path);
+        /* read the file into Tx buffer */
+        fsize = fread(tx_buff, 1, buffsize, fpd);
+        printf(" [%s] size: %d \n", data_path, fsize);
+
+        free(tx_buff);
+        free(rx_buff);	
+        goto end;
+    }
+    
+    if (sel == 7) { /* open device node */
+        int fd0, fd1;
+        fd0 = open(spi0, O_RDWR);
+        if (fd0 < 0) 
+            printf("can't open device[%s]\n", spi0); 
+        else 
+            printf("open device[%s]\n", spi0); 
+        fd1 = open(spi1, O_RDWR);
+        if (fd1 < 0) 
+                printf("can't open device[%s]\n", spi1); 
+        else 
+            printf("open device[%s]\n", spi1); 
+        goto end;
+    }
+
+
+    ret = 0;
+
     
     while (1) {
         if (!(ret % 100000)) {
@@ -318,6 +743,12 @@ int main(int argc, char *argv[])
           
         ret++;
     }
+end:
+    free(rx_buff);
+    free(tx_buff);
+    close(fd0);
+    close(fd1);
+    fclose(fpd);
 }
 #else
 int main(int argc, char *argv[]) 
@@ -326,11 +757,7 @@ int main(int argc, char *argv[])
     int fd; 
       uint8_t cmd_tx[16] = {0x53, 0x80,};
       uint8_t cmd_rx[16] = {0,};
-      int cmd_size = 2;
-      uint8_t *tx_buff, *rx_buff;
-      FILE *fpd;
-      int fsize, buffsize;
-      uint32_t bitset;
+
       
     parse_opts(argc, argv); //解析????的?? 
  
@@ -378,13 +805,16 @@ int main(int argc, char *argv[])
     /* spi work sequence start here */
     
     ioctl(fd, _IOW(SPI_IOC_MAGIC, 7, __u32), &bits);   //SPI_IOC_REL_CTL_PIN
-    
+    int cmd_size = 2;
+
+    uint32_t bitset;    
     uint32_t temp32;
     uint32_t stage;
+    uint32_t getbit;
     stage = 1;
     printf(" \n*****[%d]*****\n", stage++);
     /* 1. check control_pin ready or not */
-    uint32_t getbit;
+
     getbit = 0;
     temp32 = 2;
     while (getbit == 0) {
@@ -434,31 +864,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    /* prepare transmitting */
-    /* Tx/Rx buffer alloc */       
-    buffsize = 1*1024*1024;
-    tx_buff = malloc(buffsize);
-    if (tx_buff) {
-        printf(" tx buff alloc success!!\n");
-    }
-    rx_buff = malloc(buffsize);
-    if (rx_buff) {
-        printf(" rx buff alloc success!!\n");
-    }
-       
-    /* open target file which will be transmitted */
-    printf(" open file %s \n", data_path);
-    fpd = fopen(data_path, "r");
-       
-    if (!fpd) {
-        printf(" %s file open failed \n", data_path);
-        return ret;
-    }
-    printf(" %s file open succeed \n", data_path);
-    /* read the file into Tx buffer */
-    fsize = fread(tx_buff, 1, buffsize, fpd);
-    printf(" [%s] size: %d \n", data_path, fsize);
-    
+
+	
     printf(" \n*****[%d]*****\n", stage++); 
     /* 3. send request transmitting command and check */
     /* to be done */
