@@ -42,7 +42,7 @@ static const char *device = "/dev/spidev32765.0";
 char data_path[256] = "/root/tx/1.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
-static uint32_t speed = 10000000; 
+static uint32_t speed = 20000000; 
 static uint16_t delay; 
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
