@@ -328,7 +328,7 @@ static char spi1[] = "/dev/spidev32765.1";
 
 	/* scanner default setting */
 	mode |= SPI_CPOL;     
-
+ 
     fd = open(device, O_RDWR);  //ゴ???ゅン 
     if (fd < 0) 
         pabort("can't open device"); 
@@ -395,6 +395,30 @@ static char spi1[] = "/dev/spidev32765.1";
         else 
             printf("open device[%s]\n", spi1); 
 
+
+    /*
+     * spi0 mode 
+     */ 
+    ret = ioctl(fd0, SPI_IOC_WR_MODE, &mode);    //?家Α 
+    if (ret == -1) 
+        pabort("can't set spi mode"); 
+ 
+    ret = ioctl(fd0, SPI_IOC_RD_MODE, &mode);    //?家Α 
+    if (ret == -1) 
+        pabort("can't get spi mode"); 
+
+   /*
+     * spi1 mode
+     */ 
+    ret = ioctl(fd1, SPI_IOC_WR_MODE, &mode);    //?家Α 
+    if (ret == -1) 
+        pabort("can't set spi mode"); 
+ 
+    ret = ioctl(fd1, SPI_IOC_RD_MODE, &mode);    //?家Α 
+    if (ret == -1) 
+        pabort("can't get spi mode"); 
+	
+
        int fm[2] = {fd0, fd1};
 	char rxans[512];
 	char tx[512];
@@ -412,8 +436,8 @@ static char spi1[] = "/dev/spidev32765.1";
 	goto end;
 
 	}
-    if (sel == 11) { /* dual channel data mode ex:[11 50 file_path 12288]*/
-	#define TSIZE (256*1024*1024)
+    if (sel == 11) { /* dual channel data mode ex:[11 50 file_path 61440]*/
+	#define TSIZE (128*1024*1024)
 	#define PKTSZ  61440
 
 	if (arg0)
@@ -505,6 +529,18 @@ static char spi1[] = "/dev/spidev32765.1";
 			}
 
 			ret = tx_data(fm[0], NULL, srcBuff, pknum, pksize, 1024*1024);
+/*
+if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
+	char *ch;
+	ch = srcBuff;;
+	printf("0x%.8x: \n", (uint32_t)(ch - srctmp));
+	for (sel = 0; sel < 1024; sel++) {
+		printf("%.2x ", *ch);
+		if (!((sel + 1) % 16)) printf("\n");
+		ch++;
+	}
+}
+*/
 			//printf("[p0] tx %d fd%d\n", ret, 0);
 			srcBuff += ret + PKTSZ;
 
@@ -542,6 +578,18 @@ static char spi1[] = "/dev/spidev32765.1";
 			}
 
 			ret = tx_data(fm[1], NULL, srcBuff, pknum, pksize, 1024*1024);
+/*
+if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
+	char *ch;
+	ch = srcBuff;;
+	printf("0x%.8x: \n", (uint32_t)(ch - srctmp));
+	for (sel = 0; sel < 1024; sel++) {
+		printf("%.2x ", *ch);
+		if (!((sel + 1) % 16)) printf("\n");
+		ch++;
+	}
+}
+*/
 			//printf("[p1] tx %d fd%d\n", ret, 1);
 			srcBuff += ret + PKTSZ;
 		}
