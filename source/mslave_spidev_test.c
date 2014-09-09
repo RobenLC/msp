@@ -461,8 +461,8 @@ static char path[256];
         printf("write file %d size %d/%d \n", fp, wtsz, ret);
         goto end;
     }
-    if (sel == 14){ /* dual band data mode test ex[14]*/
-        #define TSIZE (64*1024*1024)
+    if (sel == 14){ /* dual band data mode test ex[14 0 2000]*/
+        #define TSIZE (128*1024*1024)
         #define PKTSZ  61440
         int pipefd[2];
         int pipefs[2];
@@ -476,6 +476,7 @@ static char path[256];
         //tbuff = malloc(TSIZE);
         tbuff = rx_buff[0];
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+	memset(dstBuff, 0x95, TSIZE);
         dstmp = dstBuff;
 
         /*
@@ -524,6 +525,8 @@ static char path[256];
         if (pid) {
             pid = fork();
             if (pid) {
+		uint8_t *cbuff;
+		cbuff = tx_buff[1];
                 printf("main process to monitor the p0 and p1 \n");
                 close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
                 close(pipefs[1]); // close the write-end of the pipe, I'm not going to use it
@@ -531,14 +534,17 @@ static char path[256];
                 close(pipefs[0]); // close the read-end of the pipe
                 close(pipefc[1]); // close the write-end of the pipe, thus sending EOF to the reader
                 
-                txhldsz = 5;
+                txhldsz = arg1;
                 
                 while (1) {
-                    sleep(3);					
+                    //sleep(3);					
                     ret = read(pipefc[0], &buf, 1); 
-                    printf("********//read %d, buf:%c//********\n", ret, buf);
+                    //printf("********//read %d, buf:%c//********\n", ret, buf);
                     if ((buf == '0') || (buf == '1')) {
-                        wtsz++;
+				cbuff[wtsz] = buf;
+                     	wtsz++;
+
+			if (arg0) {						
                         if (wtsz == txhldsz) {
                             printf("********//spi slave send signal to hold the data transmitting(%d/%d)//********\n", wtsz, txhldsz);
 
@@ -549,6 +555,7 @@ static char path[256];
                             bitset = 1;
                             ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                             printf("Set spi1 Tx Hold: %d\n", bitset);
+
 
 				lsz = 10;
 
@@ -564,7 +571,7 @@ static char path[256];
 					sleep(2);
 					lsz --;
 				}
-				
+
                             bitset = 0;
                             ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                             printf("Set spi0 Tx Hold: %d\n", bitset);
@@ -574,10 +581,15 @@ static char path[256];
                             printf("Set spi1 Tx Hold: %d\n", bitset);
 							
                         }   
+			   }
                     } else if (buf == 'e') {
                         ret = read(pipefc[0], lastaddr, 32); 
                         sz = atoi(lastaddr);
                         printf("********//main monitor, write count:%d, sz:%d str:%s//********\n", wtsz, sz, lastaddr);
+				for (sz = 0; sz < wtsz; sz++) {
+					printf("%c, ", cbuff[sz]);
+					if (!((sz+1) % 16)) printf("\n");
+				}
                         break;
                     } else {
                         printf("********//main monitor, get buff:%c, ERROR!!!!//********\n", buf);
@@ -595,11 +607,24 @@ static char path[256];
                 close(pipefc[0]); // close the read-end of the pipe
                 
                 while(1) {
-                    //ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
-                    ret = tx_data(fm[0], dstBuff, NULL, 1, PKTSZ, 1024*1024);
-                    printf("[p0]rx %d - %d\n", ret, wtsz++);
+                    ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
+                    //ret = tx_data(fm[0], dstBuff, NULL, 1, PKTSZ, 1024*1024);
+			if (arg0) 
+                    		printf("[p0]rx %d - %d\n", ret, wtsz++);
                     msync(dstBuff, ret, MS_SYNC);
-                    dstBuff += ret + PKTSZ;
+/*
+if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
+	char *ch;
+	ch = dstBuff;;
+	printf("0x%.8x: \n",(uint32_t)(ch - dstmp));
+	for (sel = 0; sel < 1024; sel++) {
+		printf("%.2x ", *ch);
+		if (!((sel + 1) % 16)) printf("\n");
+		ch++;
+	}
+}
+*/
+			dstBuff += ret + PKTSZ;
                     if (ret != PKTSZ) {
                         dstBuff -= PKTSZ;
                         if (ret == 1) ret = 0;
@@ -620,7 +645,7 @@ static char path[256];
                 wtsz = 0;
                 while (1) {
                     ret = read(pipefs[0], &buf, 1); 
-                    printf("p0 read %d, buf:%c \n", ret, buf);
+                    //printf("p0 read %d, buf:%c \n", ret, buf);
                     if (buf == 'c')
                         wtsz++; 
                     else if (buf == 'e') {
@@ -652,7 +677,7 @@ static char path[256];
 
                     msync(dstmp, sz, MS_SYNC);
                     ret = fwrite(dstmp, 1, sz, fp);
-                    printf("p0 write file %d size %d/%d \n", fp, sz, ret);
+                    printf("\np0 write file %d size %d/%d \n", fp, sz, ret);
                 }
                 
                 close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
@@ -669,10 +694,23 @@ static char path[256];
 
             dstBuff += PKTSZ;
             while(1) {
-                //ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
-                ret = tx_data(fm[1], dstBuff, NULL, 1, PKTSZ, 1024*1024);
-                printf("[p1]rx %d - %d\n", ret, wtsz++);
+                ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
+                //ret = tx_data(fm[1], dstBuff, NULL, 1, PKTSZ, 1024*1024);
+		if (arg0)		
+	                printf("[p1]rx %d - %d\n", ret, wtsz++);
                 msync(dstBuff, ret, MS_SYNC);
+/*
+if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
+	char *ch;
+	ch = dstBuff;;
+	printf("0x%.8x: \n", (uint32_t)(ch - dstmp));
+	for (sel = 0; sel < 1024; sel++) {
+		printf("%.2x ", *ch);
+		if (!((sel + 1) % 16)) printf("\n");
+		ch++;
+	}
+}
+*/
                 dstBuff += ret + PKTSZ;
                 if (ret != PKTSZ) {
                     dstBuff -= PKTSZ;
@@ -694,7 +732,7 @@ static char path[256];
             wtsz = 0;
             while (1) {
                 ret = read(pipefd[0], &buf, 1); 
-                printf("p1 read %d, buf:%c  \n", ret, buf);
+                //printf("p1 read %d, buf:%c  \n", ret, buf);
                 if (buf == 'c')
                     wtsz++; 
                 else if (buf == 'e') {
@@ -726,7 +764,7 @@ static char path[256];
 
                 msync(dstmp, sz, MS_SYNC);
                 ret = fwrite(dstmp, 1, sz, fp);
-                printf("p1 write file %d size %d/%d \n", fp, sz, ret);
+                printf("\np1 write file %d size %d/%d \n", fp, sz, ret);
             }
 
             close(pipefd[0]); // close the read-end of the pipe
