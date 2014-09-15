@@ -44,7 +44,28 @@ static uint32_t speed = 1000000;
 static uint16_t delay; 
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
+
  
+static int test_gen(char *tx0, char *tx1, int len) {
+    int i;
+    char ch0[64], az;
+    char ch1[64];
+    az = 48;
+    for (i = 0; i < 63; i++) {
+    	ch0[i] = az++;
+    	ch1[i] = az;
+    }
+    ch0[i] = '\n';
+    ch1[i] = '\n';
+    
+    for (i = 0; i < len; i++) {
+        tx0[i] = ch0[i%64];
+        tx1[i] = ch1[i%64];
+    }
+
+    return i;
+}
+
 static void transfer(int fd) 
 { 
     int ret, i, errcnt; 
@@ -341,21 +362,21 @@ static int data_process(char *rx, char *tx, FILE *fp, int fd, int pktsz, int num
 
 int main(int argc, char *argv[]) 
 { 
-static char spi0[] = "/dev/spidev32765.0"; 
-static char spi1[] = "/dev/spidev32766.0"; 
+static char spi1[] = "/dev/spidev32765.0"; 
+static char spi0[] = "/dev/spidev32766.0"; 
 //static char data_save[] = "/root/rx/%d.jpg"; 
 static char data_save[] = "/mnt/mmc2/rx/%d.bin"; 
 static char path[256];
 
     uint32_t bitset;
-    int sel, arg0, arg1 = 0;
+    int sel, arg0 = 0, arg1 = 0, arg2 = 0;
     int fd, ret; 
     int buffsize;
     uint8_t *tx_buff[2], *rx_buff[2];
     FILE *fp;
 
     /* scanner default setting */
-    mode |= SPI_CPOL;     
+    mode |= SPI_CPHA;     
     
     fd = open(device, O_RDWR);  //¥´???¤å¥ó 
     if (fd < 0) 
@@ -373,7 +394,11 @@ static char path[256];
         printf(" [3]:%s \n", argv[3]);
         arg1 = atoi(argv[3]);
     }
-    
+    if (argc > 4) {
+        printf(" [4]:%s \n", argv[4]);
+        arg2 = atoi(argv[4]);
+    }
+	
     buffsize = 5*1024*1024;
     tx_buff[0] = malloc(buffsize);
     if (tx_buff[0]) {
@@ -396,6 +421,9 @@ static char path[256];
     }
     memset(rx_buff[1], 0, buffsize);
 
+    ret = test_gen(tx_buff[0], tx_buff[1], buffsize);
+    printf("tx pattern gen size: %d/%d \n", ret, buffsize);
+	
     int fd0, fd1;
     fd0 = open(spi0, O_RDWR);
     if (fd0 < 0) 
@@ -507,6 +535,13 @@ static char path[256];
         bitset = 1;
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
         
+        bitset = 1;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi0 data mode: %d\n", bitset);
+
+        bitset = 1;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi1 data mode: %d\n", bitset);
 
         if (tbuff)
             printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
@@ -546,39 +581,47 @@ static char path[256];
 
 			if (arg0) {						
                         if (wtsz == txhldsz) {
-                            printf("********//spi slave send signal to hold the data transmitting(%d/%d)//********\n", wtsz, txhldsz);
+                            //printf("********//spi slave send signal to hold the data transmitting(%d/%d)//********\n", wtsz, txhldsz);
 
                             bitset = 1;
                             ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-                            printf("Set spi0 Tx Hold: %d\n", bitset);
+                            //printf("Set spi0 Tx Hold: %d\n", bitset);
 
                             bitset = 1;
                             ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-                            printf("Set spi1 Tx Hold: %d\n", bitset);
+                            //printf("Set spi1 Tx Hold: %d\n", bitset);
 
-
-				lsz = 10;
+				if (arg2>0)
+					lsz = arg2;
+				else
+					lsz = 10;
 
 				while(lsz) {
               	              bitset = 0;
        	                     ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-	                            printf("Set RDY: %d\n", bitset);
-                            	sleep(2);
+	                            //printf("Set RDY: %d, dly:%d \n", bitset, arg2);
+					usleep(1);
                             
                      	       bitset = 1;
               	              ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-       	                     printf("Set RDY: %d\n", bitset);
-					sleep(2);
+       	                     //printf("Set RDY: %d\n", bitset);
+					usleep(1);
+					
 					lsz --;
 				}
 
+              	     //         bitset = 0;
+       	             //        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+	             //               printf("Set RDY: %d\n", bitset);
+                     //       	sleep(5);
+
                             bitset = 0;
                             ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-                            printf("Set spi0 Tx Hold: %d\n", bitset);
+                            //printf("Set spi0 Tx Hold: %d\n", bitset);
 
                             bitset = 0;
                             ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-                            printf("Set spi1 Tx Hold: %d\n", bitset);
+                            //printf("Set spi1 Tx Hold: %d\n", bitset);
 							
                         }   
 			   }
@@ -609,8 +652,8 @@ static char path[256];
                 while(1) {
                     ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
                     //ret = tx_data(fm[0], dstBuff, NULL, 1, PKTSZ, 1024*1024);
-			if (arg0) 
-                    		printf("[p0]rx %d - %d\n", ret, wtsz++);
+			//if (arg0) 
+                    	//	printf("[p0]rx %d - %d\n", ret, wtsz++);
                     msync(dstBuff, ret, MS_SYNC);
 /*
 if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
@@ -696,8 +739,8 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
             while(1) {
                 ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
                 //ret = tx_data(fm[1], dstBuff, NULL, 1, PKTSZ, 1024*1024);
-		if (arg0)		
-	                printf("[p1]rx %d - %d\n", ret, wtsz++);
+		//if (arg0)		
+	       //         printf("[p1]rx %d - %d\n", ret, wtsz++);
                 msync(dstBuff, ret, MS_SYNC);
 /*
 if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
@@ -776,8 +819,9 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
         goto end;
     }
 
-    if (sel == 13){ /* data mode test ex[13 1024 100]*/
-        data_process(rx_buff[0], tx_buff[0], fp, fm[1], arg0, arg1);
+    if (sel == 13){ /* data mode test ex[13 1024 100 0]*/
+	arg2 = arg2 % 2;
+        data_process(rx_buff[0], tx_buff[0], fp, fm[arg2], arg0, arg1);
         goto end;
     }               
 
