@@ -375,6 +375,13 @@ static char path[256];
     uint8_t *tx_buff[2], *rx_buff[2];
     FILE *fp;
 
+    fp = find_save(path, data_save);
+    if (!fp) {
+        printf("find save dst failed ret:%d\n", fp);
+        goto end;
+    } else
+        printf("find save dst succeed ret:%d\n", fp);
+
     /* scanner default setting */
     mode &= ~SPI_MODE_3;
     printf("mode initial: 0x%x\n", mode & SPI_MODE_3);
@@ -441,13 +448,6 @@ static char path[256];
     else 
         printf("open device[%s]\n", spi1); 
 
-    fp = find_save(path, data_save);
-    if (!fp) {
-        printf("find save dst failed ret:%d\n", fp);
-        goto end;
-    } else
-        printf("find save dst succeed ret:%d\n", fp);
-
         int fm[2] = {fd0, fd1};
         
     char rxans[512];
@@ -458,6 +458,35 @@ static char path[256];
         rxans[i] = i & 0x95;
         tx[i] = i & 0x95;
     }
+    if (sel == 17){ /* command mode test ex[17 6]*/
+	int lsz=0, cnt=0;
+	char *ch;
+	
+	mode |= SPI_MODE_2;
+        ret = ioctl(fd0, SPI_IOC_WR_MODE, &mode);    //?¼Ò¦¡ 
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+ 
+        ret = ioctl(fd0, SPI_IOC_RD_MODE, &mode);    //?¼Ò¦¡ 
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+
+	if (arg0 > 0)
+		lsz = arg0;
+
+	while (lsz) {
+		ch = tx_buff[lsz%2];
+		*ch = 0x30 + cnt;
+              ret = tx_data(fd0, rx_buff[0], tx_buff[lsz%2], 1, 512, 1024*1024);
+		if (ret != 512)
+			break;
+		lsz --;
+		cnt++;
+	}
+		
+        goto end;
+    }
+		
     if (sel == 16){ /* tx hold test ex[16 0 0]*/
 	arg1 = arg1%2;
        bitset = arg0;
