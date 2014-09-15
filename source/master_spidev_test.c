@@ -317,8 +317,8 @@ static void parse_opts(int argc, char *argv[])
 #if 1
 int main(int argc, char *argv[]) 
 { 
-static char spi0[] = "/dev/spidev32765.0"; 
-static char spi1[] = "/dev/spidev32765.1"; 
+static char spi1[] = "/dev/spidev32765.0"; 
+static char spi0[] = "/dev/spidev32765.1"; 
     uint32_t bitset;
     int sel, arg0, arg1, arg2;
     int fd, ret; 
@@ -327,7 +327,7 @@ static char spi1[] = "/dev/spidev32765.1";
 	arg2 = 0;
 
 	/* scanner default setting */
-	mode |= SPI_CPOL;     
+	mode |= SPI_CPHA;     
  
     fd = open(device, O_RDWR);  //¥´???¤å¥ó 
     if (fd < 0) 
