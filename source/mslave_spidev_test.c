@@ -369,14 +369,15 @@ static char data_save[] = "/mnt/mmc2/rx/%d.bin";
 static char path[256];
 
     uint32_t bitset;
-    int sel, arg0 = 0, arg1 = 0, arg2 = 0;
+    int sel, arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;
     int fd, ret; 
     int buffsize;
     uint8_t *tx_buff[2], *rx_buff[2];
     FILE *fp;
 
     /* scanner default setting */
-    mode |= SPI_CPHA;     
+    mode &= ~SPI_MODE_3;
+    printf("mode initial: 0x%x\n", mode & SPI_MODE_3);
     
     fd = open(device, O_RDWR);  //¥´???¤å¥ó 
     if (fd < 0) 
@@ -397,6 +398,10 @@ static char path[256];
     if (argc > 4) {
         printf(" [4]:%s \n", argv[4]);
         arg2 = atoi(argv[4]);
+    }
+    if (argc > 5) {
+        printf(" [5]:%s \n", argv[5]);
+        arg3 = atoi(argv[5]);
     }
 	
     buffsize = 5*1024*1024;
@@ -507,6 +512,20 @@ static char path[256];
 	memset(dstBuff, 0x95, TSIZE);
         dstmp = dstBuff;
 
+	switch(arg3) {
+		case 1:
+    			mode |= SPI_MODE_1;
+			break;
+		case 2:
+    			mode |= SPI_MODE_2;
+			break;
+		case 3:
+    			mode |= SPI_MODE_3;
+			break;
+		default:
+    			mode |= SPI_MODE_0;
+			break;
+	}
         /*
          * spi mode 
          */ 
