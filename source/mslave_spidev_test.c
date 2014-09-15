@@ -461,7 +461,7 @@ static char path[256];
         goto end;
     }
 
-    if (sel == 15){ /* single band data mode test ex[14]*/
+    if (sel == 15){ /* single band data mode test ex[15 0 3]*/
         int wtsz;
 
         arg0 = arg0 % 2;
@@ -470,11 +470,11 @@ static char path[256];
         /*
          * spi mode //?竚spi??家Α
          */ 
-        ret = ioctl(fd, SPI_IOC_WR_MODE, &mode);    //?家Α 
+        ret = ioctl(fm[arg0], SPI_IOC_WR_MODE, &mode);    //?家Α 
         if (ret == -1) 
             pabort("can't set spi mode"); 
  
-        ret = ioctl(fd, SPI_IOC_RD_MODE, &mode);    //?家Α 
+        ret = ioctl(fm[arg0], SPI_IOC_RD_MODE, &mode);    //?家Α 
         if (ret == -1) 
             pabort("can't get spi mode"); 
 
@@ -482,7 +482,7 @@ static char path[256];
             arg1 = 1;
         }
         
-        printf("sel 15 spi[%d] ready to receive data, size %d \n", arg0, arg1);
+        printf("sel 15 spi[%d] ready to receive data, size: 61440 num: %d \n", arg0, arg1);
         ret = tx_data(fm[arg0], rx_buff[0], tx_buff[0], arg1, 61440, 1024*1024);
         printf("[%d]rx %d\n", arg0, ret);
         wtsz = fwrite(rx_buff[0], 1, ret, fp);
