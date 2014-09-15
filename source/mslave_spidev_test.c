@@ -37,7 +37,7 @@ static void pabort(const char *s)
 } 
  
 static const char *device = "/dev/spidev32765.0"; 
-static const char *data_path = "/root/rx/1-1.jpg"; 
+static const char *data_path = "/mnt/mmc2/tmp/1.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
 static uint32_t speed = 1000000; 
@@ -336,11 +336,20 @@ FILE *find_save(char *dst, char *tmple)
         sprintf(dst, tmple, i);
         f = fopen(dst, "r");
         if (!f) {
-            printf("open file [%s] failed \n", dst);
+            printf("open file [%s]\n", dst);
             break;
-        } else
-            printf("open file [%s] succeed \n", dst);
+        } else {
+            //printf("open file [%s] succeed \n", dst);
+        }
     }
+    f = fopen(dst, "w");
+    return f;
+}
+
+FILE *find_open(char *dst, char *tmple)
+{
+    FILE *f;
+    sprintf(dst, tmple);
     f = fopen(dst, "w");
     return f;
 }
@@ -364,7 +373,7 @@ int main(int argc, char *argv[])
 { 
 static char spi1[] = "/dev/spidev32765.0"; 
 static char spi0[] = "/dev/spidev32766.0"; 
-//static char data_save[] = "/root/rx/%d.jpg"; 
+static char data_wifi[] = "/mnt/mmc2/tmp/1.jpg"; 
 static char data_save[] = "/mnt/mmc2/rx/%d.bin"; 
 static char path[256];
 
@@ -374,6 +383,14 @@ static char path[256];
     int buffsize;
     uint8_t *tx_buff[2], *rx_buff[2];
     FILE *fp;
+    FILE *fpw;
+
+    fpw = find_open(path, data_wifi);
+    if (!fpw) {
+        printf("open [%s] failed ret:%d\n", data_wifi, fpw);
+        goto end;
+    } else
+        printf("open [%s] succeed ret:%d\n", data_wifi, fpw);
 
     fp = find_save(path, data_save);
     if (!fp) {
@@ -768,7 +785,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
 
                     msync(dstmp, sz, MS_SYNC);
                     ret = fwrite(dstmp, 1, sz, fp);
-                    printf("\np0 write file %d size %d/%d \n", fp, sz, ret);
+                    printf("\np0 write file [%s] size %d/%d \n", path, sz, ret);
                 }
                 
                 close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
@@ -855,7 +872,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
 
                 msync(dstmp, sz, MS_SYNC);
                 ret = fwrite(dstmp, 1, sz, fp);
-                printf("\np1 write file %d size %d/%d \n", fp, sz, ret);
+                printf("\np1 write file [%s] size %d/%d \n", path, sz, ret);
             }
 
             close(pipefd[0]); // close the read-end of the pipe
@@ -989,5 +1006,6 @@ end:
     free(rx_buff[1]);
 
     fclose(fp);
+    fclose(fpw);
 }
 
