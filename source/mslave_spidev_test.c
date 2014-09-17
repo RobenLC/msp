@@ -373,7 +373,7 @@ int main(int argc, char *argv[])
 { 
 static char spi1[] = "/dev/spidev32765.0"; 
 static char spi0[] = "/dev/spidev32766.0"; 
-static char data_wifi[] = "/mnt/mmc2/tmp/1.jpg"; 
+//static char data_wifi[] = "/mnt/mmc2/tmp/1.jpg"; 
 static char data_save[] = "/mnt/mmc2/rx/%d.bin"; 
 static char path[256];
 
@@ -383,14 +383,6 @@ static char path[256];
     int buffsize;
     uint8_t *tx_buff[2], *rx_buff[2];
     FILE *fp;
-    FILE *fpw;
-
-    fpw = find_open(path, data_wifi);
-    if (!fpw) {
-        printf("open [%s] failed ret:%d\n", data_wifi, fpw);
-        goto end;
-    } else
-        printf("open [%s] succeed ret:%d\n", data_wifi, fpw);
 
     fp = find_save(path, data_save);
     if (!fp) {
