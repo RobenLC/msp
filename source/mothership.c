@@ -20,7 +20,7 @@ static int print_f(char *head, char *str);
 //time measurement, start /stop
 static int time_diff(struct timespec *s, struct timespec *e, int unit);
 //file rw open, save to file for debug
-static FILE *file_save_get(void);
+static int file_save_get(FILE **fp);
 //p0: control, monitor, and debug
 static int p0(int sid);
 //p1: wifi socket connection
@@ -32,7 +32,7 @@ static int p3(void);
 
 int main(int argc, char *argv[])
 {
-    int ix;
+    int ix, ret;
     char log[256];
     int arg[8];
     sprintf(log, "argc:%d", argc);
@@ -68,7 +68,12 @@ int main(int argc, char *argv[])
     sprintf(log, "tdiff:%d ", tdiff);
     print_f("time_diff", log);
 
-    f = file_save_get();
+    ret = file_save_get(&f);
+    if (ret) {printf("get save file failed\n"); return 0;}
+    ret = fwrite("test file write \n", 1, 16, f);
+    //fclose(f);
+    sprintf(log, "write file size: %d/%d", ret, 16);
+    print_f("fwrite", log);
     
 // fork process
     int sid = 0;
@@ -161,7 +166,7 @@ static int time_diff(struct timespec *s, struct timespec *e, int unit)
     return diff;
 }
 
-static FILE *file_save_get(void)
+static int file_save_get(FILE **fp)
 {
 static char path1[] = "/mnt/mmc2/rx/%d.bin"; 
 
@@ -182,38 +187,39 @@ static char path1[] = "/mnt/mmc2/rx/%d.bin";
             fclose(f);
     }
     f = fopen(dst, "w");
-    
-    return f;
+
+    *fp = f;
+    return 0;
 }
 
 static int p0(int sid)
 {
     char plog[128];
     sprintf(plog, "parent get sid:%d", sid);
-    while(1)
-    print_f("fork", plog);
+    while(1){}
+    //print_f("fork", plog);
 }
 
 static int p1(void)
 {
     char plog[128];
     sprintf(plog, "child 01");
-    while(1)
-    print_f("fork", plog);
+    while(1){}
+    //print_f("fork", plog);
 }
 
 static int p2(void)
 {
     char plog[128];
     sprintf(plog, "child 02");
-    while(1)
-    print_f("fork", plog);
+    while(1){}
+    //print_f("fork", plog);
 }
 
 static int p3(void)
 {
     char plog[128];
     sprintf(plog, "child 03");
-    while(1)
-    print_f("fork", plog);
+    while(1){}
+    //print_f("fork", plog);
 }
