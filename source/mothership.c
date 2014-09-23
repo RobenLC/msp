@@ -384,7 +384,7 @@ static int p1(struct procRes_s *rs)
     }
 
     close(rs->pipedn_m.r); 
-    close(rs->pipeup_m.t,);
+    close(rs->pipeup_m.t);
 }
 
 static int p2(struct procRes_s *rs)
@@ -401,8 +401,6 @@ static int p2(struct procRes_s *rs)
         if (buf[px] == '9') {
             ch = '2';
             write(rs->pipeup_m.t, &ch, 1);    
-            close(rs->pipedn_m.r); 
-            close(rs->pipeup_m.t,);
             break;
         }
         px++;
@@ -412,7 +410,8 @@ static int p2(struct procRes_s *rs)
         print_f("p2", log);
     }
 
-
+    close(rs->pipedn_m.r); 
+    close(rs->pipeup_m.t);
 }
 
 static int p3(struct procRes_s *rs)
@@ -429,8 +428,7 @@ static int p3(struct procRes_s *rs)
         if (buf[px] == '9') {
             ch = '3';
             write(rs->pipeup_m.t, &ch, 1);    
-            close(rs->pipedn_m.r); 
-            close(rs->pipeup_m.t,);
+
             break;
         }
         px++;
@@ -439,6 +437,8 @@ static int p3(struct procRes_s *rs)
         sprintf(log, "03 %c", buf[pi]);
         print_f("p3", log);
     }
+    close(rs->pipedn_m.r); 
+    close(rs->pipeup_m.t);
 }
 
 static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
