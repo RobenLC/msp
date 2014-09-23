@@ -288,87 +288,99 @@ static int p0(struct mainRes_s *mrs)
         }
     }
 
-    ch = 0; pi = 0;
-    while (1) {
-        pi = read(mrs->pipeup1[0], &ch, 1);
-        if (pi) { 
-            printf("po get %c, ret:%d \n", ch, pi);
-            
-            if (ch == '1') {break;}
-        }
+    //ch = 0; pi = 0;
+    //while (1) {
+    //    pi = read(mrs->pipeup1[0], &ch, 1);
+    //    if (pi) { 
+    //        printf("po get %c, ret:%d \n", ch, pi);
+    //        
+    //        if (ch == '1') {break;}
+    //    }
         //print_f("p0", "get 1");
         //if (ch == '1') {
         //    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[0], ch);
         //    print_f("p0", mrs->log);
         //    //break;
         //}
-    }
-    ch = 0;
-    while (1) {
-        pi = read(mrs->pipeup2[0], &ch, 1);
-        if (pi) { 
-            printf("po get %c, ret:%d \n", ch, pi);
-
-            if (ch == '2') {break;}
-        }
+    //}
+    //ch = 0;
+    //while (1) {
+    //    pi = read(mrs->pipeup2[0], &ch, 1);
+    //    if (pi) { 
+    //        printf("po get %c, ret:%d \n", ch, pi);
+    //
+    //        if (ch == '2') {break;}
+    //    }
         //printf("po get %c \n", ch);
         //if (ch == '2') {
         //    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[1], ch);
         //    print_f("p0", mrs->log);
         //    //break;
         //}
-    }
-    ch = 0;
-    while (1) {
-        pi = read(mrs->pipeup3[0], &ch, 1);
-        if (pi) { 
-            printf("po get %c, ret:%d \n", ch, pi);
-            
-            if (ch == '3') {break;}
-        }
+    //}
+    //ch = 0;
+    //while (1) {
+    //    pi = read(mrs->pipeup3[0], &ch, 1);
+    //    if (pi) { 
+    //        printf("po get %c, ret:%d \n", ch, pi);
+    //        
+    //        if (ch == '3') {break;}
+    //    }
         //print_f("p0", "get 3");
         //if (ch == '3') {
         //    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[2], ch);
         //    print_f("p0", mrs->log);
         //    //break;
         //}
-    }
+    //}
 
-//    while (1) {
-        //if (!(pt & 0x1))
-        //    read(mrs->pipeup[0].r, &ch, 1);
-        //if (!(pt & 0x2))
-        //    read(mrs->pipeup[1].r, &ch, 1);
-        //if (!(pt & 0x4))
-        //    read(mrs->pipeup[2].r, &ch, 1);
-            
-  //      sprintf(mrs->log, "get ch:%c", ch);
-  //      print_f("p0", mrs->log);
+    pt = 0;
+    pi = 0;
+    while (1) {
+        if (!(pt & 0x1)) {
+            pi = read(mrs->pipeup1[0], &ch, 1);
+            printf("1 ret:%d\n", pi);
+        }
+        else if (!(pt & 0x2)) {
+            pi = read(mrs->pipeup2[0], &ch, 1);
+            printf("2 ret:%d\n", pi);
+        }
+        else if (!(pt & 0x4)) {
+            pi = read(mrs->pipeup3[0], &ch, 1);
+            printf("3 ret:%d\n", pi);
+        } else {
+            pi = 0;
+        }
         
-        //switch (ch) {
-        //    case '1':
-        //        pt |= 0x1;
-        //        sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[0], ch);
-        //        print_f("p0", mrs->log);
-        //        break;
-        //    case '2':
-        //        pt |= 0x2;
-        //        sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[1], ch);
-        //        print_f("p0", mrs->log);
-        //        break;
-        //    case '3':
-        //        pt |= 0x4;
-        //        sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[2], ch);
-        //        print_f("p0", mrs->log);
-        //        break;
-        //    default:
-        //        sprintf(mrs->log, "sid[?] send %c and is not expected, warning", ch);
-        //        print_f("p0", mrs->log);
-        //        break;
-        //}
+        if (pi) {    
+            sprintf(mrs->log, "get ch:%c", ch);
+            print_f("p0", mrs->log);
+
+            switch (ch) {
+                case '1':
+                    pt |= 0x1;
+                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[0], ch);
+                    print_f("p0", mrs->log);
+                    break;
+                case '2':
+                    pt |= 0x2;
+                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[1], ch);
+                    print_f("p0", mrs->log);
+                    break;
+                case '3':
+                    pt |= 0x4;
+                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[2], ch);
+                    print_f("p0", mrs->log);
+                    break;
+                default:
+                    sprintf(mrs->log, "sid[?] send %c and is not expected, warning", ch);
+                    print_f("p0", mrs->log);
+                    break;
+            }
+        }        
         
-//        if (pt & 0x7) break;
-//    }
+        if (pt == 0x7) break;
+    }
 
     close(mrs->pipeup1[0]);
     close(mrs->pipeup2[0]);
