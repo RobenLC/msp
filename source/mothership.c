@@ -21,13 +21,8 @@ struct pipe_s{
 struct mainRes_s{
     int sid[3];
     // 3 pipe
-    int pipedn1[2];
-    int pipedn2[2];
-    int pipedn3[2];
-    int pipeup1[2];
-    int pipeup2[2];
-    int pipeup3[2];
-    
+    struct pipe_s pipedn[3];
+    struct pipe_s pipeup[3];
     // data mode share memory
     int cdsz;
     int mdsz;
@@ -46,8 +41,8 @@ struct mainRes_s{
 
 struct procRes_s{
     // pipe
-    int pipedn_s[2];
-    int pipeup_s[2];
+    struct pipe_s pipedn_m;
+    struct pipe_s pipeup_m;
     // data mode share memory
     int cdsz_s;
     int mdsz_s;
@@ -137,17 +132,17 @@ int main(int argc, char *argv[])
     print_f("fwrite", mrs.log);
     
 // IPC
-    pipe(mrs.pipedn1);
-    pipe(mrs.pipedn2);
-    pipe(mrs.pipedn3);
+    pipe(&mrs.pipedn[0]);
+    pipe(&mrs.pipedn[1]);
+    pipe(&mrs.pipedn[2]);
 
-    pipe(mrs.pipeup1);
-    pipe(mrs.pipeup2);
-    pipe(mrs.pipeup3);
-    
-    res_put_in(&rs[0], &mrs, 1);
-    res_put_in(&rs[1], &mrs, 2);
-    res_put_in(&rs[2], &mrs, 3);
+    pipe(&mrs.pipeup[0]);
+    pipe(&mrs.pipeup[1]);
+    pipe(&mrs.pipeup[2]);
+
+    res_put_in(&rs[0], &mrs, 0);
+    res_put_in(&rs[1], &mrs, 1);
+    res_put_in(&rs[2], &mrs, 2);
 
 // fork process
     mrs.sid[0] = fork();
@@ -264,94 +259,51 @@ static char path1[] = "/mnt/mmc2/rx/%d.bin";
 
 static int p0(struct mainRes_s *mrs)
 {
-    int pi, pt;
+    int pi, pt, tp;
     char ch, c1;
     //while(1){}
-    close(mrs->pipedn1[0]);
-    close(mrs->pipedn2[0]);
-    close(mrs->pipedn3[0]);
+    close(mrs->pipedn[0].r);
+    close(mrs->pipedn[1].r);
+    close(mrs->pipedn[2].r);
 
-    close(mrs->pipeup1[1]);
-    close(mrs->pipeup2[1]);
-    close(mrs->pipeup3[1]);
+    close(mrs->pipeup[0].t);
+    close(mrs->pipeup[1].t);
+    close(mrs->pipeup[2].t);
     
     c1 = 0x30;
-    for (pt = 0; pt < 10; pt++) {
+    while (1) {
         c1 += 1;
         for (pi = 0; pi < 3; pi++) {
             ch = c1 + pi;
             sprintf(mrs->log, "sid[%d] send %c ", pi, ch);
             print_f("p0", mrs->log);
-            if (pi == 0) { write(mrs->pipedn1[1], &ch, 1); }
-            if (pi == 1) { write(mrs->pipedn2[1], &ch, 1); }
-            if (pi == 2) { write(mrs->pipedn3[1], &ch, 1); }
+            write(mrs->pipedn[pi].t, &ch, 1);
         }
+        pt++;
+        if (pt > 40) break;
     }
 
-    //ch = 0; pi = 0;
-    //while (1) {
-    //    pi = read(mrs->pipeup1[0], &ch, 1);
-    //    if (pi) { 
-    //        printf("po get %c, ret:%d \n", ch, pi);
-    //        
-    //        if (ch == '1') {break;}
-    //    }
-        //print_f("p0", "get 1");
-        //if (ch == '1') {
-        //    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[0], ch);
-        //    print_f("p0", mrs->log);
-        //    //break;
-        //}
-    //}
-    //ch = 0;
-    //while (1) {
-    //    pi = read(mrs->pipeup2[0], &ch, 1);
-    //    if (pi) { 
-    //        printf("po get %c, ret:%d \n", ch, pi);
-    //
-    //        if (ch == '2') {break;}
-    //    }
-        //printf("po get %c \n", ch);
-        //if (ch == '2') {
-        //    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[1], ch);
-        //    print_f("p0", mrs->log);
-        //    //break;
-        //}
-    //}
-    //ch = 0;
-    //while (1) {
-    //    pi = read(mrs->pipeup3[0], &ch, 1);
-    //    if (pi) { 
-    //        printf("po get %c, ret:%d \n", ch, pi);
-    //        
-    //        if (ch == '3') {break;}
-    //    }
-        //print_f("p0", "get 3");
-        //if (ch == '3') {
-        //    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[2], ch);
-        //    print_f("p0", mrs->log);
-        //    //break;
-        //}
-    //}
 
     pt = 0;
     pi = 0;
+    tp = 0;
     while (1) {
+        //printf(".");
         if (!(pt & 0x1)) {
-            pi = read(mrs->pipeup1[0], &ch, 1);
-            printf("1 ret:%d\n", pi);
+            pi = read(mrs->pipeup[0].r, &ch, 1);
+            //printf("1 ret:%d\n", pi);
         }
         else if (!(pt & 0x2)) {
-            pi = read(mrs->pipeup2[0], &ch, 1);
-            printf("2 ret:%d\n", pi);
+            pi = read(mrs->pipeup[1].r, &ch, 1);
+            //printf("2 ret:%d\n", pi);
         }
         else if (!(pt & 0x4)) {
-            pi = read(mrs->pipeup3[0], &ch, 1);
-            printf("3 ret:%d\n", pi);
+            pi = read(mrs->pipeup[2].r, &ch, 1);
+            //printf("3 ret:%d\n", pi);
         } else {
             pi = 0;
         }
-        
+
         if (pi) {    
             sprintf(mrs->log, "get ch:%c", ch);
             print_f("p0", mrs->log);
@@ -378,17 +330,24 @@ static int p0(struct mainRes_s *mrs)
                     break;
             }
         }        
-        
+
+        if (tp != pt) {
+            //printf("pt change %d => %d\n", tp, pt);
+            tp = pt;
+        }
+		        
         if (pt == 0x7) break;
     }
 
-    close(mrs->pipeup1[0]);
-    close(mrs->pipeup2[0]);
-    close(mrs->pipeup3[0]);
+    //printf("p0 end \n");
+
+    close(mrs->pipeup[0].r);
+    close(mrs->pipeup[1].r);
+    close(mrs->pipeup[2].r);
     
-    close(mrs->pipedn1[1]);
-    close(mrs->pipedn2[1]);
-    close(mrs->pipedn3[1]);
+    close(mrs->pipedn[0].t);
+    close(mrs->pipedn[1].t);
+    close(mrs->pipedn[2].t);
 
     kill(mrs->sid[0]);
     kill(mrs->sid[1]);
@@ -403,78 +362,82 @@ static int p0(struct mainRes_s *mrs)
 
 static int p1(struct procRes_s *rs)
 {
-    char buf[128], ch;
+    char buf[128], ch, log[256];
     int px, pi;
 
-    close(rs->pipedn_s[1]);
-    close(rs->pipeup_s[0]);
+    close(rs->pipedn_m.t);
+    close(rs->pipeup_m.r);
 
     px = 0;
     while(1){
-        read(rs->pipedn_s[0], &buf[px], 1); 
+        read(rs->pipedn_m.r, &buf[px], 1); 
         if (buf[px] == '9') {
             ch = '1';
-            write(rs->pipeup_s[1], &ch, 1);    
-            close(rs->pipedn_s[0]); 
+            write(rs->pipeup_m.t, &ch, 1);    
             break;
         }
         px++;
     }
     for (pi = 0; pi <= px; pi++) {
-        sprintf(rs->logs, "01 %c", buf[pi]);
-        print_f("p1", rs->logs);
+        sprintf(log, "01 %c", buf[pi]);
+        print_f("p1", log);
     }
 
+    close(rs->pipedn_m.r); 
+    close(rs->pipeup_m.t,);
 }
 
 static int p2(struct procRes_s *rs)
 {
-    char buf[128], ch;
+    char buf[128], ch, log[256];
     int px, pi;
     
-    close(rs->pipedn_s[1]);
-    close(rs->pipeup_s[0]);
-    
+    close(rs->pipedn_m.t);
+    close(rs->pipeup_m.r);
+
     px = 0;
     while(1){
-        read(rs->pipedn_s[0], &buf[px], 1); 
+        read(rs->pipedn_m.r, &buf[px], 1); 
         if (buf[px] == '9') {
             ch = '2';
-            write(rs->pipeup_s[1], &ch, 1);    
-            close(rs->pipedn_s[0]); 
+            write(rs->pipeup_m.t, &ch, 1);    
+            close(rs->pipedn_m.r); 
+            close(rs->pipeup_m.t,);
             break;
         }
         px++;
     }
     for (pi = 0; pi <= px; pi++) {
-        sprintf(rs->logs, "02 %c", buf[pi]);
-        print_f("p2", rs->logs);
+        sprintf(log, "02 %c", buf[pi]);
+        print_f("p2", log);
     }
+
 
 }
 
 static int p3(struct procRes_s *rs)
 {
-    char buf[128], ch;
+    char buf[128], ch, log[256];
     int px, pi;
     
-    close(rs->pipedn_s[1]);
-    close(rs->pipeup_s[0]);
-    
+    close(rs->pipedn_m.t);
+    close(rs->pipeup_m.r);
+
     px = 0;
     while(1){
-        read(rs->pipedn_s[0], &buf[px], 1); 
+        read(rs->pipedn_m.r, &buf[px], 1); 
         if (buf[px] == '9') {
             ch = '3';
-            write(rs->pipeup_s[1], &ch, 1);    
-            close(rs->pipedn_s[0]); 
+            write(rs->pipeup_m.t, &ch, 1);    
+            close(rs->pipedn_m.r); 
+            close(rs->pipeup_m.t,);
             break;
         }
         px++;
     }
     for (pi = 0; pi <= px; pi++) {
-        sprintf(rs->logs, "03 %c", buf[pi]);
-        print_f("p3", rs->logs);
+        sprintf(log, "03 %c", buf[pi]);
+        print_f("p3", log);
     }
 }
 
@@ -491,25 +454,10 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->tm[0] = &mrs->time[0];
     rs->tm[1] = &mrs->time[1];
 
-    if (idx == 1) {
-        rs->pipedn_s[0] = mrs->pipedn1[0];
-        rs->pipedn_s[1] = mrs->pipedn1[1];
-        rs->pipeup_s[0] = mrs->pipeup1[0];
-        rs->pipeup_s[1] = mrs->pipeup1[1];
-    }
-    
-    if (idx == 2) {
-        rs->pipedn_s[0] = mrs->pipedn2[0];
-        rs->pipedn_s[1] = mrs->pipedn2[1];
-        rs->pipeup_s[0] = mrs->pipeup2[0];
-        rs->pipeup_s[1] = mrs->pipeup2[1];    }
-    
-    if (idx == 3) {
-        rs->pipedn_s[0] = mrs->pipedn3[0];
-        rs->pipedn_s[1] = mrs->pipedn3[1];
-        rs->pipeup_s[0] = mrs->pipeup3[0];
-        rs->pipeup_s[1] = mrs->pipeup3[1];
-    }
+    rs->pipedn_m.t = mrs->pipedn[idx].t;
+    rs->pipedn_m.r = mrs->pipedn[idx].r;
+    rs->pipeup_m.t = mrs->pipeup[idx].t;
+    rs->pipeup_m.r = mrs->pipeup[idx].r;
     
     return 0;
 }
