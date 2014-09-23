@@ -69,13 +69,309 @@ static int file_save_get(FILE **fp);
 //res put in
 static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx);
 //p0: control, monitor, and debug
-static int p0(struct mainRes_s *rs);
+static int p0(struct mainRes_s *mrs);
+static int p0_init(struct mainRes_s *mrs);
+static int p0_end(struct mainRes_s *mrs);
 //p1: wifi socket connection
 static int p1(struct procRes_s *rs);
+static int p1_init(struct procRes_s *rs);
+static int p1_end(struct procRes_s *rs);
 //p2: spi0 
 static int p2(struct procRes_s *rs);
+static int p2_init(struct procRes_s *rs);
+static int p2_end(struct procRes_s *rs);
 //p3: spi1
 static int p3(struct procRes_s *rs);
+static int p3_init(struct procRes_s *rs);
+static int p3_end(struct procRes_s *rs);
+static int pn_init(struct procRes_s *rs);
+static int pn_end(struct procRes_s *rs);
+//IPC wrap
+static int rs_ipc_put(struct procRes_s *rs, char *str, int size);
+static int rs_ipc_get(struct procRes_s *rs, char *str, int size);
+static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx);
+static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx);
+
+static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx)
+{
+    int ret;
+    ret = read(mrs->pipeup[idx].r, str, size);
+    return ret;
+}
+
+static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx)
+{
+    int ret;
+    ret = write(mrs->pipedn[idx].t, str, size);
+    return ret;
+}
+
+static int rs_ipc_put(struct procRes_s *rs, char *str, int size)
+{
+    int ret;
+    ret = write(rs->pipeup_m.t, str, size);
+    return ret;
+}
+
+static int rs_ipc_get(struct procRes_s *rs, char *str, int size)
+{
+    int ret;
+    ret = read(rs->pipedn_m.r, str, size);
+    return ret;
+}
+
+static int pn_init(struct procRes_s *rs)
+{
+    close(rs->pipedn_m.t);
+    close(rs->pipeup_m.r);
+    return 0;
+}
+
+static int pn_end(struct procRes_s *rs)
+{
+    close(rs->pipedn_m.r); 
+    close(rs->pipeup_m.t);
+    return 0;
+}
+
+static int p3_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p3_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p2_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p2_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p1_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p1_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p0_init(struct mainRes_s *mrs) 
+{
+    close(mrs->pipedn[0].r);
+    close(mrs->pipedn[1].r);
+    close(mrs->pipedn[2].r);
+
+    close(mrs->pipeup[0].t);
+    close(mrs->pipeup[1].t);
+    close(mrs->pipeup[2].t);
+
+    return 0;
+}
+
+static int p0_end(struct mainRes_s *mrs)
+{
+    close(mrs->pipeup[0].r);
+    close(mrs->pipeup[1].r);
+    close(mrs->pipeup[2].r);
+    
+    close(mrs->pipedn[0].t);
+    close(mrs->pipedn[1].t);
+    close(mrs->pipedn[2].t);
+
+    kill(mrs->sid[0]);
+    kill(mrs->sid[1]);
+    kill(mrs->sid[2]);
+
+    fclose(mrs->fs);
+    munmap(mrs->dmp[0], 1024*61440);
+    munmap(mrs->cmp[0], 16*512);
+    free(mrs->dmp);
+    free(mrs->cmp);
+    return 0;
+}
+
+static int p0(struct mainRes_s *mrs)
+{
+    int pi, pt, tp;
+    char ch, c1;
+
+    p0_init(mrs);
+
+    c1 = 0x30;
+    while (1) {
+        c1 += 1;
+        for (pi = 0; pi < 3; pi++) {
+            ch = c1 + pi;
+            sprintf(mrs->log, "sid[%d] send %c ", pi, ch);
+            print_f("p0", mrs->log);
+            //write(mrs->pipedn[pi].t, &ch, 1);
+            mrs_ipc_put( mrs, &ch, 1, pi);
+        }
+        pt++;
+        if (pt > 40) break;
+    }
+
+
+    pt = 0;
+    pi = 0;
+    tp = 0;
+    while (1) {
+
+        if (!(pt & 0x1)) {
+            pi = mrs_ipc_get(mrs, &ch, 1, 0);
+            //printf("1 ret:%d\n", pi);
+        }
+        else if (!(pt & 0x2)) {
+
+            pi = mrs_ipc_get(mrs, &ch, 1, 1);
+            //printf("2 ret:%d\n", pi);
+        }
+        else if (!(pt & 0x4)) {
+
+            pi = mrs_ipc_get(mrs, &ch, 1, 2);
+            //printf("3 ret:%d\n", pi);
+        } else {
+            pi = 0;
+        }
+
+        if (pi) {    
+            sprintf(mrs->log, "get ch:%c", ch);
+            print_f("p0", mrs->log);
+
+            switch (ch) {
+                case '1':
+                    pt |= 0x1;
+                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[0], ch);
+                    print_f("p0", mrs->log);
+                    break;
+                case '2':
+                    pt |= 0x2;
+                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[1], ch);
+                    print_f("p0", mrs->log);
+                    break;
+                case '3':
+                    pt |= 0x4;
+                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[2], ch);
+                    print_f("p0", mrs->log);
+                    break;
+                default:
+                    sprintf(mrs->log, "sid[?] send %c and is not expected, warning", ch);
+                    print_f("p0", mrs->log);
+                    break;
+            }
+        }        
+
+        if (tp != pt) {
+            //printf("pt change %d => %d\n", tp, pt);
+            tp = pt;
+        }
+		        
+        if (pt == 0x7) break;
+    }
+
+    //printf("p0 end \n");
+
+    p0_end(mrs);
+    return 0;
+}
+
+static int p1(struct procRes_s *rs)
+{
+    char buf[128], ch, log[256];
+    int px, pi, ret;
+
+    p1_init(rs);
+
+    px = 0;
+    while(1){
+        pi = rs_ipc_get(rs, &buf[px], 1);
+        if (buf[px] == '9') {
+            ch = '1';
+            rs_ipc_put(rs, &ch, 1);
+            break;
+        }
+        px++;
+    }
+    for (pi = 0; pi <= px; pi++) {
+        sprintf(log, "01 %c", buf[pi]);
+        print_f("p1", log);
+    }
+
+    p1_end(rs);
+    return 0;
+}
+
+static int p2(struct procRes_s *rs)
+{
+    char buf[128], ch, log[256];
+    int px, pi, ret;
+    
+    p2_init(rs);
+
+    px = 0;
+    while(1){
+        pi = rs_ipc_get(rs, &buf[px], 1);
+        if (buf[px] == '9') {
+            ch = '2';
+            rs_ipc_put(rs, &ch, 1);
+            break;
+        }
+        px++;
+    }
+    for (pi = 0; pi <= px; pi++) {
+        sprintf(log, "02 %c", buf[pi]);
+        print_f("p2", log);
+    }
+
+    p2_end(rs);
+    return 0;
+}
+
+static int p3(struct procRes_s *rs)
+{
+    char buf[128], ch, log[256];
+    int px, pi, ret;
+    
+    p3_init(rs);
+
+    px = 0;
+    while(1){
+        pi = rs_ipc_get(rs, &buf[px], 1);
+        if (buf[px] == '9') {
+            ch = '3';
+            rs_ipc_put(rs, &ch, 1);
+            break;
+        }
+        px++;
+    }
+    for (pi = 0; pi <= px; pi++) {
+        sprintf(log, "03 %c", buf[pi]);
+        print_f("p3", log);
+    }
+    p3_end(rs);
+    return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -255,190 +551,6 @@ static char path1[] = "/mnt/mmc2/rx/%d.bin";
 
     *fp = f;
     return 0;
-}
-
-static int p0(struct mainRes_s *mrs)
-{
-    int pi, pt, tp;
-    char ch, c1;
-    //while(1){}
-    close(mrs->pipedn[0].r);
-    close(mrs->pipedn[1].r);
-    close(mrs->pipedn[2].r);
-
-    close(mrs->pipeup[0].t);
-    close(mrs->pipeup[1].t);
-    close(mrs->pipeup[2].t);
-    
-    c1 = 0x30;
-    while (1) {
-        c1 += 1;
-        for (pi = 0; pi < 3; pi++) {
-            ch = c1 + pi;
-            sprintf(mrs->log, "sid[%d] send %c ", pi, ch);
-            print_f("p0", mrs->log);
-            write(mrs->pipedn[pi].t, &ch, 1);
-        }
-        pt++;
-        if (pt > 40) break;
-    }
-
-
-    pt = 0;
-    pi = 0;
-    tp = 0;
-    while (1) {
-        //printf(".");
-        if (!(pt & 0x1)) {
-            pi = read(mrs->pipeup[0].r, &ch, 1);
-            //printf("1 ret:%d\n", pi);
-        }
-        else if (!(pt & 0x2)) {
-            pi = read(mrs->pipeup[1].r, &ch, 1);
-            //printf("2 ret:%d\n", pi);
-        }
-        else if (!(pt & 0x4)) {
-            pi = read(mrs->pipeup[2].r, &ch, 1);
-            //printf("3 ret:%d\n", pi);
-        } else {
-            pi = 0;
-        }
-
-        if (pi) {    
-            sprintf(mrs->log, "get ch:%c", ch);
-            print_f("p0", mrs->log);
-
-            switch (ch) {
-                case '1':
-                    pt |= 0x1;
-                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[0], ch);
-                    print_f("p0", mrs->log);
-                    break;
-                case '2':
-                    pt |= 0x2;
-                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[1], ch);
-                    print_f("p0", mrs->log);
-                    break;
-                case '3':
-                    pt |= 0x4;
-                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[2], ch);
-                    print_f("p0", mrs->log);
-                    break;
-                default:
-                    sprintf(mrs->log, "sid[?] send %c and is not expected, warning", ch);
-                    print_f("p0", mrs->log);
-                    break;
-            }
-        }        
-
-        if (tp != pt) {
-            //printf("pt change %d => %d\n", tp, pt);
-            tp = pt;
-        }
-		        
-        if (pt == 0x7) break;
-    }
-
-    //printf("p0 end \n");
-
-    close(mrs->pipeup[0].r);
-    close(mrs->pipeup[1].r);
-    close(mrs->pipeup[2].r);
-    
-    close(mrs->pipedn[0].t);
-    close(mrs->pipedn[1].t);
-    close(mrs->pipedn[2].t);
-
-    kill(mrs->sid[0]);
-    kill(mrs->sid[1]);
-    kill(mrs->sid[2]);
-
-    fclose(mrs->fs);
-    munmap(mrs->dmp[0], 1024*61440);
-    munmap(mrs->cmp[0], 16*512);
-    free(mrs->dmp);
-    free(mrs->cmp);
-}
-
-static int p1(struct procRes_s *rs)
-{
-    char buf[128], ch, log[256];
-    int px, pi;
-
-    close(rs->pipedn_m.t);
-    close(rs->pipeup_m.r);
-
-    px = 0;
-    while(1){
-        read(rs->pipedn_m.r, &buf[px], 1); 
-        if (buf[px] == '9') {
-            ch = '1';
-            write(rs->pipeup_m.t, &ch, 1);    
-            break;
-        }
-        px++;
-    }
-    for (pi = 0; pi <= px; pi++) {
-        sprintf(log, "01 %c", buf[pi]);
-        print_f("p1", log);
-    }
-
-    close(rs->pipedn_m.r); 
-    close(rs->pipeup_m.t);
-}
-
-static int p2(struct procRes_s *rs)
-{
-    char buf[128], ch, log[256];
-    int px, pi;
-    
-    close(rs->pipedn_m.t);
-    close(rs->pipeup_m.r);
-
-    px = 0;
-    while(1){
-        read(rs->pipedn_m.r, &buf[px], 1); 
-        if (buf[px] == '9') {
-            ch = '2';
-            write(rs->pipeup_m.t, &ch, 1);    
-            break;
-        }
-        px++;
-    }
-    for (pi = 0; pi <= px; pi++) {
-        sprintf(log, "02 %c", buf[pi]);
-        print_f("p2", log);
-    }
-
-    close(rs->pipedn_m.r); 
-    close(rs->pipeup_m.t);
-}
-
-static int p3(struct procRes_s *rs)
-{
-    char buf[128], ch, log[256];
-    int px, pi;
-    
-    close(rs->pipedn_m.t);
-    close(rs->pipeup_m.r);
-
-    px = 0;
-    while(1){
-        read(rs->pipedn_m.r, &buf[px], 1); 
-        if (buf[px] == '9') {
-            ch = '3';
-            write(rs->pipeup_m.t, &ch, 1);    
-
-            break;
-        }
-        px++;
-    }
-    for (pi = 0; pi <= px; pi++) {
-        sprintf(log, "03 %c", buf[pi]);
-        print_f("p3", log);
-    }
-    close(rs->pipedn_m.r); 
-    close(rs->pipeup_m.t);
 }
 
 static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
