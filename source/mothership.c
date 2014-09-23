@@ -1,17 +1,23 @@
-//#include <stdint.h> 
-//#include <unistd.h> 
+#include <stdint.h> 
+#include <unistd.h> 
 #include <stdio.h> 
 #include <stdlib.h> 
 //#include <string.h>
 //#include <getopt.h> 
-//#include <fcntl.h> 
-//#include <sys/ioctl.h> 
+#include <fcntl.h> 
+#include <sys/ioctl.h> 
 #include <sys/mman.h> 
-//#include <linux/types.h> 
-//#include <linux/spi/spidev.h> 
+#include <linux/types.h> 
+#include <linux/spi/spidev.h> 
 //#include <sys/times.h> 
 #include <time.h>
 //main()
+#define SPI_CPHA  0x01          /* clock phase */
+#define SPI_CPOL  0x02          /* clock polarity */
+#define SPI_MODE_0		(0|0)
+#define SPI_MODE_1		(0|SPI_CPHA)
+#define SPI_MODE_2		(SPI_CPOL|0)
+#define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
 
 struct pipe_s{
     int r;
@@ -20,6 +26,8 @@ struct pipe_s{
 
 struct mainRes_s{
     int sid[3];
+    int sfm[2];
+    int smode;
     // 3 pipe
     struct pipe_s pipedn[3];
     struct pipe_s pipeup[3];
@@ -41,6 +49,7 @@ struct mainRes_s{
 
 struct procRes_s{
     // pipe
+    int spifd;
     struct pipe_s pipedn_m;
     struct pipe_s pipeup_m;
     // data mode share memory
@@ -91,6 +100,46 @@ static int rs_ipc_put(struct procRes_s *rs, char *str, int size);
 static int rs_ipc_get(struct procRes_s *rs, char *str, int size);
 static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx);
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx);
+static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz);
+
+static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz)
+{
+    int pkt_size;
+    int ret, i, errcnt; 
+    int remain;
+
+    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
+    
+    uint8_t tg;
+    uint8_t *tx = tx_buff;
+    uint8_t *rx = rx_buff;
+    pkt_size = pksz;
+    remain = maxsz;
+
+    for (i = 0; i < num; i++) {
+        remain -= pkt_size;
+        if (remain < 0) break;
+
+        tr[i].tx_buf = (unsigned long)tx;
+        tr[i].rx_buf = (unsigned long)rx;
+        tr[i].len = pkt_size;
+        tr[i].delay_usecs = 0;
+        tr[i].speed_hz = 1000000;
+        tr[i].bits_per_word = 8;
+        
+        tx += pkt_size;
+        rx += pkt_size;
+    }
+    
+    ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
+    if (ret < 0)
+        printf("can't send spi message\n");
+    
+    //printf("tx/rx len: %d\n", ret);
+    
+    free(tr);
+    return ret;
+}
 
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx)
 {
@@ -271,6 +320,9 @@ static int p3(struct procRes_s *rs)
 
 int main(int argc, char *argv[])
 {
+static char spi0[] = "/dev/spidev32766.0"; 
+static char spi1[] = "/dev/spidev32765.0"; 
+
     struct mainRes_s mrs;
     struct procRes_s rs[3];
     int ix, ret;
@@ -322,15 +374,54 @@ int main(int argc, char *argv[])
     ret = fwrite("test file write \n", 1, 16, mrs.fs);
     sprintf(mrs.log, "write file size: %d/%d", ret, 16);
     print_f("fwrite", mrs.log);
-    
-// IPC
-    pipe(&mrs.pipedn[0]);
-    pipe(&mrs.pipedn[1]);
-    pipe(&mrs.pipedn[2]);
+// spidev id
+    int fd0, fd1;
+    fd0 = open(spi0, O_RDWR);
+    if (fd0 < 0) 
+        printf("can't open device[%s]\n", spi0); 
+    else 
+        printf("open device[%s]\n", spi0); 
+    fd1 = open(spi1, O_RDWR);
+    if (fd1 < 0) 
+            printf("can't open device[%s]\n", spi1); 
+    else 
+        printf("open device[%s]\n", spi1); 
 
-    pipe(&mrs.pipeup[0]);
-    pipe(&mrs.pipeup[1]);
-    pipe(&mrs.pipeup[2]);
+    mrs.sfm[0] = fd0;
+    mrs.sfm[1] = fd1;
+
+    mrs.smode |= SPI_MODE_2;
+
+    /*
+     * spi mode 
+     */ 
+    ret = ioctl(mrs.sfm[0], SPI_IOC_WR_MODE, &mrs.smode);
+    if (ret == -1) 
+        printf("can't set spi mode\n"); 
+    
+    ret = ioctl(mrs.sfm[0], SPI_IOC_RD_MODE, &mrs.smode);
+    if (ret == -1) 
+        printf("can't get spi mode\n"); 
+    
+    /*
+     * spi mode 
+     */ 
+    ret = ioctl(mrs.sfm[1], SPI_IOC_WR_MODE, &mrs.smode); 
+    if (ret == -1) 
+        printf("can't set spi mode\n"); 
+    
+    ret = ioctl(mrs.sfm[1], SPI_IOC_RD_MODE, &mrs.smode);
+    if (ret == -1) 
+        printf("can't get spi mode\n"); 
+
+// IPC
+    pipe((int *)&mrs.pipedn[0]);
+    pipe((int *)&mrs.pipedn[1]);
+    pipe((int *)&mrs.pipedn[2]);
+
+    pipe((int *)&mrs.pipeup[0]);
+    pipe((int *)&mrs.pipeup[1]);
+    pipe((int *)&mrs.pipeup[2]);
 
     res_put_in(&rs[0], &mrs, 0);
     res_put_in(&rs[1], &mrs, 1);
@@ -354,6 +445,9 @@ int main(int argc, char *argv[])
             }
         }
     }
+    end:
+
+    printf("something wrong in mothership, break! \n");
 
     return 0;
 }
@@ -466,6 +560,12 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pipedn_m.r = mrs->pipedn[idx].r;
     rs->pipeup_m.t = mrs->pipeup[idx].t;
     rs->pipeup_m.r = mrs->pipeup[idx].r;
-    
+
+    if (idx == 0) {
+        rs->spifd = mrs->sfm[0];
+    } else if (idx == 1) {
+        rs->spifd = mrs->sfm[1];
+    }
+	
     return 0;
 }
