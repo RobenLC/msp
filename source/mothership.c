@@ -217,80 +217,13 @@ static int p0(struct mainRes_s *mrs)
     char ch, c1;
 
     p0_init(mrs);
-
-    c1 = 0x30;
-    while (1) {
-        c1 += 1;
-        for (pi = 0; pi < 3; pi++) {
-            ch = c1 + pi;
-            sprintf(mrs->log, "sid[%d] send %c ", pi, ch);
-            print_f("p0", mrs->log);
-            //write(mrs->pipedn[pi].t, &ch, 1);
-            mrs_ipc_put( mrs, &ch, 1, pi);
-        }
-        pt++;
-        if (pt > 40) break;
-    }
-
-
-    pt = 0;
-    pi = 0;
-    tp = 0;
-    while (1) {
-
-        if (!(pt & 0x1)) {
-            pi = mrs_ipc_get(mrs, &ch, 1, 0);
-            //printf("1 ret:%d\n", pi);
-        }
-        else if (!(pt & 0x2)) {
-
-            pi = mrs_ipc_get(mrs, &ch, 1, 1);
-            //printf("2 ret:%d\n", pi);
-        }
-        else if (!(pt & 0x4)) {
-
-            pi = mrs_ipc_get(mrs, &ch, 1, 2);
-            //printf("3 ret:%d\n", pi);
-        } else {
-            pi = 0;
-        }
-
-        if (pi) {    
-            sprintf(mrs->log, "get ch:%c", ch);
-            print_f("p0", mrs->log);
-
-            switch (ch) {
-                case '1':
-                    pt |= 0x1;
-                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[0], ch);
-                    print_f("p0", mrs->log);
-                    break;
-                case '2':
-                    pt |= 0x2;
-                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[1], ch);
-                    print_f("p0", mrs->log);
-                    break;
-                case '3':
-                    pt |= 0x4;
-                    sprintf(mrs->log, "sid[%d] send %c and ready to be kill", mrs->sid[2], ch);
-                    print_f("p0", mrs->log);
-                    break;
-                default:
-                    sprintf(mrs->log, "sid[?] send %c and is not expected, warning", ch);
-                    print_f("p0", mrs->log);
-                    break;
-            }
-        }        
-
-        if (tp != pt) {
-            //printf("pt change %d => %d\n", tp, pt);
-            tp = pt;
-        }
-		        
-        if (pt == 0x7) break;
-    }
-
-    //printf("p0 end \n");
+    /* the initial mode is command mode, the rdy pin is pull low at begin */
+    // put the initial status in shared memory which is the default tx data for command mode
+    // send 'c' to p1 to start the command mode
+    // send 'c' to p3 to start the socket recv
+    // parsing command in shared memory which get from socket 
+    // parsing command in shared memory whcih get form spi
+    // 
 
     p0_end(mrs);
     return 0;
@@ -298,25 +231,14 @@ static int p0(struct mainRes_s *mrs)
 
 static int p1(struct procRes_s *rs)
 {
-    char buf[128], ch, log[256];
     int px, pi, ret;
 
     p1_init(rs);
-
-    px = 0;
-    while(1){
-        pi = rs_ipc_get(rs, &buf[px], 1);
-        if (buf[px] == '9') {
-            ch = '1';
-            rs_ipc_put(rs, &ch, 1);
-            break;
-        }
-        px++;
-    }
-    for (pi = 0; pi <= px; pi++) {
-        sprintf(log, "01 %c", buf[pi]);
-        print_f("p1", log);
-    }
+    // wait for ch from p0
+    // 'c': command mode, store the incoming infom into share memory
+    // send 'c' to notice the p0 that we have incoming command
+    // 'd': data mode, store the incomming infom into share memory 
+    // send 'd' to notice the p0 that we have incomming data chunk
 
     p1_end(rs);
     return 0;
@@ -324,25 +246,12 @@ static int p1(struct procRes_s *rs)
 
 static int p2(struct procRes_s *rs)
 {
-    char buf[128], ch, log[256];
     int px, pi, ret;
     
     p2_init(rs);
-
-    px = 0;
-    while(1){
-        pi = rs_ipc_get(rs, &buf[px], 1);
-        if (buf[px] == '9') {
-            ch = '2';
-            rs_ipc_put(rs, &ch, 1);
-            break;
-        }
-        px++;
-    }
-    for (pi = 0; pi <= px; pi++) {
-        sprintf(log, "02 %c", buf[pi]);
-        print_f("p2", log);
-    }
+    // wait for ch from p0
+    // 'd': data mode, store the incomming infom into share memory
+    // send 'd' to notice the p0 that we have incomming data chunk
 
     p2_end(rs);
     return 0;
@@ -350,25 +259,12 @@ static int p2(struct procRes_s *rs)
 
 static int p3(struct procRes_s *rs)
 {
-    char buf[128], ch, log[256];
     int px, pi, ret;
     
     p3_init(rs);
-
-    px = 0;
-    while(1){
-        pi = rs_ipc_get(rs, &buf[px], 1);
-        if (buf[px] == '9') {
-            ch = '3';
-            rs_ipc_put(rs, &ch, 1);
-            break;
-        }
-        px++;
-    }
-    for (pi = 0; pi <= px; pi++) {
-        sprintf(log, "03 %c", buf[pi]);
-        print_f("p3", log);
-    }
+    // wait for ch from p0
+    // 'c': command mode, store the socket incoming inform into share memory
+    // 'd': data mode, forward the socket incoming inform into share memory
     p3_end(rs);
     return 0;
 }
