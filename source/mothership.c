@@ -37,18 +37,12 @@ struct mainRes_s{
     // 3 pipe
     struct pipe_s pipedn[3];
     struct pipe_s pipeup[3];
+    // data mode share memory
     struct shmem_s dataRx;
     struct shmem_s dataTx;
+    // command mode share memory
     struct shmem_s cmdRx;
     struct shmem_s cmdTx;
-    // data mode share memory
-    int cdsz;
-    int mdsz;
-    char **dmp;
-    // command mode share memory
-    int ccsz;
-    int mcsz;
-    char **cmp;
     // file save
     FILE *fs;
     // time measurement
@@ -61,8 +55,13 @@ struct mainRes_s{
 struct procRes_s{
     // pipe
     int spifd;
-    struct pipe_s *pipedn_m;
-    struct pipe_s *pipeup_m;
+    struct pipe_s *ppipedn;
+    struct pipe_s *ppipeup;
+    struct shmem_s *pdataRx;
+    struct shmem_s *pdataTx;
+    struct shmem_s *pcmdRx;
+    struct shmem_s *pcmdTx;
+
     // data mode share memory
     int cdsz_s;
     int mdsz_s;
@@ -170,28 +169,28 @@ static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx)
 static int rs_ipc_put(struct procRes_s *rs, char *str, int size)
 {
     int ret;
-    ret = write(rs->pipeup_m->rt[1], str, size);
+    ret = write(rs->ppipeup->rt[1], str, size);
     return ret;
 }
 
 static int rs_ipc_get(struct procRes_s *rs, char *str, int size)
 {
     int ret;
-    ret = read(rs->pipedn_m->rt[0], str, size);
+    ret = read(rs->ppipedn->rt[0], str, size);
     return ret;
 }
 
 static int pn_init(struct procRes_s *rs)
 {
-    close(rs->pipedn_m->rt[1]);
-    close(rs->pipeup_m->rt[0]);
+    close(rs->ppipedn->rt[1]);
+    close(rs->ppipeup->rt[0]);
     return 0;
 }
 
 static int pn_end(struct procRes_s *rs)
 {
-    close(rs->pipedn_m->rt[0]); 
-    close(rs->pipeup_m->rt[1]);
+    close(rs->ppipedn->rt[0]); 
+    close(rs->ppipeup->rt[1]);
     return 0;
 }
 
@@ -265,10 +264,14 @@ static int p0_end(struct mainRes_s *mrs)
     kill(mrs->sid[2]);
 
     fclose(mrs->fs);
-    munmap(mrs->dmp[0], 1024*61440);
-    munmap(mrs->cmp[0], 16*512);
-    free(mrs->dmp);
-    free(mrs->cmp);
+    munmap(mrs->dataRx.pp[0], 1024*61440);
+    munmap(mrs->dataTx.pp[0], 2*61440);
+    munmap(mrs->cmdRx.pp[0], 16*1024);
+    munmap(mrs->cmdTx.pp[0], 2048*1024);
+    free(mrs->dataRx.pp);
+    free(mrs->cmdRx.pp);
+    free(mrs->dataTx.pp);
+    free(mrs->cmdTx.pp);
     return 0;
 }
 
@@ -337,7 +340,7 @@ static int p1(struct procRes_s *rs)
         switch (ch) {
         case 'c':
             // command mode
-            mtx_data(rs->spifd, , tx_buff, 1, 512, 65535);
+            //mtx_data(rs->spifd, , tx_buff, 1, 512, 65535);
             ret = rs_ipc_put(rs, &ch, 1);
             if (ret > 0) {
                 printf("[1s:%c]", ch);
@@ -433,27 +436,65 @@ static char spi1[] = "/dev/spidev32765.0";
         if (ix > 7) break;
     }
 // initial share parameter
+    /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &mrs.time[0]);
-    mrs.dmp = memory_init(&mrs.mdsz, 1024*61440, 61440);
-    //sprintf(mrs.log, "msz:%d dmp:0x%.8x", mrs.mdsz, mrs.dmp);
-    //print_f("minit_result", mrs.log);
-    //for (ix = 0; ix < mrs.mdsz; ix++) {
-    //    sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.dmp[ix]);
-    //    print_f("minit_result", mrs.log);
-    //}
+    mrs.dataRx.pp = memory_init(&mrs.dataRx.slotn, 1024*61440, 61440);
+    mrs.dataRx.totsz = 1024*61440;
+    mrs.dataRx.chksz = 61440;
+    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.dataRx.totsz, mrs.dataRx.pp);
+    print_f("minit_result", mrs.log);
+    for (ix = 0; ix < mrs.dataRx.slotn; ix++) {
+        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.dataRx.pp[ix]);
+        print_f("shminit_result", mrs.log);
+    }
     clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
     tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
     sprintf(mrs.log, "tdiff:%d ", tdiff);
     print_f("time_diff", mrs.log);
 
+    /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &mrs.time[0]);
-    mrs.cmp= memory_init(&mrs.mcsz, 16*1024, 1024);
-    //sprintf(mrs.log, "msz:%d dmp:0x%.8x", mrs.mcsz, mrs.cmp);
-    //print_f("minit_result", mrs.log);
-    //for (ix = 0; ix < mrs.mcsz; ix++) {
-    //    sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmp[ix]);
-    //    print_f("minit_result", mrs.log);
-    //}
+    mrs.dataTx.pp = memory_init(&mrs.dataTx.slotn, 2*61440, 61440);
+    mrs.dataTx.totsz = 2*61440;
+    mrs.dataTx.chksz = 61440;
+    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.dataTx.totsz, mrs.dataTx.pp);
+    print_f("minit_result", mrs.log);
+    for (ix = 0; ix < mrs.dataTx.slotn; ix++) {
+        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.dataTx.pp[ix]);
+        print_f("shminit_result", mrs.log);
+    }
+    clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
+    tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
+    sprintf(mrs.log, "tdiff:%d ", tdiff);
+    print_f("time_diff", mrs.log);
+
+    /* cmd mode rx from spi */
+    clock_gettime(CLOCK_REALTIME, &mrs.time[0]);
+    mrs.cmdRx.pp = memory_init(&mrs.cmdRx.slotn, 16*1024, 1024);
+    mrs.cmdRx.totsz = 16*1024;;
+    mrs.cmdRx.chksz = 61440;
+    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.cmdRx.totsz, mrs.cmdRx.pp);
+    print_f("minit_result", mrs.log);
+    for (ix = 0; ix < mrs.cmdRx.slotn; ix++) {
+        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmdRx.pp[ix]);
+        print_f("shminit_result", mrs.log);
+    }
+    clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
+    tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
+    sprintf(mrs.log, "tdiff:%d ", tdiff);
+    print_f("time_diff", mrs.log);
+	
+    /* cmd mode tx from spi */
+    clock_gettime(CLOCK_REALTIME, &mrs.time[0]);
+    mrs.cmdTx.pp = memory_init(&mrs.cmdTx.slotn, 2048*1024, 1024);
+    mrs.cmdTx.totsz = 2048*1024;;
+    mrs.cmdTx.chksz = 1024;
+    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.cmdTx.totsz, mrs.cmdTx.pp);
+    print_f("minit_result", mrs.log);
+    for (ix = 0; ix < mrs.cmdTx.slotn; ix++) {
+        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmdTx.pp[ix]);
+        print_f("shminit_result", mrs.log);
+    }
     clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
     tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
     sprintf(mrs.log, "tdiff:%d ", tdiff);
@@ -464,6 +505,7 @@ static char spi1[] = "/dev/spidev32765.0";
     ret = fwrite("test file write \n", 1, 16, mrs.fs);
     sprintf(mrs.log, "write file size: %d/%d", ret, 16);
     print_f("fwrite", mrs.log);
+
 // spidev id
     int fd0, fd1;
     fd0 = open(spi0, O_RDWR);
@@ -561,7 +603,7 @@ static char **memory_init(int *sz, int tsize, int csize)
     char *mbuf, *tmpB;
     char **pma;
     int asz, idx;
-    //char mlog[256];
+    char mlog[256];
     
     if ((!tsize) || (!csize)) return (0);
     if (tsize % csize) return (0);
@@ -570,20 +612,20 @@ static char **memory_init(int *sz, int tsize, int csize)
     asz = tsize / csize;
     pma = (char **) malloc(sizeof(char *) * asz);
     
-    //sprintf(mlog, "asz:%d pma:0x%.8x", asz, pma);
-    //print_f("memory_init", mlog);
+    sprintf(mlog, "asz:%d pma:0x%.8x", asz, pma);
+    print_f("memory_init", mlog);
     
     mbuf = mmap(NULL, tsize, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     
-    //sprintf(mlog, "mmap get 0x%.8x", mbuf);
-    //print_f("memory_init", mlog);
+    sprintf(mlog, "mmap get 0x%.8x", mbuf);
+    print_f("memory_init", mlog);
         
     tmpB = mbuf;
     for (idx = 0; idx < asz; idx++) {
         pma[idx] = mbuf;
         
-        //sprintf(mlog, "%d 0x%.8x", idx, pma[idx]);
-        //print_f("memory_init", mlog);
+        sprintf(mlog, "%d 0x%.8x", idx, pma[idx]);
+        print_f("memory_init", mlog);
         
         mbuf += csize;
     }
@@ -640,19 +682,17 @@ static char path1[] = "/mnt/mmc2/rx/%d.bin";
 
 static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 {
-    rs->ccsz_s = mrs->ccsz;
-    rs->mcsz_s = mrs->mcsz;
-    rs->cmp_s = mrs->cmp;
-    rs->mdsz_s = mrs->mdsz;
-    rs->mdsz_s = mrs->mdsz;
-    rs->dmp_s = mrs->dmp;
+    rs->pcmdRx = &mrs->cmdRx;
+    rs->pcmdTx = &mrs->cmdTx;
+    rs->pdataRx = &mrs->dataRx;
+    rs->pdataTx = &mrs->dataTx;
     rs->fs_s = mrs->fs;
     rs->logs = mrs->log;
     rs->tm[0] = &mrs->time[0];
     rs->tm[1] = &mrs->time[1];
 
-    rs->pipedn_m = &mrs->pipedn[idx];
-    rs->pipeup_m = &mrs->pipeup[idx];
+    rs->ppipedn = &mrs->pipedn[idx];
+    rs->ppipeup = &mrs->pipeup[idx];
 
     if (idx == 0) {
         rs->spifd = mrs->sfm[0];
