@@ -20,8 +20,7 @@
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
 
 struct pipe_s{
-    int r;
-    int t;
+    int rt[2];
 };
 
 struct mainRes_s{
@@ -45,13 +44,14 @@ struct mainRes_s{
     struct timespec time[2];
     // log buffer
     char log[256];
+
 };
 
 struct procRes_s{
     // pipe
     int spifd;
-    struct pipe_s pipedn_m;
-    struct pipe_s pipeup_m;
+    struct pipe_s *pipedn_m;
+    struct pipe_s *pipeup_m;
     // data mode share memory
     int cdsz_s;
     int mdsz_s;
@@ -65,6 +65,7 @@ struct procRes_s{
     // time measurement
     struct timespec *tm[2];
     char *logs;
+
 };
 
 //memory alloc. put in/put out
@@ -144,42 +145,42 @@ static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx)
 {
     int ret;
-    ret = read(mrs->pipeup[idx].r, str, size);
+    ret = read(mrs->pipeup[idx].rt[0], str, size);
     return ret;
 }
 
 static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx)
 {
     int ret;
-    ret = write(mrs->pipedn[idx].t, str, size);
+    ret = write(mrs->pipedn[idx].rt[1], str, size);
     return ret;
 }
 
 static int rs_ipc_put(struct procRes_s *rs, char *str, int size)
 {
     int ret;
-    ret = write(rs->pipeup_m.t, str, size);
+    ret = write(rs->pipeup_m->rt[1], str, size);
     return ret;
 }
 
 static int rs_ipc_get(struct procRes_s *rs, char *str, int size)
 {
     int ret;
-    ret = read(rs->pipedn_m.r, str, size);
+    ret = read(rs->pipedn_m->rt[0], str, size);
     return ret;
 }
 
 static int pn_init(struct procRes_s *rs)
 {
-    close(rs->pipedn_m.t);
-    close(rs->pipeup_m.r);
+    close(rs->pipedn_m->rt[1]);
+    close(rs->pipeup_m->rt[0]);
     return 0;
 }
 
 static int pn_end(struct procRes_s *rs)
 {
-    close(rs->pipedn_m.r); 
-    close(rs->pipeup_m.t);
+    close(rs->pipedn_m->rt[0]); 
+    close(rs->pipeup_m->rt[1]);
     return 0;
 }
 
@@ -227,26 +228,26 @@ static int p1_end(struct procRes_s *rs)
 
 static int p0_init(struct mainRes_s *mrs) 
 {
-    close(mrs->pipedn[0].r);
-    close(mrs->pipedn[1].r);
-    close(mrs->pipedn[2].r);
+    close(mrs->pipedn[0].rt[0]);
+    close(mrs->pipedn[1].rt[0]);
+    close(mrs->pipedn[2].rt[0]);
 
-    close(mrs->pipeup[0].t);
-    close(mrs->pipeup[1].t);
-    close(mrs->pipeup[2].t);
+    close(mrs->pipeup[0].rt[1]);
+    close(mrs->pipeup[1].rt[1]);
+    close(mrs->pipeup[2].rt[1]);
 
     return 0;
 }
 
 static int p0_end(struct mainRes_s *mrs)
 {
-    close(mrs->pipeup[0].r);
-    close(mrs->pipeup[1].r);
-    close(mrs->pipeup[2].r);
+    close(mrs->pipeup[0].rt[0]);
+    close(mrs->pipeup[1].rt[0]);
+    close(mrs->pipeup[2].rt[0]);
     
-    close(mrs->pipedn[0].t);
-    close(mrs->pipedn[1].t);
-    close(mrs->pipedn[2].t);
+    close(mrs->pipedn[0].rt[1]);
+    close(mrs->pipedn[1].rt[1]);
+    close(mrs->pipedn[2].rt[1]);
 
     kill(mrs->sid[0]);
     kill(mrs->sid[1]);
@@ -262,7 +263,7 @@ static int p0_end(struct mainRes_s *mrs)
 
 static int p0(struct mainRes_s *mrs)
 {
-    int pi, pt, tp;
+    int pi, pt, tp, ret;
     char ch, c1;
 
     p0_init(mrs);
@@ -274,6 +275,28 @@ static int p0(struct mainRes_s *mrs)
     // parsing command in shared memory whcih get form spi
     // 
 
+    while (1) {
+        printf("=");
+        ch = fgetc(stdin);
+        if (ch == '\n') continue;
+        mrs_ipc_put(mrs, &ch, 1, 0);
+        mrs_ipc_put(mrs, &ch, 1, 1);
+        mrs_ipc_put(mrs, &ch, 1, 2);
+        ret = mrs_ipc_get(mrs, &ch, 1, 0);
+        if (ret > 0) {
+            printf("[0g:%c:%d]", ch, ret);
+        }
+        ret = mrs_ipc_get(mrs, &ch, 1, 1);
+        if (ret > 0) {
+            printf("[1g:%c:%d]", ch, ret);
+        }
+        ret = mrs_ipc_get(mrs, &ch, 1, 2);
+        if (ret > 0) {
+            printf("[2g:%c:%d]", ch, ret);
+        }
+    }
+
+
     p0_end(mrs);
     return 0;
 }
@@ -281,8 +304,21 @@ static int p0(struct mainRes_s *mrs)
 static int p1(struct procRes_s *rs)
 {
     int px, pi, ret;
-
+    char ch;
+    printf("p1\n");
     p1_init(rs);
+
+    while (1) {
+        printf(".");
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret) {
+            printf("%c", ch);
+        }
+        ret = rs_ipc_put(rs, &ch, 1);
+        if (ret) {
+            printf("[1s:%c]", ch);
+        }
+    }
     // wait for ch from p0
     // 'c': command mode, store the incoming infom into share memory
     // send 'c' to notice the p0 that we have incoming command
@@ -296,11 +332,23 @@ static int p1(struct procRes_s *rs)
 static int p2(struct procRes_s *rs)
 {
     int px, pi, ret;
-    
+    char ch;
     p2_init(rs);
     // wait for ch from p0
     // 'd': data mode, store the incomming infom into share memory
     // send 'd' to notice the p0 that we have incomming data chunk
+
+    while (1) {
+        printf(";");
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret) {
+            printf("%c", ch);
+        }
+        ret = rs_ipc_put(rs, &ch, 1);
+        if (ret) {
+            printf("[2s:%c]", ch);
+        }
+    }
 
     p2_end(rs);
     return 0;
@@ -309,11 +357,24 @@ static int p2(struct procRes_s *rs)
 static int p3(struct procRes_s *rs)
 {
     int px, pi, ret;
-    
+    char ch;
     p3_init(rs);
     // wait for ch from p0
     // 'c': command mode, store the socket incoming inform into share memory
     // 'd': data mode, forward the socket incoming inform into share memory
+
+    while (1) {
+        printf("/");
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret) {
+            printf("%c", ch);
+        }
+        ret = rs_ipc_put(rs, &ch, 1);
+        if (ret) {
+            printf("[3s:%c]", ch);
+        }
+    }
+
     p3_end(rs);
     return 0;
 }
@@ -389,7 +450,7 @@ static char spi1[] = "/dev/spidev32765.0";
 
     mrs.sfm[0] = fd0;
     mrs.sfm[1] = fd1;
-
+    mrs.smode = 0;
     mrs.smode |= SPI_MODE_2;
 
     /*
@@ -415,13 +476,13 @@ static char spi1[] = "/dev/spidev32765.0";
         printf("can't get spi mode\n"); 
 
 // IPC
-    pipe((int *)&mrs.pipedn[0]);
-    pipe((int *)&mrs.pipedn[1]);
-    pipe((int *)&mrs.pipedn[2]);
+    pipe(mrs.pipedn[0].rt);
+    pipe(mrs.pipedn[1].rt);
+    pipe(mrs.pipedn[2].rt);
 
-    pipe((int *)&mrs.pipeup[0]);
-    pipe((int *)&mrs.pipeup[1]);
-    pipe((int *)&mrs.pipeup[2]);
+    pipe2(mrs.pipeup[0].rt, O_NONBLOCK);
+    pipe2(mrs.pipeup[1].rt, O_NONBLOCK);
+    pipe2(mrs.pipeup[2].rt, O_NONBLOCK);
 
     res_put_in(&rs[0], &mrs, 0);
     res_put_in(&rs[1], &mrs, 1);
@@ -556,10 +617,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->tm[0] = &mrs->time[0];
     rs->tm[1] = &mrs->time[1];
 
-    rs->pipedn_m.t = mrs->pipedn[idx].t;
-    rs->pipedn_m.r = mrs->pipedn[idx].r;
-    rs->pipeup_m.t = mrs->pipeup[idx].t;
-    rs->pipeup_m.r = mrs->pipeup[idx].r;
+    rs->pipedn_m = &mrs->pipedn[idx];
+    rs->pipeup_m = &mrs->pipeup[idx];
 
     if (idx == 0) {
         rs->spifd = mrs->sfm[0];
