@@ -23,6 +23,13 @@ struct pipe_s{
     int rt[2];
 };
 
+struct shmem_s{
+	int totsz;
+	int chksz;
+	int slotn;
+	char **pp;
+};
+
 struct mainRes_s{
     int sid[3];
     int sfm[2];
@@ -30,6 +37,10 @@ struct mainRes_s{
     // 3 pipe
     struct pipe_s pipedn[3];
     struct pipe_s pipeup[3];
+    struct shmem_s dataRx;
+    struct shmem_s dataTx;
+    struct shmem_s cmdRx;
+    struct shmem_s cmdTx;
     // data mode share memory
     int cdsz;
     int mdsz;
@@ -101,9 +112,9 @@ static int rs_ipc_put(struct procRes_s *rs, char *str, int size);
 static int rs_ipc_get(struct procRes_s *rs, char *str, int size);
 static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx);
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx);
-static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz);
+static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz);
 
-static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz)
+static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz)
 {
     int pkt_size;
     int ret, i, errcnt; 
@@ -282,6 +293,7 @@ static int p0(struct mainRes_s *mrs)
         mrs_ipc_put(mrs, &ch, 1, 0);
         mrs_ipc_put(mrs, &ch, 1, 1);
         mrs_ipc_put(mrs, &ch, 1, 2);
+
         ret = mrs_ipc_get(mrs, &ch, 1, 0);
         if (ret > 0) {
             printf("[0g:%c:%d]", ch, ret);
@@ -307,24 +319,38 @@ static int p1(struct procRes_s *rs)
     char ch;
     printf("p1\n");
     p1_init(rs);
-
-    while (1) {
-        printf(".");
-        ret = rs_ipc_get(rs, &ch, 1);
-        if (ret) {
-            printf("%c", ch);
-        }
-        ret = rs_ipc_put(rs, &ch, 1);
-        if (ret) {
-            printf("[1s:%c]", ch);
-        }
-    }
     // wait for ch from p0
     // 'c': command mode, store the incoming infom into share memory
     // send 'c' to notice the p0 that we have incoming command
     // 'd': data mode, store the incomming infom into share memory 
     // send 'd' to notice the p0 that we have incomming data chunk
 
+    while (1) {
+        printf(".");
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret > 0) {
+            printf("%c", ch);
+        } else {
+            continue;
+        }
+
+        switch (ch) {
+        case 'c':
+            // command mode
+            mtx_data(rs->spifd, , tx_buff, 1, 512, 65535);
+            ret = rs_ipc_put(rs, &ch, 1);
+            if (ret > 0) {
+                printf("[1s:%c]", ch);
+            }
+            break;
+        default:
+            break;
+        }
+        ret = rs_ipc_put(rs, &ch, 1);
+        if (ret > 0) {
+            printf("[1s:%c]", ch);
+        }
+    }
     p1_end(rs);
     return 0;
 }
@@ -333,6 +359,7 @@ static int p2(struct procRes_s *rs)
 {
     int px, pi, ret;
     char ch;
+    printf("p2\n");
     p2_init(rs);
     // wait for ch from p0
     // 'd': data mode, store the incomming infom into share memory
@@ -341,11 +368,11 @@ static int p2(struct procRes_s *rs)
     while (1) {
         printf(";");
         ret = rs_ipc_get(rs, &ch, 1);
-        if (ret) {
+        if (ret > 0) {
             printf("%c", ch);
         }
         ret = rs_ipc_put(rs, &ch, 1);
-        if (ret) {
+        if (ret > 0) {
             printf("[2s:%c]", ch);
         }
     }
@@ -358,6 +385,7 @@ static int p3(struct procRes_s *rs)
 {
     int px, pi, ret;
     char ch;
+    printf("p3\n");
     p3_init(rs);
     // wait for ch from p0
     // 'c': command mode, store the socket incoming inform into share memory
@@ -366,11 +394,11 @@ static int p3(struct procRes_s *rs)
     while (1) {
         printf("/");
         ret = rs_ipc_get(rs, &ch, 1);
-        if (ret) {
+        if (ret > 0) {
             printf("%c", ch);
         }
         ret = rs_ipc_put(rs, &ch, 1);
-        if (ret) {
+        if (ret > 0) {
             printf("[3s:%c]", ch);
         }
     }
@@ -390,7 +418,8 @@ static char spi1[] = "/dev/spidev32765.0";
     char *log;
     int tdiff;
     int arg[8];
-	;
+    uint32_t bitset;
+
     sprintf(mrs.log, "argc:%d", argc);
     print_f("main", mrs.log);
 // show arguments
@@ -418,7 +447,7 @@ static char spi1[] = "/dev/spidev32765.0";
     print_f("time_diff", mrs.log);
 
     clock_gettime(CLOCK_REALTIME, &mrs.time[0]);
-    mrs.cmp= memory_init(&mrs.mcsz, 16*512, 512);
+    mrs.cmp= memory_init(&mrs.mcsz, 16*1024, 1024);
     //sprintf(mrs.log, "msz:%d dmp:0x%.8x", mrs.mcsz, mrs.cmp);
     //print_f("minit_result", mrs.log);
     //for (ix = 0; ix < mrs.mcsz; ix++) {
@@ -452,6 +481,11 @@ static char spi1[] = "/dev/spidev32765.0";
     mrs.sfm[1] = fd1;
     mrs.smode = 0;
     mrs.smode |= SPI_MODE_2;
+
+    /* set RDY pin to low before spi setup ready */
+    bitset = 0;
+    ret = ioctl(mrs.sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    printf("[t]Set RDY low at beginning\n");
 
     /*
      * spi mode 
