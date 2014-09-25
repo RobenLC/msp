@@ -23,20 +23,28 @@ struct pipe_s{
     int rt[2];
 };
 
+struct ring_s{
+    int run;
+    int seq;
+};
+
 struct shmem_s{
-	int totsz;
-	int chksz;
-	int slotn;
-	char **pp;
+    int totsz;
+    int chksz;
+    int slotn;
+    char **pp;
+    struct ring_s lead;
+    struct ring_s folw;
+    int svdist;
 };
 
 struct mainRes_s{
-    int sid[3];
+    int sid[5];
     int sfm[2];
     int smode;
     // 3 pipe
-    struct pipe_s pipedn[3];
-    struct pipe_s pipeup[3];
+    struct pipe_s pipedn[5];
+    struct pipe_s pipeup[5];
     // data mode share memory
     struct shmem_s dataRx;
     struct shmem_s dataTx;
@@ -92,18 +100,27 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx);
 static int p0(struct mainRes_s *mrs);
 static int p0_init(struct mainRes_s *mrs);
 static int p0_end(struct mainRes_s *mrs);
-//p1: wifi socket connection
+//p1: spi0 send
 static int p1(struct procRes_s *rs);
 static int p1_init(struct procRes_s *rs);
 static int p1_end(struct procRes_s *rs);
-//p2: spi0 
+//p2: spi0 recv
 static int p2(struct procRes_s *rs);
 static int p2_init(struct procRes_s *rs);
 static int p2_end(struct procRes_s *rs);
-//p3: spi1
+//p3: spi1 recv
 static int p3(struct procRes_s *rs);
 static int p3_init(struct procRes_s *rs);
 static int p3_end(struct procRes_s *rs);
+//p4: socket send
+static int p4(struct procRes_s *rs);
+static int p4_init(struct procRes_s *rs);
+static int p4_end(struct procRes_s *rs);
+//p5: socket recv
+static int p5(struct procRes_s *rs);
+static int p5_init(struct procRes_s *rs);
+static int p5_end(struct procRes_s *rs);
+
 static int pn_init(struct procRes_s *rs);
 static int pn_end(struct procRes_s *rs);
 //IPC wrap
@@ -192,6 +209,34 @@ static int pn_end(struct procRes_s *rs)
     close(rs->ppipedn->rt[0]); 
     close(rs->ppipeup->rt[1]);
     return 0;
+}
+
+static int p5_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p5_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p4_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p4_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
 }
 
 static int p3_init(struct procRes_s *rs)
@@ -292,22 +337,20 @@ static int p0(struct mainRes_s *mrs)
     while (1) {
         printf("=");
         ch = fgetc(stdin);
-        if (ch == '\n') continue;
-        mrs_ipc_put(mrs, &ch, 1, 0);
-        mrs_ipc_put(mrs, &ch, 1, 1);
-        mrs_ipc_put(mrs, &ch, 1, 2);
+        if (ch == '\n') { printf("\n"); continue;}
+        printf("%c", ch);
 
-        ret = mrs_ipc_get(mrs, &ch, 1, 0);
-        if (ret > 0) {
-            printf("[0g:%c:%d]", ch, ret);
-        }
-        ret = mrs_ipc_get(mrs, &ch, 1, 1);
-        if (ret > 0) {
-            printf("[1g:%c:%d]", ch, ret);
-        }
-        ret = mrs_ipc_get(mrs, &ch, 1, 2);
-        if (ret > 0) {
-            printf("[2g:%c:%d]", ch, ret);
+        for (pi = 0; pi < 5; pi++) {
+             mrs_ipc_put(mrs, &ch, 1, pi);
+
+             ret = mrs_ipc_get(mrs, &c1, 1, pi);
+             if (ret <= 0) continue;
+             printf("[%d", pi);
+             while (ret > 0) {
+                 printf(":%c", c1);
+                 ret = mrs_ipc_get(mrs, &c1, 1, pi);
+             }
+             printf("]\n");
         }
     }
 
@@ -410,13 +453,65 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
+static int p4(struct procRes_s *rs)
+{
+    int px, pi, ret;
+    char ch;
+    printf("p4\n");
+    p4_init(rs);
+    // wait for ch from p0
+    // 'c': command mode, store the socket incoming inform into share memory
+    // 'd': data mode, forward the socket incoming inform into share memory
+
+    while (1) {
+        printf("^");
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret > 0) {
+            printf("%c", ch);
+        }
+        ret = rs_ipc_put(rs, &ch, 1);
+        if (ret > 0) {
+            printf("[4s:%c]", ch);
+        }
+    }
+
+    p4_end(rs);
+    return 0;
+}
+
+static int p5(struct procRes_s *rs)
+{
+    int px, pi, ret;
+    char ch;
+    printf("p5\n");
+    p5_init(rs);
+    // wait for ch from p0
+    // 'c': command mode, store the socket incoming inform into share memory
+    // 'd': data mode, forward the socket incoming inform into share memory
+
+    while (1) {
+        printf("#");
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret > 0) {
+            printf("%c", ch);
+        }
+        ret = rs_ipc_put(rs, &ch, 1);
+        if (ret > 0) {
+            printf("[5s:%c]", ch);
+        }
+    }
+
+    p5_end(rs);
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
 static char spi0[] = "/dev/spidev32766.0"; 
 static char spi1[] = "/dev/spidev32765.0"; 
 
     struct mainRes_s mrs;
-    struct procRes_s rs[3];
+    struct procRes_s rs[5];
     int ix, ret;
     char *log;
     int tdiff;
@@ -441,12 +536,13 @@ static char spi1[] = "/dev/spidev32765.0";
     mrs.dataRx.pp = memory_init(&mrs.dataRx.slotn, 1024*61440, 61440);
     mrs.dataRx.totsz = 1024*61440;
     mrs.dataRx.chksz = 61440;
-    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.dataRx.totsz, mrs.dataRx.pp);
-    print_f("minit_result", mrs.log);
-    for (ix = 0; ix < mrs.dataRx.slotn; ix++) {
-        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.dataRx.pp[ix]);
-        print_f("shminit_result", mrs.log);
-    }
+    mrs.dataRx.svdist = 8;
+    //sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.dataRx.totsz, mrs.dataRx.pp);
+    //print_f("minit_result", mrs.log);
+    //for (ix = 0; ix < mrs.dataRx.slotn; ix++) {
+    //    sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.dataRx.pp[ix]);
+    //    print_f("shminit_result", mrs.log);
+    //}
     clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
     tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
     sprintf(mrs.log, "tdiff:%d ", tdiff);
@@ -457,12 +553,13 @@ static char spi1[] = "/dev/spidev32765.0";
     mrs.dataTx.pp = memory_init(&mrs.dataTx.slotn, 2*61440, 61440);
     mrs.dataTx.totsz = 2*61440;
     mrs.dataTx.chksz = 61440;
-    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.dataTx.totsz, mrs.dataTx.pp);
-    print_f("minit_result", mrs.log);
-    for (ix = 0; ix < mrs.dataTx.slotn; ix++) {
-        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.dataTx.pp[ix]);
-        print_f("shminit_result", mrs.log);
-    }
+    mrs.dataTx.svdist = 1;
+    //sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.dataTx.totsz, mrs.dataTx.pp);
+    //print_f("minit_result", mrs.log);
+    //for (ix = 0; ix < mrs.dataTx.slotn; ix++) {
+    //    sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.dataTx.pp[ix]);
+    //    print_f("shminit_result", mrs.log);
+    //}
     clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
     tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
     sprintf(mrs.log, "tdiff:%d ", tdiff);
@@ -473,12 +570,13 @@ static char spi1[] = "/dev/spidev32765.0";
     mrs.cmdRx.pp = memory_init(&mrs.cmdRx.slotn, 16*1024, 1024);
     mrs.cmdRx.totsz = 16*1024;;
     mrs.cmdRx.chksz = 61440;
-    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.cmdRx.totsz, mrs.cmdRx.pp);
-    print_f("minit_result", mrs.log);
-    for (ix = 0; ix < mrs.cmdRx.slotn; ix++) {
-        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmdRx.pp[ix]);
-        print_f("shminit_result", mrs.log);
-    }
+    mrs.cmdRx.svdist = 4;
+    //sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.cmdRx.totsz, mrs.cmdRx.pp);
+    //print_f("minit_result", mrs.log);
+    //for (ix = 0; ix < mrs.cmdRx.slotn; ix++) {
+    //    sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmdRx.pp[ix]);
+    //    print_f("shminit_result", mrs.log);
+    //}
     clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
     tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
     sprintf(mrs.log, "tdiff:%d ", tdiff);
@@ -489,12 +587,13 @@ static char spi1[] = "/dev/spidev32765.0";
     mrs.cmdTx.pp = memory_init(&mrs.cmdTx.slotn, 2048*1024, 1024);
     mrs.cmdTx.totsz = 2048*1024;;
     mrs.cmdTx.chksz = 1024;
-    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.cmdTx.totsz, mrs.cmdTx.pp);
-    print_f("minit_result", mrs.log);
-    for (ix = 0; ix < mrs.cmdTx.slotn; ix++) {
-        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmdTx.pp[ix]);
-        print_f("shminit_result", mrs.log);
-    }
+    mrs.cmdTx.svdist = 128;
+    //sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.cmdTx.totsz, mrs.cmdTx.pp);
+    //print_f("minit_result", mrs.log);
+    //for (ix = 0; ix < mrs.cmdTx.slotn; ix++) {
+    //    sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmdTx.pp[ix]);
+    //    print_f("shminit_result", mrs.log);
+    //}
     clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
     tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
     sprintf(mrs.log, "tdiff:%d ", tdiff);
@@ -555,15 +654,21 @@ static char spi1[] = "/dev/spidev32765.0";
     pipe(mrs.pipedn[0].rt);
     pipe(mrs.pipedn[1].rt);
     pipe(mrs.pipedn[2].rt);
-
+    pipe(mrs.pipedn[3].rt);
+    pipe(mrs.pipedn[4].rt);
+	
     pipe2(mrs.pipeup[0].rt, O_NONBLOCK);
     pipe2(mrs.pipeup[1].rt, O_NONBLOCK);
     pipe2(mrs.pipeup[2].rt, O_NONBLOCK);
+    pipe2(mrs.pipeup[3].rt, O_NONBLOCK);
+    pipe2(mrs.pipeup[4].rt, O_NONBLOCK);
 
     res_put_in(&rs[0], &mrs, 0);
     res_put_in(&rs[1], &mrs, 1);
     res_put_in(&rs[2], &mrs, 2);
-
+    res_put_in(&rs[3], &mrs, 3);
+    res_put_in(&rs[4], &mrs, 4);
+	
 // fork process
     mrs.sid[0] = fork();
     if (!mrs.sid[0]) {
@@ -576,9 +681,18 @@ static char spi1[] = "/dev/spidev32765.0";
             mrs.sid[2] = fork();
             if (!mrs.sid[2]) {
                 p3(&rs[2]);
-                
             } else {
-                p0(&mrs);
+                mrs.sid[3] = fork();
+                if (!mrs.sid[3]) {
+                    p4(&rs[3]);
+                } else {				
+                    mrs.sid[4] = fork();
+                    if (!mrs.sid[4]) {
+                        p5(&rs[4]);
+                    } else { 
+                        p0(&mrs);
+                    }
+                }
             }
         }
     }
@@ -612,20 +726,20 @@ static char **memory_init(int *sz, int tsize, int csize)
     asz = tsize / csize;
     pma = (char **) malloc(sizeof(char *) * asz);
     
-    sprintf(mlog, "asz:%d pma:0x%.8x", asz, pma);
-    print_f("memory_init", mlog);
+    //sprintf(mlog, "asz:%d pma:0x%.8x", asz, pma);
+    //print_f("memory_init", mlog);
     
     mbuf = mmap(NULL, tsize, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     
-    sprintf(mlog, "mmap get 0x%.8x", mbuf);
-    print_f("memory_init", mlog);
+    //sprintf(mlog, "mmap get 0x%.8x", mbuf);
+    //print_f("memory_init", mlog);
         
     tmpB = mbuf;
     for (idx = 0; idx < asz; idx++) {
         pma[idx] = mbuf;
         
-        sprintf(mlog, "%d 0x%.8x", idx, pma[idx]);
-        print_f("memory_init", mlog);
+        //sprintf(mlog, "%d 0x%.8x", idx, pma[idx]);
+        //print_f("memory_init", mlog);
         
         mbuf += csize;
     }
@@ -694,9 +808,9 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->ppipedn = &mrs->pipedn[idx];
     rs->ppipeup = &mrs->pipeup[idx];
 
-    if (idx == 0) {
+    if((idx == 0) || (idx == 1)) {
         rs->spifd = mrs->sfm[0];
-    } else if (idx == 1) {
+    } else if (idx == 2) {
         rs->spifd = mrs->sfm[1];
     }
 	
