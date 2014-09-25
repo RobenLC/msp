@@ -33,9 +33,13 @@ struct shmem_s{
     int chksz;
     int slotn;
     char **pp;
-    struct ring_s lead;
-    struct ring_s folw;
     int svdist;
+    struct ring_s lead;
+    struct ring_s dual;
+    struct ring_s folw;
+    int lastflg;
+    int lastsz;
+    int dualsz;	
 };
 
 struct mainRes_s{
@@ -129,6 +133,201 @@ static int rs_ipc_get(struct procRes_s *rs, char *str, int size);
 static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx);
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx);
 static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz);
+
+static int ring_buf_init(struct shmem_s *pp);
+static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel);
+static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel);
+static int ring_buf_prod_dual(struct shmem_s *pp, int sel);
+static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel);
+static int ring_buf_get(struct shmem_s *pp, char **addr, int *size);
+static int ring_buf_set_last(struct shmem_s *pp, int size);
+static int ring_buf_prod(struct shmem_s *pp);
+static int ring_buf_cons(struct shmem_s *pp, char **addr);
+
+static int ring_buf_init(struct shmem_s *pp)
+{
+    pp->lead.run = 0;
+    pp->lead.seq = 0;
+    pp->dual.run = 0;
+    pp->dual.seq = 1;
+    pp->folw.run = 0;
+    pp->folw.seq = 0;
+    pp->lastflg = 0;
+    pp->lastsz = 0;
+    pp->dualsz = 0;
+
+    return 0;
+}
+
+static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel)
+{
+    int dualn = 0;
+    int folwn = 0;
+    int dist;
+    int tmps;
+
+    sel = sel % 2;
+
+    folwn = pp->folw.run * pp->chksz + pp->folw.seq;
+
+    if (sel) {
+        dualn = pp->dual.run * pp->chksz + pp->dual.seq;
+    } else {
+        dualn = pp->lead.run * pp->chksz + pp->lead.seq;
+    }
+
+    dist = dualn - folwn;
+     if (dist > (pp->chksz - 3))  return -1;
+
+    if (sel) {
+        if ((pp->dual.seq + 2) < pp->slotn) {
+            *addr = pp->pp[pp->dual.seq+2];
+        } else {
+            tmps = (pp->dual.seq+2) % pp->slotn;
+            *addr = pp->pp[tmps];
+        }
+    } else {
+        if ((pp->lead.seq + 2) < pp->slotn) {
+            *addr = pp->pp[pp->lead.seq+2];
+        } else {
+            tmps = (pp->lead.seq+2) % pp->slotn;
+            *addr = pp->pp[tmps];
+        }
+    }
+
+    return pp->chksz;	
+}
+
+static int ring_buf_get(struct shmem_s *pp, char **addr, int *size)
+{
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+    int tmps;
+
+    folwn = pp->folw.run * pp->chksz + pp->folw.seq;
+    leadn = pp->lead.run * pp->chksz + pp->lead.seq;
+
+    dist = leadn - folwn;
+    if (dist > (pp->chksz - 2))  return -1;
+
+    if ((pp->lead.seq + 2) < pp->slotn) {
+        *addr = pp->pp[pp->lead.seq+2];
+    } else {
+        tmps = (pp->lead.seq+2) % pp->slotn;
+        *addr = pp->pp[tmps];
+    }
+
+    return pp->chksz;	
+}
+
+static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
+{
+    sel = sel % 2;
+
+    if (sel) {
+        pp->dualsz = size;
+    } else {
+        pp->lastsz = size;
+    }
+    pp->lastflg += 1;
+
+    return pp->lastflg;
+}
+
+static int ring_buf_set_last(struct shmem_s *pp, int size)
+{
+    pp->lastsz = size;
+    pp->lastflg = 1;
+    return pp->lastflg;
+}
+static int ring_buf_prod_dual(struct shmem_s *pp, int sel)
+{
+    sel = sel % 2;
+    if (sel) {
+        if ((pp->dual.seq + 2) < pp->slotn) {
+            pp->dual.seq += 2;
+        } else {
+            pp->dual.seq = 1;
+            pp->dual.run += 1;
+        }
+    } else {
+        if ((pp->lead.seq + 2) < pp->slotn) {
+            pp->lead.seq += 2;
+        } else {
+            pp->lead.seq = 0;
+            pp->lead.run += 1;
+        }
+    }
+
+    return 0;
+}
+
+static int ring_buf_prod(struct shmem_s *pp)
+{
+    if ((pp->lead.seq + 1) < pp->slotn) {
+        pp->lead.seq += 1;
+    } else {
+        pp->lead.seq = 0;
+        pp->lead.run += 1;
+    }
+
+    return 0;
+}
+
+static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
+{
+    int dualn = 0;
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+
+    folwn = pp->folw.run * pp->chksz + pp->folw.seq;
+    dualn = pp->dual.run * pp->chksz + pp->dual.seq;
+    leadn = pp->lead.run * pp->chksz + pp->lead.seq;
+    if (dualn > leadn) {
+        dist = leadn - folwn;
+    } else {
+        dist = dualn - folwn;
+    }
+
+    if (dist < 1)  return -1;
+
+    if ((pp->folw.seq + 1) < pp->slotn) {
+        *addr = pp->pp[pp->folw.seq + 1];
+        pp->folw.seq += 1;
+    } else {
+        *addr = pp->pp[0];
+        pp->folw.seq = 0;
+        pp->folw.run += 1;
+    }
+
+    return pp->chksz;
+}
+
+static int ring_buf_cons(struct shmem_s *pp, char **addr)
+{
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+
+    folwn = pp->folw.run * pp->chksz + pp->folw.seq;
+    leadn = pp->lead.run * pp->chksz + pp->lead.seq;
+    dist = leadn - folwn;
+
+    if (dist < 1)  return -1;
+
+    if ((pp->folw.seq + 1) < pp->slotn) {
+        *addr = pp->pp[pp->folw.seq + 1];
+        pp->folw.seq += 1;
+    } else {
+        *addr = pp->pp[0];
+        pp->folw.seq = 0;
+        pp->folw.run += 1;
+    }
+
+    return pp->chksz;
+}
 
 static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz)
 {
@@ -327,9 +526,10 @@ static int p0(struct mainRes_s *mrs)
 
     p0_init(mrs);
     /* the initial mode is command mode, the rdy pin is pull low at begin */
+    // in charge of share memory and processed control
     // put the initial status in shared memory which is the default tx data for command mode
     // send 'c' to p1 to start the command mode
-    // send 'c' to p3 to start the socket recv
+    // send 'c' to p5 to start the socket recv
     // parsing command in shared memory which get from socket 
     // parsing command in shared memory whcih get form spi
     // 
@@ -366,10 +566,9 @@ static int p1(struct procRes_s *rs)
     printf("p1\n");
     p1_init(rs);
     // wait for ch from p0
+    // in charge of spi0 command and command parsing
     // 'c': command mode, store the incoming infom into share memory
     // send 'c' to notice the p0 that we have incoming command
-    // 'd': data mode, store the incomming infom into share memory 
-    // send 'd' to notice the p0 that we have incomming data chunk
 
     while (1) {
         printf(".");
@@ -408,6 +607,7 @@ static int p2(struct procRes_s *rs)
     printf("p2\n");
     p2_init(rs);
     // wait for ch from p0
+    // in charge of spi0 data mode
     // 'd': data mode, store the incomming infom into share memory
     // send 'd' to notice the p0 that we have incomming data chunk
 
@@ -434,7 +634,7 @@ static int p3(struct procRes_s *rs)
     printf("p3\n");
     p3_init(rs);
     // wait for ch from p0
-    // 'c': command mode, store the socket incoming inform into share memory
+    // in charge of spi1 data mode
     // 'd': data mode, forward the socket incoming inform into share memory
 
     while (1) {
@@ -460,8 +660,7 @@ static int p4(struct procRes_s *rs)
     printf("p4\n");
     p4_init(rs);
     // wait for ch from p0
-    // 'c': command mode, store the socket incoming inform into share memory
-    // 'd': data mode, forward the socket incoming inform into share memory
+    // in charge of socket send
 
     while (1) {
         printf("^");
@@ -486,8 +685,7 @@ static int p5(struct procRes_s *rs)
     printf("p5\n");
     p5_init(rs);
     // wait for ch from p0
-    // 'c': command mode, store the socket incoming inform into share memory
-    // 'd': data mode, forward the socket incoming inform into share memory
+    // in charge of socket recv
 
     while (1) {
         printf("#");
@@ -668,7 +866,13 @@ static char spi1[] = "/dev/spidev32765.0";
     res_put_in(&rs[2], &mrs, 2);
     res_put_in(&rs[3], &mrs, 3);
     res_put_in(&rs[4], &mrs, 4);
-	
+
+//  Share memory init
+    ring_buf_init(&mrs.dataRx);
+    ring_buf_init(&mrs.dataTx);
+    ring_buf_init(&mrs.cmdRx);
+    ring_buf_init(&mrs.cmdTx);
+
 // fork process
     mrs.sid[0] = fork();
     if (!mrs.sid[0]) {
@@ -816,3 +1020,5 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 	
     return 0;
 }
+
+
