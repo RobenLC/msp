@@ -2,7 +2,7 @@
 #include <unistd.h> 
 #include <stdio.h> 
 #include <stdlib.h> 
-//#include <string.h>
+#include <string.h>
 //#include <getopt.h> 
 #include <fcntl.h> 
 #include <sys/ioctl.h> 
@@ -143,7 +143,36 @@ static int ring_buf_get(struct shmem_s *pp, char **addr);
 static int ring_buf_set_last(struct shmem_s *pp, int size);
 static int ring_buf_prod(struct shmem_s *pp);
 static int ring_buf_cons(struct shmem_s *pp, char **addr);
+static int shmem_from_str(char **addr, char *dst, char *sz);
+static int shmem_dump(char *src, int size);
 
+static int shmem_dump(char *src, int size)
+{
+    int inc;
+    if (!src) return -1;
+
+    inc = 0;
+    printf("memdump[0x%.8x] sz%d: \n", src, size);
+    while (inc < size) {
+        printf("%.2x ", *src);
+        inc++;
+        src++;
+        if (!((inc+1) % 16)) printf("\n");
+    }
+
+    return inc;
+}
+static int shmem_from_str(char **addr, char *dst, char *sz)
+{
+    char *stop_at;
+    int size;
+    if ((!addr) || (!dst) || (!sz)) return -1;
+
+    *addr = (char *)strtoul(dst, &stop_at, 16);
+    size = strtoul(sz, &stop_at, 10);
+
+    return size;
+}
 static int ring_buf_init(struct shmem_s *pp)
 {
     pp->lead.run = 0;
@@ -303,6 +332,20 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         pp->folw.run += 1;
     }
 
+    if (pp->lastflg) {
+        if (dualn > leadn) {
+            if ((pp->folw.run == pp->dual.run) &&
+			(pp->folw.seq == pp->dual.seq)) {
+                return pp->lastsz;
+            }
+        } else {
+            if ((pp->folw.run == pp->lead.run)
+			(pp->folw.seq == pp->lead.seq)) {
+                return pp->lastsz;
+            }
+        }
+    }
+
     return pp->chksz;
 }
 
@@ -316,6 +359,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     leadn = pp->lead.run * pp->slotn + pp->lead.seq;
     dist = leadn - folwn;
 
+    printf("cons, d: %d %d/%d \n", dist, leadn, folwn);
+
     if (dist < 1)  return -1;
 
     if ((pp->folw.seq + 1) < pp->slotn) {
@@ -325,6 +370,13 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
         *addr = pp->pp[0];
         pp->folw.seq = 0;
         pp->folw.run += 1;
+    }
+
+    if (pp->lastflg) {
+        if ((pp->folw.run == pp->lead.run)
+            (pp->folw.seq == pp->lead.seq)) {
+            return pp->lastsz;
+        }
     }
 
     return pp->chksz;
@@ -532,9 +584,10 @@ static int p0_end(struct mainRes_s *mrs)
 
 static int p0(struct mainRes_s *mrs)
 {
-    int pi, pt, tp, ret;
-    char ch, c1;
-    char *addr[2];
+    int pi, pt, tp, ret, sz[2], chk[2], bksz[2];
+    char ch, c1, str[128], dst[17];
+    char *addr[2], *stop_at;
+    int pmode = 0, pstatus = 0;
 
     p0_init(mrs);
     /* the initial mode is command mode, the rdy pin is pull low at begin */
@@ -546,25 +599,94 @@ static int p0(struct mainRes_s *mrs)
     // parsing command in shared memory whcih get form spi
     // 
 
+    while (!pmode) {
+        ch = fgetc(stdin);
+        if (ch == '\n') continue;
+        if (ch == '2') {
+            // set mode to data mode
+            pmode = 1;
+            bksz[0] = 0;
+            bksz[1] = 0;
+        }
+    }
     pi = 0;
     pt = 0;
     while (1) {
-        ret = mrs_ipc_get(mrs, &ch, 1, 0);
-        if (ret > 0) {
-            ret = ring_buf_get(&mrs->cmdTx, &addr[0]);
-            printf("prod:0x%.8x, idx:%d ch:%c\n", addr[0], pi, ch);
-            ring_buf_prod(&mrs->cmdTx);
-            pi++;
-            if (ret < 0) break;
-        }
-        ret = mrs_ipc_get(mrs, &ch, 1, 1);
-        if (ret > 0) {
-            ret = ring_buf_cons(&mrs->cmdTx, &addr[1]);
-            if (ret > 0) {
-                printf("cons:0x%.8x, idx: %d ch:%c\n", addr[1], pt, ch);
-                pt++;
+        //printf(".");
+        // p2 data mode spi0 rx
+        if (pmode == 1) {
+            if (pstatus == 0) {
+                // [TODO] check the remaining buffer, stop spi if we are going to run out of the share memory
+                sz[0] = ring_buf_get_dual(&mrs->dataRx, &addr[0], pi);
+                printf("prod:0x%.8x, idx:%d m:%d sz:%d\n", addr[0], pi, pmode, sz[0]);
+                if (sz[0] < 0) break;
+                sprintf(str, "d%.8xl%.8d", addr[0],sz[0]);
+                //printf("[%s]\n", str);
+                mrs_ipc_put(mrs, str, 18, 1);
+
+                sz[1] = ring_buf_get_dual(&mrs->dataRx, &addr[1], pi + 1);
+                printf("prod:0x%.8x, idx:%d m:%d sz:%d\n", addr[1], pi + 1, pmode, sz[1]);
+                if (sz[1] < 0) break;
+                sprintf(str, "d%.8xl%.8d", addr[1],sz[1]);
+                //printf("[%s]\n", str);
+                mrs_ipc_put(mrs, str, 18, 2);
+
+                pstatus = 1;
+                chk[0] = 0;
+                chk[1] = 0;				
+            }
+            if (pstatus == 1) {	
+                ret = mrs_ipc_get(mrs, &ch, 1, 1);
+                if (ret > 0) {
+                    ret = mrs_ipc_get(mrs, &ch, 1, 1);
+                    if ((ret > 0) && (ch == 'l')) {
+                        ret = mrs_ipc_get(mrs, dst, 8, 1);
+                        if (ret == 8) {
+                            bksz[0] = strtoul(dst, &stop_at, 10);
+                        }
+                    }
+
+                    chk[0] = 1;
+                    ring_buf_prod_dual(&mrs->dataRx, pi);
+                    printf("[dback] ch:%c c:%d rt:%d idx:%d \n", ch, chk[0], ret, pi);
+                    //shmem_dump(addr[0], sz);
+                    if (bksz[0] > 0) {
+                        ring_buf_set_last_dual(&mrs->dataRx, bksz[0], pi);
+                        break;
+                    }
+                }
+                ret = mrs_ipc_get(mrs, &ch, 1, 2);
+                if (ret > 0) {
+                    ret = mrs_ipc_get(mrs, &ch, 1, 2);
+                    if ((ret > 0) && (ch == 'l')) {
+                        ret = mrs_ipc_get(mrs, dst, 8, 2);
+                        if (ret == 8) {
+                            bksz[1] = strtoul(dst, &stop_at, 10);
+                        }
+                    }
+
+                    chk[1] = 1;
+                    ring_buf_prod_dual(&mrs->dataRx, pi + 1);
+                    printf("[dback] ch:%c c:%d rt:%d idx:%d \n", ch, chk[1], ret, pi + 1);
+                    //shmem_dump(addr[0], sz);
+                    if (bksz[1] > 0) {
+                        ring_buf_set_last_dual(&mrs->dataRx, bksz[1], pi + 1);
+                        break;
+                    }
+                }
+                if ((chk[0]) && (chk[1])) {
+                    pstatus = 0;
+                    pi += 2;
+                }
             }
         }
+    }
+
+    // save to file for debug
+    if (pmode == 1) {
+        msync(mrs->dataRx.pp[0], 1024*61440, MS_SYNC);
+        ret = fwrite(mrs->dataRx.pp[0], 1, 1024*61440, mrs->fs);
+        printf("\np0 write file %d size %d/%d \n", mrs->fs, 1024*61440, ret);
     }
 
     p0_end(mrs);
@@ -587,16 +709,16 @@ static int p1(struct procRes_s *rs)
     pi = 0;
     ch = '1';
     while (1) {
-        //printf("+");
-        //ret = rs_ipc_get(rs, &ch, 1);
-        //if (ret > 0) {
-        //    printf("%c", ch);
-        //}
+        printf("+");
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret > 0) {
+            printf("%c", ch);
+        }
         ret = rs_ipc_put(rs, &ch, 1);
         if (ret > 0) {
-            printf("[1s:%c]", ch);
+            //printf("[1s:%c]", ch);
         }
-        usleep(300);
+        usleep(10);
     }
 
     p1_end(rs);
@@ -605,8 +727,9 @@ static int p1(struct procRes_s *rs)
 
 static int p2(struct procRes_s *rs)
 {
-    int px, pi, ret;
-    char ch;
+    int px, pi, ret[5], size, opsz;
+    char ch, dst[17], sz[17], str[128];
+    char *addr, *stop_at;
     printf("p2\n");
     p2_init(rs);
     // wait for ch from p0
@@ -615,17 +738,38 @@ static int p2(struct procRes_s *rs)
     // send 'd' to notice the p0 that we have incomming data chunk
 
     ch = '2';
+    pi = 0;
     while (1) {
-        //printf("!");
-        //ret = rs_ipc_get(rs, &ch, 1);
-        //if (ret > 0) {
-        //    printf("%c", ch);
-        //}
-        ret = rs_ipc_put(rs, &ch, 1);
-        if (ret > 0) {
-            printf("[2s:%c]", ch);
+        printf("!");
+        ret[0] = rs_ipc_get(rs, &ch, 1);
+        if (ret[0] > 0) {
+            printf("%c", ch);
+            if (ch == 'd') {
+                ret[2] = rs_ipc_get(rs, dst, 8);
+                dst[8] = '\0';
+                //printf("[d] %s len:%d \n", dst, ret[2]);
+                ret[3] = rs_ipc_get(rs, &ch, 1);
+                ret[4] = rs_ipc_get(rs, sz, 8);
+                sz[8] = '\0';
+                //printf("[%c] %s len:%d,%d \n", ch, sz, ret[3], ret[4]);
+                size = shmem_from_str(&addr, dst, sz);
+                printf("[convert] addr: 0x%.8x, sz:%d \n", addr, size);
+
+                // data receiving
+                memset(addr, 0xf0 | (pi++ & 0xf), size);
+
+                // data finish send back to p0
+                // data finish send back to p0
+                if (opsz != size) {
+                    sprintf(str, "dl%.8d", opsz);
+                    ret[1] = rs_ipc_put(rs, str, 10);
+                } else {
+                    ch = 'd';
+                    ret[1] = rs_ipc_put(rs, &ch, 1);
+                }
+            }
         }
-        usleep(300);
+        usleep(1000);
     }
 
     p2_end(rs);
@@ -634,8 +778,9 @@ static int p2(struct procRes_s *rs)
 
 static int p3(struct procRes_s *rs)
 {
-    int px, pi, ret;
-    char ch;
+    int px, pi, ret[5], size, opsz;
+    char ch, dst[17], sz[17], str[128];
+    char *addr, *stop_at;
     printf("p3\n");
     p3_init(rs);
     // wait for ch from p0
@@ -644,14 +789,34 @@ static int p3(struct procRes_s *rs)
 
     while (1) {
         printf("/");
-        ret = rs_ipc_get(rs, &ch, 1);
-        if (ret > 0) {
+        ret[0] = rs_ipc_get(rs, &ch, 1);
+        if (ret[0] > 0) {
             printf("%c", ch);
+            if (ch == 'd') {
+                ret[2] = rs_ipc_get(rs, dst, 8);
+                dst[8] = '\0';
+                //printf("[d] %s len:%d \n", dst, ret[2]);
+                ret[3] = rs_ipc_get(rs, &ch, 1);
+                ret[4] = rs_ipc_get(rs, sz, 8);
+                sz[8] = '\0';
+                //printf("[%c] %s len:%d,%d \n", ch, sz, ret[3], ret[4]);
+                size = shmem_from_str(&addr, dst, sz);
+                printf("[convert] addr: 0x%.8x, sz:%d \n", addr, size);
+				
+                // data receiving, opsz is the actually data size
+                memset(addr, 0x0f | ((pi++ & 0xf) << 4), size);
+
+                // data finish send back to p0
+                if (opsz != size) {
+                    sprintf(str, "dl%.8d", opsz);
+                    ret[1] = rs_ipc_put(rs, str, 10);
+                } else {
+                    ch = 'd';
+                    ret[1] = rs_ipc_put(rs, &ch, 1);
+                }
+            }
         }
-        ret = rs_ipc_put(rs, &ch, 1);
-        if (ret > 0) {
-            printf("[3s:%c]", ch);
-        }
+        usleep(1000);
     }
 
     p3_end(rs);
@@ -785,18 +950,18 @@ static char spi1[] = "/dev/spidev32765.0";
     sprintf(mrs.log, "tdiff:%d ", tdiff);
     print_f("time_diff", mrs.log);
 	
-    /* cmd mode tx from spi */
+    /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &mrs.time[0]);
     mrs.cmdTx.pp = memory_init(&mrs.cmdTx.slotn, 2048*1024, 1024);
     mrs.cmdTx.totsz = 2048*1024;;
     mrs.cmdTx.chksz = 1024;
     mrs.cmdTx.svdist = 128;
-    sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.cmdTx.totsz, mrs.cmdTx.pp);
-    print_f("minit_result", mrs.log);
-    for (ix = 0; ix < mrs.cmdTx.slotn; ix++) {
-        sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmdTx.pp[ix]);
-        print_f("shminit_result", mrs.log);
-    }
+    //sprintf(mrs.log, "totsz:%d pp:0x%.8x", mrs.cmdTx.totsz, mrs.cmdTx.pp);
+    //print_f("minit_result", mrs.log);
+    //for (ix = 0; ix < mrs.cmdTx.slotn; ix++) {
+    //    sprintf(mrs.log, "[%d] 0x%.8x", ix, mrs.cmdTx.pp[ix]);
+    //    print_f("shminit_result", mrs.log);
+    //}
     clock_gettime(CLOCK_REALTIME, &mrs.time[1]);
     tdiff = time_diff(&mrs.time[0], &mrs.time[1], 1000);
     sprintf(mrs.log, "tdiff:%d ", tdiff);
