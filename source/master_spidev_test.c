@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
 static char spi1[] = "/dev/spidev32765.0"; 
 static char spi0[] = "/dev/spidev32765.1"; 
     uint32_t bitset;
-    int sel, arg0, arg1, arg2;
+    int sel, arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;
     int fd, ret; 
     arg0 = 0;
 	arg1 = 0;
@@ -349,7 +349,10 @@ static char spi0[] = "/dev/spidev32765.1";
         printf(" [4]:%s \n", argv[4]);
         arg2 = atoi(argv[4]);
     }
-	
+    if (argc > 5) {
+        printf(" [5]:%s \n", argv[5]);
+        arg3 = atoi(argv[5]);
+    }	
         uint8_t *tx_buff, *rx_buff;
         FILE *fpd;
         int fsize, buffsize;
@@ -436,9 +439,11 @@ static char spi0[] = "/dev/spidev32765.1";
 	goto end;
 
 	}
-    if (sel == 11) { /* dual channel data mode ex:[11 50 file_path 61440]*/
+    if (sel == 11) { /* dual channel data mode ex:[./master_spi.bin 11 50 file_path 30720 30720]*/
 	#define TSIZE (128*1024*1024)
 	#define PKTSZ  61440
+	int chunksize;
+	chunksize = arg3;
 
 	if (arg0)
 		speed = arg0 * 1000000;
@@ -469,11 +474,11 @@ static char spi0[] = "/dev/spidev32765.1";
 	char *srcBuff, *srctmp;
 	char * tbuff;
 	int pid;
-	if ((arg2) && (arg2 <= PKTSZ) && !(arg2%pksize) && !(PKTSZ%arg2)) {
+	if ((arg2) && (arg2 <= chunksize) && !(arg2%pksize) && !(chunksize%arg2)) {
 		pksize = arg2;
 	}
-	pknum = PKTSZ / pksize;
-	printf("pksize:%d pknum:%d \n", pksize, pknum);
+	pknum = chunksize / pksize;
+	printf("pksize:%d pknum:%d chunksize:%d\n", pksize, pknum, chunksize);
 	struct tms time;
 	struct timespec curtime;
 	unsigned long long cur, tnow, lnow, past, tbef, lpast;
@@ -542,7 +547,7 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 }
 */
 			//printf("[p0] tx %d fd%d\n", ret, 0);
-			srcBuff += ret + PKTSZ;
+			srcBuff += ret + chunksize;
 
 			pkcnt++;
 
@@ -591,7 +596,7 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 }
 */
 			//printf("[p1] tx %d fd%d\n", ret, 1);
-			srcBuff += ret + PKTSZ;
+			srcBuff += ret + chunksize;
 		}
 
 	}

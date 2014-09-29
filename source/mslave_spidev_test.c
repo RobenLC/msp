@@ -378,7 +378,7 @@ static char data_save[] = "/mnt/mmc2/rx/%d.bin";
 static char path[256];
 
     uint32_t bitset;
-    int sel, arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;
+    int sel, arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0, arg4 = 0;
     int fd, ret; 
     int buffsize;
     uint8_t *tx_buff[2], *rx_buff[2];
@@ -419,7 +419,11 @@ static char path[256];
         printf(" [5]:%s \n", argv[5]);
         arg3 = atoi(argv[5]);
     }
-	
+    if (argc > 6) {
+        printf(" [6]:%s \n", argv[6]);
+        arg4 = atoi(argv[6]);
+    }	
+
     buffsize = 5*1024*1024;
     tx_buff[0] = malloc(buffsize);
     if (tx_buff[0]) {
@@ -532,9 +536,15 @@ static char path[256];
         printf("write file %d size %d/%d \n", fp, wtsz, ret);
         goto end;
     }
-    if (sel == 14){ /* dual band data mode test ex[14 0 2000]*/
+    if (sel == 14){ /* dual band data mode test ex[14 1 2 5 1 30720]*/
         #define TSIZE (128*1024*1024)
-        #define PKTSZ  61440
+        #define PKTSZ  30720 //61440
+        int chunksize;
+        if (arg4 == PKTSZ) chunksize = PKTSZ;
+        else chunksize = 61440;
+
+        printf("***chunk size: %d ***\n", chunksize);
+		
         int pipefd[2];
         int pipefs[2];
         int pipefc[2];
@@ -707,8 +717,8 @@ static char path[256];
                 close(pipefc[0]); // close the read-end of the pipe
                 
                 while(1) {
-                    ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
-                    //ret = tx_data(fm[0], dstBuff, NULL, 1, PKTSZ, 1024*1024);
+                    ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
+                    //ret = tx_data(fm[0], dstBuff, NULL, 1, chunksize, 1024*1024);
 			//if (arg0) 
                     	//	printf("[p0]rx %d - %d\n", ret, wtsz++);
                     msync(dstBuff, ret, MS_SYNC);
@@ -724,9 +734,9 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
 	}
 }
 */
-			dstBuff += ret + PKTSZ;
-                    if (ret != PKTSZ) {
-                        dstBuff -= PKTSZ;
+			dstBuff += ret + chunksize;
+                    if (ret != chunksize) {
+                        dstBuff -= chunksize;
                         if (ret == 1) ret = 0;
                         lsz = ret;
                         write(pipefd[1], "e", 1); // send the content of argv[1] to the reader
@@ -766,7 +776,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                     memcpy(addr, tbuff, lsz);
                     #endif
                     addr += lsz;
-                    memset(addr, 0, PKTSZ);
+                    memset(addr, 0, chunksize);
                     sz = addr - dstmp;
                     
                     /* send info to control process */
@@ -792,10 +802,10 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
             close(pipefs[0]); // close the read-end of the pipe, I'm not going to use it
             close(pipefc[0]); // close the read-end of the pipe
 
-            dstBuff += PKTSZ;
+            dstBuff += chunksize;
             while(1) {
-                ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, PKTSZ, 1024*1024);
-                //ret = tx_data(fm[1], dstBuff, NULL, 1, PKTSZ, 1024*1024);
+                ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
+                //ret = tx_data(fm[1], dstBuff, NULL, 1, chunksize, 1024*1024);
 		//if (arg0)		
 	       //         printf("[p1]rx %d - %d\n", ret, wtsz++);
                 msync(dstBuff, ret, MS_SYNC);
@@ -811,9 +821,9 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
 	}
 }
 */
-                dstBuff += ret + PKTSZ;
-                if (ret != PKTSZ) {
-                    dstBuff -= PKTSZ;
+                dstBuff += ret + chunksize;
+                if (ret != chunksize) {
+                    dstBuff -= chunksize;
                     if (ret == 1) ret = 0;
                     lsz = ret;
                     write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
@@ -853,7 +863,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                 memcpy(addr, tbuff, lsz);
                 #endif
                 addr += lsz;
-                memset(addr, 0, PKTSZ);
+                memset(addr, 0, chunksize);
                 sz = addr - dstmp;
                 
                 /* send info to control process */
@@ -998,6 +1008,5 @@ end:
     free(rx_buff[1]);
 
     fclose(fp);
-    fclose(fpw);
 }
 
