@@ -145,6 +145,52 @@ static int ring_buf_prod(struct shmem_s *pp);
 static int ring_buf_cons(struct shmem_s *pp, char **addr);
 static int shmem_from_str(char **addr, char *dst, char *sz);
 static int shmem_dump(char *src, int size);
+static int shmem_pop_send(struct mainRes_s *mrs, char **addr, int seq, int p);
+static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p);
+
+static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p)
+{
+    int ret, sz, len;
+    char ch, *stop_at, dst[16];;
+
+    ret = mrs_ipc_get(mrs, &ch, 1, p);
+    if (ret > 0) {
+        len = mrs_ipc_get(mrs, &ch, 1, p);
+        if ((len > 0) && (ch == 'l')) {
+            len = mrs_ipc_get(mrs, dst, 8, p);
+            if (len == 8) {
+                sz = strtoul(dst, &stop_at, 10);
+            }
+        }
+    
+        if ((ch == 'l') && (sz == 0)) {
+        } else {
+            ring_buf_prod_dual(&mrs->dataRx, seq);
+        }
+        printf("[dback] ch:%c rt:%d idx:%d \n", ch,  len, seq);
+        //shmem_dump(addr[0], sz);
+        if (ch == 'l') {
+            ring_buf_set_last_dual(&mrs->dataRx, sz, seq);
+        }
+
+    }
+
+    return ret;
+}
+
+static int shmem_pop_send(struct mainRes_s *mrs, char **addr, int seq, int p)
+{
+    char str[128];
+    int sz = 0;
+    sz = ring_buf_get_dual(&mrs->dataRx, addr, seq);
+    printf("shmem pop:0x%.8x, seq:%d sz:%d\n", *addr, seq, sz);
+    if (sz < 0) return (-1);
+    sprintf(str, "d%.8xl%.8d", *addr, sz);
+    printf("[%s]\n", str);
+    mrs_ipc_put(mrs, str, 18, p);
+
+    return sz;
+}
 
 static int shmem_dump(char *src, int size)
 {
@@ -610,6 +656,9 @@ static int p0(struct mainRes_s *mrs)
             pmode = 1;
             bksz[0] = 0;
             bksz[1] = 0;
+            mrs->dataRx.lastflg = 0;
+            mrs->dataRx.lastsz = 0;
+            mrs->dataRx.dualsz = 0;
         }
     }
     pi = 0; pt = 0; pc = 0;
@@ -619,71 +668,30 @@ static int p0(struct mainRes_s *mrs)
         if (pmode == 1) {
             if (pstatus == 0) {
                 // [TODO] check the remaining buffer, stop spi if we are going to run out of the share memory
-                sz[0] = ring_buf_get_dual(&mrs->dataRx, &addr[0], pi);
-                printf("prod:0x%.8x, idx:%d m:%d sz:%d\n", addr[0], pi, pmode, sz[0]);
+                sz[0] = shmem_pop_send(mrs, &addr[0], pi, 1);
                 if (sz[0] < 0) continue;
-                sprintf(str, "d%.8xl%.8d", addr[0],sz[0]);
-                //printf("[%s]\n", str);
-                mrs_ipc_put(mrs, str, 18, 1);
-
-                sz[1] = ring_buf_get_dual(&mrs->dataRx, &addr[1], pi + 1);
-                printf("prod:0x%.8x, idx:%d m:%d sz:%d\n", addr[1], pi + 1, pmode, sz[1]);
+				
+                sz[1] = shmem_pop_send(mrs, &addr[1], pi + 1, 2);
                 if (sz[1] < 0) continue;
-                sprintf(str, "d%.8xl%.8d", addr[1],sz[1]);
-                //printf("[%s]\n", str);
-                mrs_ipc_put(mrs, str, 18, 2);
 
                 pstatus = 1;
                 chk[0] = 0;
                 chk[1] = 0;				
             }
             if (pstatus == 1) {	
-                ret = mrs_ipc_get(mrs, &ch, 1, 1);
-                if (ret > 0) {
-                    ret = mrs_ipc_get(mrs, &ch, 1, 1);
-                    if ((ret > 0) && (ch == 'l')) {
-                        ret = mrs_ipc_get(mrs, dst, 8, 1);
-                        if (ret == 8) {
-                            bksz[0] = strtoul(dst, &stop_at, 10);
-                        }
-                    }
-
+                ret = shmem_rlt_get(mrs, pi, 1);
+                if (ret > 0)
                     chk[0] = 1;
-                    if ((ch == 'l') && (bksz[0] == 0)) {
-                    } else {
-                        ring_buf_prod_dual(&mrs->dataRx, pi);
-                    }
-                    printf("[dback] ch:%c c:%d rt:%d idx:%d \n", ch, chk[0], ret, pi);
-                    //shmem_dump(addr[0], sz);
-                    if (ch == 'l') {
-                        ring_buf_set_last_dual(&mrs->dataRx, bksz[0], pi);
-                    }
-                }
-                ret = mrs_ipc_get(mrs, &ch, 1, 2);
-                if (ret > 0) {
-                    ret = mrs_ipc_get(mrs, &ch, 1, 2);
-                    if ((ret > 0) && (ch == 'l')) {
-                        ret = mrs_ipc_get(mrs, dst, 8, 2);
-                        if (ret == 8) {
-                            bksz[1] = strtoul(dst, &stop_at, 10);
-                        }
-                    }
 
+                ret = shmem_rlt_get(mrs, pi + 1, 2);
+                if (ret > 0)
                     chk[1] = 1;
-                    if ((ch == 'l') && (bksz[1] == 0)) {
-                    } else {
-                        ring_buf_prod_dual(&mrs->dataRx, pi + 1);
-                    }
-                    printf("[dback] ch:%c c:%d rt:%d idx:%d \n", ch, chk[1], ret, pi + 1);
-                    //shmem_dump(addr[0], sz);
-                    if (ch == 'l') {
-                        ring_buf_set_last_dual(&mrs->dataRx, bksz[1], pi + 1);
-                    }
-                }
+
                 if ((chk[0]) && (chk[1])) {
                     pstatus = 0;
                     pi += 2;
-                    if ((bksz[0]) || (bksz[1])) pstatus = 2;
+                    if (mrs->dataRx.lastflg) 
+                        pstatus = 2;
                 }
             }
 
@@ -791,8 +799,8 @@ static int p2(struct procRes_s *rs)
                 opsz = size;
                 // data receiving
                 memset(addr, 0xf0 | (pi++ & 0xf), opsz);
+                //mtx_data(rs->spifd, addr, NULL, 1, opsz, 1024*1024);
 
-                // data finish send back to p0
                 // data finish send back to p0
                 if (opsz != size) {
                     sprintf(str, "dl%.8d", opsz);
@@ -841,11 +849,12 @@ static int p3(struct procRes_s *rs)
                 size = shmem_from_str(&addr, dst, sz);
                 printf("[3][convert] addr: 0x%.8x, sz:%d idx:%d\n", addr, size, px);
 
-                if (px > 256) opsz = 20480;
+                if (px > 16) opsz = 20480;
                 else opsz = size;
 
                 // data receiving, opsz is the actually data size
                 memset(addr, 0x0f | ((pi++ & 0xf) << 4), opsz);
+                //mtx_data(rs->spifd, addr, NULL, 1, opsz, 1024*1024);
 
                 // data finish send back to p0
                 if (opsz != size) {
