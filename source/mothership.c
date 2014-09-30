@@ -786,9 +786,9 @@ static int p2(struct procRes_s *rs)
                 size = shmem_from_str(&addr, dst, sz);
                 printf("[2][convert] addr: 0x%.8x, sz:%d idx:%d \n", addr, size, px);
 
-                if (px > 256) opsz = 20480;
-                else opsz = size;
-
+                //if (px > 256) opsz = 20480;
+                //else opsz = size;
+                opsz = size;
                 // data receiving
                 memset(addr, 0xf0 | (pi++ & 0xf), opsz);
 
@@ -841,7 +841,7 @@ static int p3(struct procRes_s *rs)
                 size = shmem_from_str(&addr, dst, sz);
                 printf("[3][convert] addr: 0x%.8x, sz:%d idx:%d\n", addr, size, px);
 
-                if (px > 256) opsz = 0;
+                if (px > 256) opsz = 20480;
                 else opsz = size;
 
                 // data receiving, opsz is the actually data size
@@ -895,6 +895,7 @@ static int p4(struct procRes_s *rs)
                 //memset(addr, 0xf0 | (pi++ & 0xf), size);
                 msync(addr, size, MS_SYNC);
                 ret[0] = fwrite(addr, 1, size, rs->fs_s);
+                fflush(rs->fs_s);
                 printf("p4 write file %d size %d/%d \n\n", rs->fs_s, size, ret[0]);
 
                 // data finish send back to p0
