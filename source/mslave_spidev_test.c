@@ -472,6 +472,18 @@ static char path[256];
         rxans[i] = i & 0x95;
         tx[i] = i & 0x95;
     }
+
+    
+    bitset = 0;
+    ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+    bitset = 1;
+    ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+	
+    if (sel == 18){ /* command mode test ex[18 1]*/
+        
+    }
     if (sel == 17){ /* command mode test ex[17 6]*/
 	int lsz=0, cnt=0;
 	char *ch;
@@ -596,13 +608,7 @@ static char path[256];
         ret = ioctl(fm[1], SPI_IOC_RD_MODE, &mode);    //?¼Ò¦¡ 
         if (ret == -1) 
             pabort("can't get spi mode"); 
-    
-        bitset = 0;
-        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
-        bitset = 1;
-        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-        
         bitset = 1;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi0 data mode: %d\n", bitset);
