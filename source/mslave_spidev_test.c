@@ -394,7 +394,8 @@ static char path[256];
     /* scanner default setting */
     mode &= ~SPI_MODE_3;
     printf("mode initial: 0x%x\n", mode & SPI_MODE_3);
-    
+    mode |= SPI_MODE_1;
+
     fd = open(device, O_RDWR);  //打???文件 
     if (fd < 0) 
         pabort("can't open device"); 
@@ -475,7 +476,7 @@ static char path[256];
 	int lsz=0, cnt=0;
 	char *ch;
 	
-	mode |= SPI_MODE_2;
+	mode |= SPI_MODE_1;
         ret = ioctl(fd0, SPI_IOC_WR_MODE, &mode);    //?模式 
         if (ret == -1) 
             pabort("can't set spi mode"); 
@@ -689,7 +690,7 @@ static char path[256];
                             bitset = 0;
                             ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                             //printf("Set spi1 Tx Hold: %d\n", bitset);
-							
+
                         }   
 			   }
                     } else if (buf == 'e') {
