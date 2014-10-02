@@ -29,6 +29,10 @@
 #define SPI_RX_DUAL 0x400         /* receive with 2 wires */
 #define SPI_RX_QUAD 0x800         /* receive with 4 wires */
 #define BUFF_SIZE  2048
+
+struct pipe_s{
+    int rt[2];
+};
     
 static void pabort(const char *s) 
 { 
@@ -481,8 +485,184 @@ static char path[256];
     ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
         
 	
-    if (sel == 18){ /* command mode test ex[18 1]*/
-        
+    if (sel == 18){ /* command mode test ex[18 1 ]*/
+        int sid[2], pid, gid, size, pi, opsz;
+        struct pipe_s pipe_t;
+        char str[128], op, *stop_at;;
+
+        char *shmtx, *dbgbuf[2], *rxbuf;
+        char *tmptx, *pdbg ;
+		
+        shmtx  = mmap(NULL, 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        dbgbuf[0] = mmap(NULL, 4*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        dbgbuf[1] = mmap(NULL, 4*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        if (!shmtx) goto end;
+        if (!dbgbuf[0]) goto end;
+        if (!dbgbuf[1]) goto end;
+
+        memset(shmtx, 0xff, 2);
+        memset(dbgbuf[0], 0xf0, 4*1024*1024);
+        memset(dbgbuf[1], 0xf0, 4*1024*1024);
+
+        tmptx = shmtx;
+
+        rxbuf = rx_buff[0];
+  
+        pipe(pipe_t.rt);
+
+        // don't pull low RDY after every transmitting
+        bitset = 1;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi0 data mode: %d\n", bitset);
+
+        bitset = 1;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi1 data mode: %d\n", bitset);
+	mode &= ~SPI_MODE_3;
+	switch(arg0) {
+		case 1:
+    			mode |= SPI_MODE_1;
+			break;
+		case 2:
+    			mode |= SPI_MODE_2;
+			break;
+		case 3:
+    			mode |= SPI_MODE_3;
+			break;
+		default:
+    			mode |= SPI_MODE_0;
+			break;
+	}
+        ret = ioctl(fm[0], SPI_IOC_WR_MODE, &mode);
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+ 
+        ret = ioctl(fm[0], SPI_IOC_RD_MODE, &mode);
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+
+/*                        ret = read(pipefs[0], lastaddr, 32); */
+        pid = getpid();
+        sid[0] = -1; sid[1] = -1;
+        sid[0] = fork();
+        if (!sid[0]) { // process 1
+             gid = pid + sid[0] + sid[1];
+             printf("[1]%d\n", gid);
+             close(pipe_t.rt[0]);
+             rxbuf[0] = 'p';
+             pdbg = dbgbuf[0];
+             while (1) {
+		  //printf("!");
+                msync(shmtx, 2, MS_SYNC);
+		  *pdbg = 0;
+		  pdbg +=1;
+
+                memcpy(pdbg, shmtx, 2);
+                pdbg += 2;
+
+		  *pdbg = 0;
+		  pdbg +=1;
+
+                ret = tx_data(fm[0], &rxbuf[1], shmtx, 1, 2, 1024);
+                //printf("[%d]%x, %x \n", gid, rxbuf[1], rxbuf[2]);
+                write(pipe_t.rt[1], rxbuf, 3);
+                if (rxbuf[2] == 0xaa) {
+                    size = pdbg - dbgbuf[0];
+                    sprintf(str, "s0s%.8d", size);
+                    write(pipe_t.rt[1], str, 11);
+		      pdbg = dbgbuf[0];
+                }
+                if (rxbuf[2] == 0xee) {
+                    write(pipe_t.rt[1], "e", 1);
+                    break;
+                }
+                //usleep(1);
+             }
+             close(pipe_t.rt[1]);
+        } else {
+            sid[1] = fork();
+            if (!sid[1]) { // process 2
+                 gid = pid + sid[0] + sid[1];
+                 printf("[2]%d\n", gid);
+                 close(pipe_t.rt[0]);
+                 rxbuf[0] = 'p';
+                 pdbg = dbgbuf[1];
+                 while (1) {
+	       	//printf("?");
+	                msync(shmtx, 2, MS_SYNC);
+			  *pdbg = 0;
+			  pdbg +=1;
+
+	                memcpy(pdbg, shmtx, 2);
+       	         pdbg += 2;
+
+			  *pdbg = 0;
+			  pdbg +=1;
+
+                     ret = tx_data(fm[0], &rxbuf[1], shmtx, 1, 2, 1024);
+                     //printf("[%d]%x, %x \n", gid, rxbuf[1], rxbuf[2]);
+                     write(pipe_t.rt[1], rxbuf, 3);
+                     if (rxbuf[2] == 0xaa) {
+                         size = pdbg - dbgbuf[1];
+                         sprintf(str, "s1s%.8d", size);
+                         write(pipe_t.rt[1], str, 11);
+			    pdbg = dbgbuf[1];
+                     }
+                     if (rxbuf[2] == 0xee) {
+                         write(pipe_t.rt[1], "e", 1);
+                         break;
+                     }
+	              //usleep(1);
+                 }
+                 close(pipe_t.rt[1]);
+            } else { // process 0
+                gid = pid + sid[0] + sid[1];
+                 printf("[0]%d\n", gid);
+                close(pipe_t.rt[1]);
+                op = 0;
+                while (1) {
+#if 0
+                    ret = read(pipe_t.rt[0], rxbuf, 3);
+                    printf("[%d]size:%d, %x %x %x \n", gid, ret, rxbuf[0], rxbuf[1], rxbuf[2] );
+#else
+                    ret = read(pipe_t.rt[0], &op, 1);
+                    if (ret > 0) {
+                        if (op == 'p') {
+                               ret = read(pipe_t.rt[0], rxbuf, 2);
+       	                 printf("[%d] 0x%.2x 0x%.2x \n", gid, rxbuf[0], rxbuf[1]);
+	                        shmtx[0] = rxbuf[0];
+              	          shmtx[1] = rxbuf[1];
+                        }
+                        else if (op == 's') {
+                               ret = read(pipe_t.rt[0], rxbuf, 10);
+                               rxbuf[10] = '\0';
+       	                 printf("[%d] %c \"%s\" \n", gid, op, rxbuf);
+                               if (rxbuf[0] == '0') pi = 0;
+                               else if (rxbuf[0] == '1') pi = 1;                               
+                               else goto end;
+                               size = strtoul(&rxbuf[2], &stop_at, 10);
+                               opsz = 16 - (size % 16);
+                               ret = fwrite(dbgbuf[pi], 1, size, fp);
+				   printf("[%d]file %d write size: %d\n", gid, fp, ret);
+                               ret = fwrite("================", 1, opsz, fp);
+				   printf("[%d]file %d write size: %d\n", gid, fp, ret);
+                        }
+                        else if (op == 'e') {
+      	                     printf("[%d] %c \n", gid, op);
+                            break;
+                        } else {
+                            printf("[?] op:%x \n", op);
+                        }
+                    }
+#endif
+                }
+                close(pipe_t.rt[0]);
+                kill(sid[0]);
+                kill(sid[1]);
+            }
+        }
+
+        goto end;
     }
     if (sel == 17){ /* command mode test ex[17 6]*/
 	int lsz=0, cnt=0;
@@ -570,7 +750,7 @@ static char path[256];
         //tbuff = malloc(TSIZE);
         tbuff = rx_buff[0];
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-	memset(dstBuff, 0x95, TSIZE);
+	 memset(dstBuff, 0x95, TSIZE);
         dstmp = dstBuff;
 
 	switch(arg3) {

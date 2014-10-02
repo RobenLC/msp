@@ -325,9 +325,10 @@ static char spi0[] = "/dev/spidev32765.1";
     arg0 = 0;
 	arg1 = 0;
 	arg2 = 0;
-
-	/* scanner default setting */
-	mode |= SPI_CPHA;     
+    /* scanner default setting */
+    mode &= ~SPI_MODE_3;
+    printf("mode initial: 0x%x\n", mode & SPI_MODE_3);
+    mode |= SPI_MODE_1;
  
     fd = open(device, O_RDWR);  //打???文件 
     if (fd < 0) 
@@ -431,10 +432,71 @@ static char spi0[] = "/dev/spidev32765.1";
 		rxans[i] = i & 0x95;
 		tx[i] = i & 0x95;
 	}
-    if (sel == 12) { /* command mode */
-	int pid = 0;
-	pid = fork();
-	printf("pid: %d \n", pid);
+
+    if (sel == 12) { /* command mode [12 1 1]*/
+	int pid = 0, i, ci, hi, hex;
+	char str[128], *stop_at, ch, hx[2];
+	ci = 0; hex = 0; hi = 0;
+	arg1 = arg1 % 2;
+	mode &= ~SPI_MODE_3;
+
+	switch(arg0) {
+		case 1:
+    			mode |= SPI_MODE_1;
+			break;
+		case 2:
+    			mode |= SPI_MODE_2;
+			break;
+		case 3:
+    			mode |= SPI_MODE_3;
+			break;
+		default:
+    			mode |= SPI_MODE_0;
+			break;
+	}
+
+    ret = ioctl(fm[arg1], SPI_IOC_WR_MODE, &mode);    //?模式 
+    if (ret == -1) 
+        pabort("can't set spi mode"); 
+ 
+    ret = ioctl(fm[arg1], SPI_IOC_RD_MODE, &mode);    //?模式 
+    if (ret == -1) 
+        pabort("can't get spi mode"); 
+	
+	printf("spi%d mode:0x%x \n", arg1, mode);
+	
+	while (1) {
+		ch = fgetc(stdin);
+
+		if (ch != '\n') {
+			hx[ci%2] = ch;
+			if (!((ci + 1) % 2)) {
+				hex = strtoul(hx, &stop_at, 16);
+				str[hi] = hex;
+				printf("get hex: %x: acu: ", hex);
+				i = 0;
+				hi++;
+	                     while (i < hi) {
+					printf("%x ", str[i]);
+					i++;
+				}
+				printf("\n");
+			}
+			ci ++;
+		} else {
+			str[hi] = '\0';
+			ret = tx_data(fm[arg1], rx_buff, str, 1, hi, 128);
+			printf("spi send size: %d get: \n", ret);
+			i = 0;
+			while (i < ret) {
+				printf("%.2x ", rx_buff[i]);
+				i++;
+			}
+			printf("\n");
+			ci = 0;
+			hi = 0;
+		}	
+	}
 	
 	goto end;
 
