@@ -11,6 +11,9 @@
 #include <linux/spi/spidev.h> 
 //#include <sys/times.h> 
 #include <time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 //main()
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
@@ -34,6 +37,12 @@ struct ring_p{
     struct ring_s prelead;
     struct ring_s predual;
     struct ring_s folw;
+};
+
+struct socket_s{
+    int listenfd;
+    int connfd;
+    struct sockaddr_in serv_addr; 
 };
 
 struct shmem_s{
@@ -67,7 +76,7 @@ struct mainRes_s{
     struct timespec time[2];
     // log buffer
     char log[256];
-
+    struct socket_s socket;
 };
 
 struct procRes_s{
@@ -93,7 +102,7 @@ struct procRes_s{
     // time measurement
     struct timespec *tm[2];
     char *logs;
-
+    struct socket_s *psocket;
 };
 
 //memory alloc. put in/put out
@@ -731,6 +740,9 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "d", 1, 1);
             mrs_ipc_put(mrs, "d", 1, 2);
         }
+        if (ch == '3') {
+            pmode = 2;
+        }
     }
     pi = 0; pt = 0; pc = 0, seq[0] = 0, seq[1] = 1; wc = 0; 
     chk[0] = 0; chk[1] = 0;
@@ -772,6 +784,17 @@ static int p0(struct mainRes_s *mrs)
                 ret = mrs_ipc_get(mrs, &ch, 1, 2);
             }
             if (chk[0] && chk[1]) pmode = 0;
+        }
+        if (pmode == 2) {
+            ret = mrs_ipc_get(mrs, &ch, 1, 4);
+            if (ret > 0) {
+                printf("0 [%c]\n", ch);
+                ret = mrs_ipc_get(mrs, str, 128, 4);
+                if (ret > 0) {
+                    str[ret] = '\0';
+                    printf("[%s] sz:%d\n", str, ret);
+                }
+            }
         }
         usleep(1);
     }
@@ -972,22 +995,44 @@ static int p4(struct procRes_s *rs)
 
 static int p5(struct procRes_s *rs)
 {
-    int px, pi, ret;
-    char ch;
+    int px, pi, ret, n;
+    char ch, *recvbuf;
     printf("p5\n");
     p5_init(rs);
     // wait for ch from p0
     // in charge of socket recv
 
+    recvbuf = malloc(1024);
+    if (!recvbuf) {
+        printf("p5 recvbuf alloc failed! \n");
+        return (-1);
+    }
+
+    rs->psocket->listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&rs->psocket->serv_addr, '0', sizeof(struct sockaddr_in));
+
+    rs->psocket->serv_addr.sin_family = AF_INET;
+    rs->psocket->serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    rs->psocket->serv_addr.sin_port = htons(5000); 
+
+    bind(rs->psocket->listenfd, (struct sockaddr*)&rs->psocket->serv_addr, sizeof(struct sockaddr_in)); 
+    listen(rs->psocket->listenfd, 10); 
+
     while (1) {
-        printf("#");
-        ret = rs_ipc_get(rs, &ch, 1);
-        if (ret > 0) {
-            printf("%c", ch);
-        }
-        ret = rs_ipc_put(rs, &ch, 1);
-        if (ret > 0) {
-            printf("[5s:%c]", ch);
+        rs->psocket->connfd = accept(rs->psocket->listenfd, (struct sockaddr*)NULL, NULL); 
+        n = read(rs->psocket->connfd, recvbuf, 1024);
+        recvbuf[n] = '\0';
+        //printf("socket receive %d char [%s]\n", n, recvbuf);
+
+        //printf("#");
+        //ret = rs_ipc_get(rs, &ch, 1);
+        //if (ret > 0) {
+        //    printf("%c", ch);
+        //}
+        rs_ipc_put(rs, "s", 1);
+        if (n > 0) {
+            rs_ipc_put(rs, recvbuf, n);
+            printf("[5:%s]\n", recvbuf);
         }
     }
 
@@ -1100,6 +1145,19 @@ static char spi1[] = "/dev/spidev32765.0";
     //ret = fwrite("test file write \n", 1, 16, pmrs->fs);
     sprintf(pmrs->log, "write file size: %d/%d", ret, 16);
     print_f("fwrite", pmrs->log);
+
+// socket server
+#if 1
+    pmrs->socket.listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&pmrs->socket.serv_addr, '0', sizeof(struct sockaddr_in));
+
+    pmrs->socket.serv_addr.sin_family = AF_INET;
+    pmrs->socket.serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    pmrs->socket.serv_addr.sin_port = htons(5000); 
+
+    bind(pmrs->socket.listenfd, (struct sockaddr*)&pmrs->socket.serv_addr, sizeof(struct sockaddr_in)); 
+    listen(pmrs->socket.listenfd, 10); 
+#endif
 
 // spidev id
     int fd0, fd1;
@@ -1316,6 +1374,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     } else if (idx == 2) {
         rs->spifd = mrs->sfm[1];
     }
+
+    rs->psocket = &mrs->socket;
 	
     return 0;
 }
