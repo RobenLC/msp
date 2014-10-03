@@ -772,23 +772,6 @@ static int p0(struct mainRes_s *mrs)
                 ret = mrs_ipc_get(mrs, &ch, 1, 2);
             }
             if (chk[0] && chk[1]) pmode = 0;
-#if 0                    
-            if (cstatus != 2) {
-                sz[2] = ring_buf_cons_dual(&mrs->dataRx, &addr[2], pc);
-                if (sz[2] >= 0) {
-                    printf("cons 0x%x %d %d \n", addr[2], sz[2], pc);
-                    sprintf(str, "d%.8xl%.8d", addr[2],sz[2]);
-                    mrs_ipc_put(mrs, str, 18, 3);
-                    pi--;
-                    pc++;
-                }
-                else if (sz[2] == (-1)) {
-                    mrs_ipc_put(mrs, "e", 1, 3);
-                    printf("cons end !!\n");
-                    cstatus = 2;
-                }
-            }		
-#endif
         }
         usleep(1);
     }
@@ -861,10 +844,10 @@ static int p2(struct procRes_s *rs)
                 while (1) {
                     size = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     opsz = mtx_data(rs->spifd, addr, NULL, 1, size, 1024*1024);
-                    printf("0 spi %d\n", opsz);
+                    //printf("0 spi %d\n", opsz);
+
                     ring_buf_prod_dual(rs->pdataRx, pi);
-                    //acusz += opsz;
-                    shmem_dump(addr, 32);
+                    //shmem_dump(addr, 32);
 					
                     if (opsz != size) break;
                     rs_ipc_put(rs, "p", 1);
@@ -905,11 +888,10 @@ static int p3(struct procRes_s *rs)
                     size = ring_buf_get_dual(rs->pdataRx, &addr, pi);
 
                     opsz = mtx_data(rs->spifd, addr, NULL, 1, size, 1024*1024);
-                    printf("1 spi %d\n", opsz);
+                    //printf("1 spi %d\n", opsz);
 
-                    shmem_dump(addr, 32);
+                    //shmem_dump(addr, 32);
                     ring_buf_prod_dual(rs->pdataRx, pi);
-                    //acusz += opsz;
 
                     if (opsz != size) break;
                     rs_ipc_put(rs, "p", 1);
@@ -952,69 +934,35 @@ static int p4(struct procRes_s *rs)
         //printf("^");
         ret[0] = rs_ipc_get(rs, &ch, 1);
         if (ret[0] > 0) {
-                printf("[%c] ", ch);
-#if 1
+                //printf("[%c] ", ch);
+
                 size = ring_buf_cons_dual(rs->pdataRx, &addr, pi);
                 if (size >= 0) {
-                    printf("cons 0x%x %d %d \n", addr, size, pi);
+                    //printf("cons 0x%x %d %d \n", addr, size, pi);
                     pi++;
-
+#if 0
+                    ret[0] = fwrite(buff, 1, size, rs->fs_s);
+                    buff += size;
+                    acusz += size;
+                    //printf("w %d\n", acusz);
+#else
                     msync(addr, size, MS_SYNC);
                     memcpy(buff, addr, size);
                     buff += size;
                     acusz += size;
-
+#endif
                 }
                 else if (size == (-1)) {
                     printf("cons end !!\n");
-
+#if 0
+                    fflush(rs->fs_s);
+#else
                     ret[0] = fwrite(tmp, 1, acusz, rs->fs_s);
                     fflush(rs->fs_s);
+#endif
                     printf("p4 write file %d size %d/%d \n\n", rs->fs_s, acusz, ret[0]);
                     free(tmp);
                 }
- 
-#else
-            //printf("%c", ch);
-            if (ch == 'd') {
-                ret[2] = rs_ipc_get(rs, dst, 8);
-                dst[8] = '\0';
-                //printf("[d] %s len:%d \n", dst, ret[2]);
-                ret[3] = rs_ipc_get(rs, &ch, 1);
-                ret[4] = rs_ipc_get(rs, sz, 8);
-                sz[8] = '\0';
-                //printf("[%c] %s len:%d,%d \n", ch, sz, ret[3], ret[4]);
-                size = shmem_from_str(&addr, dst, sz);
-                //printf("[4][convert] addr: 0x%.8x, sz:%d \n", addr, size);
-
-                // data sending
-                //memset(addr, 0xf0 | (pi++ & 0xf), size);
-                #if 0
-                #elif 0
-                msync(addr, size, MS_SYNC);
-                ret[0] = fwrite(addr, 1, size, rs->fs_s);
-                //fflush(rs->fs_s);
-                #else
-                msync(addr, size, MS_SYNC);
-                memcpy(buff, addr, size);
-                buff += size;
-                acusz += size;
-                #endif
-                //printf("p4 write file %d size %d/%d \n\n", rs->fs_s, size, ret[0]);
-
-                // data finish send back to p0
-                //ch = 'd';
-                //ret[1] = rs_ipc_put(rs, &ch, 1);
-
-            }
-            else if (ch == 'e') {
-                printf("\ntransmit finished size: %d \n", acusz);
-                ret[0] = fwrite(tmp, 1, acusz, rs->fs_s);
-                fflush(rs->fs_s);
-                printf("p4 write file %d size %d/%d \n\n", rs->fs_s, acusz, ret[0]);
-                free(tmp);
-            }
-#endif
         }
     }
 
@@ -1082,12 +1030,12 @@ static char spi1[] = "/dev/spidev32765.0";
     pmrs->dataRx.totsz = 1024*61440;
     pmrs->dataRx.chksz = 61440;
     pmrs->dataRx.svdist = 8;
-    sprintf(pmrs->log, "totsz:%d pp:0x%.8x", pmrs->dataRx.totsz, pmrs->dataRx.pp);
-    print_f("minit_result", pmrs->log);
-    for (ix = 0; ix < pmrs->dataRx.slotn; ix++) {
-        sprintf(pmrs->log, "[%d] 0x%.8x", ix, pmrs->dataRx.pp[ix]);
-        print_f("shminit_result", pmrs->log);
-    }
+    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x", pmrs->dataRx.totsz, pmrs->dataRx.pp);
+    //print_f("minit_result", pmrs->log);
+    //for (ix = 0; ix < pmrs->dataRx.slotn; ix++) {
+    //    sprintf(pmrs->log, "[%d] 0x%.8x", ix, pmrs->dataRx.pp[ix]);
+    //    print_f("shminit_result", pmrs->log);
+    //}
     clock_gettime(CLOCK_REALTIME, &pmrs->time[1]);
     tdiff = time_diff(&pmrs->time[0], &pmrs->time[1], 1000);
     sprintf(pmrs->log, "tdiff:%d ", tdiff);
