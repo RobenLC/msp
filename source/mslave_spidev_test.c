@@ -500,7 +500,8 @@ static char path[256];
         if (!dbgbuf[0]) goto end;
         if (!dbgbuf[1]) goto end;
 
-        memset(shmtx, 0xff, 2);
+        //memset(shmtx, 0xaa, 2);
+        shmtx[0] = 0xf0;         shmtx[1] = 0xf0;
         memset(dbgbuf[0], 0xf0, 4*1024*1024);
         memset(dbgbuf[1], 0xf0, 4*1024*1024);
 
@@ -511,13 +512,14 @@ static char path[256];
         pipe(pipe_t.rt);
 
         // don't pull low RDY after every transmitting
-        bitset = 1;
-        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set spi0 data mode: %d\n", bitset);
 
-        bitset = 1;
-        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set spi1 data mode: %d\n", bitset);
+        bits = 16;
+        ret = ioctl(fm[0], 	SPI_IOC_WR_BITS_PER_WORD, &bits);
+        printf("Set spi0 data wide: %d\n", bits);
+
+        ret = ioctl(fm[1], 	SPI_IOC_WR_BITS_PER_WORD, &bits);
+        printf("Set spi1 data wide: %d\n", bits);
+		
 	mode &= ~SPI_MODE_3;
 	switch(arg0) {
 		case 1:
@@ -562,7 +564,7 @@ static char path[256];
 
 		  *pdbg = 0;
 		  pdbg +=1;
-
+				
                 ret = tx_data(fm[0], &rxbuf[1], shmtx, 1, 2, 1024);
                 //printf("[%d]%x, %x \n", gid, rxbuf[1], rxbuf[2]);
                 write(pipe_t.rt[1], rxbuf, 3);
@@ -598,7 +600,7 @@ static char path[256];
 
 			  *pdbg = 0;
 			  pdbg +=1;
-
+				
                      ret = tx_data(fm[0], &rxbuf[1], shmtx, 1, 2, 1024);
                      //printf("[%d]%x, %x \n", gid, rxbuf[1], rxbuf[2]);
                      write(pipe_t.rt[1], rxbuf, 3);
