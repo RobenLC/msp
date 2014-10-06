@@ -438,7 +438,7 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
 
     if ((pp->lastflg) && (dist == 1)) {
         printf("[clast] f:%d %d, d:%d %d l: %d %d \n", pp->r->folw.run, pp->r->folw.seq, 
-			pp->r->dual.run, pp->r->dual.seq, pp->r->lead.run, pp->r->lead.seq);
+            pp->r->dual.run, pp->r->dual.seq, pp->r->lead.run, pp->r->lead.seq);
         if (dualn > leadn) {
             if ((pp->r->folw.run == pp->r->dual.run) &&
              (pp->r->folw.seq == pp->r->dual.seq)) {
@@ -741,13 +741,37 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "d", 1, 2);
         }
         if (ch == '3') {
+            bitset = 0;
+            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+            bitset = 1;
+            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+            bitset = 1;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            printf("Set spi0 data mode: %d\n", bitset);
+ 
+            bitset = 1;
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            printf("Set spi1 data mode: %d\n", bitset);
+
+            bitset = 1;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+            printf("Set RDY: %d\n", bitset);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+            printf("Get RDY: %d\n", bitset);
+
             pmode = 2;
         }
     }
+    printf("pmode select: 0x%x \n", pmode);
+
     pi = 0; pt = 0; pc = 0, seq[0] = 0, seq[1] = 1; wc = 0; 
     chk[0] = 0; chk[1] = 0;
     while (1) {
-        //printf(".%d", cstatus);
+        //printf(".");
         // p2 data mode spi0 rx
         
         if (pmode == 1) {
@@ -755,15 +779,18 @@ static int p0(struct mainRes_s *mrs)
             while (ret > 0) {
                     if (ch == 'p') {
                         //ring_buf_prod_dual(&mrs->dataRx, seq[0]);
-                        printf("0 %d\n", seq[0]);
+                        //printf("0 %d\n", seq[0]);
                         seq[0] += 2;
-                        mrs_ipc_put(mrs, "0", 1, 3);
+//                        mrs_ipc_put(mrs, "0", 1, 3);
+                        mrs_ipc_put(mrs, "0", 1, 4);
                     }
                     if (ch == 'd') {
                         printf("0 %d end\n", seq[0]);
-                        mrs_ipc_put(mrs, "O", 1, 3);
+//                        mrs_ipc_put(mrs, "O", 1, 3);
+                        mrs_ipc_put(mrs, "O", 1, 4);
                         chk[0] = 1;
-                        mrs_ipc_put(mrs, "s", 1, 3);
+//                        mrs_ipc_put(mrs, "s", 1, 3);
+                        mrs_ipc_put(mrs, "s", 1, 4);
                     }
                 ret = mrs_ipc_get(mrs, &ch, 1, 1);
             }
@@ -771,15 +798,18 @@ static int p0(struct mainRes_s *mrs)
             while (ret > 0) {
                 if (ch == 'p') {
                     //ring_buf_prod_dual(&mrs->dataRx, seq[1]);
-                    printf("1 %d\n", seq[1]);
+                    //printf("1 %d\n", seq[1]);
                     seq[1] += 2;
-                    mrs_ipc_put(mrs, "1", 1, 3);
+//                    mrs_ipc_put(mrs, "1", 1, 3);
+                mrs_ipc_put(mrs, "1", 1, 4);
                 }
                 if (ch == 'd') {
                     printf("1 %d end\n", seq[1]);
-                    mrs_ipc_put(mrs, "I", 1, 3);
+//                    mrs_ipc_put(mrs, "I", 1, 3);
+                    mrs_ipc_put(mrs, "I", 1, 4);
                     chk[1] = 1;
-                    mrs_ipc_put(mrs, "s", 1, 3);
+//                    mrs_ipc_put(mrs, "s", 1, 3);
+                    mrs_ipc_put(mrs, "s", 1, 4);
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 2);
             }
@@ -793,6 +823,11 @@ static int p0(struct mainRes_s *mrs)
                 if (ret > 0) {
                     str[ret] = '\0';
                     printf("[%s] sz:%d\n", str, ret);
+                    // send command to trigger dual spi mode
+//                    mrs_ipc_put(mrs, "t", 1, 3);
+                    pmode = 1;
+                    mrs_ipc_put(mrs, "d", 1, 1);
+                    mrs_ipc_put(mrs, "d", 1, 2);
                 }
             }
         }
@@ -871,7 +906,7 @@ static int p2(struct procRes_s *rs)
 
                     ring_buf_prod_dual(rs->pdataRx, pi);
                     //shmem_dump(addr, 32);
-					
+
                     if (opsz != size) break;
                     rs_ipc_put(rs, "p", 1);
                     pi += 2;
@@ -951,6 +986,14 @@ static int p4(struct procRes_s *rs)
         memset(buff, 0xf0, 64*1024*1024);
     }
 
+    ret[5] = rs_ipc_get(rs, &ch, 1);
+    while (ret[5]) {
+        if (ch == 't') {
+            break;
+        }
+        ret[5] = rs_ipc_get(rs, &ch, 1);
+    }
+
     pi = 0;
     while (1) {
         
@@ -963,26 +1006,23 @@ static int p4(struct procRes_s *rs)
                 if (size >= 0) {
                     //printf("cons 0x%x %d %d \n", addr, size, pi);
                     pi++;
-#if 0
-                    ret[0] = fwrite(buff, 1, size, rs->fs_s);
-                    buff += size;
-                    acusz += size;
-                    //printf("w %d\n", acusz);
-#else
+
                     msync(addr, size, MS_SYNC);
-                    memcpy(buff, addr, size);
+                    // send data to wifi socket
+                    if (rs->psocket->connfd > 0) {
+                      
+                        opsz = write(rs->psocket->connfd, addr, size);
+                        printf("socket tx %d %d\n", rs->psocket->connfd, opsz);
+                    }
+                    //memcpy(buff, addr, size);
                     buff += size;
                     acusz += size;
-#endif
+
                 }
                 else if (size == (-1)) {
                     printf("cons end !!\n");
-#if 0
-                    fflush(rs->fs_s);
-#else
                     ret[0] = fwrite(tmp, 1, acusz, rs->fs_s);
                     fflush(rs->fs_s);
-#endif
                     printf("p4 write file %d size %d/%d \n\n", rs->fs_s, acusz, ret[0]);
                     free(tmp);
                 }
@@ -995,17 +1035,19 @@ static int p4(struct procRes_s *rs)
 
 static int p5(struct procRes_s *rs)
 {
-    int px, pi, ret, n;
-    char ch, *recvbuf;
+    int px, pi, ret, n, size, opsz, acusz;
+    char ch, *recvbuf, *addr;
     printf("p5\n");
     p5_init(rs);
     // wait for ch from p0
     // in charge of socket recv
 
-    recvbuf = malloc(1024);
+    recvbuf = malloc(61440*2);
     if (!recvbuf) {
         printf("p5 recvbuf alloc failed! \n");
         return (-1);
+    } else {
+        printf("p5 recvbuf alloc success! 0x%x\n", recvbuf);
     }
 
     rs->psocket->listenfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1019,12 +1061,23 @@ static int p5(struct procRes_s *rs)
     listen(rs->psocket->listenfd, 10); 
 
     while (1) {
+        printf("#");
         rs->psocket->connfd = accept(rs->psocket->listenfd, (struct sockaddr*)NULL, NULL); 
-        n = read(rs->psocket->connfd, recvbuf, 1024);
-        recvbuf[n] = '\0';
-        //printf("socket receive %d char [%s]\n", n, recvbuf);
 
-        //printf("#");
+        n = read(rs->psocket->connfd, recvbuf, 1024);
+        if (recvbuf[n-1] == '\n')         recvbuf[n-1] = '\0';
+        printf("socket receive %d char [%s]\n", n, recvbuf);
+
+#if 0
+        px = 0;
+        while (1) {
+            ret = write(rs->psocket->connfd, recvbuf, n);
+            printf("socket tx %d sz:%d \n", rs->psocket->connfd, ret);
+            rs_ipc_put(rs, "x", 1);
+            px += ret;
+            if (px > (1024*1024)) break;
+        }
+#endif
         //ret = rs_ipc_get(rs, &ch, 1);
         //if (ret > 0) {
         //    printf("%c", ch);
@@ -1034,6 +1087,32 @@ static int p5(struct procRes_s *rs)
             rs_ipc_put(rs, recvbuf, n);
             printf("[5:%s]\n", recvbuf);
         }
+
+        pi = 0;
+        ret = rs_ipc_get(rs, &ch, 1);
+        while (ret > 0) {
+            //rs_ipc_put(rs, "x", 1);
+            //printf("%c ", ch);
+
+                size = ring_buf_cons_dual(rs->pdataRx, &addr, pi);
+                if (size >= 0) {
+                    //printf("cons 0x%x %d %d \n", addr, size, pi);
+                    pi++;
+
+                    msync(recvbuf, size, MS_SYNC);
+                    // send data to wifi socket
+                    opsz = write(rs->psocket->connfd, addr, size);
+                        //printf("socket tx %d %d\n", rs->psocket->connfd, opsz);
+
+                    //memcpy(buff, addr, size);
+                    acusz += size;
+                 }
+
+            ret = rs_ipc_get(rs, &ch, 1);
+        }
+
+        close(rs->psocket->connfd);
+        //rs->psocket->connfd = 0;
     }
 
     p5_end(rs);
@@ -1147,7 +1226,12 @@ static char spi1[] = "/dev/spidev32765.0";
     print_f("fwrite", pmrs->log);
 
 // socket server
-#if 1
+#if 0
+    int n;
+    char *recvbuf;
+
+    recvbuf = malloc(1024);
+
     pmrs->socket.listenfd = socket(AF_INET, SOCK_STREAM, 0);
     memset(&pmrs->socket.serv_addr, '0', sizeof(struct sockaddr_in));
 
@@ -1157,6 +1241,16 @@ static char spi1[] = "/dev/spidev32765.0";
 
     bind(pmrs->socket.listenfd, (struct sockaddr*)&pmrs->socket.serv_addr, sizeof(struct sockaddr_in)); 
     listen(pmrs->socket.listenfd, 10); 
+    while (1) {
+        printf("socket test\n");
+        pmrs->socket.connfd = accept(pmrs->socket.listenfd, (struct sockaddr*)NULL, NULL); 
+        while (pmrs->socket.connfd) {
+            n = read(pmrs->socket.connfd, recvbuf, 1024);
+            recvbuf[n] = '\0';
+            printf("socket receive %d char [%s]\n", n, recvbuf);
+            if (n < 0) break;
+        }
+    }
 #endif
 
 // spidev id
