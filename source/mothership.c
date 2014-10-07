@@ -292,7 +292,7 @@ static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel)
     }
 
     dist = dualn - folwn;
-    //printf("d:%d, %d /%d \n", dist, dualn, folwn);
+    printf("d:%d, %d /%d \n", dist, dualn, folwn);
     if (dist > (pp->slotn - 3))  return -1;
 
     if (sel) {
@@ -422,7 +422,7 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         dist = leadn - folwn;
     }
 
-    //printf("[cons], d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
+    printf("[cons], d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
 
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
@@ -781,15 +781,15 @@ static int p0(struct mainRes_s *mrs)
                         //ring_buf_prod_dual(&mrs->dataRx, seq[0]);
                         //printf("0 %d\n", seq[0]);
                         seq[0] += 2;
-//                        mrs_ipc_put(mrs, "0", 1, 3);
+                        //mrs_ipc_put(mrs, "0", 1, 3);
                         mrs_ipc_put(mrs, "0", 1, 4);
                     }
                     if (ch == 'd') {
                         printf("0 %d end\n", seq[0]);
-//                        mrs_ipc_put(mrs, "O", 1, 3);
+                        //mrs_ipc_put(mrs, "O", 1, 3);
                         mrs_ipc_put(mrs, "O", 1, 4);
                         chk[0] = 1;
-//                        mrs_ipc_put(mrs, "s", 1, 3);
+                        //mrs_ipc_put(mrs, "s", 1, 3);
                         mrs_ipc_put(mrs, "s", 1, 4);
                     }
                 ret = mrs_ipc_get(mrs, &ch, 1, 1);
@@ -800,15 +800,15 @@ static int p0(struct mainRes_s *mrs)
                     //ring_buf_prod_dual(&mrs->dataRx, seq[1]);
                     //printf("1 %d\n", seq[1]);
                     seq[1] += 2;
-//                    mrs_ipc_put(mrs, "1", 1, 3);
+                //mrs_ipc_put(mrs, "1", 1, 3);
                 mrs_ipc_put(mrs, "1", 1, 4);
                 }
                 if (ch == 'd') {
                     printf("1 %d end\n", seq[1]);
-//                    mrs_ipc_put(mrs, "I", 1, 3);
+                    //mrs_ipc_put(mrs, "I", 1, 3);
                     mrs_ipc_put(mrs, "I", 1, 4);
                     chk[1] = 1;
-//                    mrs_ipc_put(mrs, "s", 1, 3);
+                    //mrs_ipc_put(mrs, "s", 1, 3);
                     mrs_ipc_put(mrs, "s", 1, 4);
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 2);
@@ -986,14 +986,6 @@ static int p4(struct procRes_s *rs)
         memset(buff, 0xf0, 64*1024*1024);
     }
 
-    ret[5] = rs_ipc_get(rs, &ch, 1);
-    while (ret[5]) {
-        if (ch == 't') {
-            break;
-        }
-        ret[5] = rs_ipc_get(rs, &ch, 1);
-    }
-
     pi = 0;
     while (1) {
         
@@ -1009,21 +1001,20 @@ static int p4(struct procRes_s *rs)
 
                     msync(addr, size, MS_SYNC);
                     // send data to wifi socket
-                    if (rs->psocket->connfd > 0) {
                       
-                        opsz = write(rs->psocket->connfd, addr, size);
-                        printf("socket tx %d %d\n", rs->psocket->connfd, opsz);
-                    }
-                    //memcpy(buff, addr, size);
-                    buff += size;
-                    acusz += size;
+                    opsz = write(rs->psocket->connfd, addr, size);
+                    printf("socket tx %d %d\n", rs->psocket->connfd, opsz);
+
+                    /*memcpy(buff, addr, size);
+                    buff += size; 
+                    acusz += size; */
 
                 }
                 else if (size == (-1)) {
                     printf("cons end !!\n");
-                    ret[0] = fwrite(tmp, 1, acusz, rs->fs_s);
+                    /*ret[0] = fwrite(tmp, 1, acusz, rs->fs_s);
                     fflush(rs->fs_s);
-                    printf("p4 write file %d size %d/%d \n\n", rs->fs_s, acusz, ret[0]);
+                    printf("p4 write file %d size %d/%d \n\n", rs->fs_s, acusz, ret[0]); */
                     free(tmp);
                 }
         }
@@ -1066,7 +1057,7 @@ static int p5(struct procRes_s *rs)
 
         n = read(rs->psocket->connfd, recvbuf, 1024);
         if (recvbuf[n-1] == '\n')         recvbuf[n-1] = '\0';
-        printf("socket receive %d char [%s]\n", n, recvbuf);
+        printf("socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket->connfd);
 
 #if 0
         px = 0;
@@ -1088,6 +1079,15 @@ static int p5(struct procRes_s *rs)
             printf("[5:%s]\n", recvbuf);
         }
 
+        /*
+        ret = rs_ipc_get(rs, &ch, 1);
+        while (ret > 0) {
+            if (ch == 's') break;
+            ret = rs_ipc_get(rs, &ch, 1);
+        }
+        */
+
+
         pi = 0;
         ret = rs_ipc_get(rs, &ch, 1);
         while (ret > 0) {
@@ -1099,13 +1099,13 @@ static int p5(struct procRes_s *rs)
                     //printf("cons 0x%x %d %d \n", addr, size, pi);
                     pi++;
 
-                    msync(recvbuf, size, MS_SYNC);
+                    msync(addr, size, MS_SYNC);
                     // send data to wifi socket
                     opsz = write(rs->psocket->connfd, addr, size);
                         //printf("socket tx %d %d\n", rs->psocket->connfd, opsz);
 
                     //memcpy(buff, addr, size);
-                    acusz += size;
+                    //acusz += size;
                  }
 
             ret = rs_ipc_get(rs, &ch, 1);
