@@ -22,6 +22,14 @@
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
 
+typedef int (*func)(int argc, char *argv[]);
+
+struct cmd_s{
+    int  id;
+    char str[16];
+    func pfunc;
+};
+
 struct pipe_s{
     int rt[2];
 };
@@ -688,12 +696,25 @@ static int p0_end(struct mainRes_s *mrs)
     return 0;
 }
 
+static int cmdfunc_01(int argc, char *argv[])
+{
+    if (!argv) return -1;
+    printf("cmdfunc_01 argc:%d [%s]\n", argc, argv[0]);    
+
+    return 1;
+}
+
 static int p0(struct mainRes_s *mrs)
 {
     int pi, pt, pc, tp, ret, sz[3], chk[2], bksz[2], seq[2], bitset, wc;
     char ch, c1, str[128], dst[17];
     char *addr[3], *stop_at;
     int pmode = 0, pstatus[2], cstatus = 0;
+
+    struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
+                                {4, "aspect", cmdfunc_01}, {5, "leo", cmdfunc_01}, {6, "mothership", cmdfunc_01}, {7, "lanch", cmdfunc_01}};
+    int px, ci;
+    char cmd[32];
 
     p0_init(mrs);
     /* the initial mode is command mode, the rdy pin is pull low at begin */
@@ -704,7 +725,41 @@ static int p0(struct mainRes_s *mrs)
     // parsing command in shared memory which get from socket 
     // parsing command in shared memory whcih get form spi
     // 
+    
+    while (1) {
+        ci = 0;    
+        while (1) {
+            cmd[ci] = fgetc(stdin);
+            if (cmd[ci] == '\n') {
+                cmd[ci] = '\0';
+                break;
+            }
+            ci++;
+        }
+        
+        pi = 0;
+        while (pi < 8) {
+            if ((strlen(cmd) != strlen(cmdtab[pi].str))) {
+            }
+            else if (!strncmp(cmd, cmdtab[pi].str, strlen(cmdtab[pi].str))) {
+                 break;
+            }
+            pi++;
+        }
+        
+        if (pi == 8) {
+            printf("cmd not found!\n");
+        } else if (pi < 8) {
+            addr[0] = cmdtab[pi].str;
+            printf("input cmd: [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
+            ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
+            printf("func return value: %d \n", ret);
+        } else {
+            printf("error input cmd: [%d]\n", pi);
+        }
+    }
 
+/*
     while (!pmode) {
         ch = fgetc(stdin);
         if (ch == '\n') continue;
@@ -767,7 +822,7 @@ static int p0(struct mainRes_s *mrs)
         }
     }
     printf("pmode select: 0x%x \n", pmode);
-
+*/
     pi = 0; pt = 0; pc = 0, seq[0] = 0, seq[1] = 1; wc = 0; 
     chk[0] = 0; chk[1] = 0;
     while (1) {
@@ -847,16 +902,44 @@ static int p0(struct mainRes_s *mrs)
 
 static int p1(struct procRes_s *rs)
 {
-    int px, pi, ret;
-    char ch;
+    struct cmd_s cmdtab[8] = {{0, "poll"}, {1, "command"}, {2, "data"}, {3, "run"}};
+    int px, pi, ret, ci;
+    char ch, cmd[32];
     char *addr;
 
     printf("p1\n");
     p1_init(rs);
     // wait for ch from p0
-    // in charge of spi0 command and command parsing
-    // 'c': command mode, store the incoming infom into share memory
-    // send 'c' to notice the p0 that we have incoming command
+    // state machine control
+
+    
+    while (1) {
+        ci = 0;    
+        while (1) {
+            cmd[ci] = fgetc(stdin);
+            if (cmd[ci] == '\n') {
+                cmd[ci] = '\0';
+                break;
+            }
+            ci++;
+        }
+        
+        pi = 0;
+        while (pi < 8) {
+            if (strncmp(cmdtab[pi].str, cmd, 4) == 0) {
+                 break;
+            }
+            pi++;
+        }
+        
+        if (pi == 8) {
+            printf("cmd not found!\n");
+        } else if (pi < 8) {
+            printf("input cmd: [%d]%s\n", pi, cmdtab[pi].str);
+        } else {
+            printf("error input cmd: [%d]\n", pi);
+        }
+    }
 
     pi = 0;
     ch = '1';
