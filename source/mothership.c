@@ -23,8 +23,16 @@
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
 
 static FILE *mlog = 0;
+static struct logPool_s *mlogPool;
 
 typedef int (*func)(int argc, char *argv[]);
+
+struct logPool_s{
+    char *pool;
+    char *cur;
+    int max;
+    int len;
+};
 
 struct cmd_s{
     int  id;
@@ -89,6 +97,7 @@ struct mainRes_s{
     // log buffer
     char log[256];
     struct socket_s socket;
+    struct logPool_s plog;
 };
 
 struct procRes_s{
@@ -117,12 +126,14 @@ struct procRes_s{
     struct timespec *tm[2];
     char logs[256];
     struct socket_s *psocket;
+    struct logPool_s *plogs;
 };
 
 //memory alloc. put in/put out
 static char **memory_init(int *sz, int tsize, int csize);
 //debug printf
-static int print_f(char *head, char *str);
+static int print_f(struct logPool_s *plog, char *head, char *str);
+static int printf_flush(struct logPool_s *plog, FILE *f);
 //time measurement, start /stop
 static int time_diff(struct timespec *s, struct timespec *e, int unit);
 //file rw open, save to file for debug
@@ -215,7 +226,8 @@ static int shmem_pop_send(struct mainRes_s *mrs, char **addr, int seq, int p)
     sz = ring_buf_get_dual(&mrs->dataRx, addr, seq);
     //printf("shmem pop:0x%.8x, seq:%d sz:%d\n", *addr, seq, sz);
     if (sz < 0) return (-1);
-    sprintf(str, "d%.8xl%.8d", *addr, sz);
+    sprintf(str, "d%.8xl%.8d\n", *addr, sz);
+    print_f(&mrs->plog, "pop", str);
     //printf("[%s]\n", str);
     mrs_ipc_put(mrs, str, 18, p);
 
@@ -224,16 +236,23 @@ static int shmem_pop_send(struct mainRes_s *mrs, char **addr, int seq, int p)
 
 static int shmem_dump(char *src, int size)
 {
+    char str[128];
     int inc;
     if (!src) return -1;
 
     inc = 0;
-    printf("memdump[0x%.8x] sz%d: \n", src, size);
+    sprintf(str, "memdump[0x%.8x] sz%d: \n", src, size);
+    print_f(mlogPool, "dump", str);
     while (inc < size) {
-        printf("%.2x ", *src);
+        sprintf(str, "%.2x ", *src);
+        print_f(mlogPool, NULL, str);
+
         inc++;
         src++;
-        if (!((inc+1) % 16)) printf("\n");
+        if (!((inc+1) % 16)) {
+            sprintf(str, "\n");
+            print_f(mlogPool, NULL, str);
+        }
     }
 
     return inc;
@@ -290,6 +309,7 @@ static int ring_buf_init(struct shmem_s *pp)
 
 static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel)
 {
+    char str[128];
     int dualn = 0;
     int folwn = 0;
     int dist;
@@ -306,7 +326,9 @@ static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel)
     }
 
     dist = dualn - folwn;
-    printf("d:%d, %d /%d \n", dist, dualn, folwn);
+    sprintf(str, "d:%d, %d /%d \n", dist, dualn, folwn);
+    print_f(mlogPool, "ring", str);
+
     if (dist > (pp->slotn - 3))  return -1;
 
     if (sel) {
@@ -367,6 +389,7 @@ static int ring_buf_get(struct shmem_s *pp, char **addr)
 
 static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
 {
+    char str[128];
     sel = sel % 2;
 
     if (sel) {
@@ -376,7 +399,9 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
     }
     pp->lastflg += 1;
 
-    printf("[last] d:%d l:%d flg:%d \n", pp->dualsz, pp->lastsz, pp->lastflg);
+    sprintf(str, "[last] d:%d l:%d flg:%d \n", pp->dualsz, pp->lastsz, pp->lastflg);
+    print_f(mlogPool, "ring", str);
+
     return pp->lastflg;
 }
 
@@ -422,6 +447,7 @@ static int ring_buf_prod(struct shmem_s *pp)
 
 static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
 {
+    char str[128];
     int dualn = 0;
     int leadn = 0;
     int folwn = 0;
@@ -436,7 +462,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         dist = leadn - folwn;
     }
 
-    printf("[cons], d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
+    sprintf(str, "[cons], d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
+    print_f(mlogPool, "ring", str);
 
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
@@ -451,8 +478,9 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
     }
 
     if ((pp->lastflg) && (dist == 1)) {
-        printf("[clast] f:%d %d, d:%d %d l: %d %d \n", pp->r->folw.run, pp->r->folw.seq, 
+        sprintf(str, "[clast] f:%d %d, d:%d %d l: %d %d \n", pp->r->folw.run, pp->r->folw.seq, 
             pp->r->dual.run, pp->r->dual.seq, pp->r->lead.run, pp->r->lead.seq);
+        print_f(mlogPool, "ring", str);
         if (dualn > leadn) {
             if ((pp->r->folw.run == pp->r->dual.run) &&
              (pp->r->folw.seq == pp->r->dual.seq)) {
@@ -471,6 +499,7 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
 
 static int ring_buf_cons(struct shmem_s *pp, char **addr)
 {
+    char str[128];
     int leadn = 0;
     int folwn = 0;
     int dist;
@@ -479,7 +508,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
 
-    printf("cons, d: %d %d/%d \n", dist, leadn, folwn);
+    sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
+    print_f(mlogPool, "ring", str);
 
     if (dist < 1)  return -1;
 
@@ -704,10 +734,16 @@ static int p0_end(struct mainRes_s *mrs)
 
 static int cmdfunc_01(int argc, char *argv[])
 {
+    struct mainRes_s *mrs;
     char str[256];
     if (!argv) return -1;
-    sprintf(str, "cmdfunc_01 argc:%d [%s]", argc, argv[0]); 
-    print_f("cmdfunc", str);
+    sprintf(str, "cmdfunc_01 argc:%d [%s]\n", argc, argv[0]); 
+    print_f(mlogPool, "cmdfunc", str);
+
+    if (argc == 3) {
+        mrs = (struct mainRes_s *)argv[0];
+        mrs_ipc_put(mrs, "3", 1, 0);
+    }
 
     return 1;
 }
@@ -720,6 +756,8 @@ static int dbg(struct mainRes_s *mrs)
     struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
                                 {4, "aspect", cmdfunc_01}, {5, "leo", cmdfunc_01}, {6, "mothership", cmdfunc_01}, {7, "lanch", cmdfunc_01}};
 
+    p0_init(mrs);
+	
     while (1) {
         ci = 0;    
         while (1) {
@@ -742,19 +780,30 @@ static int dbg(struct mainRes_s *mrs)
         }
         
         if (pi == 8) {
-            sprintf(mrs->log, "cmd not found!");
-            print_f("P0", mrs->log);
+            sprintf(mrs->log, "cmd not found!\n");
+            print_f(&mrs->plog, "P0", mrs->log);
+        } else if (pi == 3) {
+            addr[0] = (char *)mrs;
+            sprintf(mrs->log, "input [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
+            print_f(&mrs->plog, "P0", mrs->log);
+            ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
         } else if (pi < 8) {
             addr[0] = cmdtab[pi].str;
-            sprintf(mrs->log, "input [%d]%s:%d[%s]", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
-            print_f("P0", mrs->log);
+            sprintf(mrs->log, "input [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
+            print_f(&mrs->plog, "P0", mrs->log);
+			
             ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
+
+            mrs_ipc_put(mrs, "t", 1, 0);
         } else {
-            printf("error input cmd: [%d]\n", pi);
+            sprintf(mrs->log, "error input cmd: [%d]\n", pi);
+            print_f(&mrs->plog, "DBG", mrs->log);
         }
-        fflush(mlog);
+
+        printf_flush(&mrs->plog, mrs->flog);
     }
 
+    p0_end(mrs);
 }
 
 static int p0(struct mainRes_s *mrs)
@@ -764,10 +813,7 @@ static int p0(struct mainRes_s *mrs)
     char *addr[3], *stop_at;
     int pmode = 0, pstatus[2], cstatus = 0;
 
-    struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
-                                {4, "aspect", cmdfunc_01}, {5, "leo", cmdfunc_01}, {6, "mothership", cmdfunc_01}, {7, "lanch", cmdfunc_01}};
     int px, ci;
-    char cmd[32];
 
     p0_init(mrs);
     /* the initial mode is command mode, the rdy pin is pull low at begin */
@@ -779,13 +825,13 @@ static int p0(struct mainRes_s *mrs)
     // parsing command in shared memory whcih get form spi
     // 
     
-
-
-/*
     while (!pmode) {
-        ch = fgetc(stdin);
-        if (ch == '\n') continue;
-        if (ch == '2') {
+        ret = mrs_ipc_get(mrs, &ch, 1, 0);
+        if (ret <= 0) {
+            sprintf(mrs->log, "ret:%d\n", ret);
+            print_f(&mrs->plog, "P0", mrs->log);
+        }
+        else if (ch == '2') {
             // set mode to data mode
             pmode = 1;
             bksz[0] = 0;
@@ -804,20 +850,23 @@ static int p0(struct mainRes_s *mrs)
         
             bitset = 1;
             ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            printf("Set spi0 data mode: %d\n", bitset);
+            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
  
             bitset = 1;
             ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            printf("Set spi1 data mode: %d\n", bitset);
+            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
 
             bitset = 0;
             ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-            printf("Get RDY: %d\n", bitset);
+            sprintf(mrs->log, "Get RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
 
             mrs_ipc_put(mrs, "d", 1, 1);
             mrs_ipc_put(mrs, "d", 1, 2);
         }
-        if (ch == '3') {
+        else if (ch == '3') {
             bitset = 0;
             ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
@@ -826,29 +875,41 @@ static int p0(struct mainRes_s *mrs)
         
             bitset = 1;
             ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            printf("Set spi0 data mode: %d\n", bitset);
+            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
  
             bitset = 1;
             ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            printf("Set spi1 data mode: %d\n", bitset);
+            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
 
             bitset = 1;
             ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
-            printf("Set RDY: %d\n", bitset);
+            sprintf(mrs->log, "Set RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
 
             bitset = 0;
             ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-            printf("Get RDY: %d\n", bitset);
+            sprintf(mrs->log, "Get RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
 
             pmode = 2;
         }
+        else {
+            sprintf(mrs->log, "%c\n", ch);
+            print_f(&mrs->plog, "P0", mrs->log);
+        }
+        sleep(2);
     }
-    printf("pmode select: 0x%x \n", pmode);
-*/
+    sprintf(mrs->log, "pmode select: 0x%x \n", pmode);
+    print_f(&mrs->plog, "P0", mrs->log);
+
     pi = 0; pt = 0; pc = 0, seq[0] = 0, seq[1] = 1; wc = 0; 
     chk[0] = 0; chk[1] = 0;
     while (1) {
-        printf(".");
+        //sprintf(mrs->log, ".");
+        //print_f(&mrs->plog, "P0", mrs->log);
+
         // p2 data mode spi0 rx
         
         if (pmode == 1) {
@@ -862,7 +923,8 @@ static int p0(struct mainRes_s *mrs)
                     mrs_ipc_put(mrs, "0", 1, 4);
                 }
                 if (ch == 'd') {
-                    printf("0 %d end\n", seq[0]);
+                    sprintf(mrs->log, "0 %d end\n", seq[0]);
+                    print_f(&mrs->plog, "P0", mrs->log);
                     //mrs_ipc_put(mrs, "O", 1, 3);
                     mrs_ipc_put(mrs, "O", 1, 4);
                     chk[0] = 1;
@@ -881,7 +943,9 @@ static int p0(struct mainRes_s *mrs)
                     mrs_ipc_put(mrs, "1", 1, 4);
                 }
                 if (ch == 'd') {
-                    printf("1 %d end\n", seq[1]);
+                    sprintf(mrs->log, "1 %d end\n", seq[1]);
+                    print_f(&mrs->plog, "P0", mrs->log);
+
                     //mrs_ipc_put(mrs, "I", 1, 3);
                     mrs_ipc_put(mrs, "I", 1, 4);
                     chk[1] = 1;
@@ -895,11 +959,15 @@ static int p0(struct mainRes_s *mrs)
         if (pmode == 2) {
             ret = mrs_ipc_get(mrs, &ch, 1, 4);
             if (ret > 0) {
-                printf("0 [%c]\n", ch);
+                sprintf(mrs->log, "0 [%c]\n", ch);
+                print_f(&mrs->plog, "P0", mrs->log);				
+
                 ret = mrs_ipc_get(mrs, str, 128, 4);
                 if (ret > 0) {
                     str[ret] = '\0';
-                    printf("[%s] sz:%d\n", str, ret);
+                    sprintf(mrs->log, "[%s] sz:%d\n", str, ret);
+                    print_f(&mrs->plog, "P0", mrs->log);
+
                     // send command to trigger dual spi mode
 //                    mrs_ipc_put(mrs, "t", 1, 3);
                     pmode = 1;
@@ -908,7 +976,7 @@ static int p0(struct mainRes_s *mrs)
                 }
             }
         }
-        sleep(1);
+        usleep(1);
     }
 
     // save to file for debug
@@ -929,7 +997,9 @@ static int p1(struct procRes_s *rs)
     char ch, cmd[32];
     char *addr;
 
-    printf("p1\n");
+    sprintf(rs->logs, "p1\n");
+    print_f(rs->plogs, "P1", rs->logs);
+
     p1_init(rs);
     // wait for ch from p0
     // state machine control
@@ -937,15 +1007,15 @@ static int p1(struct procRes_s *rs)
     pi = 0;
     ch = '1';
     while (1) {
-        //printf("+");
+        sprintf(rs->logs, "+\n");
+        print_f(rs->plogs, "P1", rs->logs);
+
         ret = rs_ipc_get(rs, &ch, 1);
         if (ret > 0) {
-            printf("%c", ch);
+            sprintf(rs->logs, "%c\n", ch);
+            print_f(rs->plogs, "P1", rs->logs);
         }
-        ret = rs_ipc_put(rs, &ch, 1);
-        if (ret > 0) {
-            //printf("[1s:%c]", ch);
-        }
+        rs_ipc_put(rs, &ch, 1);
         usleep(10);
     }
 
@@ -958,7 +1028,8 @@ static int p2(struct procRes_s *rs)
     int px, pi, ret[5], size, opsz, tEnd, acusz;
     char ch, dst[17], sz[17], str[128];
     char *addr, *stop_at;
-    printf("p2\n");
+    sprintf(rs->logs, "p2\n");
+    print_f(rs->plogs, "P2", rs->logs);
     p2_init(rs);
     // wait for ch from p0
     // in charge of spi0 data mode
@@ -968,10 +1039,11 @@ static int p2(struct procRes_s *rs)
     ch = '2';
     pi = 0; px = 0; tEnd = 0; acusz = 0;
     while (1) {
-        //printf("!");
+        sprintf(rs->logs, "!\n");
+        print_f(rs->plogs, "P2", rs->logs);
+
         ret[0] = rs_ipc_get(rs, &ch, 1);
         if (ret[0] > 0) {
-            //printf("%c", ch);
             if (ch == 'd') {
 
                 pi = 0;  
@@ -1003,7 +1075,9 @@ static int p3(struct procRes_s *rs)
     int px, pi, ret[5], size, opsz, tEnd, acusz;
     char ch, dst[17], sz[17], str[128];
     char *addr, *stop_at;
-    printf("p3\n");
+    sprintf(rs->logs, "p3\n");
+    print_f(rs->plogs, "P3", rs->logs);
+
     p3_init(rs);
     // wait for ch from p0
     // in charge of spi1 data mode
@@ -1011,10 +1085,11 @@ static int p3(struct procRes_s *rs)
 
     pi = 0; px = 0; tEnd = 0;
     while (1) {
-        //printf("/");
+        sprintf(rs->logs, "/\n");
+        print_f(rs->plogs, "P3", rs->logs);
+
         ret[0] = rs_ipc_get(rs, &ch, 1);
         if (ret[0] > 0) {
-            //printf("%c", ch);
             if (ch == 'd') {
 
                 pi = 1;  
@@ -1022,7 +1097,8 @@ static int p3(struct procRes_s *rs)
                     size = ring_buf_get_dual(rs->pdataRx, &addr, pi);
 
                     opsz = mtx_data(rs->spifd, addr, NULL, 1, size, 1024*1024);
-                    //printf("1 spi %d\n", opsz);
+                    //sprintf(rs->logs, "1 spi %d\n", opsz);
+                    //print_f(rs->plogs, "P5", rs->logs);
 
                     //shmem_dump(addr, 32);
                     ring_buf_prod_dual(rs->pdataRx, pi);
@@ -1047,7 +1123,9 @@ static int p4(struct procRes_s *rs)
     int px, pi, ret[5], size, opsz, cstatus, cmode;
     char ch, dst[17], sz[17], str[128];
     char *addr, *stop_at;
-    printf("p4\n");
+    sprintf(rs->logs, "p4\n");
+    print_f(rs->plogs, "P4", rs->logs);
+
     p4_init(rs);
     // wait for ch from p0
     // in charge of socket send
@@ -1065,21 +1143,24 @@ static int p4(struct procRes_s *rs)
     pi = 0;
     while (1) {
         
-        //printf("^");
+        sprintf(rs->logs, "^\n");
+        print_f(rs->plogs, "P4", rs->logs);
+
         ret[0] = rs_ipc_get(rs, &ch, 1);
         if (ret[0] > 0) {
-            //printf("[%c] ", ch);
             
             size = ring_buf_cons_dual(rs->pdataRx, &addr, pi);
             if (size >= 0) {
-                //printf("cons 0x%x %d %d \n", addr, size, pi);
+                //sprintf(rs->logs, "cons 0x%x %d %d \n", addr, size, pi);
+                //print_f(rs->plogs, "P5", rs->logs);
                 pi++;
             
                 msync(addr, size, MS_SYNC);
                 // send data to wifi socket
                   
                 opsz = write(rs->psocket->connfd, addr, size);
-                printf("socket tx %d %d\n", rs->psocket->connfd, opsz);
+                sprintf(rs->logs, "socket tx %d %d\n", rs->psocket->connfd, opsz);
+                print_f(rs->plogs, "P4", rs->logs);
             
                 /*memcpy(buff, addr, size);
                 buff += size; 
@@ -1087,10 +1168,12 @@ static int p4(struct procRes_s *rs)
             
             }
             else if (size == (-1)) {
-                printf("cons end !!\n");
+                sprintf(rs->logs, "cons end !!\n");
+                print_f(rs->plogs, "P4", rs->logs);
                 /*ret[0] = fwrite(tmp, 1, acusz, rs->fs_s);
                 fflush(rs->fs_s);
-                printf("p4 write file %d size %d/%d \n\n", rs->fs_s, acusz, ret[0]); */
+                sprintf(rs->logs, "p4 write file %d size %d/%d \n\n", rs->fs_s, acusz, ret[0]); 
+                print_f(rs->plogs, "P5", rs->logs);*/
                 free(tmp);
             }
         }
@@ -1104,17 +1187,21 @@ static int p5(struct procRes_s *rs)
 {
     int px, pi, ret, n, size, opsz, acusz;
     char ch, *recvbuf, *addr;
-    printf("p5\n");
+    sprintf(rs->logs, "p5\n");
+    print_f(rs->plogs, "P5", rs->logs);
+
     p5_init(rs);
     // wait for ch from p0
     // in charge of socket recv
 
     recvbuf = malloc(1024);
     if (!recvbuf) {
-        printf("p5 recvbuf alloc failed! \n");
+        sprintf(rs->logs, "p5 recvbuf alloc failed! \n");
+        print_f(rs->plogs, "P5", rs->logs);
         return (-1);
     } else {
-        printf("p5 recvbuf alloc success! 0x%x\n", recvbuf);
+        sprintf(rs->logs, "p5 recvbuf alloc success! 0x%x\n", recvbuf);
+        print_f(rs->plogs, "P5", rs->logs);
     }
 
     rs->psocket->listenfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1129,16 +1216,21 @@ static int p5(struct procRes_s *rs)
 
     while (1) {
         //printf("#");
+        sprintf(rs->logs, "#\n");
+        print_f(rs->plogs, "P5", rs->logs);
+
         rs->psocket->connfd = accept(rs->psocket->listenfd, (struct sockaddr*)NULL, NULL); 
 
         n = read(rs->psocket->connfd, recvbuf, 1024);
         if (recvbuf[n-1] == '\n')         recvbuf[n-1] = '\0';
-        printf("socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket->connfd);
+        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket->connfd);
+        print_f(rs->plogs, "P5", rs->logs);
 
         rs_ipc_put(rs, "s", 1);
         if (n > 0) {
             rs_ipc_put(rs, recvbuf, n);
-            printf("[5:%s]\n", recvbuf);
+            sprintf(rs->logs, "[5:%s]\n", recvbuf);
+            print_f(rs->plogs, "P5", rs->logs);
         }
 
         pi = 0;
@@ -1184,14 +1276,29 @@ static char spi1[] = "/dev/spidev32765.0";
 
     pmrs = (struct mainRes_s *)mmap(NULL, sizeof(struct mainRes_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
 
-    sprintf(pmrs->log, "argc:%d", argc);
-    print_f("main", pmrs->log);
+    pmrs->plog.max = 6*1024*1024;
+    pmrs->plog.pool = mmap(NULL, pmrs->plog.max, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (!pmrs->plog.pool) {printf("get log pool share memory failed\n"); return 0;}
+    mlogPool = &pmrs->plog;
+    pmrs->plog.len = 0;
+    pmrs->plog.cur = pmrs->plog.pool;
+
+    ret = file_save_get(&pmrs->flog, "/mnt/mmc2/rx/%d.log");
+    if (ret) {printf("get log file failed\n"); return 0;}
+    mlog = pmrs->flog;
+    ret = fwrite("test file write \n", 1, 16, pmrs->flog);
+    sprintf(pmrs->log, "write file size: %d/%d\n", ret, 16);
+    print_f(&pmrs->plog, "fwrite", pmrs->log);
+    fflush(pmrs->flog);
+
+    sprintf(pmrs->log, "argc:%d\n", argc);
+    print_f(&pmrs->plog, "main", pmrs->log);
 // show arguments
     ix = 0;
     while(argc) {
         arg[ix] = atoi(argv[ix]);
-        sprintf(pmrs->log, "%d %d %s", ix, arg[ix], argv[ix]);
-        print_f("arg", pmrs->log);
+        sprintf(pmrs->log, "%d %d %s\n", ix, arg[ix], argv[ix]);
+        print_f(&pmrs->plog, "arg", pmrs->log);
         ix++;
         argc--;
         if (ix > 7) break;
@@ -1204,16 +1311,16 @@ static char spi1[] = "/dev/spidev32765.0";
     pmrs->dataRx.totsz = 1024*61440;
     pmrs->dataRx.chksz = 61440;
     pmrs->dataRx.svdist = 8;
-    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x", pmrs->dataRx.totsz, pmrs->dataRx.pp);
-    //print_f("minit_result", pmrs->log);
+    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataRx.totsz, pmrs->dataRx.pp);
+    //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->dataRx.slotn; ix++) {
-    //    sprintf(pmrs->log, "[%d] 0x%.8x", ix, pmrs->dataRx.pp[ix]);
-    //    print_f("shminit_result", pmrs->log);
+    //    sprintf(pmrs->log, "[%d] 0x%.8x\n", ix, pmrs->dataRx.pp[ix]);
+    //    print_f(&pmrs->plog, "shminit_result", pmrs->log);
     //}
     clock_gettime(CLOCK_REALTIME, &pmrs->time[1]);
     tdiff = time_diff(&pmrs->time[0], &pmrs->time[1], 1000);
-    sprintf(pmrs->log, "tdiff:%d ", tdiff);
-    print_f("time_diff", pmrs->log);
+    sprintf(pmrs->log, "tdiff:%d \n", tdiff);
+    print_f(&pmrs->plog, "time_diff", pmrs->log);
 
     /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
@@ -1222,16 +1329,16 @@ static char spi1[] = "/dev/spidev32765.0";
     pmrs->dataTx.totsz = 8*61440;
     pmrs->dataTx.chksz = 61440;
     pmrs->dataTx.svdist = 1;
-    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x", pmrs->dataTx.totsz, pmrs->dataTx.pp);
-    //print_f("minit_result", pmrs->log);
+    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataTx.totsz, pmrs->dataTx.pp);
+    //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->dataTx.slotn; ix++) {
-    //    sprintf(pmrs->log, "[%d] 0x%.8x", ix, pmrs->dataTx.pp[ix]);
-    //    print_f("shminit_result", pmrs->log);
+    //    sprintf(pmrs->log, "[%d] 0x%.8x\n", ix, pmrs->dataTx.pp[ix]);
+    //    print_f(&pmrs->plog, "shminit_result", pmrs->log);
     //}
     clock_gettime(CLOCK_REALTIME, &pmrs->time[1]);
     tdiff = time_diff(&pmrs->time[0], &pmrs->time[1], 1000);
-    sprintf(pmrs->log, "tdiff:%d ", tdiff);
-    print_f("time_diff", pmrs->log);
+    sprintf(pmrs->log, "tdiff:%d \n", tdiff);
+    print_f(&pmrs->plog, "time_diff", pmrs->log);
 
     /* cmd mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
@@ -1240,16 +1347,16 @@ static char spi1[] = "/dev/spidev32765.0";
     pmrs->cmdRx.totsz = 16*1024;;
     pmrs->cmdRx.chksz = 61440;
     pmrs->cmdRx.svdist = 4;
-    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x", pmrs->cmdRx.totsz, pmrs->cmdRx.pp);
-    //print_f("minit_result", pmrs->log);
+    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdRx.totsz, pmrs->cmdRx.pp);
+    //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->cmdRx.slotn; ix++) {
-    //    sprintf(pmrs->log, "[%d] 0x%.8x", ix, pmrs->cmdRx.pp[ix]);
-    //    print_f("shminit_result", pmrs->log);
+    //    sprintf(pmrs->log, "[%d] 0x%.8x\n", ix, pmrs->cmdRx.pp[ix]);
+    //    print_f(&pmrs->plog, "shminit_result", pmrs->log);
     //}
     clock_gettime(CLOCK_REALTIME, &pmrs->time[1]);
     tdiff = time_diff(&pmrs->time[0], &pmrs->time[1], 1000);
-    sprintf(pmrs->log, "tdiff:%d ", tdiff);
-    print_f("time_diff", pmrs->log);
+    sprintf(pmrs->log, "tdiff:%d \n", tdiff);
+    print_f(&pmrs->plog, "time_diff", pmrs->log);
 	
     /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
@@ -1258,30 +1365,23 @@ static char spi1[] = "/dev/spidev32765.0";
     pmrs->cmdTx.totsz = 2048*1024;;
     pmrs->cmdTx.chksz = 1024;
     pmrs->cmdTx.svdist = 128;
-    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
-    //print_f("minit_result", pmrs->log);
+    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
+    //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->cmdTx.slotn; ix++) {
-    //    sprintf(pmrs->log, "[%d] 0x%.8x", ix, pmrs->cmdTx.pp[ix]);
-    //    print_f("shminit_result", pmrs->log);
+    //    sprintf(pmrs->log, "[%d] 0x%.8x\n", ix, pmrs->cmdTx.pp[ix]);
+    //    print_f(&pmrs->plog, "shminit_result", pmrs->log);
     //}
     clock_gettime(CLOCK_REALTIME, &pmrs->time[1]);
     tdiff = time_diff(&pmrs->time[0], &pmrs->time[1], 1000);
-    sprintf(pmrs->log, "tdiff:%d ", tdiff);
-    print_f("time_diff", pmrs->log);
+    sprintf(pmrs->log, "tdiff:%d \n", tdiff);
+    print_f(&pmrs->plog, "time_diff", pmrs->log);
 
     ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
     if (ret) {printf("get save file failed\n"); return 0;}
     //ret = fwrite("test file write \n", 1, 16, pmrs->fs);
-    sprintf(pmrs->log, "write file size: %d/%d", ret, 16);
-    print_f("fwrite", pmrs->log);
-
-    ret = file_save_get(&pmrs->flog, "/mnt/mmc2/rx/%d.log");
-    if (ret) {printf("get log file failed\n"); return 0;}
-    mlog = pmrs->flog;
-    ret = fwrite("test file write \n", 1, 16, pmrs->flog);
     sprintf(pmrs->log, "write file size: %d/%d\n", ret, 16);
-    print_f("fwrite", pmrs->log);
-    fflush(pmrs->flog);
+    print_f(&pmrs->plog, "fwrite", pmrs->log);
+
 // socket server
 #if 0
     int n;
@@ -1415,19 +1515,55 @@ static char spi1[] = "/dev/spidev32765.0";
     }
     end:
 
-    printf("something wrong in mothership, break! \n");
+    sprintf(pmrs->log, "something wrong in mothership, break!\n");
+    print_f(&pmrs->plog, "main", pmrs->log);
+    printf_flush(&pmrs->plog, pmrs->flog);
 
     return 0;
 }
 
-static int print_f(char *head, char *str)
+static int print_f(struct logPool_s *plog, char *head, char *str)
 {
+    int len;
     char ch[256];
     if((!head) || (!str)) return (-1);
-    if (!mlog) return;
-    sprintf(ch, "[%s] %s\n", head, str);
+
+    if (head)
+        sprintf(ch, "[%s] %s", head, str);
+    else 
+        sprintf(ch, "%s", str);
+
     printf("%s",ch);
-    fprintf(mlog, "%s", ch);
+
+    if (!plog) return (-2);
+	
+    msync(plog, sizeof(struct logPool_s), MS_SYNC);
+    len = strlen(ch);
+    if ((len + plog->len) > plog->max) return (-3);
+    memcpy(plog->cur, ch, strlen(ch));
+    plog->cur += len;
+    plog->len += len;
+
+    //if (!mlog) return (-4);
+    //fwrite(ch, 1, strlen(ch), mlog);
+    //fflush(mlog);
+    //fprintf(mlog, "%s", ch);
+	
+    return 0;
+}
+
+static int printf_flush(struct logPool_s *plog, FILE *f) 
+{
+    msync(plog, sizeof(struct logPool_s), MS_SYNC);
+    if (plog->cur == plog->pool) return (-1);
+    if (plog->len > plog->max) return (-2);
+
+    msync(plog->pool, plog->len, MS_SYNC);
+    fwrite(plog->pool, 1, plog->len, f);
+    fflush(f);
+
+    plog->cur = plog->pool;
+    plog->len = 0;
     return 0;
 }
 
@@ -1445,20 +1581,20 @@ static char **memory_init(int *sz, int tsize, int csize)
     asz = tsize / csize;
     pma = (char **) malloc(sizeof(char *) * asz);
     
-    //sprintf(mlog, "asz:%d pma:0x%.8x", asz, pma);
-    //print_f("memory_init", mlog);
+    //sprintf(mlog, "asz:%d pma:0x%.8x\n", asz, pma);
+    //print_f(mlogPool, "memory_init", mlog);
     
     mbuf = mmap(NULL, tsize, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     
-    //sprintf(mlog, "mmap get 0x%.8x", mbuf);
-    //print_f("memory_init", mlog);
+    //sprintf(mlog, "mmap get 0x%.8x\n", mbuf);
+    //print_f(mlogPool, "memory_init", mlog);
         
     tmpB = mbuf;
     for (idx = 0; idx < asz; idx++) {
         pma[idx] = mbuf;
         
-        //sprintf(mlog, "%d 0x%.8x", idx, pma[idx]);
-        //print_f("memory_init", mlog);
+        //sprintf(mlog, "%d 0x%.8x\n", idx, pma[idx]);
+        //print_f(mlogPool, "memory_init", mlog);
         
         mbuf += csize;
     }
@@ -1504,7 +1640,7 @@ static int file_save_get(FILE **fp, char *path1)
         f = fopen(dst, "r");
         if (!f) {
             sprintf(flog, "open file [%s]", dst);
-            print_f("save", flog);
+            print_f(mlogPool, "save", flog);
             break;
         } else
             fclose(f);
@@ -1528,6 +1664,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 
     rs->ppipedn = &mrs->pipedn[idx];
     rs->ppipeup = &mrs->pipeup[idx];
+    rs->plogs = &mrs->plog;
 
     if((idx == 0) || (idx == 1)) {
         rs->spifd = mrs->sfm[0];
