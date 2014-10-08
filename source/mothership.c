@@ -22,6 +22,8 @@
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
 
+static FILE *mlog = 0;
+
 typedef int (*func)(int argc, char *argv[]);
 
 struct cmd_s{
@@ -66,7 +68,7 @@ struct shmem_s{
 };
 
 struct mainRes_s{
-    int sid[5];
+    int sid[6];
     int sfm[2];
     int smode;
     // 3 pipe
@@ -80,6 +82,8 @@ struct mainRes_s{
     struct shmem_s cmdTx;
     // file save
     FILE *fs;
+    // file log
+    FILE *flog;
     // time measurement
     struct timespec time[2];
     // log buffer
@@ -107,9 +111,11 @@ struct procRes_s{
     char **cmp_s;
     // save file
     FILE *fs_s;
+    // save log file
+    FILE *flog_s;
     // time measurement
     struct timespec *tm[2];
-    char *logs;
+    char logs[256];
     struct socket_s *psocket;
 };
 
@@ -120,7 +126,7 @@ static int print_f(char *head, char *str);
 //time measurement, start /stop
 static int time_diff(struct timespec *s, struct timespec *e, int unit);
 //file rw open, save to file for debug
-static int file_save_get(FILE **fp);
+static int file_save_get(FILE **fp, char *path1);
 //res put in
 static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx);
 //p0: control, monitor, and debug
@@ -698,10 +704,57 @@ static int p0_end(struct mainRes_s *mrs)
 
 static int cmdfunc_01(int argc, char *argv[])
 {
+    char str[256];
     if (!argv) return -1;
-    printf("cmdfunc_01 argc:%d [%s]\n", argc, argv[0]);    
+    sprintf(str, "cmdfunc_01 argc:%d [%s]", argc, argv[0]); 
+    print_f("cmdfunc", str);
 
     return 1;
+}
+
+static int dbg(struct mainRes_s *mrs)
+{
+    int ci, pi, ret;
+    char cmd[256], *addr[3];
+
+    struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
+                                {4, "aspect", cmdfunc_01}, {5, "leo", cmdfunc_01}, {6, "mothership", cmdfunc_01}, {7, "lanch", cmdfunc_01}};
+
+    while (1) {
+        ci = 0;    
+        while (1) {
+            cmd[ci] = fgetc(stdin);
+            if (cmd[ci] == '\n') {
+                cmd[ci] = '\0';
+                break;
+            }
+            ci++;
+        }
+        
+        pi = 0;
+        while (pi < 8) {
+            if ((strlen(cmd) != strlen(cmdtab[pi].str))) {
+            }
+            else if (!strncmp(cmd, cmdtab[pi].str, strlen(cmdtab[pi].str))) {
+                 break;
+            }
+            pi++;
+        }
+        
+        if (pi == 8) {
+            sprintf(mrs->log, "cmd not found!");
+            print_f("P0", mrs->log);
+        } else if (pi < 8) {
+            addr[0] = cmdtab[pi].str;
+            sprintf(mrs->log, "input [%d]%s:%d[%s]", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
+            print_f("P0", mrs->log);
+            ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
+        } else {
+            printf("error input cmd: [%d]\n", pi);
+        }
+        fflush(mlog);
+    }
+
 }
 
 static int p0(struct mainRes_s *mrs)
@@ -726,38 +779,7 @@ static int p0(struct mainRes_s *mrs)
     // parsing command in shared memory whcih get form spi
     // 
     
-    while (1) {
-        ci = 0;    
-        while (1) {
-            cmd[ci] = fgetc(stdin);
-            if (cmd[ci] == '\n') {
-                cmd[ci] = '\0';
-                break;
-            }
-            ci++;
-        }
-        
-        pi = 0;
-        while (pi < 8) {
-            if ((strlen(cmd) != strlen(cmdtab[pi].str))) {
-            }
-            else if (!strncmp(cmd, cmdtab[pi].str, strlen(cmdtab[pi].str))) {
-                 break;
-            }
-            pi++;
-        }
-        
-        if (pi == 8) {
-            printf("cmd not found!\n");
-        } else if (pi < 8) {
-            addr[0] = cmdtab[pi].str;
-            printf("input cmd: [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
-            ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
-            printf("func return value: %d \n", ret);
-        } else {
-            printf("error input cmd: [%d]\n", pi);
-        }
-    }
+
 
 /*
     while (!pmode) {
@@ -826,7 +848,7 @@ static int p0(struct mainRes_s *mrs)
     pi = 0; pt = 0; pc = 0, seq[0] = 0, seq[1] = 1; wc = 0; 
     chk[0] = 0; chk[1] = 0;
     while (1) {
-        //printf(".");
+        printf(".");
         // p2 data mode spi0 rx
         
         if (pmode == 1) {
@@ -886,7 +908,7 @@ static int p0(struct mainRes_s *mrs)
                 }
             }
         }
-        usleep(1);
+        sleep(1);
     }
 
     // save to file for debug
@@ -911,35 +933,6 @@ static int p1(struct procRes_s *rs)
     p1_init(rs);
     // wait for ch from p0
     // state machine control
-
-    
-    while (1) {
-        ci = 0;    
-        while (1) {
-            cmd[ci] = fgetc(stdin);
-            if (cmd[ci] == '\n') {
-                cmd[ci] = '\0';
-                break;
-            }
-            ci++;
-        }
-        
-        pi = 0;
-        while (pi < 8) {
-            if (strncmp(cmdtab[pi].str, cmd, 4) == 0) {
-                 break;
-            }
-            pi++;
-        }
-        
-        if (pi == 8) {
-            printf("cmd not found!\n");
-        } else if (pi < 8) {
-            printf("input cmd: [%d]%s\n", pi, cmdtab[pi].str);
-        } else {
-            printf("error input cmd: [%d]\n", pi);
-        }
-    }
 
     pi = 0;
     ch = '1';
@@ -1276,12 +1269,19 @@ static char spi1[] = "/dev/spidev32765.0";
     sprintf(pmrs->log, "tdiff:%d ", tdiff);
     print_f("time_diff", pmrs->log);
 
-    ret = file_save_get(&pmrs->fs);
+    ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
     if (ret) {printf("get save file failed\n"); return 0;}
     //ret = fwrite("test file write \n", 1, 16, pmrs->fs);
     sprintf(pmrs->log, "write file size: %d/%d", ret, 16);
     print_f("fwrite", pmrs->log);
 
+    ret = file_save_get(&pmrs->flog, "/mnt/mmc2/rx/%d.log");
+    if (ret) {printf("get log file failed\n"); return 0;}
+    mlog = pmrs->flog;
+    ret = fwrite("test file write \n", 1, 16, pmrs->flog);
+    sprintf(pmrs->log, "write file size: %d/%d\n", ret, 16);
+    print_f("fwrite", pmrs->log);
+    fflush(pmrs->flog);
 // socket server
 #if 0
     int n;
@@ -1402,7 +1402,12 @@ static char spi1[] = "/dev/spidev32765.0";
                     if (!pmrs->sid[4]) {
                         p5(&rs[4]);
                     } else { 
-                        p0(pmrs);
+                        pmrs->sid[5] = fork();
+                        if (!pmrs->sid[5]) {
+                            dbg(pmrs);
+                        } else {
+                            p0(pmrs);
+                        }
                     }
                 }
             }
@@ -1419,8 +1424,10 @@ static int print_f(char *head, char *str)
 {
     char ch[256];
     if((!head) || (!str)) return (-1);
+    if (!mlog) return;
     sprintf(ch, "[%s] %s\n", head, str);
     printf("%s",ch);
+    fprintf(mlog, "%s", ch);
     return 0;
 }
 
@@ -1480,13 +1487,15 @@ static int time_diff(struct timespec *s, struct timespec *e, int unit)
     return diff;
 }
 
-static int file_save_get(FILE **fp)
+static int file_save_get(FILE **fp, char *path1)
 {
-static char path1[] = "/mnt/mmc2/rx/%d.bin"; 
+//static char path1[] = "/mnt/mmc2/rx/%d.bin"; 
 
     char dst[128], temp[128], flog[256];
     FILE *f = NULL;
     int i;
+
+    if (!path1) return (-1);
 
     sprintf(temp, "%s", path1);
 
@@ -1513,7 +1522,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pdataRx = &mrs->dataRx;
     rs->pdataTx = &mrs->dataTx;
     rs->fs_s = mrs->fs;
-    rs->logs = mrs->log;
+    rs->flog_s = mrs->flog;
     rs->tm[0] = &mrs->time[0];
     rs->tm[1] = &mrs->time[1];
 
