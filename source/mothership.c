@@ -27,6 +27,28 @@ static struct logPool_s *mlogPool;
 
 typedef int (*func)(int argc, char *argv[]);
 
+typedef enum {
+    SPY = 0,
+    BULLET,
+    LASER,
+    SMAX,
+}state_e;
+
+typedef enum {
+    PSSET = 0,
+    PSACT,
+    PSWT,
+    PSRLT,
+    PSTSM,
+    PSMAX,
+}status_e;
+
+struct psdata_s {
+    int result;
+};
+
+typedef int (*stfunc)(struct psdata_s *data);
+
 struct logPool_s{
     char *pool;
     char *cur;
@@ -188,6 +210,38 @@ static int shmem_from_str(char **addr, char *dst, char *sz);
 static int shmem_dump(char *src, int size);
 static int shmem_pop_send(struct mainRes_s *mrs, char **addr, int seq, int p);
 static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p);
+static int stspy_01(struct psdata_s *data);
+static int stspy_02(struct psdata_s *data);
+static int stspy_03(struct psdata_s *data);
+static int stspy_04(struct psdata_s *data);
+static int stspy_05(struct psdata_s *data);
+static int stbullet_01(struct psdata_s *data);
+static int stbullet_02(struct psdata_s *data);
+static int stbullet_03(struct psdata_s *data);
+static int stbullet_04(struct psdata_s *data);
+static int stbullet_05(struct psdata_s *data);
+static int stlaser_01(struct psdata_s *data);
+static int stlaser_02(struct psdata_s *data);
+static int stlaser_03(struct psdata_s *data);
+static int stlaser_04(struct psdata_s *data);
+static int stlaser_05(struct psdata_s *data);
+
+
+static int stspy_01(struct psdata_s *data) { char str[128]; sprintf(str, "spy 01\n"); print_f(mlogPool, "st", str); return 0;}
+static int stspy_02(struct psdata_s *data) { char str[128]; sprintf(str, "spy 02\n"); print_f(mlogPool, "st", str); return 0;}
+static int stspy_03(struct psdata_s *data) { char str[128]; sprintf(str, "spy 03\n"); print_f(mlogPool, "st", str); return 0;}
+static int stspy_04(struct psdata_s *data) { char str[128]; sprintf(str, "spy 04\n"); print_f(mlogPool, "st", str); return 0;}
+static int stspy_05(struct psdata_s *data) { char str[128]; sprintf(str, "spy 05\n"); print_f(mlogPool, "st", str); return 0;}
+static int stbullet_01(struct psdata_s *data) { char str[128]; sprintf(str, "bullet 01\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stbullet_02(struct psdata_s *data) { char str[128]; sprintf(str, "bullet 02\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stbullet_03(struct psdata_s *data) { char str[128]; sprintf(str, "bullet 03\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stbullet_04(struct psdata_s *data) { char str[128]; sprintf(str, "bullet 04\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stbullet_05(struct psdata_s *data) { char str[128]; sprintf(str, "bullet 05\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stlaser_01(struct psdata_s *data) { char str[128]; sprintf(str, "laser 01\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stlaser_02(struct psdata_s *data) { char str[128]; sprintf(str, "laser 02\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stlaser_03(struct psdata_s *data) { char str[128]; sprintf(str, "laser 03\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stlaser_04(struct psdata_s *data) { char str[128]; sprintf(str, "laser 04\n"); print_f(mlogPool, "st", str);  return 0;}
+static int stlaser_05(struct psdata_s *data) { char str[128]; sprintf(str, "laser 05\n"); print_f(mlogPool, "st", str);  return 0;}
 
 static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p)
 {
@@ -992,13 +1046,16 @@ static int p0(struct mainRes_s *mrs)
 
 static int p1(struct procRes_s *rs)
 {
-    struct cmd_s cmdtab[8] = {{0, "poll"}, {1, "command"}, {2, "data"}, {3, "run"}};
     int px, pi, ret, ci;
     char ch, cmd[32];
     char *addr;
 
     sprintf(rs->logs, "p1\n");
     print_f(rs->plogs, "P1", rs->logs);
+    struct psdata_s stdata;
+    stfunc pf[SMAX][PSMAX] = {{stspy_01, stspy_02, stspy_03, stspy_04, stspy_05},
+                            {stbullet_01, stbullet_02, stbullet_03, stbullet_04, stbullet_05},
+                            {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05}};
 
     p1_init(rs);
     // wait for ch from p0
@@ -1014,6 +1071,11 @@ static int p1(struct procRes_s *rs)
         if (ret > 0) {
             sprintf(rs->logs, "%c\n", ch);
             print_f(rs->plogs, "P1", rs->logs);
+            for (pi = 0; pi < SMAX; pi++) {
+                for (px = 0; px < PSMAX; px++) {
+                    ret = (*pf[pi][px])(&stdata);
+                }
+            }
         }
         rs_ipc_put(rs, &ch, 1);
         usleep(10);
