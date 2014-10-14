@@ -505,7 +505,7 @@ static char path[256];
 
     if (sel == 19){ /* command mode test ex[19 1 ]*/
         FILE *f;
-        int fsize, acusz, send, txsz;
+        int fsize, acusz, send, txsz, pktcnt;
         char *src, *dstBuff, *dstmp;
         if (argc > 3) {
             f = fopen(argv[3], "r");
@@ -551,15 +551,19 @@ static char path[256];
         printf("Set spi0 data mode: %d\n", bitset);
 
         bitset = 0;
-        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set spi1 data mode: %d\n", bitset);
+        ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
+        printf("Get spi0 data mode: %d\n", bitset);
 
-        bitset = 0;
+        bitset = 1;
         ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_RD_CS_PIN
-        printf("Get CS: %d\n", bitset);
+        printf("Get spi1 CS: %d\n", bitset);
+
+        bitset = 1;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WR_CS_PIN
+        printf("Set spi1 CS: %d\n", bitset);
 
         src = dstBuff;
-        acusz = 0;
+        acusz = 0; pktcnt = 0;
         while (acusz < fsize) {
             if ((fsize - acusz) > 61440) {
                 txsz = 61440;
@@ -568,12 +572,15 @@ static char path[256];
             }
 			
             send = tx_data(fm[0], rx_buff[0], src, 1, txsz, 1024*1024);
+            acusz += send;
+            printf("[%d] tx %d - %d\n", pktcnt, send, acusz);
             if (send != txsz) {
                 printf("Error! spi data tx did not complete %d/%d \n", send, txsz);
                 break;
             }
             src += send;
-            acusz += send;
+
+            pktcnt++;
         }
 
         bitset = 0;
@@ -805,6 +812,10 @@ static char path[256];
         int wtsz;
 
         arg0 = arg0 % 2;
+
+        mode &= ~SPI_MODE_3;
+	 mode |= SPI_MODE_1;
+
         printf("select spi%d mode: 0x%x tx:0xf0\n", arg0, mode);
 
         /*
