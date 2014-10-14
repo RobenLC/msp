@@ -30,6 +30,8 @@
 #define SPI_RX_QUAD 0x800         /* receive with 4 wires */
 #define BUFF_SIZE  2048
 
+#define TSIZE (128*1024*1024)
+		
 struct pipe_s{
     int rt[2];
 };
@@ -429,26 +431,43 @@ static char path[256];
         arg4 = atoi(argv[6]);
     }	
 
-    buffsize = 5*1024*1024;
+    buffsize = 1*1024*1024;
+
     tx_buff[0] = malloc(buffsize);
     if (tx_buff[0]) {
         printf(" tx buff 0 alloc success!!\n");
+    } else {
+        printf("Error!!buff alloc failed!!");
+        goto end;
     }
     memset(tx_buff[0], 0xf0, buffsize);
+
     rx_buff[0] = malloc(buffsize);
     if (rx_buff[0]) {
         printf(" rx buff 0 alloc success!!\n");
+    } else {
+        printf("Error!!buff alloc failed!!");
+        goto end;
     }
     memset(rx_buff[0], 0xf0, buffsize);
+
     tx_buff[1] = malloc(buffsize);
     if (tx_buff[1]) {
         printf(" tx buff 1 alloc success!!\n");
+    } else {
+        printf("Error!!buff alloc failed!!");
+        goto end;
     }
     memset(tx_buff[1], 0, buffsize);
+
     rx_buff[1] = malloc(buffsize);
     if (rx_buff[1]) {
         printf(" rx buff 1 alloc success!!\n");
+    } else {
+        printf("Error!!buff alloc failed!!");
+        goto end;
     }
+
     memset(rx_buff[1], 0, buffsize);
 
     ret = test_gen(tx_buff[0], tx_buff[1], buffsize);
@@ -483,7 +502,86 @@ static char path[256];
 
     bitset = 1;
     ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-        
+
+    if (sel == 19){ /* command mode test ex[19 1 ]*/
+        FILE *f;
+        int fsize, acusz, send, txsz;
+        char *src, *dstBuff, *dstmp;
+        if (argc > 3) {
+            f = fopen(argv[3], "r");
+        } else {
+            printf("Error!! no input file \n");
+        }
+        if (!f) printf("Error!! file open failed\n");
+
+        dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+	 memset(dstBuff, 0x95, TSIZE);
+        dstmp = dstBuff;
+
+        fsize = fread(dstBuff, 1, TSIZE, f);
+        printf("open [%s] size: %d \n", argv[3], fsize);
+
+	mode &= ~SPI_MODE_3;
+	switch(arg0) {
+		case 1:
+    			mode |= SPI_MODE_1;
+			break;
+		case 2:
+    			mode |= SPI_MODE_2;
+			break;
+		case 3:
+    			mode |= SPI_MODE_3;
+			break;
+		default:
+    			mode |= SPI_MODE_0;
+			break;
+	}
+        ret = ioctl(fm[0], SPI_IOC_WR_MODE, &mode);
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+ 
+        ret = ioctl(fm[0], SPI_IOC_RD_MODE, &mode);
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+
+
+        // disable data mode
+        bitset = 0;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi0 data mode: %d\n", bitset);
+
+        bitset = 0;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi1 data mode: %d\n", bitset);
+
+        bitset = 0;
+        ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_RD_CS_PIN
+        printf("Get CS: %d\n", bitset);
+
+        src = dstBuff;
+        acusz = 0;
+        while (acusz < fsize) {
+            if ((fsize - acusz) > 61440) {
+                txsz = 61440;
+            } else {
+                txsz = fsize - acusz;
+            }
+			
+            send = tx_data(fm[0], rx_buff[0], src, 1, txsz, 1024*1024);
+            if (send != txsz) {
+                printf("Error! spi data tx did not complete %d/%d \n", send, txsz);
+                break;
+            }
+            src += send;
+            acusz += send;
+        }
+
+        bitset = 0;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WT_CS_PIN
+        printf("Set CS: %d\n", bitset);
+
+        goto end;
+    }
 	
     if (sel == 18){ /* command mode test ex[18 1 ]*/
         int sid[2], pid, gid, size, pi, opsz;
@@ -732,7 +830,6 @@ static char path[256];
         goto end;
     }
     if (sel == 14){ /* dual band data mode test ex[14 1 2 5 1 30720]*/
-        #define TSIZE (128*1024*1024)
         #define PKTSZ  30720 //61440
         int chunksize;
         if (arg4 == PKTSZ) chunksize = PKTSZ;
