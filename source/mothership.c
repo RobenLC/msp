@@ -118,7 +118,8 @@ struct mainRes_s{
     struct timespec time[2];
     // log buffer
     char log[256];
-    struct socket_s socket;
+    struct socket_s socket_r;
+    struct socket_s socket_t;
     struct logPool_s plog;
 };
 
@@ -147,7 +148,8 @@ struct procRes_s{
     // time measurement
     struct timespec *tm[2];
     char logs[256];
-    struct socket_s *psocket;
+    struct socket_s *psocket_r;
+    struct socket_s *psocket_t;
     struct logPool_s *plogs;
 };
 
@@ -227,7 +229,15 @@ static int stlaser_04(struct psdata_s *data);
 static int stlaser_05(struct psdata_s *data);
 
 
-static int stspy_01(struct psdata_s *data) { char str[128]; sprintf(str, "spy 01\n"); print_f(mlogPool, "st", str); return 0;}
+static int stspy_01(struct psdata_s *data)
+{ 
+    // keep polling, kind of idle mode
+    // jump to next status if receive any op code
+    char str[128]; 
+    sprintf(str, "spy 01\n"); 
+    print_f(mlogPool, "st", str); 
+    return 0;
+}
 static int stspy_02(struct psdata_s *data) { char str[128]; sprintf(str, "spy 02\n"); print_f(mlogPool, "st", str); return 0;}
 static int stspy_03(struct psdata_s *data) { char str[128]; sprintf(str, "spy 03\n"); print_f(mlogPool, "st", str); return 0;}
 static int stspy_04(struct psdata_s *data) { char str[128]; sprintf(str, "spy 04\n"); print_f(mlogPool, "st", str); return 0;}
@@ -973,17 +983,17 @@ static int p0(struct mainRes_s *mrs)
                     //ring_buf_prod_dual(&mrs->dataRx, seq[0]);
                     //printf("0 %d\n", seq[0]);
                     seq[0] += 2;
-                    //mrs_ipc_put(mrs, "0", 1, 3);
-                    mrs_ipc_put(mrs, "0", 1, 4);
+                    mrs_ipc_put(mrs, "0", 1, 3);
+                    //mrs_ipc_put(mrs, "0", 1, 4);
                 }
                 if (ch == 'd') {
                     sprintf(mrs->log, "0 %d end\n", seq[0]);
                     print_f(&mrs->plog, "P0", mrs->log);
-                    //mrs_ipc_put(mrs, "O", 1, 3);
-                    mrs_ipc_put(mrs, "O", 1, 4);
+                    mrs_ipc_put(mrs, "O", 1, 3);
+                    //mrs_ipc_put(mrs, "O", 1, 4);
                     chk[0] = 1;
-                    //mrs_ipc_put(mrs, "s", 1, 3);
-                    mrs_ipc_put(mrs, "s", 1, 4);
+                    mrs_ipc_put(mrs, "s", 1, 3);
+                    //mrs_ipc_put(mrs, "s", 1, 4);
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 1);
             }
@@ -993,18 +1003,18 @@ static int p0(struct mainRes_s *mrs)
                     //ring_buf_prod_dual(&mrs->dataRx, seq[1]);
                     //printf("1 %d\n", seq[1]);
                     seq[1] += 2;
-                    //mrs_ipc_put(mrs, "1", 1, 3);
-                    mrs_ipc_put(mrs, "1", 1, 4);
+                    mrs_ipc_put(mrs, "1", 1, 3);
+                    //mrs_ipc_put(mrs, "1", 1, 4);
                 }
                 if (ch == 'd') {
                     sprintf(mrs->log, "1 %d end\n", seq[1]);
                     print_f(&mrs->plog, "P0", mrs->log);
 
-                    //mrs_ipc_put(mrs, "I", 1, 3);
-                    mrs_ipc_put(mrs, "I", 1, 4);
+                    mrs_ipc_put(mrs, "I", 1, 3);
+                    //mrs_ipc_put(mrs, "I", 1, 4);
                     chk[1] = 1;
-                    //mrs_ipc_put(mrs, "s", 1, 3);
-                    mrs_ipc_put(mrs, "s", 1, 4);
+                    mrs_ipc_put(mrs, "s", 1, 3);
+                    //mrs_ipc_put(mrs, "s", 1, 4);
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 2);
             }
@@ -1182,7 +1192,7 @@ static int p3(struct procRes_s *rs)
 
 static int p4(struct procRes_s *rs)
 {
-    int px, pi, ret[5], size, opsz, cstatus, cmode;
+    int px, pi, ret, size, opsz, cstatus, cmode, n;
     char ch, dst[17], sz[17], str[128];
     char *addr, *stop_at;
     sprintf(rs->logs, "p4\n");
@@ -1193,20 +1203,72 @@ static int p4(struct procRes_s *rs)
     // in charge of socket send
 
     int acusz;
-    char *buff, *tmp;
+    char *recvbuf, *tmp;
     acusz = 0;
-    buff = malloc(64*1024*1024);
-    tmp = buff;
-    if (buff) {
-        printf("temp buff alloc ok!0x%x\n", buff);
-        memset(buff, 0xf0, 64*1024*1024);
+
+    recvbuf = malloc(1024);
+    if (!recvbuf) {
+        sprintf(rs->logs, "p4 recvbuf alloc failed! \n");
+        print_f(rs->plogs, "P4", rs->logs);
+        return (-1);
+    } else {
+        sprintf(rs->logs, "p4 recvbuf alloc success! 0x%x\n", recvbuf);
+        print_f(rs->plogs, "P4", rs->logs);
     }
 
+    rs->psocket_t->listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&rs->psocket_t->serv_addr, '0', sizeof(struct sockaddr_in));
+
+    rs->psocket_t->serv_addr.sin_family = AF_INET;
+    rs->psocket_t->serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    rs->psocket_t->serv_addr.sin_port = htons(6000); 
+
+    bind(rs->psocket_t->listenfd, (struct sockaddr*)&rs->psocket_t->serv_addr, sizeof(struct sockaddr_in)); 
+    listen(rs->psocket_t->listenfd, 10); 
+
+    while (1) {
+        //printf("^");
+        sprintf(rs->logs, "^\n");
+        print_f(rs->plogs, "P4", rs->logs);
+
+        rs->psocket_t->connfd = accept(rs->psocket_t->listenfd, (struct sockaddr*)NULL, NULL); 
+
+//        n = read(rs->psocket_t->connfd, recvbuf, 1024);
+        n = 0;
+        recvbuf[0] = '\0';
+        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket_t->connfd);
+        print_f(rs->plogs, "P4", rs->logs);
+
+        pi = 0;
+        ret = rs_ipc_get(rs, &ch, 1);
+        while (ret > 0) {
+            //printf("%c ", ch);
+            
+            size = ring_buf_cons_dual(rs->pdataRx, &addr, pi);
+            if (size >= 0) {
+                //printf("cons 0x%x %d %d \n", addr, size, pi);
+                pi++;
+            
+                msync(addr, size, MS_SYNC);
+                /* send data to wifi socket */
+                opsz = write(rs->psocket_t->connfd, addr, size);
+                //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
+            
+            }
+            
+            ret = rs_ipc_get(rs, &ch, 1);
+        }
+
+        close(rs->psocket_t->connfd);
+        //rs->psocket_r->connfd = 0;
+    }
+#if 0
     pi = 0;
     while (1) {
         
         sprintf(rs->logs, "^\n");
         print_f(rs->plogs, "P4", rs->logs);
+
 
         ret[0] = rs_ipc_get(rs, &ch, 1);
         if (ret[0] > 0) {
@@ -1220,8 +1282,8 @@ static int p4(struct procRes_s *rs)
                 msync(addr, size, MS_SYNC);
                 // send data to wifi socket
                   
-                opsz = write(rs->psocket->connfd, addr, size);
-                sprintf(rs->logs, "socket tx %d %d\n", rs->psocket->connfd, opsz);
+                opsz = write(rs->psocket_r->connfd, addr, size);
+                sprintf(rs->logs, "socket tx %d %d\n", rs->psocket_r->connfd, opsz);
                 print_f(rs->plogs, "P4", rs->logs);
             
                 /*memcpy(buff, addr, size);
@@ -1240,6 +1302,7 @@ static int p4(struct procRes_s *rs)
             }
         }
     }
+#endif
 
     p4_end(rs);
     return 0;
@@ -1266,26 +1329,26 @@ static int p5(struct procRes_s *rs)
         print_f(rs->plogs, "P5", rs->logs);
     }
 
-    rs->psocket->listenfd = socket(AF_INET, SOCK_STREAM, 0);
-    memset(&rs->psocket->serv_addr, '0', sizeof(struct sockaddr_in));
+    rs->psocket_r->listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&rs->psocket_r->serv_addr, '0', sizeof(struct sockaddr_in));
 
-    rs->psocket->serv_addr.sin_family = AF_INET;
-    rs->psocket->serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    rs->psocket->serv_addr.sin_port = htons(5000); 
+    rs->psocket_r->serv_addr.sin_family = AF_INET;
+    rs->psocket_r->serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    rs->psocket_r->serv_addr.sin_port = htons(5000); 
 
-    bind(rs->psocket->listenfd, (struct sockaddr*)&rs->psocket->serv_addr, sizeof(struct sockaddr_in)); 
-    listen(rs->psocket->listenfd, 10); 
+    bind(rs->psocket_r->listenfd, (struct sockaddr*)&rs->psocket_r->serv_addr, sizeof(struct sockaddr_in)); 
+    listen(rs->psocket_r->listenfd, 10); 
 
     while (1) {
         //printf("#");
         sprintf(rs->logs, "#\n");
         print_f(rs->plogs, "P5", rs->logs);
 
-        rs->psocket->connfd = accept(rs->psocket->listenfd, (struct sockaddr*)NULL, NULL); 
+        rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)NULL, NULL); 
 
-        n = read(rs->psocket->connfd, recvbuf, 1024);
+        n = read(rs->psocket_r->connfd, recvbuf, 1024);
         if (recvbuf[n-1] == '\n')         recvbuf[n-1] = '\0';
-        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket->connfd);
+        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket_r->connfd);
         print_f(rs->plogs, "P5", rs->logs);
 
         rs_ipc_put(rs, "s", 1);
@@ -1294,7 +1357,7 @@ static int p5(struct procRes_s *rs)
             sprintf(rs->logs, "[5:%s]\n", recvbuf);
             print_f(rs->plogs, "P5", rs->logs);
         }
-
+#if 0
         pi = 0;
         ret = rs_ipc_get(rs, &ch, 1);
         while (ret > 0) {
@@ -1307,16 +1370,16 @@ static int p5(struct procRes_s *rs)
             
                 msync(addr, size, MS_SYNC);
                 /* send data to wifi socket */
-                opsz = write(rs->psocket->connfd, addr, size);
-                //printf("socket tx %d %d\n", rs->psocket->connfd, opsz);
+                opsz = write(rs->psocket_r->connfd, addr, size);
+                //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
             
             }
             
             ret = rs_ipc_get(rs, &ch, 1);
         }
-
-        close(rs->psocket->connfd);
-        //rs->psocket->connfd = 0;
+#endif
+        close(rs->psocket_r->connfd);
+        //rs->psocket_r->connfd = 0;
     }
 
     p5_end(rs);
@@ -1451,20 +1514,20 @@ static char spi1[] = "/dev/spidev32765.0";
 
     recvbuf = malloc(1024);
 
-    pmrs->socket.listenfd = socket(AF_INET, SOCK_STREAM, 0);
-    memset(&pmrs->socket.serv_addr, '0', sizeof(struct sockaddr_in));
+    pmrs->socket_r.listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&pmrs->socket_r.serv_addr, '0', sizeof(struct sockaddr_in));
 
-    pmrs->socket.serv_addr.sin_family = AF_INET;
-    pmrs->socket.serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    pmrs->socket.serv_addr.sin_port = htons(5000); 
+    pmrs->socket_r.serv_addr.sin_family = AF_INET;
+    pmrs->socket_r.serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    pmrs->socket_r.serv_addr.sin_port = htons(5000); 
 
-    bind(pmrs->socket.listenfd, (struct sockaddr*)&pmrs->socket.serv_addr, sizeof(struct sockaddr_in)); 
-    listen(pmrs->socket.listenfd, 10); 
+    bind(pmrs->socket_r.listenfd, (struct sockaddr*)&pmrs->socket_r.serv_addr, sizeof(struct sockaddr_in)); 
+    listen(pmrs->socket_r.listenfd, 10); 
     while (1) {
         printf("socket test\n");
-        pmrs->socket.connfd = accept(pmrs->socket.listenfd, (struct sockaddr*)NULL, NULL); 
-        while (pmrs->socket.connfd) {
-            n = read(pmrs->socket.connfd, recvbuf, 1024);
+        pmrs->socket_r.connfd = accept(pmrs->socket_r.listenfd, (struct sockaddr*)NULL, NULL); 
+        while (pmrs->socket_r.connfd) {
+            n = read(pmrs->socket_r.connfd, recvbuf, 1024);
             recvbuf[n] = '\0';
             printf("socket receive %d char [%s]\n", n, recvbuf);
             if (n < 0) break;
@@ -1734,8 +1797,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
         rs->spifd = mrs->sfm[1];
     }
 
-    rs->psocket = &mrs->socket;
-	
+    rs->psocket_r = &mrs->socket_r;
+    rs->psocket_t = &mrs->socket_t;	
     return 0;
 }
 
