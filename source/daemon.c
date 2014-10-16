@@ -9,10 +9,12 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <time.h> 
+#include <sys/mman.h> 
+#include <sys/times.h> 
 
 #define TSIZE (128*1024*1024)
 #define TCP_WIN_SZ  16777216
-
+#if 1
 int find_open(char *path, char *srcBuff)
 {
 
@@ -43,6 +45,7 @@ int monitor(int pipefd0)
 	int csize;
 
 	csize = 0;
+	/*
 	while(1) {
 		read(pipefd0, &buf, 1); 
 		if (buf == 'c') {
@@ -53,8 +56,71 @@ int monitor(int pipefd0)
 			csize = 0;
 		}
 	}
+       */
+    int listenfd = 0, connfd = 0, n = 0, i = 0;
+    struct sockaddr_in serv_addr; 
+    FILE *fp=NULL;
 
+    char sendBuff[2048];
+    char *recvBuff;
+    time_t ticks; 
+
+    recvBuff = malloc(1024*1024);
+    if (!recvBuff) return (-1);
+
+    listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&serv_addr, '0', sizeof(serv_addr));
+    memset(sendBuff, '0', sizeof(sendBuff)); 
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_port = htons(5000); 
+
+    bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)); 
+
+    listen(listenfd, 10); 
+
+		// Open a log file in write mode.
+    fp = fopen ("Log0.txt", "w+");
+
+    while(1)
+    {
+        printf("-\n");
+        connfd = accept(listenfd, (struct sockaddr*)NULL, NULL); 
+        n = 1;
+        while (n > 0) {
+
+        n = read(connfd, recvBuff, 1024);
+        fprintf(fp, "\n Receive %d char \n", n);
+        fprintf(fp, " start len: %d\n \"", n);
+        for (i = 0; i < n; i++) {
+            if (i < 1024)
+                fprintf(fp, "%c", recvBuff[i]);
+        }
+				
+        fprintf(fp, "\"\n end\n\n");
+        recvBuff[n] = '\0';
+
+        printf("0 recv %d bytes [%s]\n", n, recvBuff);
+        
+        }
+
+        write(connfd, recvBuff, n);
+
+//        fprintf(fp, " %s\n ", sendBuff);
+        close(connfd);
+        sleep(1);
+        
+        //Dont block context switches, let the process sleep for some time
+        fprintf(fp, "Logging info...\n");
+        fflush(fp);
+        // Implement and call some function that does core work for this daemon.
+
+    }
+end:
+    fclose(fp);
 }
+#if 0
 int sockserver(char *pBuf, int vsize, int pipefd1)
 {
     int listenfd = 0, connfd = 0, n = 0, i = 0;
@@ -64,14 +130,11 @@ int sockserver(char *pBuf, int vsize, int pipefd1)
     char *pb;
 
     char sendBuff[2048];
-    char recvBuff[1025];
+    char *recvBuff;
     time_t ticks; 
 
-    struct timespec curtime;
-    unsigned long long cur, tnow, lnow, past, tbef, lpast;
-
-    clock_gettime(CLOCK_REALTIME, &curtime);
-    printf("time measurement %llu, %llu \n", curtime.tv_sec, curtime.tv_nsec);
+    recvBuff = malloc(1024*1024);
+    if (!recvBuff) return (-1);
 
     sz = vsize;
     pb = pBuf;
@@ -89,183 +152,142 @@ int sockserver(char *pBuf, int vsize, int pipefd1)
     listen(listenfd, 10); 
 
 		// Open a log file in write mode.
-		fp = fopen ("Log.txt", "w+");
+	fp = fopen ("/root/Log.txt", "w+");
+    if (!fp) printf("open log failed \n");
+    else printf("open log ok %d\n", fp);
 
     while(1)
     {
+        printf("+\n");
         connfd = accept(listenfd, (struct sockaddr*)NULL, NULL); 
-				n = read(connfd, recvBuff, 1024);
-				fprintf(fp, "\n Receive %d char \n", n);
-				fprintf(fp, " start len: %d\n \"", n);
-				for (i = 0; i < n; i++) {
-						if (i < 1024)
-								fprintf(fp, "%c", recvBuff[i]);
-				}
+
+        n = read(connfd, recvBuff, 1024);
+        fprintf(fp, "\n Receive %d char \n", n);
+        fprintf(fp, " start len: %d\n \"", n);
+        for (i = 0; i < n; i++) {
+            if (i < 1024)
+                fprintf(fp, "%x", recvBuff[i]);
+        }
 				
-				fprintf(fp, "\"\n end\n\n");
-				recvBuff[i+1] = '\0';
-				
-        ticks = time(NULL);
-        snprintf(sendBuff, sizeof(sendBuff), "%.24s+ \"%s\" \r\n", ctime(&ticks), recvBuff);
-	printf("recv: %s\n", recvBuff);
+        fprintf(fp, "\"\n end\n\n");
+        recvBuff[n] = '\0';
 
-    clock_gettime(CLOCK_REALTIME, &curtime);
-    cur = curtime.tv_sec;
-    tnow = curtime.tv_nsec;
-    lnow = cur * 1000000000+tnow;
-    printf("[p0] enter %d t:%llu %llu %llu\n", sz, cur,tnow, lnow/1000000);
-#if 0
-    write(connfd, pBuf, vsize);
-#else
-	while(vsize) {
-            //printf("remain %d bytes \r", vsize);
+        printf("1 recv [%s] \n", n);
 
-            if (TCP_WIN_SZ > vsize) {
-               write(connfd, pBuf, vsize);
-               write(pipefd1, "e", 1); // send the content of argv[1] to the reader
-		 break;	   
-            } else {
-               write(connfd, pBuf, TCP_WIN_SZ);
-               write(pipefd1, "c", 1);
-            }
-
-           vsize -= TCP_WIN_SZ;
-           pBuf += TCP_WIN_SZ;
-       }
-#endif
-       //restore
-       vsize = sz;
-       pBuf = pb;
-
-    clock_gettime(CLOCK_REALTIME, &curtime);
-    past = curtime.tv_sec;
-    tbef = curtime.tv_nsec;		
-    lpast = past * 1000000000+tbef;	
-    
-    printf("time cost: %llu s, bandwidth: %llu Mbits/s \n", (lpast - lnow)/1000000000, ((vsize*8)/((lpast - lnow)/1000000000)) /1000000 );
-	
-
-	//printf("\n%d bytes tx finished\n", vsize);
-	
-	fprintf(fp, " %s\n ", sendBuff);
         close(connfd);
         sleep(1);
         
-				//Dont block context switches, let the process sleep for some time
-				fprintf(fp, "Logging info...\n");
-				fflush(fp);
-				// Implement and call some function that does core work for this daemon.
+        //Dont block context switches, let the process sleep for some time
+        fprintf(fp, "Logging info...\n");
+        fflush(fp);
+        // Implement and call some function that does core work for this daemon.
 
     }
-end:
+err:
     fclose(fp);
 }
-
+#endif
+#endif
 int main(int argc, char* argv[])
 {
-             int i = 0, sz;
-             char *fpath;
-             printf("argc:%d ", argc);
-             while(i < argc) {
-                 if (argv[i])
-                     printf("[%d]:%s ", i, argv[i]);
-                 i++;
-             }
+    int uid;
 
-             if (argc > 1) {
-                 //printf("[%d]:%s\n", 1, argv[1]);
-                 fpath = argv[1];
-             }
+    uid = fork();
+    if (uid == 0) {
+        monitor(uid);
+        exit(1);
+    }
+    int i = 0, sz, acusz;
+    char *fpath;
+
+	struct tms time;
+	struct timespec curtime;
+	unsigned long long cur, tnow, lnow, past, tbef, lpast;
 
 
+    int listenfd = 0, connfd = 0, n = 0;
+    struct sockaddr_in serv_addr; 
+    FILE *fp=NULL;
 
-		pid_t process_id = 0;
-		pid_t sid = 0;
-		// Create child process
-		process_id = fork();
-		// Indication of fork() failure
-		if (process_id < 0)
-		{
-				printf("fork failed!\n");
-				// Return failure in exit status
-				exit(1);
-		}
-		// PARENT PROCESS. Need to kill it.
-		if (process_id > 0)
-		{
-				printf("process_id of child process %d \n", process_id);
-				// return success in exit status
-				exit(0);
-		}
-              int pipefd[2];
-              pipe(pipefd);
+    char *recvBuff, *save, *tmps;
+    time_t ticks; 
 
-		// Create child's child process
-		process_id = fork();
-		if (process_id < 0)
-		{
-				printf("fork failed!\n");
-				// Return failure in exit status
-				exit(1);
-		}
-		if (process_id == 0) {
-			printf("monitor process \n");
-			close(pipefd[1]); // close the write-end of the pipe, I'm not going to use it
-			monitor(pipefd[0]);
-			close(pipefd[0]); // close the read-end of the pipe
-                     exit(1);
-		}
+    recvBuff = malloc(1024*1024);
+    if (!recvBuff) return (-1);
 
-		printf("socketserver process \n");
-		close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
-		//unmask the file mode
-		umask(0);
-		//set new session
-		sid = setsid();
-		if(sid < 0)
-		{
-				// Return failure
-				exit(1);
-		}
-		// Change the current working directory to root.
-		chdir("/mnt/mmc2");
-		// Close stdin. stdout and stderr
-		//close(STDIN_FILENO);
-		//close(STDOUT_FILENO);
-		//close(STDERR_FILENO);
+    save = mmap(NULL, 64*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (!save) return (-1);
+    tmps = save;
 
-		char *srcBuff = NULL;
-		int buffsize;
-			
-		buffsize = TSIZE;
-              srcBuff = malloc(buffsize);
-              if (srcBuff) {
-                  printf(" buff alloc success!!\n");
-              } else {
-                  printf(" buff alloc failed!!\n");
-                  goto end;
-              }
-			  
-              sz = find_open(fpath, srcBuff);
-              if (sz < 0) {printf("file open failed ret:%d \n", sz); goto end;}
+    listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&serv_addr, '0', sizeof(serv_addr));
 
-		sockserver(srcBuff, sz, pipefd[1]);
-		// Open a log file in write mode.
-		//fp = fopen ("Log.txt", "w+");
-		//while (1)
-		//{
-		//		//Dont block context switches, let the process sleep for some time
-		//		sleep(1);
-		//		fprintf(fp, "Logging info...\n");
-		//		fflush(fp);
-		//		// Implement and call some function that does core work for this daemon.
-		//}
-		//fclose(fp);
-		close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
-		end:
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_port = htons(6000); 
 
-		free(srcBuff);
-              printf("daemonfs end \n");
-		exit(1);
-		return (0);
+    bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)); 
+    listen(listenfd, 10); 
+
+    // Open a log file in write mode.
+    fp = fopen ("/mnt/mmc2/recvfromApp.bin", "w");
+    if (!fp) {
+        printf("open log failed \n");
+        return (-2);
+    }
+    else {
+        printf("open log ok %d\n", fp);
+    }
+
+
+    while(1)
+    {
+        printf("+\n");
+        connfd = accept(listenfd, (struct sockaddr*)NULL, NULL); 
+
+		clock_gettime(CLOCK_REALTIME, &curtime);
+		cur = curtime.tv_sec;
+		tnow = curtime.tv_nsec;
+		lnow = cur * 1000000000+tnow;
+		printf("[p0] enter %d t:%llu %llu %llu\n", acusz,cur,tnow, lnow/1000000);
+
+        save = tmps;
+        acusz = 0;
+        n = 1;
+        while (n > 0) {
+            n = read(connfd, recvBuff, 61440);
+            if (n < 61440) printf("recv %d\n", n);
+
+            memcpy(save, recvBuff, n);
+            save += n;
+            acusz += n;
+
+            //printf("recv %d %d\n", n, acusz);
+        }
+
+	clock_gettime(CLOCK_REALTIME, &curtime);
+	past = curtime.tv_sec;
+	tbef = curtime.tv_nsec;		
+	lpast = past * 1000000000+tbef;	
+
+	printf("time cose: %llu s, bandwidth: %llu Mbits/s \n", (lpast - lnow)/1000000000, ((acusz*8)/((lpast - lnow)/1000000000)) /1000000 );
+	
+        //Dont block context switches, let the process sleep for some time
+        msync(tmps, acusz, MS_SYNC);
+		
+        printf("write file %d size: %d\n", fp, acusz);
+		
+        fwrite(tmps, 1, acusz, fp);
+        fflush(fp);
+        // Implement and call some function that does core work for this daemon.
+        close(connfd);
+		
+    }
+
+    fclose(fp);
+    free(recvBuff);
+    munmap(tmps, 64*1024*1024);
+    printf("daemonfs end \n");
+    exit(1);
+    return (0);
 }
