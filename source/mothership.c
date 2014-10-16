@@ -803,16 +803,25 @@ static int p0_end(struct mainRes_s *mrs)
 static int cmdfunc_01(int argc, char *argv[])
 {
     struct mainRes_s *mrs;
-    char str[256];
+    char str[256], ch;
     if (!argv) return -1;
-    sprintf(str, "cmdfunc_01 argc:%d [%s]\n", argc, argv[0]); 
-    print_f(mlogPool, "cmdfunc", str);
+
+    mrs = (struct mainRes_s *)argv[0];
+
+    ch = '0';
 
     if (argc == 3) {
-        mrs = (struct mainRes_s *)argv[0];
-        mrs_ipc_put(mrs, "3", 1, 0);
+        ch = '3';
     }
 
+    if (argc == 1) {
+        ch = '4';
+    }
+
+    sprintf(str, "cmdfunc_01 argc:%d [%s] ch:%c\n", argc, argv[0], ch); 
+    print_f(mlogPool, "cmdfunc", str);
+
+    mrs_ipc_put(mrs, &ch, 1, 0);
     return 1;
 }
 
@@ -852,16 +861,11 @@ static int dbg(struct mainRes_s *mrs)
         if (pi == 8) {
             sprintf(mrs->log, "cmd not found!\n");
             print_f(&mrs->plog, "P0", mrs->log);
-        } else if (pi == 3) {
+        } 
+        else if (pi < 8) {
             addr[0] = (char *)mrs;
             sprintf(mrs->log, "input [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
             print_f(&mrs->plog, "P0", mrs->log);
-            ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
-        } else if (pi < 8) {
-            addr[0] = cmdtab[pi].str;
-            sprintf(mrs->log, "input [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
-            print_f(&mrs->plog, "P0", mrs->log);
-			
             ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
 
             mrs_ipc_put(mrs, "t", 1, 0);
@@ -897,6 +901,11 @@ static int p0(struct mainRes_s *mrs)
     
     while (!pmode) {
         ret = mrs_ipc_get(mrs, &ch, 1, 0);
+        if (ret > 0) {
+            sprintf(mrs->log, "ret:%d ch:%c\n", ret, ch);
+            print_f(&mrs->plog, "P0", mrs->log);
+        }
+		
         if (ret <= 0) {
             //sprintf(mrs->log, "ret:%d\n", ret);
             //print_f(&mrs->plog, "P0", mrs->log);
@@ -965,6 +974,35 @@ static int p0(struct mainRes_s *mrs)
 
             pmode = 2;
         }
+        else if (ch == '4') { /* app -> wifi -> spi */
+            bitset = 0;
+            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+            bitset = 1;
+            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+ 
+            bitset = 0;
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+            sprintf(mrs->log, "Get RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+            sprintf(mrs->log, "Set RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            pmode = 3;
+        }
         else {
             sprintf(mrs->log, "%c\n", ch);
             print_f(&mrs->plog, "P0", mrs->log);
@@ -986,41 +1024,31 @@ static int p0(struct mainRes_s *mrs)
             ret = mrs_ipc_get(mrs, &ch, 1, 1);
             while (ret > 0) {
                 if (ch == 'p') {
-                    //ring_buf_prod_dual(&mrs->dataRx, seq[0]);
-                    //printf("0 %d\n", seq[0]);
                     seq[0] += 2;
                     mrs_ipc_put(mrs, "d", 1, 3);
-                    //mrs_ipc_put(mrs, "d", 1, 4);
                 }
                 if (ch == 'd') {
                     sprintf(mrs->log, "0 %d end\n", seq[0]);
                     print_f(&mrs->plog, "P0", mrs->log);
                     mrs_ipc_put(mrs, "d", 1, 3);
-                    //mrs_ipc_put(mrs, "d", 1, 4);
                     chk[0] = 1;
                     mrs_ipc_put(mrs, "D", 1, 3);
-                    //mrs_ipc_put(mrs, "D", 1, 4);
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 1);
             }
             ret = mrs_ipc_get(mrs, &ch, 1, 2);
             while (ret > 0) {
                 if (ch == 'p') {
-                    //ring_buf_prod_dual(&mrs->dataRx, seq[1]);
-                    //printf("1 %d\n", seq[1]);
                     seq[1] += 2;
                     mrs_ipc_put(mrs, "d", 1, 3);
-                    //mrs_ipc_put(mrs, "d", 1, 4);
                 }
                 if (ch == 'd') {
                     sprintf(mrs->log, "1 %d end\n", seq[1]);
                     print_f(&mrs->plog, "P0", mrs->log);
 
                     mrs_ipc_put(mrs, "d", 1, 3);
-                    //mrs_ipc_put(mrs, "d", 1, 4);
                     chk[1] = 1;
                     mrs_ipc_put(mrs, "D", 1, 3);
-                    //mrs_ipc_put(mrs, "D", 1, 4);
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 2);
             }
@@ -1039,14 +1067,50 @@ static int p0(struct mainRes_s *mrs)
                     print_f(&mrs->plog, "P0", mrs->log);
 
                     // send command to trigger dual spi mode
-//                    mrs_ipc_put(mrs, "t", 1, 3);
                     pmode = 1;
                     mrs_ipc_put(mrs, "d", 1, 1);
                     mrs_ipc_put(mrs, "d", 1, 2);
                 }
             }
         }
-        usleep(1);
+        if (pmode == 3) {
+            ret = mrs_ipc_get(mrs, &ch, 1, 4);
+            if (ret > 0) {
+                sprintf(mrs->log, "0 [%c]\n", ch);
+                print_f(&mrs->plog, "P0", mrs->log);				
+
+                ret = mrs_ipc_get(mrs, str, 128, 4);
+                if (ret > 0) {
+                    str[ret] = '\0';
+                    sprintf(mrs->log, "[%s] sz:%d\n", str, ret);
+                    print_f(&mrs->plog, "P0", mrs->log);
+
+                    // send command to trigger dual spi mode
+                    pmode = 4;
+                    seq[0] = 0;
+                    mrs_ipc_put(mrs, "c", 1, 3);
+                }
+            }
+        }
+        if (pmode == 4) {
+            ret = mrs_ipc_get(mrs, &ch, 1, 3);
+            while (ret > 0) {
+                if (ch == 'c') {
+                    seq[0] += 1;
+                    mrs_ipc_put(mrs, "c", 1, 1);
+                }
+                if (ch == 'C') {
+                    sprintf(mrs->log, "tcp rx %d end\n", seq[0]);
+                    print_f(&mrs->plog, "P0", mrs->log);
+                    mrs_ipc_put(mrs, "c", 1, 1);
+                    chk[0] = 1;
+                    mrs_ipc_put(mrs, "C", 1, 1);
+                }
+                ret = mrs_ipc_get(mrs, &ch, 1, 3);
+            }
+            if (chk[0]) pmode = 0;
+        }
+        usleep(10);
     }
 
     // save to file for debug
@@ -1122,8 +1186,10 @@ static int p2(struct procRes_s *rs)
 
         ret[0] = rs_ipc_get(rs, &ch, 1);
         if (ret[0] > 0) {
-            if (ch == 'd') {
+            sprintf(rs->logs, "recv ch: %c\n", ch);
+            print_f(rs->plogs, "P2", rs->logs);
 
+            if (ch == 'd') {
                 pi = 0;  
                 while (1) {
                     size = ring_buf_get_dual(rs->pdataRx, &addr, pi);
@@ -1139,7 +1205,17 @@ static int p2(struct procRes_s *rs)
                 }
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 ret[1] = rs_ipc_put(rs, "d", 1);
-
+            }
+            if ((ch == 'c') || (ch == 'C')) {
+                size = ring_buf_cons(rs->pcmdTx, &addr);
+                if (size >= 0) {
+                    pi++;
+                    
+                    msync(addr, size, MS_SYNC);
+                    /* send data to spi command mode */
+                    opsz = mtx_data(rs->spifd, NULL, addr, 1, size, 1024*1024);
+                    //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
+                }
             }
         }
     }
@@ -1168,6 +1244,9 @@ static int p3(struct procRes_s *rs)
 
         ret[0] = rs_ipc_get(rs, &ch, 1);
         if (ret[0] > 0) {
+            sprintf(rs->logs, "recv ch: %c\n", ch);
+            print_f(rs->plogs, "P3", rs->logs);
+
             if (ch == 'd') {
 
                 pi = 1;  
@@ -1239,10 +1318,16 @@ static int p4(struct procRes_s *rs)
 
         rs->psocket_t->connfd = accept(rs->psocket_t->listenfd, (struct sockaddr*)NULL, NULL); 
 
+        if (rs->psocket_t->connfd < 0) {
+            sprintf(rs->logs, "connect failed [%d]\n", rs->psocket_t->connfd);
+            print_f(rs->plogs, "P4", rs->logs);
+			
+            continue;
+        }
 //        n = read(rs->psocket_t->connfd, recvbuf, 1024);
         n = 0;
         recvbuf[0] = '\0';
-        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket_t->connfd);
+        sprintf(rs->logs, "socket connected %d\n", rs->psocket_t->connfd);
         print_f(rs->plogs, "P4", rs->logs);
 
         pi = 0;
@@ -1263,18 +1348,31 @@ static int p4(struct procRes_s *rs)
             }
             else if (ch == 'c') {
                 px = 0;
+                size = ring_buf_get(rs->pcmdTx, &addr);
+                n = read(rs->psocket_t->connfd, addr, size);
+                while (n <= 0) {
+                    //sprintf(rs->logs, "[wait] socket receive %d/%d bytes from %d\n", px, n, size, rs->psocket_t->connfd);
+                    //print_f(rs->plogs, "P4", rs->logs);
+                    
+                    n = read(rs->psocket_t->connfd, addr, size);
+                }
+				
+                sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d\n", px, n, size, rs->psocket_t->connfd);
+                print_f(rs->plogs, "P4", rs->logs);
+                px++;
+                ring_buf_prod(rs->pcmdTx);
+
                 while (1) {
                     size = ring_buf_get(rs->pcmdTx, &addr);
 
-                    n = read(rs->psocket_r->connfd, addr, size);
-                    sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d\n", px, n, size, rs->psocket_r->connfd);
+                    n = read(rs->psocket_t->connfd, addr, size);
+                    sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d\n", px, n, size, rs->psocket_t->connfd);
                     print_f(rs->plogs, "P4", rs->logs);
                     px++;
 
-                    if (n != size) break;
-        
-                    //shmem_dump(addr, 32);
                     ring_buf_prod(rs->pcmdTx);
+                    if (n != size) break;
+                    //shmem_dump(addr, 32);
 
                     rs_ipc_put(rs, "c", 1);
                 }
@@ -1343,9 +1441,14 @@ static int p5(struct procRes_s *rs)
         rs_ipc_put(rs, "s", 1);
         if (n > 0) {
             rs_ipc_put(rs, recvbuf, n);
-            sprintf(rs->logs, "[5:%s]\n", recvbuf);
+            sprintf(rs->logs, "send to p0 [%s]\n", recvbuf);
+            print_f(rs->plogs, "P5", rs->logs);
+            
+            ret = write(rs->psocket_r->connfd, recvbuf, n);
+            sprintf(rs->logs, "send back app [%s] size:%d/%d\n", recvbuf, ret, n);
             print_f(rs->plogs, "P5", rs->logs);
         }
+
 #if 0
         pi = 0;
         ret = rs_ipc_get(rs, &ch, 1);
@@ -1474,11 +1577,11 @@ static char spi1[] = "/dev/spidev32765.0";
 	
     /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 1024*4096, 4096);
+    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 32*61440, 4096);
     pmrs->cmdTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdTx.totsz = 1024*4096;;
-    pmrs->cmdTx.chksz = 4096;
-    pmrs->cmdTx.svdist = 32;
+    pmrs->cmdTx.totsz = 32*61440;;
+    pmrs->cmdTx.chksz = 61440;
+    pmrs->cmdTx.svdist = 2;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->cmdTx.slotn; ix++) {
