@@ -335,8 +335,8 @@ static void parse_opts(int argc, char *argv[])
 #if 1
 int main(int argc, char *argv[]) 
 { 
-static char spi1[] = "/dev/spidev32765.0"; 
-static char spi0[] = "/dev/spidev32765.1"; 
+static char spi0[] = "/dev/spidev32765.0"; 
+static char spi1[] = "/dev/spidev32766.0"; 
     uint32_t bitset;
     int sel, arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;
     int fd, ret; 
@@ -462,21 +462,338 @@ static char spi0[] = "/dev/spidev32765.1";
 		tx[i] = i & 0x95;
 	}
 
-
-    if (sel == 13) { /* continuous command mode [13 20 path pktsize chunksize] ex: 13 20 ./01.mp3 512 61440*/
-#define TSIZE (128*1024*1024)
+    if (sel == 14) { /* dual continuous command mode [14 20 path1 path2 pktsize] ex: 14 20 ./01.mp4 ./02.mp4 512 */
+#define DCTSIZE (64*1024*1024)
 #define PKTSZ  61440
         int chunksize, acusz;
-        chunksize = arg3;
+        chunksize = PKTSZ;
+        FILE *fp2, *fpd1, *fpd2;
+        char svpath2[128], srcpath1[128], srcpath2[128];
+
+        fp2 = find_save(svpath2, data_save);
+        if (!fp2) {
+            printf("find save dst failed ret:%d\n", fp2);
+            goto end;
+        } else
+            printf("find save dst [%s] succeed ret:%d\n", svpath2, fp2);
+
+        if (argv[3]) {
+     		strcpy(srcpath1, argv[3]);
+              fpd1 = fopen(srcpath1, "r");
+     		if (!fpd1) {
+            	    printf(" %s file open failed \n", srcpath1);
+	           goto end;
+        	} else
+        	        printf(" %s file open succeed \n", srcpath1);
+        }
+
+        if (argv[4]) {
+     		strcpy(srcpath2, argv[4]);
+              fpd2 = fopen(srcpath2, "r");
+     		if (!fpd2) {
+            	    printf(" %s file open failed \n", srcpath2);
+	           goto end;
+        	} else
+        	        printf(" %s file open succeed \n", srcpath2);
+        }
 
         mode &= ~SPI_MODE_3;
         mode |= SPI_MODE_1;
 
-        ret = ioctl(fm[arg1], SPI_IOC_WR_MODE, &mode);    //?家Α 
+        ret = ioctl(fm[0], SPI_IOC_WR_MODE, &mode);    //?家Α 
         if (ret == -1) 
             pabort("can't set spi mode"); 
  
-        ret = ioctl(fm[arg1], SPI_IOC_RD_MODE, &mode);    //?家Α 
+        ret = ioctl(fm[0], SPI_IOC_RD_MODE, &mode);    //?家Α 
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+	
+	printf("spi%d mode:0x%x \n", 0, mode);
+
+        ret = ioctl(fm[1], SPI_IOC_WR_MODE, &mode);    //?家Α 
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+ 
+        ret = ioctl(fm[1], SPI_IOC_RD_MODE, &mode);    //?家Α 
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+	
+	printf("spi%d mode:0x%x \n", 1, mode);
+
+        if (arg0)
+            speed = arg0 * 1000000;
+
+        /*
+         * max speed hz     //?竚硉瞯
+         */ 
+        ret = ioctl(fm[0], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?硉瞯 
+        if (ret == -1) 
+            pabort("can't set max speed hz"); 
+        
+        ret = ioctl(fm[0], SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?硉瞯 
+        if (ret == -1) 
+            pabort("can't get max speed hz"); 
+
+        printf("spi%d max speed: %d Hz (%d KHz)\n", 0, speed, speed/1000); 
+
+        ret = ioctl(fm[1], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?硉瞯 
+        if (ret == -1) 
+            pabort("can't set max speed hz"); 
+        
+        ret = ioctl(fm[1], SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?硉瞯 
+        if (ret == -1) 
+            pabort("can't get max speed hz"); 
+
+        printf("spi%d max speed: %d Hz (%d KHz)\n", 1, speed, speed/1000); 
+		
+    /*
+     * bits per word    
+     */ 
+    ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);   
+    if (ret == -1) 
+        pabort("can't set bits per word"); 
+ 
+    ret = ioctl(fm[0], SPI_IOC_RD_BITS_PER_WORD, &bits);   
+    if (ret == -1) 
+        pabort("can't get bits per word"); 
+
+    printf("spi%d bits per word: %d\n", 0, bits);  
+
+    ret = ioctl(fm[1], SPI_IOC_WR_BITS_PER_WORD, &bits);   
+    if (ret == -1) 
+        pabort("can't set bits per word"); 
+ 
+    ret = ioctl(fm[1], SPI_IOC_RD_BITS_PER_WORD, &bits);   
+    if (ret == -1) 
+        pabort("can't get bits per word"); 
+
+    printf("spi%d bits per word: %d\n", 1, bits); 
+
+        
+        bitset = 0;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+        int pksize = 512;
+        int pknum = 120;
+        int trunksz, remainsz, pkcnt;
+        char *srcBuff1, *srctmp1, *srcBuff2, *srctmp2;
+        int fsz1, fsz2;
+        char * tbuff;
+        int pid;
+		
+        if ((arg3) && (arg3 <= chunksize) && !(arg3%pksize) && !(chunksize%arg3)) {
+        	pksize = arg3;
+        }
+        pknum = chunksize / pksize;
+        printf("pksize:%d pknum:%d chunksize:%d\n", pksize, pknum, chunksize);
+        struct tms time;
+        struct timespec curtime;
+        unsigned long long cur, tnow, lnow, past, tbef, lpast;
+        
+        trunksz = pknum * pksize;
+        
+        pkcnt = 0;
+        tbuff = tx_buff;
+        
+        clock_gettime(CLOCK_REALTIME, &curtime);
+        printf("%llu, %llu \n", curtime.tv_sec, curtime.tv_nsec);
+        times(&time);
+        printf("%llu %llu %llu %llu \n", time.tms_utime, time.tms_stime, time.tms_cutime, time.tms_cstime);
+        
+        
+        srcBuff1 = mmap(NULL, DCTSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        srctmp1 = srcBuff1;
+
+        srcBuff2 = mmap(NULL, DCTSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        srctmp2 = srcBuff2;
+        
+        fsz1 = fread(srcBuff1, 1, DCTSIZE, fpd1);
+        printf(" [%s] size: %d, read to share memory\n", srcpath1, fsz1);
+
+        fsz2 = fread(srcBuff2, 1, DCTSIZE, fpd2);
+        printf(" [%s] size: %d, read to share memory\n", srcpath2, fsz2);
+        
+        memset(srcBuff1, 0xf0, fsz1);
+        memset(srcBuff2, 0xf0, fsz2);
+        memset(tx_buff, 0xf0, trunksz);
+        
+/*
+	memcpy(srcBuff, tx_buff, fsize);
+	printf(" [%s] size: %d, copy to share memory\n", data_path, fsize);
+*/
+        bitset = 0;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set data mode: %d\n", bitset);
+        
+        bitset = 1;
+        ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
+        printf("Get data mode: %d\n", bitset);
+        
+        bitset = 0;
+        ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("Get RDY pin: %d\n", bitset);
+
+        bitset = 0;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set data mode: %d\n", bitset);
+        
+        bitset = 1;
+        ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
+        printf("Get data mode: %d\n", bitset);
+        
+        bitset = 0;
+        ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("Get RDY pin: %d\n", bitset);
+                
+        acusz = 0;
+ 
+        int sid;
+        sid = fork();
+        if (sid) {
+
+        remainsz = fsz1;
+
+        while (1) {
+            if (remainsz < trunksz) {
+                if (remainsz < pksize)
+                    pknum = 1;
+                else {
+                     pknum = remainsz / pksize;
+                     if (remainsz % pksize) pknum += 1;
+                }
+                remainsz = 0;
+            } else {
+                remainsz -= trunksz;
+            }
+            
+            ret = tx_data(fm[0], srcBuff1, tx_buff, pknum, pksize, 1024*1024);
+            acusz += ret;
+            printf("[%d] tx %d - %d\n", pkcnt, ret, acusz);
+            srcBuff1 += ret;
+
+            if (pkcnt == 0) {
+                clock_gettime(CLOCK_REALTIME, &curtime);
+                cur = curtime.tv_sec;
+                tnow = curtime.tv_nsec;
+                lnow = cur * 1000000000+tnow;
+                printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+            }
+			
+            pkcnt++;
+            
+            if (remainsz <= 0) break;
+            //usleep(1);
+        }
+
+        clock_gettime(CLOCK_REALTIME, &curtime);
+        past = curtime.tv_sec;
+        tbef = curtime.tv_nsec;		
+        lpast = past * 1000000000+tbef;	
+        
+        printf("time cose: %llu s, bandwidth: %llu Mbits/s \n", (lpast - lnow)/1000000000, ((fsz1*8)/((lpast - lnow)/1000000000)) /1000000 );
+        
+        sleep(3);
+        
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[cmd]Set RDY pin: %d cnt:%d\n",  bitset,pkcnt);
+
+        sleep(1);
+        
+        bitset = 0;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[cmd]Set RDY pin: %d cnt:%d\n", bitset, pkcnt);
+
+        msync(srctmp1, acusz, MS_SYNC);
+        ret = fwrite(srctmp1, 1, acusz, fp);
+        printf("recv data save to [%s] size: %d/%d \n", path, ret, acusz);
+        fflush(fp);
+        fclose(fp);
+
+        } else {
+        remainsz = fsz2;
+
+        while (1) {
+            if (remainsz < trunksz) {
+                if (remainsz < pksize)
+                    pknum = 1;
+                else {
+                     pknum = remainsz / pksize;
+                     if (remainsz % pksize) pknum += 1;
+                }
+                remainsz = 0;
+            } else {
+                remainsz -= trunksz;
+            }
+            
+            ret = tx_data(fm[1], srcBuff2, tx_buff, pknum, pksize, 1024*1024);
+            acusz += ret;
+            printf("[%d] tx %d - %d\n", pkcnt, ret, acusz);
+            srcBuff2 += ret;
+
+            if (pkcnt == 0) {
+                clock_gettime(CLOCK_REALTIME, &curtime);
+                cur = curtime.tv_sec;
+                tnow = curtime.tv_nsec;
+                lnow = cur * 1000000000+tnow;
+                printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+            }
+			
+            pkcnt++;
+            
+            if (remainsz <= 0) break;
+            //usleep(1);
+        }
+
+        clock_gettime(CLOCK_REALTIME, &curtime);
+        past = curtime.tv_sec;
+        tbef = curtime.tv_nsec;		
+        lpast = past * 1000000000+tbef;	
+        
+        printf("time cose: %llu s, bandwidth: %llu Mbits/s \n", (lpast - lnow)/1000000000, ((fsz2*8)/((lpast - lnow)/1000000000)) /1000000 );
+        
+        sleep(3);
+        
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[cmd]Set RDY pin: %d cnt:%d\n",  bitset,pkcnt);
+
+        sleep(1);
+        
+        bitset = 0;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[cmd]Set RDY pin: %d cnt:%d\n", bitset, pkcnt);
+
+        msync(srctmp2, acusz, MS_SYNC);
+        ret = fwrite(srctmp2, 1, acusz, fp2);
+        printf("recv data save to [%s] size: %d/%d \n", svpath2, ret, acusz);
+        fflush(fp2);
+        fclose(fp2);
+        }
+
+        munmap(srctmp1, DCTSIZE);
+        munmap(srctmp2, DCTSIZE);
+        goto end;
+    }
+    if (sel == 13) { /* continuous command mode [13 20 path pktsize spi] ex: 13 20 ./01.mp3 512 1*/
+#define TSIZE (128*1024*1024)
+#define PKTSZ  61440
+        int chunksize, acusz;
+        chunksize = PKTSZ;
+
+        mode &= ~SPI_MODE_3;
+        mode |= SPI_MODE_1;
+
+        arg3 = arg3 % 2;
+
+        ret = ioctl(fm[arg3], SPI_IOC_WR_MODE, &mode);    //?家Α 
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+ 
+        ret = ioctl(fm[arg3], SPI_IOC_RD_MODE, &mode);    //?家Α 
         if (ret == -1) 
             pabort("can't get spi mode"); 
 	
@@ -487,11 +804,11 @@ static char spi0[] = "/dev/spidev32765.1";
         /*
          * max speed hz     //?竚硉瞯
          */ 
-        ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?硉瞯 
+        ret = ioctl(fm[arg3], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?硉瞯 
         if (ret == -1) 
             pabort("can't set max speed hz"); 
         
-        ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?硉瞯 
+        ret = ioctl(fm[arg3], SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?硉瞯 
         if (ret == -1) 
             pabort("can't get max speed hz"); 
         //ゴ家Α,–ぶ㎝硉瞯獺 
@@ -511,6 +828,7 @@ static char spi0[] = "/dev/spidev32765.1";
         char *srcBuff, *srctmp;
         char * tbuff;
         int pid;
+		
         if ((arg2) && (arg2 <= chunksize) && !(arg2%pksize) && !(chunksize%arg2)) {
         	pksize = arg2;
         }
@@ -556,13 +874,7 @@ static char spi0[] = "/dev/spidev32765.1";
         bitset = 0;
         ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("Get RDY pin: %d\n", bitset);
-        
-        
-        clock_gettime(CLOCK_REALTIME, &curtime);
-        cur = curtime.tv_sec;
-        tnow = curtime.tv_nsec;
-        lnow = cur * 1000000000+tnow;
-        printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+                
         acusz = 0;
         while (1) {
             if (remainsz < trunksz) {
@@ -581,11 +893,19 @@ static char spi0[] = "/dev/spidev32765.1";
             acusz += ret;
             printf("[%d] tx %d - %d\n", pkcnt, ret, acusz);
             srcBuff += ret;
-            
+
+            if (pkcnt == 0) {
+                clock_gettime(CLOCK_REALTIME, &curtime);
+                cur = curtime.tv_sec;
+                tnow = curtime.tv_nsec;
+                lnow = cur * 1000000000+tnow;
+                printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+            }
+			
             pkcnt++;
             
             if (remainsz <= 0) break;
-            usleep(500);
+            //usleep(1);
         }
 
         clock_gettime(CLOCK_REALTIME, &curtime);
@@ -600,11 +920,19 @@ static char spi0[] = "/dev/spidev32765.1";
         bitset = 1;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[cmd]Set RDY pin: %d cnt:%d\n",  bitset,pkcnt);
+
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[cmd]Set RDY pin: %d cnt:%d\n",  bitset,pkcnt);
         
         sleep(1);
         
         bitset = 0;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[cmd]Set RDY pin: %d cnt:%d\n", bitset, pkcnt);
+
+        bitset = 0;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[cmd]Set RDY pin: %d cnt:%d\n", bitset, pkcnt);
 
         msync(srctmp, acusz, MS_SYNC);
@@ -695,13 +1023,54 @@ static char spi0[] = "/dev/spidev32765.1";
     /*
      * max speed hz     //?竚硉瞯
      */ 
-    ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?硉瞯 
+    ret = ioctl(fm[0], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?硉瞯 
     if (ret == -1) 
         pabort("can't set max speed hz"); 
  
-    ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?硉瞯 
+    ret = ioctl(fm[0], SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?硉瞯 
     if (ret == -1) 
         pabort("can't get max speed hz"); 
+
+    ret = ioctl(fm[1], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?硉瞯 
+    if (ret == -1) 
+        pabort("can't set max speed hz"); 
+ 
+    ret = ioctl(fm[1], SPI_IOC_RD_MAX_SPEED_HZ, &speed);   //?硉瞯 
+    if (ret == -1) 
+        pabort("can't get max speed hz"); 
+
+    ret = ioctl(fm[0], SPI_IOC_RD_MODE, &mode);    //?家Α 
+    if (ret == -1) 
+        pabort("can't get spi mode"); 
+	
+	printf("spi%d mode:0x%x \n", 0, mode);
+
+    ret = ioctl(fm[1], SPI_IOC_RD_MODE, &mode);    //?家Α 
+    if (ret == -1) 
+        pabort("can't get spi mode"); 
+	
+	printf("spi%d mode:0x%x \n", 1, mode);
+
+ 
+    /*
+     * bits per word    
+     */ 
+    ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);   
+    if (ret == -1) 
+        pabort("can't set bits per word"); 
+ 
+    ret = ioctl(fm[0], SPI_IOC_RD_BITS_PER_WORD, &bits);   
+    if (ret == -1) 
+        pabort("can't get bits per word"); 
+ 
+    ret = ioctl(fm[1], SPI_IOC_WR_BITS_PER_WORD, &bits);   
+    if (ret == -1) 
+        pabort("can't set bits per word"); 
+ 
+    ret = ioctl(fm[1], SPI_IOC_RD_BITS_PER_WORD, &bits);   
+    if (ret == -1) 
+        pabort("can't get bits per word"); 
+
     //ゴ家Α,–ぶ㎝硉瞯獺 
     printf("spi mode: %d\n", mode); 
     printf("bits per word: %d\n", bits); 
@@ -717,8 +1086,11 @@ static char spi0[] = "/dev/spidev32765.1";
         int pknum = 60;
         int trunksz, remainsz, pkcnt;
 	char *srcBuff, *srctmp;
-	char * tbuff;
+	char * tbuff, buf;
 	int pid;
+        int pipefd[2];
+        int pipefc[2];
+
 	if ((arg2) && (arg2 <= chunksize) && !(arg2%pksize) && !(chunksize%arg2)) {
 		pksize = arg2;
 	}
@@ -754,16 +1126,41 @@ static char spi0[] = "/dev/spidev32765.1";
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("Set RDY pin: %d\n", bitset);
 
+        pipe(pipefd);
+        pipe(pipefc);
+
 	pid = fork();
 	printf("pid: %d \n", pid);
 
 	if (pid) {
+              close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
+              close(pipefc[1]);
+
 		clock_gettime(CLOCK_REALTIME, &curtime);
 		cur = curtime.tv_sec;
 		tnow = curtime.tv_nsec;
 		lnow = cur * 1000000000+tnow;
 		printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
-		while (1) {
+
+            	if (remainsz < trunksz) {
+			if (remainsz < pksize)
+				pknum = 1;
+			else {
+				pknum = remainsz / pksize;
+				 if (remainsz % pksize)
+					pknum += 1;
+			}
+			remainsz = 0;
+            	} else {
+			remainsz -= trunksz * 2;
+		}
+					
+		ret = tx_data(fm[0], NULL, srcBuff, pknum, pksize, 1024*1024);
+              write(pipefd[1], "d", 1); // send the content of argv[1] to the reader
+		srcBuff += ret + chunksize;
+		pkcnt++;
+
+		while (remainsz > 0) {
 	
 	            	if (remainsz < trunksz) {
 				if (remainsz < pksize)
@@ -777,8 +1174,10 @@ static char spi0[] = "/dev/spidev32765.1";
 	            	} else {
 				remainsz -= trunksz * 2;
 			}
-
+					
+                     ret = read(pipefc[0], &buf, 1); 
 			ret = tx_data(fm[0], NULL, srcBuff, pknum, pksize, 1024*1024);
+                     write(pipefd[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 	char *ch;
@@ -796,10 +1195,12 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 
 			pkcnt++;
 
-			if (remainsz <= 0) break;
 		}
-
+              close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
+              close(pipefc[0]);
 	}else {
+              close(pipefd[1]); // close the write-end of the pipe, I'm not going to use it
+              close(pipefc[0]);
 		remainsz -= trunksz;
 		
 		clock_gettime(CLOCK_REALTIME, &curtime);
@@ -827,7 +1228,9 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 				remainsz -= trunksz * 2;
 			}
 
+                     read(pipefd[0], &buf, 1); 
 			ret = tx_data(fm[1], NULL, srcBuff, pknum, pksize, 1024*1024);
+                     write(pipefc[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 	char *ch;
@@ -843,7 +1246,8 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 			//printf("[p1] tx %d fd%d\n", ret, 1);
 			srcBuff += ret + chunksize;
 		}
-
+             close(pipefd[0]); // close the read-end of the pipe
+             close(pipefc[1]);
 	}
 
 
@@ -860,10 +1264,19 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset,pkcnt);
 
+
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset,pkcnt);
+
 	sleep(1);
 	
         bitset = 0;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
+		
+        bitset = 0;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
 
 	munmap(srctmp, TSIZE);
