@@ -836,7 +836,7 @@ static char spi1[] = "/dev/spidev32766.0";
         printf("pksize:%d pknum:%d chunksize:%d\n", pksize, pknum, chunksize);
         struct tms time;
         struct timespec curtime;
-        unsigned long long cur, tnow, lnow, past, tbef, lpast;
+        unsigned long long cur, tnow, lnow, past, tbef, lpast, tmp;
         
         trunksz = pknum * pksize;
         
@@ -889,7 +889,7 @@ static char spi1[] = "/dev/spidev32766.0";
                 remainsz -= trunksz;
             }
             
-            ret = tx_data(fm[0], srcBuff, tx_buff, pknum, pksize, 1024*1024);
+            ret = tx_data(fm[arg3], srcBuff, tx_buff, pknum, pksize, 1024*1024);
             acusz += ret;
             printf("[%d] tx %d - %d\n", pkcnt, ret, acusz);
             srcBuff += ret;
@@ -899,7 +899,7 @@ static char spi1[] = "/dev/spidev32766.0";
                 cur = curtime.tv_sec;
                 tnow = curtime.tv_nsec;
                 lnow = cur * 1000000000+tnow;
-                printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+                printf("[p%d] enter %d t:%llu %llu %llu\n", arg3, remainsz,cur,tnow, lnow/1000000);
             }
 			
             pkcnt++;
@@ -912,8 +912,14 @@ static char spi1[] = "/dev/spidev32766.0";
         past = curtime.tv_sec;
         tbef = curtime.tv_nsec;		
         lpast = past * 1000000000+tbef;	
-        
-        printf("time cose: %llu s, bandwidth: %llu Mbits/s \n", (lpast - lnow)/1000000000, ((fsize*8)/((lpast - lnow)/1000000000)) /1000000 );
+
+        tmp = (lpast - lnow);
+        if (tmp < 1000000000) {
+            printf("time cose: %llu us, bandwidth: %llu Bits/s \n",  tmp/1000, (fsize*8)/(tmp/1000));            
+        } else {
+            printf("time cose: %llu s, bandwidth: %llu MBits/s \n",  tmp/1000000000, ((fsize*8)/((lpast - lnow)/1000000)) /1000 );            
+        }
+
         
         sleep(3);
         
