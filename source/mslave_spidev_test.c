@@ -627,9 +627,9 @@ static char path[256];
 			
             send = tx_data(fm[0], rx_buff[0], src, 1, txsz, 1024*1024);
             acusz += send;
-            printf("[%d] tx %d - %d\n", pktcnt, send, acusz);
+            printf("[%d][%d] tx %d - %d\n", 0, pktcnt, send, acusz);
             if (send != txsz) {
-                printf("Error! spi data tx did not complete %d/%d \n", send, txsz);
+                printf("[%d]Error! spi data tx did not complete %d/%d \n", 0, send, txsz);
                 break;
             }
             src += send;
@@ -651,9 +651,9 @@ static char path[256];
 			
             send = tx_data(fm[1], rx_buff[1], src, 1, txsz, 1024*1024);
             acusz += send;
-            printf("[%d] tx %d - %d\n", pktcnt, send, acusz);
+            printf("[%d][%d] tx %d - %d\n", 1, pktcnt, send, acusz);
             if (send != txsz) {
-                printf("Error! spi data tx did not complete %d/%d \n", send, txsz);
+                printf("[%d]Error! spi data tx did not complete %d/%d \n", 1, send, txsz);
                 break;
             }
             src += send;
@@ -730,6 +730,14 @@ static char path[256];
         ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
         printf("Set spi1 RDY: %d\n", bitset);
 
+        bitset = 1;
+        ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WR_CS_PIN
+        printf("Set CS: %d\n", bitset);
+
+        bitset = 0;
+        ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_RD_CS_PIN
+        printf("Get CS: %d\n", bitset);
+
         src = dstBuff;
         acusz = 0; pktcnt = 0;
         while (acusz < fsize) {
@@ -739,7 +747,7 @@ static char path[256];
                 txsz = fsize - acusz;
             }
 			
-            send = tx_data(fm[0], rx_buff[0], src, 1, txsz, 1024*1024);
+            send = tx_data(fm[arg2], rx_buff[0], src, 1, txsz, 1024*1024);
             acusz += send;
             printf("[%d] tx %d - %d\n", pktcnt, send, acusz);
             if (send != txsz) {
@@ -750,11 +758,11 @@ static char path[256];
 
             pktcnt++;
         }
-/*
+
         bitset = 0;
-        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WT_CS_PIN
+        ret = ioctl(fm[(arg2+1)%2], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WT_CS_PIN
         printf("Set CS: %d\n", bitset);
-*/
+
         goto end;
     }
 	
