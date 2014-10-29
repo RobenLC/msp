@@ -591,7 +591,7 @@ static char spi1[] = "/dev/spidev32766.0";
         printf("pksize:%d pknum:%d chunksize:%d\n", pksize, pknum, chunksize);
         struct tms time;
         struct timespec curtime;
-        unsigned long long cur, tnow, lnow, past, tbef, lpast;
+        unsigned long long cur, tnow, lnow, past, tbef, lpast, tmp;
         
         trunksz = pknum * pksize;
         
@@ -753,7 +753,13 @@ static char spi1[] = "/dev/spidev32766.0";
         tbef = curtime.tv_nsec;		
         lpast = past * 1000000000+tbef;	
         
-        printf("time cose: %llu s, bandwidth: %llu Mbits/s \n", (lpast - lnow)/1000000000, ((fsz2*8)/((lpast - lnow)/1000000000)) /1000000 );
+        tmp = (lpast - lnow);
+        if (tmp < 1000000000) {
+            printf("time cose: %llu us, bandwidth: %llu Bits/s \n",  tmp/1000, (fsize*8)/(tmp/1000));            
+        } else {
+            printf("time cose: %llu s, bandwidth: %llu MBits/s \n",  tmp/1000000000, ((fsize*8)/((lpast - lnow)/1000000)) /1000 );            
+        }
+
         
         sleep(3);
         
@@ -1104,7 +1110,7 @@ static char spi1[] = "/dev/spidev32766.0";
 	printf("pksize:%d pknum:%d chunksize:%d\n", pksize, pknum, chunksize);
 	struct tms time;
 	struct timespec curtime;
-	unsigned long long cur, tnow, lnow, past, tbef, lpast;
+	unsigned long long cur, tnow, lnow, past, tbef, lpast, tmp;
 	
         trunksz = pknum * pksize;
 
@@ -1142,12 +1148,6 @@ static char spi1[] = "/dev/spidev32766.0";
               close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
               close(pipefc[1]);
 
-		clock_gettime(CLOCK_REALTIME, &curtime);
-		cur = curtime.tv_sec;
-		tnow = curtime.tv_nsec;
-		lnow = cur * 1000000000+tnow;
-		printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
-
             	if (remainsz < trunksz) {
 			if (remainsz < pksize)
 				pknum = 1;
@@ -1166,6 +1166,12 @@ static char spi1[] = "/dev/spidev32766.0";
 		srcBuff += ret + chunksize;
 		pkcnt++;
 
+		clock_gettime(CLOCK_REALTIME, &curtime);
+		cur = curtime.tv_sec;
+		tnow = curtime.tv_nsec;
+		lnow = cur * 1000000000+tnow;
+		printf("[p0] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+
 		while (remainsz > 0) {
 	
 	            	if (remainsz < trunksz) {
@@ -1183,6 +1189,7 @@ static char spi1[] = "/dev/spidev32766.0";
 					
                      ret = read(pipefc[0], &buf, 1); 
 			ret = tx_data(fm[0], NULL, srcBuff, pknum, pksize, 1024*1024);
+			//printf("[p0] tx %d \n", ret);
                      write(pipefd[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
@@ -1209,14 +1216,6 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
               close(pipefc[0]);
 		remainsz -= trunksz;
 		
-		clock_gettime(CLOCK_REALTIME, &curtime);
-		cur = curtime.tv_sec;
-		tnow = curtime.tv_nsec;
-		lnow = cur * 1000000000+tnow;
-		printf("[p1] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
-		
-
-		
 		srcBuff += trunksz;
 		while (1) {
 			if (remainsz <= 0) break;
@@ -1235,7 +1234,15 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 			}
 
                      read(pipefd[0], &buf, 1); 
+		
+                     clock_gettime(CLOCK_REALTIME, &curtime);
+                     cur = curtime.tv_sec;
+                     tnow = curtime.tv_nsec;
+                     lnow = cur * 1000000000+tnow;
+                     printf("[p1] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+
 			ret = tx_data(fm[1], NULL, srcBuff, pknum, pksize, 1024*1024);
+			//printf("[p1] tx %d \n", ret);
                      write(pipefc[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
@@ -1262,7 +1269,13 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 	tbef = curtime.tv_nsec;		
 	lpast = past * 1000000000+tbef;	
 
-	printf("time cose: %llu s, bandwidth: %llu Mbits/s \n", (lpast - lnow)/1000000000, ((fsize*8)/((lpast - lnow)/1000000000)) /1000000 );
+        tmp = (lpast - lnow);
+        if (tmp < 1000000000) {
+            printf("time cose: %llu us, bandwidth: %llu Bits/s \n",  tmp/1000, (fsize*8)/(tmp/1000));            
+        } else {
+            printf("time cose: %llu s, bandwidth: %llu MBits/s \n",  tmp/1000000000, ((fsize*8)/((lpast - lnow)/1000000)) /1000 );            
+        }
+
 	
 	sleep(3);
 
