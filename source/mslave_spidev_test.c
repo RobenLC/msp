@@ -733,11 +733,11 @@ static char path[256];
         bitset = 1;
         ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WR_CS_PIN
         printf("Set CS: %d\n", bitset);
-
+/*
         bitset = 0;
         ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_RD_CS_PIN
         printf("Get CS: %d\n", bitset);
-
+*/
         src = dstBuff;
         acusz = 0; pktcnt = 0;
         while (acusz < fsize) {
@@ -1083,6 +1083,14 @@ static char path[256];
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi1 data mode: %d\n", bitset);
 
+        bitset = 1;
+        ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+        printf("Get spi1 RDY: %d\n", bitset);
+
+        bitset = 1;
+        ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+        printf("Get spi1 RDY: %d\n", bitset);
+
         if (tbuff)
             printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
         else 
@@ -1193,7 +1201,7 @@ static char path[256];
                     ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
                     //ret = tx_data(fm[0], dstBuff, NULL, 1, chunksize, 1024*1024);
 			//if (arg0) 
-                    	//	printf("[p0]rx %d - %d\n", ret, wtsz++);
+                    		printf("[p0]rx %d - %d\n", ret, wtsz++);
                     msync(dstBuff, ret, MS_SYNC);
 /*
 if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
@@ -1280,7 +1288,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                 ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
                 //ret = tx_data(fm[1], dstBuff, NULL, 1, chunksize, 1024*1024);
 		//if (arg0)		
-	       //         printf("[p1]rx %d - %d\n", ret, wtsz++);
+	               printf("[p1]rx %d - %d\n", ret, wtsz++);
                 msync(dstBuff, ret, MS_SYNC);
 /*
 if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
@@ -1395,6 +1403,12 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
              if (bitset == 0) break;
              sleep(3);
         }
+        goto end;
+    }
+    if (sel == 2) { /*set RDY pin*/
+        bitset = arg0;
+        ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WR_CS_PIN
+        printf("Set CS: %d\n", bitset);
         goto end;
     }
 
