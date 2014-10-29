@@ -102,8 +102,8 @@ struct mainRes_s{
     int sfm[2];
     int smode;
     // 3 pipe
-    struct pipe_s pipedn[5];
-    struct pipe_s pipeup[5];
+    struct pipe_s pipedn[6];
+    struct pipe_s pipeup[6];
     // data mode share memory
     struct shmem_s dataRx;
     struct shmem_s dataTx;
@@ -185,7 +185,7 @@ static int p4(struct procRes_s *rs);
 static int p4_init(struct procRes_s *rs);
 static int p4_end(struct procRes_s *rs);
 //p5: socket recv
-static int p5(struct procRes_s *rs);
+static int p5(struct procRes_s *rs, struct procRes_s *rcmd);
 static int p5_init(struct procRes_s *rs);
 static int p5_end(struct procRes_s *rs);
 
@@ -816,7 +816,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
     ch = '0';
 
-    if (argc == 3) {
+    if (argc == 2) {
         ch = '3';
     }
 
@@ -844,6 +844,8 @@ static int dbg(struct mainRes_s *mrs)
     while (1) {
         /* command parsing */
         ci = 0;    
+
+        /*
         while (1) {
             cmd[ci] = fgetc(stdin);
             if (cmd[ci] == '\n') {
@@ -852,7 +854,20 @@ static int dbg(struct mainRes_s *mrs)
             }
             ci++;
         }
-        
+        */
+
+        ci = mrs_ipc_get(mrs, cmd, 256, 5);
+
+        if (ci > 0) {
+            cmd[ci] = '\0';
+            sprintf(mrs->log, "get [%s] size:%d \n", cmd, ci);
+            print_f(&mrs->plog, "DBG", mrs->log);
+        } else {
+            printf_flush(&mrs->plog, mrs->flog);
+            usleep(500);
+            continue;
+        }
+
         pi = 0;
         while (pi < 8) {
             if ((strlen(cmd) != strlen(cmdtab[pi].str))) {
@@ -866,12 +881,12 @@ static int dbg(struct mainRes_s *mrs)
         /* command execution */
         if (pi == 8) {
             sprintf(mrs->log, "cmd not found!\n");
-            print_f(&mrs->plog, "P0", mrs->log);
+            print_f(&mrs->plog, "DBG", mrs->log);
         } 
         else if (pi < 8) {
             addr[0] = (char *)mrs;
             sprintf(mrs->log, "input [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
-            print_f(&mrs->plog, "P0", mrs->log);
+            print_f(&mrs->plog, "DBG", mrs->log);
             ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
 
             mrs_ipc_put(mrs, "t", 1, 0);
@@ -968,14 +983,14 @@ static int p0(struct mainRes_s *mrs)
             sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
             print_f(&mrs->plog, "P0", mrs->log);
 
-            bitset = 1;
+            bitset = 0;
             ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
             sprintf(mrs->log, "Set RDY: %d\n", bitset);
             print_f(&mrs->plog, "P0", mrs->log);
 
             bitset = 0;
-            ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-            sprintf(mrs->log, "Get RDY: %d\n", bitset);
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+            sprintf(mrs->log, "Set RDY: %d\n", bitset);
             print_f(&mrs->plog, "P0", mrs->log);
 
             pmode = 2;
@@ -995,11 +1010,6 @@ static int p0(struct mainRes_s *mrs)
             bitset = 0;
             ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
             sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            bitset = 0;
-            ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-            sprintf(mrs->log, "Get RDY: %d\n", bitset);
             print_f(&mrs->plog, "P0", mrs->log);
 
             bitset = 0;
@@ -1455,7 +1465,7 @@ static int p4(struct procRes_s *rs)
     return 0;
 }
 
-static int p5(struct procRes_s *rs)
+static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 {
     int px, pi, ret, n, size, opsz, acusz;
     char ch, *recvbuf, *addr;
@@ -1493,6 +1503,8 @@ static int p5(struct procRes_s *rs)
 
         rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)NULL, NULL); 
 
+        memset(recvbuf, 0x0, 1024);
+
         n = read(rs->psocket_r->connfd, recvbuf, 1024);
         if (recvbuf[n-1] == '\n')         recvbuf[n-1] = '\0';
         sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket_r->connfd);
@@ -1507,6 +1519,8 @@ static int p5(struct procRes_s *rs)
             ret = write(rs->psocket_r->connfd, recvbuf, n);
             sprintf(rs->logs, "send back app [%s] size:%d/%d\n", recvbuf, ret, n);
             print_f(rs->plogs, "P5", rs->logs);
+
+            rs_ipc_put(rcmd, recvbuf, n);
         }
 
         close(rs->psocket_r->connfd);
@@ -1519,11 +1533,11 @@ static int p5(struct procRes_s *rs)
 
 int main(int argc, char *argv[])
 {
-static char spi0[] = "/dev/spidev32766.0"; 
-static char spi1[] = "/dev/spidev32765.0"; 
+static char spi1[] = "/dev/spidev32766.0"; 
+static char spi0[] = "/dev/spidev32765.0"; 
 
     struct mainRes_s *pmrs;
-    struct procRes_s rs[5];
+    struct procRes_s rs[6];
     int ix, ret;
     char *log;
     int tdiff;
@@ -1687,25 +1701,44 @@ static char spi1[] = "/dev/spidev32765.0";
     if (ret == -1) 
         printf("can't get spi mode\n"); 
 
+   /*
+     * pull low RDY
+     */ 
+    bitset = 0;
+    ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+    sprintf(pmrs->log, "Set RDY: %d\n", bitset);
+    print_f(&pmrs->plog, "Init", pmrs->log);
+
+   /*
+     * pull low RDY
+     */ 
+    bitset = 0;
+    ret = ioctl(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+    sprintf(pmrs->log, "Set RDY: %d\n", bitset);
+    print_f(&pmrs->plog, "Init", pmrs->log);
+
 // IPC
     pipe(pmrs->pipedn[0].rt);
     pipe(pmrs->pipedn[1].rt);
     pipe(pmrs->pipedn[2].rt);
     pipe(pmrs->pipedn[3].rt);
     pipe(pmrs->pipedn[4].rt);
+    pipe(pmrs->pipedn[5].rt);
 	
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[1].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[2].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[3].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[4].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[5].rt, O_NONBLOCK);
 
     res_put_in(&rs[0], pmrs, 0);
     res_put_in(&rs[1], pmrs, 1);
     res_put_in(&rs[2], pmrs, 2);
     res_put_in(&rs[3], pmrs, 3);
     res_put_in(&rs[4], pmrs, 4);
-
+    res_put_in(&rs[5], pmrs, 5);
+	
 //  Share memory init
     ring_buf_init(&pmrs->dataRx);
     pmrs->dataRx.r->folw.seq = 1;
@@ -1732,7 +1765,7 @@ static char spi1[] = "/dev/spidev32765.0";
                 } else {				
                     pmrs->sid[4] = fork();
                     if (!pmrs->sid[4]) {
-                        p5(&rs[4]);
+                        p5(&rs[4], &rs[5]);
                     } else { 
                         pmrs->sid[5] = fork();
                         if (!pmrs->sid[5]) {
