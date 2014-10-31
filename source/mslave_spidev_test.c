@@ -716,24 +716,25 @@ static char path[256];
         // disable data mode
         bitset = 0;
         ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set spi0 data mode: %d\n", bitset);
+        printf("Set spi%d data mode: %d\n", arg2, bitset);
 
         bitset = 0;
         ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
-        printf("Get spi0 data mode: %d\n", bitset);
+        printf("Get spi%d data mode: %d\n", arg2, bitset);
 
         bitset = 1;
         ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-        printf("Get spi1 RDY: %d\n", bitset);
+        printf("Get spi%d RDY: %d\n", arg2, bitset);
 
-        bitset = 1;
+        bitset = 0;
         ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
-        printf("Set spi1 RDY: %d\n", bitset);
+        printf("Set spi%d RDY: %d\n", arg2, bitset);
 
+/*
         bitset = 1;
         ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WR_CS_PIN
         printf("Set CS: %d\n", bitset);
-/*
+
         bitset = 0;
         ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_RD_CS_PIN
         printf("Get CS: %d\n", bitset);
@@ -758,10 +759,15 @@ static char path[256];
 
             pktcnt++;
         }
-
+/*
         bitset = 0;
         ret = ioctl(fm[(arg2+1)%2], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WT_CS_PIN
         printf("Set CS: %d\n", bitset);
+*/
+
+        bitset = 1;
+        ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+        printf("Get spi%d RDY: %d\n", arg2, bitset);
 
         goto end;
     }
