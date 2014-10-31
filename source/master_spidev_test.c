@@ -928,7 +928,7 @@ static char spi1[] = "/dev/spidev32766.0";
 
         
         sleep(3);
-        
+        /*
         bitset = 1;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[cmd]Set RDY pin: %d cnt:%d\n",  bitset,pkcnt);
@@ -946,7 +946,7 @@ static char spi1[] = "/dev/spidev32766.0";
         bitset = 0;
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[cmd]Set RDY pin: %d cnt:%d\n", bitset, pkcnt);
-
+        */
         msync(srctmp, acusz, MS_SYNC);
         ret = fwrite(srctmp, 1, acusz, fp);
         printf("recv data save to [%s] size: %d/%d \n", path, ret, acusz);
@@ -1136,8 +1136,20 @@ static char spi1[] = "/dev/spidev32766.0";
 */
         bitset = 1;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("Set RDY pin: %d\n", bitset);
+        printf("spi0 Set RDY pin: %d\n", bitset);
 
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("spi1 Set RDY pin: %d\n", bitset);
+
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("spi0 Set data mode: %d\n", bitset);
+		
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("spi1 Set data mode: %d\n", bitset);
+        
         pipe(pipefd);
         pipe(pipefc);
 
