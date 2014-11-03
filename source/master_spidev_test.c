@@ -1201,7 +1201,7 @@ static char spi1[] = "/dev/spidev32766.0";
 					
                      ret = read(pipefc[0], &buf, 1); 
 			ret = tx_data(fm[0], NULL, srcBuff, pknum, pksize, 1024*1024);
-			//printf("[p0] tx %d \n", ret);
+			printf("[p0] tx %d \n", ret);
                      write(pipefd[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
@@ -1251,10 +1251,10 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
                      cur = curtime.tv_sec;
                      tnow = curtime.tv_nsec;
                      lnow = cur * 1000000000+tnow;
-                     printf("[p1] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+                     //printf("[p1] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
 
 			ret = tx_data(fm[1], NULL, srcBuff, pknum, pksize, 1024*1024);
-			//printf("[p1] tx %d \n", ret);
+			printf("[p1] tx %d \n", ret);
                      write(pipefc[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
@@ -1309,6 +1309,17 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         bitset = 0;
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
+
+	sleep(1);
+	
+        bitset = 0;
+        ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("[%d]Get RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
+		
+        bitset = 0;
+        ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("[%d]Get RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
+
 
 	munmap(srctmp, TSIZE);
 	goto end;
