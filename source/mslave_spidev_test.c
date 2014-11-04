@@ -486,7 +486,23 @@ static char path[256];
         printf("open device[%s]\n", spi1); 
 
         int fm[2] = {fd0, fd1};
-        
+
+        ret = ioctl(fm[0], SPI_IOC_WR_MODE, &mode);
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+ 
+        ret = ioctl(fm[0], SPI_IOC_RD_MODE, &mode);
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+
+        ret = ioctl(fm[1], SPI_IOC_WR_MODE, &mode);
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+ 
+        ret = ioctl(fm[1], SPI_IOC_RD_MODE, &mode);
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+
     char rxans[512];
     char tx[512];
     char rx[512];
