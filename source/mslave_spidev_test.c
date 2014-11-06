@@ -458,7 +458,7 @@ static char path[256];
         printf("Error!!buff alloc failed!!");
         goto end;
     }
-    memset(tx_buff[1], 0, buffsize);
+    memset(tx_buff[1], 0xf0, buffsize);
 
     rx_buff[1] = malloc(buffsize);
     if (rx_buff[1]) {
