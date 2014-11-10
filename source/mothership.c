@@ -106,9 +106,9 @@ struct mainRes_s{
     struct pipe_s pipeup[6];
     // data mode share memory
     struct shmem_s dataRx;
-    struct shmem_s dataTx;
+    struct shmem_s dataTx; /* we don't have data mode Tx, so use it as cmdRx for spi1 */
     // command mode share memory
-    struct shmem_s cmdRx;
+    struct shmem_s cmdRx; /* cmdRx for spi0 */
     struct shmem_s cmdTx;
     // file save
     FILE *fs;
@@ -796,9 +796,9 @@ static int p0_end(struct mainRes_s *mrs)
 
     fclose(mrs->fs);
     munmap(mrs->dataRx.pp[0], 1024*61440);
-    munmap(mrs->dataTx.pp[0], 8*61440);
-    munmap(mrs->cmdRx.pp[0], 16*1024);
-    munmap(mrs->cmdTx.pp[0], 2048*1024);
+    munmap(mrs->dataTx.pp[0], 256*61440);
+    munmap(mrs->cmdRx.pp[0], 256*61440);
+    munmap(mrs->cmdTx.pp[0], 512*61440);
     free(mrs->dataRx.pp);
     free(mrs->cmdRx.pp);
     free(mrs->dataTx.pp);
@@ -871,8 +871,7 @@ static int dbg(struct mainRes_s *mrs)
         pi = 0;
         while (pi < 8) {
             if ((strlen(cmd) != strlen(cmdtab[pi].str))) {
-            }
-            else if (!strncmp(cmd, cmdtab[pi].str, strlen(cmdtab[pi].str))) {
+            } else if (!strncmp(cmd, cmdtab[pi].str, strlen(cmdtab[pi].str))) {
                  break;
             }
             pi++;
@@ -1595,12 +1594,12 @@ static char spi0[] = "/dev/spidev32765.0";
 
     /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 8*61440, 61440);
+    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 256*61440, 61440);
     if (!pmrs->dataTx.pp) goto end;
     pmrs->dataTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataTx.totsz = 8*61440;
+    pmrs->dataTx.totsz = 256*61440;
     pmrs->dataTx.chksz = 61440;
-    pmrs->dataTx.svdist = 1;
+    pmrs->dataTx.svdist = 12;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataTx.totsz, pmrs->dataTx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->dataTx.slotn; ix++) {
@@ -1614,12 +1613,12 @@ static char spi0[] = "/dev/spidev32765.0";
 
     /* cmd mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 16*1024, 1024);
+    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 256*61440, 61440);
     if (!pmrs->cmdRx.pp) goto end;
     pmrs->cmdRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdRx.totsz = 16*1024;;
+    pmrs->cmdRx.totsz = 256*61440;;
     pmrs->cmdRx.chksz = 61440;
-    pmrs->cmdRx.svdist = 4;
+    pmrs->cmdRx.svdist = 12;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdRx.totsz, pmrs->cmdRx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->cmdRx.slotn; ix++) {
@@ -1636,7 +1635,7 @@ static char spi0[] = "/dev/spidev32765.0";
     pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 512*61440, 61440);
     if (!pmrs->cmdTx.pp) goto end;
     pmrs->cmdTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdTx.totsz = 512*61440;;
+    pmrs->cmdTx.totsz = 512*61440;
     pmrs->cmdTx.chksz = 61440;
     pmrs->cmdTx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
