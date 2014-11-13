@@ -228,8 +228,234 @@ static int stlaser_03(struct psdata_s *data);
 static int stlaser_04(struct psdata_s *data);
 static int stlaser_05(struct psdata_s *data);
 
-static int ps_test(struct psdata_s *data)
+static int next_spy(struct psdata_s *data)
 {
+    int pro, rlt, next = 0;
+    char str[256];
+    rlt = (data->result >> 8) & 0xf;
+    pro = data->result & 0xf;
+
+    sprintf(str, "%d-%d\n", pro, rlt); 
+    print_f(mlogPool, "spy", str); 
+
+    switch (pro) {
+        case PSSET:
+            sprintf(str, "PSSET\n"); 
+            print_f(mlogPool, "spy", str); 
+            next = PSACT;
+            break;
+        case PSACT:
+            sprintf(str, "PSACT\n"); 
+            print_f(mlogPool, "spy", str); 
+            next = PSWT;
+            break;
+        case PSWT:
+            sprintf(str, "PSWT\n"); 
+            print_f(mlogPool, "spy", str); 
+            next = PSRLT;
+            break;
+        case PSRLT:
+            sprintf(str, "PSRLT\n"); 
+            print_f(mlogPool, "spy", str); 
+            next = PSTSM;
+            break;
+        case PSTSM:
+            sprintf(str, "PSTSM\n"); 
+            print_f(mlogPool, "spy", str); 
+            next = PSSET | 0x1000; /* jump to next stage */
+            break;
+        default:
+            sprintf(str, "default\n"); 
+            print_f(mlogPool, "spy", str); 
+
+            break;
+    }
+
+    return next;
+}
+
+static int next_bullet(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    char str[256];
+    rlt = (data->result >> 8) & 0xf;
+    pro = data->result & 0xf;
+    sprintf(str, "%d-%d\n", pro, rlt); 
+    print_f(mlogPool, "bullet", str); 
+
+    switch (pro) {
+        case PSSET:
+            sprintf(str, "PSSET\n"); 
+            print_f(mlogPool, "bullet", str); 
+            next = PSACT;
+            break;
+        case PSACT:
+            sprintf(str, "PSACT\n"); 
+            print_f(mlogPool, "bullet", str); 
+            next = PSWT;
+            break;
+        case PSWT:
+            sprintf(str, "PSWT\n"); 
+            print_f(mlogPool, "bullet", str); 
+            next = PSRLT;
+            break;
+        case PSRLT:
+            sprintf(str, "PSRLT\n"); 
+            print_f(mlogPool, "bullet", str); 
+            next = PSTSM;
+            break;
+        case PSTSM:
+            sprintf(str, "PSTSM\n"); 
+            print_f(mlogPool, "bullet", str); 
+            next = PSSET | 0x1000; /* jump to next stage */
+            break;
+        default:
+            sprintf(str, "default\n"); 
+            print_f(mlogPool, "bullet", str); 
+            next = PSSET;
+            break;
+    }
+
+    return next;
+}
+
+static int next_laser(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    char str[256];
+    rlt = (data->result >> 8) & 0xf;
+    pro = data->result & 0xf;
+    sprintf(str, "%d-%d\n", pro, rlt); 
+    print_f(mlogPool, "laser", str); 
+
+    switch (pro) {
+        case PSSET:
+            sprintf(str, "PSSET\n"); 
+            print_f(mlogPool, "laser", str); 
+            next = PSACT;
+            break;
+        case PSACT:
+            sprintf(str, "PSACT\n"); 
+            print_f(mlogPool, "laser", str); 
+            next = PSWT;
+            break;
+        case PSWT:
+            sprintf(str, "PSWT\n"); 
+            print_f(mlogPool, "laser", str); 
+            next = PSRLT;
+            break;
+        case PSRLT:
+            sprintf(str, "PSRLT\n"); 
+            print_f(mlogPool, "laser", str); 
+            next = PSTSM;
+            break;
+        case PSTSM:
+            sprintf(str, "PSTSM\n"); 
+            print_f(mlogPool, "laser", str); 
+            next = PSSET | 0x1000; /* jump to next stage */
+            break;
+        default:
+            sprintf(str, "default\n"); 
+            print_f(mlogPool, "laser", str); 
+            next = PSSET;
+            break;
+    }
+
+
+    return next;
+}
+
+static int next_error(struct psdata_s *data)
+{
+    int pro, rlt, next;
+    char str[256];
+    rlt = (data->result >> 8) & 0xf;
+    pro = data->result & 0xf;
+    sprintf(str, "%d-%d\n", pro, rlt); 
+    print_f(mlogPool, "error", str); 
+
+    switch (pro) {
+        case PSSET:
+            sprintf(str, "PSSET\n"); 
+            print_f(mlogPool, "error", str); 
+            next = PSACT;
+            break;
+        case PSACT:
+            sprintf(str, "PSACT\n"); 
+            print_f(mlogPool, "error", str); 
+            next = PSWT;
+            break;
+        case PSWT:
+            sprintf(str, "PSWT\n"); 
+            print_f(mlogPool, "error", str); 
+            next = PSRLT;
+            break;
+        case PSRLT:
+            sprintf(str, "PSRLT\n"); 
+            print_f(mlogPool, "error", str); 
+            next = PSTSM;
+            break;
+        case PSTSM:
+            sprintf(str, "PSTSM\n"); 
+            print_f(mlogPool, "error", str); 
+            next = PSSET;
+            break;
+        default:
+            sprintf(str, "default\n"); 
+            print_f(mlogPool, "error", str); 
+            next = PSSET;
+            break;
+    }
+
+    next = 0; /* error handle, return to 0 */
+
+    return next;
+}
+static int ps_next(struct psdata_s *data)
+{
+    int sta, ret, evt, nxtst = -1, nxtrlt = 0;
+    char str[256];
+
+    sta = (data->result >> 4) & 0xf;
+    nxtst = sta;
+
+    sprintf(str, "sta: 0x%x\n", sta); 
+    print_f(mlogPool, "ps_next", str); 
+
+    switch (sta) {
+        case SPY:
+            ret = next_spy(data);
+            evt = (ret >> 12) & 0xf;
+            if (evt == 0x1) nxtst = BULLET;
+
+            break;
+        case BULLET:
+            ret = next_bullet(data);
+            evt = (ret >> 12) & 0xf;
+            if (evt == 0x1) nxtst = LASER;
+
+            break;
+        case LASER:
+            ret = next_laser(data);
+            evt = (ret >> 12) & 0xf;
+            if (evt == 0x1) nxtst = SPY;
+
+            break;
+        default:
+            ret = next_error(data);
+            evt = (ret >> 12) & 0xf;
+            if (evt == 0x1) nxtst = SPY;
+
+            break;
+    }
+
+    nxtrlt = ret & ~0xf0;
+    nxtrlt |= (nxtst << 4) & 0xf0;
+
+    sprintf(str, "ret: 0x%.4x nxtst: 0x%x nxtrlt: 0x%.4x\n", ret, nxtst, nxtrlt); 
+    print_f(mlogPool, "ps_next", str); 
+    
+#if 0
     data->result += 1;
     if ((data->result & 0xf) == PSMAX) {
         data->result = (data->result & 0xf0) + 0x10;
@@ -238,8 +464,9 @@ static int ps_test(struct psdata_s *data)
     if (((data->result & 0xf0) >> 4)== SMAX) {
         data->result = -1;
     }
+#endif
 
-    return data->result;
+    return nxtrlt;
 
 }
 static int stspy_01(struct psdata_s *data)
@@ -247,108 +474,107 @@ static int stspy_01(struct psdata_s *data)
     // keep polling, kind of idle mode
     // jump to next status if receive any op code
     char str[128]; 
-    sprintf(str, "spy 01\n"); 
-    print_f(mlogPool, "st", str); 
-
-    return ps_test(data);
+    sprintf(str, "op_01\n"); 
+    print_f(mlogPool, "spy", str); 
+    return ps_next(data);
 }
 static int stspy_02(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "spy 02\n"); 
-    print_f(mlogPool, "st", str); 
-    return ps_test(data);
+    sprintf(str, "op_02\n"); 
+    print_f(mlogPool, "spy", str); 
+    return ps_next(data);
 }
 static int stspy_03(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "spy 03\n"); 
-    print_f(mlogPool, "st", str); 
-    return ps_test(data);
+    sprintf(str, "op_03\n"); 
+    print_f(mlogPool, "spy", str); 
+    return ps_next(data);
 }
 static int stspy_04(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "spy 04\n"); 
-    print_f(mlogPool, "st", str); 
-    return ps_test(data);
+    sprintf(str, "op_04\n"); 
+    print_f(mlogPool, "spy", str); 
+    return ps_next(data);
 }
 static int stspy_05(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "spy 05\n"); 
-    print_f(mlogPool, "st", str); 
-    return ps_test(data);
+    sprintf(str, "op_05\n"); 
+    print_f(mlogPool, "spy", str); 
+    return ps_next(data);
 }
 static int stbullet_01(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "bullet 01\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_01\n"); 
+    print_f(mlogPool, "bullet", str);  
+    return ps_next(data);
 }
 static int stbullet_02(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "bullet 02\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_02\n"); 
+    print_f(mlogPool, "bullet", str);  
+    return ps_next(data);
 }
 static int stbullet_03(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "bullet 03\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_03\n"); 
+    print_f(mlogPool, "bullet", str);  
+    return ps_next(data);
 }
 static int stbullet_04(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "bullet 04\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_04\n"); 
+    print_f(mlogPool, "bullet", str);  
+    return ps_next(data);
 }
 static int stbullet_05(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "bullet 05\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_05\n"); 
+    print_f(mlogPool, "bullet", str);  
+    return ps_next(data);
 }
 static int stlaser_01(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "laser 01\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_01\n"); 
+    print_f(mlogPool, "laser", str);  
+    return ps_next(data);
 }
 static int stlaser_02(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "laser 02\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_02\n"); 
+    print_f(mlogPool, "laser", str);  
+    return ps_next(data);
 }
 static int stlaser_03(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "laser 03\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_03\n"); 
+    print_f(mlogPool, "laser", str);  
+    return ps_next(data);
 }
 static int stlaser_04(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "laser 04\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_04\n"); 
+    print_f(mlogPool, "laser", str);  
+    return ps_next(data);
 }
 static int stlaser_05(struct psdata_s *data) 
 { 
     char str[128]; 
-    sprintf(str, "laser 05\n"); 
-    print_f(mlogPool, "st", str);  
-    return ps_test(data);
+    sprintf(str, "op_05\n"); 
+    print_f(mlogPool, "laser", str);  
+    return ps_next(data);
 }
 
 static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p)
@@ -1268,12 +1494,13 @@ static int p1(struct procRes_s *rs)
             stdata.result = 0;
             ret = 0;
             while (1) {
-                sprintf(rs->logs, "%x\n", ret);
+                sprintf(rs->logs, "%.4x\n", ret);
                 print_f(rs->plogs, "P1", rs->logs);
                 pi = (ret & 0xf0) >> 4;
                 px = (ret & 0xf);
                 ret = (*pf[pi][px])(&stdata);
                 if (ret == (-1)) break;
+                stdata.result = ret;
             }
 
         }
