@@ -50,7 +50,8 @@ typedef enum {
 }status_e;
 
 struct psdata_s {
-    int result;
+    int         result;
+    uint32_t ansp0;
 };
 
 typedef int (*stfunc)(struct psdata_s *data);
@@ -262,8 +263,8 @@ static int next_spy(struct psdata_s *data)
     rlt = (data->result >> 8) & 0xf;
     pro = data->result & 0xf;
 
-    sprintf(str, "%d-%d\n", pro, rlt); 
-    print_f(mlogPool, "spy", str); 
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "spy", str); 
 
     next = pro;
     if (rlt == WAIT) 
@@ -293,7 +294,8 @@ static int next_spy(struct psdata_s *data)
         case PSTSM:
             sprintf(str, "PSTSM\n"); 
             print_f(mlogPool, "spy", str); 
-            next = PSSET | 0x1000; /* jump to next stage */
+            next = PSMAX; /* end of state machine */
+            //next = PSSET | 0x1000; /* jump to next stage */
             break;
         default:
             sprintf(str, "default\n"); 
@@ -312,8 +314,8 @@ static int next_bullet(struct psdata_s *data)
     rlt = (data->result >> 8) & 0xf;
     pro = data->result & 0xf;
 
-    sprintf(str, "%d-%d\n", pro, rlt); 
-    print_f(mlogPool, "bullet", str); 
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
 
     next = pro;
     if (rlt == WAIT) 
@@ -362,8 +364,8 @@ static int next_laser(struct psdata_s *data)
     rlt = (data->result >> 8) & 0xf;
     pro = data->result & 0xf;
 
-    sprintf(str, "%d-%d\n", pro, rlt); 
-    print_f(mlogPool, "laser", str); 
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "laser", str); 
 
     next = pro;
     if (rlt == WAIT) 
@@ -412,8 +414,9 @@ static int next_error(struct psdata_s *data)
     char str[256];
     rlt = (data->result >> 8) & 0xf;
     pro = data->result & 0xf;
-    sprintf(str, "%d-%d\n", pro, rlt); 
-    print_f(mlogPool, "error", str); 
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "error", str); 
 
     switch (pro) {
         case PSSET:
@@ -460,8 +463,8 @@ static int ps_next(struct psdata_s *data)
     sta = (data->result >> 4) & 0xf;
     nxtst = sta;
 
-    sprintf(str, "sta: 0x%x\n", sta); 
-    print_f(mlogPool, "ps_next", str); 
+    //sprintf(str, "sta: 0x%x\n", sta); 
+    //print_f(mlogPool, "ps_next", str); 
 
     switch (sta) {
         case SPY:
@@ -1210,7 +1213,11 @@ static int cmdfunc_01(int argc, char *argv[])
 
     mrs = (struct mainRes_s *)argv[0];
 
-    ch = '0';
+    ch = '\0';
+
+    if (argc == 0) {
+        ch = 'p';
+    }
 
     if (argc == 2) {
         ch = '3';
@@ -1220,8 +1227,12 @@ static int cmdfunc_01(int argc, char *argv[])
         ch = '4';
     }
 
-    sprintf(str, "cmdfunc_01 argc:%d [%s] ch:%c\n", argc, argv[0], ch); 
-    print_f(mlogPool, "cmdfunc", str);
+    if (argc == 5) {
+        ch = 's';
+    }
+
+    //sprintf(str, "cmdfunc_01 argc:%d [%s] ch:%c\n", argc, argv[0], ch); 
+    //print_f(mlogPool, "cmdfunc", str);
 
     mrs_ipc_put(mrs, &ch, 1, 6);
     return 1;
@@ -1245,16 +1256,16 @@ static int dbg(struct mainRes_s *mrs)
 
         if (ci > 0) {
             cmd[ci] = '\0';
-            sprintf(mrs->log, "get [%s] size:%d \n", cmd, ci);
-            print_f(&mrs->plog, "DBG", mrs->log);
+            //sprintf(mrs->log, "get [%s] size:%d \n", cmd, ci);
+            //print_f(&mrs->plog, "DBG", mrs->log);
         } else {
-            if (idle > 300) {
+            if (idle > 5) {
                 idle = 0;
                 strcpy(cmd, poll);
             } else {
                 idle ++;
                 printf_flush(&mrs->plog, mrs->flog);
-                usleep(100);
+                usleep(1000);
                 continue;
             }
         }
@@ -1272,11 +1283,11 @@ static int dbg(struct mainRes_s *mrs)
         /* command execution */
         if (pi < 8) {
             addr[0] = (char *)mrs;
-            sprintf(mrs->log, "input [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
+            sprintf(mrs->log, "input [%d]%s\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
             print_f(&mrs->plog, "DBG", mrs->log);
             ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
 
-            mrs_ipc_put(mrs, "t", 1, 6);
+            //mrs_ipc_put(mrs, "t", 1, 6);
         }
 
         cmd[0] = '\0';
@@ -1518,7 +1529,8 @@ static int p0(struct mainRes_s *mrs)
 
         ch = '1';
         mrs_ipc_put(mrs, &ch, 1, 0);
-        usleep(1000);
+        usleep(100);
+        //sleep(2);
     }
 
     // save to file for debug
@@ -1535,7 +1547,7 @@ static int p0(struct mainRes_s *mrs)
 static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 {
     int px, pi, ret = 0, ci, evt;
-    char ch, cmd;
+    char ch, cmd, cmdt;
     char *addr;
 
     sprintf(rs->logs, "p1\n");
@@ -1549,36 +1561,44 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     // wait for ch from p0
     // state machine control
 
-    pi = 0;
-    stdata.result = 0;
-    cmd = '\0';
+    pi = 0;    stdata.result = 0;    cmd = '\0';   cmdt = '\0';
     while (1) {
         //sprintf(rs->logs, "+\n");
         //print_f(rs->plogs, "P1", rs->logs);
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
-        if (ci > 0) {
+        while (ci > 0) {
             sprintf(rs->logs, "%c\n", cmd);
             print_f(rs->plogs, "P1CMD", rs->logs);
-            stdata.result = 0;
+
+            if (cmdt == '\0') {
+                if (cmd == 's') {
+                    stdata.result = 0x0;
+                    cmdt = cmd;
+                }
+            }
+            ci = 0;
+            ci = rs_ipc_get(rcmd, &cmd, 1);            
         }
 
         ret = 0; ch = '\0';
         ret = rs_ipc_get(rs, &ch, 1);
-        if (ret > 0) {
-            sprintf(rs->logs, "ret:%d ch:%c\n", ret, ch);
-            print_f(rs->plogs, "P1", rs->logs);
-        }
+        //if (ret > 0) {
+        //    sprintf(rs->logs, "ret:%d ch:%c\n", ret, ch);
+        //    print_f(rs->plogs, "P1", rs->logs);
+        //}
 
-        if (((ret > 0) && (ch != '\0')) &&
-            (cmd != '\0')) {
+        if (((ret > 0) && (ch != '\0')) ||
+            (cmdt != '\0')) {
+            stdata.ansp0 = ch;
             evt = stdata.result;
             pi = (evt & 0xf0) >> 4;
             px = (evt & 0xf);
             if ((pi >= SMAX) || (px >= PSMAX)) {
-                cmd = '\0';
+                cmdt = '\0';
                 continue;
             }
+
             stdata.result = (*pf[pi][px])(&stdata);
 
             sprintf(rs->logs, "ret:%d ch:%c evt:0x%.4x\n", ret, ch, evt);
