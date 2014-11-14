@@ -28,6 +28,12 @@ static struct logPool_s *mlogPool;
 typedef int (*func)(int argc, char *argv[]);
 
 typedef enum {
+    WAIT = 0,
+    NEXT,
+    BREAK,
+    EVTMAX,
+}event_e;
+typedef enum {
     SPY = 0,
     BULLET,
     LASER,
@@ -102,8 +108,8 @@ struct mainRes_s{
     int sfm[2];
     int smode;
     // 3 pipe
-    struct pipe_s pipedn[6];
-    struct pipe_s pipeup[6];
+    struct pipe_s pipedn[7];
+    struct pipe_s pipeup[7];
     // data mode share memory
     struct shmem_s dataRx;
     struct shmem_s dataTx; /* we don't have data mode Tx, so use it as cmdRx for spi1 */
@@ -169,7 +175,7 @@ static int p0(struct mainRes_s *mrs);
 static int p0_init(struct mainRes_s *mrs);
 static int p0_end(struct mainRes_s *mrs);
 //p1: spi0 send
-static int p1(struct procRes_s *rs);
+static int p1(struct procRes_s *rs, struct procRes_s *rcmd);
 static int p1_init(struct procRes_s *rs);
 static int p1_end(struct procRes_s *rs);
 //p2: spi0 recv
@@ -228,6 +234,27 @@ static int stlaser_03(struct psdata_s *data);
 static int stlaser_04(struct psdata_s *data);
 static int stlaser_05(struct psdata_s *data);
 
+inline int emb_result(int result, int flag) 
+{
+    result &= ~0xf00;
+    result |= (flag << 8) & 0xf00;
+    return result;
+}
+
+inline int emb_state(int result, int flag) 
+{
+    result &= ~0xf0;
+    result |= (flag << 4) & 0xf0;
+    return result;
+}
+
+inline int emb_process(int result, int flag) 
+{
+    result &= ~0xf;
+    result |= flag & 0xf;
+    return result;
+}
+
 static int next_spy(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
@@ -237,6 +264,10 @@ static int next_spy(struct psdata_s *data)
 
     sprintf(str, "%d-%d\n", pro, rlt); 
     print_f(mlogPool, "spy", str); 
+
+    next = pro;
+    if (rlt == WAIT) 
+        return next;
 
     switch (pro) {
         case PSSET:
@@ -280,8 +311,13 @@ static int next_bullet(struct psdata_s *data)
     char str[256];
     rlt = (data->result >> 8) & 0xf;
     pro = data->result & 0xf;
+
     sprintf(str, "%d-%d\n", pro, rlt); 
     print_f(mlogPool, "bullet", str); 
+
+    next = pro;
+    if (rlt == WAIT) 
+        return next;
 
     switch (pro) {
         case PSSET:
@@ -325,8 +361,13 @@ static int next_laser(struct psdata_s *data)
     char str[256];
     rlt = (data->result >> 8) & 0xf;
     pro = data->result & 0xf;
+
     sprintf(str, "%d-%d\n", pro, rlt); 
     print_f(mlogPool, "laser", str); 
+
+    next = pro;
+    if (rlt == WAIT) 
+        return next;
 
     switch (pro) {
         case PSSET:
@@ -438,7 +479,7 @@ static int ps_next(struct psdata_s *data)
         case LASER:
             ret = next_laser(data);
             evt = (ret >> 12) & 0xf;
-            if (evt == 0x1) nxtst = SPY;
+            if (evt == 0x1) nxtst = SMAX; /* end the test loop */
 
             break;
         default:
@@ -449,8 +490,7 @@ static int ps_next(struct psdata_s *data)
             break;
     }
 
-    nxtrlt = ret & ~0xf0;
-    nxtrlt |= (nxtst << 4) & 0xf0;
+    nxtrlt = emb_state(ret, nxtst);
 
     sprintf(str, "ret: 0x%.4x nxtst: 0x%x nxtrlt: 0x%.4x\n", ret, nxtst, nxtrlt); 
     print_f(mlogPool, "ps_next", str); 
@@ -473,9 +513,12 @@ static int stspy_01(struct psdata_s *data)
 { 
     // keep polling, kind of idle mode
     // jump to next status if receive any op code
+
     char str[128]; 
     sprintf(str, "op_01\n"); 
     print_f(mlogPool, "spy", str); 
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stspy_02(struct psdata_s *data) 
@@ -483,6 +526,8 @@ static int stspy_02(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_02\n"); 
     print_f(mlogPool, "spy", str); 
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stspy_03(struct psdata_s *data) 
@@ -490,6 +535,8 @@ static int stspy_03(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_03\n"); 
     print_f(mlogPool, "spy", str); 
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stspy_04(struct psdata_s *data) 
@@ -497,6 +544,8 @@ static int stspy_04(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_04\n"); 
     print_f(mlogPool, "spy", str); 
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stspy_05(struct psdata_s *data) 
@@ -504,6 +553,8 @@ static int stspy_05(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_05\n"); 
     print_f(mlogPool, "spy", str); 
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stbullet_01(struct psdata_s *data) 
@@ -511,6 +562,8 @@ static int stbullet_01(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_01\n"); 
     print_f(mlogPool, "bullet", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stbullet_02(struct psdata_s *data) 
@@ -518,6 +571,8 @@ static int stbullet_02(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_02\n"); 
     print_f(mlogPool, "bullet", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stbullet_03(struct psdata_s *data) 
@@ -525,6 +580,8 @@ static int stbullet_03(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_03\n"); 
     print_f(mlogPool, "bullet", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stbullet_04(struct psdata_s *data) 
@@ -532,6 +589,8 @@ static int stbullet_04(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_04\n"); 
     print_f(mlogPool, "bullet", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stbullet_05(struct psdata_s *data) 
@@ -539,6 +598,8 @@ static int stbullet_05(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_05\n"); 
     print_f(mlogPool, "bullet", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stlaser_01(struct psdata_s *data) 
@@ -546,6 +607,8 @@ static int stlaser_01(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_01\n"); 
     print_f(mlogPool, "laser", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stlaser_02(struct psdata_s *data) 
@@ -553,6 +616,8 @@ static int stlaser_02(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_02\n"); 
     print_f(mlogPool, "laser", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stlaser_03(struct psdata_s *data) 
@@ -560,6 +625,8 @@ static int stlaser_03(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_03\n"); 
     print_f(mlogPool, "laser", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stlaser_04(struct psdata_s *data) 
@@ -567,6 +634,8 @@ static int stlaser_04(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_04\n"); 
     print_f(mlogPool, "laser", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 static int stlaser_05(struct psdata_s *data) 
@@ -574,6 +643,8 @@ static int stlaser_05(struct psdata_s *data)
     char str[128]; 
     sprintf(str, "op_05\n"); 
     print_f(mlogPool, "laser", str);  
+
+    data->result = emb_result(data->result, NEXT);
     return ps_next(data);
 }
 
@@ -656,6 +727,7 @@ static int shmem_from_str(char **addr, char *dst, char *sz)
 
     return size;
 }
+
 static int ring_buf_info_len(struct shmem_s *pp)
 {
     int dualn = 0;
@@ -667,7 +739,6 @@ static int ring_buf_info_len(struct shmem_s *pp)
     dualn = pp->r->dual.run * pp->slotn + pp->r->dual.seq;
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
 
-	
     if (dualn > leadn) {
         dist = dualn - folwn;
     } else {
@@ -676,6 +747,7 @@ static int ring_buf_info_len(struct shmem_s *pp)
 
     return dist;
 }
+
 static int ring_buf_init(struct shmem_s *pp)
 {
     pp->r->lead.run = 0;
@@ -1151,14 +1223,15 @@ static int cmdfunc_01(int argc, char *argv[])
     sprintf(str, "cmdfunc_01 argc:%d [%s] ch:%c\n", argc, argv[0], ch); 
     print_f(mlogPool, "cmdfunc", str);
 
-    mrs_ipc_put(mrs, &ch, 1, 0);
+    mrs_ipc_put(mrs, &ch, 1, 6);
     return 1;
 }
 
 static int dbg(struct mainRes_s *mrs)
 {
-    int ci, pi, ret;
+    int ci, pi, ret, idle = 0;
     char cmd[256], *addr[3];
+    char poll[32] = "poll";
 
     struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
                                 {4, "aspect", cmdfunc_01}, {5, "leo", cmdfunc_01}, {6, "mothership", cmdfunc_01}, {7, "lanch", cmdfunc_01}};
@@ -1168,18 +1241,6 @@ static int dbg(struct mainRes_s *mrs)
     while (1) {
         /* command parsing */
         ci = 0;    
-
-        /*
-        while (1) {
-            cmd[ci] = fgetc(stdin);
-            if (cmd[ci] == '\n') {
-                cmd[ci] = '\0';
-                break;
-            }
-            ci++;
-        }
-        */
-
         ci = mrs_ipc_get(mrs, cmd, 256, 5);
 
         if (ci > 0) {
@@ -1187,36 +1248,38 @@ static int dbg(struct mainRes_s *mrs)
             sprintf(mrs->log, "get [%s] size:%d \n", cmd, ci);
             print_f(&mrs->plog, "DBG", mrs->log);
         } else {
-            printf_flush(&mrs->plog, mrs->flog);
-            usleep(500);
-            continue;
+            if (idle > 300) {
+                idle = 0;
+                strcpy(cmd, poll);
+            } else {
+                idle ++;
+                printf_flush(&mrs->plog, mrs->flog);
+                usleep(100);
+                continue;
+            }
         }
 
         pi = 0;
         while (pi < 8) {
-            if ((strlen(cmd) != strlen(cmdtab[pi].str))) {
-            } else if (!strncmp(cmd, cmdtab[pi].str, strlen(cmdtab[pi].str))) {
-                 break;
+            if ((strlen(cmd) == strlen(cmdtab[pi].str))) {
+                if (!strncmp(cmd, cmdtab[pi].str, strlen(cmdtab[pi].str))) {
+                    break;
+                }
             }
             pi++;
         }
 
         /* command execution */
-        if (pi == 8) {
-            sprintf(mrs->log, "cmd not found!\n");
-            print_f(&mrs->plog, "DBG", mrs->log);
-        } 
-        else if (pi < 8) {
+        if (pi < 8) {
             addr[0] = (char *)mrs;
             sprintf(mrs->log, "input [%d]%s:%d[%s]\n", pi, cmdtab[pi].str, cmdtab[pi].id, cmd);
             print_f(&mrs->plog, "DBG", mrs->log);
             ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
 
-            mrs_ipc_put(mrs, "t", 1, 0);
-        } else {
-            sprintf(mrs->log, "error input cmd: [%d]\n", pi);
-            print_f(&mrs->plog, "DBG", mrs->log);
+            mrs_ipc_put(mrs, "t", 1, 6);
         }
+
+        cmd[0] = '\0';
 
         printf_flush(&mrs->plog, mrs->flog);
     }
@@ -1242,7 +1305,10 @@ static int p0(struct mainRes_s *mrs)
     // parsing command in shared memory which get from socket 
     // parsing command in shared memory whcih get form spi
     // 
-    
+
+    // [todo]remove test code below
+    pmode = 5;
+
     while (!pmode) {
         ret = mrs_ipc_get(mrs, &ch, 1, 0);
         if (ret > 0) {
@@ -1449,7 +1515,10 @@ static int p0(struct mainRes_s *mrs)
             }
             if (chk[0]) pmode = 0;
         }
-        usleep(10);
+
+        ch = '1';
+        mrs_ipc_put(mrs, &ch, 1, 0);
+        usleep(1000);
     }
 
     // save to file for debug
@@ -1463,10 +1532,10 @@ static int p0(struct mainRes_s *mrs)
     return 0;
 }
 
-static int p1(struct procRes_s *rs)
+static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    int px, pi, ret, ci;
-    char ch, cmd[32];
+    int px, pi, ret = 0, ci, evt;
+    char ch, cmd;
     char *addr;
 
     sprintf(rs->logs, "p1\n");
@@ -1481,31 +1550,43 @@ static int p1(struct procRes_s *rs)
     // state machine control
 
     pi = 0;
-    ch = '1';
+    stdata.result = 0;
+    cmd = '\0';
     while (1) {
-        sprintf(rs->logs, "+\n");
-        print_f(rs->plogs, "P1", rs->logs);
+        //sprintf(rs->logs, "+\n");
+        //print_f(rs->plogs, "P1", rs->logs);
+        ci = 0; 
+        ci = rs_ipc_get(rcmd, &cmd, 1);
+        if (ci > 0) {
+            sprintf(rs->logs, "%c\n", cmd);
+            print_f(rs->plogs, "P1CMD", rs->logs);
+            stdata.result = 0;
+        }
 
+        ret = 0; ch = '\0';
         ret = rs_ipc_get(rs, &ch, 1);
         if (ret > 0) {
-            sprintf(rs->logs, "%c\n", ch);
+            sprintf(rs->logs, "ret:%d ch:%c\n", ret, ch);
             print_f(rs->plogs, "P1", rs->logs);
-
-            stdata.result = 0;
-            ret = 0;
-            while (1) {
-                sprintf(rs->logs, "%.4x\n", ret);
-                print_f(rs->plogs, "P1", rs->logs);
-                pi = (ret & 0xf0) >> 4;
-                px = (ret & 0xf);
-                ret = (*pf[pi][px])(&stdata);
-                if (ret == (-1)) break;
-                stdata.result = ret;
-            }
-
         }
-        rs_ipc_put(rs, &ch, 1);
-        usleep(10);
+
+        if (((ret > 0) && (ch != '\0')) &&
+            (cmd != '\0')) {
+            evt = stdata.result;
+            pi = (evt & 0xf0) >> 4;
+            px = (evt & 0xf);
+            if ((pi >= SMAX) || (px >= PSMAX)) {
+                cmd = '\0';
+                continue;
+            }
+            stdata.result = (*pf[pi][px])(&stdata);
+
+            sprintf(rs->logs, "ret:%d ch:%c evt:0x%.4x\n", ret, ch, evt);
+            print_f(rs->plogs, "P1", rs->logs);
+        }
+
+        //rs_ipc_put(rs, &ch, 1);
+        //usleep(10);
     }
 
     p1_end(rs);
@@ -1868,7 +1949,7 @@ static char spi1[] = "/dev/spidev32766.0";
 static char spi0[] = "/dev/spidev32765.0"; 
 
     struct mainRes_s *pmrs;
-    struct procRes_s rs[6];
+    struct procRes_s rs[7];
     int ix, ret;
     char *log;
     int tdiff;
@@ -2050,11 +2131,14 @@ static char spi0[] = "/dev/spidev32765.0";
 
 // IPC
     pipe(pmrs->pipedn[0].rt);
+    //pipe2(pmrs->pipedn[0].rt, O_NONBLOCK);
     pipe(pmrs->pipedn[1].rt);
     pipe(pmrs->pipedn[2].rt);
     pipe(pmrs->pipedn[3].rt);
     pipe(pmrs->pipedn[4].rt);
     pipe(pmrs->pipedn[5].rt);
+    //pipe(pmrs->pipedn[6].rt);
+    pipe2(pmrs->pipedn[6].rt, O_NONBLOCK);
 	
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[1].rt, O_NONBLOCK);
@@ -2062,6 +2146,7 @@ static char spi0[] = "/dev/spidev32765.0";
     pipe2(pmrs->pipeup[3].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[4].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[5].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[6].rt, O_NONBLOCK);
 
     res_put_in(&rs[0], pmrs, 0);
     res_put_in(&rs[1], pmrs, 1);
@@ -2069,6 +2154,7 @@ static char spi0[] = "/dev/spidev32765.0";
     res_put_in(&rs[3], pmrs, 3);
     res_put_in(&rs[4], pmrs, 4);
     res_put_in(&rs[5], pmrs, 5);
+    res_put_in(&rs[6], pmrs, 6);
 	
 //  Share memory init
     ring_buf_init(&pmrs->dataRx);
@@ -2080,7 +2166,7 @@ static char spi0[] = "/dev/spidev32765.0";
 // fork process
     pmrs->sid[0] = fork();
     if (!pmrs->sid[0]) {
-        p1(&rs[0]);
+        p1(&rs[0], &rs[6]);
     } else {
         pmrs->sid[1] = fork();
         if (!pmrs->sid[1]) {
