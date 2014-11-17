@@ -28,7 +28,8 @@ static struct logPool_s *mlogPool;
 typedef int (*func)(int argc, char *argv[]);
 
 typedef enum {
-    WAIT = 0,
+    STINIT = 0,
+    WAIT,
     NEXT,
     BREAK,
     EVTMAX,
@@ -52,6 +53,7 @@ typedef enum {
 struct psdata_s {
     int         result;
     uint32_t ansp0;
+    struct procRes_s *rs;
 };
 
 typedef int (*stfunc)(struct psdata_s *data);
@@ -235,6 +237,11 @@ static int stlaser_03(struct psdata_s *data);
 static int stlaser_04(struct psdata_s *data);
 static int stlaser_05(struct psdata_s *data);
 
+inline int abs_result(int result)
+{
+    result = result >> 8;
+    return (result & 0xf);
+}
 inline int emb_result(int result, int flag) 
 {
     result &= ~0xf00;
@@ -562,11 +569,27 @@ static int stspy_05(struct psdata_s *data)
 }
 static int stbullet_01(struct psdata_s *data) 
 { 
-    char str[128]; 
+    char str[128], ch = 0; 
+    int rlt;
     sprintf(str, "op_01\n"); 
     print_f(mlogPool, "bullet", str);  
 
-    data->result = emb_result(data->result, NEXT);
+    rlt = abs_result(data->result);
+    switch (rlt) {
+        case STINIT:
+            ch = '0'; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            break;
+        case WAIT:
+            if (data->ansp0 == 1)
+                data->result = emb_result(data->result, NEXT);
+            break;
+        case NEXT:
+            break;
+        default:
+            break;
+    }
     return ps_next(data);
 }
 static int stbullet_02(struct psdata_s *data) 
@@ -1304,6 +1327,7 @@ static int p0(struct mainRes_s *mrs)
     char ch, c1, str[128], dst[17];
     char *addr[3], *stop_at;
     int pmode = 0, pstatus[2], cstatus = 0;
+    int rsp = 0;
 
     int px, ci;
 
@@ -1317,116 +1341,8 @@ static int p0(struct mainRes_s *mrs)
     // parsing command in shared memory whcih get form spi
     // 
 
-    // [todo]remove test code below
-    pmode = 5;
-
-    while (!pmode) {
-        ret = mrs_ipc_get(mrs, &ch, 1, 0);
-        if (ret > 0) {
-            sprintf(mrs->log, "ret:%d ch:%c\n", ret, ch);
-            print_f(&mrs->plog, "P0", mrs->log);
-        }
-		
-        if (ret <= 0) {
-            //sprintf(mrs->log, "ret:%d\n", ret);
-            //print_f(&mrs->plog, "P0", mrs->log);
-        }
-        else if (ch == '2') {
-            // set mode to data mode
-            pmode = 1;
-            bksz[0] = 0;
-            bksz[1] = 0;
-            mrs->dataRx.lastflg = 0;
-            mrs->dataRx.lastsz = 0;
-            mrs->dataRx.dualsz = 0;
-            pstatus[0] = 0;
-            pstatus[1] = 0;
-            cstatus = 0;
-            bitset = 0;
-            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-
-            bitset = 1;
-            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-        
-            bitset = 1;
-            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
- 
-            bitset = 1;
-            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            bitset = 0;
-            ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-            sprintf(mrs->log, "Get RDY: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            mrs_ipc_put(mrs, "d", 1, 1);
-            mrs_ipc_put(mrs, "d", 1, 2);
-        }
-        else if (ch == '3') {
-            bitset = 0;
-            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-
-            bitset = 1;
-            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-        
-            bitset = 1;
-            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
- 
-            bitset = 1;
-            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            bitset = 0;
-            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
-            sprintf(mrs->log, "Set RDY: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            bitset = 0;
-            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
-            sprintf(mrs->log, "Set RDY: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            pmode = 2;
-        }
-        else if (ch == '4') { /* app -> wifi -> spi */
-            bitset = 0;
-            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-
-            bitset = 1;
-            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-        
-            bitset = 0;
-            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
- 
-            bitset = 0;
-            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            bitset = 0;
-            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
-            sprintf(mrs->log, "Set RDY: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            pmode = 3;
-        }
-        else {
-            sprintf(mrs->log, "%c\n", ch);
-            print_f(&mrs->plog, "P0", mrs->log);
-        }
-        usleep(500);
-    }
-    sprintf(mrs->log, "pmode select: 0x%x \n", pmode);
-    print_f(&mrs->plog, "P0", mrs->log);
+    // [todo]initial value
+    pmode = -1;
 
     pi = 0; pt = 0; pc = 0, seq[0] = 0, seq[1] = 1; wc = 0; 
     chk[0] = 0; chk[1] = 0;
@@ -1435,7 +1351,25 @@ static int p0(struct mainRes_s *mrs)
         //print_f(&mrs->plog, "P0", mrs->log);
 
         // p2 data mode spi0 rx
-        
+        ret = mrs_ipc_get(mrs, &ch, 1, 0);
+        if (ret > 0) {
+            sprintf(mrs->log, "ret:%d ch:%c\n", ret, ch);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            if (pmode == -1) {
+                switch (ch) {
+                    case '':
+                        pmode = ;
+                        \break;
+                    default:
+                        pmode = ch;
+                        break;
+                }
+            } else {
+                /* todo: interrupt state machine here */
+            }
+        }
+
         if (pmode == 1) {
             ret = mrs_ipc_get(mrs, &ch, 1, 1);
             while (ret > 0) {
@@ -1468,9 +1402,11 @@ static int p0(struct mainRes_s *mrs)
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 2);
             }
-            if (chk[0] && chk[1]) pmode = 0;
-        }
-        if (pmode == 2) {
+            if (chk[0] && chk[1]) {
+                pmode = 0;
+                rsp = 1;
+            }
+        } else if (pmode == 2) {
             ret = mrs_ipc_get(mrs, &ch, 1, 4);
             if (ret > 0) {
                 sprintf(mrs->log, "0 [%c]\n", ch);
@@ -1483,13 +1419,14 @@ static int p0(struct mainRes_s *mrs)
                     print_f(&mrs->plog, "P0", mrs->log);
 
                     // send command to trigger dual spi mode
-                    pmode = 1;
                     mrs_ipc_put(mrs, "d", 1, 1);
                     mrs_ipc_put(mrs, "d", 1, 2);
+                    
+                    pmode = 0; //pmode = 1;
+                    rsp = 1;
                 }
             }
-        }
-        if (pmode == 3) {
+        } else if (pmode == 3) {
             ret = mrs_ipc_get(mrs, &ch, 1, 4);
             if (ret > 0) {
                 sprintf(mrs->log, "0 [%c]\n", ch);
@@ -1502,13 +1439,14 @@ static int p0(struct mainRes_s *mrs)
                     print_f(&mrs->plog, "P0", mrs->log);
 
                     // send command to trigger spi command mode
-                    pmode = 4;
                     seq[0] = 0;
                     mrs_ipc_put(mrs, "c", 1, 3);
+
+                    pmode = 0; //pmode = 4;
+                    rsp = 1;
                 }
             }
-        }
-        if (pmode == 4) {
+        } else if (pmode == 4) {
             ret = mrs_ipc_get(mrs, &ch, 1, 3);
             while (ret > 0) {
                 if (ch == 'c') {
@@ -1524,11 +1462,108 @@ static int p0(struct mainRes_s *mrs)
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 3);
             }
-            if (chk[0]) pmode = 0;
-        }
+            if (chk[0]) {
+                pmode = 0;
+                rsp = 1;
+            }
+        } else if (pmode == 5) { //(ch == '2') {
+            // set mode to data mode
+            bksz[0] = 0;
+            bksz[1] = 0;
+            mrs->dataRx.lastflg = 0;
+            mrs->dataRx.lastsz = 0;
+            mrs->dataRx.dualsz = 0;
+            pstatus[0] = 0;
+            pstatus[1] = 0;
+            cstatus = 0;
+            bitset = 0;
+            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
-        ch = '1';
-        mrs_ipc_put(mrs, &ch, 1, 0);
+            bitset = 1;
+            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+            bitset = 1;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+ 
+            bitset = 1;
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+            sprintf(mrs->log, "Get RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            mrs_ipc_put(mrs, "d", 1, 1);
+            mrs_ipc_put(mrs, "d", 1, 2);
+
+            pmode = 0;//pmode = 1;
+            rsp = 1;
+        } else if (pmode == 6) { //(ch == '3') {
+            bitset = 0;
+            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+            bitset = 1;
+            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+            bitset = 1;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+ 
+            bitset = 1;
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+            sprintf(mrs->log, "Set RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+            sprintf(mrs->log, "Set RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            pmode = 0//pmode = 2;
+            rsp = 1;
+        }
+        else if (pmode == 7) {//(ch == '4') { /* app -> wifi -> spi */
+            bitset = 0;
+            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+            bitset = 1;
+            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+ 
+            bitset = 0;
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+            sprintf(mrs->log, "Set RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            pmode = 0//pmode = 3;
+            rsp = 1;
+        }
+        
+        if (pmode == 0) (
+            ch = rsp;
+            mrs_ipc_put(mrs, &ch, 1, 0);
+            pmode = -1;
+            rsp = 0;
+        }
         usleep(100);
         //sleep(2);
     }
@@ -1560,7 +1595,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     p1_init(rs);
     // wait for ch from p0
     // state machine control
-
+    stdata.rs = rs;
     pi = 0;    stdata.result = 0;    cmd = '\0';   cmdt = '\0';
     while (1) {
         //sprintf(rs->logs, "+\n");
