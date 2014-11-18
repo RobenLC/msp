@@ -580,8 +580,8 @@ static int stbullet_01(struct psdata_s *data)
     char str[128], ch = 0; 
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    sprintf(str, "op_01: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
-    print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_01: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
+    //print_f(mlogPool, "bullet", str);  
 
 
     switch (rlt) {
@@ -612,8 +612,8 @@ static int stbullet_02(struct psdata_s *data)
     uint32_t rlt;
     char str[128], ch = 0; 
     rlt = abs_result(data->result);	
-    sprintf(str, "op_02: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
-    print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_02: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
+    //print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -640,8 +640,8 @@ static int stbullet_03(struct psdata_s *data)
     uint32_t rlt;
 	
     rlt = abs_result(data->result);	
-    sprintf(str, "op_03: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
-    print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_03: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
+    //print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -667,8 +667,8 @@ static int stbullet_04(struct psdata_s *data)
     char str[128], ch = 0; 
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    sprintf(str, "op_04: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
-    print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_04: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
+    //print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -694,8 +694,8 @@ static int stbullet_05(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    sprintf(str, "op_05: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
-    print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_05: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
+    //print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1347,7 +1347,7 @@ static int cmdfunc_01(int argc, char *argv[])
         ch = 'b';
     }
 
-    sprintf(str, "cmdfunc_01 argc:%d ch:%c\n", argc, argv[0], ch); 
+    sprintf(str, "cmdfunc_01 argc:%d ch:%c\n", argc, ch); 
     print_f(mlogPool, "cmdfunc", str);
 
     mrs_ipc_put(mrs, &ch, 1, 6);
@@ -1477,50 +1477,96 @@ static int p0(struct mainRes_s *mrs)
 
 #if 1
         if (pmode == 10) {
-            pi ++;
-            if (pi > 100) { 
-                sprintf(mrs->log, "pmode:%d pi:%d - 1\n", pmode, pi);
-                print_f(&mrs->plog, "P0", mrs->log);
+            bitset = 0;
+            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
-                pmode = 0;
-                rsp = 1;
-            }
+            bitset = 1;
+            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+        
+            bitset = 1;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+ 
+            bitset = 1;
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+            sprintf(mrs->log, "Set RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            bitset = 0;
+            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+            sprintf(mrs->log, "Set RDY: %d\n", bitset);
+            print_f(&mrs->plog, "P0", mrs->log);
+
+            pmode = 0;
+            rsp = 1;
         } else if (pmode == 11) {
-            pi ++;
-            if (pi > 200) { 
-                sprintf(mrs->log, "pmode:%d pi:%d - 2\n", pmode, pi);
-                print_f(&mrs->plog, "P0", mrs->log);
+            ret = mrs_ipc_get(mrs, &ch, 1, 4);
+            if (ret > 0) {
+                sprintf(mrs->log, "0 [%c]\n", ch);
+                print_f(&mrs->plog, "P0", mrs->log);				
 
-                pmode = 0;
-                rsp = 1;
+                ret = mrs_ipc_get(mrs, str, 128, 4);
+                if (ret > 0) {
+                    str[ret] = '\0';
+                    sprintf(mrs->log, "[%s] sz:%d\n", str, ret);
+                    print_f(&mrs->plog, "P0", mrs->log);
+
+                    // send command to trigger dual spi mode
+                    mrs_ipc_put(mrs, "d", 1, 1);
+                    mrs_ipc_put(mrs, "d", 1, 2);
+                    
+                    pmode = 0; //pmode = 1;
+                    rsp = 1;
+                }
             }
         } else if (pmode == 12) {
-            pi ++;
-            if (pi > 300) { 
-                sprintf(mrs->log, "pmode:%d pi:%d - 3\n", pmode, pi);
-                print_f(&mrs->plog, "P0", mrs->log);
+            ret = mrs_ipc_get(mrs, &ch, 1, 1);
+            while (ret > 0) {
+                if (ch == 'p') {
+                    seq[0] += 2;
+                    mrs_ipc_put(mrs, "d", 1, 3);
+                }
+                if (ch == 'd') {
+                    sprintf(mrs->log, "0 %d end\n", seq[0]);
+                    print_f(&mrs->plog, "P0", mrs->log);
+                    mrs_ipc_put(mrs, "d", 1, 3);
+                    chk[0] = 1;
+                    mrs_ipc_put(mrs, "D", 1, 3);
+                }
+                ret = mrs_ipc_get(mrs, &ch, 1, 1);
+            }
+            ret = mrs_ipc_get(mrs, &ch, 1, 2);
+            while (ret > 0) {
+                if (ch == 'p') {
+                    seq[1] += 2;
+                    mrs_ipc_put(mrs, "d", 1, 3);
+                }
+                if (ch == 'd') {
+                    sprintf(mrs->log, "1 %d end\n", seq[1]);
+                    print_f(&mrs->plog, "P0", mrs->log);
 
+                    mrs_ipc_put(mrs, "d", 1, 3);
+                    chk[1] = 1;
+                    mrs_ipc_put(mrs, "D", 1, 3);
+                }
+                ret = mrs_ipc_get(mrs, &ch, 1, 2);
+            }
+            if (chk[0] && chk[1]) {
                 pmode = 0;
                 rsp = 1;
             }
         } else if (pmode == 13) {
-            pi ++;
-            if (pi > 400) { 
-                sprintf(mrs->log, "pmode:%d pi:%d - 4\n", pmode, pi);
-                print_f(&mrs->plog, "P0", mrs->log);
-
-                pmode = 0;
-                rsp = 1;
-            }
+            pmode = 0;
+            rsp = 1;
         } else if (pmode == 14) {
-            pi ++;
-            if (pi > 500) {
-                sprintf(mrs->log, "pmode:%d pi:%d - 5\n", pmode, pi);
-                print_f(&mrs->plog, "P0", mrs->log);
-
-                pmode = 0;
-                rsp = 1;
-            }
+            pmode = 0;
+            rsp = 1;
         }
 #else
         if (pmode == 1) {
@@ -1725,7 +1771,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(10000);
+        usleep(1000);
         //sleep(2);
     }
 
@@ -1804,8 +1850,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
             stdata.result = (*pf[pi][px])(&stdata);
 
-            sprintf(rs->logs, "ret:%d ch:%d evt:0x%.4x\n", ret, ch, evt);
-            print_f(rs->plogs, "P1", rs->logs);
+            //sprintf(rs->logs, "ret:%d ch:%d evt:0x%.4x\n", ret, ch, evt);
+            //print_f(rs->plogs, "P1", rs->logs);
         }
 
         //rs_ipc_put(rs, &ch, 1);
