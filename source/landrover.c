@@ -106,6 +106,11 @@ struct shmem_s{
     int dualsz;	
 };
 
+struct modersp_s{
+    int m;
+    int r;
+};
+
 struct mainRes_s{
     int sid[6];
     int sfm[2];
@@ -130,6 +135,13 @@ struct mainRes_s{
     struct socket_s socket_r;
     struct socket_s socket_t;
     struct logPool_s plog;
+};
+
+typedef int (*fselec)(struct mainRes_s *mrs, struct modersp_s *modersp);
+
+struct fselec_s{
+    int  id;
+    fselec pfunc;
 };
 
 struct procRes_s{
@@ -256,6 +268,13 @@ inline uint32_t emb_stanPro(uint32_t result, uint32_t rlt, uint32_t sta, uint32_
     return result;
 }
 
+inline uint32_t emb_event(uint32_t result, uint32_t flag) 
+{
+    result &= ~0xff000000;
+    result |= (flag & 0xff) << 24;
+    return result;
+}
+
 inline uint32_t emb_state(uint32_t result, uint32_t flag) 
 {
     result &= ~0xff00;
@@ -273,6 +292,7 @@ inline uint32_t emb_process(uint32_t result, uint32_t flag)
 static int next_spy(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
@@ -280,24 +300,37 @@ static int next_spy(struct psdata_s *data)
     //sprintf(str, "%d-%d\n", pro, rlt); 
     //print_f(mlogPool, "spy", str); 
 
+    tmpRlt = data->result;
     if (rlt == WAIT) {
         next = pro;
     } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
         switch (pro) {
-            case PSSET:
+            case PSSET: /* load file, prepare data and spi */
                 sprintf(str, "PSSET\n"); 
                 print_f(mlogPool, "spy", str); 
                 next = PSACT;
                 break;
-            case PSACT:
+            case PSACT: /* check RDY, and start transmitting */
                 sprintf(str, "PSACT\n"); 
                 print_f(mlogPool, "spy", str); 
                 next = PSWT;
                 break;
-            case PSWT:
+            case PSWT: /* end the transmitting and back to polling OP_QRY */
                 sprintf(str, "PSWT\n"); 
                 print_f(mlogPool, "spy", str); 
-                next = PSRLT;
+                if (tmpAns == 0x1) {
+                    next = PSSET;
+                    evt = 0x1;
+                } else if (tmpAns == 0x2) {
+                    next = PSSET;
+                    evt = 0x2;
+                } else {
+                    next = PSRLT;
+                }
                 break;
             case PSRLT:
                 sprintf(str, "PSRLT\n"); 
@@ -307,22 +340,25 @@ static int next_spy(struct psdata_s *data)
             case PSTSM:
                 sprintf(str, "PSTSM\n"); 
                 print_f(mlogPool, "spy", str); 
-                next = PSSET; /* infinite loop */
+                next = PSMAX;
                 //next = PSSET | (0x1 << 24); /* jump to next stage */
                 break;
             default:
                 sprintf(str, "default\n"); 
                 print_f(mlogPool, "spy", str); 
-        
+                next = PSSET;
                 break;
         }
     }
-    return emb_process(data->result, next);
+
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
 }
 
 static uint32_t next_bullet(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
@@ -330,27 +366,37 @@ static uint32_t next_bullet(struct psdata_s *data)
     //sprintf(str, "%d-%d\n", pro, rlt); 
     //print_f(mlogPool, "bullet", str); 
 
+    tmpRlt = data->result;
     if (rlt == WAIT) {
         next = pro;
     } else if (rlt == NEXT) {
         /* reset pro */  
+        tmpAns = data->ansp0;
         data->ansp0 = 0;
-        data->result = emb_result(data->result, STINIT);
+        tmpRlt = emb_result(tmpRlt, STINIT);
         switch (pro) {
-            case PSSET:
+            case PSSET: /* load file, prepare data and spi */
                 sprintf(str, "PSSET\n"); 
                 print_f(mlogPool, "bullet", str); 
                 next = PSACT;
                 break;
-            case PSACT:
+            case PSACT: /* check RDY, and start transmitting */
                 sprintf(str, "PSACT\n"); 
                 print_f(mlogPool, "bullet", str); 
                 next = PSWT;
                 break;
-            case PSWT:
+            case PSWT: /* end the transmitting and back to polling OP_QRY */
                 sprintf(str, "PSWT\n"); 
                 print_f(mlogPool, "bullet", str); 
-                next = PSRLT;
+                if (tmpAns == 0x1) {
+                    next = PSSET;
+                    evt = 0x1;
+                } else if (tmpAns == 0x2) {
+                    next = PSSET;
+                    evt = 0x2;
+                } else {
+                    next = PSRLT;
+                }
                 break;
             case PSRLT:
                 sprintf(str, "PSRLT\n"); 
@@ -370,12 +416,15 @@ static uint32_t next_bullet(struct psdata_s *data)
                 break;
         }
     }
-    return emb_process(data->result, next);
+
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
 }
 
 static int next_laser(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
@@ -383,24 +432,37 @@ static int next_laser(struct psdata_s *data)
     //sprintf(str, "%d-%d\n", pro, rlt); 
     //print_f(mlogPool, "laser", str); 
 
+    tmpRlt = data->result;
     if (rlt == WAIT) {
         next = pro;
     } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
         switch (pro) {
-            case PSSET:
+            case PSSET: /* load file, prepare data and spi */
                 sprintf(str, "PSSET\n"); 
                 print_f(mlogPool, "laser", str); 
                 next = PSACT;
                 break;
-            case PSACT:
+            case PSACT: /* check RDY, and start transmitting */
                 sprintf(str, "PSACT\n"); 
                 print_f(mlogPool, "laser", str); 
                 next = PSWT;
                 break;
-            case PSWT:
+            case PSWT: /* end the transmitting and back to polling OP_QRY */
                 sprintf(str, "PSWT\n"); 
                 print_f(mlogPool, "laser", str); 
-                next = PSRLT;
+                if (tmpAns == 0x1) {
+                    next = PSSET;
+                    evt = 0x1;
+                } else if (tmpAns == 0x2) {
+                    next = PSSET;
+                    evt = 0x2;
+                } else {
+                    next = PSRLT;
+                }
                 break;
             case PSRLT:
                 sprintf(str, "PSRLT\n"); 
@@ -410,7 +472,8 @@ static int next_laser(struct psdata_s *data)
             case PSTSM:
                 sprintf(str, "PSTSM\n"); 
                 print_f(mlogPool, "laser", str); 
-                next = PSSET | (0x1 << 24); /* jump to next stage */
+                next = PSMAX;
+                //next = PSSET | (0x1 << 24); /* jump to next stage */
                 break;
             default:
                 sprintf(str, "default\n"); 
@@ -420,7 +483,8 @@ static int next_laser(struct psdata_s *data)
         }
     }
 
-    return emb_process(data->result, next);
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
 }
 
 static int next_error(struct psdata_s *data)
@@ -486,6 +550,8 @@ static int ps_next(struct psdata_s *data)
         case SPY:
             ret = next_spy(data);
             evt = (ret >> 24) & 0xff;
+            if (evt == 0x1) nxtst = BULLET; /* state change */
+            if (evt == 0x2) nxtst = LASER; /* state change */
 
             break;
         case BULLET:
@@ -532,47 +598,154 @@ static int stspy_01(struct psdata_s *data)
     // keep polling, kind of idle mode
     // jump to next status if receive any op code
 
-    char str[128]; 
-    sprintf(str, "op_01\n"); 
-    print_f(mlogPool, "spy", str); 
+    char str[128], ch = 0; 
+    uint32_t rlt;
+    rlt = abs_result(data->result);	
 
-    data->result = emb_result(data->result, NEXT);
+    //sprintf(str, "op_01 - rlt:0x%x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 1; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_01: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1)
+                data->result = emb_result(data->result, NEXT);
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+
     return ps_next(data);
 }
 static int stspy_02(struct psdata_s *data) 
 { 
-    char str[128]; 
-    sprintf(str, "op_02\n"); 
-    print_f(mlogPool, "spy", str); 
+    char str[128], ch = 0; 
+    uint32_t rlt;
+    rlt = abs_result(data->result);	
 
-    data->result = emb_result(data->result, NEXT);
+    //sprintf(str, "op_02 - rlt:0x%x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 3; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //printf(str, "op_02: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1)
+                data->result = emb_result(data->result, NEXT);
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
     return ps_next(data);
 }
 static int stspy_03(struct psdata_s *data) 
 { 
-    char str[128]; 
-    sprintf(str, "op_03\n"); 
-    print_f(mlogPool, "spy", str); 
+    char str[128], ch = 0; 
+    uint32_t rlt;
+    rlt = abs_result(data->result);	
 
-    data->result = emb_result(data->result, NEXT);
+   // sprintf(str, "op_03 - rlt:0x%x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 4; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_03: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1)
+                data->result = emb_result(data->result, NEXT);
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+
     return ps_next(data);
 }
 static int stspy_04(struct psdata_s *data) 
 { 
-    char str[128]; 
-    sprintf(str, "op_04\n"); 
-    print_f(mlogPool, "spy", str); 
+    char str[128], ch = 0; 
+    uint32_t rlt;
+    rlt = abs_result(data->result);	
 
-    data->result = emb_result(data->result, NEXT);
+    //sprintf(str, "op_04 - rlt:0x%x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 5; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_04: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1)
+                data->result = emb_result(data->result, NEXT);
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
     return ps_next(data);
 }
 static int stspy_05(struct psdata_s *data) 
 { 
-    char str[128]; 
-    sprintf(str, "op_05\n"); 
-    print_f(mlogPool, "spy", str); 
+    char str[128], ch = 0; 
+    uint32_t rlt;
+    rlt = abs_result(data->result);	
 
-    data->result = emb_result(data->result, NEXT);
+    //sprintf(str, "op_05 - rlt:0x%x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 6; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_05: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1)
+                data->result = emb_result(data->result, NEXT);
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
     return ps_next(data);
 }
 static int stbullet_01(struct psdata_s *data) 
@@ -585,7 +758,7 @@ static int stbullet_01(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = '0'; 
+            ch = 7; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(str, "op_01: result: %x\n", data->result); 
@@ -616,7 +789,7 @@ static int stbullet_02(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = '1'; 
+            ch = 9; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             break;
@@ -644,7 +817,7 @@ static int stbullet_03(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = '2'; 
+            ch = 10; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             break;
@@ -671,7 +844,7 @@ static int stbullet_04(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = '3'; 
+            ch = 11; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             break;
@@ -698,7 +871,7 @@ static int stbullet_05(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = '4'; 
+            ch = 12; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             break;
@@ -1413,110 +1586,103 @@ static int dbg(struct mainRes_s *mrs)
     p0_end(mrs);
 }
 
+static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp){ return 0; }
+static int fs01(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    mrs_ipc_put(mrs, "g", 1, 3);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int len=0;
+    char ch=0;
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'b')){
+        return 1;
+    }
+    return 0; 
+}
+static int fs03(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs04(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs05(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs06(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ return 1; }
+static int fs07(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    mrs_ipc_put(mrs, "g", 1, 4);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+static int fs08(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    len = mrs_ipc_get(mrs, &ch, 1, 4);
+    if ((len > 0) && (ch == 'b')){
+        return 1;
+    }
+    return 0; 
+}
+static int fs09(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs11(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs13(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs14(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1; }
+
 static int p0(struct mainRes_s *mrs)
 {
-    int pi, pt, pc, tp, ret, sz[3], chk[2], bksz[2], seq[2], bitset, wc;
-    char ch, c1, str[128], dst[17];
-    char *addr[3], *stop_at;
-    int pmode = 0, pstatus[2], cstatus = 0;
-    int rsp = 0;
+    int len;
+    char str[128], ch;
 
-    int px, ci;
+    struct modersp_s modesw;
+    struct fselec_s afselec[15] = {{ 0, fs00},{ 1, fs01},{ 2, fs02},{ 3, fs03},{ 4, fs04},
+                                 { 5, fs05},{ 6, fs06},{ 7, fs07},{ 8, fs08},{ 9, fs09},
+                                 {10, fs10},{11, fs11},{12, fs12},{13, fs13},{14, fs14},
+                                };
 
     p0_init(mrs);
 
     // [todo]initial value
-    pmode = -1;
-
-    pi = 0; pt = 0; pc = 0, seq[0] = 0, seq[1] = 1; wc = 0; 
-    chk[0] = 0; chk[1] = 0;
+    modesw.m = -1;
+    modesw.r = 0;
     while (1) {
         //sprintf(mrs->log, ".");
         //print_f(&mrs->plog, "P0", mrs->log);
 
         // p2 data mode spi0 rx
-        ret = mrs_ipc_get(mrs, &ch, 1, 0);
-        if (ret > 0) {
-            sprintf(mrs->log, "ret:%d ch:%c\n", ret, ch);
-            print_f(&mrs->plog, "P0", mrs->log);
+        len = mrs_ipc_get(mrs, &ch, 1, 0);
+        if (len > 0) {
+            //sprintf(mrs->log, "ret:%d ch:%c\n", ret, ch);
+            //print_f(&mrs->plog, "P0", mrs->log);
 
-            if (pmode == -1) {
-                switch (ch) {
-                    case '0':
-                        pmode = 10;
-                        break;
-                    case '1':
-                        pmode = 11;
-                        break;
-                    case '2':
-                        pmode = 12;
-                        break;
-                    case '3':
-                        pmode = 13;
-                        break;
-                    case '4':
-                        pmode = 14;
-                        break;
-                    default:
-                        pmode = ch;
-                        break;
+            if (modesw.m == -1) {
+                if ((ch > 0) && (ch < 15)) {
+                    modesw.m = ch;
                 }
             } else {
                 /* todo: interrupt state machine here */
             }
         }
 
-        if (pmode == 10) {
-            bitset = 0;
-            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-
-            bitset = 1;
-            ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-        
-            bitset = 1;
-            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            sprintf(mrs->log, "Set spi0 data mode: %d\n", bitset);
+        if ((modesw.m > 0) && (modesw.m < 15)) {
+            modesw.r = (*afselec[modesw.m].pfunc)(mrs, &modesw);
+            sprintf(mrs->log, "pmode:%d rsp:%d\n", modesw.m, modesw.r);
             print_f(&mrs->plog, "P0", mrs->log);
- 
-            bitset = 1;
-            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            sprintf(mrs->log, "Set spi1 data mode: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            bitset = 0;
-            ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
-            sprintf(mrs->log, "Set RDY: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            bitset = 0;
-            ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
-            sprintf(mrs->log, "Set RDY: %d\n", bitset);
-            print_f(&mrs->plog, "P0", mrs->log);
-
-            pmode = 0;
-            rsp = 1;
-        } else if (pmode == 11) {
-            pmode = 0;
-            rsp = 1;
-        } else if (pmode == 12) {
-            pmode = 0;
-            rsp = 1;
-        } else if (pmode == 13) {
-            pmode = 0;
-            rsp = 1;
-        } else if (pmode == 14) {
-            pmode = 0;
-            rsp = 1;
+            if (modesw.r > 0) modesw.m = 0;
         }
 
-        if (pmode == 0) {
-            sprintf(mrs->log, "pmode:%d pi:%d rsp:%d - end\n", pmode, pi, rsp);
+        if (modesw.m == 0) {
+            sprintf(mrs->log, "pmode:%d rsp:%d - end\n", modesw.m, modesw.r);
             print_f(&mrs->plog, "P0", mrs->log);
 
-            ch = rsp;
-            pmode = -1;
-            rsp = 0;
-            pi = 0;
+            ch = modesw.r;
+            modesw.m = -1;
+            modesw.r = 0;
+
             mrs_ipc_put(mrs, &ch, 1, 0);
         } else {
             mrs_ipc_put(mrs, "$", 1, 0);
@@ -1573,6 +1739,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'b') {
                     stdata.result = emb_stanPro(0, STINIT, BULLET, PSSET);
                     cmdt = cmd;
+                } else if (cmd == 'p') {
+                    stdata.result = emb_stanPro(0, STINIT, SPY, PSSET);
+                    cmdt = cmd;
                 }
             } else { /* command to interrupt state machine here */
 
@@ -1615,6 +1784,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
 static int p2(struct procRes_s *rs)
 {
+    /* spi0 */
+    char ch;
+    int len;
     sprintf(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
 
@@ -1623,6 +1795,11 @@ static int p2(struct procRes_s *rs)
         sprintf(rs->logs, "!\n");
         print_f(rs->plogs, "P2", rs->logs);
 
+        len = rs_ipc_get(rs, &ch, 1);
+        if (len > 0) {
+            sprintf(rs->logs, "%c \n", ch);
+            print_f(rs->plogs, "P2", rs->logs);
+        }
     }
 
     p2_end(rs);
@@ -1631,6 +1808,10 @@ static int p2(struct procRes_s *rs)
 
 static int p3(struct procRes_s *rs)
 {
+    /* spi1 */
+    char ch;
+    int len;
+
     sprintf(rs->logs, "p3\n");
     print_f(rs->plogs, "P3", rs->logs);
 
@@ -1639,6 +1820,11 @@ static int p3(struct procRes_s *rs)
         sprintf(rs->logs, "/\n");
         print_f(rs->plogs, "P3", rs->logs);
 
+        len = rs_ipc_get(rs, &ch, 1);
+        if (len > 0) {
+            sprintf(rs->logs, "%c \n", ch);
+            print_f(rs->plogs, "P3", rs->logs);
+        }
     }
 
     p3_end(rs);
@@ -1647,6 +1833,10 @@ static int p3(struct procRes_s *rs)
 
 static int p4(struct procRes_s *rs)
 {
+    char ch;
+    int len = 0, cmode = 0;
+    uint32_t bitset;
+
     sprintf(rs->logs, "p4\n");
     print_f(rs->plogs, "P4", rs->logs);
 
@@ -1657,6 +1847,32 @@ static int p4(struct procRes_s *rs)
         sprintf(rs->logs, "^\n");
         print_f(rs->plogs, "P4", rs->logs);
 
+        len = rs_ipc_get(rs, &ch, 1);
+        if (len > 0) {
+            sprintf(rs->logs, "%c \n", ch);
+            print_f(rs->plogs, "P4", rs->logs);
+
+            switch (ch) {
+                case 'g':
+                    cmode = 1;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (cmode == 1) {
+            while (1) {
+                bitset = 1;
+                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
+                print_f(rs->plogs, "P4", rs->logs);
+
+                if (bitset == 0) break;
+            }
+            if (!bitset) rs_ipc_put(rs, "b", 1);
+        }
+
     }
 
     p4_end(rs);
@@ -1665,15 +1881,45 @@ static int p4(struct procRes_s *rs)
 
 static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 {
+    char ch;
+    int len, cmode;
+    uint32_t bitset;
+
     sprintf(rs->logs, "p5\n");
     print_f(rs->plogs, "P5", rs->logs);
 
     p5_init(rs);
 
+    rs_ipc_put(rcmd, "poll", 4);
+
     while (1) {
-        //printf("#");
         sprintf(rs->logs, "#\n");
         print_f(rs->plogs, "P5", rs->logs);
+
+        len = rs_ipc_get(rs, &ch, 1);
+        if (len > 0) {
+            sprintf(rs->logs, "%c \n", ch);
+            print_f(rs->plogs, "P4", rs->logs);
+
+            switch (ch) {
+                case 'g':
+                    cmode = 1;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (cmode == 1) {
+            while (1) {
+                bitset = 1;
+                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
+                print_f(rs->plogs, "P5", rs->logs);
+                if (bitset == 0) break;
+            }
+            if (!bitset) rs_ipc_put(rs, "b", 1);
+        }
 
     }
 
@@ -2086,9 +2332,9 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->ppipeup = &mrs->pipeup[idx];
     rs->plogs = &mrs->plog;
 
-    if((idx == 0) || (idx == 1)) {
+    if((idx == 0) || (idx == 1) || (idx == 3)) {
         rs->spifd = mrs->sfm[0];
-    } else if (idx == 2) {
+    } else if ((idx == 2) || (idx == 4)) {
         rs->spifd = mrs->sfm[1];
     }
 
