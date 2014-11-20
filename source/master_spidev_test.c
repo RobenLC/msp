@@ -190,6 +190,45 @@ static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz
   return ret;
 }
 
+static int tx_data_16(int fd, uint16_t *rx_buff, uint16_t *tx_buff, int num, int pksz, int maxsz)
+{
+    int pkt_size;
+    int ret, i, errcnt; 
+    int remain;
+
+    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
+    
+    uint8_t tg;
+    uint16_t *tx = tx_buff;
+    uint16_t *rx = rx_buff;  
+    pkt_size = pksz;
+    remain = maxsz;
+
+    for (i = 0; i < num; i++) {
+        remain -= pkt_size;
+        if (remain < 0) break;
+
+        tr[i].tx_buf = (unsigned long)tx;
+        tr[i].rx_buf = (unsigned long)rx;
+        tr[i].len = pkt_size;
+        tr[i].delay_usecs = delay;
+        tr[i].speed_hz = speed;
+        tr[i].bits_per_word = 16;
+        
+        tx += pkt_size;
+        rx += pkt_size;
+    }
+    
+  ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
+  if (ret < 1)
+      pabort("can't send spi message");
+
+  //printf("tx/rx len: %d\n", ret);
+
+  free(tr);
+  return ret;
+}
+
 static void _tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int ex_size)
 {
   int ret, i, errcnt; 
@@ -461,7 +500,65 @@ static char spi1[] = "/dev/spidev32766.0";
 		rxans[i] = i & 0x95;
 		tx[i] = i & 0x95;
 	}
+    if (sel == 15) { /* 16Bits inform mode [15 spi size bits]*/
+        int ret=0;
+        uint16_t *tx16, *rx16, *tmp16;
+        uint8_t *tx8, *rx8, *tmp8;
+        tx16 = malloc(61440);
+        rx16 = malloc(61440);
+        tx8 = malloc(61440);
+        rx8 = malloc(61440);
 
+        int i;
+        tmp8 = (uint8_t *)tx16;
+        for(i = 0; i < 61440; i++) {
+            *tmp8 = i & 0xff;
+            tmp8++;
+        }
+
+        tmp8 = (uint8_t *)tx8;
+        for(i = 0; i < 61440; i++) {
+            *tmp8 = i & 0xff;
+            tmp8++;
+        }
+
+        arg0 = arg0 % 2;
+        bits = arg2;
+        ret = ioctl(fm[arg0], SPI_IOC_WR_BITS_PER_WORD, &bits);
+        if (ret == -1) 
+            pabort("can't set bits per word"); 
+ 
+        ret = ioctl(fm[arg0], SPI_IOC_RD_BITS_PER_WORD, &bits); 
+        if (ret == -1) 
+            pabort("can't get bits per word"); 
+
+        if (bits == 16) {
+            ret = tx_data_16(fm[arg0], rx16, tx16, 1, arg1, 61440);
+            int i;
+            tmp16 = rx16;
+            for (i = 0; i < ret; i+=2) {
+                if (((i % 16) == 0) && (i != 0)) printf("\n");
+                printf("0x%.4x ", *tmp16);
+                tmp16++;
+            }
+            printf("\n");
+        }
+        if (bits == 8) {
+            ret = tx_data(fm[arg0], rx8, tx8, 1, arg1, 61440);
+            int i;
+            tmp8 = rx8;
+            for (i = 0; i < ret; i+=1) {
+                if (((i % 16) == 0) && (i != 0)) printf("\n");
+                printf("0x%.2x ", *tmp8);
+                tmp8++;
+            }
+            printf("\n");
+
+        }
+
+        printf("spi%d bits: %d txsize: %d/%d\n", arg0, bits, ret, arg1);
+        goto end;
+    }
     if (sel == 14) { /* dual continuous command mode [14 20 path1 path2 pktsize] ex: 14 20 ./01.mp4 ./02.mp4 512 */
 #define DCTSIZE (64*1024*1024)
 #define PKTSZ  61440
@@ -624,6 +721,15 @@ static char spi1[] = "/dev/spidev32766.0";
 	memcpy(srcBuff, tx_buff, fsize);
 	printf(" [%s] size: %d, copy to share memory\n", data_path, fsize);
 */
+
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi 0 slave ready: %d\n", bitset);
+
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi 0 slave ready: %d\n", bitset);
+
         bitset = 0;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set data mode: %d\n", bitset);
@@ -869,6 +975,11 @@ static char spi1[] = "/dev/spidev32766.0";
 	memcpy(srcBuff, tx_buff, fsize);
 	printf(" [%s] size: %d, copy to share memory\n", data_path, fsize);
 */
+
+        bitset = 1;
+        ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi %d slave ready: %d\n", arg1, bitset);
+
         bitset = 0;
         ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set data mode: %d\n", bitset);
@@ -1094,6 +1205,15 @@ static char spi1[] = "/dev/spidev32766.0";
         bitset = 1;
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi 0 slave ready: %d\n", bitset);
+
+        bitset = 1;
+        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi 0 slave ready: %d\n", bitset);
+
+		
         int pksize = 1024;
         int pknum = 60;
         int trunksz, remainsz, pkcnt;
@@ -1381,7 +1501,7 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 	        ret = tx_data(fm[pkcnt%2], NULL, tbuff, pknum, pksize, 1024*1024);
        	 //printf("tx ret:%d fd%d\n", ret, pkcnt%2);
 
-		tbuff += pknum * pksize;
+		 tbuff += pknum * pksize;
 		
 		 pkcnt++;
 		 if (!remainsz) break;
@@ -1458,21 +1578,19 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         goto end;
     }
     
-    if (sel == 7) { /* open device node */
-        int fd0, fd1;
-        fd0 = open(spi0, O_RDWR);
-        if (fd0 < 0) 
-            printf("can't open device[%s]\n", spi0); 
-        else 
-            printf("open device[%s]\n", spi0); 
-        fd1 = open(spi1, O_RDWR);
-        if (fd1 < 0) 
-                printf("can't open device[%s]\n", spi1); 
-        else 
-            printf("open device[%s]\n", spi1); 
+    if (sel == 7) { /* get slve ready */
+        bitset = 0;
+        ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_RD_SLVE_READY
+        printf("Get slave ready: %d\n", bitset);
         goto end;
     }
 
+    if (sel == 2) { /* set slve ready */
+        bitset = arg0;
+        ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set slave ready: %d\n", arg0);
+        goto end;
+    }
 
     ret = 0;
 
