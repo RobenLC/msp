@@ -1322,7 +1322,46 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pks
     if (ret < 0)
         printf("can't send spi message\n");
     
-    //printf("tx/rx len: %d\n", ret);
+    printf("tx/rx len: %d\n", ret);
+    
+    free(tr);
+    return ret;
+}
+
+static int mtx_data_16(int fd, uint16_t *rx_buff, uint16_t *tx_buff, int num, int pksz, int maxsz)
+{
+    int pkt_size;
+    int ret, i, errcnt; 
+    int remain;
+
+    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
+    
+    uint8_t tg;
+    uint16_t *tx = tx_buff;
+    uint16_t *rx = rx_buff;
+    pkt_size = pksz;
+    remain = maxsz;
+
+    for (i = 0; i < num; i++) {
+        remain -= pkt_size;
+        if (remain < 0) break;
+
+        tr[i].tx_buf = (unsigned long)tx;
+        tr[i].rx_buf = (unsigned long)rx;
+        tr[i].len = pkt_size;
+        tr[i].delay_usecs = 0;
+        tr[i].speed_hz = 20000000;
+        tr[i].bits_per_word = 16;
+        
+        tx += pkt_size;
+        rx += pkt_size;
+    }
+    
+    ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
+    if (ret < 0)
+        printf("can't send spi message\n");
+    
+    printf("tx/rx len: %d\n", ret);
     
     free(tr);
     return ret;
@@ -1589,7 +1628,7 @@ static int dbg(struct mainRes_s *mrs)
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp){ return 0; }
 static int fs01(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    mrs_ipc_put(mrs, "g", 1, 3);
+    mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
     return 0; 
 }
@@ -1598,7 +1637,7 @@ static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0;
     char ch=0;
     len = mrs_ipc_get(mrs, &ch, 1, 3);
-    if ((len > 0) && (ch == 'b')){
+    if ((len > 0) && (ch == 'C')){
         return 1;
     }
     return 0; 
@@ -1610,7 +1649,7 @@ static int fs06(struct mainRes_s *mrs, struct modersp_s *modersp)
 { return 1; }
 static int fs07(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    mrs_ipc_put(mrs, "g", 1, 4);
+    mrs_ipc_put(mrs, "c", 1, 4);
     modersp->m = modersp->m + 1;
     return 0; 
 }
@@ -1619,7 +1658,7 @@ static int fs08(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0;
     char ch=0;
     len = mrs_ipc_get(mrs, &ch, 1, 4);
-    if ((len > 0) && (ch == 'b')){
+    if ((len > 0) && (ch == 'C')){
         return 1;
     }
     return 0; 
@@ -1833,20 +1872,36 @@ static int p3(struct procRes_s *rs)
 
 static int p4(struct procRes_s *rs)
 {
-    char ch;
-    int len = 0, cmode = 0;
+    char ch, *tx, *rx;
+    uint16_t *tx16, *rx16;
+    int len = 0, cmode = 0, ret;
     uint32_t bitset;
 
     sprintf(rs->logs, "p4\n");
     print_f(rs->plogs, "P4", rs->logs);
 
     p4_init(rs);
- 
+
+    tx = malloc(64);
+    rx = malloc(64);
+
+    int i;
+    for (i = 0; i < 64; i+=4) {
+        tx[i] = 0xaa;
+        tx[i+1] = 0x55; 
+        tx[i+2] = 0xff; 
+        tx[i+3] = 0xee; 
+    }
+
+    tx16 = (uint16_t *)tx;
+    rx16 = (uint16_t *)rx;	
+
     while (1) {
         //printf("^");
         sprintf(rs->logs, "^\n");
         print_f(rs->plogs, "P4", rs->logs);
 
+        len = 0;
         len = rs_ipc_get(rs, &ch, 1);
         if (len > 0) {
             sprintf(rs->logs, "%c \n", ch);
@@ -1855,6 +1910,9 @@ static int p4(struct procRes_s *rs)
             switch (ch) {
                 case 'g':
                     cmode = 1;
+                    break;
+                case 'c':
+                    cmode = 2;
                     break;
                 default:
                     break;
@@ -1870,7 +1928,26 @@ static int p4(struct procRes_s *rs)
 
                 if (bitset == 0) break;
             }
-            if (!bitset) rs_ipc_put(rs, "b", 1);
+            if (!bitset) rs_ipc_put(rs, "G", 1);
+        } else if (cmode == 2) {
+            int bits = 16;
+            ret = ioctl(rs->spifd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+            if (ret == -1) {
+                sprintf(rs->logs, "can't set bits per word"); 
+                print_f(rs->plogs, "P4", rs->logs);
+            }
+            ret = ioctl(rs->spifd, SPI_IOC_RD_BITS_PER_WORD, &bits); 
+            if (ret == -1) {
+                sprintf(rs->logs, "can't get bits per word"); 
+                print_f(rs->plogs, "P4", rs->logs);
+            }
+
+            len = 0;
+            len = mtx_data_16(rs->spifd, rx16, tx16, 1, 2, 1024);
+            if (len > 0) rs_ipc_put(rs, "C", 1);
+            sprintf(rs->logs, "16Bits get: %.8x\n", *rx16);
+            print_f(rs->plogs, "P4", rs->logs);
+
         }
 
     }
@@ -1881,8 +1958,9 @@ static int p4(struct procRes_s *rs)
 
 static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    char ch;
-    int len, cmode;
+    char ch, *tx, *rx;
+    uint16_t *tx16, *rx16;
+    int len, cmode, ret;
     uint32_t bitset;
 
     sprintf(rs->logs, "p5\n");
@@ -1891,6 +1969,20 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     p5_init(rs);
 
     rs_ipc_put(rcmd, "poll", 4);
+
+    tx = malloc(64);
+    rx = malloc(64);
+
+    int i;
+    for (i = 0; i < 64; i+=4) {
+        tx[i] = 0xaa;
+        tx[i+1] = 0x55; 
+        tx[i+2] = 0xff; 
+        tx[i+3] = 0xee; 
+    }
+
+    tx16 = (uint16_t *)tx;
+    rx16 = (uint16_t *)rx;
 
     while (1) {
         sprintf(rs->logs, "#\n");
@@ -1905,6 +1997,9 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                 case 'g':
                     cmode = 1;
                     break;
+                case 'c':
+                    cmode = 2;
+                    break;
                 default:
                     break;
             }
@@ -1918,7 +2013,25 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                 print_f(rs->plogs, "P5", rs->logs);
                 if (bitset == 0) break;
             }
-            if (!bitset) rs_ipc_put(rs, "b", 1);
+            if (!bitset) rs_ipc_put(rs, "G", 1);
+        } else if (cmode == 2) {
+            int bits = 16;
+            ret = ioctl(rs->spifd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+            if (ret == -1) {
+                sprintf(rs->logs, "can't set bits per word"); 
+                print_f(rs->plogs, "P5", rs->logs);
+            }
+            ret = ioctl(rs->spifd, SPI_IOC_RD_BITS_PER_WORD, &bits); 
+            if (ret == -1) {
+                sprintf(rs->logs, "can't get bits per word"); 
+                print_f(rs->plogs, "P5", rs->logs);
+            }
+
+            len = 0;
+            len = mtx_data_16(rs->spifd, rx16, tx16, 1, 2, 64);
+            if (len > 0) rs_ipc_put(rs, "C", 1);
+            sprintf(rs->logs, "16Bits get: %.8x\n", *rx16);
+            print_f(rs->plogs, "P5", rs->logs);
         }
 
     }
