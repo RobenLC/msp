@@ -558,6 +558,34 @@ static char path[256];
     bitset = 1;
     ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
+    if (sel == 22){ /* command mode test ex[22 num]*/
+#define OP_PON 0x1
+#define OP_QRY 0x2
+#define OP_RDY 0x3
+#define OP_DAT 0x4
+#define OP_SCM 0x5
+#define OP_DCM 0x6
+
+        int ret=0;
+        uint8_t tx8[4], rx8[4];
+        uint8_t dt[7] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM};
+
+        tx8[0] = dt[arg0];
+        tx8[1] = 0xff;
+
+        bits = 8;
+        ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
+        if (ret == -1) 
+            pabort("can't set bits per word");  
+        ret = ioctl(fm[0], SPI_IOC_RD_BITS_PER_WORD, &bits); 
+        if (ret == -1) 
+            pabort("can't get bits per word"); 
+
+        ret = tx_data(fm[0], rx8, tx8, 1, 2, 1024);
+        printf("len:%d, 0x%.2x-0x%.2x \n", ret, rx8[0], rx8[1]);
+
+        goto end;
+    }
     if (sel == 21){ /* command mode test ex[21 spi size bits]*/
         int ret=0;
         uint16_t *tx16, *rx16, *tmp16;
@@ -569,16 +597,28 @@ static char path[256];
 
         int i;
         tmp8 = (uint8_t *)tx16;
-        for(i = 0; i < 1024; i++) {
-            *tmp8 = i & 0xff;
-            tmp8++;
+        for(i = 0; i < 512; i+=2) {
+            *tmp8 = ((i + 4) % 512) & 0xff;
+            tmp8+=2;
         }
-
+        tx16[511] = 0x0101; 
         tmp8 = (uint8_t *)tx8;
         for(i = 0; i < 1024; i++) {
             *tmp8 = i & 0xff;
             tmp8++;
         }
+
+        tx8[1016] = 0x01;
+        tx8[1017] = 0x01;
+		
+        tx8[1018] = 0x02;
+        tx8[1019] = 0x02;
+
+        tx8[1020] = 0x03;
+        tx8[1021] = 0x03;
+
+        tx8[1022] = 0x04;
+        tx8[1023] = 0x04;
 
         arg0 = arg0 % 2;
         bits = arg2;
@@ -606,13 +646,17 @@ static char path[256];
             printf("\n");
         }
         if (bits == 8) {
-            ret = tx_data(fm[arg0], rx8, tx8, 1, arg1, 1024);
             int i;
+            if (arg1 > 1024) arg1 = 1024;
+
             tmp8 = rx8;
-            for (i = 0; i < ret; i+=1) {
+            for (i = 0; i < arg1; i+=2) {
                 if (((i % 16) == 0) && (i != 0)) printf("\n");
-                printf("0x%.2x ", *tmp8);
-                tmp8++;
+                ret = tx_data(fm[arg0], tmp8, tx8+i, 1, 2, 1024);
+
+                printf("0x%.2x-0x%.2x ", *tmp8, *(tmp8+1));
+                tmp8+=2;
+                //usleep(100000);
             }
             printf("\n");
 
