@@ -118,6 +118,7 @@ struct modersp_s{
     int m;
     int r;
     int d;
+    int v;	
 };
 
 struct info16Bit_s{
@@ -438,7 +439,8 @@ static uint32_t next_bullet(struct psdata_s *data)
                 sprintf(str, "PSTSM\n"); 
                 print_f(mlogPool, "bullet", str); 
                 //next = PSMAX;
-                next = PSSET | (0x1 << 24); /* jump to next stage */
+                next = PSSET;
+                evt = 0x1; /* jump to next stage */
                 break;
             default:
                 sprintf(str, "default\n"); 
@@ -496,7 +498,8 @@ static int next_laser(struct psdata_s *data)
                 sprintf(str, "PSTSM\n"); 
                 print_f(mlogPool, "laser", str); 
                 //next = PSMAX;
-                next = PSTSM | (0x1 << 24); /* jump to next stage */
+                next = PSTSM;
+                evt = 0x1; /* jump to next stage */
                 break;
             default:
                 sprintf(str, "default\n"); 
@@ -567,7 +570,7 @@ static int ps_next(struct psdata_s *data)
     nxtst = sta;
 
     //sprintf(str, "sta: 0x%x\n", sta); 
-    //print_f(mlogPool, "ps_next", str); 
+    //print_f(mlogPool, "psnext", str); 
 
     switch (sta) {
         case SPY:
@@ -660,8 +663,8 @@ static int stspy_02(struct psdata_s *data)
 
     rlt = abs_result(data->result);	
 
-    //sprintf(str, "op_02 - rlt:0x%x \n", rlt); 
-    //print_f(mlogPool, "spy", str); 
+    sprintf(str, "op_02 - rlt:0x%x \n", rlt); 
+    print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
@@ -694,7 +697,7 @@ static int stspy_03(struct psdata_s *data)
     uint32_t rlt;
     rlt = abs_result(data->result);	
 
-   // sprintf(str, "op_03 - rlt:0x%x \n", rlt); 
+    //sprintf(str, "op_03 - rlt:0x%x \n", rlt); 
     //print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
@@ -725,8 +728,8 @@ static int stspy_04(struct psdata_s *data)
     uint32_t rlt;
     rlt = abs_result(data->result);	
 
-    //sprintf(str, "op_04 - rlt:0x%x \n", rlt); 
-    //print_f(mlogPool, "spy", str); 
+    sprintf(str, "op_04 - rlt:0x%x \n", rlt); 
+    print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
@@ -755,8 +758,8 @@ static int stspy_05(struct psdata_s *data)
     uint32_t rlt;
     rlt = abs_result(data->result);	
 
-    //sprintf(str, "op_05 - rlt:0x%x \n", rlt); 
-    //print_f(mlogPool, "spy", str); 
+    sprintf(str, "op_05 - rlt:0x%x \n", rlt); 
+    print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
@@ -788,8 +791,8 @@ static int stbullet_01(struct psdata_s *data)
     rs = data->rs;
     p = &rs->pmch->get;
     rlt = abs_result(data->result);	
-    //sprintf(str, "op_01: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
-    //print_f(mlogPool, "bullet", str);  
+    sprintf(str, "op_01: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
+    print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -824,8 +827,8 @@ static int stbullet_02(struct psdata_s *data)
     uint32_t rlt;
     char str[128], ch = 0; 
     rlt = abs_result(data->result);	
-    //sprintf(str, "op_02: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
-    //print_f(mlogPool, "bullet", str);  
+    sprintf(str, "op_02: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
+    print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -852,8 +855,8 @@ static int stbullet_03(struct psdata_s *data)
     uint32_t rlt;
 	
     rlt = abs_result(data->result);	
-    //sprintf(str, "op_03: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
-    //print_f(mlogPool, "bullet", str);  
+    sprintf(str, "op_03: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0); 
+    print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -934,8 +937,8 @@ static int stlaser_01(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    //sprintf(str, "op_05: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
-    //print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_01: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
+    //print_f(mlogPool, "laser", str);  
 
     switch (rlt) {
         case STINIT:
@@ -962,8 +965,8 @@ static int stlaser_02(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    //sprintf(str, "op_05: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
-    //print_f(mlogPool, "bullet", str);  
+    sprintf(str, "op_02: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
+    print_f(mlogPool, "laser", str);  
 
     switch (rlt) {
         case STINIT:
@@ -990,8 +993,8 @@ static int stlaser_03(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    //sprintf(str, "op_05: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
-    //print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_03: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
+    //print_f(mlogPool, "laser", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1018,8 +1021,8 @@ static int stlaser_04(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    //sprintf(str, "op_05: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
-    //print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_04: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
+    //print_f(mlogPool, "laser", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1047,8 +1050,8 @@ static int stlaser_05(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    //sprintf(str, "op_05: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
-    //print_f(mlogPool, "bullet", str);  
+    sprintf(str, "op_05: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
+    print_f(mlogPool, "laser", str);  
 
     switch (rlt) {
         case STINIT:
@@ -2123,9 +2126,9 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
         //print_f(&mrs->plog, "P0", mrs->log);
 
         if (p->opcode == OP_FIH) {
-            return 1;
+            modersp->m = 23;
         } else {
-            modersp->m = modersp->m - 1;        
+            modersp->m = modersp->m - 1; 
             return 2;
         }
     }
@@ -2194,6 +2197,13 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     ioctl(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
     printf("[%d]Get RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
 
+    bitset = 0;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    printf("Set spi 0 slave ready: %d\n", bitset);
+    bitset = 0;
+    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    printf("Set spi 1 slave ready: %d\n", bitset);
+
     return 1;
 }
 
@@ -2230,10 +2240,28 @@ static int fs22(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 }
 
+static int fs23(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int bitset;
+    bitset = 1;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    //printf("Set spi 0 slave ready: %d\n", bitset);
+    sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
+    print_f(&mrs->plog, "P0", mrs->log);
+
+    bitset = 1;
+    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    //printf("Set spi 1 slave ready: %d\n", bitset);
+    sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
+    print_f(&mrs->plog, "P0", mrs->log);
+
+    return 1;
+}
+
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 23
-    int len;
+#define PS_NUM 24
+    int len, tmp;
     char str[128], ch;
 
     struct modersp_s modesw;
@@ -2241,7 +2269,7 @@ static int p0(struct mainRes_s *mrs)
                                  { 5, fs05},{ 6, fs06},{ 7, fs07},{ 8, fs08},{ 9, fs09},
                                  {10, fs10},{11, fs11},{12, fs12},{13, fs13},{14, fs14},
                                  {15, fs15},{16, fs16},{17, fs17},{18, fs18},{19, fs19},
-                                 {20, fs20},{21, fs21},{22, fs22},
+                                 {20, fs20},{21, fs21},{22, fs22},{23, fs23},
                                 };
 
     p0_init(mrs);
@@ -2273,11 +2301,14 @@ static int p0(struct mainRes_s *mrs)
             modesw.r = (*afselec[modesw.m].pfunc)(mrs, &modesw);
             //sprintf(mrs->log, "pmode:%d rsp:%d\n", modesw.m, modesw.r);
             //print_f(&mrs->plog, "P0", mrs->log);
-            if (modesw.r == 1) modesw.m = 0;
+            if (modesw.r == 1) {
+                tmp = modesw.m;
+                modesw.m = 0;
+            }
         }
 
         if (modesw.m == 0) {
-            sprintf(mrs->log, "pmode:%d rsp:%d - end\n", modesw.m, modesw.r);
+            sprintf(mrs->log, "pmode:%d rsp:%d - end\n", tmp, modesw.r);
             print_f(&mrs->plog, "P0", mrs->log);
 
             ch = modesw.r; /* response */
