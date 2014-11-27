@@ -2777,6 +2777,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 static int p2(struct procRes_s *rs)
 {
     int px, pi=0, ret, len=0, opsz, cmode=0;
+    int bitset;
     char ch, str[128];
     char *addr;
     sprintf(rs->logs, "p2\n");
@@ -2819,8 +2820,36 @@ static int p2(struct procRes_s *rs)
                 default:
                     break;
             }
+            if (cmode == 1) {
+                bitset = 1;
+                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
+                print_f(rs->plogs, "P2", rs->logs);
 
-            if (cmode == 5) {
+                while (1) {
+                    bitset = 1;
+                    ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
+                    //print_f(rs->plogs, "P2", rs->logs);
+                    if (bitset == 0) break;
+                }
+                if (!bitset) rs_ipc_put(rs, "G", 1);
+            } else if (cmode == 4) {
+                bitset = 0;
+                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
+                print_f(rs->plogs, "P4", rs->logs);
+            
+                while (1) {
+                    bitset = 0;
+                    ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
+                    //print_f(rs->plogs, "P4", rs->logs);
+            
+                    if (bitset == 1) break;
+                }
+                if (bitset) rs_ipc_put(rs, "B", 1);
+            }else if (cmode == 5) {
                 pi = 0;  
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
@@ -2859,7 +2888,7 @@ static int p2(struct procRes_s *rs)
 
 static int p3(struct procRes_s *rs)
 {
-    int pi, ret, len, opsz, cmode;
+    int pi, ret, len, opsz, cmode, bitset;
     char ch, str[128];
     char *addr;
     sprintf(rs->logs, "p3\n");
@@ -2901,8 +2930,36 @@ static int p3(struct procRes_s *rs)
                 default:
                     break;
             }
+            if (cmode == 1) {
+                bitset = 1;
+                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
+                print_f(rs->plogs, "P3", rs->logs);
 
-            if (cmode == 5) {
+                while (1) {
+                    bitset = 1;
+                    ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
+                    //print_f(rs->plogs, "P3", rs->logs);
+                    if (bitset == 0) break;
+                }
+                if (!bitset) rs_ipc_put(rs, "G", 1);
+            } else if (cmode == 4) {
+                bitset = 0;
+                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
+                print_f(rs->plogs, "P3", rs->logs);
+            
+                while (1) {
+                    bitset = 0;
+                    ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
+                    //print_f(rs->plogs, "P4", rs->logs);
+            
+                    if (bitset == 1) break;
+                }
+                if (bitset) rs_ipc_put(rs, "B", 1);
+            } else if (cmode == 5) {
                 pi = 1;  
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
