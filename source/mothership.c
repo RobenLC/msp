@@ -303,21 +303,30 @@ static int error_handle(char *log)
 }
 inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
 {
+    char str[128];
+
     p->data = info & 0xff;
     p->opcode = (info >> 8) & 0xf;
     p->seqnum = (info >> 12) & 0x7;
     p->inout = (info >> 15) & 0x1;
+
+    sprintf(str, "info: 0x%.4x \n", info); 
+    print_f(mlogPool, "abs_info", str); 
 
     return info;
 }
 
 inline uint16_t pkg_info(struct info16Bit_s *p)
 {
+    char str[128];
     uint16_t info = 0;
     info |= p->data & 0xff;
     info |= (p->opcode & 0xf) << 8;
     info |= (p->seqnum & 0x7) << 12;
     info |= (p->inout & 0x1) << 15;
+
+    sprintf(str, "info: 0x%.4x \n", info); 
+    print_f(mlogPool, "pkg_info", str); 
 
     return info;
 }
@@ -660,16 +669,16 @@ static int stspy_01(struct psdata_s *data)
     uint32_t rlt;
     rlt = abs_result(data->result);	
 
-    //sprintf(str, "op_01 - rlt:0x%x \n", rlt); 
-    //print_f(mlogPool, "spy", str); 
+    sprintf(str, "op_01 - rlt:0x%x \n", rlt); 
+    print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
             ch = 1; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            //sprintf(str, "op_01: result: %x\n", data->result); 
-            //print_f(mlogPool, "spy", str);  
+            sprintf(str, "op_01: result: %x\n", data->result); 
+            print_f(mlogPool, "spy", str);  
             break;
         case WAIT:
             if (data->ansp0 == 1)
@@ -1757,7 +1766,19 @@ static int dbg(struct mainRes_s *mrs)
     p0_end(mrs);
 }
 
-static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp){ return 0; }
+static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
+
+    sprintf(mrs->log, "usleep(%d) %d -> %d \n", modersp->v, modersp->m, modersp->d);
+    print_f(&mrs->plog, "fs00", mrs->log);
+
+    usleep(modersp->v);
+    modersp->m = modersp->d;
+	
+    return 0; 
+}
 static int fs01(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     struct info16Bit_s *p;
@@ -1815,6 +1836,9 @@ static int fs04(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
+    sprintf(mrs->log, "enter \n");
+    print_f(&mrs->plog, "fs04", mrs->log);
+
     len = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((len > 0) && (ch == 'C')) {
         msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
@@ -1827,7 +1851,9 @@ static int fs04(struct mainRes_s *mrs, struct modersp_s *modersp)
             //modersp->m = modersp->m + 1;        
             return 1;
         } else {
-            modersp->m = modersp->m - 1;        
+            modersp->m = 0;
+            modersp->d = 4;
+            modersp->v = 1000000;
             return 2;
         }
     }
@@ -1900,34 +1926,46 @@ static int fs08(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
-
     sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs08", mrs->log);
-
-    /* wait for command */
-    while(1);
-}
-
-static int fs09(struct mainRes_s *mrs, struct modersp_s *modersp)
-{ 
-    struct info16Bit_s *p;
-
-    //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-    //print_f(&mrs->plog, "fs09", mrs->log);
-
-    p = &mrs->mchine.cur;
 
     mrs->mchine.seqcnt += 1;
     if (mrs->mchine.seqcnt >= 0x8) {
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_QRY;
+    p->opcode = OP_RDY;
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
 	
     mrs_ipc_put(mrs, "c", 1, 1);
     modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs09(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        p = &mrs->mchine.get;
+        sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+        print_f(&mrs->plog, "fs09", mrs->log);
+
+        if (p->opcode == OP_RDY) {
+            return 1;
+        } else {
+            modersp->d = modersp->m - 1;        
+            modersp->m = 0;
+            modersp->v = 10000;
+            return 2;
+        }
+    }
     return 0; 
 }
 
@@ -2297,19 +2335,22 @@ static int p0(struct mainRes_s *mrs)
 
     // [todo]initial value
     pmode = -1;
+    modesw.m = -1;
+    modesw.r = 0;
+    modesw.d = 0;
 
     pi = 0; pt = 0; pc = 0, seq[0] = 0, seq[1] = 1; wc = 0; 
     chk[0] = 0; chk[1] = 0;
     while (1) {
-        //sprintf(mrs->log, ".");
-        //print_f(&mrs->plog, "P0", mrs->log);
+        sprintf(mrs->log, ".\n");
+        print_f(&mrs->plog, "P0", mrs->log);
 
         // p2 data mode spi0 rx
 #if 1
         len = mrs_ipc_get(mrs, &ch, 1, 0);
         if (len > 0) {
-            //sprintf(mrs->log, "ret:%d ch:%c\n", ret, ch);
-            //print_f(&mrs->plog, "P0", mrs->log);
+            sprintf(mrs->log, "modesw.m:%d ch:0x%x\n", modesw.m, ch);
+            print_f(&mrs->plog, "P0", mrs->log);
 
             if (modesw.m == -1) {
                 if ((ch > 0) && (ch < PS_NUM)) {
@@ -2322,8 +2363,8 @@ static int p0(struct mainRes_s *mrs)
 
         if ((modesw.m > 0) && (modesw.m < PS_NUM)) {
             modesw.r = (*afselec[modesw.m].pfunc)(mrs, &modesw);
-            //sprintf(mrs->log, "pmode:%d rsp:%d\n", modesw.m, modesw.r);
-            //print_f(&mrs->plog, "P0", mrs->log);
+            sprintf(mrs->log, "pmode:%d rsp:%d\n", modesw.m, modesw.r);
+            print_f(&mrs->plog, "P0", mrs->log);
             if (modesw.r == 1) {
                 tmp = modesw.m;
                 modesw.m = 0;
@@ -2718,11 +2759,10 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     // wait for ch from p0
     // state machine control
     stdata.rs = rs;
-    pi = 0;    stdata.result = 0;    cmd = '\0';   cmdt = '\0';
-    stdata.result = emb_stanPro(0, STINIT, SPY, PSSET);
+    pi = 0;    stdata.result = 0;    cmd = '\0';   cmdt = 'w';
     while (1) {
-        sprintf(rs->logs, "+\n");
-        print_f(rs->plogs, "P1", rs->logs);
+        //sprintf(rs->logs, "+\n");
+        //print_f(rs->plogs, "P1", rs->logs);
 
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
@@ -2730,11 +2770,16 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
             sprintf(rs->logs, "%c\n", cmd);
             print_f(rs->plogs, "P1CMD", rs->logs);
 
-            if (cmdt == 'p') {
+            if (cmdt == '\0') {
                 if (cmd == 'd') {
                     //stdata.result = emb_stanPro(0, STINIT, SPY, PSSET);
                     cmdt = cmd;
+                } else if (cmd == 'w') {
+                    cmdt = cmd;
+                    stdata.result = emb_stanPro(0, STINIT, SPY, PSSET);
                 }
+
+                if (cmdt != '\0') break;
             } else { /* command to interrupt state machine here */
 
             }
@@ -2749,21 +2794,30 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //    print_f(rs->plogs, "P1", rs->logs);
         //}
 
-        if ((ret > 0) && (ch != '$')) {
+        if (((ret > 0) && (ch != '$')) || (cmdt != '\0')){
             stdata.ansp0 = ch;
             evt = stdata.result;
             pi = (evt >> 8) & 0xff;
             px = (evt & 0xff);
             if ((pi >= SMAX) || (px >= PSMAX)) {
-                cmdt = 'p';
+                if (cmdt != '\0') {
+                    sprintf(rs->logs, "comdt:%c ch:0x%x evt:0x%.8x\n", cmdt, ch, evt);
+                    print_f(rs->plogs, "P1", rs->logs);
+
+                    rs_ipc_put(rcmd, &cmdt, 1);
+                    rs_ipc_put(rcmd, &ch, 1);
+                    cmdt = '\0';
+                    stdata.result = 0;
+                }
+
                 //stdata.result = emb_stanPro(0, STINIT, SPY, PSSET);
                 continue;
             }
 
             stdata.result = (*pf[pi][px])(&stdata);
 
-            //sprintf(rs->logs, "ret:%d ch:%d evt:0x%.4x\n", ret, ch, evt);
-            //print_f(rs->plogs, "P1", rs->logs);
+            sprintf(rs->logs, "comdt:%c ch:0x%x evt:0x%.8x\n", cmdt, ch, evt);
+            print_f(rs->plogs, "P1", rs->logs);
         }
 
         //rs_ipc_put(rs, &ch, 1);
@@ -2792,13 +2846,13 @@ static int p2(struct procRes_s *rs)
     ch = '2';
 
     while (1) {
-        //sprintf(rs->logs, "!\n");
-        //print_f(rs->plogs, "P2", rs->logs);
+        sprintf(rs->logs, "!\n");
+        print_f(rs->plogs, "P2", rs->logs);
 
         ret = rs_ipc_get(rs, &ch, 1);
         if (ret > 0) {
-            //sprintf(rs->logs, "recv ch: %c\n", ch);
-            //print_f(rs->plogs, "P2", rs->logs);
+            sprintf(rs->logs, "recv ch: %c\n", ch);
+            print_f(rs->plogs, "P2", rs->logs);
             switch (ch) {
                 case 'g':
                     cmode = 1;
@@ -2806,6 +2860,8 @@ static int p2(struct procRes_s *rs)
                 case 'c':
                 case 'C':
                     cmode = 2;
+                    sprintf(rs->logs, "cmode: %d - 1\n", cmode);
+                    print_f(rs->plogs, "P2", rs->logs);
                     break;
                 case 'e':
                     pi = 0;
@@ -2821,7 +2877,14 @@ static int p2(struct procRes_s *rs)
                 default:
                     break;
             }
+
+            sprintf(rs->logs, "cmode: %d - 2\n", cmode);
+            print_f(rs->plogs, "P2", rs->logs);
+			
             if (cmode == 1) {
+                sprintf(rs->logs, "cmode: %d - 3\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+
                 bitset = 1;
                 ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                 sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
@@ -2836,22 +2899,33 @@ static int p2(struct procRes_s *rs)
                 }
                 if (!bitset) rs_ipc_put(rs, "G", 1);
             } else if (cmode == 2) {
+                sprintf(rs->logs, "cmode: %d - 4\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+
                 len = 0;
                 msync(rs->pmch, sizeof(struct machineCtrl_s), MS_SYNC);            
                 send16 = pkg_info(&rs->pmch->cur);
-                tx8[0] = send16 & 0xff;
-                tx8[1] = (send16 >> 8) & 0xff;		
+                tx8[1] = send16 & 0xff;
+                tx8[0] = (send16 >> 8) & 0xff;		
+
+                sprintf(rs->logs, "send %d %d \n", tx8[0], tx8[1]);
+                print_f(rs->plogs, "P2", rs->logs);
+
                 len = mtx_data(rs->spifd, rx8, tx8, 1, 2, 1024);
                 if (len > 0) {
-                    recv16 = rx8[0] | (rx8[1] << 8);
+                    recv16 = rx8[1] | (rx8[0] << 8);
                     abs_info(&rs->pmch->get, recv16);
                     rs_ipc_put(rs, "C", 1);
                 }
+
             } else if (cmode == 4) {
+                sprintf(rs->logs, "cmode: %d - 5\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+
                 bitset = 0;
                 ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                 sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
-                print_f(rs->plogs, "P4", rs->logs);
+                print_f(rs->plogs, "P2", rs->logs);
             
                 while (1) {
                     bitset = 0;
@@ -2863,6 +2937,9 @@ static int p2(struct procRes_s *rs)
                 }
                 if (bitset) rs_ipc_put(rs, "B", 1);
             }else if (cmode == 5) {
+                sprintf(rs->logs, "cmode: %d - 6\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+
                 pi = 0;  
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
@@ -2878,11 +2955,17 @@ static int p2(struct procRes_s *rs)
                 }
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
-            } else if (cmode == 2) {
+            }else {
+                sprintf(rs->logs, "cmode: %d - 7\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+            }
+			
+/*
+            else if (cmode == 2) {
                 len = ring_buf_cons(rs->pcmdTx, &addr);
                 if (len >= 0) {
                     msync(addr, len, MS_SYNC);
-                    /* send data to spi command mode */
+                    // send data to spi command mode
                     opsz = mtx_data(rs->spifd, NULL, addr, 1, len, 1024*1024);
                     //sprintf(rs->logs, "[%d] spi tx %d\n", px, opsz);
                     //print_f(rs->plogs, "P2", rs->logs);
@@ -2892,6 +2975,7 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);
                 }
             }
+*/
         }
     }
 
@@ -3671,6 +3755,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 
     rs->psocket_r = &mrs->socket_r;
     rs->psocket_t = &mrs->socket_t;	
+
+    rs->pmch = &mrs->mchine;
     return 0;
 }
 
