@@ -275,7 +275,7 @@ static int stlaser_03(struct psdata_s *data);
 static int stlaser_04(struct psdata_s *data);
 static int stlaser_05(struct psdata_s *data);
 
-static int error_handle(char *log)
+static int error_handle(char *log, int line)
 {
 #define MAX_LEN 256
 #define TOT_LEN (MAX_LEN + 32)
@@ -288,11 +288,11 @@ static int error_handle(char *log)
         if (len >= MAX_LEN) len = MAX_LEN;
         log[len] = '\0';
 
-        sprintf(str, "warning: %s\n", log); 
+        sprintf(str, "warning: %s - line: %d\n", log, line); 
         print_f(mlogPool, "error", str); 
 
     } else {
-        sprintf(str, "warning: read log failed \n"); 
+        sprintf(str, "warning: read log failed - line: %d\n", line); 
         print_f(mlogPool, "error", str); 
     }
 
@@ -418,8 +418,8 @@ static int next_spy(struct psdata_s *data)
             case PSRLT:
                 sprintf(str, "PSRLT\n"); 
                 print_f(mlogPool, "spy", str); 
-                next = PSTSM;
-                //next = PSMAX;
+                //next = PSTSM;
+                next = PSMAX;
                 break;
             case PSTSM:
                 sprintf(str, "PSTSM\n"); 
@@ -1679,24 +1679,8 @@ static int cmdfunc_01(int argc, char *argv[])
 
     ch = '\0';
 
-    if (argc == 0) {
-        ch = 'p';
-    }
-
-    if (argc == 2) {
-        ch = 'd';
-    }
-
-    if (argc == 1) {
-        ch = '4';
-    }
-
-    if (argc == 5) {
-        ch = 's';
-    }
-
     if (argc == 7) {
-        ch = 'b';
+        ch = 'd';
     }
 
     sprintf(str, "cmdfunc_01 argc:%d ch:%c\n", argc, ch); 
@@ -1709,7 +1693,7 @@ static int cmdfunc_01(int argc, char *argv[])
 static int dbg(struct mainRes_s *mrs)
 {
     int ci, pi, ret, idle = 0;
-    char cmd[256], *addr[3];
+    char cmd[256], *addr[3], rsp[256];
     char poll[32] = "poll";
 
     struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
@@ -1758,6 +1742,20 @@ static int dbg(struct mainRes_s *mrs)
             //mrs_ipc_put(mrs, "t", 1, 6);
         }
 
+        ret = 0;
+        ret = mrs_ipc_get(mrs, rsp, 256, 6);
+        while (ret == 0) {
+            if (cmd[0] == '\0') break;
+            usleep(1000);
+            ret = mrs_ipc_get(mrs, rsp, 256, 6);
+        }
+
+        if (ret > 0) {
+            sprintf(mrs->log, "rsp:%s\n", rsp);
+            print_f(&mrs->plog, "DBG", mrs->log);
+            mrs_ipc_put(mrs, rsp, ret, 5);
+        }
+		
         cmd[0] = '\0';
 
         printf_flush(&mrs->plog, mrs->flog);
@@ -1957,13 +1955,15 @@ static int fs09(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
         print_f(&mrs->plog, "fs09", mrs->log);
 
-        if (p->opcode == OP_RDY) {
-            return 1;
-        } else {
+        if (p->opcode == OP_QRY) {
             modersp->d = modersp->m - 1;        
             modersp->m = 0;
             modersp->v = 10000;
             return 2;
+        } else {
+            /* must be something wrong */
+            sprintf(mrs->log, "fs09: did not receive QRY but 0x%x", p->opcode);
+            error_handle(mrs->log, 1967);
         }
     }
     return 0; 
@@ -2743,7 +2743,7 @@ static int p0(struct mainRes_s *mrs)
 
 static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    int px, pi, ret = 0, ci;
+    int px, pi, ret = 0, ci, len;
     char ch, cmd, cmdt;
     char *addr;
     uint32_t evt;
@@ -2803,9 +2803,13 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 if (cmdt != '\0') {
                     sprintf(rs->logs, "comdt:%c ch:0x%x evt:0x%.8x\n", cmdt, ch, evt);
                     print_f(rs->plogs, "P1", rs->logs);
+					
+                    sprintf(rs->logs, "%c;0x%x;done", cmdt, ch);
+                    len = strlen(rs->logs);
+                    if (len > 256) len = 256;
+                    rs->logs[len - 1] = '\0';
+                    rs_ipc_put(rcmd, rs->logs, len);
 
-                    rs_ipc_put(rcmd, &cmdt, 1);
-                    rs_ipc_put(rcmd, &ch, 1);
                     cmdt = '\0';
                     stdata.result = 0;
                 }
@@ -3122,8 +3126,8 @@ static int p4(struct procRes_s *rs)
 
     rs->psocket_t->listenfd = socket(AF_INET, SOCK_STREAM, 0);
     if (rs->psocket_t->listenfd < 0) { 
-        sprintf(rs->logs, "p4 get socket ret: %d line 2951\n", rs->psocket_t->listenfd);
-        error_handle(rs->logs);
+        sprintf(rs->logs, "p4 get socket ret: %d", rs->psocket_t->listenfd);
+        error_handle(rs->logs, 3128);
     }
 
     memset(&rs->psocket_t->serv_addr, '0', sizeof(struct sockaddr_in));
@@ -3134,14 +3138,14 @@ static int p4(struct procRes_s *rs)
 
     ret = bind(rs->psocket_t->listenfd, (struct sockaddr*)&rs->psocket_t->serv_addr, sizeof(struct sockaddr_in)); 
     if (ret < 0) {
-        sprintf(rs->logs, "p4 get bind ret: %d\n", ret);
-        error_handle(rs->logs);
+        sprintf(rs->logs, "p4 get bind ret: %d", ret);
+        error_handle(rs->logs, 3140);
     }
 
     ret = listen(rs->psocket_t->listenfd, 10); 
     if (ret < 0) {
-        sprintf(rs->logs, "p4 get listen ret: %d\n", ret);
-        error_handle(rs->logs);
+        sprintf(rs->logs, "p4 get listen ret: %d", ret);
+        error_handle(rs->logs, 3146);
     }
 
     while (1) {
@@ -3151,8 +3155,8 @@ static int p4(struct procRes_s *rs)
 
         rs->psocket_t->connfd = accept(rs->psocket_t->listenfd, (struct sockaddr*)NULL, NULL); \
         if (rs->psocket_t->connfd < 0) {
-            sprintf(rs->logs, "P4 get connect failed ret:%d\n", rs->psocket_t->connfd);
-            error_handle(rs->logs);
+            sprintf(rs->logs, "P4 get connect failed ret:%d", rs->psocket_t->connfd);
+            error_handle(rs->logs, 3157);
             continue;
         }
 //        opsz = read(rs->psocket_t->connfd, recvbuf, 1024);
@@ -3296,8 +3300,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
     rs->psocket_r->listenfd = socket(AF_INET, SOCK_STREAM, 0);
     if (rs->psocket_r->listenfd < 0) { 
-        sprintf(rs->logs, "p5 get socket ret: %d\n", rs->psocket_r->listenfd);
-        error_handle(rs->logs);
+        sprintf(rs->logs, "p5 get socket ret: %d", rs->psocket_r->listenfd);
+        error_handle(rs->logs, 3302);
     }
 
     memset(&rs->psocket_r->serv_addr, '0', sizeof(struct sockaddr_in));
@@ -3308,14 +3312,14 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
     ret = bind(rs->psocket_r->listenfd, (struct sockaddr*)&rs->psocket_r->serv_addr, sizeof(struct sockaddr_in)); 
     if (ret < 0) {
-        sprintf(rs->logs, "p5 get bind ret: %d\n", ret);
-        error_handle(rs->logs);
+        sprintf(rs->logs, "p5 get bind ret: %d", ret);
+        error_handle(rs->logs, 3314);
     }
 
     ret = listen(rs->psocket_r->listenfd, 10); 
     if (ret < 0) {
-        sprintf(rs->logs, "p5 get listen ret: %d\n", ret);
-        error_handle(rs->logs);
+        sprintf(rs->logs, "p5 get listen ret: %d", ret);
+        error_handle(rs->logs, 3320);
     }
 
     while (1) {
@@ -3325,8 +3329,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
         rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)NULL, NULL); 
         if (rs->psocket_r->connfd < 0) {
-            sprintf(rs->logs, "P5 get connect failed ret:%d\n", rs->psocket_r->connfd);
-            error_handle(rs->logs);
+            sprintf(rs->logs, "P5 get connect failed ret:%d", rs->psocket_r->connfd);
+            error_handle(rs->logs, 3331);
             continue;
         }
 
@@ -3372,6 +3376,7 @@ static char spi0[] = "/dev/spidev32765.0";
     uint32_t bitset;
 
     pmrs = (struct mainRes_s *)mmap(NULL, sizeof(struct mainRes_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+    memset(pmrs, 0, sizeof(struct mainRes_s));
 
     pmrs->plog.max = 6*1024*1024;
     pmrs->plog.pool = mmap(NULL, pmrs->plog.max, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
