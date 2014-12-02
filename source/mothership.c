@@ -2361,23 +2361,23 @@ static int p0(struct mainRes_s *mrs)
             }
         }
 
-        if ((modesw.m > 0) && (modesw.m < PS_NUM)) {
+        if ((modesw.m >= 0) && (modesw.m < PS_NUM)) {
             modesw.r = (*afselec[modesw.m].pfunc)(mrs, &modesw);
             sprintf(mrs->log, "pmode:%d rsp:%d\n", modesw.m, modesw.r);
             print_f(&mrs->plog, "P0", mrs->log);
             if (modesw.r == 1) {
                 tmp = modesw.m;
-                modesw.m = 0;
+                modesw.m = -1;
             }
         }
 
-        if (modesw.m == 0) {
+        if (modesw.m == -1) {
             sprintf(mrs->log, "pmode:%d rsp:%d - end\n", tmp, modesw.r);
             print_f(&mrs->plog, "P0", mrs->log);
 
             ch = modesw.r; /* response */
-            modesw.m = -1;
             modesw.r = 0;
+            tmp = -1;
 
             mrs_ipc_put(mrs, &ch, 1, 0);
         } else {
