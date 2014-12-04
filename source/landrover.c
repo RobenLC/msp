@@ -21,6 +21,7 @@
 #define SPI_MODE_1		(0|SPI_CPHA)
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
+#define SPI_SPEED    30000000
 
 #define OP_PON 0x1
 #define OP_QRY 0x2
@@ -1460,7 +1461,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pks
         tr[i].rx_buf = (unsigned long)rx;
         tr[i].len = pkt_size;
         tr[i].delay_usecs = 0;
-        tr[i].speed_hz = 20000000;
+        tr[i].speed_hz = 30000000;
         tr[i].bits_per_word = 8;
         
         tx += pkt_size;
@@ -1499,7 +1500,7 @@ static int mtx_data_16(int fd, uint16_t *rx_buff, uint16_t *tx_buff, int num, in
         tr[i].rx_buf = (unsigned long)rx;
         tr[i].len = pkt_size;
         tr[i].delay_usecs = 0;
-        tr[i].speed_hz = 20000000;
+        tr[i].speed_hz = SPI_SPEED;
         tr[i].bits_per_word = 16;
         
         tx += pkt_size;
@@ -2050,6 +2051,9 @@ static int fs13(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "can't get bits per word"); 
         print_f(&mrs->plog, "fs13", mrs->log);
     }
+
+    ring_buf_init(&mrs->dataRx);
+    mrs->dataRx.r->folw.seq = 1;
 
     return 1;
 }
@@ -2637,6 +2641,10 @@ static int p4(struct procRes_s *rs)
             len = mtx_data_16(rs->spifd, rx16, tx16, 1, 2, 1024);
             if (len > 0) {
                 in16 = rx16[0];
+
+                sprintf(rs->logs, "16Bits send: 0x%.4x, get: 0x%.4x\n", tx16[0], in16);
+                print_f(rs->plogs, "P4", rs->logs);
+
                 abs_info(&rs->pmch->get, in16);
                 rs_ipc_put(rs, "C", 1);
             }
@@ -2827,7 +2835,7 @@ static char spi0[] = "/dev/spidev32765.0";
     struct procRes_s rs[7];
     int ix, ret;
     char *log;
-    int tdiff;
+    int tdiff, speed;
     int arg[8];
     uint32_t bitset;
 
@@ -2869,12 +2877,12 @@ static char spi0[] = "/dev/spidev32765.0";
     pmrs->dataRx.totsz = 1024*61440;
     pmrs->dataRx.chksz = 61440;
     pmrs->dataRx.svdist = 16;
-    sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataRx.totsz, pmrs->dataRx.pp);
-    print_f(&pmrs->plog, "minit_result", pmrs->log);
-    for (ix = 0; ix < pmrs->dataRx.slotn; ix++) {
-        sprintf(pmrs->log, "[%d] 0x%.8x\n", ix, pmrs->dataRx.pp[ix]);
-        print_f(&pmrs->plog, "shminit_result", pmrs->log);
-    }
+    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataRx.totsz, pmrs->dataRx.pp);
+    //print_f(&pmrs->plog, "minit_result", pmrs->log);
+    //for (ix = 0; ix < pmrs->dataRx.slotn; ix++) {
+    //    sprintf(pmrs->log, "[%d] 0x%.8x\n", ix, pmrs->dataRx.pp[ix]);
+    //    print_f(&pmrs->plog, "shminit_result", pmrs->log);
+    //}
     clock_gettime(CLOCK_REALTIME, &pmrs->time[1]);
     tdiff = time_diff(&pmrs->time[0], &pmrs->time[1], 1000);
     sprintf(pmrs->log, "tdiff:%d \n", tdiff);
@@ -2965,6 +2973,18 @@ static char spi0[] = "/dev/spidev32765.0";
     //bitset = 0;
     //ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
    // printf("[t]Set RDY low at beginning\n");
+    /*
+     * spi speed 
+     */ 
+
+    speed = SPI_SPEED;
+    ret = ioctl(pmrs->sfm[0], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?速率 
+    if (ret == -1) 
+        printf("can't set max speed hz"); 
+        
+    ret = ioctl(pmrs->sfm[1], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?速率 
+    if (ret == -1) 
+        printf("can't set max speed hz"); 
 
     /*
      * spi mode 
@@ -2987,22 +3007,6 @@ static char spi0[] = "/dev/spidev32765.0";
     ret = ioctl(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
     if (ret == -1) 
         printf("can't get spi mode\n"); 
-
-   /*
-     * pull low RDY
-     */ 
-    bitset = 0;
-    ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
-    sprintf(pmrs->log, "Set RDY: %d\n", bitset);
-    print_f(&pmrs->plog, "Init", pmrs->log);
-
-   /*
-     * pull low RDY
-     */ 
-    bitset = 0;
-    ret = ioctl(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
-    sprintf(pmrs->log, "Set RDY: %d\n", bitset);
-    print_f(&pmrs->plog, "Init", pmrs->log);
 
 // IPC
     pipe(pmrs->pipedn[0].rt);
