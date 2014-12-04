@@ -311,8 +311,8 @@ inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
     p->seqnum = (info >> 12) & 0x7;
     p->inout = (info >> 15) & 0x1;
 
-    sprintf(str, "info: 0x%.4x \n", info); 
-    print_f(mlogPool, "abs_info", str); 
+    //sprintf(str, "info: 0x%.4x \n", info); 
+    //print_f(mlogPool, "abs_info", str); 
 
     return info;
 }
@@ -326,8 +326,8 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
     info |= (p->seqnum & 0x7) << 12;
     info |= (p->inout & 0x1) << 15;
 
-    sprintf(str, "info: 0x%.4x \n", info); 
-    print_f(mlogPool, "pkg_info", str); 
+    //sprintf(str, "info: 0x%.4x \n", info); 
+    //print_f(mlogPool, "pkg_info", str); 
 
     return info;
 }
@@ -402,35 +402,35 @@ static int next_spy(struct psdata_s *data)
         tmpRlt = emb_result(tmpRlt, STINIT);
         switch (pro) {
             case PSSET:
-                sprintf(str, "PSSET\n"); 
-                print_f(mlogPool, "spy", str); 
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "spy", str); 
                 next = PSACT;
                 break;
             case PSACT:
-                sprintf(str, "PSACT\n"); 
-                print_f(mlogPool, "spy", str); 
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "spy", str); 
                 next = PSWT;
                 break;
             case PSWT:
-                sprintf(str, "PSWT\n"); 
-                print_f(mlogPool, "spy", str); 
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "spy", str); 
                 next = PSRLT;
                 break;
             case PSRLT:
-                sprintf(str, "PSRLT\n"); 
-                print_f(mlogPool, "spy", str); 
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "spy", str); 
                 //next = PSTSM;
                 next = PSMAX;
                 break;
             case PSTSM:
-                sprintf(str, "PSTSM\n"); 
-                print_f(mlogPool, "spy", str); 
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "spy", str); 
                 next = PSSET; /* jump to next stage */
                 evt = 0x1;
                 break;
             default:
-                sprintf(str, "default\n"); 
-                print_f(mlogPool, "spy", str); 
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "spy", str); 
                 next = PSSET;
                 break;
         }
@@ -463,35 +463,35 @@ static uint32_t next_bullet(struct psdata_s *data)
         tmpRlt = emb_result(tmpRlt, STINIT);
         switch (pro) {
             case PSSET:
-                sprintf(str, "PSSET\n"); 
-                print_f(mlogPool, "bullet", str); 
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
                 next = PSACT;
                 break;
             case PSACT:
-                sprintf(str, "PSACT\n"); 
-                print_f(mlogPool, "bullet", str); 
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
                 next = PSWT;
                 break;
             case PSWT:
-                sprintf(str, "PSWT\n"); 
-                print_f(mlogPool, "bullet", str); 
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
                 next = PSRLT;
                 break;
             case PSRLT:
-                sprintf(str, "PSRLT\n"); 
-                print_f(mlogPool, "bullet", str); 
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
                 next = PSTSM;
                 break;
             case PSTSM:
-                sprintf(str, "PSTSM\n"); 
-                print_f(mlogPool, "bullet", str); 
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str); 
                 next = PSSET;
                 evt = 0x1; /* jump to next stage */
                 //next = PSMAX;
                 break;
             default:
-                sprintf(str, "default\n"); 
-                print_f(mlogPool, "bullet", str); 
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
                 next = PSSET;
                 break;
         }
@@ -523,35 +523,35 @@ static int next_laser(struct psdata_s *data)
         tmpRlt = emb_result(tmpRlt, STINIT);
         switch (pro) {
             case PSSET:
-                sprintf(str, "PSSET\n"); 
-                print_f(mlogPool, "laser", str); 
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "laser", str); 
                 next = PSACT;
                 break;
             case PSACT:
-                sprintf(str, "PSACT\n"); 
-                print_f(mlogPool, "laser", str); 
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "laser", str); 
                 //next = PSWT;
                 next = PSMAX;
                 break;
             case PSWT:
-                sprintf(str, "PSWT\n"); 
-                print_f(mlogPool, "laser", str); 
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "laser", str); 
                 next = PSRLT;
                 break;
             case PSRLT:
-                sprintf(str, "PSRLT\n"); 
-                print_f(mlogPool, "laser", str); 
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "laser", str); 
                 next = PSTSM;
                 break;
             case PSTSM:
-                sprintf(str, "PSTSM\n"); 
-                print_f(mlogPool, "laser", str); 
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "laser", str); 
                 next = PSSET;
                 evt = 0x1; /* jump to next stage */
                 break;
             default:
-                sprintf(str, "default\n"); 
-                print_f(mlogPool, "laser", str); 
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "laser", str); 
                 next = PSSET;
                 break;
         }
@@ -1293,8 +1293,8 @@ static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel)
     }
 
     dist = dualn - folwn;
-    sprintf(str, "d:%d, %d /%d \n", dist, dualn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "d:%d, %d /%d \n", dist, dualn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if (dist > (pp->slotn - 3))  return -1;
 
@@ -1436,8 +1436,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         dist = leadn - folwn;
     }
 
-    sprintf(str, "[cons], d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "[cons], d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
@@ -1744,7 +1744,7 @@ static int dbg(struct mainRes_s *mrs)
     char poll[32] = "poll";
 
     struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
-                                {4, "aspect", cmdfunc_01}, {5, "leo", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "lanch", cmdfunc_01}};
+                                {4, "aspect", cmdfunc_01}, {5, "leo", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_01}};
 
     p0_init(mrs);
 
@@ -2934,8 +2934,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
         while (ci > 0) {
-            sprintf(rs->logs, "%c\n", cmd);
-            print_f(rs->plogs, "P1CMD", rs->logs);
+            //sprintf(rs->logs, "%c\n", cmd);
+            //print_f(rs->plogs, "P1CMD", rs->logs);
 
             if (cmdt == '\0') {
                 if (cmd == 'd') {
@@ -2986,8 +2986,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                     logcnt = 0;
 
                     cmdt = '\0'; 
-                    sprintf(rs->logs, "comdt:0x%x ch:0x%x evt:0x%.8x - end\n", cmdt, ch, stdata.result);
-                    print_f(rs->plogs, "P1", rs->logs);
+                    //sprintf(rs->logs, "comdt:0x%x ch:0x%x evt:0x%.8x - end\n", cmdt, ch, stdata.result);
+                    //print_f(rs->plogs, "P1", rs->logs);
                 }
 
                 //stdata.result = emb_stanPro(0, STINIT, SPY, PSSET);
@@ -3036,13 +3036,13 @@ static int p2(struct procRes_s *rs)
     ch = '2';
 
     while (1) {
-        sprintf(rs->logs, "!\n");
-        print_f(rs->plogs, "P2", rs->logs);
+        //sprintf(rs->logs, "!\n");
+        //print_f(rs->plogs, "P2", rs->logs);
 
         ret = rs_ipc_get(rs, &ch, 1);
         if (ret > 0) {
-            sprintf(rs->logs, "recv ch: %c\n", ch);
-            print_f(rs->plogs, "P2", rs->logs);
+            //sprintf(rs->logs, "recv ch: %c\n", ch);
+            //print_f(rs->plogs, "P2", rs->logs);
             switch (ch) {
                 case 'g':
                     cmode = 1;
@@ -3050,8 +3050,8 @@ static int p2(struct procRes_s *rs)
                 case 'c':
                 case 'C':
                     cmode = 2;
-                    sprintf(rs->logs, "cmode: %d - 1\n", cmode);
-                    print_f(rs->plogs, "P2", rs->logs);
+                    //sprintf(rs->logs, "cmode: %d - 1\n", cmode);
+                    //print_f(rs->plogs, "P2", rs->logs);
                     break;
                 case 'e':
                     pi = 0;
@@ -3068,17 +3068,17 @@ static int p2(struct procRes_s *rs)
                     break;
             }
 
-            sprintf(rs->logs, "cmode: %d - 2\n", cmode);
-            print_f(rs->plogs, "P2", rs->logs);
+            //sprintf(rs->logs, "cmode: %d - 2\n", cmode);
+            //print_f(rs->plogs, "P2", rs->logs);
 			
             if (cmode == 1) {
-                sprintf(rs->logs, "cmode: %d - 3\n", cmode);
-                print_f(rs->plogs, "P2", rs->logs);
+                //sprintf(rs->logs, "cmode: %d - 3\n", cmode);
+                //print_f(rs->plogs, "P2", rs->logs);
 
                 bitset = 1;
                 ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-                sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
-                print_f(rs->plogs, "P2", rs->logs);
+                //sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
+                //print_f(rs->plogs, "P2", rs->logs);
 
                 while (1) {
                     bitset = 1;
@@ -3089,8 +3089,8 @@ static int p2(struct procRes_s *rs)
                 }
                 if (!bitset) rs_ipc_put(rs, "G", 1);
             } else if (cmode == 2) {
-                sprintf(rs->logs, "cmode: %d - 4\n", cmode);
-                print_f(rs->plogs, "P2", rs->logs);
+                //sprintf(rs->logs, "cmode: %d - 4\n", cmode);
+                //print_f(rs->plogs, "P2", rs->logs);
 
                 len = 0;
                 msync(rs->pmch, sizeof(struct machineCtrl_s), MS_SYNC);            
@@ -3098,8 +3098,8 @@ static int p2(struct procRes_s *rs)
                 tx8[1] = send16 & 0xff;
                 tx8[0] = (send16 >> 8) & 0xff;		
 
-                sprintf(rs->logs, "send %d %d \n", tx8[0], tx8[1]);
-                print_f(rs->plogs, "P2", rs->logs);
+                //sprintf(rs->logs, "send %d %d \n", tx8[0], tx8[1]);
+                //print_f(rs->plogs, "P2", rs->logs);
 
                 len = mtx_data(rs->spifd, rx8, tx8, 1, 2, 1024);
                 if (len > 0) {
@@ -3109,13 +3109,13 @@ static int p2(struct procRes_s *rs)
                 }
 
             } else if (cmode == 4) {
-                sprintf(rs->logs, "cmode: %d - 5\n", cmode);
-                print_f(rs->plogs, "P2", rs->logs);
+                //sprintf(rs->logs, "cmode: %d - 5\n", cmode);
+                //print_f(rs->plogs, "P2", rs->logs);
 
                 bitset = 0;
                 ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-                sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
-                print_f(rs->plogs, "P2", rs->logs);
+                //sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
+                //print_f(rs->plogs, "P2", rs->logs);
             
                 while (1) {
                     bitset = 0;
@@ -3127,16 +3127,16 @@ static int p2(struct procRes_s *rs)
                 }
                 if (bitset) rs_ipc_put(rs, "B", 1);
             }else if (cmode == 5) {
-                sprintf(rs->logs, "cmode: %d\n", cmode);
-                print_f(rs->plogs, "P2", rs->logs);
+                //sprintf(rs->logs, "cmode: %d\n", cmode);
+                //print_f(rs->plogs, "P2", rs->logs);
 
                 pi = 0;  
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     opsz = mtx_data(rs->spifd, addr, NULL, 1, len, 1024*1024);
                     //printf("0 spi %d\n", opsz);
-                    sprintf(rs->logs, "spi0 recv %d\n", opsz);
-                    print_f(rs->plogs, "P2", rs->logs);
+                    //sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                    //print_f(rs->plogs, "P2", rs->logs);
 
                     ring_buf_prod_dual(rs->pdataRx, pi);
                     //shmem_dump(addr, 32);
@@ -3147,8 +3147,8 @@ static int p2(struct procRes_s *rs)
                 }
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
-                sprintf(rs->logs, "spi0 recv end\n");
-                print_f(rs->plogs, "P2", rs->logs);
+                //sprintf(rs->logs, "spi0 recv end\n");
+                //print_f(rs->plogs, "P2", rs->logs);
 
             }else {
                 sprintf(rs->logs, "cmode: %d - 7\n", cmode);
@@ -3226,8 +3226,8 @@ static int p3(struct procRes_s *rs)
             if (cmode == 1) {
                 bitset = 1;
                 ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-                sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
-                print_f(rs->plogs, "P3", rs->logs);
+                //sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
+                //print_f(rs->plogs, "P3", rs->logs);
 
                 while (1) {
                     bitset = 1;
@@ -3252,8 +3252,8 @@ static int p3(struct procRes_s *rs)
             } else if (cmode == 4) {
                 bitset = 0;
                 ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-                sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
-                print_f(rs->plogs, "P3", rs->logs);
+                //sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
+                //print_f(rs->plogs, "P3", rs->logs);
             
                 while (1) {
                     bitset = 0;
@@ -3265,8 +3265,8 @@ static int p3(struct procRes_s *rs)
                 }
                 if (bitset) rs_ipc_put(rs, "B", 1);
             } else if (cmode == 5) {
-                sprintf(rs->logs, "cmode: %d\n", cmode);
-                print_f(rs->plogs, "P3", rs->logs);
+                //sprintf(rs->logs, "cmode: %d\n", cmode);
+                //print_f(rs->plogs, "P3", rs->logs);
 
                 pi = 1;  
                 while (1) {
@@ -3275,8 +3275,8 @@ static int p3(struct procRes_s *rs)
                     opsz = mtx_data(rs->spifd, addr, NULL, 1, len, 1024*1024);
                     //sprintf(rs->logs, "1 spi %d\n", opsz);
                     //print_f(rs->plogs, "P5", rs->logs);
-                    sprintf(rs->logs, "spi1 recv %d\n", opsz);
-                    print_f(rs->plogs, "P3", rs->logs);
+                    //sprintf(rs->logs, "spi1 recv %d\n", opsz);
+                    //print_f(rs->plogs, "P3", rs->logs);
 
                     //shmem_dump(addr, 32);
                     ring_buf_prod_dual(rs->pdataRx, pi);
@@ -3287,8 +3287,8 @@ static int p3(struct procRes_s *rs)
                 }
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
-                sprintf(rs->logs, "spi1 recv end\n");
-                print_f(rs->plogs, "P3", rs->logs);
+                //sprintf(rs->logs, "spi1 recv end\n");
+                //print_f(rs->plogs, "P3", rs->logs);
             }
         }
     }
@@ -3348,8 +3348,8 @@ static int p4(struct procRes_s *rs)
 
     while (1) {
         //printf("^");
-        sprintf(rs->logs, "^\n");
-        print_f(rs->plogs, "P4", rs->logs);
+        //sprintf(rs->logs, "^\n");
+        //print_f(rs->plogs, "P4", rs->logs);
 
         rs->psocket_t->connfd = accept(rs->psocket_t->listenfd, (struct sockaddr*)NULL, NULL); \
         if (rs->psocket_t->connfd < 0) {
@@ -3363,8 +3363,8 @@ static int p4(struct procRes_s *rs)
 //        opsz = read(rs->psocket_t->connfd, recvbuf, 1024);
         opsz = 0;
         recvbuf[0] = '\0';
-        sprintf(rs->logs, "socket connected %d\n", rs->psocket_t->connfd);
-        print_f(rs->plogs, "P4", rs->logs);
+        //sprintf(rs->logs, "socket connected %d\n", rs->psocket_t->connfd);
+        //print_f(rs->plogs, "P4", rs->logs);
 
         pi = 0;
         ret = 1;
@@ -3374,8 +3374,8 @@ static int p4(struct procRes_s *rs)
             ret = 0;
             ret = rs_ipc_get(rs, &ch, 1);        		
 			
-            sprintf(rs->logs, "%c ret:%d \n", ch, ret);
-            print_f(rs->plogs, "P4", rs->logs);
+            //sprintf(rs->logs, "%c ret:%d \n", ch, ret);
+            //print_f(rs->plogs, "P4", rs->logs);
 
             switch (ch) {
                 case 'd':
@@ -3409,11 +3409,11 @@ static int p4(struct procRes_s *rs)
                     
                         msync(addr, len, MS_SYNC);
                         /* send data to wifi socket */
-                        sprintf(rs->logs, "%c socket tx %d %d %d - 1\n", ch, rs->psocket_t->connfd, 0, pi);
-                        print_f(rs->plogs, "P4", rs->logs);         
+                        //sprintf(rs->logs, "%c socket tx %d %d %d - 1\n", ch, rs->psocket_t->connfd, 0, pi);
+                        //print_f(rs->plogs, "P4", rs->logs);         
                         opsz = write(rs->psocket_t->connfd, addr, len);
                         //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-                        sprintf(rs->logs, "%c socket tx %d %d %d - 2\n", ch, rs->psocket_t->connfd, opsz, pi);
+                        sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_t->connfd, opsz, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
                     } else {
                         sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, opsz, pi);
@@ -3579,8 +3579,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
     while (1) {
         //printf("#");
-        sprintf(rs->logs, "#\n");
-        print_f(rs->plogs, "P5", rs->logs);
+        //sprintf(rs->logs, "#\n");
+        //print_f(rs->plogs, "P5", rs->logs);
 
         rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)NULL, NULL); 
         if (rs->psocket_r->connfd < 0) {
@@ -3596,28 +3596,15 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket_r->connfd);
         print_f(rs->plogs, "P5", rs->logs);
 
-/*
-        memset(str, 0, 2048);
-        str[0] = '['; acu = 1;
-        len = 0;
-        len = rs_ipc_get(rcmd, str+acu, 2048 - acu);
-        if (len > 0) {
-            acu += len;
-            str[acu] = ']';
-            ret = write(rs->psocket_r->connfd, str, acu+1);
-            sprintf(rs->logs, "send initial log to app [%s] size:%d/%d\n", str, ret, acu);
-            print_f(rs->plogs, "P5", rs->logs);
-        }
-*/
         rs_ipc_put(rs, "s", 1);
         if (n > 0) {
             rs_ipc_put(rs, recvbuf, n);
-            sprintf(rs->logs, "send to p0 [%s]\n", recvbuf);
-            print_f(rs->plogs, "P5", rs->logs);
+            //sprintf(rs->logs, "send to p0 [%s]\n", recvbuf);
+            //print_f(rs->plogs, "P5", rs->logs);
             
             ret = write(rs->psocket_r->connfd, recvbuf, n);
-            sprintf(rs->logs, "send back app [%s] size:%d/%d\n", recvbuf, ret, n);
-            print_f(rs->plogs, "P5", rs->logs);
+            //sprintf(rs->logs, "send back app [%s] size:%d/%d\n", recvbuf, ret, n);
+            //print_f(rs->plogs, "P5", rs->logs);
 
             rs_ipc_put(rcmd, recvbuf, n);
 
