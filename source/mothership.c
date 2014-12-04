@@ -1928,8 +1928,8 @@ static int fs04(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "enter \n");
-    print_f(&mrs->plog, "fs04", mrs->log);
+    //sprintf(mrs->log, "enter \n");
+    //print_f(&mrs->plog, "fs04", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((len > 0) && (ch == 'C')) {
@@ -2083,8 +2083,8 @@ static int fs11(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "wait socket status\n");
-    print_f(&mrs->plog, "fs11", mrs->log);
+    //sprintf(mrs->log, "wait socket status\n");
+    //print_f(&mrs->plog, "fs11", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if (len > 0) {
@@ -2229,8 +2229,8 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
     int ret;
     char ch;
 
-    sprintf(mrs->log, "%d\n", modersp->v);
-    print_f(&mrs->plog, "fs18", mrs->log);
+    //sprintf(mrs->log, "%d\n", modersp->v);
+    //print_f(&mrs->plog, "fs18", mrs->log);
 
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     while (ret > 0) {
@@ -2244,7 +2244,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs18", mrs->log);
             mrs_ipc_put(mrs, "d", 1, 3);
             modersp->r |= 0x1;
-            mrs_ipc_put(mrs, "D", 1, 3);
+            //mrs_ipc_put(mrs, "D", 1, 3);
         }
         ret = mrs_ipc_get(mrs, &ch, 1, 1);
     }
@@ -2261,12 +2261,13 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
     
             mrs_ipc_put(mrs, "d", 1, 3);
             modersp->r |= 0x2;
-            mrs_ipc_put(mrs, "D", 1, 3);
+            //mrs_ipc_put(mrs, "D", 1, 3);
         }
         ret = mrs_ipc_get(mrs, &ch, 1, 2);
     }
 
     if (modersp->r == 0x3) {
+        mrs_ipc_put(mrs, "D", 1, 3);
         sprintf(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs18", mrs->log);
         modersp->m = modersp->m + 1;
@@ -2284,12 +2285,16 @@ static int fs19(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'D')) {
+        ring_buf_init(&mrs->dataRx);
+        mrs->dataRx.r->folw.seq = 1;
+
         modersp->m = modersp->m + 1;
         return 2;
     }
 
     return 0;
 }
+
 static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     int bitset;
@@ -3363,9 +3368,12 @@ static int p4(struct procRes_s *rs)
 
         pi = 0;
         ret = 1;
-        while (ret > 0) {
-            ret = rs_ipc_get(rs, &ch, 1);
 
+        while (ret > 0) {
+
+            ret = 0;
+            ret = rs_ipc_get(rs, &ch, 1);        		
+			
             sprintf(rs->logs, "%c ret:%d \n", ch, ret);
             print_f(rs->plogs, "P4", rs->logs);
 
@@ -3389,6 +3397,7 @@ static int p4(struct procRes_s *rs)
                     continue;
                 } else {
                     rs_ipc_put(rs, "r", 1);
+                    break;
                 }
             } else if (cmode == 1) {
 
@@ -3414,11 +3423,11 @@ static int p4(struct procRes_s *rs)
                     ch = 0;
                     rs_ipc_get(rs, &ch, 1);
                 }
-				
+
                 rs_ipc_put(rs, "D", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
                 print_f(rs->plogs, "P4", rs->logs);         
-
+                break;
             }
             else if (cmode == 2) {
                 px = 0;
@@ -3505,7 +3514,7 @@ static int p4(struct procRes_s *rs)
                 rs_ipc_put(rs, "C", 1);
                 break;
             }
-            ret = rs_ipc_get(rs, &ch, 1);
+
         }
 
         close(rs->psocket_t->connfd);
