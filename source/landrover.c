@@ -21,7 +21,7 @@
 #define SPI_MODE_1		(0|SPI_CPHA)
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
-#define SPI_SPEED    30000000
+#define SPI_SPEED    40000000
 
 #define OP_PON 0x1
 #define OP_QRY 0x2
@@ -1461,7 +1461,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pks
         tr[i].rx_buf = (unsigned long)rx;
         tr[i].len = pkt_size;
         tr[i].delay_usecs = 0;
-        tr[i].speed_hz = 30000000;
+        tr[i].speed_hz = SPI_SPEED;
         tr[i].bits_per_word = 8;
         
         tx += pkt_size;
@@ -2371,7 +2371,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(1000);
+        usleep(100);
         //sleep(2);
     }
 
@@ -2976,6 +2976,12 @@ static char spi0[] = "/dev/spidev32765.0";
     /*
      * spi speed 
      */ 
+
+    bitset = 0;
+    ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+    bitset = 1;
+    ioctl(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
     speed = SPI_SPEED;
     ret = ioctl(pmrs->sfm[0], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?³t²v 
