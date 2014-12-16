@@ -9,7 +9,9 @@
 #include <sys/mman.h> 
 #include <linux/types.h> 
 #include <linux/spi/spidev.h> 
- 
+#include <sys/times.h> 
+#include <time.h>
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
  
 #define SPI_CPHA  0x01          /* clock phase */
@@ -51,6 +53,30 @@ static uint16_t delay;
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
 
+static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
+{
+    unsigned long long cur, tnow, lnow, past, tbef, lpast, gunit;
+    int diff;
+
+    gunit = unit;
+    //clock_gettime(CLOCK_REALTIME, &curtime);
+    cur = s->tv_sec;
+    tnow = s->tv_nsec;
+    lnow = cur * 1000000000+tnow;
+    
+    //clock_gettime(CLOCK_REALTIME, &curtime);
+    past = e->tv_sec;
+    tbef = e->tv_nsec;		
+    lpast = past * 1000000000+tbef;	
+
+    if (lpast < lnow) {
+        diff = -1;
+    } else {
+        diff = (lpast - lnow)/gunit;
+    }
+
+    return diff;
+}
  
 static int test_gen(char *tx0, char *tx1, int len) {
     int i;
@@ -565,13 +591,14 @@ static char path[256];
 #define OP_DAT 0x4
 #define OP_SCM 0x5
 #define OP_DCM 0x6
+#define OP_FIH  0x7
 
         int ret=0;
         uint8_t tx8[4], rx8[4];
-        uint8_t dt[7] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM};
+        uint8_t dt[8] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM, OP_FIH};
 
         tx8[0] = dt[arg0];
-        tx8[1] = 0xff;
+        tx8[1] = 0x5f;
 
         bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
@@ -582,7 +609,7 @@ static char path[256];
             pabort("can't get bits per word"); 
 
         ret = tx_data(fm[0], rx8, tx8, 1, 2, 1024);
-        printf("len:%d, 0x%.2x-0x%.2x \n", ret, rx8[0], rx8[1]);
+        printf("len:%d, rx: 0x%.2x-0x%.2x, tx: 0x%.2x-0x%.2x \n", ret, rx8[0], rx8[1], tx8[0], tx8[1]);
 
         goto end;
     }
@@ -1286,6 +1313,18 @@ static char path[256];
         ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
         printf("Get spi1 RDY: %d\n", bitset);
 
+	
+        struct timespec *tspi = (struct timespec *)mmap(NULL, sizeof(struct timespec) * 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+        if (!tspi) {
+            printf("get share memory for timespec failed - %d\n", tspi);
+            goto end;
+        }
+        clock_gettime(CLOCK_REALTIME, &tspi[0]);  
+        clock_gettime(CLOCK_REALTIME, &tspi[1]);  
+        int tcost, tlast;
+        struct tms time;
+        struct timespec curtime, tdiff[2];
+
         if (tbuff)
             printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
         else 
@@ -1393,10 +1432,18 @@ static char path[256];
                 close(pipefc[0]); // close the read-end of the pipe
                 
                 while(1) {
+                    clock_gettime(CLOCK_REALTIME, &tdiff[0]);            
                     ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
+                     clock_gettime(CLOCK_REALTIME, &tspi[0]);   
+                     msync(tspi, sizeof(struct timespec)*2, MS_SYNC);
+                     tlast = test_time_diff(&tspi[1], &tdiff[0], 1000);
+                     if (tlast == -1) {
+                         tlast = 0 - test_time_diff(&tdiff[0], &tspi[1], 1000);
+                     }
+                     tcost = test_time_diff(&tdiff[0], &tspi[0], 1000);
                     //ret = tx_data(fm[0], dstBuff, NULL, 1, chunksize, 1024*1024);
 			//if (arg0) 
-                    		printf("[p0]rx %d - %d\n", ret, wtsz++);
+                    		printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
                     msync(dstBuff, ret, MS_SYNC);
 /*
 if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
@@ -1480,10 +1527,18 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
 
             dstBuff += chunksize;
             while(1) {
+                clock_gettime(CLOCK_REALTIME, &tdiff[1]);            
                 ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
+                clock_gettime(CLOCK_REALTIME, &tspi[1]);   
+                msync(tspi, sizeof(struct timespec) * 2, MS_SYNC);
+                tlast = test_time_diff(&tspi[0], &tdiff[1], 1000);
+                if (tlast == -1) {
+                     tlast = 0 - test_time_diff(&tdiff[1], &tspi[0], 1000);
+                }
+                tcost = test_time_diff(&tdiff[1], &tspi[1], 1000);
                 //ret = tx_data(fm[1], dstBuff, NULL, 1, chunksize, 1024*1024);
 		//if (arg0)		
-	               printf("[p1]rx %d - %d\n", ret, wtsz++);
+                printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
                 msync(dstBuff, ret, MS_SYNC);
 /*
 if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {

@@ -47,6 +47,31 @@ static uint16_t delay;
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
 
+static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
+{
+    unsigned long long cur, tnow, lnow, past, tbef, lpast, gunit;
+    int diff;
+
+    gunit = unit;
+    //clock_gettime(CLOCK_REALTIME, &curtime);
+    cur = s->tv_sec;
+    tnow = s->tv_nsec;
+    lnow = cur * 1000000000+tnow;
+    
+    //clock_gettime(CLOCK_REALTIME, &curtime);
+    past = e->tv_sec;
+    tbef = e->tv_nsec;		
+    lpast = past * 1000000000+tbef;	
+
+    if (lpast < lnow) {
+        diff = -1;
+    } else {
+        diff = (lpast - lnow)/gunit;
+    }
+
+    return diff;
+}
+
 FILE *find_save(char *dst, char *tmple)
 {
     int i;
@@ -377,7 +402,7 @@ int main(int argc, char *argv[])
 static char spi0[] = "/dev/spidev32765.0"; 
 static char spi1[] = "/dev/spidev32766.0"; 
     uint32_t bitset;
-    int sel, arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0;
+    int sel, arg0 = 0, arg1 = 0, arg2 = 0, arg3 = 0, arg4 = 0;
     int fd, ret; 
     arg0 = 0;
 	arg1 = 0;
@@ -411,6 +436,11 @@ static char spi1[] = "/dev/spidev32766.0";
         printf(" [5]:%s \n", argv[5]);
         arg3 = atoi(argv[5]);
     }	
+    if (argc > 6) {
+        printf(" [6]:%s \n", argv[6]);
+        arg4 = atoi(argv[6]);
+    }	
+
         uint8_t *tx_buff, *rx_buff;
         FILE *fpd;
         int fsize, buffsize;
@@ -500,6 +530,35 @@ static char spi1[] = "/dev/spidev32766.0";
 		rxans[i] = i & 0x95;
 		tx[i] = i & 0x95;
 	}
+    if (sel == 16){ /* command mode test ex[16 num]*/
+#define OP_PON 0x1
+#define OP_QRY 0x2
+#define OP_RDY 0x3
+#define OP_DAT 0x4
+#define OP_SCM 0x5
+#define OP_DCM 0x6
+#define OP_FIH  0x7
+
+        int ret=0;
+        uint8_t tx8[4], rx8[4];
+        uint8_t dt[8] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM, OP_FIH};
+
+        tx8[0] = dt[arg0];
+        tx8[1] = 0x5f;
+
+        bits = 8;
+        ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
+        if (ret == -1) 
+            pabort("can't set bits per word");  
+        ret = ioctl(fm[0], SPI_IOC_RD_BITS_PER_WORD, &bits); 
+        if (ret == -1) 
+            pabort("can't get bits per word"); 
+
+        ret = tx_data(fm[0], rx8, tx8, 1, 2, 1024);
+        printf("len:%d, rx: 0x%.2x-0x%.2x, tx: 0x%.2x-0x%.2x \n", ret, rx8[0], rx8[1], tx8[0], tx8[1]);
+
+        goto end;
+    }
     if (sel == 15) { /* 16Bits inform mode [15 spi size bits]*/
         int ret=0;
         uint16_t *tx16, *rx16, *tmp16;
@@ -605,7 +664,7 @@ static char spi1[] = "/dev/spidev32766.0";
         if (ret == -1) 
             pabort("can't get spi mode"); 
 	
-	printf("spi%d mode:0x%x \n", 0, mode);
+        printf("spi%d mode:0x%x \n", 0, mode);
 
         ret = ioctl(fm[1], SPI_IOC_WR_MODE, &mode);    //?¼Ò¦¡ 
         if (ret == -1) 
@@ -615,7 +674,7 @@ static char spi1[] = "/dev/spidev32766.0";
         if (ret == -1) 
             pabort("can't get spi mode"); 
 	
-	printf("spi%d mode:0x%x \n", 1, mode);
+        printf("spi%d mode:0x%x \n", 1, mode);
 
         if (arg0)
             speed = arg0 * 1000000;
@@ -686,8 +745,14 @@ static char spi1[] = "/dev/spidev32766.0";
         }
         pknum = chunksize / pksize;
         printf("pksize:%d pknum:%d chunksize:%d\n", pksize, pknum, chunksize);
+        struct timespec *tspi = (struct timespec *)mmap(NULL, sizeof(struct timespec) * 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+        if (!tspi) {
+            printf("get share memory for timespec failed - %d\n", tspi);
+            goto end;
+        }
+        int tcost, tlast;
         struct tms time;
-        struct timespec curtime;
+        struct timespec curtime, tdiff[2];
         unsigned long long cur, tnow, lnow, past, tbef, lpast, tmp;
         
         trunksz = pknum * pksize;
@@ -774,10 +839,17 @@ static char spi1[] = "/dev/spidev32766.0";
             } else {
                 remainsz -= trunksz;
             }
-            
+
+            clock_gettime(CLOCK_REALTIME, &tdiff[0]);            
             ret = tx_data(fm[0], srcBuff1, tx_buff, pknum, pksize, 1024*1024);
+            clock_gettime(CLOCK_REALTIME, &tspi[0]);   
+
+            msync(&tspi[1], sizeof(struct timespec), MS_SYNC);
+            tlast = test_time_diff(&tspi[1], &tdiff[0], 1000);
+            tcost = test_time_diff(&tdiff[0], &tspi[0], 1000);
+
             acusz += ret;
-            printf("[%d] tx %d - %d\n", pkcnt, ret, acusz);
+            printf("[%d] tx %d - %d(%d us/ %d us)\n", pkcnt, ret, acusz, tcost, tlast);
             srcBuff1 += ret;
 
             if (pkcnt == 0) {
@@ -834,10 +906,16 @@ static char spi1[] = "/dev/spidev32766.0";
             } else {
                 remainsz -= trunksz;
             }
-            
+            clock_gettime(CLOCK_REALTIME, &tdiff[1]);            
             ret = tx_data(fm[1], srcBuff2, tx_buff, pknum, pksize, 1024*1024);
+            clock_gettime(CLOCK_REALTIME, &tspi[1]);   
+
+            msync(&tspi[0], sizeof(struct timespec), MS_SYNC);
+            tlast = test_time_diff(&tspi[0], &tdiff[1], 1000);
+            tcost = test_time_diff(&tdiff[1], &tspi[1], 1000);
+
             acusz += ret;
-            printf("[%d] tx %d - %d\n", pkcnt, ret, acusz);
+            printf("[%d] tx %d - %d(%d us /%d us)\n", pkcnt, ret, acusz, tcost, tlast);
             srcBuff2 += ret;
 
             if (pkcnt == 0) {
@@ -1228,8 +1306,17 @@ static char spi1[] = "/dev/spidev32766.0";
 	}
 	pknum = chunksize / pksize;
 	printf("pksize:%d pknum:%d chunksize:%d\n", pksize, pknum, chunksize);
-	struct tms time;
-	struct timespec curtime;
+	
+        struct timespec *tspi = (struct timespec *)mmap(NULL, sizeof(struct timespec) * 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+        if (!tspi) {
+            printf("get share memory for timespec failed - %d\n", tspi);
+            goto end;
+        }
+
+        int tcost, tlast;
+        struct tms time;
+        struct timespec curtime, tdiff[2];
+
 	unsigned long long cur, tnow, lnow, past, tbef, lpast, tmp;
 	
         trunksz = pknum * pksize;
@@ -1318,10 +1405,19 @@ static char spi1[] = "/dev/spidev32766.0";
 	            	} else {
 				remainsz -= trunksz * 2;
 			}
-					
+
                      ret = read(pipefc[0], &buf, 1); 
+                     clock_gettime(CLOCK_REALTIME, &tdiff[0]);            
 			ret = tx_data(fm[0], NULL, srcBuff, pknum, pksize, 1024*1024);
-			printf("[p0] tx %d \n", ret);
+                     clock_gettime(CLOCK_REALTIME, &tspi[0]);   
+                     msync(tspi, sizeof(struct timespec)*2, MS_SYNC);
+                     tlast = test_time_diff(&tspi[1], &tdiff[0], 1000);
+                     tcost = test_time_diff(&tdiff[0], &tspi[0], 1000);
+
+			printf("[p0] tx %d (%d us /%d us)\n", ret, tcost, tlast);
+                     if (arg4) {
+                         usleep(arg4);
+                     }
                      write(pipefd[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
@@ -1366,15 +1462,23 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 			}
 
                      read(pipefd[0], &buf, 1); 
-		
-                     clock_gettime(CLOCK_REALTIME, &curtime);
-                     cur = curtime.tv_sec;
-                     tnow = curtime.tv_nsec;
-                     lnow = cur * 1000000000+tnow;
+                     //clock_gettime(CLOCK_REALTIME, &curtime);
+                     //cur = curtime.tv_sec;
+                     //tnow = curtime.tv_nsec;
+                     //now = cur * 1000000000+tnow;
                      //printf("[p1] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
+                     
+                     clock_gettime(CLOCK_REALTIME, &tdiff[1]);            
+			ret = tx_data(fm[1], NULL, srcBuff, pknum, pksize, 1024*1024);		 
+                     clock_gettime(CLOCK_REALTIME, &tspi[1]);   
+                     msync(tspi, sizeof(struct timespec) * 2, MS_SYNC);
+                     tlast = test_time_diff(&tspi[0], &tdiff[1], 1000);
+                     tcost = test_time_diff(&tdiff[1], &tspi[1], 1000);
 
-			ret = tx_data(fm[1], NULL, srcBuff, pknum, pksize, 1024*1024);
-			printf("[p1] tx %d \n", ret);
+			printf("[p1] tx %d (%d us /%d us)\n", ret, tcost, tlast);
+                     if (arg4) {
+                         usleep(arg4);
+                     }
                      write(pipefc[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
