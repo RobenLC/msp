@@ -323,8 +323,8 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
     uint16_t info = 0;
     info |= p->data & 0xff;
     info |= (p->opcode & 0xf) << 8;
-    info |= (p->seqnum & 0x7) << 12;
-    info |= (p->inout & 0x1) << 15;
+    //info |= (p->seqnum & 0x7) << 12;
+    //info |= (p->inout & 0x1) << 15;
 
     //sprintf(str, "info: 0x%.4x \n", info); 
     //print_f(mlogPool, "pkg_info", str); 
@@ -3020,7 +3020,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
 static int p2(struct procRes_s *rs)
 {
-    int px, pi=0, ret, len=0, opsz, cmode=0;
+    struct timespec tnow;
+    int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait;
     int bitset;
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4];
@@ -3133,10 +3134,24 @@ static int p2(struct procRes_s *rs)
                 pi = 0;  
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
+
+                    clock_gettime(CLOCK_REALTIME, &tnow);
+
                     opsz = mtx_data(rs->spifd, addr, NULL, 1, len, 1024*1024);
                     //printf("0 spi %d\n", opsz);
                     //sprintf(rs->logs, "spi0 recv %d\n", opsz);
                     //print_f(rs->plogs, "P2", rs->logs);
+                    clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
+
+                    tlast = time_diff(rs->tm[1], &tnow, 1000);
+                    if (tlast == -1) {
+                         tlast = 0 - time_diff(&tnow, rs->tm[1], 1000);
+                    }
+                    tdiff = time_diff(rs->tm[1], rs->tm[0], 1000);
+                    twait = time_diff(&tnow, rs->tm[0], 1000);
+                    sprintf(rs->logs, "t %d us / %d us / %d us\n", tdiff, tlast, twait - tdiff);
+                    print_f(rs->plogs, "P2", rs->logs);
 
                     ring_buf_prod_dual(rs->pdataRx, pi);
                     //shmem_dump(addr, 32);
@@ -3180,7 +3195,8 @@ static int p2(struct procRes_s *rs)
 
 static int p3(struct procRes_s *rs)
 {
-    int pi, ret, len, opsz, cmode, bitset;
+    struct timespec tnow;
+    int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait;
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4];
     char *addr;
@@ -3272,11 +3288,24 @@ static int p3(struct procRes_s *rs)
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
 
+                    clock_gettime(CLOCK_REALTIME, &tnow);
+
                     opsz = mtx_data(rs->spifd, addr, NULL, 1, len, 1024*1024);
                     //sprintf(rs->logs, "1 spi %d\n", opsz);
                     //print_f(rs->plogs, "P5", rs->logs);
                     //sprintf(rs->logs, "spi1 recv %d\n", opsz);
                     //print_f(rs->plogs, "P3", rs->logs);
+                    clock_gettime(CLOCK_REALTIME, rs->tm[1]);
+                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
+					
+                    tlast = time_diff(rs->tm[0], &tnow, 1000);
+                    if (tlast == -1) {
+                         tlast = 0 - time_diff(&tnow, rs->tm[0], 1000);
+                    }
+                    tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
+                    twait = time_diff(&tnow, rs->tm[1], 1000);
+                    sprintf(rs->logs, "t %d us / %d us / %d us\n", tdiff, tlast, twait - tdiff);
+                    print_f(rs->plogs, "P3", rs->logs);
 
                     //shmem_dump(addr, 32);
                     ring_buf_prod_dual(rs->pdataRx, pi);
@@ -3780,6 +3809,12 @@ static char spi0[] = "/dev/spidev32765.0";
     //ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
    // printf("[t]Set RDY low at beginning\n");
 
+
+    bitset = 0;     
+    ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
+    bitset = 1;    
+    ioctl(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
     /*
      * spi mode 
      */ 
@@ -3973,7 +4008,11 @@ static int time_diff(struct timespec *s, struct timespec *e, int unit)
     tbef = e->tv_nsec;		
     lpast = past * 1000000000+tbef;	
 
-    diff = (lpast - lnow)/gunit;
+    if (lpast < lnow) {
+        diff = -1;
+    } else {
+        diff = (lpast - lnow)/gunit;
+    }
 
     return diff;
 }
