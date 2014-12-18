@@ -281,15 +281,17 @@ static int stlaser_05(struct psdata_s *data);
 static int error_handle(char *log, int line)
 {
 #define MAX_LEN 256
-#define TOT_LEN (MAX_LEN + 32)
+#define TOT_LEN (MAX_LEN + 64)
 
     char str[TOT_LEN];
     int len=0;
 
-    len = strlen(log);
+    len = strlen(log);   
     if (len > 0) {
-        if (len >= MAX_LEN) len = MAX_LEN;
-        log[len] = '\0';
+        if (len >= MAX_LEN) {
+            len = MAX_LEN;
+            log[len-1] = '\0';
+        }
 
         sprintf(str, "warning: %s - line: %d\n", log, line); 
         print_f(mlogPool, "error", str); 
