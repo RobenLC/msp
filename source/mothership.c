@@ -30,6 +30,8 @@
 #define OP_DCM 0x6
 #define OP_FIH  0x7
 
+#define SPI_MAX_TXSZ  (1024 * 1024)
+
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -244,7 +246,7 @@ static int rs_ipc_put(struct procRes_s *rs, char *str, int size);
 static int rs_ipc_get(struct procRes_s *rs, char *str, int size);
 static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx);
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx);
-static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz);
+static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct spi_ioc_transfer *tr);
 
 static int ring_buf_init(struct shmem_s *pp);
 static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel);
@@ -1508,42 +1510,25 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     return pp->chksz;
 }
 
-static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz)
+static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct spi_ioc_transfer *tr)
 {
-    int pkt_size;
-    int ret, i, errcnt; 
-    int remain;
+    int ret;
 
-    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
-    
-    uint8_t tg;
-    uint8_t *tx = tx_buff;
-    uint8_t *rx = rx_buff;
-    pkt_size = pksz;
-    remain = maxsz;
+    if (pksz > SPI_MAX_TXSZ) return (-3);
 
-    for (i = 0; i < num; i++) {
-        remain -= pkt_size;
-        if (remain < 0) break;
+    tr->tx_buf = (unsigned long)tx_buff;
+    tr->rx_buf = (unsigned long)rx_buff;
+    tr->len = pksz;
+    tr->delay_usecs = 0;
+    tr->speed_hz = 1000000;
+    tr->bits_per_word = 8;
 
-        tr[i].tx_buf = (unsigned long)tx;
-        tr[i].rx_buf = (unsigned long)rx;
-        tr[i].len = pkt_size;
-        tr[i].delay_usecs = 0;
-        tr[i].speed_hz = 1000000;
-        tr[i].bits_per_word = 8;
-        
-        tx += pkt_size;
-        rx += pkt_size;
-    }
-    
-    ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), tr);
     if (ret < 0)
         printf("can't send spi message\n");
     
     //printf("tx/rx len: %d\n", ret);
     
-    free(tr);
     return ret;
 }
 
@@ -2218,8 +2203,13 @@ static int fs17(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0 spi1 \n");
     print_f(&mrs->plog, "fs17", mrs->log);
 
-    mrs_ipc_put(mrs, "d", 1, 1);
+
     mrs_ipc_put(mrs, "d", 1, 2);
+    clock_gettime(CLOCK_REALTIME, &mrs->time[1]);
+    usleep(100);
+    mrs_ipc_put(mrs, "d", 1, 1);
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
     modersp->m = modersp->m + 1;
     return 2;
 }
@@ -2244,7 +2234,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs18", mrs->log);
             mrs_ipc_put(mrs, "d", 1, 3);
             modersp->r |= 0x1;
-            //mrs_ipc_put(mrs, "D", 1, 3);
+            //mrs_ipc_put(mrs, "e", 1, 3);
         }
         ret = mrs_ipc_get(mrs, &ch, 1, 1);
     }
@@ -2261,7 +2251,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
     
             mrs_ipc_put(mrs, "d", 1, 3);
             modersp->r |= 0x2;
-            //mrs_ipc_put(mrs, "D", 1, 3);
+            //mrs_ipc_put(mrs, "e", 1, 3);
         }
         ret = mrs_ipc_get(mrs, &ch, 1, 2);
     }
@@ -2280,8 +2270,8 @@ static int fs19(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int len=0;
     char ch=0;
-    sprintf(mrs->log, "wait socket finish \n");
-    print_f(&mrs->plog, "fs19", mrs->log);
+    //sprintf(mrs->log, "wait socket finish \n");
+    //print_f(&mrs->plog, "fs19", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'D')) {
@@ -2550,7 +2540,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(1000);
+        usleep(10000);
 #elif 1
         ret = mrs_ipc_get(mrs, &ch, 1, 0);
         if (ret > 0) {
@@ -3020,12 +3010,13 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
 static int p2(struct procRes_s *rs)
 {
+    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer));
     struct timespec tnow;
     int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait;
     int bitset;
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4];
-    char *addr;
+    char *addr, *laddr;
     sprintf(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
     p2_init(rs);
@@ -3102,7 +3093,7 @@ static int p2(struct procRes_s *rs)
                 //sprintf(rs->logs, "send %d %d \n", tx8[0], tx8[1]);
                 //print_f(rs->plogs, "P2", rs->logs);
 
-                len = mtx_data(rs->spifd, rx8, tx8, 1, 2, 1024);
+                len = mtx_data(rs->spifd, rx8, tx8, 2, tr);
                 if (len > 0) {
                     recv16 = rx8[1] | (rx8[0] << 8);
                     abs_info(&rs->pmch->get, recv16);
@@ -3132,27 +3123,34 @@ static int p2(struct procRes_s *rs)
                 //print_f(rs->plogs, "P2", rs->logs);
 
                 pi = 0;  
+
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
 
-                    clock_gettime(CLOCK_REALTIME, &tnow);
 
-                    opsz = mtx_data(rs->spifd, addr, NULL, 1, len, 1024*1024);
+                    clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
                     //printf("0 spi %d\n", opsz);
                     //sprintf(rs->logs, "spi0 recv %d\n", opsz);
                     //print_f(rs->plogs, "P2", rs->logs);
-                    clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                    clock_gettime(CLOCK_REALTIME, &tnow);
+
                     msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
-                    tlast = time_diff(rs->tm[1], &tnow, 1000);
-                    if (tlast == -1) {
-                         tlast = 0 - time_diff(&tnow, rs->tm[1], 1000);
+                    tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
+                    if (tdiff == -1) {
+                         tdiff = 0 - time_diff(rs->tm[1], rs->tm[0], 1000);
                     }
-                    tdiff = time_diff(rs->tm[1], rs->tm[0], 1000);
-                    twait = time_diff(&tnow, rs->tm[0], 1000);
-                    sprintf(rs->logs, "t %d us / %d us / %d us\n", tdiff, tlast, twait - tdiff);
-                    print_f(rs->plogs, "P2", rs->logs);
 
+                    sprintf(rs->logs, "t %d us\n", tdiff);
+                    print_f(rs->plogs, "P2", rs->logs);					
+
+                    if (tdiff < 0) {
+                        sprintf(rs->logs, "!!!t %d - %d!!!\n", tdiff, len);
+                        print_f(rs->plogs, "P2", rs->logs);
+                    }
+
+                    //msync(addr, len, MS_SYNC);
                     ring_buf_prod_dual(rs->pdataRx, pi);
                     //shmem_dump(addr, 32);
 
@@ -3160,6 +3158,7 @@ static int p2(struct procRes_s *rs)
                     rs_ipc_put(rs, "p", 1);
                     pi += 2;
                 }
+
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
                 //sprintf(rs->logs, "spi0 recv end\n");
@@ -3176,7 +3175,7 @@ static int p2(struct procRes_s *rs)
                 if (len >= 0) {
                     msync(addr, len, MS_SYNC);
                     // send data to spi command mode
-                    opsz = mtx_data(rs->spifd, NULL, addr, 1, len, 1024*1024);
+                    opsz = mtx_data(rs->spifd, NULL, addr, len, 1024*1024);
                     //sprintf(rs->logs, "[%d] spi tx %d\n", px, opsz);
                     //print_f(rs->plogs, "P2", rs->logs);
                     px++;
@@ -3195,11 +3194,12 @@ static int p2(struct procRes_s *rs)
 
 static int p3(struct procRes_s *rs)
 {
+    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer));
     struct timespec tnow;
     int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait;
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4];
-    char *addr;
+    char *addr, *laddr;
     sprintf(rs->logs, "p3\n");
     print_f(rs->plogs, "P3", rs->logs);
 
@@ -3259,7 +3259,7 @@ static int p3(struct procRes_s *rs)
                 send16 = pkg_info(&rs->pmch->cur);
                 tx8[0] = send16 & 0xff;
                 tx8[1] = (send16 >> 8) & 0xff;		
-                len = mtx_data(rs->spifd, rx8, tx8, 1, 2, 1024);
+                len = mtx_data(rs->spifd, rx8, tx8, 2, tr);
                 if (len > 0) {
                     recv16 = rx8[0] | (rx8[1] << 8);
                     abs_info(&rs->pmch->get, recv16);
@@ -3285,35 +3285,42 @@ static int p3(struct procRes_s *rs)
                 //print_f(rs->plogs, "P3", rs->logs);
 
                 pi = 1;  
+
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
 
-                    clock_gettime(CLOCK_REALTIME, &tnow);
+                    clock_gettime(CLOCK_REALTIME, rs->tm[1]);
 
-                    opsz = mtx_data(rs->spifd, addr, NULL, 1, len, 1024*1024);
+                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
                     //sprintf(rs->logs, "1 spi %d\n", opsz);
                     //print_f(rs->plogs, "P5", rs->logs);
                     //sprintf(rs->logs, "spi1 recv %d\n", opsz);
                     //print_f(rs->plogs, "P3", rs->logs);
-                    clock_gettime(CLOCK_REALTIME, rs->tm[1]);
-                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
-					
-                    tlast = time_diff(rs->tm[0], &tnow, 1000);
-                    if (tlast == -1) {
-                         tlast = 0 - time_diff(&tnow, rs->tm[0], 1000);
-                    }
-                    tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
-                    twait = time_diff(&tnow, rs->tm[1], 1000);
-                    sprintf(rs->logs, "t %d us / %d us / %d us\n", tdiff, tlast, twait - tdiff);
-                    print_f(rs->plogs, "P3", rs->logs);
 
+                    clock_gettime(CLOCK_REALTIME, &tnow);
+
+                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
+
+                    tdiff = time_diff(rs->tm[1], rs->tm[0], 1000);
+                    if (tdiff == -1) {
+                         tdiff = 0 - time_diff(rs->tm[0], rs->tm[1], 1000);
+                    }
+
+                    sprintf(rs->logs, "t %d us\n", tdiff);
+                    print_f(rs->plogs, "P3", rs->logs);
+                    if (tdiff < 0) {                    
+                        sprintf(rs->logs, "!!!t %d - %d!!!\n", tdiff, len);
+                        print_f(rs->plogs, "P3", rs->logs);
+                    }
                     //shmem_dump(addr, 32);
+                    msync(addr, len, MS_SYNC);
                     ring_buf_prod_dual(rs->pdataRx, pi);
 
                     if (opsz != len) break;
                     rs_ipc_put(rs, "p", 1);
                     pi += 2;
                 }
+
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
                 //sprintf(rs->logs, "spi1 recv end\n");
@@ -3438,19 +3445,24 @@ static int p4(struct procRes_s *rs)
                     
                         msync(addr, len, MS_SYNC);
                         /* send data to wifi socket */
-                        //sprintf(rs->logs, "%c socket tx %d %d %d - 1\n", ch, rs->psocket_t->connfd, 0, pi);
-                        //print_f(rs->plogs, "P4", rs->logs);         
-                        opsz = write(rs->psocket_t->connfd, addr, len);
-                        //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-                        sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_t->connfd, opsz, pi);
+                        sprintf(rs->logs, " %d -%d \n", len, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
+                        if (len != 0) {
+                            opsz = write(rs->psocket_t->connfd, addr, len);
+                            //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
+                            //sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_t->connfd, opsz, pi);
+                            //print_f(rs->plogs, "P4", rs->logs);         
+                        }
                     } else {
                         sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, opsz, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
                         break;
                     }
-                    ch = 0;
-                    rs_ipc_get(rs, &ch, 1);
+
+                    if (ch != 'D') {
+                        ch = 0;
+                        rs_ipc_get(rs, &ch, 1);
+                    }
                 }
 
                 rs_ipc_put(rs, "D", 1);
@@ -3954,6 +3966,7 @@ static int printf_flush(struct logPool_s *plog, FILE *f)
 
     plog->cur = plog->pool;
     plog->len = 0;
+
     return 0;
 }
 
