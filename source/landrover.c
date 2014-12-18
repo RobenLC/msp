@@ -21,7 +21,7 @@
 #define SPI_MODE_1		(0|SPI_CPHA)
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
-#define SPI_SPEED    40000000
+#define SPI_SPEED    60000000
 
 #define OP_PON 0x1
 #define OP_QRY 0x2
@@ -2486,7 +2486,8 @@ static int p2(struct procRes_s *rs)
             if (ch == 'r') {
                 int totsz=0, fsize=0, pi=0, len;
                 char *addr;
-                char filename[128] = "/mnt/mmc2/sample1.mp4";
+                //char filename[128] = "/mnt/mmc2/sample1.mp4";
+                char filename[128] = "/mnt/mmc2/pattern2.txt";
                 FILE *fp;
 
                 fp = fopen(filename, "r");
@@ -2516,6 +2517,87 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
                 print_f(rs->plogs, "P2", rs->logs);
 
+                fclose(fp);
+            }
+
+            if (ch == 'g') {
+                int totsz=0, fsize=0, pi=0, len, ret;
+                char *addr, ch, *laddr, *saddr, *pool;
+                char filename[128] = "/mnt/mmc2/pattern2.txt";
+                FILE *fp;
+
+                laddr = malloc(64);
+                saddr = malloc(64);
+                pool = malloc(4096);
+
+                ch = 0x30;
+                addr = laddr;
+                for (pi = 0; pi < 31; pi++) {
+                    addr[pi] = ch;
+                    ch++;
+                }
+
+                ch = 0x30;
+                addr = laddr+31;
+                for (pi = 0; pi < 31; pi++) {
+                    addr[pi] = ch;
+                    ch++;
+                }
+
+                fp = fopen(filename, "wr");
+                if (!fp) {
+                    sprintf(rs->logs, "file read [%s] failed \n", filename);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+/*
+                addr = pool;
+                for (pi = 0; pi < 128; pi++) {
+                    memcpy(addr, laddr + (pi % 32), 31);
+                    addr+=31;
+                    *addr = '\n';
+                    addr+=1;
+                }
+*/
+                for (pi = 0; pi < 2097151; pi++) {
+                    memcpy(saddr, laddr + (pi % 31), 31);
+                    saddr[31] = '\n';
+                    ret = fwrite(saddr, 1, 32, fp);
+                    //sprintf(rs->logs, "g ret:%d - %d\n", ret, pi);
+                    //print_f(rs->plogs, "P2", rs->logs);
+                }
+                sprintf(rs->logs, "g ret:%d - %d\n", ret, pi);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                fclose(fp);
+
+                fp = fopen(filename, "r");
+                if (!fp) {
+                    sprintf(rs->logs, "file read [%s] failed \n", filename);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
+                fsize = fread(addr, 1, len, fp);
+                totsz += fsize;
+                while (fsize == len) {
+                    ring_buf_prod_dual(rs->pdataRx, pi);
+                    pi++;
+                    rs_ipc_put(rs, "r", 1);
+					
+                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
+                    fsize = fread(addr, 1, len, fp);
+                    totsz += fsize;
+                }
+
+                ring_buf_prod_dual(rs->pdataRx, pi);
+                ring_buf_set_last_dual(rs->pdataRx, fsize, pi);
+                rs_ipc_put(rs, "r", 1);
+                rs_ipc_put(rs, "e", 1);
+
+                sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                fclose(fp);
             }
         }
     }
