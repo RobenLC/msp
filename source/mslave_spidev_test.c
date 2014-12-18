@@ -1432,15 +1432,16 @@ static char path[256];
                 close(pipefc[0]); // close the read-end of the pipe
                 
                 while(1) {
-                    clock_gettime(CLOCK_REALTIME, &tdiff[0]);            
+        
+                    clock_gettime(CLOCK_REALTIME, &tspi[0]);   
                     ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
-                     clock_gettime(CLOCK_REALTIME, &tspi[0]);   
+                    clock_gettime(CLOCK_REALTIME, &tdiff[0]);    
                      msync(tspi, sizeof(struct timespec)*2, MS_SYNC);
-                     tlast = test_time_diff(&tspi[1], &tdiff[0], 1000);
+                     tlast = test_time_diff(&tspi[1], &tspi[0], 1000);
                      if (tlast == -1) {
-                         tlast = 0 - test_time_diff(&tdiff[0], &tspi[1], 1000);
+                         tlast = 0 - test_time_diff(&tspi[0], &tspi[1], 1000);
                      }
-                     tcost = test_time_diff(&tdiff[0], &tspi[0], 1000);
+                     tcost = test_time_diff(&tspi[0], &tdiff[0], 1000);
                     //ret = tx_data(fm[0], dstBuff, NULL, 1, chunksize, 1024*1024);
 			//if (arg0) 
                     		printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
@@ -1527,15 +1528,15 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
 
             dstBuff += chunksize;
             while(1) {
-                clock_gettime(CLOCK_REALTIME, &tdiff[1]);            
+                clock_gettime(CLOCK_REALTIME, &tspi[1]);            
                 ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
-                clock_gettime(CLOCK_REALTIME, &tspi[1]);   
+                clock_gettime(CLOCK_REALTIME, &tdiff[1]);   
                 msync(tspi, sizeof(struct timespec) * 2, MS_SYNC);
-                tlast = test_time_diff(&tspi[0], &tdiff[1], 1000);
+                tlast = test_time_diff(&tspi[0], &tspi[1], 1000);
                 if (tlast == -1) {
-                     tlast = 0 - test_time_diff(&tdiff[1], &tspi[0], 1000);
+                     tlast = 0 - test_time_diff(&tspi[1], &tspi[0], 1000);
                 }
-                tcost = test_time_diff(&tdiff[1], &tspi[1], 1000);
+                tcost = test_time_diff(&tspi[1], &tdiff[1], 1000);
                 //ret = tx_data(fm[1], dstBuff, NULL, 1, chunksize, 1024*1024);
 		//if (arg0)		
                 printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
