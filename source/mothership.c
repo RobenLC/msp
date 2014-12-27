@@ -2197,6 +2197,16 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs16", mrs->log);
 
+    bitset = 0;
+    ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs16", mrs->log);
+
+    bitset = 0;
+    ret = ioctl(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi1 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs16", mrs->log);
+	
     modersp->r = 1;
     return 1;
 }
@@ -3128,14 +3138,22 @@ static int p2(struct procRes_s *rs)
 
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
-
-
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
-                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+
+                    //opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+                    opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    
                     //printf("0 spi %d\n", opsz);
                     //sprintf(rs->logs, "spi0 recv %d\n", opsz);
                     //print_f(rs->plogs, "P2", rs->logs);
                     clock_gettime(CLOCK_REALTIME, &tnow);
+
+			if (opsz < 0) {
+	                    sprintf(rs->logs, "opsz:%d\n", opsz);
+       	             print_f(rs->plogs, "P2", rs->logs);	
+                           usleep(1000);
+				continue;
+			}
 
                     msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
@@ -3293,13 +3311,21 @@ static int p3(struct procRes_s *rs)
 
                     clock_gettime(CLOCK_REALTIME, rs->tm[1]);
 
-                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+                    //opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+                    opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     //sprintf(rs->logs, "1 spi %d\n", opsz);
                     //print_f(rs->plogs, "P5", rs->logs);
                     //sprintf(rs->logs, "spi1 recv %d\n", opsz);
                     //print_f(rs->plogs, "P3", rs->logs);
 
                     clock_gettime(CLOCK_REALTIME, &tnow);
+
+			if (opsz < 0) {
+	                    sprintf(rs->logs, "opsz:%d\n", opsz);
+       	             print_f(rs->plogs, "P3", rs->logs);	
+                           usleep(1000);
+				continue;
+			}
 
                     msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
