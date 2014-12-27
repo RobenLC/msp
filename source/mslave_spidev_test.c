@@ -11,6 +11,7 @@
 #include <linux/spi/spidev.h> 
 #include <sys/times.h> 
 #include <time.h>
+#include <sys/socket.h>
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
  
@@ -470,7 +471,7 @@ static char path[256];
     fd = open(device, O_RDWR);  //ゴ???ゅン 
     if (fd < 0) 
         pabort("can't open device"); 
-    
+
     if (argc > 1) {
         printf(" [1]:%s \n", argv[1]);
         sel = atoi(argv[1]);
@@ -583,7 +584,449 @@ static char path[256];
 
     bitset = 1;
     ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+    if (sel == 25){ /* dual band data mode test with kthread ex[25 0 2 5 1 61440]*/
+        #define PKTSZ  30720 //61440
+        int chunksize;
+        if (arg4 == PKTSZ) chunksize = PKTSZ;
+        else chunksize = 61440;
+        
+        printf("***chunk size: %d ***\n", chunksize);
+        
+        int pipefd[2];
+        int pipefs[2];
+        int pipefc[2];
+        char *tbuff, *tmp, buf='c', *dstBuff, *dstmp;
+        char lastaddr[48];
+        int sz = 0, wtsz = 0, lsz = 0;
+        char *addr;
+        int pid = 0;
+        int txhldsz = 0;
 
+redo: 
+
+	sz = 0;
+	wtsz = 0;
+	lsz = 0;
+	pid = 0;
+	txhldsz = 0;
+	*tmp, buf='c';
+        //tbuff = malloc(TSIZE);
+        tbuff = rx_buff[0];
+        dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        memset(dstBuff, 0x95, TSIZE);
+        dstmp = dstBuff;
+        
+        switch(arg3) {
+            case 1:
+                    mode |= SPI_MODE_1;
+                break;
+            case 2:
+                    mode |= SPI_MODE_2;
+                break;
+            case 3:
+                    mode |= SPI_MODE_3;
+                break;
+            default:
+                    mode |= SPI_MODE_0;
+                break;
+        }
+        /*
+         * spi mode 
+         */ 
+        ret = ioctl(fm[0], SPI_IOC_WR_MODE, &mode);    //?家Α 
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+        
+        ret = ioctl(fm[0], SPI_IOC_RD_MODE, &mode);    //?家Α 
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+        
+        /*
+         * spi mode 
+         */ 
+        ret = ioctl(fm[1], SPI_IOC_WR_MODE, &mode);    //?家Α 
+        if (ret == -1) 
+            pabort("can't set spi mode"); 
+        
+        ret = ioctl(fm[1], SPI_IOC_RD_MODE, &mode);    //?家Α 
+        if (ret == -1) 
+            pabort("can't get spi mode"); 
+        
+        bitset = 1;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set slve ready: %d\n", bitset);
+        
+        bitset = 1;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set slve ready: %d\n", bitset);
+        
+        bitset = 0;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+        printf("Set spi0 RDY: %d\n", bitset);
+        
+        bitset = 0;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+        printf("Set spi1 RDY: %d\n", bitset);
+        
+        bitset = 1;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi0 data mode: %d\n", bitset);
+        
+        bitset = 1;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi1 data mode: %d\n", bitset);
+        
+        struct timespec *tspi = (struct timespec *)mmap(NULL, sizeof(struct timespec) * 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+        if (!tspi) {
+            printf("get share memory for timespec failed - %d\n", tspi);
+            goto end;
+        }
+        clock_gettime(CLOCK_REALTIME, &tspi[0]);  
+        clock_gettime(CLOCK_REALTIME, &tspi[1]);  
+        int tcost, tlast;
+        struct tms time;
+        struct timespec curtime, tdiff[2];
+        
+        if (tbuff)
+            printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
+        else 
+            goto end;
+        
+        tmp = tbuff;
+        
+        sz = 0;
+        pipe(pipefd);
+        pipe(pipefs);
+        pipe(pipefc);
+        
+        pid = fork();
+    
+        if (pid) {
+            pid = fork();
+            if (pid) {
+                uint8_t *cbuff;
+                cbuff = tx_buff[1];
+                printf("main process to monitor the p0 and p1 \n");
+                close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
+                close(pipefs[1]); // close the write-end of the pipe, I'm not going to use it
+                close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
+                close(pipefs[0]); // close the read-end of the pipe
+                close(pipefc[1]); // close the write-end of the pipe, thus sending EOF to the reader
+                
+                txhldsz = arg1;
+                
+                while (1) {
+                    //sleep(3);                 
+                    ret = read(pipefc[0], &buf, 1); 
+
+                    if (ret <= 0) {
+                        //printf("[25] did get pipe, buf:%c\n", buf);
+			   continue;
+                    }
+		
+                    if ((buf == '0') || (buf == '1')) {
+                        cbuff[wtsz] = buf;
+                        wtsz++;
+                        if (arg0) {
+                            if (wtsz == txhldsz) {
+        
+                                bitset = 1;
+                                ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                                
+                                bitset = 1;
+                                ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                                
+                                if (arg2>0)
+                                    lsz = arg2;
+                                else
+                                    lsz = 10;
+                                
+                                while(lsz) {
+                                    bitset = 0;
+                                    ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                                    //printf("Set RDY: %d, dly:%d \n", bitset, arg2);
+                                    usleep(1);
+                                
+                                    bitset = 1;
+                                    ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                                    //printf("Set RDY: %d\n", bitset);
+                                    usleep(1);
+                                
+                                    lsz --;
+                                }
+                                
+                                bitset = 0;
+                                ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                                //printf("Set spi0 Tx Hold: %d\n", bitset);
+                                
+                                bitset = 0;
+                                ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                                //printf("Set spi1 Tx Hold: %d\n", bitset);
+                                
+                            }
+                        }
+                    } else if (buf == 'e') {
+                        ret = read(pipefc[0], lastaddr, 32); 
+                        sz = atoi(lastaddr);
+                        printf("********//main monitor, write count:%d, sz:%d str:%s//********\n", wtsz, sz, lastaddr);
+                        for (sz = 0; sz < wtsz; sz++) {
+                            printf("%c, ", cbuff[sz]);
+                            if (!((sz+1) % 16)) printf("\n");
+                        }
+                        break;
+                    } else {
+                        printf("********//main monitor, get buff:%c, ERROR!!!!//********\n", buf);
+                    }
+                    
+                }
+                close(pipefc[0]); // close the read-end of the pipe
+        
+            } else {
+                printf("p0 process pid:%d!\n", pid);
+                char str[256] = "/root/p0.log";
+                
+                close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
+                close(pipefs[1]); // close the write-end of the pipe, I'm not going to use it
+                close(pipefc[0]); // close the read-end of the pipe
+                
+                printf("Start spi%d spidev thread, ret: 0x%x\n", 0, ret);
+                bitset = 0;
+                ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+
+                while(1) {
+                    clock_gettime(CLOCK_REALTIME, &tspi[0]);   
+                    
+                    ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 15, __u32), dstBuff);  //SPI_IOC_PROBE_THREAD
+                    
+                    clock_gettime(CLOCK_REALTIME, &tdiff[0]);    
+                     msync(tspi, sizeof(struct timespec)*2, MS_SYNC);
+                     tlast = test_time_diff(&tspi[1], &tspi[0], 1000);
+                     if (tlast == -1) {
+                         tlast = 0 - test_time_diff(&tspi[0], &tspi[1], 1000);
+                     }
+                     tcost = test_time_diff(&tspi[0], &tdiff[0], 1000);
+
+                    printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
+
+			if (ret < 0) {
+				continue;
+			}
+
+                    msync(dstBuff, ret, MS_SYNC);
+        
+                    dstBuff += ret + chunksize;
+                    if (ret != chunksize) {
+                        dstBuff -= chunksize;
+                        if (ret == 1) ret = 0;
+                        lsz = ret;
+                        write(pipefd[1], "e", 1); // send the content of argv[1] to the reader
+                        sprintf(lastaddr, "%d", dstBuff);
+                        printf("p0 write e  addr:%x str:%s ret:%d\n", dstBuff, lastaddr, ret);
+                        write(pipefd[1], lastaddr, 32); 
+                        break;
+                    }
+                    write(pipefd[1], "c", 1);
+                    
+                    /* send info to control process */
+                    write(pipefc[1], "0", 1);
+                    //printf("main process write c \n");    
+                }
+
+
+	         bitset = 0;
+       	  ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+    	         printf("Stop spi%d spidev thread, ret: %d\n", 0, ret);
+                
+                wtsz = 0;
+                while (1) {
+                    ret = read(pipefs[0], &buf, 1); 
+                    //printf("p0 read %d, buf:%c \n", ret, buf);
+                    if (buf == 'c') {
+                        wtsz++; 
+                    } else if (buf == 'e') {
+                        ret = read(pipefs[0], lastaddr, 32); 
+                        addr = (char *)atoi(lastaddr);
+                        printf("p0 process wait wtsz:%d, lastaddr:%x/%x\n", wtsz, addr, dstBuff);
+                        break;
+                    }
+                }
+                
+                if (dstBuff > addr) {
+                    printf("p0 memcpy from  %x to %x sz:%d\n", dstBuff-lsz, addr, lsz);
+                    msync(dstBuff-lsz, lsz, MS_SYNC);
+                    #if 0
+                    memcpy(addr, dstBuff-lsz, lsz);
+                    #else
+                    memcpy(tbuff, dstBuff-lsz, lsz);
+                    memcpy(addr, tbuff, lsz);
+                    #endif
+                    addr += lsz;
+                    memset(addr, 0, chunksize);
+                    sz = addr - dstmp;
+                    
+                    /* send info to control process */
+                    write(pipefc[1], "e", 1);
+                    sprintf(lastaddr, "%d", sz);
+                    printf("p0 write e, sz:%x str:%s \n", sz, lastaddr);
+                    write(pipefc[1], lastaddr, 32);
+        
+                    msync(dstmp, sz, MS_SYNC);
+                    ret = fwrite(dstmp, 1, sz, fp);
+                    printf("\np0 write file [%s] size %d/%d \n", path, sz, ret);
+                }
+                
+                close(pipefd[1]); // close the write-end of the pipe, thus sending EOF to the reader
+                close(pipefs[0]); // close the read-end of the pipe
+                close(pipefc[0]); // close the read-end of the pipe
+            }
+        } else {
+            char str[256] = "/root/p1.log";
+            printf("p1 process pid:%d!\n", pid);
+        
+            close(pipefd[1]); // close the write-end of the pipe, I'm not going to use it
+            close(pipefs[0]); // close the read-end of the pipe, I'm not going to use it
+            close(pipefc[0]); // close the read-end of the pipe
+        
+            printf("Start spi%d spidev thread, ret: 0x%x\n", 1, ret);
+            bitset = 0;
+            ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+
+            dstBuff += chunksize;
+			
+            while(1) {				
+                clock_gettime(CLOCK_REALTIME, &tspi[1]);            
+                
+                ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 15, __u32), dstBuff);  //SPI_IOC_PROBE_THREAD
+
+                clock_gettime(CLOCK_REALTIME, &tdiff[1]);   
+                msync(tspi, sizeof(struct timespec) * 2, MS_SYNC);
+                tlast = test_time_diff(&tspi[0], &tspi[1], 1000);
+                if (tlast == -1) {
+                     tlast = 0 - test_time_diff(&tspi[1], &tspi[0], 1000);
+                }
+                tcost = test_time_diff(&tspi[1], &tdiff[1], 1000);
+
+                printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
+		if (ret < 0) {
+			continue;
+		}
+
+                msync(dstBuff, ret, MS_SYNC);
+        
+                dstBuff += ret + chunksize;
+                if (ret != chunksize) {
+                    dstBuff -= chunksize;
+                    if (ret == 1) ret = 0;
+                    lsz = ret;
+                    write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
+                    sprintf(lastaddr, "%d", dstBuff);
+                    printf("p1 write e addr:%x str:%s ret:%d\n", dstBuff, lastaddr, ret);
+                    write(pipefs[1], lastaddr, 32); // send the content of argv[1] to the reader
+
+                    break;
+                }
+                write(pipefs[1], "c", 1); // send the content of argv[1] to the reader         
+                
+                /* send info to control process */
+                write(pipefc[1], "1", 1);
+                //printf("p1 process write c \n");
+            }
+
+            bitset = 0;
+            ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+            printf("Stop spi%d spidev thread, ret: %d\n", 1, ret);
+
+            wtsz = 0;
+            while (1) {
+                ret = read(pipefd[0], &buf, 1); 
+                //printf("p1 read %d, buf:%c  \n", ret, buf);
+                if (buf == 'c')
+                    wtsz++; 
+                else if (buf == 'e') {
+                    ret = read(pipefd[0], lastaddr, 32); 
+                    addr = (char *)atoi(lastaddr);
+                    printf("p1 process wtsz:%d, lastaddr:%x/%x\n",  wtsz, addr, dstBuff);
+                    break;
+                }
+            }
+        
+            if (dstBuff > addr) {
+                printf("p1 memcpy from  %x to %x sz:%d\n", dstBuff-lsz, addr, lsz);
+                msync(dstBuff-lsz, lsz, MS_SYNC);
+                #if 0
+                memcpy(addr, dstBuff-lsz, lsz);
+                #else
+                memcpy(tbuff, dstBuff-lsz, lsz);
+                memcpy(addr, tbuff, lsz);
+                #endif
+                addr += lsz;
+                memset(addr, 0, chunksize);
+                sz = addr - dstmp;
+                
+                /* send info to control process */
+                write(pipefc[1], "e", 1);
+                sprintf(lastaddr, "%d", sz);
+                printf("p1 write e sz:%x str:%s \n", sz, lastaddr);
+                write(pipefc[1], lastaddr, 32); 
+        
+                msync(dstmp, sz, MS_SYNC);
+                ret = fwrite(dstmp, 1, sz, fp);
+                printf("\np1 write file [%s] size %d/%d \n", path, sz, ret);
+            }
+        
+            close(pipefd[0]); // close the read-end of the pipe
+            close(pipefs[1]); // close the write-end    of the pipe, thus sending EOF to the
+            close(pipefc[0]); // close the read-end of the pipe
+        }
+    
+        munmap(dstmp, TSIZE);
+	//goto redo;
+       goto end;
+    }
+    
+	
+    if (sel == 24){ /* command mode test ex[24 0/num 1/0]*/
+        arg1 = arg1 % 2;
+        if (arg0 == 0) {
+            bitset = 0;
+            ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 15, __u32), &bitset);  //SPI_IOC_PROBE_THREAD
+            printf("Probe spi%d spidev thread, num: %d\n", arg1, bitset);
+        } else {
+            bitset = arg0;
+            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 15, __u32), &bitset);  //SPI_IOC_WRITE_THREAD
+            printf("Write spi%d spidev thread, num: %d\n", arg1, bitset);
+        }
+        goto end;
+    }
+    if (sel == 23){ /* command mode test ex[23 1/0 1/0]*/
+        arg1 = arg1 % 2;
+
+        if (arg0) {
+            bitset = 1;
+            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+            printf("Set slve ready: %d\n", bitset);
+
+            bitset = 1;
+            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+            printf("Set spi%d data mode: %d\n", arg1, bitset);
+
+            bitset = 1;
+            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
+            printf("Set spi%d RDY: %d\n", arg1, bitset);
+
+            printf("Start spi%d spidev thread, ret: 0x%x\n", arg1, ret);
+            bitset = 0;
+            ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+
+        } else {
+            bitset = 0;
+            printf("Stop spi%d spidev thread, ret: %d\n", arg1, ret);
+            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+        }
+
+        while(1);
+        goto end;
+    }
     if (sel == 22){ /* command mode test ex[22 num]*/
 #define OP_PON 0x1
 #define OP_QRY 0x2
@@ -1297,6 +1740,14 @@ static char path[256];
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
         printf("Set slve ready: %d\n", bitset);
 
+        bitset = 0;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+        printf("Set spi0 RDY: %d\n", bitset);
+
+        bitset = 0;
+        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
+        printf("Set spi1 RDY: %d\n", bitset);
+
         bitset = 1;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi0 data mode: %d\n", bitset);
@@ -1304,15 +1755,6 @@ static char path[256];
         bitset = 1;
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi1 data mode: %d\n", bitset);
-
-        bitset = 1;
-        ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-        printf("Get spi1 RDY: %d\n", bitset);
-
-        bitset = 1;
-        ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-        printf("Get spi1 RDY: %d\n", bitset);
-
 	
         struct timespec *tspi = (struct timespec *)mmap(NULL, sizeof(struct timespec) * 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
         if (!tspi) {
@@ -1342,6 +1784,7 @@ static char path[256];
         if (pid) {
             pid = fork();
             if (pid) {
+                //usleep(1000000);
 		uint8_t *cbuff;
 		cbuff = tx_buff[1];
                 printf("main process to monitor the p0 and p1 \n");
@@ -1519,6 +1962,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                 close(pipefc[0]); // close the read-end of the pipe
             }
         } else {
+            sleep(2);
             char str[256] = "/root/p1.log";
             printf("p1 process pid:%d!\n", pid);
 
@@ -1724,7 +2168,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
             
             if (sel == 1) {
                 printf(" Tx bitset %d \n", bitset);
-                ioctl(fd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
+                ioctl(fd1, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WD_CTL_PIN
                 if (bitset == 1)
                     bitset = 0;
                 else
@@ -1732,7 +2176,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
             }
             else {
                 printf(" Rx bitset %d \n", bitset);
-                ret = ioctl(fd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN            
+                ret = ioctl(fd1, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN            
             }
         }
           
