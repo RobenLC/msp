@@ -2086,6 +2086,9 @@ static int fs11(struct mainRes_s *mrs, struct modersp_s *modersp)
             error_handle("socket error", 2010);
             modersp->r = 2;
             return 1;
+        } else  {
+            modersp->r = 3;
+	     return 0;
         }
     }
     return 0; 
@@ -2228,7 +2231,7 @@ static int fs17(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    int ret;
+    int ret, bitset;
     char ch;
 
     //sprintf(mrs->log, "%d\n", modersp->v);
@@ -2269,6 +2272,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     if (modersp->r == 0x3) {
+
         mrs_ipc_put(mrs, "D", 1, 3);
         sprintf(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs18", mrs->log);
@@ -2299,7 +2303,7 @@ static int fs19(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    int bitset;
+    int bitset, ret;
 
     bitset = 0;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
@@ -2320,6 +2324,17 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
+
+    bitset = 0;
+    ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+    sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs20", mrs->log);
+
+    bitset = 0;
+    ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+    sprintf(mrs->log, "Stop spi1 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs20", mrs->log);
+
 
     modersp->r = 1;
     return 1;
@@ -3148,7 +3163,7 @@ static int p2(struct procRes_s *rs)
                     //print_f(rs->plogs, "P2", rs->logs);
                     clock_gettime(CLOCK_REALTIME, &tnow);
 
-			if (opsz < 0) {
+			if (opsz == 0) {
 	                    sprintf(rs->logs, "opsz:%d\n", opsz);
        	             print_f(rs->plogs, "P2", rs->logs);	
                            usleep(1000);
@@ -3174,7 +3189,7 @@ static int p2(struct procRes_s *rs)
                     ring_buf_prod_dual(rs->pdataRx, pi);
                     //shmem_dump(addr, 32);
 
-                    if (opsz != len) break;
+                    if (opsz < 0) break;
                     rs_ipc_put(rs, "p", 1);
                     pi += 2;
                 }
@@ -3492,6 +3507,13 @@ static int p4(struct procRes_s *rs)
                         rs_ipc_get(rs, &ch, 1);
                     }
                 }
+
+		  while (ch != 'D') {
+                        sprintf(rs->logs, "%c clr\n", ch);
+                        print_f(rs->plogs, "P4", rs->logs);         
+                        ch = 0;
+                        rs_ipc_get(rs, &ch, 1);
+		  }
 
                 rs_ipc_put(rs, "D", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
