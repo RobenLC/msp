@@ -808,16 +808,19 @@ redo:
 
                     printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
 
-			if (ret < 0) {
+			if (ret == 0) {
 				continue;
 			}
 
                     msync(dstBuff, ret, MS_SYNC);
         
                     dstBuff += ret + chunksize;
-                    if (ret != chunksize) {
+                    if (ret < 0) {
+
+			   ret = 0 - ret;
+			   if (ret == 1) ret = 0;
+
                         dstBuff -= chunksize;
-                        if (ret == 1) ret = 0;
                         lsz = ret;
                         write(pipefd[1], "e", 1); // send the content of argv[1] to the reader
                         sprintf(lastaddr, "%d", dstBuff);
@@ -907,16 +910,19 @@ redo:
                 tcost = test_time_diff(&tspi[1], &tdiff[1], 1000);
 
                 printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
-		if (ret < 0) {
+		if (ret == 0) {
 			continue;
 		}
 
                 msync(dstBuff, ret, MS_SYNC);
         
                 dstBuff += ret + chunksize;
-                if (ret != chunksize) {
-                    dstBuff -= chunksize;
+                if (ret < 0) {
+
+			ret = 0 - ret;
                     if (ret == 1) ret = 0;
+					
+                    dstBuff -= chunksize;
                     lsz = ret;
                     write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
                     sprintf(lastaddr, "%d", dstBuff);

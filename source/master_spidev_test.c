@@ -1529,7 +1529,7 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         bitset = 0;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
-		
+
         bitset = 0;
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
@@ -1539,7 +1539,7 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         bitset = 0;
         ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("[%d]Get RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
-		
+
         bitset = 0;
         ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("[%d]Get RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
