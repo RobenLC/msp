@@ -195,6 +195,8 @@ struct procRes_s{
     FILE *fs_s;
     // save log file
     FILE *flog_s;
+    // save data file
+    FILE *fdat_s;
     // time measurement
     struct timespec *tm[2];
     char logs[256];
@@ -3479,6 +3481,16 @@ static int p4(struct procRes_s *rs)
                     break;
                 }
             } else if (cmode == 1) {
+            
+                ret = file_save_get(&rs->fdat_s, "/mnt/mmc2/tx/%d.dat");
+                if (ret) {
+                    sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                    print_f(rs->plogs, "P4", rs->logs);         
+                    while(1);
+                } else {
+                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s);
+                    print_f(rs->plogs, "P4", rs->logs);         
+                }
 
                 while (1) {
                     len = ring_buf_cons_dual(rs->pdataRx, &addr, pi);
@@ -3495,6 +3507,8 @@ static int p4(struct procRes_s *rs)
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
                             //sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_t->connfd, opsz, pi);
                             //print_f(rs->plogs, "P4", rs->logs);         
+                            fwrite(addr, 1, len, rs->fdat_s);
+                            fflush(rs->fdat_s);
                         }
                     } else {
                         sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, opsz, pi);
@@ -3518,6 +3532,8 @@ static int p4(struct procRes_s *rs)
                 rs_ipc_put(rs, "D", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
                 print_f(rs->plogs, "P4", rs->logs);         
+
+                fclose(rs->fdat_s);
                 break;
             }
             else if (cmode == 2) {
