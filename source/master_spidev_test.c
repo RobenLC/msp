@@ -1213,7 +1213,7 @@ static char spi1[] = "/dev/spidev32766.0";
 	goto end;
 
 	}
-    if (sel == 11) { /* dual channel data mode ex:[./master_spi.bin 11 50 file_path 30720 30720]*/
+    if (sel == 11) { /* dual channel data mode ex:[./master_spi.bin 11 50 file_path 30720 30720 sleepus]*/
 	#define TSIZE (128*1024*1024)
 	#define PKTSZ  61440
 	int chunksize;
@@ -1221,6 +1221,7 @@ static char spi1[] = "/dev/spidev32766.0";
 
 	if (arg0)
 		speed = arg0 * 1000000;
+
     /*
      * max speed hz     //?¸m³t²v
      */ 

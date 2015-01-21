@@ -21,7 +21,7 @@
 #define SPI_MODE_1		(0|SPI_CPHA)
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
-#define SPI_SPEED    60000000
+#define SPI_SPEED    40000000
 
 #define OP_PON 0x1
 #define OP_QRY 0x2
@@ -33,6 +33,7 @@
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
+static char *infpath;
 
 typedef int (*func)(int argc, char *argv[]);
 
@@ -161,6 +162,7 @@ struct mainRes_s{
     struct socket_s socket_r;
     struct socket_s socket_t;
     struct logPool_s plog;
+    char filein[128];
 };
 
 typedef int (*fselec)(struct mainRes_s *mrs, struct modersp_s *modersp);
@@ -2469,7 +2471,27 @@ static int p2(struct procRes_s *rs)
 {
     /* spi0 */
     char ch;
-    int len;
+    int totsz=0, fsize=0, pi=0, len;
+    char *addr;
+    char filename[128] = "/mnt/mmc2/hilldesert.jpg";
+    //char filename[128] = "/mnt/mmc2/sample1.mp4";
+    //char filename[128] = "/mnt/mmc2/pattern2.txt";
+    FILE *fp = NULL;
+	
+    if (infpath[0] != '\0') {
+        strcpy(filename, infpath);
+    }
+
+    fp = fopen(filename, "r");
+    if (!fp) {
+        sprintf(rs->logs, "file read [%s] failed \n", filename);
+        print_f(rs->plogs, "P2", rs->logs);
+        while(1);
+    } else {
+        sprintf(rs->logs, "file read [%s] ok \n", filename);
+        print_f(rs->plogs, "P2", rs->logs);
+    }
+
     sprintf(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
 
@@ -2484,17 +2506,6 @@ static int p2(struct procRes_s *rs)
             //print_f(rs->plogs, "P2", rs->logs);
 
             if (ch == 'r') {
-                int totsz=0, fsize=0, pi=0, len;
-                char *addr;
-                //char filename[128] = "/mnt/mmc2/sample1.mp4";
-                char filename[128] = "/mnt/mmc2/pattern2.txt";
-                FILE *fp;
-
-                fp = fopen(filename, "r");
-                if (!fp) {
-                    sprintf(rs->logs, "file read [%s] failed \n", filename);
-                    print_f(rs->plogs, "P2", rs->logs);
-                }
 
                 len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                 fsize = fread(addr, 1, len, fp);
@@ -2922,6 +2933,15 @@ static char spi0[] = "/dev/spidev32765.0";
     uint32_t bitset;
 
     pmrs = (struct mainRes_s *)mmap(NULL, sizeof(struct mainRes_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+
+    if (argc > 1) {
+        sprintf(pmrs->filein, "%s", argv[1]);
+    } else {
+        pmrs->filein[0] = '\0';
+    }
+    printf("Get file input: [%s] \n", pmrs->filein);
+
+    infpath = pmrs->filein;
 
     pmrs->plog.max = 6*1024*1024;
     pmrs->plog.pool = mmap(NULL, pmrs->plog.max, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
