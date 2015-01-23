@@ -68,6 +68,17 @@ struct psdata_s {
 
 typedef int (*stfunc)(struct psdata_s *data);
 
+struct directnFile_s{
+    uint32_t   dftype;
+    uint32_t   dfstats;
+    char        dfLFN[256];
+    char        dfSFN[16];
+    uint32_t   dfattrib;
+    directnFile_s *pa;
+    directnFile_s *br;
+    directnFile_s *ch;	
+}
+
 struct logPool_s{
     char *pool;
     char *cur;
@@ -142,6 +153,7 @@ struct mainRes_s{
     int sid[6];
     int sfm[2];
     int smode;
+    struct directnFile_s root_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
     struct pipe_s pipedn[7];
