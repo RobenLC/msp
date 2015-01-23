@@ -13,6 +13,9 @@
 #include <time.h>
 #include <sys/socket.h>
 
+#include <dirent.h>
+#include <sys/stat.h>  
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
  
 #define SPI_CPHA  0x01          /* clock phase */
@@ -53,6 +56,33 @@ static uint32_t speed = 1000000;
 static uint16_t delay; 
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
+
+void printdir(char *dir, int depth)
+{
+	DIR *dp;
+	struct dirent *entry;
+	struct stat statbuf;
+
+	if ((dp = opendir(dir)) == NULL) {
+		fprintf(stderr, "Can`t open directory %s\n", dir);
+		return ;
+	}
+	
+	chdir(dir);
+	while ((entry = readdir(dp)) != NULL) {
+		lstat(entry->d_name, &statbuf);
+		if (S_ISDIR(statbuf.st_mode)) {
+			if (strcmp(entry->d_name, ".") == 0 || 
+				strcmp(entry->d_name, "..") == 0 )  
+				continue;	
+			printf("%*s%s\n", depth, "", entry->d_name, depth);
+			printdir(entry->d_name, depth+4);
+		} else
+			printf("%*s%s\n", depth, "", entry->d_name, depth);
+	}
+	chdir("..");
+	closedir(dp);	
+}
 
 static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
 {
@@ -584,6 +614,48 @@ static char path[256];
 
     bitset = 1;
     ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+    if (sel == 27){ /* list the files in root ex[27]*/
+
+	char *topdir = ".";
+	printf("Directory scan of %s\n", topdir);
+	printdir(topdir, 0);
+	printf("done.\n");
+
+	goto end;
+
+    }
+
+    if (sel == 26){ /* list the files in root ex[26]*/
+		
+  char name[256][256];
+  DIR           *d;
+  struct dirent *dir;
+  int count = 0;
+  int index = 0;
+  d = opendir(".");
+  if (d)
+  {
+    while ((dir = readdir(d)) != NULL)
+    {
+      printf("%s - 0x%x\n", dir->d_name, dir->d_type);
+      strcpy(name[count],dir->d_name);
+      count++;
+    }
+
+    closedir(d);
+  }
+
+  while( count > 0 )
+  {
+      printf("The directory list is %s\r\n",name[index]);
+      index++;
+      count--;
+  }
+
+        goto end;
+    }
+
     if (sel == 25){ /* dual band data mode test with kthread ex[25 0 2 5 1 61440]*/
         #define PKTSZ  30720 //61440
         int chunksize;
