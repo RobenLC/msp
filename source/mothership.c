@@ -74,10 +74,10 @@ struct directnFile_s{
     char        dfLFN[256];
     char        dfSFN[16];
     uint32_t   dfattrib;
-    directnFile_s *pa;
-    directnFile_s *br;
-    directnFile_s *ch;	
-}
+    struct directnFile_s *pa;
+    struct directnFile_s *br;
+    struct directnFile_s *ch;	
+};
 
 struct logPool_s{
     char *pool;
@@ -252,6 +252,10 @@ static int p4_end(struct procRes_s *rs);
 static int p5(struct procRes_s *rs, struct procRes_s *rcmd);
 static int p5_init(struct procRes_s *rs);
 static int p5_end(struct procRes_s *rs);
+//p6: file list recv/send
+static int p6(struct procRes_s *rs);
+static int p6_init(struct procRes_s *rs);
+static int p6_end(struct procRes_s *rs);
 
 static int pn_init(struct procRes_s *rs);
 static int pn_end(struct procRes_s *rs);
@@ -1588,6 +1592,20 @@ static int pn_end(struct procRes_s *rs)
     close(rs->ppipedn->rt[0]); 
     close(rs->ppipeup->rt[1]);
     return 0;
+}
+
+static int p6_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p6_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
 }
 
 static int p5_init(struct procRes_s *rs)
@@ -3747,6 +3765,58 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     }
 
     p5_end(rs);
+    return 0;
+}
+
+static int p6(struct procRes_s *rs)
+{
+    int ret;
+
+    sprintf(rs->logs, "p6\n");
+    print_f(rs->plogs, "P6", rs->logs);
+
+    p6_init(rs);
+
+    rs->psocket_r->listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (rs->psocket_r->listenfd < 0) { 
+        sprintf(rs->logs, "p6 get socket ret: %d", rs->psocket_r->listenfd);
+        error_handle(rs->logs, 3302);
+    }
+
+    memset(&rs->psocket_r->serv_addr, '0', sizeof(struct sockaddr_in));
+
+    rs->psocket_r->serv_addr.sin_family = AF_INET;
+    rs->psocket_r->serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    rs->psocket_r->serv_addr.sin_port = htons(4000); 
+
+    ret = bind(rs->psocket_r->listenfd, (struct sockaddr*)&rs->psocket_r->serv_addr, sizeof(struct sockaddr_in)); 
+    if (ret < 0) {
+        sprintf(rs->logs, "p6 get bind ret: %d", ret);
+        error_handle(rs->logs, 3795);
+    }
+
+    ret = listen(rs->psocket_r->listenfd, 10); 
+    if (ret < 0) {
+        sprintf(rs->logs, "p6 get listen ret: %d", ret);
+        error_handle(rs->logs, 3801);
+    }
+
+    while (1) {
+        //printf("@");
+        //sprintf(rs->logs, "#\n");
+        //print_f(rs->plogs, "P6", rs->logs);
+
+        rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)NULL, NULL); 
+        if (rs->psocket_r->connfd < 0) {
+            sprintf(rs->logs, "P5 get connect failed ret:%d", rs->psocket_r->connfd);
+            error_handle(rs->logs, 3331);
+        }
+
+        close(rs->psocket_r->connfd);
+        rs->psocket_r->connfd = 0;
+    }
+
+    p6_end(rs);
     return 0;
 }
 
