@@ -150,14 +150,14 @@ struct machineCtrl_s{
 };
 
 struct mainRes_s{
-    int sid[6];
+    int sid[7];
     int sfm[2];
     int smode;
     struct directnFile_s root_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
-    struct pipe_s pipedn[7];
-    struct pipe_s pipeup[7];
+    struct pipe_s pipedn[8];
+    struct pipe_s pipeup[8];
     // data mode share memory
     struct shmem_s dataRx;
     struct shmem_s dataTx; /* we don't have data mode Tx, so use it as cmdRx for spi1 */
@@ -174,6 +174,7 @@ struct mainRes_s{
     char log[256];
     struct socket_s socket_r;
     struct socket_s socket_t;
+    struct socket_s socket_at;
     struct logPool_s plog;
 };
 
@@ -214,6 +215,7 @@ struct procRes_s{
     char logs[256];
     struct socket_s *psocket_r;
     struct socket_s *psocket_t;
+    struct socket_s *psocket_at;
     struct logPool_s *plogs;
 };
 
@@ -319,7 +321,7 @@ static int error_handle(char *log, int line)
         print_f(mlogPool, "error", str); 
     }
 
-    while(1);
+    //while(1);
 
     return 0;
 
@@ -3770,50 +3772,107 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
 static int p6(struct procRes_s *rs)
 {
-    int ret;
+    char *recvbuf, *sendbuf;
+    int ret, n, num;
 
     sprintf(rs->logs, "p6\n");
     print_f(rs->plogs, "P6", rs->logs);
 
     p6_init(rs);
 
-    rs->psocket_r->listenfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (rs->psocket_r->listenfd < 0) { 
-        sprintf(rs->logs, "p6 get socket ret: %d", rs->psocket_r->listenfd);
+    recvbuf = malloc(1024);
+    if (!recvbuf) {
+        sprintf(rs->logs, "recvbuf alloc failed! \n");
+        print_f(rs->plogs, "P6", rs->logs);
+        return (-1);
+    } else {
+        sprintf(rs->logs, "recvbuf alloc success! 0x%x\n", recvbuf);
+        print_f(rs->plogs, "P6", rs->logs);
+    }
+
+    sendbuf = malloc(1024);
+    if (!sendbuf) {
+        sprintf(rs->logs, "sendbuf alloc failed! \n");
+        print_f(rs->plogs, "P6", rs->logs);
+        return (-1);
+    } else {
+        sprintf(rs->logs, "sendbuf alloc success! 0x%x\n", sendbuf);
+        print_f(rs->plogs, "P6", rs->logs);
+    }
+
+    rs->psocket_at->listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (rs->psocket_at->listenfd < 0) { 
+        sprintf(rs->logs, "p6 get socket ret: %d", rs->psocket_at->listenfd);
         error_handle(rs->logs, 3302);
     }
 
-    memset(&rs->psocket_r->serv_addr, '0', sizeof(struct sockaddr_in));
+    memset(&rs->psocket_at->serv_addr, '0', sizeof(struct sockaddr_in));
 
-    rs->psocket_r->serv_addr.sin_family = AF_INET;
-    rs->psocket_r->serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    rs->psocket_r->serv_addr.sin_port = htons(4000); 
+    rs->psocket_at->serv_addr.sin_family = AF_INET;
+    rs->psocket_at->serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    rs->psocket_at->serv_addr.sin_port = htons(4000); 
 
-    ret = bind(rs->psocket_r->listenfd, (struct sockaddr*)&rs->psocket_r->serv_addr, sizeof(struct sockaddr_in)); 
+    ret = bind(rs->psocket_at->listenfd, (struct sockaddr*)&rs->psocket_at->serv_addr, sizeof(struct sockaddr_in)); 
     if (ret < 0) {
         sprintf(rs->logs, "p6 get bind ret: %d", ret);
         error_handle(rs->logs, 3795);
     }
 
-    ret = listen(rs->psocket_r->listenfd, 10); 
+    ret = listen(rs->psocket_at->listenfd, 10); 
     if (ret < 0) {
         sprintf(rs->logs, "p6 get listen ret: %d", ret);
         error_handle(rs->logs, 3801);
     }
 
     while (1) {
-        //printf("@");
-        //sprintf(rs->logs, "#\n");
+        //sprintf(rs->logs, "@\n");
         //print_f(rs->plogs, "P6", rs->logs);
 
-        rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)NULL, NULL); 
-        if (rs->psocket_r->connfd < 0) {
-            sprintf(rs->logs, "P5 get connect failed ret:%d", rs->psocket_r->connfd);
-            error_handle(rs->logs, 3331);
+        rs->psocket_at->connfd = accept(rs->psocket_at->listenfd, (struct sockaddr*)NULL, NULL); 
+        if (rs->psocket_at->connfd < 0) {
+            sprintf(rs->logs, "P6 get connect failed ret:%d", rs->psocket_at->connfd);
+            error_handle(rs->logs, 3812);
+            continue;
         }
 
-        close(rs->psocket_r->connfd);
-        rs->psocket_r->connfd = 0;
+        memset(recvbuf, 0x0, 1024);
+        memset(sendbuf, 0x0, 1024);
+		
+        n = read(rs->psocket_at->connfd, recvbuf, 1024);
+        if (recvbuf[n-1] == '\n')         recvbuf[n-1] = '\0';
+        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket_at->connfd);
+        print_f(rs->plogs, "P6", rs->logs);
+
+        sendbuf[0] = '!';
+        sendbuf[1] = '1';
+        sendbuf[2] = '+';
+        sendbuf[3] = 'D';
+        sendbuf[4] = '[';
+
+        memcpy(&sendbuf[5], recvbuf, n+4);
+
+        sendbuf[5+n+4+1] = ']';
+        sendbuf[5+n+4+2] = '\n';
+
+        sprintf(rs->logs, "socket send %d char [%s] from %d\n", 5+n+4+3, sendbuf, rs->psocket_at->connfd);
+        print_f(rs->plogs, "P6", rs->logs);
+
+        num = 10;
+        while (num > 0) {
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+4+3);
+            if (num % 3) {
+                sendbuf[3] = 'F';
+            } else {
+                sendbuf[3] = 'D';
+            }
+            num--;
+	 }
+
+        sprintf(rs->logs, "socket send %d char \n", ret);
+        print_f(rs->plogs, "P6", rs->logs);
+
+        close(rs->psocket_at->connfd);
+        rs->psocket_at->connfd = 0;
     }
 
     p6_end(rs);
@@ -3826,7 +3885,7 @@ static char spi1[] = "/dev/spidev32766.0";
 static char spi0[] = "/dev/spidev32765.0"; 
 
     struct mainRes_s *pmrs;
-    struct procRes_s rs[7];
+    struct procRes_s rs[8];
     int ix, ret;
     char *log;
     int tdiff;
@@ -4007,6 +4066,7 @@ static char spi0[] = "/dev/spidev32765.0";
     pipe(pmrs->pipedn[5].rt);
     //pipe(pmrs->pipedn[6].rt);
     pipe2(pmrs->pipedn[6].rt, O_NONBLOCK);
+    pipe(pmrs->pipedn[7].rt);
 	
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[1].rt, O_NONBLOCK);
@@ -4015,6 +4075,7 @@ static char spi0[] = "/dev/spidev32765.0";
     pipe2(pmrs->pipeup[4].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[5].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[6].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[7].rt, O_NONBLOCK);
 
     res_put_in(&rs[0], pmrs, 0);
     res_put_in(&rs[1], pmrs, 1);
@@ -4023,7 +4084,8 @@ static char spi0[] = "/dev/spidev32765.0";
     res_put_in(&rs[4], pmrs, 4);
     res_put_in(&rs[5], pmrs, 5);
     res_put_in(&rs[6], pmrs, 6);
-	
+    res_put_in(&rs[7], pmrs, 7);
+
 //  Share memory init
     ring_buf_init(&pmrs->dataRx);
     pmrs->dataRx.r->folw.seq = 1;
@@ -4056,7 +4118,12 @@ static char spi0[] = "/dev/spidev32765.0";
                         if (!pmrs->sid[5]) {
                             dbg(pmrs);
                         } else {
-                            p0(pmrs);
+                            pmrs->sid[6] = fork();
+				if (!pmrs->sid[6]) {
+                                p6(&rs[7]);
+				} else {
+                                p0(pmrs);
+                            }
                         }
                     }
                 }
@@ -4229,6 +4296,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 
     rs->psocket_r = &mrs->socket_r;
     rs->psocket_t = &mrs->socket_t;	
+    rs->psocket_at = &mrs->socket_at;
 
     rs->pmch = &mrs->mchine;
     return 0;
