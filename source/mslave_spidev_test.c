@@ -37,7 +37,18 @@
 #define BUFF_SIZE  2048
 
 #define TSIZE (128*1024*1024)
-		
+
+struct directnFile_s{
+    uint32_t   dftype;
+    uint32_t   dfstats;
+    char        dfLFN[256];
+    int           dflen;
+    uint32_t   dfattrib;
+    struct directnFile_s *pa;
+    struct directnFile_s *br;
+    struct directnFile_s *ch;	
+};
+
 struct pipe_s{
     int rt[2];
 };
@@ -47,7 +58,15 @@ static void pabort(const char *s)
     perror(s); 
     abort(); 
 } 
- 
+/*
+ struct dirent {
+    ino_t d_ino;
+    off_t d_off;
+    unsigned short int d_reclen;
+    unsigned char d_type;
+    char d_name[256];
+};
+*/
 static const char *device = "/dev/spidev32765.0"; 
 static const char *data_path = "/mnt/mmc2/tmp/1.jpg"; 
 static uint8_t mode; 
@@ -56,6 +75,26 @@ static uint32_t speed = 1000000;
 static uint16_t delay; 
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
+
+typedef enum {
+    ASPFS_TYPE_ROOT = 0x1,
+    ASPFS_TYPE_DIR,
+    ASPFS_TYPE_FILE,
+} aspFS_Type_e;
+
+/* construct the file system */
+static int aspFS_createRoot(struct directnFile_s **root, char *dir);
+static int aspFS_insertChilds(struct directnFile_s *root);
+static int aspFS_insertChildDir(struct directnFile_s *parent, char *dir);
+static int aspFS_insertChildFile(struct directnFile_s *parent, char *str);
+static int aspFS_list(struct directnFile_s *root, int depth);
+
+static int aspFS_deleteNote(struct directnFile_s *root, char *path);
+static int aspFS_save(struct directnFile_s *root, FILE fp);
+static int aspFS_extract(struct directnFile_s *root, FILE fp);
+
+static int aspFS_getNote(struct directnFile_s *note, struct directnFile_s *root, char *path);
+static int aspFS_getFilelist(char *flst, struct directnFile_s *note);
 
 void printdir(char *dir, int depth)
 {
@@ -84,6 +123,184 @@ void printdir(char *dir, int depth)
 	closedir(dp);	
 }
 
+static int aspFS_createRoot(struct directnFile_s **root, char *dir)
+{
+    DIR *dp;
+    struct directnFile_s *r = 0;
+
+    printf("[R]open directory [%s]\n", dir);
+    if ((dp = opendir(dir)) == NULL) {
+        printf("[R]Can`t open directory [%s]\n", dir);
+        return (-1);
+    }
+    printf("[R]open directory [%s] done\n", dir);
+
+    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    if (!r) {
+        return (-2);
+    }else {
+            printf("[R]alloc root fs done [0x%x]\n", r);
+    }
+
+    r->pa = 0;
+    r->br = 0;
+    r->ch = 0;
+    r->dftype = ASPFS_TYPE_ROOT;
+    r->dfattrib = 0;
+    r->dfstats = 0;
+
+    r->dflen = strlen(dir);
+    printf("[%s] len: %d\n", dir, r->dflen);
+    if (r->dflen > 255) r->dflen = 255;
+    strncpy(r->dfLFN, dir, r->dflen);
+
+    *root = r;
+
+    return 0;
+}
+
+static int aspFS_insertChilds(struct directnFile_s *root)
+{
+#define TAB_DEPTH   4
+    int ret = 0;
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
+
+    if (!root) {
+        printf("[R]root error 0x%x\n", root);
+        ret = -1;
+        goto insertEnd;
+    }
+
+    printf("[R]open directory [%s]\n", root->dfLFN);
+
+    if ((dp = opendir(root->dfLFN)) == NULL) {
+        printf("Can`t open directory [%s]\n", root->dfLFN);
+        ret = -2;
+        goto insertEnd;
+    }
+
+    printf("[R]open directory [%s] done\n", root->dfLFN);
+	
+    chdir(root->dfLFN);
+    while ((entry = readdir(dp)) != NULL) {
+        lstat(entry->d_name, &statbuf);
+        if (S_ISDIR(statbuf.st_mode)) {
+            if (strcmp(entry->d_name, ".") == 0 || 
+                strcmp(entry->d_name, "..") == 0 ) {
+                continue;	
+            }
+            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            //printdir(entry->d_name, TAB_DEPTH+4);
+            ret = aspFS_insertChildDir(root, entry->d_name);
+            if (ret) goto insertEnd;
+        } else {
+            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            ret = aspFS_insertChildFile(root, entry->d_name);
+            if (ret) goto insertEnd;
+        }
+    }
+    chdir("..");	
+
+insertEnd:
+    closedir(dp);	
+
+    return ret;
+}
+static int aspFS_insertChildDir(struct directnFile_s *parent, char *dir)
+{
+    int ret;
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
+    struct directnFile_s *r = 0;
+    struct directnFile_s *brt = 0;
+
+    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    if (!r) return (-2);
+
+    r->pa = parent;
+    r->br = 0;
+    r->ch = 0;
+    r->dfattrib = 0;
+    r->dfstats = 0;
+    r->dftype = ASPFS_TYPE_DIR;
+
+    r->dflen = strlen(dir);
+    printf("[%d][%s] len: %d \n", r->dftype, dir, r->dflen);
+    if (r->dflen > 255) r->dflen = 255;
+    strncpy(r->dfLFN, dir, r->dflen+1);
+
+    if (parent->ch == 0) {
+        parent->ch = r;
+    } else {
+        brt = parent->ch;
+        if (brt->br == 0) {
+            brt->br = r;
+        } else {
+            r->br = brt->br;
+            brt->br = r;
+        }
+    }
+
+    ret = aspFS_insertChilds(r);
+ 
+    return ret;
+}
+
+static int aspFS_insertChildFile(struct directnFile_s *parent, char *str)
+{
+    struct directnFile_s *r = 0;
+    struct directnFile_s *brt = 0;
+
+    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    if (!r) return (-2);
+
+    r->pa = parent;
+    r->br = 0;
+    r->ch = 0;
+    r->dfattrib = 0;
+    r->dfstats = 0;
+    r->dftype = ASPFS_TYPE_FILE;
+
+    r->dflen = strlen(str);
+    printf("[%d][%s] len: %d \n", r->dftype, str, r->dflen);
+    if (r->dflen > 255) r->dflen = 255;
+    strncpy(r->dfLFN, str, r->dflen+1);
+
+    if (parent->ch == 0) {
+        parent->ch = r;
+    } else {
+        brt = parent->ch;
+        if (brt->br == 0) {
+            brt->br = r;
+        } else {
+            r->br = brt->br;
+            brt->br = r;
+        }
+    }
+ 
+    return 0;
+}
+
+static int aspFS_list(struct directnFile_s *root, int depth)
+{
+
+    struct directnFile_s *fs = 0;
+    if (!root) return (-1);
+
+    fs = root->ch;
+    while (fs) {
+        printf("%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
+        if (fs->dftype == ASPFS_TYPE_DIR) {
+            aspFS_list(fs, depth + 4);
+        }
+        fs = fs->br;
+    }
+
+    return 0;
+}
 static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
 {
     unsigned long long cur, tnow, lnow, past, tbef, lpast, gunit;
@@ -615,9 +832,35 @@ static char path[256];
     bitset = 1;
     ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
-    if (sel == 27){ /* list the files in root ex[27]*/
+    if (sel == 28){ /* list the files in root ex[28]*/
+       struct directnFile_s *root = 0;
+       char topdir[256] = "/root";
+       int ret;
+       if (argc > 2) {
+           strcpy(topdir, argv[2]);
+       }
+	
+	printf("Directory scan of [%s], %d, %d, %d\n", topdir, ASPFS_TYPE_ROOT, ASPFS_TYPE_DIR, ASPFS_TYPE_FILE);
 
-	char *topdir = ".";
+       ret = aspFS_createRoot(&root, topdir);
+       if (ret != 0) printf("[R]aspFS_createRoot failed ret: %d \n", ret);
+       else printf("[R]aspFS_createRoot ok ret: %d \n", ret);
+       ret = aspFS_insertChilds(root);
+       if (ret != 0) printf("[R]aspFS_insertChilds failed ret: %d \n", ret);
+       else printf("[R]aspFS_insertChilds ok ret: %d \n", ret);
+
+       printf("[R]aspFS_list...\n");
+       aspFS_list(root, 4);
+
+       goto end;
+    }
+
+    if (sel == 27){ /* list the files in root ex[27]*/
+       char topdir[256] = ".";
+       if (argc > 2) {
+           strcpy(topdir, argv[2]);
+       }
+	
 	printf("Directory scan of %s\n", topdir);
 	printdir(topdir, 0);
 	printf("done.\n");
