@@ -88,6 +88,9 @@ static int aspFS_insertChilds(struct directnFile_s *root);
 static int aspFS_insertChildDir(struct directnFile_s *parent, char *dir);
 static int aspFS_insertChildFile(struct directnFile_s *parent, char *str);
 static int aspFS_list(struct directnFile_s *root, int depth);
+static int aspFS_search(struct directnFile_s **dir, struct directnFile_s *root, char *path);
+static int aspFS_showFolder(struct directnFile_s *root);
+static int aspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *root, char *path);
 
 static int aspFS_deleteNote(struct directnFile_s *root, char *path);
 static int aspFS_save(struct directnFile_s *root, FILE fp);
@@ -301,6 +304,131 @@ static int aspFS_list(struct directnFile_s *root, int depth)
 
     return 0;
 }
+
+static int aspFS_search(struct directnFile_s **dir, struct directnFile_s *root, char *path)
+{
+    int ret = 0;
+    char split = '/';
+    char *ch;
+    char rmp[16][256];
+    int a = 0, b = 0;
+    struct directnFile_s *brt;
+
+    ret = strlen(path);
+    printf("path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
+
+    ch = path;
+    while (ret > 0) {
+        if (*ch == split) {
+            if (b > 0) {
+                b = 0;
+                a++;
+            }
+        } else {
+            rmp[a][b] = *ch;
+            b++;
+            printf("%x ", *ch);
+        }
+        ch++;
+        ret --;
+    }
+
+    printf("\n a:%d, b:%d \n", a, b);
+
+    for (b = 0; b <= a; b++) {
+        printf("[%d.%d]%s \n", a, b, rmp[b]);
+    }
+
+    ret = -1;
+    b = 0;
+    brt = root->ch;
+    while (brt) {
+        printf("comp[%s] [%s] \n", brt->dfLFN, &rmp[b][0]);
+	 if (strcmp("..", &rmp[b][0]) == 0) {
+            b++;
+            if (brt->dftype != ASPFS_TYPE_ROOT) {
+                brt = brt->pa;
+            }
+	 } else if (strcmp(".", &rmp[b][0]) == 0) {
+            b++;
+        } else if (strcmp(brt->dfLFN, &rmp[b][0]) == 0) {
+            b++;
+            if (b > a) {
+               *dir = brt;
+                ret = 0;
+                break;
+            }
+            brt = brt->ch;
+        } else {
+            brt = brt->br;
+        }
+    }
+
+    printf("path len: %d, match num: %d, brt:0x%x \n", a, b, brt);
+
+    while((brt) && (b>=0)) {
+        printf("[%d][%s][%s] \n", b, &rmp[b][0], brt->dfLFN);
+        b--;
+        brt = brt->pa;
+    }
+
+    return ret;
+}
+
+static int aspFS_showFolder(struct directnFile_s *root)
+{
+    struct directnFile_s *brt = 0;
+    if (!root) return (-1);
+    if (root->dftype == ASPFS_TYPE_FILE) return (-2);
+	
+    printf("%s \n", root->dfLFN);
+
+    brt = root->ch;
+    while (brt) {
+        printf("|-[%c] %s\n", brt->dftype == ASPFS_TYPE_DIR?'D':'F', brt->dfLFN);
+        brt = brt->br;
+    }
+    return 0;
+}
+
+static int aspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *root, char *path)
+{
+    int retval = 0;
+    struct directnFile_s *brt;
+
+    if ((!path) || (!root) || (!dir)) return (-1);
+    if (root->dftype == ASPFS_TYPE_FILE) return (-2);
+
+    if (strcmp("..", path) == 0) {
+        if (root->dftype == ASPFS_TYPE_ROOT) {
+            *dir = root;
+            retval = 1;
+        } else {
+            *dir = root->pa;
+            retval = 2;
+        }
+    } else if (strcmp(".", path) == 0) {
+        *dir = root;
+        retval = 3;
+    } else {
+        brt = root->ch;
+
+        while (brt) {
+            if ((brt->dftype == ASPFS_TYPE_DIR) && 
+                 (strcmp(brt->dfLFN, path) == 0)) {
+                *dir = brt;
+                retval = 4;
+                break;
+            }
+            brt = brt->br;
+        }
+
+        if (!brt) retval = (-3);
+    }
+
+    return retval;
+}
+
 static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
 {
     unsigned long long cur, tnow, lnow, past, tbef, lpast, gunit;
@@ -851,6 +979,57 @@ static char path[256];
 
        printf("[R]aspFS_list...\n");
        aspFS_list(root, 4);
+
+       int i = 0;
+       char ch;
+       char path[256];
+       struct directnFile_s *dfs, *cur;
+
+#if 0
+       i = 0;
+       while (1) {
+           ch = fgetc(stdin);
+           if (ch != '\n')
+               printf("%c", ch);
+           path[i] = ch;
+           if (ch == '\n') {
+               path[i] = '\0';
+	        break;
+           }
+           i++;
+       }
+       printf("search [%s]\n", path);
+	   
+       ret = aspFS_search(&dfs, root, path);
+	if (!ret)   
+           printf("ret = %d, search [%s], [%s]\n\n\n",ret ,path, dfs->dfLFN);
+
+       aspFS_showFolder(dfs);
+#else
+        cur = root;
+        while (1) {
+            i = 0;
+            while (1) {
+                ch = fgetc(stdin);
+                if (ch != '\n')
+                    printf("%c", ch);
+                path[i] = ch;
+                if (ch == '\n') {
+                    path[i] = '\0';
+	             break;
+                }
+                i++;
+            }
+
+            ret = aspFS_folderJump(&dfs, cur, path);
+            printf("\n folder jump, ret: %d \n", ret);
+            if (ret > 0) {
+                aspFS_showFolder(dfs);				
+                cur = dfs;
+            }
+
+        }
+#endif
 
        goto end;
     }
