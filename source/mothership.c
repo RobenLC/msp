@@ -318,21 +318,27 @@ static int mspFS_folderJump(struct aspDirnFile_s **dir, struct aspDirnFile_s *ro
 
 static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
 {
+    char mlog[256];
     DIR *dp;
     struct aspDirnFile_s *r = 0;
 
-    printf("[R]open directory [%s]\n", dir);
+    sprintf(mlog, "open directory [%s]\n", dir);
+    print_f(mlogPool, "FS", mlog);
+
     if ((dp = opendir(dir)) == NULL) {
-        printf("[R]Can`t open directory [%s]\n", dir);
+        sprintf(mlog, "[R]Can`t open directory [%s]\n", dir);
+        print_f(mlogPool, "FS", mlog);
         return (-1);
     }
-    printf("[R]open directory [%s] done\n", dir);
+    sprintf(mlog, "[R]open directory [%s] done\n", dir);
+    print_f(mlogPool, "FS", mlog);
 
     r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
     if (!r) {
         return (-2);
     }else {
-            printf("[R]alloc root fs done [0x%x]\n", r);
+            sprintf(mlog, "alloc root fs done [0x%x]\n", r);
+            print_f(mlogPool, "FS", mlog);
     }
 
     r->pa = 0;
@@ -343,7 +349,8 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
     r->dfstats = 0;
 
     r->dflen = strlen(dir);
-    printf("[%s] len: %d\n", dir, r->dflen);
+    sprintf(mlog, "[%s] len: %d\n", dir, r->dflen);
+    print_f(mlogPool, "FS", mlog);
     if (r->dflen > 255) r->dflen = 255;
     strncpy(r->dfLFN, dir, r->dflen);
 
@@ -356,17 +363,20 @@ static int aspFS_insertChilds(struct aspDirnFile_s *root)
 {
 #define TAB_DEPTH   4
     int ret = 0;
+    char mlog[256];
     DIR *dp;
     struct dirent *entry;
     struct stat statbuf;
 
     if (!root) {
-        printf("[R]root error 0x%x\n", root);
+        sprintf(mlog, "root error 0x%x\n", root);
+        print_f(mlogPool, "FS", mlog);
         ret = -1;
         goto insertEnd;
     }
 
-    printf("[R]open directory [%s]\n", root->dfLFN);
+    sprintf(mlog, "open directory [%s]\n", root->dfLFN);
+    print_f(mlogPool, "FS", mlog);
 
     if ((dp = opendir(root->dfLFN)) == NULL) {
         printf("Can`t open directory [%s]\n", root->dfLFN);
@@ -374,7 +384,8 @@ static int aspFS_insertChilds(struct aspDirnFile_s *root)
         goto insertEnd;
     }
 
-    printf("[R]open directory [%s] done\n", root->dfLFN);
+    sprintf(mlog, "open directory [%s] done\n", root->dfLFN);
+    print_f(mlogPool, "FS", mlog);
 	
     chdir(root->dfLFN);
     while ((entry = readdir(dp)) != NULL) {
@@ -384,12 +395,14 @@ static int aspFS_insertChilds(struct aspDirnFile_s *root)
                 strcmp(entry->d_name, "..") == 0 ) {
                 continue;	
             }
-            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            sprintf(mlog, "%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            print_f(mlogPool, "FS", mlog);
             //printdir(entry->d_name, TAB_DEPTH+4);
             ret = mspFS_insertChildDir(root, entry->d_name);
             if (ret) goto insertEnd;
         } else {
-            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            sprintf(mlog, "%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            print_f(mlogPool, "FS", mlog);
             ret = mspFS_insertChildFile(root, entry->d_name);
             if (ret) goto insertEnd;
         }
@@ -404,6 +417,7 @@ insertEnd:
 static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
 {
     int ret;
+    char mlog[256];
     DIR *dp;
     struct dirent *entry;
     struct stat statbuf;
@@ -421,7 +435,8 @@ static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
     r->dftype = ASPFS_TYPE_DIR;
 
     r->dflen = strlen(dir);
-    printf("[%d][%s] len: %d \n", r->dftype, dir, r->dflen);
+    sprintf(mlog, "[%d][%s] len: %d \n", r->dftype, dir, r->dflen);
+    print_f(mlogPool, "FS", mlog);
     if (r->dflen > 255) r->dflen = 255;
     strncpy(r->dfLFN, dir, r->dflen+1);
 
@@ -444,6 +459,7 @@ static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
 
 static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str)
 {
+    char mlog[256];
     struct aspDirnFile_s *r = 0;
     struct aspDirnFile_s *brt = 0;
 
@@ -458,7 +474,8 @@ static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str)
     r->dftype = ASPFS_TYPE_FILE;
 
     r->dflen = strlen(str);
-    printf("[%d][%s] len: %d \n", r->dftype, str, r->dflen);
+    sprintf(mlog, "[%d][%s] len: %d \n", r->dftype, str, r->dflen);
+    print_f(mlogPool, "FS", mlog);
     if (r->dflen > 255) r->dflen = 255;
     strncpy(r->dfLFN, str, r->dflen+1);
 
@@ -479,13 +496,14 @@ static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str)
 
 static int mspFS_list(struct aspDirnFile_s *root, int depth)
 {
-
+    char mlog[256];
     struct aspDirnFile_s *fs = 0;
     if (!root) return (-1);
 
     fs = root->ch;
     while (fs) {
-        printf("%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
+        sprintf(mlog, "%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
+        print_f(mlogPool, "FS", mlog);
         if (fs->dftype == ASPFS_TYPE_DIR) {
             mspFS_list(fs, depth + 4);
         }
@@ -497,6 +515,7 @@ static int mspFS_list(struct aspDirnFile_s *root, int depth)
 
 static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path)
 {
+    char mlog[256];
     int ret = 0;
     char split = '/';
     char *ch;
@@ -505,7 +524,8 @@ static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, 
     struct aspDirnFile_s *brt;
 
     ret = strlen(path);
-    printf("path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
+    sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
+    print_f(mlogPool, "FS", mlog);
 
     ch = path;
     while (ret > 0) {
@@ -517,23 +537,27 @@ static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, 
         } else {
             rmp[a][b] = *ch;
             b++;
-            printf("%x ", *ch);
+            sprintf(mlog, "%x ", *ch);
+            print_f(mlogPool, "FS", mlog);
         }
         ch++;
         ret --;
     }
 
-    printf("\n a:%d, b:%d \n", a, b);
+    sprintf(mlog, "\n a:%d, b:%d \n", a, b);
+    print_f(mlogPool, "FS", mlog);
 
     for (b = 0; b <= a; b++) {
-        printf("[%d.%d]%s \n", a, b, rmp[b]);
+        sprintf(mlog, "[%d.%d]%s \n", a, b, rmp[b]);
+        print_f(mlogPool, "FS", mlog);
     }
 
     ret = -1;
     b = 0;
     brt = root->ch;
     while (brt) {
-        printf("comp[%s] [%s] \n", brt->dfLFN, &rmp[b][0]);
+        sprintf(mlog, "comp[%s] [%s] \n", brt->dfLFN, &rmp[b][0]);
+        print_f(mlogPool, "FS", mlog);
 	 if (strcmp("..", &rmp[b][0]) == 0) {
             b++;
             if (brt->dftype != ASPFS_TYPE_ROOT) {
@@ -554,10 +578,12 @@ static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, 
         }
     }
 
-    printf("path len: %d, match num: %d, brt:0x%x \n", a, b, brt);
+    sprintf(mlog, "path len: %d, match num: %d, brt:0x%x \n", a, b, brt);
+    print_f(mlogPool, "FS", mlog);
 
     while((brt) && (b>=0)) {
-        printf("[%d][%s][%s] \n", b, &rmp[b][0], brt->dfLFN);
+        sprintf(mlog, "[%d][%s][%s] \n", b, &rmp[b][0], brt->dfLFN);
+        print_f(mlogPool, "FS", mlog);
         b--;
         brt = brt->pa;
     }
@@ -567,15 +593,18 @@ static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, 
 
 static int mspFS_showFolder(struct aspDirnFile_s *root)
 {
+    char mlog[256];
     struct aspDirnFile_s *brt = 0;
     if (!root) return (-1);
     if (root->dftype == ASPFS_TYPE_FILE) return (-2);
 	
-    printf("%s \n", root->dfLFN);
+    sprintf(mlog, "%s \n", root->dfLFN);
+    print_f(mlogPool, "FS", mlog);
 
     brt = root->ch;
     while (brt) {
-        printf("|-[%c] %s\n", brt->dftype == ASPFS_TYPE_DIR?'D':'F', brt->dfLFN);
+        sprintf(mlog, "|-[%c] %s\n", brt->dftype == ASPFS_TYPE_DIR?'D':'F', brt->dfLFN);
+        print_f(mlogPool, "FS", mlog);
         brt = brt->br;
     }
     return 0;
@@ -583,6 +612,7 @@ static int mspFS_showFolder(struct aspDirnFile_s *root)
 
 static int mspFS_folderJump(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path)
 {
+    char mlog[256];
     int retval = 0;
     struct aspDirnFile_s *brt;
 
@@ -1518,7 +1548,7 @@ static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p)
         } else {
             ring_buf_prod_dual(&mrs->dataRx, seq);
         }
-        //printf("[dback] ch:%c rt:%d idx:%d \n", ch,  len, seq);
+        //sprintf(mlog, "[dback] ch:%c rt:%d idx:%d \n", ch,  len, seq);
         //shmem_dump(addr[0], sz);
         if (ch == 'l') {
             ring_buf_set_last_dual(&mrs->dataRx, sz, seq);
@@ -1534,11 +1564,11 @@ static int shmem_pop_send(struct mainRes_s *mrs, char **addr, int seq, int p)
     char str[128];
     int sz = 0;
     sz = ring_buf_get_dual(&mrs->dataRx, addr, seq);
-    //printf("shmem pop:0x%.8x, seq:%d sz:%d\n", *addr, seq, sz);
+    //sprintf(mlog, "shmem pop:0x%.8x, seq:%d sz:%d\n", *addr, seq, sz);
     if (sz < 0) return (-1);
     sprintf(str, "d%.8xl%.8d\n", *addr, sz);
     print_f(&mrs->plog, "pop", str);
-    //printf("[%s]\n", str);
+    //sprintf(mlog, "[%s]\n", str);
     mrs_ipc_put(mrs, str, 18, p);
 
     return sz;
@@ -1855,6 +1885,7 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
 
 static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct spi_ioc_transfer *tr)
 {
+    char mlog[256];
     int ret;
 
     if (pksz > SPI_MAX_TXSZ) return (-3);
@@ -1867,10 +1898,11 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
     tr->bits_per_word = 8;
 
     ret = ioctl(fd, SPI_IOC_MESSAGE(1), tr);
-    if (ret < 0)
-        printf("can't send spi message\n");
-    
-    //printf("tx/rx len: %d\n", ret);
+    if (ret < 0) {
+        sprintf(mlog, "can't send spi message\n");
+        print_f(mlogPool, "SPI", mlog);
+    }
+    //sprintf(mlog, "tx/rx len: %d\n", ret);
     
     return ret;
 }
@@ -3272,7 +3304,7 @@ static int p0(struct mainRes_s *mrs)
     //if (pmode == 1) {
     //   msync(mrs->dataRx.pp[0], 1024*61440, MS_SYNC);
     //    ret = fwrite(mrs->dataRx.pp[0], 1, 1024*61440, mrs->fs);
-    //    printf("\np0 write file %d size %d/%d \n", mrs->fs, 1024*61440, ret);
+    //    sprintf(mlog, "\np0 write file %d size %d/%d \n", mrs->fs, 1024*61440, ret);
     //}
 
     p0_end(mrs);
