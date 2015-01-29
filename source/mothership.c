@@ -14,6 +14,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+#include <dirent.h>
+#include <sys/stat.h>  
 //main()
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
@@ -60,6 +63,23 @@ typedef enum {
     PSMAX,
 }status_e;
 
+typedef enum {
+    ASPFS_TYPE_ROOT = 0x1,
+    ASPFS_TYPE_DIR,
+    ASPFS_TYPE_FILE,
+} aspFStp_e;
+
+struct aspDirnFile_s{
+    uint32_t   dftype;
+    uint32_t   dfstats;
+    char        dfLFN[256];
+    int           dflen;
+    uint32_t   dfattrib;
+    struct aspDirnFile_s *pa;
+    struct aspDirnFile_s *br;
+    struct aspDirnFile_s *ch;	
+};
+
 struct psdata_s {
     uint32_t result;
     uint32_t ansp0;
@@ -67,17 +87,6 @@ struct psdata_s {
 };
 
 typedef int (*stfunc)(struct psdata_s *data);
-
-struct directnFile_s{
-    uint32_t   dftype;
-    uint32_t   dfstats;
-    char        dfLFN[256];
-    char        dfSFN[16];
-    uint32_t   dfattrib;
-    struct directnFile_s *pa;
-    struct directnFile_s *br;
-    struct directnFile_s *ch;	
-};
 
 struct logPool_s{
     char *pool;
@@ -153,7 +162,7 @@ struct mainRes_s{
     int sid[7];
     int sfm[2];
     int smode;
-    struct directnFile_s root_dirt;
+    struct aspDirnFile_s root_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
     struct pipe_s pipedn[8];
@@ -297,6 +306,318 @@ static int stlaser_02(struct psdata_s *data);
 static int stlaser_03(struct psdata_s *data);
 static int stlaser_04(struct psdata_s *data);
 static int stlaser_05(struct psdata_s *data);
+
+static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir);
+static int mspFS_insertChilds(struct aspDirnFile_s *root);
+static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir);
+static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str);
+static int mspFS_list(struct aspDirnFile_s *root, int depth);
+static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path);
+static int mspFS_showFolder(struct aspDirnFile_s *root);
+static int mspFS_folderJump(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path);
+
+static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
+{
+    DIR *dp;
+    struct aspDirnFile_s *r = 0;
+
+    printf("[R]open directory [%s]\n", dir);
+    if ((dp = opendir(dir)) == NULL) {
+        printf("[R]Can`t open directory [%s]\n", dir);
+        return (-1);
+    }
+    printf("[R]open directory [%s] done\n", dir);
+
+    r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    if (!r) {
+        return (-2);
+    }else {
+            printf("[R]alloc root fs done [0x%x]\n", r);
+    }
+
+    r->pa = 0;
+    r->br = 0;
+    r->ch = 0;
+    r->dftype = ASPFS_TYPE_ROOT;
+    r->dfattrib = 0;
+    r->dfstats = 0;
+
+    r->dflen = strlen(dir);
+    printf("[%s] len: %d\n", dir, r->dflen);
+    if (r->dflen > 255) r->dflen = 255;
+    strncpy(r->dfLFN, dir, r->dflen);
+
+    *root = r;
+
+    return 0;
+}
+
+static int aspFS_insertChilds(struct aspDirnFile_s *root)
+{
+#define TAB_DEPTH   4
+    int ret = 0;
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
+
+    if (!root) {
+        printf("[R]root error 0x%x\n", root);
+        ret = -1;
+        goto insertEnd;
+    }
+
+    printf("[R]open directory [%s]\n", root->dfLFN);
+
+    if ((dp = opendir(root->dfLFN)) == NULL) {
+        printf("Can`t open directory [%s]\n", root->dfLFN);
+        ret = -2;
+        goto insertEnd;
+    }
+
+    printf("[R]open directory [%s] done\n", root->dfLFN);
+	
+    chdir(root->dfLFN);
+    while ((entry = readdir(dp)) != NULL) {
+        lstat(entry->d_name, &statbuf);
+        if (S_ISDIR(statbuf.st_mode)) {
+            if (strcmp(entry->d_name, ".") == 0 || 
+                strcmp(entry->d_name, "..") == 0 ) {
+                continue;	
+            }
+            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            //printdir(entry->d_name, TAB_DEPTH+4);
+            ret = mspFS_insertChildDir(root, entry->d_name);
+            if (ret) goto insertEnd;
+        } else {
+            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            ret = mspFS_insertChildFile(root, entry->d_name);
+            if (ret) goto insertEnd;
+        }
+    }
+    chdir("..");	
+
+insertEnd:
+    closedir(dp);	
+
+    return ret;
+}
+static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
+{
+    int ret;
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
+    struct aspDirnFile_s *r = 0;
+    struct aspDirnFile_s *brt = 0;
+
+    r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    if (!r) return (-2);
+
+    r->pa = parent;
+    r->br = 0;
+    r->ch = 0;
+    r->dfattrib = 0;
+    r->dfstats = 0;
+    r->dftype = ASPFS_TYPE_DIR;
+
+    r->dflen = strlen(dir);
+    printf("[%d][%s] len: %d \n", r->dftype, dir, r->dflen);
+    if (r->dflen > 255) r->dflen = 255;
+    strncpy(r->dfLFN, dir, r->dflen+1);
+
+    if (parent->ch == 0) {
+        parent->ch = r;
+    } else {
+        brt = parent->ch;
+        if (brt->br == 0) {
+            brt->br = r;
+        } else {
+            r->br = brt->br;
+            brt->br = r;
+        }
+    }
+
+    ret = aspFS_insertChilds(r);
+ 
+    return ret;
+}
+
+static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str)
+{
+    struct aspDirnFile_s *r = 0;
+    struct aspDirnFile_s *brt = 0;
+
+    r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    if (!r) return (-2);
+
+    r->pa = parent;
+    r->br = 0;
+    r->ch = 0;
+    r->dfattrib = 0;
+    r->dfstats = 0;
+    r->dftype = ASPFS_TYPE_FILE;
+
+    r->dflen = strlen(str);
+    printf("[%d][%s] len: %d \n", r->dftype, str, r->dflen);
+    if (r->dflen > 255) r->dflen = 255;
+    strncpy(r->dfLFN, str, r->dflen+1);
+
+    if (parent->ch == 0) {
+        parent->ch = r;
+    } else {
+        brt = parent->ch;
+        if (brt->br == 0) {
+            brt->br = r;
+        } else {
+            r->br = brt->br;
+            brt->br = r;
+        }
+    }
+ 
+    return 0;
+}
+
+static int mspFS_list(struct aspDirnFile_s *root, int depth)
+{
+
+    struct aspDirnFile_s *fs = 0;
+    if (!root) return (-1);
+
+    fs = root->ch;
+    while (fs) {
+        printf("%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
+        if (fs->dftype == ASPFS_TYPE_DIR) {
+            mspFS_list(fs, depth + 4);
+        }
+        fs = fs->br;
+    }
+
+    return 0;
+}
+
+static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path)
+{
+    int ret = 0;
+    char split = '/';
+    char *ch;
+    char rmp[16][256];
+    int a = 0, b = 0;
+    struct aspDirnFile_s *brt;
+
+    ret = strlen(path);
+    printf("path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
+
+    ch = path;
+    while (ret > 0) {
+        if (*ch == split) {
+            if (b > 0) {
+                b = 0;
+                a++;
+            }
+        } else {
+            rmp[a][b] = *ch;
+            b++;
+            printf("%x ", *ch);
+        }
+        ch++;
+        ret --;
+    }
+
+    printf("\n a:%d, b:%d \n", a, b);
+
+    for (b = 0; b <= a; b++) {
+        printf("[%d.%d]%s \n", a, b, rmp[b]);
+    }
+
+    ret = -1;
+    b = 0;
+    brt = root->ch;
+    while (brt) {
+        printf("comp[%s] [%s] \n", brt->dfLFN, &rmp[b][0]);
+	 if (strcmp("..", &rmp[b][0]) == 0) {
+            b++;
+            if (brt->dftype != ASPFS_TYPE_ROOT) {
+                brt = brt->pa;
+            }
+	 } else if (strcmp(".", &rmp[b][0]) == 0) {
+            b++;
+        } else if (strcmp(brt->dfLFN, &rmp[b][0]) == 0) {
+            b++;
+            if (b > a) {
+               *dir = brt;
+                ret = 0;
+                break;
+            }
+            brt = brt->ch;
+        } else {
+            brt = brt->br;
+        }
+    }
+
+    printf("path len: %d, match num: %d, brt:0x%x \n", a, b, brt);
+
+    while((brt) && (b>=0)) {
+        printf("[%d][%s][%s] \n", b, &rmp[b][0], brt->dfLFN);
+        b--;
+        brt = brt->pa;
+    }
+
+    return ret;
+}
+
+static int mspFS_showFolder(struct aspDirnFile_s *root)
+{
+    struct aspDirnFile_s *brt = 0;
+    if (!root) return (-1);
+    if (root->dftype == ASPFS_TYPE_FILE) return (-2);
+	
+    printf("%s \n", root->dfLFN);
+
+    brt = root->ch;
+    while (brt) {
+        printf("|-[%c] %s\n", brt->dftype == ASPFS_TYPE_DIR?'D':'F', brt->dfLFN);
+        brt = brt->br;
+    }
+    return 0;
+}
+
+static int mspFS_folderJump(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path)
+{
+    int retval = 0;
+    struct aspDirnFile_s *brt;
+
+    if ((!path) || (!root) || (!dir)) return (-1);
+    if (root->dftype == ASPFS_TYPE_FILE) return (-2);
+
+    if (strcmp("..", path) == 0) {
+        if (root->dftype == ASPFS_TYPE_ROOT) {
+            *dir = root;
+            retval = 1;
+        } else {
+            *dir = root->pa;
+            retval = 2;
+        }
+    } else if (strcmp(".", path) == 0) {
+        *dir = root;
+        retval = 3;
+    } else {
+        brt = root->ch;
+
+        while (brt) {
+            if ((brt->dftype == ASPFS_TYPE_DIR) && 
+                 (strcmp(brt->dfLFN, path) == 0)) {
+                *dir = brt;
+                retval = 4;
+                break;
+            }
+            brt = brt->br;
+        }
+
+        if (!brt) retval = (-3);
+    }
+
+    return retval;
+}
 
 static int error_handle(char *log, int line)
 {
@@ -3849,12 +4170,12 @@ static int p6(struct procRes_s *rs)
         sendbuf[3] = 'D';
         sendbuf[4] = '[';
 
-        memcpy(&sendbuf[5], recvbuf, n+4);
+        memcpy(&sendbuf[5], recvbuf, n);
 
-        sendbuf[5+n+4+1] = ']';
-        sendbuf[5+n+4+2] = '\n';
+        sendbuf[5+n+1] = ']';
+        sendbuf[5+n+2] = '\n';
 
-        sprintf(rs->logs, "socket send %d char [%s] from %d\n", 5+n+4+3, sendbuf, rs->psocket_at->connfd);
+        sprintf(rs->logs, "socket send %d char [%s] from %d\n", 5+n+3, sendbuf, rs->psocket_at->connfd);
         print_f(rs->plogs, "P6", rs->logs);
 
         num = 10;
