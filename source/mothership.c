@@ -320,7 +320,7 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
 {
     char mlog[256];
     DIR *dp;
-    struct aspDirnFile_s *r = 0;
+    struct aspDirnFile_s *r = 0, *c = 0;
 
     sprintf(mlog, "open directory [%s]\n", dir);
     print_f(mlogPool, "FS", mlog);
@@ -341,9 +341,26 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
             print_f(mlogPool, "FS", mlog);
     }
 
+    c = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    if (!c) {
+        return (-3);
+    }else {
+        sprintf(mlog, "alloc root fs first child done [0x%x]\n", c);
+        print_f(mlogPool, "FS", mlog);
+    }
+
+    c->pa = r;
+    c->br = 0;
+    c->ch = 0;
+    c->dftype = ASPFS_TYPE_DIR;
+    c->dfattrib = 0;
+    c->dfstats = 0;
+    c->dflen = 2;
+    strcpy(c->dfLFN, "..");
+
     r->pa = 0;
     r->br = 0;
-    r->ch = 0;
+    r->ch = c;
     r->dftype = ASPFS_TYPE_ROOT;
     r->dfattrib = 0;
     r->dfstats = 0;
@@ -421,15 +438,32 @@ static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
     DIR *dp;
     struct dirent *entry;
     struct stat statbuf;
-    struct aspDirnFile_s *r = 0;
+    struct aspDirnFile_s *r = 0, *c = 0;
     struct aspDirnFile_s *brt = 0;
 
     r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
     if (!r) return (-2);
 
+    c = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    if (!c) {
+        return (-3);
+    }else {
+        sprintf(mlog, "alloc root fs first child done [0x%x]\n", c);
+        print_f(mlogPool, "FS", mlog);
+    }
+
+    c->pa = r;
+    c->br = 0;
+    c->ch = 0;
+    c->dftype = ASPFS_TYPE_DIR;
+    c->dfattrib = 0;
+    c->dfstats = 0;
+    c->dflen = 2;
+    strcpy(c->dfLFN, "..");
+
     r->pa = parent;
     r->br = 0;
-    r->ch = 0;
+    r->ch = c;
     r->dfattrib = 0;
     r->dfstats = 0;
     r->dftype = ASPFS_TYPE_DIR;
@@ -4143,10 +4177,14 @@ static int atFindIdx(char *str, char ch)
 static int p6(struct procRes_s *rs)
 {
     char *recvbuf, *sendbuf;
-    int ret, n, num;
+    int ret, n, num, hd, be, ed, ln;
 	
-    struct aspDirnFile_s *root = 0, *fscur = 0;
-    char dir[256] = "/mnt/mmc2";
+    struct aspDirnFile_s *root = 0, *fscur = 0, *nxtf = 0;
+    struct aspDirnFile_s *brt;
+
+    //char dir[256] = "/mnt/mmc2";
+    char dir[256] = "/root";
+    char folder[256];
 
     sprintf(rs->logs, "p6\n");
     print_f(rs->plogs, "P6", rs->logs);
@@ -4224,54 +4262,89 @@ static int p6(struct procRes_s *rs)
         if (rs->psocket_at->connfd < 0) {
             sprintf(rs->logs, "P6 get connect failed ret:%d", rs->psocket_at->connfd);
             error_handle(rs->logs, 3812);
-            continue;
+            goto socketEnd;
         }
 
         memset(recvbuf, 0x0, 1024);
         memset(sendbuf, 0x0, 1024);
 		
         n = read(rs->psocket_at->connfd, recvbuf, 1024);
-        ret = atFindIdx(recvbuf, '!');
-        n = strlen(&recvbuf[ret]);
-        if (recvbuf[ret+n-1] == '\n')         recvbuf[ret+n-1] = '\0';
-        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, &recvbuf[ret], rs->psocket_at->connfd);
+        if (n <= 0) goto socketEnd;
+        hd = atFindIdx(recvbuf, '!');
+        if (hd < 0) goto socketEnd;
+        be = atFindIdx(&recvbuf[hd], '[');
+        if (be < 0) goto socketEnd;
+        ed = atFindIdx(&recvbuf[hd], ']');
+        if (ed < 0) goto socketEnd;
+        ln = atFindIdx(&recvbuf[hd], '\0');
+
+        n = strlen(&recvbuf[hd]);
+        if (n <= 0) {
+            goto socketEnd;
+        }
+
+        sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]\n", n, &recvbuf[hd], hd, be, ed, ln);
         print_f(rs->plogs, "P6", rs->logs);
+
+        sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]\n", recvbuf[hd+1], recvbuf[be-1]);
+        print_f(rs->plogs, "P6", rs->logs);
+
+        n = ed - be - 1;
+        if ((n < 255) && (n > 0)) {
+            memcpy(folder, &recvbuf[be+1], n);
+            folder[n] = '\0';
+        } else {
+            goto socketEnd;
+        }
+
+        sprintf(rs->logs, "jump folder:[%s]\n", folder);
+        print_f(rs->plogs, "P6", rs->logs);
+
+        nxtf = 0;
+        ret = mspFS_folderJump(&nxtf, fscur, folder);
+        if (ret < 0) {
+            sprintf(rs->logs, "jump folder:[%s] failed, ret:%d\n", folder, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            nxtf = fscur;
+        }
+
+        if (nxtf) {
+            sprintf(rs->logs, "jump folder:[%s] done, ret:%d, get next folder: 0x%x\n", folder, ret, nxtf);
+            print_f(rs->plogs, "P6", rs->logs);
+            fscur = nxtf;
+        } else {
+            sprintf(rs->logs, "jump folder:[%s] failed, ret:%d, get next folder == 0\n", folder, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            goto socketEnd;
+        }
 
         sendbuf[0] = '!';
         sendbuf[1] = 0x11;
         sendbuf[2] = '+';
         sendbuf[3] = 0x01;
         sendbuf[4] = '[';
+        brt = fscur->ch;
+        while (brt) {
+            n = strlen(brt->dfLFN);
+            memcpy(&sendbuf[5], brt->dfLFN, n);
 
-        n = strlen(&recvbuf[ret+5]) - 1;
-        memcpy(&sendbuf[5], &recvbuf[ret+5], n);
-        sendbuf[5] = 0x30;
-        sendbuf[5+n+1] = ']';
-        sendbuf[5+n+2] = '\n';
-        sendbuf[5+n+3] = '\0';
-
-        //sprintf(rs->logs, "socket send %d char [%s] from %d\n", 5+n+3, sendbuf, rs->psocket_at->connfd);
-        //print_f(rs->plogs, "P6", rs->logs);
-
-        num = 10;
-        while (num > 0) {
-            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+4+3);
-            sprintf(rs->logs, "isocket send %d char [%s] from %d\n", 5+n+3, sendbuf, rs->psocket_at->connfd);
-            print_f(rs->plogs, "P6", rs->logs);
-
-            if (num % 3) {
+            if (brt->dftype == ASPFS_TYPE_FILE) {
                 sendbuf[3] = 'F';
             } else {
                 sendbuf[3] = 'D';
             }
-            sendbuf[1] += 1;
-            sendbuf[5] += 1;
-            num--;
-	 }
 
-        sprintf(rs->logs, "socket send %d char \n", ret);
-        print_f(rs->plogs, "P6", rs->logs);
+            sendbuf[5+n] = ']';
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
 
+            brt = brt->br;
+        }
+
+        socketEnd:
         close(rs->psocket_at->connfd);
         rs->psocket_at->connfd = 0;
     }
