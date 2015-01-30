@@ -326,11 +326,11 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
     print_f(mlogPool, "FS", mlog);
 
     if ((dp = opendir(dir)) == NULL) {
-        sprintf(mlog, "[R]Can`t open directory [%s]\n", dir);
+        sprintf(mlog, "Can`t open directory [%s]\n", dir);
         print_f(mlogPool, "FS", mlog);
         return (-1);
     }
-    sprintf(mlog, "[R]open directory [%s] done\n", dir);
+    sprintf(mlog, "open directory [%s] done\n", dir);
     print_f(mlogPool, "FS", mlog);
 
     r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
@@ -359,7 +359,7 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
     return 0;
 }
 
-static int aspFS_insertChilds(struct aspDirnFile_s *root)
+static int mspFS_insertChilds(struct aspDirnFile_s *root)
 {
 #define TAB_DEPTH   4
     int ret = 0;
@@ -395,14 +395,14 @@ static int aspFS_insertChilds(struct aspDirnFile_s *root)
                 strcmp(entry->d_name, "..") == 0 ) {
                 continue;	
             }
-            sprintf(mlog, "%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
-            print_f(mlogPool, "FS", mlog);
+            //sprintf(mlog, "%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            //print_f(mlogPool, "FS", mlog);
             //printdir(entry->d_name, TAB_DEPTH+4);
             ret = mspFS_insertChildDir(root, entry->d_name);
             if (ret) goto insertEnd;
         } else {
-            sprintf(mlog, "%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
-            print_f(mlogPool, "FS", mlog);
+            //sprintf(mlog, "%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            //print_f(mlogPool, "FS", mlog);
             ret = mspFS_insertChildFile(root, entry->d_name);
             if (ret) goto insertEnd;
         }
@@ -435,8 +435,8 @@ static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
     r->dftype = ASPFS_TYPE_DIR;
 
     r->dflen = strlen(dir);
-    sprintf(mlog, "[%d][%s] len: %d \n", r->dftype, dir, r->dflen);
-    print_f(mlogPool, "FS", mlog);
+    //sprintf(mlog, "[%d][%s] len: %d \n", r->dftype, dir, r->dflen);
+    //print_f(mlogPool, "FS", mlog);
     if (r->dflen > 255) r->dflen = 255;
     strncpy(r->dfLFN, dir, r->dflen+1);
 
@@ -452,7 +452,7 @@ static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
         }
     }
 
-    ret = aspFS_insertChilds(r);
+    ret = mspFS_insertChilds(r);
  
     return ret;
 }
@@ -474,8 +474,8 @@ static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str)
     r->dftype = ASPFS_TYPE_FILE;
 
     r->dflen = strlen(str);
-    sprintf(mlog, "[%d][%s] len: %d \n", r->dftype, str, r->dflen);
-    print_f(mlogPool, "FS", mlog);
+    //sprintf(mlog, "[%d][%s] len: %d \n", r->dftype, str, r->dflen);
+    //print_f(mlogPool, "FS", mlog);
     if (r->dflen > 255) r->dflen = 255;
     strncpy(r->dfLFN, str, r->dflen+1);
 
@@ -4123,15 +4123,54 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     return 0;
 }
 
+static int atFindIdx(char *str, char ch)
+{
+    int i, len;
+    if (!str) return (-1);
+    len = strlen(str);
+    if (len > 1024) return (-2);
+
+    i = 0;
+    while (i < len) {
+        if (*str == ch) {
+            return i;
+        }
+        str++;
+        i++;
+    }
+    return (-3);
+}
 static int p6(struct procRes_s *rs)
 {
     char *recvbuf, *sendbuf;
     int ret, n, num;
+	
+    struct aspDirnFile_s *root = 0, *fscur = 0;
+    char dir[256] = "/mnt/mmc2";
 
     sprintf(rs->logs, "p6\n");
     print_f(rs->plogs, "P6", rs->logs);
 
     p6_init(rs);
+
+    ret = mspFS_createRoot(&root, dir);
+    if (!ret) {
+        sprintf(rs->logs, "FS root [%s] create done, root:0x%x\n", dir, root);
+        print_f(rs->plogs, "P6", rs->logs);
+        ret = mspFS_insertChilds(root);
+        if (!ret) {
+            sprintf(rs->logs, "FS insert ch done\n");
+            print_f(rs->plogs, "P6", rs->logs);
+            mspFS_showFolder(root);
+            fscur = root;
+        } else {
+            sprintf(rs->logs, "FS insert ch failed\n");
+            print_f(rs->plogs, "P6", rs->logs);
+        }
+    } else {
+        sprintf(rs->logs, "FS root [%s] create failed ret:%d\n", ret);
+        print_f(rs->plogs, "P6", rs->logs);
+    }
 
     recvbuf = malloc(1024);
     if (!recvbuf) {
@@ -4192,32 +4231,41 @@ static int p6(struct procRes_s *rs)
         memset(sendbuf, 0x0, 1024);
 		
         n = read(rs->psocket_at->connfd, recvbuf, 1024);
-        if (recvbuf[n-1] == '\n')         recvbuf[n-1] = '\0';
-        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket_at->connfd);
+        ret = atFindIdx(recvbuf, '!');
+        n = strlen(&recvbuf[ret]);
+        if (recvbuf[ret+n-1] == '\n')         recvbuf[ret+n-1] = '\0';
+        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, &recvbuf[ret], rs->psocket_at->connfd);
         print_f(rs->plogs, "P6", rs->logs);
 
         sendbuf[0] = '!';
-        sendbuf[1] = '1';
+        sendbuf[1] = 0x11;
         sendbuf[2] = '+';
-        sendbuf[3] = 'D';
+        sendbuf[3] = 0x01;
         sendbuf[4] = '[';
 
-        memcpy(&sendbuf[5], recvbuf, n);
-
+        n = strlen(&recvbuf[ret+5]) - 1;
+        memcpy(&sendbuf[5], &recvbuf[ret+5], n);
+        sendbuf[5] = 0x30;
         sendbuf[5+n+1] = ']';
         sendbuf[5+n+2] = '\n';
+        sendbuf[5+n+3] = '\0';
 
-        sprintf(rs->logs, "socket send %d char [%s] from %d\n", 5+n+3, sendbuf, rs->psocket_at->connfd);
-        print_f(rs->plogs, "P6", rs->logs);
+        //sprintf(rs->logs, "socket send %d char [%s] from %d\n", 5+n+3, sendbuf, rs->psocket_at->connfd);
+        //print_f(rs->plogs, "P6", rs->logs);
 
         num = 10;
         while (num > 0) {
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+4+3);
+            sprintf(rs->logs, "isocket send %d char [%s] from %d\n", 5+n+3, sendbuf, rs->psocket_at->connfd);
+            print_f(rs->plogs, "P6", rs->logs);
+
             if (num % 3) {
                 sendbuf[3] = 'F';
             } else {
                 sendbuf[3] = 'D';
             }
+            sendbuf[1] += 1;
+            sendbuf[5] += 1;
             num--;
 	 }
 
