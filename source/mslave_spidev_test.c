@@ -1299,14 +1299,15 @@ redo:
                          tlast = 0 - test_time_diff(&tspi[0], &tspi[1], 1000);
                      }
                      tcost = test_time_diff(&tspi[0], &tdiff[0], 1000);
-
-                    printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
-
+					 
 			if (ret == 0) {
 				continue;
 			}
 
-                    msync(dstBuff, ret, MS_SYNC);
+                    printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
+
+                    if (ret > 0)
+                        msync(dstBuff, ret, MS_SYNC);
         
                     dstBuff += ret + chunksize;
                     if (ret < 0) {
@@ -1403,12 +1404,15 @@ redo:
                 }
                 tcost = test_time_diff(&tspi[1], &tdiff[1], 1000);
 
-                printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
-		if (ret == 0) {
-			continue;
-		}
 
-                msync(dstBuff, ret, MS_SYNC);
+                if (ret == 0) {
+			continue;
+		  }
+
+                printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
+
+                if (ret > 0)
+                    msync(dstBuff, ret, MS_SYNC);
         
                 dstBuff += ret + chunksize;
                 if (ret < 0) {

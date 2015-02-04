@@ -2973,10 +2973,10 @@ static char spi0[] = "/dev/spidev32765.0";
 // initial share parameter
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 1024*61440, 61440);
+    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 2048*61440, 61440);
     if (!pmrs->dataRx.pp) goto end;
     pmrs->dataRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataRx.totsz = 1024*61440;
+    pmrs->dataRx.totsz = 2048*61440;
     pmrs->dataRx.chksz = 61440;
     pmrs->dataRx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataRx.totsz, pmrs->dataRx.pp);
