@@ -3585,9 +3585,9 @@ static int p2(struct procRes_s *rs)
                     clock_gettime(CLOCK_REALTIME, &tnow);
 
 			if (opsz == 0) {
-	                    sprintf(rs->logs, "opsz:%d\n", opsz);
-       	             print_f(rs->plogs, "P2", rs->logs);	
-                           usleep(1000);
+	                    //sprintf(rs->logs, "opsz:%d\n", opsz);
+       	             //print_f(rs->plogs, "P2", rs->logs);	
+                           //usleep(1000);
 				continue;
 			}
 
@@ -3756,10 +3756,10 @@ static int p3(struct procRes_s *rs)
 
                     clock_gettime(CLOCK_REALTIME, &tnow);
 
-			if (opsz < 0) {
-	                    sprintf(rs->logs, "opsz:%d\n", opsz);
-       	             print_f(rs->plogs, "P3", rs->logs);	
-                           usleep(1000);
+			if (opsz == 0) {
+	                    //sprintf(rs->logs, "opsz:%d\n", opsz);
+       	             //print_f(rs->plogs, "P3", rs->logs);	
+                           //usleep(1000);
 				continue;
 			}
 
@@ -3777,10 +3777,10 @@ static int p3(struct procRes_s *rs)
                         print_f(rs->plogs, "P3", rs->logs);
                     }
                     //shmem_dump(addr, 32);
-                    msync(addr, len, MS_SYNC);
+                    //msync(addr, len, MS_SYNC);
                     ring_buf_prod_dual(rs->pdataRx, pi);
 
-                    if (opsz != len) break;
+                    if (opsz < 0) break;
                     rs_ipc_put(rs, "p", 1);
                     pi += 2;
                 }
@@ -3796,6 +3796,8 @@ static int p3(struct procRes_s *rs)
     p3_end(rs);
     return 0;
 }
+
+#define MSP_P4_SAVE_DAT (0)
 
 static int p4(struct procRes_s *rs)
 {
@@ -3900,7 +3902,7 @@ static int p4(struct procRes_s *rs)
                     break;
                 }
             } else if (cmode == 1) {
-            
+#if MSP_P4_SAVE_DAT
                 ret = file_save_get(&rs->fdat_s, "/mnt/mmc2/tx/%d.dat");
                 if (ret) {
                     sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
@@ -3910,7 +3912,7 @@ static int p4(struct procRes_s *rs)
                     sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s);
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
-
+#endif
                 while (1) {
                     len = ring_buf_cons_dual(rs->pdataRx, &addr, pi);
                     if (len >= 0) {
@@ -3922,12 +3924,18 @@ static int p4(struct procRes_s *rs)
                         sprintf(rs->logs, " %d -%d \n", len, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
                         if (len != 0) {
+#if 1 /* debug */
                             opsz = write(rs->psocket_t->connfd, addr, len);
+#else
+                            opsz = len;
+#endif
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
                             //sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_t->connfd, opsz, pi);
                             //print_f(rs->plogs, "P4", rs->logs);         
+#if MSP_P4_SAVE_DAT
                             fwrite(addr, 1, len, rs->fdat_s);
                             fflush(rs->fdat_s);
+#endif
                         }
                     } else {
                         sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, opsz, pi);
@@ -3951,8 +3959,9 @@ static int p4(struct procRes_s *rs)
                 rs_ipc_put(rs, "D", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
                 print_f(rs->plogs, "P4", rs->logs);         
-
+#if MSP_P4_SAVE_DAT
                 fclose(rs->fdat_s);
+#endif
                 break;
             }
             else if (cmode == 2) {
@@ -4613,6 +4622,8 @@ static char spi0[] = "/dev/spidev32765.0";
     return 0;
 }
 
+#define MSP_SAVE_LOG (0)
+
 static int print_f(struct logPool_s *plog, char *head, char *str)
 {
     int len;
@@ -4626,6 +4637,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 
     printf("%s",ch);
 
+#if MSP_SAVE_LOG
     if (!plog) return (-2);
 	
     msync(plog, sizeof(struct logPool_s), MS_SYNC);
@@ -4634,7 +4646,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
     memcpy(plog->cur, ch, strlen(ch));
     plog->cur += len;
     plog->len += len;
-
+#endif
     //if (!mlog) return (-4);
     //fwrite(ch, 1, strlen(ch), mlog);
     //fflush(mlog);
@@ -4645,6 +4657,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 
 static int printf_flush(struct logPool_s *plog, FILE *f) 
 {
+#if MSP_SAVE_LOG
     msync(plog, sizeof(struct logPool_s), MS_SYNC);
     if (plog->cur == plog->pool) return (-1);
     if (plog->len > plog->max) return (-2);
@@ -4655,7 +4668,7 @@ static int printf_flush(struct logPool_s *plog, FILE *f)
 
     plog->cur = plog->pool;
     plog->len = 0;
-
+#endif
     return 0;
 }
 
