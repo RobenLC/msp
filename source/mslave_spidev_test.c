@@ -578,10 +578,12 @@ static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz
     }
     
     ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
-    if (ret < 0)
-        pabort("can't send spi message");
-    
-    //printf("tx/rx len: %d\n", ret);
+    printf("tx/rx len: %d\n", ret);
+    if (ret < 0) {
+        //pabort("can't send spi message");
+        ret = 0 - ret;
+    }
+
     
     free(tr);
     return ret;
