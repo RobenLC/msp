@@ -578,12 +578,14 @@ static int tx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz
     }
     
     ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
-    printf("tx/rx len: %d\n", ret);
+    //printf("tx/rx len: %d\n", ret);
+
+/*
     if (ret < 0) {
         //pabort("can't send spi message");
         ret = 0 - ret;
     }
-
+*/
     
     free(tr);
     return ret;
@@ -1047,7 +1049,6 @@ static char path[256];
 	printf("done.\n");
 
 	goto end;
-
     }
 
     if (sel == 26){ /* list the files in root ex[26]*/
@@ -1308,10 +1309,11 @@ redo:
 
                     printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
 
-                    if (ret > 0)
+                    if (ret > 0) {
                         msync(dstBuff, ret, MS_SYNC);
-        
-                    dstBuff += ret + chunksize;
+                        dstBuff += ret + chunksize;
+                    }
+
                     if (ret < 0) {
 
 			   ret = 0 - ret;
@@ -1413,10 +1415,10 @@ redo:
 
                 printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
 
-                if (ret > 0)
+                if (ret > 0) {
                     msync(dstBuff, ret, MS_SYNC);
-        
-                dstBuff += ret + chunksize;
+                    dstBuff += ret + chunksize;
+                }
                 if (ret < 0) {
 
 			ret = 0 - ret;
@@ -1774,6 +1776,9 @@ redo:
             }
 			
             send = tx_data(fm[0], rx_buff[0], src, 1, txsz, 1024*1024);
+            if (send < 0) {
+                send = 0 - send;
+            }
             acusz += send;
             printf("[%d][%d] tx %d - %d\n", 0, pktcnt, send, acusz);
             if (send != txsz) {
@@ -1798,6 +1803,9 @@ redo:
             }
 			
             send = tx_data(fm[1], rx_buff[1], src, 1, txsz, 1024*1024);
+            if (send < 0) {
+                send = 0 - send;
+            }
             acusz += send;
             printf("[%d][%d] tx %d - %d\n", 1, pktcnt, send, acusz);
             if (send != txsz) {
@@ -1816,8 +1824,12 @@ redo:
     }
 
     if (sel == 19){ /* command mode test ex[19 1 path spi]*/
+#define USE_SHARE_MEM 0
+#define SPI_THREAD_EN 0
+#define SEND_FILE 0
+
         FILE *f;
-        int fsize, acusz, send, txsz, pktcnt;
+        int fsize, acusz, send, txsz, pktcnt, len=0;
         char *src, *dstBuff, *dstmp;
         char *save, *svBuff, *svtmp;	
         if (argc > 3) {
@@ -1826,13 +1838,22 @@ redo:
             printf("Error!! no input file \n");
         }
         if (!f) printf("Error!! file open failed\n");
-
+#if USE_SHARE_MEM 
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
 	 memset(dstBuff, 0x95, TSIZE);
         dstmp = dstBuff;
+#else
+        dstBuff = rx_buff[0];
+	 memset(dstBuff, 0x95, buffsize);
+        dstmp = dstBuff;
+#endif
 
+#if SEND_FILE
         fsize = fread(dstBuff, 1, TSIZE, f);
         printf("open [%s] size: %d \n", argv[3], fsize);
+#else
+        printf("allcate buff [0x%x] size: %d \n", dstBuff, TSIZE);
+#endif
 
 	mode &= ~SPI_MODE_3;
 	switch(arg0) {
@@ -1864,12 +1885,8 @@ redo:
         // disable data mode
 
         bitset = 1;
-        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-        printf("Set slve ready: %d\n", bitset);
-
-        bitset = 1;
-        ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-        printf("Set slve ready: %d\n", bitset);
+        ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi%d slve ready: %d\n", arg2, bitset);
 
         bitset = 0;
         ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
@@ -1887,44 +1904,86 @@ redo:
         ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
         printf("Set spi%d RDY: %d\n", arg2, bitset);
 
-/*
-        bitset = 1;
-        ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WR_CS_PIN
-        printf("Set CS: %d\n", bitset);
-
+#if SPI_THREAD_EN
+        printf("Start spi%d spidev thread, ret: 0x%x\n", 1, ret);
         bitset = 0;
-        ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_RD_CS_PIN
-        printf("Get CS: %d\n", bitset);
-*/
+        ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+#endif
+
         src = dstBuff;
         acusz = 0; pktcnt = 0;
-        while (acusz < fsize) {
+//        while (acusz < fsize) {
+        while (1) {
+/*
             if ((fsize - acusz) > 61440) {
                 txsz = 61440;
             } else {
                 txsz = fsize - acusz;
             }
-			
-            send = tx_data(fm[arg2], rx_buff[0], src, 1, txsz, 1024*1024);
-            acusz += send;
-            printf("[%d] tx %d - %d\n", pktcnt, send, acusz);
-            if (send != txsz) {
-                printf("Error! spi data tx did not complete %d/%d \n", send, txsz);
+*/
+            txsz = 61440;
+#if SPI_THREAD_EN
+            send = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 15, __u32), src);  //SPI_IOC_PROBE_THREAD
+#else
+            send = tx_data(fm[arg2], src, src, 1, txsz, 1024*1024);
+#endif
+
+            if (send == 0) {
+                continue;
+            } else if (send < 0) {
+                if (send == -1) {
+                    len = 0;
+                } else {
+                    len = 0 - send;
+                }
+            } else {
+                len = send;
+            }
+
+            acusz += len;
+
+            printf("[%d] tx %d/%d - %d\n", pktcnt, send, len, acusz);
+#if USE_SHARE_MEM
+#else
+            if (len > 0) {
+                msync(src, len, MS_SYNC);
+                ret = fwrite(src, 1, len, fp);
+                if (ret != len) {
+                    printf("[%s]write file error, ret:%d len:%d\n", path, ret, len);
+                } else {
+                    //printf("[%s]write file done, ret:%d len:%d\n", path, ret, len);
+                }
+            }
+#endif
+            if (send < 0) {
+                printf("spi%d data tx complete %d/%d \n", arg2, send, txsz);
                 break;
             }
-            src += send;
-
+#if USE_SHARE_MEM
+            src += len;
+#endif
             pktcnt++;
         }
-/*
+#if SPI_THREAD_EN
         bitset = 0;
-        ret = ioctl(fm[(arg2+1)%2], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_WT_CS_PIN
-        printf("Set CS: %d\n", bitset);
-*/
-
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+        printf("Stop spi%d spidev thread, ret: %d\n", 0, ret);
+#endif
         bitset = 1;
         ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
         printf("Get spi%d RDY: %d\n", arg2, bitset);
+
+#if USE_SHARE_MEM
+        msync(dstBuff, acusz, MS_SYNC);
+        ret = fwrite(dstBuff, 1, acusz, fp);
+        if (ret != acusz) {
+             printf("[%s]write file error, ret:%d len:%d\n", path, ret, acusz);
+        } else {
+            printf("[%s]file saved, size:%d\n", path, acusz);
+        }
+#else
+        printf("[%s]file saved, size:%d\n", path, acusz);
+#endif
 
         goto end;
     }
@@ -2384,6 +2443,9 @@ redo:
         
                     clock_gettime(CLOCK_REALTIME, &tspi[0]);   
                     ret = tx_data(fm[0], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
+                    if (ret < 0) {
+                        ret = 0 - ret;
+                    }
                     clock_gettime(CLOCK_REALTIME, &tdiff[0]);    
                      msync(tspi, sizeof(struct timespec)*2, MS_SYNC);
                      tlast = test_time_diff(&tspi[1], &tspi[0], 1000);
@@ -2480,6 +2542,9 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
             while(1) {
                 clock_gettime(CLOCK_REALTIME, &tspi[1]);            
                 ret = tx_data(fm[1], dstBuff, tx_buff[0], 1, chunksize, 1024*1024);
+                if (ret < 0) {
+                    ret = 0 - ret;
+                }
                 clock_gettime(CLOCK_REALTIME, &tdiff[1]);   
                 msync(tspi, sizeof(struct timespec) * 2, MS_SYNC);
                 tlast = test_time_diff(&tspi[0], &tspi[1], 1000);
