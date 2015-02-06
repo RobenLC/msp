@@ -1380,11 +1380,11 @@ static char spi1[] = "/dev/spidev32766.0";
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("spi1 Set RDY pin: %d\n", bitset);
 
-        bitset = 1;
+        bitset = 0;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("spi0 Set data mode: %d\n", bitset);
 		
-        bitset = 1;
+        bitset = 0;
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("spi1 Set data mode: %d\n", bitset);
         
