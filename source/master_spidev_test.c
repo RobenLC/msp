@@ -454,7 +454,7 @@ static char spi1[] = "/dev/spidev32766.0";
             printf(" rx buff alloc success!!\n");
         }
 
-	if (((sel == 9) ||(sel == 11) || (sel == 13)) && (argc > 3))
+	if (((sel == 11) || (sel == 13)) && (argc > 3))
 		strcpy(data_path, argv[3]);
         /* open target file which will be transmitted */
         printf(" open file %s \n", data_path);
@@ -971,6 +971,8 @@ static char spi1[] = "/dev/spidev32766.0";
     if (sel == 13) { /* continuous command mode [13 20 path pktsize spi] ex: 13 20 ./01.mp3 512 1*/
 #define TSIZE (128*1024*1024)
 #define PKTSZ  61440
+#define SAVE_FILE 0
+#define USE_SHARE_MEM 1
         int chunksize, acusz;
         chunksize = PKTSZ;
 
@@ -978,6 +980,8 @@ static char spi1[] = "/dev/spidev32766.0";
         mode |= SPI_MODE_1;
 
         arg3 = arg3 % 2;
+
+        printf("spi select: [%d] \n", arg3);
 
         ret = ioctl(fm[arg3], SPI_IOC_WR_MODE, &mode);    //?¼Ò¦¡ 
         if (ret == -1) 
@@ -987,7 +991,7 @@ static char spi1[] = "/dev/spidev32766.0";
         if (ret == -1) 
             pabort("can't get spi mode"); 
 	
-	printf("spi%d mode:0x%x \n", arg1, mode);
+        printf("spi%d mode:0x%x \n", arg3, mode);
 
         if (arg0)
             speed = arg0 * 1000000;
@@ -1038,14 +1042,24 @@ static char spi1[] = "/dev/spidev32766.0";
         times(&time);
         printf("%llu %llu %llu %llu \n", time.tms_utime, time.tms_stime, time.tms_cutime, time.tms_cstime);
         
-        
+#if USE_SHARE_MEM
         srcBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
         srctmp = srcBuff;
-        
+        memset(srcBuff, 0xf0, TSIZE);
+        msync(srcBuff, TSIZE, MS_SYNC);
+#else
+        srcBuff = rx_buff;
+        srctmp = srcBuff;
+        memset(srcBuff, 0xf0, buffsize);
+#endif
+
+#if USE_SHARE_MEM
         fsize = fread(srcBuff, 1, TSIZE, fpd);
         printf(" [%s] size: %d, read to share memory\n", data_path, fsize);
-        
-        memset(srcBuff, 0xf0, fsize);
+#else
+        printf(" [%s] NOT read to share memory\n", data_path);
+#endif  
+        //memset(srcBuff, 0xf0, fsize);
         memset(tx_buff, 0xf0, trunksz);
         
         remainsz = fsize;
@@ -1055,23 +1069,24 @@ static char spi1[] = "/dev/spidev32766.0";
 */
 
         bitset = 1;
-        ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-        printf("Set spi %d slave ready: %d\n", arg1, bitset);
+        ioctl(fm[arg3], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi %d slave ready: %d\n", arg3, bitset);
 
         bitset = 0;
-        ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set data mode: %d\n", bitset);
+        ioctl(fm[arg3], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi%d data mode: %d\n", arg3, bitset);
         
         bitset = 1;
-        ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
-        printf("Get data mode: %d\n", bitset);
+        ioctl(fm[arg3], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
+        printf("Get spi%d data mode: %d\n", arg3, bitset);
         
-        bitset = 0;
-        ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-        printf("Get RDY pin: %d\n", bitset);
+        bitset = -1;
+        ioctl(fm[arg3], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("Get spi%d RDY pin: %d\n", arg3, bitset);
                 
         acusz = 0;
         while (1) {
+#if USE_SHARE_MEM
             if (remainsz < trunksz) {
                 if (remainsz < pksize)
                     pknum = 1;
@@ -1080,14 +1095,35 @@ static char spi1[] = "/dev/spidev32766.0";
                      if (remainsz % pksize) pknum += 1;
                 }
                 remainsz = 0;
+
             } else {
                 remainsz -= trunksz;
             }
-            
-            ret = tx_data(fm[arg3], srcBuff, tx_buff, pknum, pksize, 1024*1024);
+#else
+            fsize = fread(srcBuff, 1, trunksz, fpd);
+            if (fsize < trunksz) {
+                if (fsize < pksize)
+                    pknum = 1;
+                else {
+                     pknum = fsize / pksize;
+                     if (fsize % pksize) pknum += 1;
+                }
+                fsize = 0;
+            }
+            remainsz = fsize;
+#endif
+            ret = tx_data(fm[arg3], srcBuff, srcBuff, pknum, pksize, 1024*1024);
             acusz += ret;
             printf("[%d] tx %d - %d\n", pkcnt, ret, acusz);
+#if USE_SHARE_MEM
             srcBuff += ret;
+#endif
+            if (remainsz == 0) {
+                /* pull low RDY right away at the end of tx */
+                bitset = 0;
+                ioctl(fm[arg3], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                printf("[R]Set spi%d RDY pin: %d\n",  arg3, bitset);
+            }
 
             if (pkcnt == 0) {
                 clock_gettime(CLOCK_REALTIME, &curtime);
@@ -1115,30 +1151,24 @@ static char spi1[] = "/dev/spidev32766.0";
             printf("time cose: %llu s, bandwidth: %llu MBits/s \n",  tmp/1000000000, ((fsize*8)/((lpast - lnow)/1000000)) /1000 );            
         }
 
-        
-        sleep(3);
-        /*
-        bitset = 1;
-        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("[cmd]Set RDY pin: %d cnt:%d\n",  bitset,pkcnt);
+        sleep(2);
 
         bitset = 1;
-        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("[cmd]Set RDY pin: %d cnt:%d\n",  bitset,pkcnt);
-        
-        sleep(1);
-        
-        bitset = 0;
-        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("[cmd]Set RDY pin: %d cnt:%d\n", bitset, pkcnt);
+        ioctl(fm[arg3], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[R]Set spi%d RDY pin: %d, finished!! \n", arg3, bitset);
 
-        bitset = 0;
-        ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("[cmd]Set RDY pin: %d cnt:%d\n", bitset, pkcnt);
-        */
+        usleep(100);
+		
+        ioctl(fm[arg3], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("[R]Get spi%d RDY pin: %d, finished!! \n", arg3, bitset);
+
+#if SAVE_FILE
         msync(srctmp, acusz, MS_SYNC);
         ret = fwrite(srctmp, 1, acusz, fp);
         printf("recv data save to [%s] size: %d/%d \n", path, ret, acusz);
+#else
+        printf("recv data NOT save to [%s] size: %d/%d \n", path, ret, acusz);
+#endif
         fflush(fp);
         fclose(fp);
 
@@ -1574,62 +1604,6 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
 	}
         goto end;
     }
-		
-    if (sel == 9) { /* tx data use dual band [9 100 filename] */
-
-        int pksize = 1024;
-        int pknum = arg0;
-        int trunksz, remainsz, pkcnt;
-	char * tbuff;
-        trunksz = pknum * pksize;
-        remainsz = fsize;
-        pkcnt = 0;
-	tbuff = tx_buff;
-
-        bitset = 1;
-        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("Set RDY pin: %d\n", bitset);
-
-        while (1) {
-            	if (remainsz < trunksz) {
-			if (remainsz < pksize)
-				pknum = 1;
-			else {
-				pknum = remainsz / pksize;
-				 if (remainsz % pksize)
-					pknum += 1;
-			}
-			remainsz = 0;
-            	} else {
-			remainsz -= trunksz;
-		}
-	        ret = tx_data(fm[pkcnt%2], NULL, tbuff, pknum, pksize, 1024*1024);
-       	 //printf("tx ret:%d fd%d\n", ret, pkcnt%2);
-
-		 tbuff += pknum * pksize;
-		
-		 pkcnt++;
-		 if (!remainsz) break;
-        }
-
-	sleep(3);
-
-        bitset = 1;
-        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("Set RDY pin: %d\n", bitset);
-
-        bitset = 0;
-        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        printf("Set RDY pin: %d\n", bitset);
-
-        goto end;
-    }
-	
-    if (sel == 8) { /* tx data */
-        ret = tx_data(fm[arg2], rx_buff, tx_buff, arg0, arg1, 1024*1024);
-        printf("tx len: %d num: %d fd%d pksz:%d\n", ret, arg0, arg2, arg1);
-        goto end;
-    }
     if (sel == 3) { /* set cs pin */
         bitset = arg0;
         ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 7, __u32), &bitset);   //SPI_IOC_WR_CS_PIN
@@ -1694,6 +1668,20 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         bitset = arg0;
         ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
         printf("Set slave ready: %d\n", arg0);
+        goto end;
+    }
+
+    if (sel == 8) { /* get data mode */
+        bitset = 0;
+        ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
+        printf("Get spi%d data mode: %d\n", arg1, bitset);
+        goto end;
+    }
+
+    if (sel == 9) { /* set data mode */
+        bitset = arg0;
+        ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi%d data mode: %d\n", arg1, arg0);
         goto end;
     }
 
