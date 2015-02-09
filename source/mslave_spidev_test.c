@@ -1165,11 +1165,11 @@ redo:
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WT_CTL_PIN
         printf("Set spi1 RDY: %d\n", bitset);
         
-        bitset = 1;
+        bitset = 0;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi0 data mode: %d\n", bitset);
         
-        bitset = 1;
+        bitset = 0;
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi1 data mode: %d\n", bitset);
         
@@ -1550,6 +1550,22 @@ redo:
 
         tx8[0] = dt[arg0];
         tx8[1] = 0x5f;
+
+        // disable data mode
+        bitset = 0;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi0 data mode: %d\n", bitset);
+
+        bitset = 0;
+        ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
+        printf("Get spi0 data mode: %d\n", bitset);
+
+        bitset = 1;
+        ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+        printf("Get spi0 RDY: %d\n", bitset);
+        bitset = 0;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
+        printf("Set spi0 RDY: %d\n", bitset);
 
         bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);

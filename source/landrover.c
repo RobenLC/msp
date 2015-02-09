@@ -1911,8 +1911,8 @@ static int fs08(struct mainRes_s *mrs, struct modersp_s *modersp)
         msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
 
         p = &mrs->mchine.get;
-        //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-        //print_f(&mrs->plog, "fs08", mrs->log);
+        sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+        print_f(&mrs->plog, "fs08", mrs->log);
 
         if (p->opcode == OP_RDY) {
             return 1;
@@ -2022,11 +2022,11 @@ static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs13(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset=0, ret;
-    bitset = 1;
+    bitset = 0;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs13", mrs->log);
-    bitset = 1;
+    bitset = 0;
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs13", mrs->log);
@@ -2506,7 +2506,19 @@ static int p2(struct procRes_s *rs)
             //print_f(rs->plogs, "P2", rs->logs);
 
             if (ch == 'r') {
+                if (fp == NULL) {
+                    fp = fopen(filename, "r");
+                    if (!fp) {
+                        sprintf(rs->logs, "file read [%s] failed \n", filename);
+                        print_f(rs->plogs, "P2", rs->logs);
+                        continue;
+                    } else {
+                        sprintf(rs->logs, "file read [%s] ok \n", filename);
+                        print_f(rs->plogs, "P2", rs->logs);
+                    }
+                }
 
+                pi = 0;
                 len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                 fsize = fread(addr, 1, len, fp);
                 totsz += fsize;
@@ -2529,6 +2541,7 @@ static int p2(struct procRes_s *rs)
                 print_f(rs->plogs, "P2", rs->logs);
 
                 fclose(fp);
+                fp = NULL;
             }
 
             if (ch == 'g') {
@@ -2746,6 +2759,7 @@ static int p4(struct procRes_s *rs)
         } else if (cmode == 3) {
             int size=0, opsz;
             char *addr;
+            pi = 0;
             size = ring_buf_cons_dual(rs->pdataRx, &addr, pi);
             if (size >= 0) {
                 //sprintf(rs->logs, "cons 0x%x %d %d \n", addr, size, pi);

@@ -2612,15 +2612,16 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset=0, ret;
-    bitset = 1;
+    bitset = 0;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs16", mrs->log);
-    bitset = 1;
+    bitset = 0;
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs16", mrs->log);
 
+#if 0 /* DO NOT use kthread for spi */
     bitset = 0;
     ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
@@ -2630,7 +2631,8 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
     ret = ioctl(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi1 spidev thread, ret: 0x%x\n", ret);
     print_f(&mrs->plog, "fs16", mrs->log);
-	
+#endif
+
     modersp->r = 1;
     return 1;
 }
@@ -3576,8 +3578,8 @@ static int p2(struct procRes_s *rs)
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
 
-                    //opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
-                    opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+                    //opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     
                     //printf("0 spi %d\n", opsz);
                     //sprintf(rs->logs, "spi0 recv %d\n", opsz);
@@ -3615,6 +3617,7 @@ static int p2(struct procRes_s *rs)
                     pi += 2;
                 }
 
+                opsz = 0 - opsz;
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
                 //sprintf(rs->logs, "spi0 recv end\n");
@@ -3747,8 +3750,8 @@ static int p3(struct procRes_s *rs)
 
                     clock_gettime(CLOCK_REALTIME, rs->tm[1]);
 
-                    //opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
-                    opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+                    //opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     //sprintf(rs->logs, "1 spi %d\n", opsz);
                     //print_f(rs->plogs, "P5", rs->logs);
                     //sprintf(rs->logs, "spi1 recv %d\n", opsz);
@@ -3785,6 +3788,7 @@ static int p3(struct procRes_s *rs)
                     pi += 2;
                 }
 
+                opsz = 0 - opsz;
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
                 //sprintf(rs->logs, "spi1 recv end\n");
