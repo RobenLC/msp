@@ -538,10 +538,11 @@ static char spi1[] = "/dev/spidev32766.0";
 #define OP_SCM 0x5
 #define OP_DCM 0x6
 #define OP_FIH  0x7
+#define OP_DUL 0x8
 
         int ret=0;
         uint8_t tx8[4], rx8[4];
-        uint8_t dt[8] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM, OP_FIH};
+        uint8_t dt[9] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM, OP_FIH, OP_DUL};
 
         tx8[0] = dt[arg0];
         tx8[1] = 0x5f;
@@ -777,9 +778,11 @@ static char spi1[] = "/dev/spidev32766.0";
 
         fsz2 = fread(srcBuff2, 1, DCTSIZE, fpd2);
         printf(" [%s] size: %d, read to share memory\n", srcpath2, fsz2);
-        
+
+/*
         memset(srcBuff1, 0xf0, fsz1);
         memset(srcBuff2, 0xf0, fsz2);
+*/
         memset(tx_buff, 0xf0, trunksz);
         
 /*
@@ -841,7 +844,11 @@ static char spi1[] = "/dev/spidev32766.0";
             }
 
             clock_gettime(CLOCK_REALTIME, &tdiff[0]);            
+#if 1 /* send real data */
+            ret = tx_data(fm[0], srcBuff1, srcBuff1, pknum, pksize, 1024*1024);
+#else
             ret = tx_data(fm[0], srcBuff1, tx_buff, pknum, pksize, 1024*1024);
+#endif
             clock_gettime(CLOCK_REALTIME, &tspi[0]);   
 
             msync(&tspi[1], sizeof(struct timespec), MS_SYNC);
@@ -890,11 +897,12 @@ static char spi1[] = "/dev/spidev32766.0";
         bitset = 0;
         ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("[%d]Get RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
-
+/*
         msync(srctmp1, acusz, MS_SYNC);
         ret = fwrite(srctmp1, 1, acusz, fp);
         printf("recv data save to [%s] size: %d/%d \n", path, ret, acusz);
         fflush(fp);
+*/
         fclose(fp);
 
         } else {
@@ -913,7 +921,11 @@ static char spi1[] = "/dev/spidev32766.0";
                 remainsz -= trunksz;
             }
             clock_gettime(CLOCK_REALTIME, &tdiff[1]);            
+#if 1 /* send real data */
+            ret = tx_data(fm[1], srcBuff2, srcBuff2, pknum, pksize, 1024*1024);
+#else
             ret = tx_data(fm[1], srcBuff2, tx_buff, pknum, pksize, 1024*1024);
+#endif
             clock_gettime(CLOCK_REALTIME, &tspi[1]);   
 
             msync(&tspi[0], sizeof(struct timespec), MS_SYNC);
@@ -968,11 +980,12 @@ static char spi1[] = "/dev/spidev32766.0";
         bitset = 0;
         ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("[%d]Get RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
-
+/*
         msync(srctmp2, acusz, MS_SYNC);
         ret = fwrite(srctmp2, 1, acusz, fp2);
         printf("recv data save to [%s] size: %d/%d \n", svpath2, ret, acusz);
         fflush(fp2);
+*/
         fclose(fp2);
         }
 
