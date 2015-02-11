@@ -4506,7 +4506,8 @@ static int p4(struct procRes_s *rs)
                     rs_ipc_put(rs, "r", 1);
                     break;
                 }
-            } else if (cmode == 1) {
+            } 
+            else if (cmode == 1) {
 #if MSP_P4_SAVE_DAT
                 ret = file_save_get(&rs->fdat_s, "/mnt/mmc2/tx/%d.dat");
                 if (ret) {
@@ -4699,6 +4700,7 @@ static int p4(struct procRes_s *rs)
             }else {
                 sprintf(rs->logs, "cmode: %d - 7\n", cmode);
                 print_f(rs->plogs, "P4", rs->logs);
+                error_handle(rs->logs, 4702);
             }
         }
 
@@ -5051,7 +5053,7 @@ static int p7(struct procRes_s *rs)
     while (1) {
         sprintf(rs->logs, ")\n");
         print_f(rs->plogs, "P7", rs->logs);
-#if 0 /* debug */
+#if 1 /* disable for testing */
         rs->psocket_n->connfd = accept(rs->psocket_n->listenfd, (struct sockaddr*)NULL, NULL); 
         if (rs->psocket_n->connfd < 0) {
             sprintf(rs->logs, "P7 get connect failed ret:%d", rs->psocket_n->connfd);
@@ -5076,6 +5078,9 @@ static int p7(struct procRes_s *rs)
                     break;
                 case 'r':
                     cmode = 2;
+                    break;
+                case 'd':
+                    cmode = 3;
                     break;
                 default:
                     break;
@@ -5134,9 +5139,74 @@ static int p7(struct procRes_s *rs)
                     break;
                 }
             }
+            else if (cmode == 3) {
+#if MSP_P4_SAVE_DAT
+                ret = file_save_get(&rs->fdat_s, "/mnt/mmc2/tx/%d.dat");
+                if (ret) {
+                    sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                    print_f(rs->plogs, "P7", rs->logs);         
+                    while(1);
+                } else {
+                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s);
+                    print_f(rs->plogs, "P7", rs->logs);         
+                }
+#endif
+                tx = 0;
+                while (1) {
+                    len = ring_buf_cons_dual(rs->pdataRx, &addr, tx);
+                    if (len >= 0) {
+                        //printf("cons 0x%x %d %d \n", addr, len, tx);
+                        tx++;
+                    
+                        msync(addr, len, MS_SYNC);
+                        /* send data to wifi socket */
+                        sprintf(rs->logs, " %d -%d \n", len, tx);
+                        print_f(rs->plogs, "P7", rs->logs);         
+                        if (len != 0) {
+#if 1 /* debug */
+                            num = write(rs->psocket_t->connfd, addr, len);
+#else
+                            num = len;
+#endif
+                            //printf("socket tx %d %d\n", rs->psocket_r->connfd, num);
+                            //sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_t->connfd, num, tx);
+                            //print_f(rs->plogs, "P7", rs->logs);         
+#if MSP_P4_SAVE_DAT
+                            fwrite(addr, 1, len, rs->fdat_s);
+                            fflush(rs->fdat_s);
+#endif
+                        }
+                    } else {
+                        sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, num, tx);
+                        print_f(rs->plogs, "P7", rs->logs);         
+                        break;
+                    }
+
+                    if (ch != 'D') {
+                        ch = 0;
+                        rs_ipc_get(rs, &ch, 1);
+                    }
+                }
+
+		  while (ch != 'D') {
+                        sprintf(rs->logs, "%c clr\n", ch);
+                        print_f(rs->plogs, "P7", rs->logs);         
+                        ch = 0;
+                        rs_ipc_get(rs, &ch, 1);
+		  }
+
+                rs_ipc_put(rs, "D", 1);
+                sprintf(rs->logs, "%c socket tx %d - end\n", ch, tx);
+                print_f(rs->plogs, "P7", rs->logs);         
+#if MSP_P4_SAVE_DAT
+                fclose(rs->fdat_s);
+#endif
+                break;
+            }
             else {
                 sprintf(rs->logs, "cmode: %d - 7\n", cmode);
                 print_f(rs->plogs, "P7", rs->logs);
+                error_handle(rs->logs, 5141);
             }
 
             ret = 0;
