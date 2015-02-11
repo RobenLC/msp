@@ -5066,9 +5066,10 @@ static int p7(struct procRes_s *rs)
 #else
         rs->psocket_n->connfd = 7;
 #endif
-        ret = 0;
-        ret = rs_ipc_get(rs, &ch, 1);
+        ret = 1; ch = 0;
         while (ret > 0) {
+
+            ret = rs_ipc_get(rs, &ch, 1);
             switch (ch) {
                 case 'E':
                     goto socketEnd;
@@ -5098,7 +5099,7 @@ static int p7(struct procRes_s *rs)
                         sprintf(rs->logs, " %d -%d \n", len, tx);
                         print_f(rs->plogs, "P7", rs->logs);         
                         if (len != 0) {
-                            #if 0 /* debug */
+                            #if 1 /* debug */
                             num = write(rs->psocket_n->connfd, addr, len);
                             #else
                             num = len;
@@ -5164,12 +5165,12 @@ static int p7(struct procRes_s *rs)
                         print_f(rs->plogs, "P7", rs->logs);         
                         if (len != 0) {
 #if 1 /* debug */
-                            num = write(rs->psocket_t->connfd, addr, len);
+                            num = write(rs->psocket_n->connfd, addr, len);
 #else
                             num = len;
 #endif
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, num);
-                            //sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_t->connfd, num, tx);
+                            //sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_n->connfd, num, tx);
                             //print_f(rs->plogs, "P7", rs->logs);         
 #if MSP_P4_SAVE_DAT
                             fwrite(addr, 1, len, rs->fdat_s);
@@ -5177,7 +5178,7 @@ static int p7(struct procRes_s *rs)
 #endif
                         }
                     } else {
-                        sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, num, tx);
+                        sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_n->connfd, num, tx);
                         print_f(rs->plogs, "P7", rs->logs);         
                         break;
                     }
@@ -5208,9 +5209,7 @@ static int p7(struct procRes_s *rs)
                 print_f(rs->plogs, "P7", rs->logs);
                 error_handle(rs->logs, 5141);
             }
-
-            ret = 0;
-            ret = rs_ipc_get(rs, &ch, 1);        		
+    		
         }
 
         socketEnd:
