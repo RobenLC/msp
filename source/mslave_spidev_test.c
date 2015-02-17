@@ -1830,9 +1830,9 @@ redo:
 
     if (sel == 19){ /* command mode test ex[19 1 path spi]*/
 #define USE_SHARE_MEM 0
-#define SPI_THREAD_EN 0
+#define SPI_THREAD_EN 1
 #define SEND_FILE 0
-
+#define SAVE_FILE 0
         FILE *f;
         int fsize, acusz, send, txsz, pktcnt, len=0;
         char *src, *dstBuff, *dstmp;
@@ -1916,7 +1916,7 @@ redo:
 #if SPI_THREAD_EN
         printf("Start spi%d spidev thread, ret: 0x%x\n", 1, ret);
         bitset = 0;
-        ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+        ret = ioctl(fm[arg0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
 #endif
 
         src = dstBuff;
@@ -1954,6 +1954,7 @@ redo:
             printf("[%d] tx %d/%d - %d\n", pktcnt, send, len, acusz);
 #if USE_SHARE_MEM
 #else
+#if SAVE_FILE
             if (len > 0) {
                 msync(src, len, MS_SYNC);
                 ret = fwrite(src, 1, len, fp);
@@ -1963,6 +1964,7 @@ redo:
                     //printf("[%s]write file done, ret:%d len:%d\n", path, ret, len);
                 }
             }
+#endif
 #endif
             if (send < 0) {
                 printf("spi%d data tx complete %d/%d \n", arg0, send, txsz);
@@ -1975,7 +1977,7 @@ redo:
         }
 #if SPI_THREAD_EN
         bitset = 0;
-        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+        ret = ioctl(fm[arg0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
         printf("Stop spi%d spidev thread, ret: %d\n", 0, ret);
 #endif
         bitset = 1;
