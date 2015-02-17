@@ -2669,7 +2669,7 @@ static int dbg(struct mainRes_s *mrs)
     char poll[32] = "poll";
 
     struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
-                                {4, "aspect", cmdfunc_01}, {5, "double", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_01}};
+                                {4, "aspect", cmdfunc_01}, {5, "go", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_01}};
 
     p0_init(mrs);
 
@@ -3622,8 +3622,8 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
     int ret, bitset;
     char ch;
 
-    sprintf(mrs->log, "%d\n", modersp->v);
-    print_f(&mrs->plog, "fs35", mrs->log);
+    //sprintf(mrs->log, "%d\n", modersp->v);
+    //print_f(&mrs->plog, "fs35", mrs->log);
 
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     while (ret > 0) {
