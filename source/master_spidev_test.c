@@ -1000,6 +1000,8 @@ static char spi1[] = "/dev/spidev32766.0";
 #define PKTSZ  SPI_TRUNK_SZ
 #define SAVE_FILE 0
 #define USE_SHARE_MEM 1
+#define MEASURE_TIME_DIFF 1
+
         int chunksize, acusz;
         chunksize = PKTSZ;
 
@@ -1057,7 +1059,7 @@ static char spi1[] = "/dev/spidev32766.0";
         printf("pksize:%d pknum:%d chunksize:%d\n", pksize, pknum, chunksize);
         struct tms time;
         struct timespec curtime;
-        unsigned long long cur, tnow, lnow, past, tbef, lpast, tmp;
+        unsigned long long cur, tnow, lnow, past, tbef, lpast, tmp, tdiff, torg;
         
         trunksz = pknum * pksize;
         
@@ -1110,7 +1112,12 @@ static char spi1[] = "/dev/spidev32766.0";
         bitset = -1;
         ioctl(fm[arg3], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("Get spi%d RDY pin: %d\n", arg3, bitset);
-                
+
+        clock_gettime(CLOCK_REALTIME, &curtime);
+        past = curtime.tv_sec;
+        tbef = curtime.tv_nsec;		
+        torg = past * 1000000000+tbef;	
+
         acusz = 0;
         while (1) {
 #if USE_SHARE_MEM
@@ -1145,6 +1152,22 @@ static char spi1[] = "/dev/spidev32766.0";
 #if USE_SHARE_MEM
             srcBuff += ret;
 #endif
+
+#if MEASURE_TIME_DIFF
+        clock_gettime(CLOCK_REALTIME, &curtime);
+        past = curtime.tv_sec;
+        tbef = curtime.tv_nsec;		
+        lpast = past * 1000000000+tbef;	
+
+        tdiff = (lpast - torg);
+        if (tdiff < 1000000000) {
+            printf("time diff: %llu us \n",  tdiff/1000);
+        } else {
+            printf("time diff: %llu s\n",  tdiff/1000000000);            
+        }
+#endif
+        torg = lpast;
+
             if (remainsz == 0) {
                 /* pull low RDY right away at the end of tx */
                 bitset = 0;
