@@ -1663,50 +1663,22 @@ redo:
     }
     if (sel == 20){ /* command mode test ex[20 1 path1 path2]*/
 #define TCSIZE 64*1024*1024
-        FILE *fp1, *fp2;
-        int fsz1, fsz2, acusz, send, txsz, pktcnt;
-        char *src, *dstBuff1, *dstmp1, *dstBuff2, *dstmp2;
-        char *save, *svBuff, *svtmp;	
-        if (argc > 3) {
-            fp1 = fopen(argv[3], "r");
-        } else {
-            printf("Error!! no input file 01\n");
-        }
-        if (!fp1) printf("Error!! file open [%s] failed\n", argv[3]);
-        else printf("File open [%s] succeed\n", argv[3]);
+        int acusz, send, pktcnt, modeSel;
+        char path_02[256];
 
-        if (argc > 4) {
-            fp2 = fopen(argv[4], "r");
-        } else {
-            printf("Error!! no input file 02 \n");
-        }
-        if (!fp2) printf("Error!! file open [%s] failed\n", argv[4]);
-        else printf("File open [%s] succeed\n", argv[4]);
+        FILE *fp_02;
 
-        dstBuff1 = mmap(NULL, TCSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-        if (!dstBuff1) {
-            printf("share memory alloc failed \n");
-            goto end;
-        }
-	 memset(dstBuff1, 0x95, TCSIZE);
-        dstmp1 = dstBuff1;
+    fp_02 = find_save(path_02, data_save);
+    if (!fp_02) {
+        printf("find save dst failed ret:%d\n", fp_02);
+        goto end;
+    } else {
+        printf("find save dst succeed ret:%d\n", fp_02);
+    }
 
-        dstBuff2 = mmap(NULL, TCSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-	 memset(dstBuff2, 0x95, TCSIZE);
-        dstmp2 = dstBuff2;
-        if (!dstBuff2) {
-            printf("share memory alloc failed \n");
-            goto end;
-        }
-
-        fsz1 = fread(dstBuff1, 1, TSIZE, fp1);
-        printf("open [%s] size: %d \n", argv[3], fsz1);
-
-        fsz2 = fread(dstBuff2, 1, TSIZE, fp2);
-        printf("open [%s] size: %d \n", argv[4], fsz2);
-
+       modeSel = 1;
 	mode &= ~SPI_MODE_3;
-	switch(arg0) {
+	switch(modeSel) {
 		case 1:
     			mode |= SPI_MODE_1;
 			break;
@@ -1740,95 +1712,111 @@ redo:
         // disable data mode
         bitset = 1;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-        printf("Set slve ready: %d\n", bitset);
+        printf("Set spi%d slve ready: %d\n", 0, bitset);
 
         bitset = 1;
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-        printf("Set slve ready: %d\n", bitset);
+        printf("Set spi%d slve ready: %d\n", 1, bitset);
 
         bitset = 0;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set spi0 data mode: %d\n", bitset);
+        printf("Set spi%d data mode: %d\n", 0, bitset);
 
         bitset = 0;
         ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
-        printf("Get spi0 data mode: %d\n", bitset);
+        printf("Get spi%d data mode: %d\n", 0, bitset);
 
         bitset = 0;
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set spi0 data mode: %d\n", bitset);
+        printf("Set spi%d data mode: %d\n", 1, bitset);
 
         bitset = 0;
         ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
-        printf("Get spi0 data mode: %d\n", bitset);
+        printf("Get spi%d data mode: %d\n", 1, bitset);
 
         bitset = 1;
         ret = ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-        printf("Get spi1 RDY: %d\n", bitset);
+        printf("Get spi%d RDY: %d\n", 0, bitset);
         bitset = 0;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
-        printf("Set spi1 RDY: %d\n", bitset);
+        printf("Set spi%d RDY: %d\n", 0, bitset);
 
         bitset = 1;
         ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-        printf("Get spi1 RDY: %d\n", bitset);
+        printf("Get spi%d RDY: %d\n", 1, bitset);
         bitset = 0;
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
-        printf("Set spi1 RDY: %d\n", bitset);
+        printf("Set spi%d RDY: %d\n", 1, bitset);
 
         int sid;
         sid = fork();
 
         if (sid) {
-			
-        src = dstBuff1;
 
-        acusz = 0; pktcnt = 0;
-        while (acusz < fsz1) {
-            if ((fsz1 - acusz) > 61440) {
-                txsz = 61440;
-            } else {
-                txsz = fsz1 - acusz;
-            }
+        acusz = 0; pktcnt = 0; send = 0;
+        while (1) {
 			
-            send = tx_data(fm[0], rx_buff[0], src, 1, txsz, 1024*1024);
+            send = tx_data(fm[0], rx_buff[0], tx_buff[0], 1, 61440, 1024*1024);
+		
             if (send < 0) {
                 send = 0 - send;
             }
+
+            if (send == 1) send = 0;
+
             acusz += send;
-            printf("[%d][%d] tx %d - %d\n", 0, pktcnt, send, acusz);
-            if (send != txsz) {
-                printf("[%d]Error! spi data tx did not complete %d/%d \n", 0, send, txsz);
+
+            if (send > 0) {
+                msync(rx_buff[0], send, MS_SYNC);
+                ret = fwrite(rx_buff[0], 1, send, fp);
+                if (ret != send) {
+                    printf("[%s]write file error, ret:%d len:%d\n", path, ret, send);
+                } else {
+                    //printf("[%s]write file done, ret:%d len:%d\n", path, ret, len);
+                }
+            }
+
+            printf("[spi%d][%d] tx %d - %d\n", 0, pktcnt, send, acusz);
+
+            if (send != 61440) {
+                printf("spi%d transmitting complete, save[%s] total size: %d/\n", 1, path, acusz);
                 break;
             }
-            src += send;
 
             pktcnt++;
         }
 
         }else {
 
-        src = dstBuff2;
-
-        acusz = 0; pktcnt = 0;
-        while (acusz < fsz2) {
-            if ((fsz2 - acusz) > 61440) {
-                txsz = 61440;
-            } else {
-                txsz = fsz2 - acusz;
-            }
+        acusz = 0; pktcnt = 0; send = 0;
+        while (1) {
 			
-            send = tx_data(fm[1], rx_buff[1], src, 1, txsz, 1024*1024);
+            send = tx_data(fm[1], rx_buff[1], tx_buff[1], 1, 61440, 1024*1024);
+
             if (send < 0) {
                 send = 0 - send;
             }
+
+            if (send == 1) send = 0;
+
             acusz += send;
-            printf("[%d][%d] tx %d - %d\n", 1, pktcnt, send, acusz);
-            if (send != txsz) {
-                printf("[%d]Error! spi data tx did not complete %d/%d \n", 1, send, txsz);
+
+            if (send > 0) {
+                msync(rx_buff[1], send, MS_SYNC);
+                ret = fwrite(rx_buff[1], 1, send, fp_02);
+                if (ret != send) {
+                    printf("[%s]write file error, ret:%d len:%d\n", path_02, ret, send);
+                } else {
+                    //printf("[%s]write file done, ret:%d len:%d\n", path, ret, len);
+                }
+            }
+
+            printf("[spi%d][%d] tx %d - %d\n", 1, pktcnt, send, acusz);
+
+            if (send != 61440) {
+                printf("spi%d transmitting complete, save[%s] total size: %d/\n", 1, path_02, acusz);
                 break;
             }
-            src += send;
 
             pktcnt++;
         }
@@ -1848,12 +1836,15 @@ redo:
         int fsize, acusz, send, txsz, pktcnt, len=0;
         char *src, *dstBuff, *dstmp;
         char *save, *svBuff, *svtmp;	
+        int modeSel;
+#if SEND_FILE
         if (argc > 3) {
             f = fopen(argv[3], "r");
         } else {
             printf("Error!! no input file \n");
         }
         if (!f) printf("Error!! file open failed\n");
+#endif
 #if USE_SHARE_MEM 
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
 	 memset(dstBuff, 0x95, TSIZE);
@@ -1871,8 +1862,9 @@ redo:
         printf("allcate buff [0x%x] size: %d \n", dstBuff, TSIZE);
 #endif
 
+       modeSel = 1;
 	mode &= ~SPI_MODE_3;
-	switch(arg0) {
+	switch(modeSel) {
 		case 1:
     			mode |= SPI_MODE_1;
 			break;
@@ -1887,13 +1879,13 @@ redo:
 			break;
 	}
 
-       arg2 = arg2 % 2;
+       arg0 = arg0 % 2;
 
-        ret = ioctl(fm[arg2], SPI_IOC_WR_MODE, &mode);
+        ret = ioctl(fm[arg0], SPI_IOC_WR_MODE, &mode);
         if (ret == -1) 
             pabort("can't set spi mode"); 
  
-        ret = ioctl(fm[arg2], SPI_IOC_RD_MODE, &mode);
+        ret = ioctl(fm[arg0], SPI_IOC_RD_MODE, &mode);
         if (ret == -1) 
             pabort("can't get spi mode"); 
 
@@ -1901,24 +1893,24 @@ redo:
         // disable data mode
 
         bitset = 1;
-        ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-        printf("Set spi%d slve ready: %d\n", arg2, bitset);
+        ret = ioctl(fm[arg0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi%d slve ready: %d\n", arg0, bitset);
 
         bitset = 0;
-        ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-        printf("Set spi%d data mode: %d\n", arg2, bitset);
+        ret = ioctl(fm[arg0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi%d data mode: %d\n", arg0, bitset);
 
         bitset = 0;
-        ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
-        printf("Get spi%d data mode: %d\n", arg2, bitset);
+        ret = ioctl(fm[arg0], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
+        printf("Get spi%d data mode: %d\n", arg0, bitset);
 
         bitset = 1;
-        ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-        printf("Get spi%d RDY: %d\n", arg2, bitset);
+        ret = ioctl(fm[arg0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+        printf("Get spi%d RDY: %d\n", arg0, bitset);
 
         bitset = 0;
-        ret = ioctl(fm[arg2], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
-        printf("Set spi%d RDY: %d\n", arg2, bitset);
+        ret = ioctl(fm[arg0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
+        printf("Set spi%d RDY: %d\n", arg0, bitset);
 
 #if SPI_THREAD_EN
         printf("Start spi%d spidev thread, ret: 0x%x\n", 1, ret);
@@ -1939,9 +1931,9 @@ redo:
 */
             txsz = 61440;
 #if SPI_THREAD_EN
-            send = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 15, __u32), src);  //SPI_IOC_PROBE_THREAD
+            send = ioctl(fm[arg0], _IOR(SPI_IOC_MAGIC, 15, __u32), src);  //SPI_IOC_PROBE_THREAD
 #else
-            send = tx_data(fm[arg2], src, src, 1, txsz, 1024*1024);
+            send = tx_data(fm[arg0], src, src, 1, txsz, 1024*1024);
 #endif
 
             if (send == 0) {
@@ -1972,7 +1964,7 @@ redo:
             }
 #endif
             if (send < 0) {
-                printf("spi%d data tx complete %d/%d \n", arg2, send, txsz);
+                printf("spi%d data tx complete %d/%d \n", arg0, send, txsz);
                 break;
             }
 #if USE_SHARE_MEM
@@ -1986,8 +1978,8 @@ redo:
         printf("Stop spi%d spidev thread, ret: %d\n", 0, ret);
 #endif
         bitset = 1;
-        ret = ioctl(fm[arg2], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
-        printf("Get spi%d RDY: %d\n", arg2, bitset);
+        ret = ioctl(fm[arg0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
+        printf("Get spi%d RDY: %d\n", arg0, bitset);
 
 #if USE_SHARE_MEM
         msync(dstBuff, acusz, MS_SYNC);
@@ -2700,24 +2692,28 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
         printf("Set RDY: %d\n", arg0);
         goto end;
     }
+
     if (sel == 4) { /* get RDY pin */
         bitset = 0;
         ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_RD_CTL_PIN
         printf("Get RDY: %d\n", bitset);
         goto end;
     }
+
     if (sel == 5) { /* get CS pin */
         bitset = 0;
         ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 7, __u32), &bitset);  //SPI_IOC_RD_CS_PIN
         printf("Get CS: %d\n", bitset);
         goto end;
     }
+
     if (sel == 6){/* set data mode test */
         bitset = arg0;
         ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set data mode: %d\n", arg0);
         goto end;
     }
+
     if (sel == 7) {/* get data mode test */
         bitset = 0;
         ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);  //SPI_IOC_RD_DATA_MODE
