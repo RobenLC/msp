@@ -31,6 +31,8 @@
 #define OP_DCM 0x6
 #define OP_FIH  0x7
 
+#define SPI_TRUNK_SZ   (32768)
+
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 static char *infpath;
@@ -1669,10 +1671,10 @@ static int p0_end(struct mainRes_s *mrs)
     kill(mrs->sid[4]);
 
     fclose(mrs->fs);
-    munmap(mrs->dataRx.pp[0], 1024*61440);
-    munmap(mrs->dataTx.pp[0], 256*61440);
-    munmap(mrs->cmdRx.pp[0], 256*61440);
-    munmap(mrs->cmdTx.pp[0], 512*61440);
+    munmap(mrs->dataRx.pp[0], 1024*SPI_TRUNK_SZ);
+    munmap(mrs->dataTx.pp[0], 256*SPI_TRUNK_SZ);
+    munmap(mrs->cmdRx.pp[0], 256*SPI_TRUNK_SZ);
+    munmap(mrs->cmdTx.pp[0], 512*SPI_TRUNK_SZ);
     free(mrs->dataRx.pp);
     free(mrs->cmdRx.pp);
     free(mrs->dataTx.pp);
@@ -2379,9 +2381,9 @@ static int p0(struct mainRes_s *mrs)
 
     // save to file for debug
     //if (pmode == 1) {
-    //   msync(mrs->dataRx.pp[0], 1024*61440, MS_SYNC);
-    //    ret = fwrite(mrs->dataRx.pp[0], 1, 1024*61440, mrs->fs);
-    //    printf("\np0 write file %d size %d/%d \n", mrs->fs, 1024*61440, ret);
+    //   msync(mrs->dataRx.pp[0], 1024*SPI_TRUNK_SZ, MS_SYNC);
+    //    ret = fwrite(mrs->dataRx.pp[0], 1, 1024*SPI_TRUNK_SZ, mrs->fs);
+    //    printf("\np0 write file %d size %d/%d \n", mrs->fs, 1024*SPI_TRUNK_SZ, ret);
     //}
 
     p0_end(mrs);
@@ -2988,11 +2990,11 @@ static char spi0[] = "/dev/spidev32765.0";
 // initial share parameter
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 2048*61440, 61440);
+    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 4096*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->dataRx.pp) goto end;
     pmrs->dataRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataRx.totsz = 2048*61440;
-    pmrs->dataRx.chksz = 61440;
+    pmrs->dataRx.totsz = 2048*SPI_TRUNK_SZ;
+    pmrs->dataRx.chksz = SPI_TRUNK_SZ;
     pmrs->dataRx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataRx.totsz, pmrs->dataRx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);
@@ -3007,11 +3009,11 @@ static char spi0[] = "/dev/spidev32765.0";
 
     /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 1*61440, 61440);
+    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 1*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->dataTx.pp) goto end;
     pmrs->dataTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataTx.totsz = 1*61440;
-    pmrs->dataTx.chksz = 61440;
+    pmrs->dataTx.totsz = 1*SPI_TRUNK_SZ;
+    pmrs->dataTx.chksz = SPI_TRUNK_SZ;
     pmrs->dataTx.svdist = 1;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataTx.totsz, pmrs->dataTx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);
@@ -3026,11 +3028,11 @@ static char spi0[] = "/dev/spidev32765.0";
 
     /* cmd mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 1*61440, 61440);
+    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 1*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->cmdRx.pp) goto end;
     pmrs->cmdRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdRx.totsz = 1*61440;;
-    pmrs->cmdRx.chksz = 61440;
+    pmrs->cmdRx.totsz = 1*SPI_TRUNK_SZ;;
+    pmrs->cmdRx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdRx.svdist = 1;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdRx.totsz, pmrs->cmdRx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);
@@ -3045,11 +3047,11 @@ static char spi0[] = "/dev/spidev32765.0";
 	
     /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 1*61440, 61440);
+    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 1*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->cmdTx.pp) goto end;
     pmrs->cmdTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdTx.totsz = 1*61440;
-    pmrs->cmdTx.chksz = 61440;
+    pmrs->cmdTx.totsz = 1*SPI_TRUNK_SZ;
+    pmrs->cmdTx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdTx.svdist = 1;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);

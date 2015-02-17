@@ -37,6 +37,7 @@
 #define BUFF_SIZE  2048
 
 #define TSIZE (128*1024*1024)
+#define SPI_TRUNK_SZ             32768
 
 struct directnFile_s{
     uint32_t   dftype;
@@ -1081,11 +1082,11 @@ static char path[256];
         goto end;
     }
 
-    if (sel == 25){ /* dual band data mode test with kthread ex[25 0 2 5 1 61440]*/
-        #define PKTSZ  30720 //61440
+    if (sel == 25){ /* dual band data mode test with kthread ex[25 0 2 5 1 SPI_TRUNK_SZ]*/
+        #define PKTSZ  30720 //SPI_TRUNK_SZ
         int chunksize;
         if (arg4 == PKTSZ) chunksize = PKTSZ;
-        else chunksize = 61440;
+        else chunksize = SPI_TRUNK_SZ;
         
         printf("***chunk size: %d ***\n", chunksize);
         
@@ -1662,7 +1663,7 @@ redo:
         goto end;
     }
     if (sel == 20){ /* command mode test ex[20 1 path1 path2]*/
-#define TCSIZE 64*1024*1024
+#define TCSIZE 128*1024*1024
         int acusz, send, pktcnt, modeSel;
         char path_02[256];
 
@@ -1756,7 +1757,7 @@ redo:
         acusz = 0; pktcnt = 0; send = 0;
         while (1) {
 			
-            send = tx_data(fm[0], rx_buff[0], tx_buff[0], 1, 61440, 1024*1024);
+            send = tx_data(fm[0], rx_buff[0], tx_buff[0], 1, SPI_TRUNK_SZ, 1024*1024);
 		
             if (send < 0) {
                 send = 0 - send;
@@ -1778,7 +1779,7 @@ redo:
 
             printf("[spi%d][%d] tx %d - %d\n", 0, pktcnt, send, acusz);
 
-            if (send != 61440) {
+            if (send != SPI_TRUNK_SZ) {
                 printf("spi%d transmitting complete, save[%s] total size: %d/\n", 1, path, acusz);
                 break;
             }
@@ -1791,7 +1792,7 @@ redo:
         acusz = 0; pktcnt = 0; send = 0;
         while (1) {
 			
-            send = tx_data(fm[1], rx_buff[1], tx_buff[1], 1, 61440, 1024*1024);
+            send = tx_data(fm[1], rx_buff[1], tx_buff[1], 1, SPI_TRUNK_SZ, 1024*1024);
 
             if (send < 0) {
                 send = 0 - send;
@@ -1813,7 +1814,7 @@ redo:
 
             printf("[spi%d][%d] tx %d - %d\n", 1, pktcnt, send, acusz);
 
-            if (send != 61440) {
+            if (send != SPI_TRUNK_SZ) {
                 printf("spi%d transmitting complete, save[%s] total size: %d/\n", 1, path_02, acusz);
                 break;
             }
@@ -1923,13 +1924,13 @@ redo:
 //        while (acusz < fsize) {
         while (1) {
 /*
-            if ((fsize - acusz) > 61440) {
-                txsz = 61440;
+            if ((fsize - acusz) > SPI_TRUNK_SZ) {
+                txsz = SPI_TRUNK_SZ;
             } else {
                 txsz = fsize - acusz;
             }
 */
-            txsz = 61440;
+            txsz = SPI_TRUNK_SZ;
 #if SPI_THREAD_EN
             send = ioctl(fm[arg0], _IOR(SPI_IOC_MAGIC, 15, __u32), src);  //SPI_IOC_PROBE_THREAD
 #else
@@ -2239,18 +2240,18 @@ redo:
             arg1 = 1;
         }
         
-        printf("sel 15 spi[%d] ready to receive data, size: 61440 num: %d \n", arg0, arg1);
-        ret = tx_data(fm[arg0], rx_buff[0], tx_buff[0], arg1, 61440, 1024*1024);
+        printf("sel 15 spi[%d] ready to receive data, size: %d num: %d \n", SPI_TRUNK_SZ, arg0, arg1);
+        ret = tx_data(fm[arg0], rx_buff[0], tx_buff[0], arg1, SPI_TRUNK_SZ, 1024*1024);
         printf("[%d]rx %d\n", arg0, ret);
         wtsz = fwrite(rx_buff[0], 1, ret, fp);
         printf("write file %d size %d/%d \n", fp, wtsz, ret);
         goto end;
     }
     if (sel == 14){ /* dual band data mode test ex[14 1 2 5 1 30720]*/
-        #define PKTSZ  30720 //61440
+        #define PKTSZ  30720 //SPI_TRUNK_SZ
         int chunksize;
         if (arg4 == PKTSZ) chunksize = PKTSZ;
-        else chunksize = 61440;
+        else chunksize = SPI_TRUNK_SZ;
 
         printf("***chunk size: %d ***\n", chunksize);
 		

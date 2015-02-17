@@ -32,6 +32,8 @@
 #define SPI_RX_QUAD 0x800         /* receive with 4 wires */
 #define BUFF_SIZE  2048
 
+#define SPI_TRUNK_SZ 32768
+
 static void pabort(const char *s) 
 { 
     perror(s); 
@@ -42,7 +44,7 @@ static const char *device = "/dev/spidev32765.0";
 char data_path[256] = "/root/tx/1.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
-static uint32_t speed = 20000000; 
+static uint32_t speed = 30000000; 
 static uint16_t delay; 
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
@@ -564,20 +566,20 @@ static char spi1[] = "/dev/spidev32766.0";
         int ret=0;
         uint16_t *tx16, *rx16, *tmp16;
         uint8_t *tx8, *rx8, *tmp8;
-        tx16 = malloc(61440);
-        rx16 = malloc(61440);
-        tx8 = malloc(61440);
-        rx8 = malloc(61440);
+        tx16 = malloc(SPI_TRUNK_SZ);
+        rx16 = malloc(SPI_TRUNK_SZ);
+        tx8 = malloc(SPI_TRUNK_SZ);
+        rx8 = malloc(SPI_TRUNK_SZ);
 
         int i;
         tmp8 = (uint8_t *)tx16;
-        for(i = 0; i < 61440; i++) {
+        for(i = 0; i < SPI_TRUNK_SZ; i++) {
             *tmp8 = i & 0xff;
             tmp8++;
         }
 
         tmp8 = (uint8_t *)tx8;
-        for(i = 0; i < 61440; i++) {
+        for(i = 0; i < SPI_TRUNK_SZ; i++) {
             *tmp8 = i & 0xff;
             tmp8++;
         }
@@ -593,7 +595,7 @@ static char spi1[] = "/dev/spidev32766.0";
             pabort("can't get bits per word"); 
 
         if (bits == 16) {
-            ret = tx_data_16(fm[arg0], rx16, tx16, 1, arg1, 61440);
+            ret = tx_data_16(fm[arg0], rx16, tx16, 1, arg1, SPI_TRUNK_SZ);
             int i;
             tmp16 = rx16;
             for (i = 0; i < ret; i+=2) {
@@ -604,7 +606,7 @@ static char spi1[] = "/dev/spidev32766.0";
             printf("\n");
         }
         if (bits == 8) {
-            ret = tx_data(fm[arg0], rx8, tx8, 1, arg1, 61440);
+            ret = tx_data(fm[arg0], rx8, tx8, 1, arg1, SPI_TRUNK_SZ);
             int i;
             tmp8 = rx8;
             for (i = 0; i < ret; i+=1) {
@@ -620,8 +622,8 @@ static char spi1[] = "/dev/spidev32766.0";
         goto end;
     }
     if (sel == 14) { /* dual continuous command mode [14 20 path1 path2 pktsize] ex: 14 20 ./01.mp4 ./02.mp4 512 */
-#define DCTSIZE (64*1024*1024)
-#define PKTSZ  61440
+#define DCTSIZE (128*1024*1024)
+#define PKTSZ  SPI_TRUNK_SZ
         int chunksize, acusz;
         chunksize = PKTSZ;
         FILE *fp2, *fpd1, *fpd2;
@@ -995,7 +997,7 @@ static char spi1[] = "/dev/spidev32766.0";
     }
     if (sel == 13) { /* continuous command mode [13 20 path pktsize spi] ex: 13 20 ./01.mp3 512 1*/
 #define TSIZE (128*1024*1024)
-#define PKTSZ  61440
+#define PKTSZ  SPI_TRUNK_SZ
 #define SAVE_FILE 0
 #define USE_SHARE_MEM 1
         int chunksize, acusz;
@@ -1270,7 +1272,7 @@ static char spi1[] = "/dev/spidev32766.0";
 	}
     if (sel == 11) { /* dual channel data mode ex:[./master_spi.bin 11 50 file_path 30720 30720 sleepus]*/
 	#define TSIZE (128*1024*1024)
-	#define PKTSZ  61440
+	#define PKTSZ  SPI_TRUNK_SZ
 	int chunksize;
 	chunksize = arg3;
 
