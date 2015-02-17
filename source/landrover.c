@@ -2473,7 +2473,8 @@ static int p2(struct procRes_s *rs)
     char ch;
     int totsz=0, fsize=0, pi=0, len;
     char *addr;
-    char filename[128] = "/mnt/mmc2/hilldesert.jpg";
+    char filename[128] = "/mnt/mmc2/handmade.jpg";
+    //char filename[128] = "/mnt/mmc2/hilldesert.jpg";
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/pattern2.txt";
     FILE *fp = NULL;
