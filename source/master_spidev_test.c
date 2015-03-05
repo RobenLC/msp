@@ -532,6 +532,35 @@ static char spi1[] = "/dev/spidev32766.0";
 		rxans[i] = i & 0x95;
 		tx[i] = i & 0x95;
 	}
+    if (sel == 17){ /* command mode test ex[17 1/0]*/
+#define TRUNK_SIZE 4096
+
+        int ret = 0, len = 0, cnt = 0, acusz = 0;
+        int spis = 0;
+
+        spis = arg0 % 2;
+        // disable data mode
+        bitset = 0;
+        ret = ioctl(fm[spis], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi%d data mode: %d\n", spis, bitset);
+
+        bitset = 1;
+        ret = ioctl(fm[spis], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi%d slve ready: %d\n", spis, bitset);
+
+        memset(tx_buff, TRUNK_SIZE, 0x55);
+
+            memset(rx_buff, TRUNK_SIZE, 0xff);
+
+            len = tx_data(fm[spis], rx_buff, tx_buff, 1, TRUNK_SIZE, 1024*1024);
+
+            printf("receive %d bytes, write to file %d bytes \n", cnt, len, ret);
+
+        acusz += len;
+        printf("file save [%s], receive total size: %d \n", path, acusz);
+
+        goto end;
+    }
     if (sel == 16){ /* command mode test ex[16 num]*/
 #define OP_PON 0x1
 #define OP_QRY 0x2
@@ -541,13 +570,50 @@ static char spi1[] = "/dev/spidev32766.0";
 #define OP_DCM 0x6
 #define OP_FIH  0x7
 #define OP_DUL 0x8
+#define OP_RD 0x9
+#define OP_WT 0xa
+
+#define OP_STSEC_00  0x10
+#define OP_STSEC_01  0x11
+#define OP_STSEC_02  0x12
+#define OP_STSEC_03  0x13
+#define OP_STLEN_00  0x14
+#define OP_STLEN_01  0x15
+#define OP_STLEN_02  0x16
+#define OP_STLEN_03  0x17
 
         int ret=0;
         uint8_t tx8[4], rx8[4];
-        uint8_t dt[9] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM, OP_FIH, OP_DUL};
+        uint8_t op[13] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM, OP_FIH, OP_DUL, OP_RD, OP_WT, OP_STSEC_00, OP_STLEN_00};
+        uint8_t st[4] = {OP_STSEC_00, OP_STSEC_01, OP_STSEC_02, OP_STSEC_03};
+        uint8_t ln[4] = {OP_STLEN_00, OP_STLEN_01, OP_STLEN_02, OP_STLEN_03};
+        uint8_t staddr = 0, stlen = 0, btidx = 0;
 
-        tx8[0] = dt[arg0];
+        tx8[0] = op[arg0];
         tx8[1] = 0x5f;
+
+        if (arg0 > 12) {
+            printf("Error!! Index overflow!![%d]\n", arg0);
+            goto end;
+        }
+
+        btidx = arg2 % 4;
+        if (op[arg0] == OP_STSEC_00) {
+            staddr = arg1 & (0xff << (8 * btidx));
+            
+            tx8[0] = st[btidx];
+            tx8[1] = staddr;
+            
+            printf("start secter: %.8x, send:%.2x \n", arg1, staddr);
+        }
+
+        if (op[arg0] == OP_STLEN_00) {
+            stlen = arg1 & (0xff << (8 * btidx));
+            tx8[0] = ln[btidx];
+            tx8[1] = stlen;
+            
+            printf("secter length: %.8x, send:%.2x\n", arg1, stlen);
+        }
 
         bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
