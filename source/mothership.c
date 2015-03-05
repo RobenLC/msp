@@ -17,6 +17,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>  
+
 //main()
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
@@ -25,14 +26,27 @@
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
 
-#define OP_PON 0x1
-#define OP_QRY 0x2
-#define OP_RDY 0x3
-#define OP_DAT 0x4
-#define OP_SCM 0x5
-#define OP_DCM 0x6
-#define OP_FIH  0x7
-#define OP_DUL  0x8
+#define OP_PON   0x1
+#define OP_QRY   0x2
+#define OP_RDY   0x3
+#define OP_DAT   0x4
+#define OP_SCM   0x5
+#define OP_DCM   0x6
+#define OP_FIH    0x7
+#define OP_DUL    0x8
+#define OP_RD      0x9
+#define OP_WT     0xa
+#define OP_SDAT   0xb
+
+#define OP_STSEC_00  0x10
+#define OP_STSEC_01  0x11
+#define OP_STSEC_02  0x12
+#define OP_STSEC_03  0x13
+#define OP_STLEN_00  0x14
+#define OP_STLEN_01  0x15
+#define OP_STLEN_02  0x16
+#define OP_STLEN_03  0x17
+
 
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
@@ -319,6 +333,16 @@ static int stlaser_02(struct psdata_s *data);
 static int stlaser_03(struct psdata_s *data);
 static int stlaser_04(struct psdata_s *data);
 static int stlaser_05(struct psdata_s *data);
+static int stdob_01(struct psdata_s *data);
+static int stdob_02(struct psdata_s *data);
+static int stdob_03(struct psdata_s *data);
+static int stdob_04(struct psdata_s *data);
+static int stdob_05(struct psdata_s *data);
+static int stdob_06(struct psdata_s *data);
+static int stdob_07(struct psdata_s *data);
+static int stdob_08(struct psdata_s *data);
+static int stdob_09(struct psdata_s *data);
+static int stdob_10(struct psdata_s *data);
 
 static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir);
 static int mspFS_insertChilds(struct aspDirnFile_s *root);
