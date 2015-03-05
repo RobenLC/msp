@@ -841,7 +841,7 @@ static char path[256];
         printf("find save dst failed ret:%d\n", fp);
         goto end;
     } else
-        printf("find save dst succeed ret:%d\n", fp);
+        printf("find save dst succeed[%s] ret:%d\n", path, fp);
 
     /* scanner default setting */
     mode &= ~SPI_MODE_3;
@@ -1507,33 +1507,47 @@ redo:
         }
         goto end;
     }
-    if (sel == 23){ /* command mode test ex[23 1/0 1/0]*/
-        arg1 = arg1 % 2;
+    if (sel == 23){ /* command mode test ex[23 1/0]*/
+#define TRUNK_SIZE 32768
 
-        if (arg0) {
-            bitset = 1;
-            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-            printf("Set slve ready: %d\n", bitset);
+        int ret = 0, len = 0, cnt = 0, acusz = 0;
+        int spis = 0;
 
-            bitset = 1;
-            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-            printf("Set spi%d data mode: %d\n", arg1, bitset);
+        spis = arg0 % 2;
+        // disable data mode
+        bitset = 0;
+        ret = ioctl(fm[spis], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi%d data mode: %d\n", spis, bitset);
 
-            bitset = 1;
-            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
-            printf("Set spi%d RDY: %d\n", arg1, bitset);
+        bitset = 1;
+        ret = ioctl(fm[spis], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi%d slve ready: %d\n", spis, bitset);
 
-            printf("Start spi%d spidev thread, ret: 0x%x\n", arg1, ret);
-            bitset = 0;
-            ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+        memset(tx_buff[0], TRUNK_SIZE, 0xaa);
 
-        } else {
-            bitset = 0;
-            printf("Stop spi%d spidev thread, ret: %d\n", arg1, ret);
-            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+        while (1) {
+            memset(rx_buff[0], TRUNK_SIZE, 0x95);
+
+            len = tx_data(fm[spis], rx_buff[0], tx_buff[0], 1, TRUNK_SIZE, 1024*1024);
+
+            msync(rx_buff[0], len, MS_SYNC);
+            if (len < 0) {
+                len = 0 - len;
+                ret = fwrite(rx_buff[0], 1, len, fp);
+                printf("[%d]receive %d bytes, write to file %d bytes - end\n", cnt, len, ret);
+                break;
+            }
+            ret = fwrite(rx_buff[0], 1, len, fp);
+            printf("[%d]receive %d bytes, write to file %d bytes \n", cnt, len, ret);
+            acusz += len;
+            cnt++;            
+            len = 0;
+            ret = 0;
         }
 
-        while(1);
+        acusz += len;
+        printf("file save [%s], receive total size: %d \n", path, acusz);
+
         goto end;
     }
     if (sel == 22){ /* command mode test ex[22 num]*/
@@ -1544,15 +1558,61 @@ redo:
 #define OP_SCM 0x5
 #define OP_DCM 0x6
 #define OP_FIH  0x7
+#define OP_DUL 0x8
+#define OP_RD 0x9
+#define OP_WT 0xa
+#define OP_SDAT 0xb
+#define OP_MAX 0xff
+#define OP_NONE 0x00
+
+#define OP_STSEC_0  0x10
+#define OP_STSEC_1  0x11
+#define OP_STSEC_2  0x12
+#define OP_STSEC_3  0x13
+#define OP_STLEN_0  0x14
+#define OP_STLEN_1  0x15
+#define OP_STLEN_2  0x16
+#define OP_STLEN_3  0x17
 
         int ret=0;
         uint8_t tx8[4], rx8[4];
-        uint8_t dt[8] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM, OP_FIH};
+        uint8_t op[26] = {		0xaa, 	OP_PON, 		OP_QRY, 		OP_RDY, 		OP_DAT, 		OP_SCM
+							, 	OP_DCM, 	OP_FIH, 		OP_DUL, 		OP_RD, 		OP_WT
+							, 	OP_SDAT, 	OP_NONE, 	OP_NONE, 	OP_NONE, 	OP_NONE
+							, 	OP_NONE, 	OP_NONE, 	OP_NONE,	OP_NONE,	OP_STSEC_0
+							,	OP_STLEN_0,	OP_NONE,	OP_NONE,	OP_NONE,	OP_MAX};
 
-        tx8[0] = dt[arg0];
+        uint8_t st[4] = {OP_STSEC_0, 	OP_STSEC_1,	OP_STSEC_2,	OP_STSEC_3};
+        uint8_t ln[4] = {OP_STLEN_0, 	OP_STLEN_1,	OP_STLEN_2,	OP_STLEN_3};
+        uint8_t staddr = 0, stlen = 0, btidx = 0;
+
+        tx8[0] = op[arg0];
         tx8[1] = 0x5f;
 
+        if (arg0 > 25) {
+            printf("Error!! Index overflow!![%d]\n", arg0);
+            goto end;
+        }
+
+        btidx = arg2 % 4;
+        if (op[arg0] == OP_STSEC_0) {
+            staddr = (arg1 >> (8 * btidx)) & 0xff;
+            
+            tx8[0] = st[btidx];
+            tx8[1] = staddr;
+            
+            printf("start secter: %.8x, send:%.2x \n", arg1, staddr);
+        }
+
+        if (op[arg0] == OP_STLEN_0) {
+            stlen = (arg1 >> (8 * btidx)) & 0xff;
+            tx8[0] = ln[btidx];
+            tx8[1] = stlen;
+            
+            printf("secter length: %.8x, send:%.2x\n", arg1, stlen);
+        }
         // disable data mode
+/*
         bitset = 0;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi0 data mode: %d\n", bitset);
@@ -1567,7 +1627,7 @@ redo:
         bitset = 0;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
         printf("Set spi0 RDY: %d\n", bitset);
-
+*/
         bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
         if (ret == -1) 
