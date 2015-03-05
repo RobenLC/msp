@@ -53,7 +53,51 @@ struct directnFile_s{
 struct pipe_s{
     int rt[2];
 };
-    
+
+struct sdbootsec_s{
+    int secSt;
+    char secSysid[8];
+    int secSize;          // 512
+    int secPrClst;       // 4 8 16 32 64
+    int secResv;        // M 
+    int secNfat;         // should be 2
+    int secTotal;        // total sectors
+    int secIDm;         // must be 0xF8
+    int secPrfat;         // sectors per FAT
+    int secPrtrk;         // sectors per track
+    int secNsid;          // number of sides
+    int secNhid;          // number of hidden sectors
+    int secExtf;           // extension flag, specify the status of FAT mirroring
+    int secVers;          // File system version
+    int secRtclst;        // indicate the cluster number of root dir
+    int secFSif;           // indicate the sector number of FS info, will be 1 normally
+    int secBkbt;          // indicate the offset sector number of backup boot sector
+    int secPhdk;         // pyhsical disk number, should be 0x80
+    int secExtbt;        // extended boot record signature, should be 0x29
+    int secVoid;          // volume ID number
+    char secVola[12]; // volume label
+    char secFtyp[8];   // file system type in ascii
+    int secSign;          // shall be 0x55 (BP510) and 0xAA (BP511)
+};
+
+struct sdFSinfo_s{
+    int finLdsn;            // lead ingnature, shall be 0x52 0x52 0x61 0x41
+    int finStsn;             // structure signature, shall be 0x72 0x72 0x41 0x61
+    int finFreClst;        // free cluster count
+    int finNxtFreClst;   // next free cluster
+    int finTrsn;             // shall be 0x00 0x00 0x55 0xaa
+};
+
+struct sdFATable_s{
+    char BP[4];
+};
+
+struct sdFAT_s{
+    struct sdbootsec_s fatBootsec;
+    struct sdFSinfo_s fatFSinfo;
+    struct sdFATable_s *f32fat;
+};
+
 static void pabort(const char *s) 
 { 
     perror(s); 
@@ -96,9 +140,11 @@ static int aspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *ro
 static int aspFS_deleteNote(struct directnFile_s *root, char *path);
 static int aspFS_save(struct directnFile_s *root, FILE fp);
 static int aspFS_extract(struct directnFile_s *root, FILE fp);
-
 static int aspFS_getNote(struct directnFile_s *note, struct directnFile_s *root, char *path);
 static int aspFS_getFilelist(char *flst, struct directnFile_s *note);
+
+static int aspSD_getRoot();
+static int aspSD_getDir();
 
 void printdir(char *dir, int depth)
 {
