@@ -54,6 +54,10 @@ struct pipe_s{
     int rt[2];
 };
 
+struct sdRaw_s{
+    char rowBP[512];
+};
+
 struct sdbootsec_s{
     int secSt;
     char secSysid[8];
@@ -88,14 +92,19 @@ struct sdFSinfo_s{
     int finTrsn;             // shall be 0x00 0x00 0x55 0xaa
 };
 
+struct sdFATitem_s{
+    char fitBP[4];
+};
 struct sdFATable_s{
-    char BP[4];
+    struct sdFATitem_s *ftbFat;
+    int ftbLen;
 };
 
 struct sdFAT_s{
-    struct sdbootsec_s fatBootsec;
-    struct sdFSinfo_s fatFSinfo;
-    struct sdFATable_s *f32fat;
+    struct sdbootsec_s  *fatBootsec;
+    struct sdFSinfo_s    *fatFSinfo;
+    struct sdFATable_s *fatTable;
+    struct directnFile_s *fatRootdir;
 };
 
 static void pabort(const char *s) 
