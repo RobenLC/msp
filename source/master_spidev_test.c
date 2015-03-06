@@ -33,6 +33,27 @@
 #define BUFF_SIZE  2048
 
 #define SPI_TRUNK_SZ 32768
+#define TRUNK_SIZE SPI_TRUNK_SZ
+
+#define OP_PON 0x1
+#define OP_QRY 0x2
+#define OP_RDY 0x3
+#define OP_DAT 0x4
+#define OP_SCM 0x5
+#define OP_DCM 0x6
+#define OP_FIH  0x7
+#define OP_DUL 0x8
+#define OP_RD 0x9
+#define OP_WT 0xa
+
+#define OP_STSEC_00  0x10
+#define OP_STSEC_01  0x11
+#define OP_STSEC_02  0x12
+#define OP_STSEC_03  0x13
+#define OP_STLEN_00  0x14
+#define OP_STLEN_01  0x15
+#define OP_STLEN_02  0x16
+#define OP_STLEN_03  0x17
 
 static void pabort(const char *s) 
 { 
@@ -532,8 +553,106 @@ static char spi1[] = "/dev/spidev32766.0";
 		rxans[i] = i & 0x95;
 		tx[i] = i & 0x95;
 	}
+    if (sel == 18){ /* command mode test ex[18 startsec secNum filename.bin]*/
+#define SEC_LEN 512
+
+        int startSec = 0, secNum = 0;
+        int startAddr = 0, bLength = 0;
+        char diskpath[128];
+        FILE *dkf = 0;
+        char *outbuf;
+        int ret = 0, len = 0, cnt = 0, acusz = 0, max = 0;
+        int sLen = 0;
+
+        startSec = arg0;
+        secNum = arg1;
+
+        /* open target file which will be transmitted */
+        strcpy(diskpath, argv[4]);
+        printf(" open file [%s] \n", diskpath);
+        dkf = fopen(diskpath, "r");
+       
+        if (!dkf) {
+            printf(" [%s] file open failed \n", diskpath);
+            goto end;
+        }	
+        printf(" [%s] file open succeed \n", diskpath);
+
+        bitset = 0;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi%d data mode: %d\n", 0, bitset);
+
+        bitset = 1;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi%d slve ready: %d\n", 0, bitset);
+
+        startAddr = startSec * SEC_LEN;
+        bLength = secNum * SEC_LEN;
+
+        ret = fseek(dkf, 0, SEEK_END);
+        if (ret) {
+            printf("seek file failed: ret:%d \n", ret);
+            goto end;
+        }
+
+        max = ftell(dkf);
+        if ((startAddr + bLength) > max) {
+            printf("dump size overflow start:%d len:%d max:%d\n", startAddr, bLength, max);
+            goto end;
+        } else {
+            printf("disk dump, start:%d len:%d max:%d\n", startAddr, bLength, max);
+        }
+
+        ret = fseek(dkf, startAddr, SEEK_SET);
+        if (ret) {
+            printf("seek file failed: ret:%d \n", ret);
+            goto end;
+        }
+
+        ret = fread(tx_buff, 1, bLength, dkf);
+        printf("read file size: %d/%d \n", ret, bLength);
+
+        acusz = bLength;
+        outbuf = tx_buff;
+        cnt = 0;
+        while (acusz>0) {
+            if (acusz > TRUNK_SIZE) {
+                sLen = TRUNK_SIZE;
+                acusz -= sLen;
+            } else {
+                sLen = acusz;
+                acusz = 0;
+            }
+
+            len = tx_data(fm[0], rx_buff, outbuf, 1, sLen, 1024*1024);
+            printf("[%d]Send %d/%d bytes!!\n", cnt, len, sLen);
+
+            cnt++;
+            outbuf += len;
+    	 }
+
+        usleep(100000);
+
+        bitset = 0;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[R]Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
+
+        usleep(100000);
+
+        bitset = 0;
+        ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("[R]Get spi%d RDY pin: %d \n", 0, bitset);
+
+        usleep(100000);
+
+        bitset = 0;
+        ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("[R]Get spi%d RDY pin: %d \n", 0, bitset);
+
+        goto end;
+    }
+
     if (sel == 17){ /* command mode test ex[17 1/0]*/
-#define TRUNK_SIZE 4096
 
         int ret = 0, len = 0, cnt = 0, acusz = 0;
         int spis = 0;
@@ -562,25 +681,6 @@ static char spi1[] = "/dev/spidev32766.0";
         goto end;
     }
     if (sel == 16){ /* command mode test ex[16 num]*/
-#define OP_PON 0x1
-#define OP_QRY 0x2
-#define OP_RDY 0x3
-#define OP_DAT 0x4
-#define OP_SCM 0x5
-#define OP_DCM 0x6
-#define OP_FIH  0x7
-#define OP_DUL 0x8
-#define OP_RD 0x9
-#define OP_WT 0xa
-
-#define OP_STSEC_00  0x10
-#define OP_STSEC_01  0x11
-#define OP_STSEC_02  0x12
-#define OP_STSEC_03  0x13
-#define OP_STLEN_00  0x14
-#define OP_STLEN_01  0x15
-#define OP_STLEN_02  0x16
-#define OP_STLEN_03  0x17
 
         int ret=0;
         uint8_t tx8[4], rx8[4];

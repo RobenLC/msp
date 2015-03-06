@@ -1550,16 +1550,56 @@ redo:
     
 	
     if (sel == 24){ /* command mode test ex[24 0/num 1/0]*/
-        arg1 = arg1 % 2;
-        if (arg0 == 0) {
-            bitset = 0;
-            ret = ioctl(fm[arg1], _IOR(SPI_IOC_MAGIC, 15, __u32), &bitset);  //SPI_IOC_PROBE_THREAD
-            printf("Probe spi%d spidev thread, num: %d\n", arg1, bitset);
-        } else {
-            bitset = arg0;
-            ret = ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 15, __u32), &bitset);  //SPI_IOC_WRITE_THREAD
-            printf("Write spi%d spidev thread, num: %d\n", arg1, bitset);
+        int ret=0, max=0;
+        FILE *dkf;
+        char diskpath[128], *dkbuf = 0;
+        struct sdRaw_s *raw;
+
+        strcpy(diskpath, argv[3]);
+        printf(" open file [%s] \n", diskpath);
+        dkf = fopen(diskpath, "r");
+       
+        if (!dkf) {
+            printf(" [%s] file open failed \n", diskpath);
+            goto end;
+        }	
+        printf(" [%s] file open succeed \n", diskpath);
+
+        ret = fseek(dkf, 0, SEEK_END);
+        if (ret) {
+            printf(" file seek failed!! ret:%d \n", ret);
+            goto end;
         }
+
+        max = ftell(dkf);
+        printf(" file [%s] size: %d \n", diskpath, max);
+        dkbuf = malloc(max);
+        if (dkbuf) {
+            printf(" dkbuf alloc succeed! size: %d \n", max);
+        } else {
+            printf(" dkbuf alloc failed! size: %d \n", max);
+            goto end;
+        }
+
+        ret = fseek(dkf, 0, SEEK_SET);
+        if (ret) {
+            printf(" file seek failed!! ret:%d \n", ret);
+            goto end;
+        }
+		
+        ret = fread(dkbuf, 1, max, dkf);
+        printf(" dk file read size: %d/%d \n", ret, max);
+
+        switch (arg0) {
+        case 0: /* read the boot sector */
+            break;
+        case 1: /* read the fat table */
+            break;
+        case 2: /* read the dir tree */
+            break;
+        default:
+            break;
+        }	
         goto end;
     }
     if (sel == 23){ /* command mode test ex[23 1/0]*/
