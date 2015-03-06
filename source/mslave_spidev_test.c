@@ -43,6 +43,7 @@ struct directnFile_s{
     uint32_t   dftype;
     uint32_t   dfstats;
     char        dfLFN[256];
+    char        dfSFN[12];
     int           dflen;
     uint32_t   dfattrib;
     struct directnFile_s *pa;
@@ -59,7 +60,8 @@ struct sdRaw_s{
 };
 
 struct sdbootsec_s{
-    int secSt;
+    int secSt;              // status of boot sector 
+    int secJpcmd;      // jump command to the boot program
     char secSysid[8];
     int secSize;          // 512
     int secPrClst;       // 4 8 16 32 64
@@ -80,8 +82,10 @@ struct sdbootsec_s{
     int secExtbt;        // extended boot record signature, should be 0x29
     int secVoid;          // volume ID number
     char secVola[12]; // volume label
-    char secFtyp[8];   // file system type in ascii
+    char secFtyp[12];   // file system type in ascii
     int secSign;          // shall be 0x55 (BP510) and 0xAA (BP511)
+    int secWhfat;        // indicate the sector of fat table
+    int secWhroot;      // indicate the sector of root dir
 };
 
 struct sdFSinfo_s{
@@ -154,6 +158,174 @@ static int aspFS_getFilelist(char *flst, struct directnFile_s *note);
 
 static int aspSD_getRoot();
 static int aspSD_getDir();
+
+static char aspLnameFilter(char ch);
+
+static int aspNameCpy(char *raw, char *dst, int offset, int len, int jump)
+{
+    char ch;
+    int i, cnt, idx;
+
+    cnt = 0;
+    for (i = 0; i < len; i++) {
+        idx = offset+i*jump;
+        if (idx > 32) return (-1);
+        ch = aspLnameFilter(raw[idx]);
+        if (ch == 0xff) return cnt;
+        *dst = ch;
+        dst ++;
+        cnt++;
+    }
+
+    return cnt;
+}
+
+static char aspLnameFilter(char ch)
+{
+    char def = '_', *p;
+    char noAllow[16] = {0x22, 0x2a, 0x2b, 0x2c, 0x2e, 0x2f, 0x3a, 0x3b, 
+		                      0x3c, 0x3d, 0x3e, 0x3f, 0x5b, 0x5c, 0x5d, 0x7c};
+    if (ch < 0x20) {
+        return def;
+    }
+    p = noAllow + 16;
+    while (p >= noAllow) {
+        if (*p == ch) return def;
+        p --;
+    }
+
+    return ch;
+}
+
+static int aspLnameAbs(char *raw, char *dst) 
+{
+    int i, cnt, ret;
+    char ch;
+    if (!raw) return (-1);
+    if (!dst) return (-2);
+
+    ret = aspNameCpy(raw, dst, 1, 5, 2);
+    cnt += ret;
+    if (ret != 5) return cnt;
+
+    dst += ret;
+    ret = aspNameCpy(raw, dst, 14, 6, 2);
+    cnt += ret;
+    if (ret != 6) return cnt;
+	
+    dst += ret;
+    ret = aspNameCpy(raw, dst, 28, 2, 2);
+    cnt += ret;
+
+    return cnt;
+}
+
+static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
+{
+    int leN, cnt;
+    char *lnN, *stN;
+    char ld=0;
+    if (!raw) return (-1);
+    if (!fs) return (-2);
+    if (last < 32) return (-3);	
+
+    ld = *raw;
+
+    if ((ld == 0xe5) || (ld == 0x05)) {
+        if (last == 32) {
+            return 32;
+        } else if (last > 32) {
+            raw += 32;
+            last = last - 32;
+            return 32 + aspRawParseDir(raw, fs, last);
+        } else {
+            return (-4);
+        }
+    } else if (ld == 0x00) {
+        return 32;
+    } else if (ld == 0x42) {
+        lnN = fs->dfLFN;
+        cnt = aspLnameAbs(raw, lnN);
+        fs->dflen += cnt;
+        raw += 32;
+        return 32 + aspRawParseDir(raw, fs, last);
+    }
+
+}
+
+static uint32_t aspRawCompose(char * raw, int size)
+{
+    int sh[4] = {0, 8, 16, 24};
+    int i = 0;
+    uint32_t val = 0, tmp = 0;
+
+    while(i < size) {
+        tmp = raw[i];
+        val |= tmp << sh[i];
+        i++;
+    }
+    return val;
+}
+
+void debugPrintBootSec(struct sdbootsec_s *psec)
+{
+            /* 0  Jump command */
+    printf("[0x%x]: /* 0  Jump command */ \n", psec->secJpcmd);
+            /* 3  system id */
+    printf("[%s]: /* 3  system id */\n", psec->secSysid);
+            /* 11 sector size */ 
+    printf("[%d]: /* 11 sector size */ \n", psec->secSize);
+            /* 13 sector per cluster */
+    printf("[%d]: /* 13 sector per cluster */\n", psec->secPrClst);
+            /* 14 reserved sector count*/
+    printf("[%d]: /* 14 reserved sector count*/\n", psec->secResv);            
+            /* 16 number of FATs */
+    printf("[%d]: /* 16 number of FATs */\n", psec->secNfat);
+            /* 17 skip, number of root dir entries */
+            /* 19 skip, total sectors */
+            /* 21 medium id */
+    printf("[0x%x]: /* 21 medium id */\n", psec->secIDm);
+            /* 22 skip, sector per FAT */
+            /* 24 sector per track */
+    printf("[%d]: /* 24 sector per track */\n", psec->secPrtrk);
+            /* 26 number of sides */
+    printf("[%d]: /* 26 number of sides */\n", psec->secNsid);
+            /* 28 number of hidded sectors */
+    printf("[%d]: /* 28 number of hidded sectors */\n", psec->secNhid);
+            /* 32 total sectors */
+    printf("[%d]: /* 32 total sectors */\n", psec->secTotal);
+            /* 36 sectors per FAT */
+    printf("[%d]: /* 36 sectors per FAT */\n", psec->secPrfat);
+            /* 40 extension flag */
+    printf("[0x%x]: /* 40 extension flag */\n", psec->secExtf);
+            /* 42 FS version */
+    printf("[0x%x]: /* 42 FS version */\n", psec->secVers); 
+            /* 44 root cluster */
+    printf("[%d]: /* 44 root cluster */\n", psec->secRtclst); 
+            /* 48 FS info */
+    printf("[0x%x]: /* 48 FS info */\n", psec->secFSif); 
+            /* 50 backup boot sector */
+    printf("[%d]: /* 50 backup boot sector */\n", psec->secBkbt); 
+            /* 64 physical disk number */
+    printf("[%d]: /* 64 physical disk number */\n", psec->secPhdk);
+            /* 66 extended boot record signature */
+    printf("[0x%x]: /* 66 extended boot record signature */\n", psec->secExtbt);
+            /* 67 volume ID number */
+    printf("[0x%x]: /* 67 volume ID number */\n", psec->secVoid); 
+            /* 71 to 81 volume label */
+    printf("[%s]: /* 71 to 81 volume label */\n", psec->secVola);
+            /* 82 to 89 file system type */
+    printf("[%s]: /* 82 to 89 file system type */\n", psec->secFtyp);
+            /* 510 signature word */
+    printf("[0x%x]: /* 510 signature word */\n", psec->secSign);
+            /* set the boot sector status to 1 */
+    printf("[0x%x]: /* boot sector status */\n", psec->secSt);
+            /* the start sector of fat table */
+    printf("[%d]: /* the start sector of fat table */\n", psec->secWhfat);
+            /* the start sector of root dir */
+    printf("[%d]: /* the start sector of root dir */\n", psec->secWhroot);
+
+}
 
 void printdir(char *dir, int depth)
 {
@@ -1590,12 +1762,144 @@ redo:
         ret = fread(dkbuf, 1, max, dkf);
         printf(" dk file read size: %d/%d \n", ret, max);
 
+        raw = (struct sdRaw_s *) dkbuf;
+
+        int i, j;
+        /* dump raw */
+
+        for (i = 0; i < (max/512); i++) {
+            printf("[%d] \n", i);
+            for (j = 0; j < 512; j++) {
+                if ((j % 16) == 0) printf("%.6x ", i * 512 + j);
+                printf("%.2x ", raw[i].rowBP[j]);
+                if (((j +1) % 16) == 0) printf("\n");
+            }
+        }
+
+#if TEST
+struct sdFAT_s{
+    struct sdbootsec_s  *fatBootsec;
+    struct sdFSinfo_s    *fatFSinfo;
+    struct sdFATable_s *fatTable;
+    struct directnFile_s *fatRootdir;
+};
+struct sdbootsec_s{
+    int secSt;              // status of boot sector 
+    int secJpcmd;      // jump command to the boot program
+    char secSysid[8];
+    int secSize;          // 512
+    int secPrClst;       // 4 8 16 32 64
+    int secResv;        // M 
+    int secNfat;         // should be 2
+    int secTotal;        // total sectors
+    int secIDm;         // must be 0xF8
+    int secPrfat;         // sectors per FAT
+    int secPrtrk;         // sectors per track
+    int secNsid;          // number of sides
+    int secNhid;          // number of hidden sectors
+    int secExtf;           // extension flag, specify the status of FAT mirroring
+    int secVers;          // File system version
+    int secRtclst;        // indicate the cluster number of root dir
+    int secFSif;           // indicate the sector number of FS info, will be 1 normally
+    int secBkbt;          // indicate the offset sector number of backup boot sector
+    int secPhdk;         // pyhsical disk number, should be 0x80
+    int secExtbt;        // extended boot record signature, should be 0x29
+    int secVoid;          // volume ID number
+    char secVola[12]; // volume label
+    char secFtyp[8];   // file system type in ascii
+    int secSign;          // shall be 0x55 (BP510) and 0xAA (BP511)
+    int secWhfat;        // indicate the sector of fat table
+    int secWhroot;      // indicate the sector of root dir
+};
+#endif
+#define SF0 (8 * 0)
+#define SF1 (8 * 1)
+#define SF2 (8 * 2)
+#define SF3 (8 * 3)
+
+        struct sdFAT_s *pfat;
+        struct sdbootsec_s  *psec;
+        char *pr;
+
+        pfat = malloc(sizeof(struct sdFAT_s));
+        pfat->fatBootsec = malloc(sizeof(struct sdbootsec_s));
+        pfat->fatFSinfo = malloc(sizeof(struct sdFSinfo_s));
+
         switch (arg0) {
         case 0: /* read the boot sector */
+            psec = pfat->fatBootsec;
+            pr = raw[0].rowBP;
+            /* 0  Jump command */
+            psec->secJpcmd = pr[0] | (pr[1] << SF1) | (pr[2] << SF2) | (pr[3] << SF3);
+            /* 3  system id */
+            for (i = 0; i < 8; i++) {
+                psec->secSysid[i] = pr[3+i];
+            }
+            psec->secSysid[8] = '\0';
+            /* 11 sector size */ 
+            psec->secSize = aspRawCompose(&pr[11], 2);
+            /* 13 sector per cluster */
+            psec->secPrClst = pr[13];
+            /* 14 reserved sector count*/
+            psec->secResv = aspRawCompose(&pr[14], 2);
+            /* 16 number of FATs */
+            psec->secNfat = pr[16];
+            /* 17 skip, number of root dir entries */
+            /* 19 skip, total sectors */
+            /* 21 medium id */
+            psec->secIDm = pr[21];
+            /* 22 skip, sector per FAT */
+            /* 24 sector per track */
+            psec->secPrtrk = aspRawCompose(&pr[24], 2);
+            /* 26 number of sides */
+            psec->secNsid = aspRawCompose(&pr[26], 2);
+            /* 28 number of hidded sectors */
+            psec->secNhid = aspRawCompose(&pr[28], 4);
+            /* 32 total sectors */
+            psec->secTotal = aspRawCompose(&pr[32], 4);
+            /* 36 sectors per FAT */
+            psec->secPrfat = aspRawCompose(&pr[36], 4);
+            /* 40 extension flag */
+            psec->secExtf = aspRawCompose(&pr[40], 2);
+            /* 42 FS version */
+            psec->secVers = aspRawCompose(&pr[42], 2); 
+            /* 44 root cluster */
+            psec->secRtclst = aspRawCompose(&pr[44], 4); 
+            /* 48 FS info */
+            psec->secFSif = aspRawCompose(&pr[48], 2); 
+            /* 50 backup boot sector */
+            psec->secBkbt = aspRawCompose(&pr[50], 2); 
+            /* 64 physical disk number */
+            psec->secPhdk = pr[64];
+            /* 66 extended boot record signature */
+            psec->secExtbt = pr[66];
+            /* 67 volume ID number */
+            psec->secVoid = aspRawCompose(&pr[67], 4); 
+            /* 71 to 81 volume label */
+            for (i = 0; i < 11; i++) {
+                psec->secVola[i] = pr[71+i];
+            }
+            psec->secVola[11] = '\0';
+            /* 82 to 89 file system type */
+            for (i = 0; i < 8; i++) {
+                psec->secFtyp[i] = pr[82+i];
+            }
+            psec->secFtyp[8] = '\0';
+            /* 510 signature word */
+            psec->secSign = aspRawCompose(&pr[510], 2); 
+
+            /* set the boot sector status to 1 */
+            psec->secSt = 1;
+
+            psec->secWhfat = psec->secResv;
+            psec->secWhroot = psec->secWhfat + psec->secPrfat * 2;
+
+            debugPrintBootSec(psec);
             break;
         case 1: /* read the fat table */
             break;
         case 2: /* read the dir tree */
+			
             break;
         default:
             break;
