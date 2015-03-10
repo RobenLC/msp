@@ -182,6 +182,20 @@ static int aspFS_getFilelist(char *flst, struct directnFile_s *note);
 static int aspSD_getRoot();
 static int aspSD_getDir();
 
+static void aspFSrmspace(char *str, int len)
+{
+    int sc=0;
+    char *end=0;
+    if (!str) return;
+    if (!len) return;
+    end = str + len;
+    while (end > str) {
+        if (*end == 0x20) *end = 0;
+        if (*end != 0) break;
+        end --;
+    }
+}
+
 static uint8_t aspFSchecksum(uint8_t *pFcbName)
 {
     int len=0;
@@ -247,6 +261,7 @@ static int aspNameCpy(char *raw, char *dst, int offset, int len, int jump)
         *dst = ch;
         dst ++;
         cnt++;
+        if (ch == 0) return cnt;
     }
 
     //printf("cpy cnt:%d \n", cnt);
@@ -279,7 +294,7 @@ static int aspLnameAbs(char *raw, char *dst)
 
 static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 {
-    printf("[%.2x][%d] - [%.6x] \n", *raw, last, fs->dfstats);
+    //printf("[%.2x][%d] - [%.6x] \n", *raw, last, fs->dfstats);
     uint32_t tmp32=0;
     uint8_t sum=0;
     int leN=0, cnt=0, idx=0, ret = 0;
@@ -304,12 +319,12 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         return 0;
     } else if (fs->dfstats == ASPFS_STATUS_DIS) {
         if (fs->dflen) {
-            printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
+            //printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
             sum = aspFSchecksum(raw);
             if (sum != (fs->dfstats >> 16) & 0xff) {
                 ret = -11;
                 //memset(fs, 0x00, sizeof(struct directnFile_s));
-                printf("checksum error: %x / %x\n", sum, (fs->dfstats >> 16) & 0xff);
+                //printf("checksum error: %x / %x\n", sum, (fs->dfstats >> 16) & 0xff);
                 //goto fsparseEnd;
             }
         }
@@ -317,9 +332,11 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         ret = aspNameCpy(raw, pstN, 0, 11, 1);
         if (ret != 11) {
             memset(fs, 0x00, sizeof(struct directnFile_s));
-            printf("short name copy error ret:%d \n", ret);
+            //printf("short name copy error ret:%d \n", ret);
             goto fsparseEnd;
         }
+
+        aspFSrmspace(pstN, 11);
 
         fs->dfattrib = raw[11];
         tmp32 = raw[14] | (raw[15] << 8);
@@ -347,7 +364,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
         }
-        printf("LONG file name parsing...\n");
+        //printf("LONG file name parsing...\n");
 	
         ret = 0;
         if (raw[11] != 0x0f) {
@@ -380,12 +397,11 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 	 plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
-        printf("LONG file name parsing... go to next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
+        //printf("LONG file name parsing... go to next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
         return ret;
     }
     else if ((fs->dfstats & 0xff) == ASPFS_STATUS_ING) {
-    
-        printf("LONG file name parsing... the next \n");
+        //printf("LONG file name parsing... the next \n");
         ret = 0;
         idx = (fs->dfstats >> 8) & 0xf;
         if (ld != (idx - 1)) {
@@ -401,7 +417,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             ret = -10;
         }		
         if (ret) {
-            printf("LONG file name parsing... broken here ret:%d\n", ret);
+            //printf("LONG file name parsing... broken here ret:%d\n", ret);
             memset(fs, 0x00, sizeof(struct directnFile_s));
             goto fsparseEnd;
         }
@@ -421,7 +437,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 	 plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
-        printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
+        //printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
 
         return ret;
     }else {
@@ -515,6 +531,113 @@ void debugPrintBootSec(struct sdbootsec_s *psec)
     printf("[%d]: /* the start sector of fat table */\n", psec->secWhfat);
             /* the start sector of root dir */
     printf("[%d]: /* the start sector of root dir */\n", psec->secWhroot);
+
+}
+
+void debugPrintDir(struct directnFile_s *pf)
+{
+#if 0
+struct directnFile_s{
+    uint32_t   dftype;
+    uint32_t   dfstats;
+    char        dfLFN[256];
+    char        dfSFN[12];
+    int           dflen;
+    uint32_t   dfattrib;
+    uint32_t   dfcretime;
+    uint32_t   dfcredate;
+    uint32_t   dflstacdate;
+    uint32_t   dfrecotime;
+    uint32_t   dfrecodate;
+    uint32_t   dfclstnum;
+    uint32_t   dflength;
+    struct directnFile_s *pa;
+    struct directnFile_s *br;
+    struct directnFile_s *ch;	
+};
+#endif
+    printf("==========================================\n");
+    printf("  [%x] type \n", pf->dftype);
+    printf("  [%x] status \n", pf->dfstats);
+    printf("  [%s] long file name, len:%d\n", pf->dfLFN, pf->dflen);
+    printf("  [%s] short file name \n", pf->dfSFN);
+    printf("  [%x] attribute \n", pf->dfattrib);
+    printf("  [%.2d:%.2d:%.2d] H:M:S created time \n", (pf->dfcretime >> 16) & 0xff, (pf->dfcretime >> 8) & 0xff, ((pf->dfcretime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] Y:M:D created date \n", ((pf->dfcredate >> 16) & 0xff) + 1980, (pf->dfcredate >> 8) & 0xff, (pf->dfcredate >> 0) & 0xff);
+    printf("  [%.2d:%.2d:%.2d] Y:M:D access date \n", ((pf->dflstacdate >> 16) & 0xff) + 1980, (pf->dflstacdate >> 8) & 0xff, (pf->dflstacdate >> 0) & 0xff);
+    printf("  [%.2d:%.2d:%.2d] H:M:S recorded time \n", (pf->dfrecotime >> 16) & 0xff, (pf->dfrecotime >> 8) & 0xff, ((pf->dfrecotime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] Y:M:D recorded date \n", ((pf->dfrecodate >> 16) & 0xff) + 1980, (pf->dfrecodate >> 8) & 0xff, (pf->dfrecodate >> 0) & 0xff);
+    printf("  [%d] cluster number \n", pf->dfclstnum);
+    printf("  [%d] file length \n", pf->dflength);
+    printf("==========================================\n");
+}
+
+void prinfatdir(char *df, int rsz, int shift, int depth)
+{
+    char *raw=0;
+    int ret=0, len=0;
+    int offset=0, sec=0, per=0,root=0;
+    char *nxraw=0;
+    struct directnFile_s *fs;
+    if (!df) return;
+    if (!rsz) return;	
+
+    raw = df + shift;
+    //printf("raw[0x%.8x] df[0x%.8x] rsz[%d]\n", raw, df, rsz);
+
+    fs = malloc(sizeof(struct directnFile_s));
+    memset(fs, 0, sizeof(struct directnFile_s));
+
+    per = 64; // sector per cluster
+    root = 0; /* root dir sector offset */
+
+    len = rsz - shift;
+    ret = aspRawParseDir(raw, fs, len);
+    while (1) {
+
+        if (fs->dfstats == 0) {
+            
+        } else if (fs->dfattrib & 0x10) {
+            if (strcmp(fs->dfSFN, ".") != 0 && 
+                 strcmp(fs->dfSFN, "..") != 0 )  {
+                if (fs->dflen) {
+                    printf("%*s\"%s\"\n", depth, "", fs->dfLFN, depth);
+                    printf("%*s\"%s\"\n", depth, "", fs->dfSFN, depth);
+                } else {
+                    printf("%*s\"%s\"\n", depth, "", fs->dfSFN, depth);
+                }
+                sec = (fs->dfclstnum - 2) * per;
+                offset = (root + sec) * 512;
+                nxraw = df + offset;
+			
+                //printf("[0x%.8x]next clst:%d sec:%d offset:0x%.6x \n", nxraw, fs->dfclstnum, sec, offset);
+                if ((nxraw - df) > rsz) {
+                    printf("overflow %d/%d \n", nxraw - df, rsz);
+                } else {
+                    prinfatdir(df, rsz, offset, depth+4);
+                }            
+            }
+
+        } else if (fs->dfattrib & 0x20) {
+            if (fs->dflen) {
+                printf("%*s%s\n", depth, "", fs->dfLFN, depth);
+                printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+            } else {
+                printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+            }
+        } else {
+            printf("unknown! \n");     
+        }
+
+        raw += ret;
+        len -= ret;
+        if (len <= 0) break;
+        if (ret == 0) break;
+
+        memset(fs, 0, sizeof(struct directnFile_s));
+        ret = aspRawParseDir(raw, fs, len);
+
+    }
 
 }
 
@@ -1957,7 +2080,7 @@ redo:
 
         int i, j;
         /* dump raw */
-
+#if 0
         for (i = 0; i < (max/512); i++) {
             printf("[%d] \n", i);
             for (j = 0; j < 512; j++) {
@@ -1966,7 +2089,7 @@ redo:
                 if (((j +1) % 16) == 0) printf("\n");
             }
         }
-
+#endif
 #if TEST
 struct sdFAT_s{
     struct sdbootsec_s  *fatBootsec;
@@ -2102,6 +2225,7 @@ struct sdbootsec_s{
                     if (fsds->dflen > 0) {
                         printf("long name: %s, len:%d \n", fsds->dfLFN, fsds->dflen);
                     }
+                    debugPrintDir(fsds);
                 }
 
                 dkbuf += ret;
@@ -2116,7 +2240,7 @@ struct sdbootsec_s{
             printf(" raw parsing end: %d \n", ret);
             break;
         case 2: /* read the dir tree */
-			
+            prinfatdir(dkbuf, max, 0, 4);
             break;
         default:
             break;
