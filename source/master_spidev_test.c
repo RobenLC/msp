@@ -467,7 +467,7 @@ static char spi1[] = "/dev/spidev32766.0";
         uint8_t *tx_buff, *rx_buff;
         FILE *fpd;
         int fsize, buffsize;
-        buffsize = 16*1024*1024;
+        buffsize = 128*1024*1024;
         tx_buff = malloc(buffsize);
         if (tx_buff) {
             printf(" tx buff alloc success!!\n");
