@@ -572,24 +572,23 @@ struct directnFile_s{
     printf("==========================================\n");
 }
 
-void prinfatdir(char *df, int rsz, int shift, int depth)
+void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
 {
     char *raw=0;
     int ret=0, len=0;
-    int offset=0, sec=0, per=0,root=0;
+    int offset=0, sec=0;
     char *nxraw=0;
     struct directnFile_s *fs;
     if (!df) return;
-    if (!rsz) return;	
+    if (!rsz) return;
+    if ((shift * 512) > rsz) return;
 
-    raw = df + shift;
+    raw = df + (shift * 512);
+	
     //printf("raw[0x%.8x] df[0x%.8x] rsz[%d]\n", raw, df, rsz);
 
     fs = malloc(sizeof(struct directnFile_s));
     memset(fs, 0, sizeof(struct directnFile_s));
-
-    per = 64; // sector per cluster
-    root = 0; /* root dir sector offset */
 
     len = rsz - shift;
     ret = aspRawParseDir(raw, fs, len);
@@ -607,14 +606,14 @@ void prinfatdir(char *df, int rsz, int shift, int depth)
                     printf("%*s\"%s\"\n", depth, "", fs->dfSFN, depth);
                 }
                 sec = (fs->dfclstnum - 2) * per;
-                offset = (root + sec) * 512;
-                nxraw = df + offset;
+                offset = root + sec;
+                nxraw = df + (offset * 512);
 			
                 //printf("[0x%.8x]next clst:%d sec:%d offset:0x%.6x \n", nxraw, fs->dfclstnum, sec, offset);
                 if ((nxraw - df) > rsz) {
                     printf("overflow %d/%d \n", nxraw - df, rsz);
                 } else {
-                    prinfatdir(df, rsz, offset, depth+4);
+                    prinfatdir(df, rsz, offset, depth+4, root, per);
                 }            
             }
 
@@ -2240,7 +2239,8 @@ struct sdbootsec_s{
             printf(" raw parsing end: %d \n", ret);
             break;
         case 2: /* read the dir tree */
-            prinfatdir(dkbuf, max, 0, 4);
+            printf("[0x%x]root dir offset: %d per:%d\n", dkbuf, arg2, arg3);
+            prinfatdir(dkbuf, max, arg2, 4, arg2, arg3);
             break;
         default:
             break;
