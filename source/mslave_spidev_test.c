@@ -595,7 +595,7 @@ void prinfatdir(char *df, int rsz, int shift, int depth)
     ret = aspRawParseDir(raw, fs, len);
     while (1) {
 
-        if (fs->dfstats == 0) {
+        if (fs->dfstats != ASPFS_STATUS_EN) {
             
         } else if (fs->dfattrib & 0x10) {
             if (strcmp(fs->dfSFN, ".") != 0 && 
