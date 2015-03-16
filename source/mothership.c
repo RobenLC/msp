@@ -60,6 +60,8 @@
 #define OP_SCANLEN_H    0x2a
 #define OP_SCANLEN_L    0x2b
 
+#define OP_MSG               0x30
+
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
 
@@ -364,6 +366,8 @@ static int mspFS_list(struct aspDirnFile_s *root, int depth);
 static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path);
 static int mspFS_showFolder(struct aspDirnFile_s *root);
 static int mspFS_folderJump(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path);
+
+static int atFindIdx(char *str, char ch);
 
 static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
 {
@@ -4760,8 +4764,10 @@ static int p4(struct procRes_s *rs)
 
 static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    int px, pi, ret, n, size, opsz, acusz, len, acu;
-    char ch, *recvbuf, *addr, *str;
+    int px, pi, size, opsz, acusz, len, acu;
+    int ret, n, num, hd, be, ed, ln;
+    char ch, *recvbuf, *addr, *sendbuf;
+    char msg[256], opcode=0, param=0;
     sprintf(rs->logs, "p5\n");
     print_f(rs->plogs, "P5", rs->logs);
 
@@ -4769,9 +4775,9 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     // wait for ch from p0
     // in charge of socket recv
 
-    str = malloc(2048);
-    if (!str) {
-        sprintf(rs->logs, "p5 str alloc failed! \n");
+    sendbuf = malloc(2048);
+    if (!sendbuf) {
+        sprintf(rs->logs, "p5 sendbuf alloc failed! \n");
         print_f(rs->plogs, "P5", rs->logs);
         return (-1);
     }
@@ -4823,41 +4829,84 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         }
 
         memset(recvbuf, 0x0, 1024);
+        memset(sendbuf, 0x0, 1024);
+        memset(msg, 0x0, 256);
 
         n = read(rs->psocket_r->connfd, recvbuf, 1024);
-        if (recvbuf[n-1] == '\n')         recvbuf[n-1] = '\0';
-        sprintf(rs->logs, "socket receive %d char [%s] from %d\n", n, recvbuf, rs->psocket_r->connfd);
+        if (n <= 0) goto socketEnd;
+        hd = atFindIdx(recvbuf, '!');
+        if (hd < 0) goto socketEnd;
+        be = atFindIdx(&recvbuf[hd], '[');
+        if (be < 0) goto socketEnd;
+        ed = atFindIdx(&recvbuf[hd], ']');
+        if (ed < 0) goto socketEnd;
+        ln = atFindIdx(&recvbuf[hd], '\0');
+
+        n = strlen(&recvbuf[hd]);
+        if (n <= 0) {
+            goto socketEnd;
+        }
+
+        sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]\n", n, &recvbuf[hd], hd, be, ed, ln);
         print_f(rs->plogs, "P5", rs->logs);
 
-        rs_ipc_put(rs, "s", 1);
+        opcode = recvbuf[hd+1]; param = recvbuf[be-1];
+        sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]\n", opcode, param);
+        print_f(rs->plogs, "P5", rs->logs);
+
+        n = ed - be - 1;
+        if ((n < 255) && (n > 0)) {
+            memcpy(msg, &recvbuf[be+1], n);
+            msg[n] = '\0';
+        } else {
+            goto socketEnd;
+        }
+
+        if (opcode != 0x30) {
+            n = 0;
+        }
+
         if (n > 0) {
-            rs_ipc_put(rs, recvbuf, n);
+            //rs_ipc_put(rs, "s", 1);
+            //rs_ipc_put(rs, msg, n);
             //sprintf(rs->logs, "send to p0 [%s]\n", recvbuf);
             //print_f(rs->plogs, "P5", rs->logs);
             
-            ret = write(rs->psocket_r->connfd, recvbuf, n);
+            ret = write(rs->psocket_r->connfd, msg, n);
             //sprintf(rs->logs, "send back app [%s] size:%d/%d\n", recvbuf, ret, n);
             //print_f(rs->plogs, "P5", rs->logs);
-
-            rs_ipc_put(rcmd, recvbuf, n);
-
-            sleep(1);
-
-            memset(str, 0, 2048);
-
-            str[0] = '['; acu = 1;
-            len = rs_ipc_get(rcmd, str+acu, 2048 - acu);
-            if (len > 0) {
-                acu += len;
-                str[acu] = ']';
-                ret = write(rs->psocket_r->connfd, str, acu+1);
-                sprintf(rs->logs, "send cmd result to app [%s] size:%d/%d\n", str, ret, acu);
-                print_f(rs->plogs, "P5", rs->logs);
-            }
+            rs_ipc_put(rcmd, msg, n);
+        }else {
+            msg[0] = 0xaa;
+            msg[0] = opcode;
+            msg[0] = '/';
+            msg[0] = param;
+            msg[0] = 0xa5;
+            rs_ipc_put(rcmd, msg, 5);
         }
 
+        usleep(100000);
+        memset(sendbuf, 0, 2048);
+
+        sendbuf[0] = '!';
+        sendbuf[1] = opcode;
+        sendbuf[2] = '+';
+        sendbuf[3] = 0x0;
+        sendbuf[4] = '[';
+
+        n = rs_ipc_get(rcmd, &sendbuf[5], 2048 - 5);
+        sendbuf[3] = n;
+
+        sendbuf[5+n] = ']';
+        sendbuf[5+n+1] = '\n';
+        sendbuf[5+n+2] = '\0';
+        ret = write(rs->psocket_r->connfd, sendbuf, 5+n+3);
+        sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_r->connfd, ret);
+        print_f(rs->plogs, "P5", rs->logs);
+
+        socketEnd:
         close(rs->psocket_r->connfd);
-        //rs->psocket_r->connfd = 0;
+        rs->psocket_r->connfd = 0;
     }
 
     p5_end(rs);
