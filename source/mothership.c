@@ -47,6 +47,18 @@
 #define OP_STLEN_02  0x16
 #define OP_STLEN_03  0x17
 
+#define OP_FFORMAT      0x20
+#define OP_COLRMOD      0x21
+#define OP_COMPRAT      0x22
+#define OP_SCANMOD      0x23
+#define OP_DATPATH      0x24
+#define OP_RESOLTN       0x25
+#define OP_SCANGAV       0x26
+#define OP_MAXWIDH      0x27
+#define OP_WIDTHAD_H   0x28
+#define OP_WIDTHAD_L   0x29
+#define OP_SCANLEN_H    0x2a
+#define OP_SCANLEN_L    0x2b
 
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
