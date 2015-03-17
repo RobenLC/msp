@@ -4889,19 +4889,21 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         memset(sendbuf, 0, 2048);
 
         sendbuf[0] = '!';
-        sendbuf[1] = opcode;
-        sendbuf[2] = '+';
-        sendbuf[3] = 0x0;
-        sendbuf[4] = '[';
+        sendbuf[1] = (opcode & 0x80) ? 1:0;
+        sendbuf[2] = opcode & 0x7f;
+        sendbuf[3] = '+';
+        //sendbuf[3] = 'P';//0x0;
+        sendbuf[6] = '[';
 
-        n = rs_ipc_get(rcmd, &sendbuf[5], 2048 - 5);
-        sendbuf[3] = n;
-
-        sendbuf[5+n] = ']';
-        sendbuf[5+n+1] = '\n';
-        sendbuf[5+n+2] = '\0';
-        ret = write(rs->psocket_r->connfd, sendbuf, 5+n+3);
-        sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_r->connfd, ret);
+        n = rs_ipc_get(rcmd, &sendbuf[7], 2048 - 7);
+        sendbuf[4] = (param & 0x80) ? 1:0;
+        sendbuf[5] = param & 0x7f;
+		
+        sendbuf[7+n] = ']';
+        sendbuf[7+n+1] = '\n';
+        sendbuf[7+n+2] = '\0';
+        ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
+        sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, sendbuf, rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
         print_f(rs->plogs, "P5", rs->logs);
 
         socketEnd:
