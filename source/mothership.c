@@ -61,6 +61,7 @@
 #define OP_SCANLEN_L    0x2b
 
 #define OP_MSG               0x30
+#define OP_ERROR           0xe0
 
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
@@ -102,6 +103,57 @@ typedef enum {
     ASPFS_TYPE_DIR,
     ASPFS_TYPE_FILE,
 } aspFStp_e;
+
+typedef enum {
+    ASPOP_STA_NONE = 0x0,
+    ASPOP_STA_WR,
+    ASPOP_STA_UPD,
+} aspOpSt_e;
+
+typedef enum {
+    ASPOP_CODE_NONE = 0,
+    ASPOP_FILE_FORMAT,
+    ASPOP_COLOR_MODE,
+    ASPOP_COMPRES_RATE,
+    ASPOP_SCAN_MODE,
+    ASPOP_DATA_PATH,
+    ASPOP_RESOLUTION,
+    ASPOP_SCAN_GRAVITY,
+    ASPOP_MAX_WIDTH,
+    ASPOP_WIDTH_ADJ_H,
+    ASPOP_WIDTH_ADJ_L,
+    ASPOP_SCAN_LENS_H,
+    ASPOP_SCAN_LENS_L,
+    ASPOP_CODE_MAX, /* 13 */
+} aspOpCode_e;
+
+typedef enum {
+    ASPOP_MASK_0 = 0x0,
+    ASPOP_MASK_1 = 0x1,
+    ASPOP_MASK_2 = 0x3,
+    ASPOP_MASK_3 = 0x7,
+    ASPOP_MASK_4 = 0xf,
+    ASPOP_MASK_5 = 0x1f,
+    ASPOP_MASK_6 = 0x3f,
+    ASPOP_MASK_7 = 0x7f,
+    ASPOP_MASK_8 = 0xff,
+} aspOpMask_e;
+
+typedef enum {
+    ASPOP_TYPE_NONE = 0,
+    ASPOP_TYPE_SINGLE,
+    ASPOP_TYPE_MULTI,
+    ASPOP_TYPE_VALUE,
+} aspOpType_e;
+
+struct aspConfig_s{
+    uint32_t opStatus;
+    uint32_t opCode;
+    uint32_t opValue;
+    uint32_t opMask;
+    uint32_t opType;
+    uint32_t opBitlen;
+};
 
 struct aspDirnFile_s{
     uint32_t   dftype;
@@ -197,6 +249,7 @@ struct mainRes_s{
     int sid[8];
     int sfm[2];
     int smode;
+    struct aspConfig_s configTable[ASPOP_CODE_MAX];
     struct aspDirnFile_s root_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
@@ -2672,6 +2725,97 @@ static int p0_end(struct mainRes_s *mrs)
     return 0;
 }
 
+static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len)
+{
+    int cnt=0, s=0;
+    if (val > mask) return -1;
+    if (len > 32) return -2;
+    if (!len) return -3;
+
+    s = 0;
+    while(s < len) {
+        if (val & (0x1 << s)) cnt++;
+        s++;
+    }
+
+    if (cnt == 0) return -4;
+    if (cnt > 1) return -5;
+
+    return val;
+}
+static int cmdfunc_opcode(int argc, char *argv[])
+{
+    uint32_t val=0;
+    int n=0, ix=0, ret=0;
+    char ch=0, opcode[5], tg=0;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    /* get opcode and parameter */
+    ch = 'o';
+    mrs_ipc_put(mrs, &ch, 1, 5);
+
+    n = -1;
+    while (n == -1) {
+        n = mrs_ipc_get(mrs, opcode, 5, 5);
+        //sprintf(mrs->log, "n:%d\n", n); 
+        //print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    /* debug print */
+    for (ix = 0; ix < n; ix++) {
+        sprintf(mrs->log, "%d.%.2x\n", ix, opcode[ix]); 
+        print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    if (n != 5) {ret = -2; goto end;}
+    if (opcode[0] != 0xaa) {ret = -3; goto end;}
+    if (opcode[4] != 0xa5) {ret = -4; goto end;}
+    if (opcode[2] != '/') {ret = -5; goto end;}
+
+    tg = opcode[1];
+    struct aspConfig_s* ctb = 0;
+    for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+        ctb = &mrs->configTable[ix];
+        if (tg == ctb->opCode) {
+            break;
+        }
+        ctb = 0;
+    }
+
+    if (ctb) {
+        val = cmdfunc_opchk_single(ctb->opValue, ctb->opMask, ctb->opBitlen);
+        if (val > 0) ctb->opValue = val;
+        sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x, val:%d \n", ctb->opCode, ctb->opValue, val); 
+        print_f(&mrs->plog, "DBG", mrs->log);
+        ch = 'p';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+    } else {
+        ch = 'x';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+        ch = 0xf0;
+        mrs_ipc_put(mrs, &ch, 1, 5);
+    }
+
+end:
+
+    if (ret < 0) {
+        sprintf(mrs->log, "xxx opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d", ctb->opCode, ctb->opValue, val, ret); 		
+    } else {
+        sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x, val:%d", ctb->opCode, ctb->opValue, val); 		
+    }
+    
+    n = strlen(mrs->log);
+    mrs_ipc_put(mrs, mrs->log, n, 5);
+
+    sprintf(mrs->log, "opcode op end, log n =%d, ret=%d\n", n, ret); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+	
+    return 0;
+}
+
 static int cmdfunc_01(int argc, char *argv[])
 {
     struct mainRes_s *mrs;
@@ -2699,7 +2843,7 @@ static int cmdfunc_01(int argc, char *argv[])
     }
 
     sprintf(str, "cmdfunc_01 argc:%d ch:%c\n", argc, ch); 
-    print_f(mlogPool, "cmdfunc", str);
+    print_f(mlogPool, "DBG", str);
 
     mrs_ipc_put(mrs, &ch, 1, 6);
     return 1;
@@ -2711,7 +2855,7 @@ static int dbg(struct mainRes_s *mrs)
     char cmd[256], *addr[3], rsp[256], ch, *plog;
     char poll[32] = "poll";
 
-    struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "run", cmdfunc_01}, 
+    struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "op", cmdfunc_opcode}, 
                                 {4, "aspect", cmdfunc_01}, {5, "go", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_01}};
 
     p0_init(mrs);
@@ -2760,8 +2904,9 @@ static int dbg(struct mainRes_s *mrs)
         while (ret > 0) {
             sprintf(mrs->log, "ret:%d, rsp:%s\n", ret, rsp);
             print_f(&mrs->plog, "DBG", mrs->log);
+/*
             mrs_ipc_put(mrs, rsp, ret, 5);
-
+*/
             ret = 0;
             ret = mrs_ipc_get(mrs, rsp, 256, 6);
         }
@@ -2778,7 +2923,9 @@ static int dbg(struct mainRes_s *mrs)
                 loglen = 0;
                 memset(cmd, 0, 256);
             } else {
+/*
                 mrs_ipc_put(mrs, "?", 1, 5); 
+*/
                 continue;
             }
         } else {
@@ -2789,13 +2936,15 @@ static int dbg(struct mainRes_s *mrs)
         ret = mrs_ipc_get(mrs, &ch, 1, 6);
         while (ret > 0) {
             sprintf(mrs->log, "%c", ch);
-            print_f(&mrs->plog, "!", mrs->log);
+            print_f(&mrs->plog, "DBG", mrs->log);
 
             if (loglen > 0) {
                 plog[loglen] = ch;
                 loglen++;
                 if ((ch == '>') || (loglen == 2048)) {
+/*
                     mrs_ipc_put(mrs, plog, loglen, 5);
+*/
                     wait = -1;
                 }
             } else {
@@ -2813,7 +2962,9 @@ static int dbg(struct mainRes_s *mrs)
             sprintf(mrs->log, "command time out :%d, loglen: %d\n", wait, loglen);
             print_f(&mrs->plog, "DBG", mrs->log);
             if (loglen > 0) {
+/*
                 mrs_ipc_put(mrs, plog, loglen, 5);
+*/
             }
             wait = -1;
         }
@@ -4877,12 +5028,36 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             //print_f(rs->plogs, "P5", rs->logs);
             rs_ipc_put(rcmd, msg, n);
         }else {
-            msg[0] = 0xaa;
-            msg[0] = opcode;
-            msg[0] = '/';
-            msg[0] = param;
-            msg[0] = 0xa5;
-            rs_ipc_put(rcmd, msg, 5);
+            msg[0] = 'o';
+            msg[1] = 'p';
+            rs_ipc_put(rcmd, msg, 2);
+
+
+            ch = 0; n = 0;
+            n = rs_ipc_get(rcmd, &ch, 1);
+
+            sprintf(rs->logs, "1.n:%d, ch:%c\n", n, ch);
+            print_f(rs->plogs, "P5", rs->logs);
+
+            if (ch == 'o') {			
+                msg[0] = 0xaa;			
+                msg[1] = opcode;
+                msg[2] = '/';
+                msg[3] = param;
+                msg[4] = 0xa5;
+                rs_ipc_put(rcmd, msg, 5);
+            }
+
+            ch = 0; n = 0;
+            n = rs_ipc_get(rcmd, &ch, 1);
+            sprintf(rs->logs, "2.n:%d, ch:%c\n", n, ch);
+            print_f(rs->plogs, "P5", rs->logs);
+
+            if (ch != 'p') {			
+                opcode = OP_ERROR; 
+                n = rs_ipc_get(rcmd, &ch, 1);
+                param = ch;
+            }
         }
 
         usleep(100000);
@@ -5442,6 +5617,129 @@ static char spi0[] = "/dev/spidev32765.0";
     //ret = fwrite("test file write \n", 1, 16, pmrs->fs);
     sprintf(pmrs->log, "write file size: %d/%d\n", ret, 16);
     print_f(&pmrs->plog, "fwrite", pmrs->log);
+
+    struct aspConfig_s* ctb = 0;
+    for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+        ctb = &pmrs->configTable[ix];
+        switch(ix) {
+        case ASPOP_CODE_NONE:   
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = 0;
+            ctb->opType = ASPOP_TYPE_NONE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_0;
+            ctb->opBitlen = 0;
+            break;
+        case ASPOP_FILE_FORMAT: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FFORMAT;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_3;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_COLOR_MODE:  
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_COLRMOD;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_4;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_COMPRES_RATE:
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_COMPRAT;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_3;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SCAN_MODE:   
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_SCANMOD;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_2;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_DATA_PATH:   
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_DATPATH;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_4;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_RESOLUTION:
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_RESOLTN;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_4;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SCAN_GRAVITY:
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_SCANGAV;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_2;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_MAX_WIDTH:   
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_MAXWIDH;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_3;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_WIDTH_ADJ_H: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_WIDTHAD_H;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_WIDTH_ADJ_L: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_WIDTHAD_L;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SCAN_LENS_H: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_SCANLEN_H;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SCAN_LENS_L: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_SCANLEN_L;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        default: break;
+        }
+    }
+
+    for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+        ctb = &pmrs->configTable[ix];
+            printf("ctb[%d] 0x%.2x opcode:0x%.2x 0x%.2x val:0x%.2x mask:0x%.2x len:%d \n", ix,
+            ctb->opStatus,
+            ctb->opCode,
+            ctb->opType,
+            ctb->opValue,
+            ctb->opMask,
+            ctb->opBitlen);
+    }
 
 // spidev id
     int fd0, fd1;
