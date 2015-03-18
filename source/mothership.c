@@ -4889,14 +4889,14 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         memset(sendbuf, 0, 2048);
 
         sendbuf[0] = '!';
-        sendbuf[1] = (opcode & 0x80) ? 1:0;
+        sendbuf[1] = ((opcode & 0x80) ? 1:0) + 1;
         sendbuf[2] = opcode & 0x7f;
         sendbuf[3] = '+';
         //sendbuf[3] = 'P';//0x0;
         sendbuf[6] = '[';
 
         n = rs_ipc_get(rcmd, &sendbuf[7], 2048 - 7);
-        sendbuf[4] = (param & 0x80) ? 1:0;
+        sendbuf[4] = ((param & 0x80) ? 1:0) + 1;
         sendbuf[5] = param & 0x7f;
 		
         sendbuf[7+n] = ']';
