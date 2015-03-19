@@ -2745,9 +2745,10 @@ static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len)
 }
 static int cmdfunc_opcode(int argc, char *argv[])
 {
-    uint32_t val=0;
+    int val=0;
     int n=0, ix=0, ret=0;
-    char ch=0, opcode[5], tg=0;
+    char ch=0, opcode[5];
+    uint32_t tg=0, cd=0;
     struct mainRes_s *mrs=0;
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
@@ -2769,6 +2770,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
         sprintf(mrs->log, "%d.%.2x\n", ix, opcode[ix]); 
         print_f(&mrs->plog, "DBG", mrs->log);
     }
+    /* debug print */
 
     if (n != 5) {ret = -2; goto end;}
     if (opcode[0] != 0xaa) {ret = -3; goto end;}
@@ -2786,30 +2788,45 @@ static int cmdfunc_opcode(int argc, char *argv[])
     }
 
     if (ctb) {
-        val = cmdfunc_opchk_single(ctb->opValue, ctb->opMask, ctb->opBitlen);
-        if (val > 0) ctb->opValue = val;
-        sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x, val:%d \n", ctb->opCode, ctb->opValue, val); 
+        cd = opcode[3];
+        ret = cmdfunc_opchk_single(cd, ctb->opMask, ctb->opBitlen);
+        if (ret > 0) {
+            ctb->opValue = ret;
+        } else {
+            ret = (ret * 10) -6;
+        }
+        sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x\n", ctb->opCode, ctb->opValue, val); 
         print_f(&mrs->plog, "DBG", mrs->log);
-        ch = 'p';
-        mrs_ipc_put(mrs, &ch, 1, 5);
     } else {
-        ch = 'x';
-        mrs_ipc_put(mrs, &ch, 1, 5);
-        ch = 0xf0;
-        mrs_ipc_put(mrs, &ch, 1, 5);
+        sprintf(mrs->log, "cmdfunc_opcode - 3\n"); 
+        print_f(&mrs->plog, "DBG", mrs->log);
+        ret = -7;
     }
 
 end:
 
     if (ret < 0) {
-        sprintf(mrs->log, "xxx opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d", ctb->opCode, ctb->opValue, val, ret); 		
+        ch = 'x';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+        ch = 0xf0;
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        if (!ctb) {
+            sprintf(mrs->log, "xxfailed: input 0x%x/0x%x, ret:%d", opcode[1], opcode[3], ret); 
+        } else {
+            sprintf(mrs->log, "xxfailed: input 0x%x/0x%x, mask:0x%x, bitlen:%d, ret:%d", opcode[1], opcode[3], ctb->opMask, ctb->opBitlen, ret); 
+        }
+
     } else {
-        sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x, val:%d", ctb->opCode, ctb->opValue, val); 		
+        ch = 'p';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        sprintf(mrs->log, "succeed: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);	
     }
-    
+
     n = strlen(mrs->log);
     mrs_ipc_put(mrs, mrs->log, n, 5);
-
+    
     sprintf(mrs->log, "opcode op end, log n =%d, ret=%d\n", n, ret); 
     print_f(&mrs->plog, "DBG", mrs->log);
 	
@@ -5057,6 +5074,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                 opcode = OP_ERROR; 
                 n = rs_ipc_get(rcmd, &ch, 1);
                 param = ch;
+                sprintf(rs->logs, "3.n:%d, ch:0x%.2x\n", n, ch);
+                print_f(rs->plogs, "P5", rs->logs);
             }
         }
 
@@ -5075,7 +5094,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sendbuf[5] = param & 0x7f;
 		
         sendbuf[7+n] = ']';
-        sendbuf[7+n+1] = '\n';
+        sendbuf[7+n+1] = '\0';
         sendbuf[7+n+2] = '\0';
         ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
         sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, sendbuf, rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
