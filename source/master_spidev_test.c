@@ -45,15 +45,32 @@
 #define OP_DUL 0x8
 #define OP_RD 0x9
 #define OP_WT 0xa
+#define OP_SDAT 0xb
 
-#define OP_STSEC_00  0x10
-#define OP_STSEC_01  0x11
-#define OP_STSEC_02  0x12
-#define OP_STSEC_03  0x13
-#define OP_STLEN_00  0x14
-#define OP_STLEN_01  0x15
-#define OP_STLEN_02  0x16
-#define OP_STLEN_03  0x17
+#define OP_MAX 0xff
+#define OP_NONE 0x00
+
+#define OP_STSEC_0  0x10
+#define OP_STSEC_1  0x11
+#define OP_STSEC_2  0x12
+#define OP_STSEC_3  0x13
+#define OP_STLEN_0  0x14
+#define OP_STLEN_1  0x15
+#define OP_STLEN_2  0x16
+#define OP_STLEN_3  0x17
+
+#define OP_FFORMAT      0x20
+#define OP_COLRMOD      0x21
+#define OP_COMPRAT      0x22
+#define OP_SCANMOD      0x23
+#define OP_DATPATH      0x24
+#define OP_RESOLTN       0x25
+#define OP_SCANGAV       0x26
+#define OP_MAXWIDH      0x27
+#define OP_WIDTHAD_H   0x28
+#define OP_WIDTHAD_L   0x29
+#define OP_SCANLEN_H    0x2a
+#define OP_SCANLEN_L    0x2b
 
 static void pabort(const char *s) 
 { 
@@ -681,24 +698,36 @@ static char spi1[] = "/dev/spidev32766.0";
         goto end;
     }
     if (sel == 16){ /* command mode test ex[16 num]*/
-
+#define ARRY_MAX  61
         int ret=0;
         uint8_t tx8[4], rx8[4];
-        uint8_t op[13] = {0xaa, OP_PON, OP_QRY, OP_RDY, OP_DAT, OP_SCM, OP_DCM, OP_FIH, OP_DUL, OP_RD, OP_WT, OP_STSEC_00, OP_STLEN_00};
-        uint8_t st[4] = {OP_STSEC_00, OP_STSEC_01, OP_STSEC_02, OP_STSEC_03};
-        uint8_t ln[4] = {OP_STLEN_00, OP_STLEN_01, OP_STLEN_02, OP_STLEN_03};
+        uint8_t op[ARRY_MAX] = {	0xaa
+							, 	OP_PON,	 		OP_QRY,	 		OP_RDY,	 		OP_DAT,	 		OP_SCM			/* 0x01 -0x05 */
+							, 	OP_DCM,		 	OP_FIH,	 		OP_DUL,	 		OP_RD,	 		OP_WT          		/* 0x06 -0x0a */
+							, 	OP_SDAT,	 	OP_NONE,	 	OP_NONE,	 	OP_NONE,	 	OP_NONE      		/* 0x0b -0x0f  */
+							, 	OP_NONE,	 	OP_NONE,	 	OP_NONE,		OP_NONE,		OP_STSEC_0 		/* 0x10 -0x14  */
+							,	OP_STLEN_0,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE     		/* 0x15 -0x19  */
+							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE     		/* 0x1A -0x1E  */
+							,	OP_NONE,		OP_FFORMAT,		OP_COLRMOD,	OP_COMPRAT,	OP_SCANMOD     	/* 0x1F -0x23  */
+							,	OP_DATPATH,		OP_RESOLTN,		OP_SCANGAV,	OP_MAXWIDH,	OP_WIDTHAD_H	/* 0x24 -0x28  */
+							,	OP_WIDTHAD_L,	OP_SCANLEN_H,	OP_SCANLEN_L,	OP_NONE,		OP_NONE		/* 0x29 -0x2D  */
+							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE		/* 0x2E -0x32  */
+							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE		/* 0x33 -0x37  */
+							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_MAX};		/* 0x38 -0x3C  */
+        uint8_t st[4] = {OP_STSEC_0, OP_STSEC_1, OP_STSEC_2, OP_STSEC_3};
+        uint8_t ln[4] = {OP_STLEN_0, OP_STLEN_1, OP_STLEN_2, OP_STLEN_3};
         uint8_t staddr = 0, stlen = 0, btidx = 0;
 
         tx8[0] = op[arg0];
-        tx8[1] = 0x5f;
+        tx8[1] = arg1;
 
-        if (arg0 > 12) {
+        if (arg0 > ARRY_MAX) {
             printf("Error!! Index overflow!![%d]\n", arg0);
             goto end;
         }
 
         btidx = arg2 % 4;
-        if (op[arg0] == OP_STSEC_00) {
+        if (op[arg0] == OP_STSEC_0) {
             staddr = arg1 & (0xff << (8 * btidx));
             
             tx8[0] = st[btidx];
@@ -707,13 +736,17 @@ static char spi1[] = "/dev/spidev32766.0";
             printf("start secter: %.8x, send:%.2x \n", arg1, staddr);
         }
 
-        if (op[arg0] == OP_STLEN_00) {
+        if (op[arg0] == OP_STLEN_0) {
             stlen = arg1 & (0xff << (8 * btidx));
             tx8[0] = ln[btidx];
             tx8[1] = stlen;
             
             printf("secter length: %.8x, send:%.2x\n", arg1, stlen);
         }
+
+        bitset = 1;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi 0 slave ready: %d\n", bitset);
 
         bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);

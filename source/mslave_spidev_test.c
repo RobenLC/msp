@@ -2350,12 +2350,13 @@ struct sdbootsec_s{
         uint8_t staddr = 0, stlen = 0, btidx = 0;
 
         tx8[0] = op[arg0];
-        tx8[1] = 0x5f;
+        tx8[1] = arg1;
 
         if (arg0 > ARRY_MAX) {
             printf("Error!! Index overflow!![%d]\n", arg0);
             goto end;
         }
+
 
         btidx = arg2 % 4;
         if (op[arg0] == OP_STSEC_0) {
@@ -2391,6 +2392,10 @@ struct sdbootsec_s{
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
         printf("Set spi0 RDY: %d\n", bitset);
 */
+        bitset = 1;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi%d slve ready: %d\n", 0, bitset);
+
         bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
         if (ret == -1) 
