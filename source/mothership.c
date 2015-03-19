@@ -249,6 +249,7 @@ struct mainRes_s{
     int sid[8];
     int sfm[2];
     int smode;
+    struct psdata_s stdata;
     struct aspConfig_s configTable[ASPOP_CODE_MAX];
     struct aspDirnFile_s root_dirt;
     struct machineCtrl_s mchine;
@@ -286,6 +287,7 @@ struct fselec_s{
 struct procRes_s{
     // pipe
     int spifd;
+    struct psdata_s *pstdata;
     struct pipe_s *ppipedn;
     struct pipe_s *ppipeup;
     struct shmem_s *pdataRx;
@@ -2765,12 +2767,13 @@ static int cmdfunc_opcode(int argc, char *argv[])
         //print_f(&mrs->plog, "DBG", mrs->log);
     }
 
-    /* debug print */
+    /* debug print */ 
+    /*
     for (ix = 0; ix < n; ix++) {
         sprintf(mrs->log, "%d.%.2x\n", ix, opcode[ix]); 
         print_f(&mrs->plog, "DBG", mrs->log);
     }
-    /* debug print */
+    */
 
     if (n != 5) {ret = -2; goto end;}
     if (opcode[0] != 0xaa) {ret = -3; goto end;}
@@ -2812,9 +2815,9 @@ end:
         mrs_ipc_put(mrs, &ch, 1, 5);
 
         if (!ctb) {
-            sprintf(mrs->log, "xxfailed: input 0x%x/0x%x, ret:%d", opcode[1], opcode[3], ret); 
+            sprintf(mrs->log, "failed: input 0x%x/0x%x, ret:%d", opcode[1], opcode[3], ret); 
         } else {
-            sprintf(mrs->log, "xxfailed: input 0x%x/0x%x, mask:0x%x, bitlen:%d, ret:%d", opcode[1], opcode[3], ctb->opMask, ctb->opBitlen, ret); 
+            sprintf(mrs->log, "failed: input 0x%x/0x%x, mask:0x%x, bitlen:%d, ret:%d", opcode[1], opcode[3], ctb->opMask, ctb->opBitlen, ret); 
         }
 
     } else {
@@ -2921,9 +2924,9 @@ static int dbg(struct mainRes_s *mrs)
         while (ret > 0) {
             sprintf(mrs->log, "ret:%d, rsp:%s\n", ret, rsp);
             print_f(&mrs->plog, "DBG", mrs->log);
-/*
+
             mrs_ipc_put(mrs, rsp, ret, 5);
-*/
+
             ret = 0;
             ret = mrs_ipc_get(mrs, rsp, 256, 6);
         }
@@ -2940,9 +2943,7 @@ static int dbg(struct mainRes_s *mrs)
                 loglen = 0;
                 memset(cmd, 0, 256);
             } else {
-/*
                 mrs_ipc_put(mrs, "?", 1, 5); 
-*/
                 continue;
             }
         } else {
@@ -2959,9 +2960,9 @@ static int dbg(struct mainRes_s *mrs)
                 plog[loglen] = ch;
                 loglen++;
                 if ((ch == '>') || (loglen == 2048)) {
-/*
+
                     mrs_ipc_put(mrs, plog, loglen, 5);
-*/
+
                     wait = -1;
                 }
             } else {
@@ -2979,9 +2980,9 @@ static int dbg(struct mainRes_s *mrs)
             sprintf(mrs->log, "command time out :%d, loglen: %d\n", wait, loglen);
             print_f(&mrs->plog, "DBG", mrs->log);
             if (loglen > 0) {
-/*
+
                 mrs_ipc_put(mrs, plog, loglen, 5);
-*/
+
             }
             wait = -1;
         }
@@ -4065,7 +4066,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(10000);
+        usleep(100000);
     }
 
     p0_end(mrs);
@@ -4074,24 +4075,26 @@ static int p0(struct mainRes_s *mrs)
 
 static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    int px, pi, ret = 0, ci, len, logcnt=0;
-    char ch, cmd, cmdt, str[128];
+    uint32_t px, pi;
+    int ret = 0, ci, len, logcnt=0;
+    char ch, cmd, cmdt, str[128] = "good";
     char *addr;
     uint32_t evt;
 
     sprintf(rs->logs, "p1\n");
     print_f(rs->plogs, "P1", rs->logs);
-    struct psdata_s stdata;
+    struct psdata_s *stdata;
     stfunc pf[SMAX][PSMAX] = {{stspy_01, stspy_02, stspy_03, stspy_04, stspy_05},
                             {stbullet_01, stbullet_02, stbullet_03, stbullet_04, stbullet_05},
                             {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05},
                             {stdob_01, stdob_02, stdob_03, stdob_04, stdob_05},
                             {stdob_06, stdob_07, stdob_08, stdob_09, stdob_10}};
     p1_init(rs);
+    stdata = rs->pstdata;
     // wait for ch from p0
     // state machine control
-    stdata.rs = rs;
-    pi = 0;    stdata.result = 0;    cmd = '\0';   cmdt = 'w';
+    stdata->rs = rs;
+    pi = 0;    stdata->result = 0;    cmd = '\0';   cmdt = 'w';
     while (1) {
         //sprintf(rs->logs, "+\n");
         //print_f(rs->plogs, "P1", rs->logs);
@@ -4101,31 +4104,38 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         ci = rs_ipc_get(rcmd, &cmd, 1);
         while (ci > 0) {
             //sprintf(rs->logs, "%c\n", cmd);
-            //print_f(rs->plogs, "P1CMD", rs->logs);
+            //print_f(rs->plogs, "P1", rs->logs);
 
             if (cmdt == '\0') {
                 if (cmd == 'd') {
                     cmdt = cmd;
-                    stdata.result = emb_stanPro(0, STINIT, BULLET, PSSET);
+                    stdata->result = emb_stanPro(0, STINIT, BULLET, PSSET);
                 } else if (cmd == 'p') {
                     cmdt = cmd;
-                    stdata.result = emb_stanPro(0, STINIT, SPY, PSTSM);
+                    stdata->result = emb_stanPro(0, STINIT, SPY, PSTSM);
                 } else if (cmd == '=') {
                     cmdt = cmd;
-                    stdata.result = emb_stanPro(0, STINIT, SMAX, PSMAX);
+                    stdata->result = emb_stanPro(0, STINIT, SMAX, PSMAX);
                 } else if (cmd == 'n') {
                     cmdt = cmd;
-                    stdata.result = emb_stanPro(0, STINIT, DOUBLEC, PSSET);
+                    stdata->result = emb_stanPro(0, STINIT, DOUBLEC, PSSET);
                 }
 
                 if (cmdt != '\0') {
+                    evt = stdata->result;
+                    pi = (evt >> 8) & 0xff;
+                    px = (evt & 0xff);
+
+                    sprintf(rs->logs, "cmdt:%c, [%d,%d] - 0\nSTART\n", cmdt, pi, px);
+                    print_f(rs->plogs, "P1", rs->logs);
+
                     logcnt = 0;
                     break;
                 }
             } else { /* command to interrupt state machine here */
                 if (cmd == 'r') {
                     cmdt = cmd;
-                    stdata.result = emb_result(stdata.result, BREAK);
+                    stdata->result = emb_result(stdata->result, BREAK);
                 }
             }
             ci = 0;
@@ -4134,37 +4144,76 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
         ret = 0; ch = '\0';
         ret = rs_ipc_get(rs, &ch, 1);
-        //if (ret > 0) {
-        //    sprintf(rs->logs, "ret:%d ch:%c\n", ret, ch);
-        //    print_f(rs->plogs, "P1", rs->logs);
-        //}
+        
+        if ((ret > 0) && (ch != '$')) {
+            sprintf(rs->logs, "rsp, ret:%d ch:0x%.2x\n", ret, ch);
+            print_f(rs->plogs, "P1", rs->logs);
+        }
+        
 
         if (((ret > 0) && (ch != '$')) || (cmdt != '\0')){
-            stdata.ansp0 = ch;
-            evt = stdata.result;
+            msync(stdata, sizeof(struct psdata_s), MS_SYNC);
+            stdata->ansp0 = ch;
+            evt = stdata->result;
             pi = (evt >> 8) & 0xff;
             px = (evt & 0xff);
-            if ((pi >= SMAX) || (px >= PSMAX)) {
-                if (cmdt != '\0') {
-                    sprintf(str, "<%c;0x%x;done>", cmdt, ch);
-                    print_f(rs->plogs, "P1", str);
 
+            //sprintf(rs->logs, "[%d,%d] - 1\n", pi, px);
+            //print_f(rs->plogs, "P1", rs->logs);
+            if ((pi >= SMAX) && (px >= PSMAX)) {
+                sprintf(rs->logs, "cmdt:%c do nothing\n", cmdt, ch);
+                print_f(rs->plogs, "P1", rs->logs);
+            }
+            else if ((pi >= SMAX) || (px >= PSMAX)) {
+                sprintf(rs->logs, "Error!! [%d,%d] - 2\n", pi, px);
+                print_f(rs->plogs, "P1", rs->logs);
+
+                sprintf(str, "<%c,0x%x,unexpectedFailed>", cmdt, ch);
+                len = strlen(str);
+                if (len >= 256) len = 255;
+                str[len] = '\0';
+                rs_ipc_put(rcmd, str, len+1);
+                logcnt = 0;
+
+                sprintf(rs->logs, "result:0x%.8x\nBRKEN\n", stdata->result);
+                print_f(rs->plogs, "P1", rs->logs);
+
+                cmdt = '\0'; 
+                stdata->result = emb_stanPro(0, STINIT, SPY, PSSET);
+                continue;
+            } else {
+                stdata->result = (*pf[pi][px])(stdata);
+            }
+
+            msync(stdata, sizeof(struct psdata_s), MS_SYNC);
+            evt = stdata->result;
+            pi = (evt >> 8) & 0xff;
+            px = (evt & 0xff);
+
+            //sprintf(rs->logs, "[%d,%d] [%d,%d] - 3\n", pi, px, SMAX, PSMAX);
+            //print_f(rs->plogs, "P1", rs->logs);
+
+            if ((pi >= SMAX) || (px >= PSMAX)) {
+
+                sprintf(rs->logs, "<%c,0x%x,done>\n", cmdt, ch);
+                print_f(rs->plogs, "P1", rs->logs);
+
+                if (((cmdt != '\0') && (cmdt != 'w')) && (px == PSMAX)) {
+                    sprintf(str, "<%c,0x%x,done>", cmdt, ch);
                     len = strlen(str);
                     if (len >= 256) len = 255;
                     str[len] = '\0';
                     rs_ipc_put(rcmd, str, len+1);
                     logcnt = 0;
 
-                    cmdt = '\0'; 
-                    //sprintf(rs->logs, "comdt:0x%x ch:0x%x evt:0x%.8x - end\n", cmdt, ch, stdata.result);
-                    //print_f(rs->plogs, "P1", rs->logs);
+                    sprintf(rs->logs, "result:0x%.8x\nEND\n", stdata->result);
+                    print_f(rs->plogs, "P1", rs->logs);
                 }
 
+                cmdt = '\0'; 
                 //stdata.result = emb_stanPro(0, STINIT, SPY, PSSET);
                 continue;
             }
-
-            stdata.result = (*pf[pi][px])(&stdata);
 
             //sprintf(rs->logs, "comdt:%c ch:0x%x evt:0x%.8x\n", cmdt, ch, stdata.result);
             //print_f(rs->plogs, "P1", rs->logs);
@@ -5053,9 +5102,6 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             ch = 0; n = 0;
             n = rs_ipc_get(rcmd, &ch, 1);
 
-            sprintf(rs->logs, "1.n:%d, ch:%c\n", n, ch);
-            print_f(rs->plogs, "P5", rs->logs);
-
             if (ch == 'o') {			
                 msg[0] = 0xaa;			
                 msg[1] = opcode;
@@ -5067,15 +5113,11 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
             ch = 0; n = 0;
             n = rs_ipc_get(rcmd, &ch, 1);
-            sprintf(rs->logs, "2.n:%d, ch:%c\n", n, ch);
-            print_f(rs->plogs, "P5", rs->logs);
 
             if (ch != 'p') {			
                 opcode = OP_ERROR; 
                 n = rs_ipc_get(rcmd, &ch, 1);
                 param = ch;
-                sprintf(rs->logs, "3.n:%d, ch:0x%.2x\n", n, ch);
-                print_f(rs->plogs, "P5", rs->logs);
             }
         }
 
@@ -6068,6 +6110,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->psocket_n = &mrs->socket_n;
 
     rs->pmch = &mrs->mchine;
+    rs->pstdata = &mrs->stdata;
     return 0;
 }
 
