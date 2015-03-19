@@ -283,8 +283,8 @@ static int stlaser_05(struct psdata_s *data);
 inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
 {
     p->data = info & 0xff;
-    p->opcode = (info >> 8) & 0xf;
-    p->seqnum = (info >> 12) & 0x7;
+    p->opcode = (info >> 8) & 0x7f;
+    //p->seqnum = (info >> 12) & 0x7;
     p->inout = (info >> 15) & 0x1;
 
     return info;
@@ -294,8 +294,8 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
 {
     uint16_t info = 0;
     info |= p->data & 0xff;
-    info |= (p->opcode & 0xf) << 8;
-    info |= (p->seqnum & 0x7) << 12;
+    info |= (p->opcode & 0x7f) << 8;
+    //info |= (p->seqnum & 0x7) << 12;
     info |= (p->inout & 0x1) << 15;
 
     return info;
