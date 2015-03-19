@@ -743,11 +743,11 @@ static char spi1[] = "/dev/spidev32766.0";
             
             printf("secter length: %.8x, send:%.2x\n", arg1, stlen);
         }
-
+/*
         bitset = 1;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
         printf("Set spi 0 slave ready: %d\n", bitset);
-
+*/
         bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
         if (ret == -1) 
