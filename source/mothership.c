@@ -824,8 +824,8 @@ inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
     char str[128];
 
     p->data = info & 0xff;
-    p->opcode = (info >> 8) & 0xf;
-    p->seqnum = (info >> 12) & 0x7;
+    p->opcode = (info >> 8) & 0x7f;
+    //p->seqnum = (info >> 12) & 0x7;
     p->inout = (info >> 15) & 0x1;
 
     //sprintf(str, "info: 0x%.4x \n", info); 
@@ -839,9 +839,9 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
     char str[128];
     uint16_t info = 0;
     info |= p->data & 0xff;
-    info |= (p->opcode & 0xf) << 8;
+    info |= (p->opcode & 0x7f) << 8;
     //info |= (p->seqnum & 0x7) << 12;
-    //info |= (p->inout & 0x1) << 15;
+    info |= (p->inout & 0x1) << 15;
 
     //sprintf(str, "info: 0x%.4x \n", info); 
     //print_f(mlogPool, "pkg_info", str); 
@@ -1002,9 +1002,8 @@ static uint32_t next_doubleD(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSSET;
-                evt = 0x1; /* jump to next stage */
-                //next = PSMAX;
+                //evt = 0x1; /* jump to next stage */
+                next = PSMAX;
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -1617,7 +1616,7 @@ static int stdob_09(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = 1; 
+            ch = 41; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             //sprintf(str, "op_01: result: %x\n", data->result); 
@@ -2727,6 +2726,21 @@ static int p0_end(struct mainRes_s *mrs)
     return 0;
 }
 
+static int cmdfunc_wt_opcode(int argc, char *argv[])
+{
+    char ch=0;
+    int ret=0;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_wt_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    ch = 't';
+    ret = mrs_ipc_put(mrs, &ch, 1, 6);
+end:
+    return ret;
+}
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len)
 {
     int cnt=0, s=0;
@@ -2795,6 +2809,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
         ret = cmdfunc_opchk_single(cd, ctb->opMask, ctb->opBitlen);
         if (ret > 0) {
             ctb->opValue = ret;
+            ctb->opStatus = ASPOP_STA_WR;
         } else {
             ret = (ret * 10) -6;
         }
@@ -2876,7 +2891,7 @@ static int dbg(struct mainRes_s *mrs)
     char poll[32] = "poll";
 
     struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "op", cmdfunc_opcode}, 
-                                {4, "aspect", cmdfunc_01}, {5, "go", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_01}};
+                                {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_01}};
 
     p0_init(mrs);
 
@@ -2917,19 +2932,20 @@ static int dbg(struct mainRes_s *mrs)
             }
             pi++;
         }
-
+#if 0 /* no longer dumy log */
         /* clear previous log */
         ret = 0;
         ret = mrs_ipc_get(mrs, rsp, 256, 6);
         while (ret > 0) {
             sprintf(mrs->log, "ret:%d, rsp:%s\n", ret, rsp);
             print_f(&mrs->plog, "DBG", mrs->log);
-
+/*
             mrs_ipc_put(mrs, rsp, ret, 5);
-
+*/
             ret = 0;
             ret = mrs_ipc_get(mrs, rsp, 256, 6);
         }
+#endif
 
         /* command execution */
         if (ci > 0) {
@@ -3996,9 +4012,67 @@ static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
+static int fs41(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
+    sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    print_f(&mrs->plog, "fs06", mrs->log);
+
+    mrs->mchine.seqcnt += 1;
+    if (mrs->mchine.seqcnt >= 0x8) {
+        mrs->mchine.seqcnt = 0;
+    }
+
+    p->opcode = OP_RDY;
+    p->inout = 0;
+    p->seqnum = mrs->mchine.seqcnt;
+	
+    mrs_ipc_put(mrs, "c", 1, 1);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs42(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        p = &mrs->mchine.get;
+        sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+        print_f(&mrs->plog, "fs07", mrs->log);
+
+        if (p->opcode == OP_RDY) {
+            modersp->r = 1;
+            return 1;
+        } else {
+            modersp->m = modersp->m - 1;        
+            return 2;
+        }
+    }
+    return 0; 
+}
+
+static int fs43(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+
+    return 0;
+}
+
+static int fs44(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+
+    return 0;
+}
+
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 41
+#define PS_NUM 45
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -4012,7 +4086,7 @@ static int p0(struct mainRes_s *mrs)
                                  {25, fs25},{26, fs26},{27, fs27},{28, fs28},{29, fs29},
                                  {30, fs30},{31, fs31},{32, fs32},{33, fs33},{34, fs34},
                                  {35, fs35},{36, fs36},{37, fs37},{38, fs38},{39, fs39},
-                                 {40, fs40}};
+                                 {40, fs40},{41, fs41},{42, fs42},{43, fs43},{44, fs44}};
 
     p0_init(mrs);
 
@@ -4066,7 +4140,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(100000);
+        usleep(10000);
     }
 
     p0_end(mrs);
@@ -4077,7 +4151,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 {
     uint32_t px, pi;
     int ret = 0, ci, len, logcnt=0;
-    char ch, cmd, cmdt, str[128] = "good";
+    char ch, cmd, cmdt, str[128] = "good", er=0;
     char *addr;
     uint32_t evt;
 
@@ -4119,8 +4193,10 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'n') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, DOUBLEC, PSSET);
+                } else if (cmd == 't') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, DOUBLED, PSRLT);
                 }
-
                 if (cmdt != '\0') {
                     evt = stdata->result;
                     pi = (evt >> 8) & 0xff;
@@ -4168,10 +4244,16 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 sprintf(rs->logs, "Error!! [%d,%d] - 2\n", pi, px);
                 print_f(rs->plogs, "P1", rs->logs);
 
+                er = cmdt;
+                rs_ipc_put(rcmd, &er, 1);
+                er = 0x32;
+                rs_ipc_put(rcmd, &er, 1);
+
                 sprintf(str, "<%c,0x%x,unexpectedFailed>", cmdt, ch);
                 len = strlen(str);
                 if (len >= 256) len = 255;
                 str[len] = '\0';
+				
                 rs_ipc_put(rcmd, str, len+1);
                 logcnt = 0;
 
@@ -4199,6 +4281,12 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 print_f(rs->plogs, "P1", rs->logs);
 
                 if (((cmdt != '\0') && (cmdt != 'w')) && (px == PSMAX)) {
+                    er = cmdt;
+                    rs_ipc_put(rcmd, &er, 1);
+                    er = 0x31;
+                    rs_ipc_put(rcmd, &er, 1);
+
+
                     sprintf(str, "<%c,0x%x,done>", cmdt, ch);
                     len = strlen(str);
                     if (len >= 256) len = 255;
