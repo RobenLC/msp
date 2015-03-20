@@ -146,6 +146,14 @@ typedef enum {
     ASPOP_TYPE_VALUE,
 } aspOpType_e;
 
+struct aspWaitRlt_s{
+    char *wtRlt; /* size == 16bytes */
+    int  wtMs;
+    int  wtComp;
+    int  wtChan;
+    struct mainRes_s *wtMrs;
+};
+
 struct aspConfig_s{
     uint32_t opStatus;
     uint32_t opCode;
@@ -275,6 +283,7 @@ struct mainRes_s{
     struct socket_s socket_at;
     struct socket_s socket_n;
     struct logPool_s plog;
+    struct aspWaitRlt_s wtg;
 };
 
 typedef int (*fselec)(struct mainRes_s *mrs, struct modersp_s *modersp);
@@ -2731,14 +2740,6 @@ static int p0_end(struct mainRes_s *mrs)
     return 0;
 }
 
-struct aspWaitRlt_s{
-    char *wtRlt;
-    int  wtMs;
-    int  wtComp;
-    int  wtChan;
-    struct mainRes_s *wtMrs;
-};
-
 static int aspWaitResult(struct aspWaitRlt_s *tg)
 {
     struct mainRes_s *mrs;
@@ -2783,23 +2784,17 @@ end:
     return ret;
 }
 
-static int cmdfunc_wt_opcode(int argc, char *argv[])
+static int cmdfunc_upd2host(struct mainRes_s *mrs, struct info16Bit_s *pkt)
 {
     char ch=0, param=0;
     int ret=0, wcnt=0, n=0;
     uint16_t dt16;
-    struct mainRes_s *mrs=0;
     struct aspWaitRlt_s tg;
-    struct info16Bit_s pkt;
-    mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
-    sprintf(mrs->log, "cmdfunc_wt_opcode argc:%d\n", argc); 
+    sprintf(mrs->log, "cmdfunc_upd2host opc:0x%x, dat:0x%x\n", pkt->opcode, pkt->data); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
-    memset(&pkt, 0,  sizeof(struct info16Bit_s));
-    pkt.opcode = 0x21;
-    pkt.data = 0x1;
-    dt16 = pkg_info(&pkt);
+    dt16 = pkg_info(pkt);
     abs_info(&mrs->mchine.cur, dt16);
 
     ch = 't';
@@ -2830,16 +2825,29 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
     sprintf(mrs->log, "2.wt get 0x%x\n", ch); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
-    memset(&pkt, 0,  sizeof(struct info16Bit_s));
     dt16 = pkg_info(&mrs->mchine.get);
-    abs_info(&pkt, dt16);
-    sprintf(mrs->log, "3.wt get pkt op:0x%x, data:0x%x\n", pkt.opcode, pkt.data); 
+    abs_info(pkt, dt16);
+    sprintf(mrs->log, "3.wt get pkt op:0x%x, data:0x%x\n", pkt->opcode, pkt->data); 
     print_f(&mrs->plog, "DBG", mrs->log);
     
 end:
 	
     return ret;
 }
+
+static int cmdfunc_wt_opcode(int argc, char *argv[])
+{
+    int ret=0;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_wt_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+end:
+	return ret;
+}
+
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len)
 {
     int cnt=0, s=0;
@@ -5858,6 +5866,15 @@ static char spi0[] = "/dev/spidev32765.0";
     tdiff = time_diff(&pmrs->time[0], &pmrs->time[1], 1000);
     sprintf(pmrs->log, "tdiff:%d \n", tdiff);
     print_f(&pmrs->plog, "time_diff", pmrs->log);
+
+    pmrs->wtg.wtRlt =  mmap(NULL, 16, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (pmrs->wtg.wtRlt) {
+        sprintf(pmrs->log, "wtg result buff:0x%.8x - DONE\n", pmrs->wtg.wtRlt);
+        print_f(&pmrs->plog, "WTG", pmrs->log);
+    } else {
+        sprintf(pmrs->log, "wtg result buff alloc failed!!- ERROR\n", pmrs->wtg.wtRlt);
+        print_f(&pmrs->plog, "WTG", pmrs->log);
+    }
 
     ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
     if (ret) {printf("get save file failed\n"); return 0;}
