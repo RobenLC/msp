@@ -248,6 +248,7 @@ struct info16Bit_s{
 
 struct machineCtrl_s{
     uint32_t seqcnt;
+    struct info16Bit_s tmp;
     struct info16Bit_s cur;
     struct info16Bit_s get;
     struct modersp_s mch;
@@ -2784,13 +2785,21 @@ end:
     return ret;
 }
 
-static int cmdfunc_upd2host(struct mainRes_s *mrs, struct info16Bit_s *pkt)
+static int cmdfunc_upd2host(struct mainRes_s *mrs)
 {
-    char ch=0, param=0;
+    char ch=0, param=0, *rlt=0;
     int ret=0, wcnt=0, n=0;
     uint16_t dt16;
-    struct aspWaitRlt_s tg;
+    struct info16Bit_s *pkt;
+    struct aspWaitRlt_s *pwt;
     if (!mrs) {ret = -1; goto end;}
+    pwt = &mrs->wtg;
+    pkt = &mrs->mchine.tmp;
+    if ((!pwt) || (!pwt->wtRlt) || (!pwt->wtMrs)) {ret = -2; goto end;}
+    if (!pkt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
     sprintf(mrs->log, "cmdfunc_upd2host opc:0x%x, dat:0x%x\n", pkt->opcode, pkt->data); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
@@ -2798,31 +2807,27 @@ static int cmdfunc_upd2host(struct mainRes_s *mrs, struct info16Bit_s *pkt)
     abs_info(&mrs->mchine.cur, dt16);
 
     ch = 't';
-    ret = mrs_ipc_put(mrs, &ch, 1, 6);
+    mrs_ipc_put(mrs, &ch, 1, 6);
 
     ch = 't';
-    tg.wtChan = 6;
-    tg.wtComp = 1;
-    tg.wtMrs = mrs;
-    tg.wtMs = 3000;
-    tg.wtRlt = &ch;
-    n = aspWaitResult(&tg);
+    pwt->wtComp = 1;
+    *rlt = ch;
+    n = aspWaitResult(pwt);
     if (n) {
         ret = (n * 10) -2;
         goto end;
     }
-    sprintf(mrs->log, "1.wt get %c\n", ch); 
+    sprintf(mrs->log, "1.wt get %c\n", *rlt); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
     ch = 0;
-    tg.wtComp = 0;
-    tg.wtRlt = &ch;
-    n = aspWaitResult(&tg);
+    pwt->wtComp = 0;
+    n = aspWaitResult(pwt);
     if (n) {
         ret = (n * 10) -3;
         goto end;
     }    
-    sprintf(mrs->log, "2.wt get 0x%x\n", ch); 
+    sprintf(mrs->log, "2.wt get 0x%x\n", *rlt); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
     dt16 = pkg_info(&mrs->mchine.get);
@@ -2837,13 +2842,49 @@ end:
 
 static int cmdfunc_wt_opcode(int argc, char *argv[])
 {
-    int ret=0;
+    char *rlt=0;
+    int ret=0, ix=0, n=0, err=0, upd=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
     struct mainRes_s *mrs=0;
-    mrs = (struct mainRes_s *)argv[0];
-    if (!mrs) {ret = -1; goto end;}
     sprintf(mrs->log, "cmdfunc_wt_opcode argc:%d\n", argc); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 3000;
+
+    struct aspConfig_s* ctb = 0;
+    for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+        ctb = &mrs->configTable[ix];
+        if (!ctb) {ret = -5; goto end;}
+        if (ctb->opStatus == ASPOP_STA_WR) {
+            n = 0;
+            /* set data for update to scanner */
+            pkt->opcode = ctb->opCode;
+            pkt->data = ctb->opValue;
+            n = cmdfunc_upd2host(mrs);
+            if (!n) {
+                ctb->opStatus = ASPOP_STA_UPD;
+            } else {
+                err++;
+            }
+            upd++;
+        }
+        ctb = 0;
+    }
+
+    sprintf(mrs->log, "cmdfunc_wt_opcode total do:%d error:%d \n", upd, err); 
+    print_f(&mrs->plog, "DBG", mrs->log);
 end:
 	return ret;
 }
@@ -5875,6 +5916,7 @@ static char spi0[] = "/dev/spidev32765.0";
         sprintf(pmrs->log, "wtg result buff alloc failed!!- ERROR\n", pmrs->wtg.wtRlt);
         print_f(&pmrs->plog, "WTG", pmrs->log);
     }
+    pmrs->wtg.wtMrs = pmrs;
 
     ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
     if (ret) {printf("get save file failed\n"); return 0;}
