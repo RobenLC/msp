@@ -2972,8 +2972,10 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
             if ((!n) && (rsp == 0x1) && (pkt->opcode == ctb->opCode) && (pkt->data == ctb->opValue)) {
                 ctb->opStatus = ASPOP_STA_UPD; 
             } else {
+                /*
                 sprintf(mrs->log, "<err++, n=%d rsp=%d opc:0x%x dat:0x%x>", n, rsp, pkt->opcode, pkt->data); 
                 print_dbg(&mrs->plog, mrs->log, 0);
+                */
                 sprintf(mrs->log, "err++, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
                 print_f(&mrs->plog, "DBG", mrs->log);
 
@@ -2987,6 +2989,13 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
     sprintf(mrs->log, "cmdfunc_wt_opcode total do:%d error:%d \n", upd, err); 
     print_f(&mrs->plog, "DBG", mrs->log);
 end:
+
+    if (brk | ret | err) {
+        sprintf(mrs->log, "E,%d,%d,%d", err, ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d,%d", err, ret, brk);
+    }
+/*
     if (brk) {
         n = 0; rsp = 0;
         n = cmdfunc_upd2host(mrs, 'r', &rsp);
@@ -2996,7 +3005,8 @@ end:
     } else {
         sprintf(mrs->log, "succeed:do=%d, error=%d ret=%d", upd, err, ret);         
     }
- 
+ */
+
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
     printf_dbgflush(&mrs->plog, mrs);
@@ -3004,21 +3014,28 @@ end:
     return ret;
 }
 
-static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len)
+static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type)
 {
     int cnt=0, s=0;
     if (val > mask) return -1;
     if (len > 32) return -2;
     if (!len) return -3;
 
+    if (type != ASPOP_TYPE_SINGLE) {
+        if (val > mask) {
+            return -4;
+        }
+        return val;
+    }
+	
     s = 0;
     while(s < len) {
         if (val & (0x1 << s)) cnt++;
         s++;
     }
 
-    if (cnt == 0) return -4;
-    if (cnt > 1) return -5;
+    if (cnt == 0) return -5;
+    if (cnt > 1) return -6;
 
     return val;
 }
@@ -3069,13 +3086,17 @@ static int cmdfunc_opcode(int argc, char *argv[])
 
     if (ctb) {
         cd = opcode[3];
-        ret = cmdfunc_opchk_single(cd, ctb->opMask, ctb->opBitlen);
+        if (cd == ctb->opValue) {
+            goto end;
+        }
+        ret = cmdfunc_opchk_single(cd, ctb->opMask, ctb->opBitlen, ctb->opType);
         if (ret > 0) {
             ctb->opValue = ret;
             ctb->opStatus = ASPOP_STA_WR;
         } else {
             ret = (ret * 10) -6;
         }
+        
         sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x\n", ctb->opCode, ctb->opValue, val); 
         print_f(&mrs->plog, "DBG", mrs->log);
     } else {
@@ -3098,11 +3119,16 @@ end:
             sprintf(mrs->log, "failed: input 0x%x/0x%x, mask:0x%x, bitlen:%d, ret:%d", opcode[1], opcode[3], ctb->opMask, ctb->opBitlen, ret); 
         }
 
-    } else {
+    } else if (ret > 0) {
         ch = 'p';
         mrs_ipc_put(mrs, &ch, 1, 5);
 
         sprintf(mrs->log, "succeed: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);	
+    } else {
+        ch = 'p';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        sprintf(mrs->log, "same: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);	
     }
 
     n = strlen(mrs->log);
@@ -3316,86 +3342,12 @@ static int hd40(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd41(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd42(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-#if 1
     int ret=0, bitset;
     bitset = 0;
     ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "set sp0 ctl pin=%d ret=%d\n", bitset, ret);
     print_f(&mrs->plog, "ERROR42", mrs->log);
 
-#else
-    struct mainRes_s *pmrs;
-    int bitset=0, ret=0;
-    pmrs = mrs;
-// spidev id
-    int fd0, fd1;
-    ret = close(pmrs->sfm[0]);
-    if (ret) {
-        sprintf(mrs->log, "close spi 0 failed, ret: %d\n", ret);
-        print_f(&mrs->plog, "ERROR42", mrs->log);
-    } else {
-        sprintf(mrs->log, "close spi 0 success, ret: %d\n", ret);
-        print_f(&mrs->plog, "ERROR42", mrs->log);
-    }
-
-    ret = close(pmrs->sfm[1]);
-    if (ret) {
-        sprintf(mrs->log, "close spi 1 failed, ret: %d\n", ret);
-        print_f(&mrs->plog, "ERROR42", mrs->log);
-    } else {
-        sprintf(mrs->log, "close spi 1 success, ret: %d\n", ret);
-        print_f(&mrs->plog, "ERROR42", mrs->log);
-    }
-	
-    fd0 = open(spi0, O_RDWR);
-    if (fd0 < 0) 
-        printf("can't open device[%s]\n", spi0); 
-    else 
-        printf("open device[%s]\n", spi0); 
-    fd1 = open(spi1, O_RDWR);
-    if (fd1 < 0) 
-            printf("can't open device[%s]\n", spi1); 
-    else 
-        printf("open device[%s]\n", spi1); 
-
-    pmrs->sfm[0] = fd0;
-    pmrs->sfm[1] = fd1;
-    pmrs->smode = 0;
-    pmrs->smode |= SPI_MODE_1;
-
-    /* set RDY pin to low before spi setup ready */
-    //bitset = 0;
-    //ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-   // printf("[t]Set RDY low at beginning\n");
-
-
-    bitset = 0;     
-    ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
-    bitset = 1;    
-    ioctl(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-
-    /*
-     * spi mode 
-     */ 
-    ret = ioctl(pmrs->sfm[0], SPI_IOC_WR_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't set spi mode\n"); 
-    
-    ret = ioctl(pmrs->sfm[0], SPI_IOC_RD_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't get spi mode\n"); 
-    
-    /*
-     * spi mode 
-     */ 
-    ret = ioctl(pmrs->sfm[1], SPI_IOC_WR_MODE, &pmrs->smode); 
-    if (ret == -1) 
-        printf("can't set spi mode\n"); 
-    
-    ret = ioctl(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't get spi mode\n"); 
-#endif
     return 0;
 }
 static int hd43(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
