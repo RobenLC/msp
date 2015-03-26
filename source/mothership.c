@@ -3090,6 +3090,61 @@ end:
     return ret;
 }
 
+static int cmdfunc_go_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_go_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_DAT;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, 'n', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+		
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_go_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type)
 {
     int cnt=0, s=0;
@@ -3256,7 +3311,7 @@ static int dbg(struct mainRes_s *mrs)
     char poll[32] = "poll";
 
     struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "op", cmdfunc_opcode}, 
-                                {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_lh_opcode}};
+                                {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_go_opcode}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_lh_opcode}};
 
     p0_init(mrs);
 
@@ -4339,7 +4394,8 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'N')) {
-        ring_buf_init(&mrs->dataRx);
+        ring_buf_init(&mrs->cmdRx);
+        ring_buf_init(&mrs->cmdTx);
         mrs->dataRx.r->folw.seq = 1;
 
         modersp->m = modersp->m + 1;
@@ -6212,7 +6268,7 @@ int main(int argc, char *argv[])
     pmrs->cmdRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     pmrs->cmdRx.totsz = 256*SPI_TRUNK_SZ;;
     pmrs->cmdRx.chksz = SPI_TRUNK_SZ;
-    pmrs->cmdRx.svdist = 12;
+    pmrs->cmdRx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdRx.totsz, pmrs->cmdRx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->cmdRx.slotn; ix++) {
@@ -6226,10 +6282,10 @@ int main(int argc, char *argv[])
 	
     /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 512*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 256*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->cmdTx.pp) goto end;
     pmrs->cmdTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdTx.totsz = 512*SPI_TRUNK_SZ;
+    pmrs->cmdTx.totsz = 256*SPI_TRUNK_SZ;
     pmrs->cmdTx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdTx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
