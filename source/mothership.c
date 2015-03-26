@@ -2855,11 +2855,13 @@ static int aspWaitResult(struct aspWaitRlt_s *tg)
                  goto end;
             }
         }
+/*		
         usleep(ms);
         wcnt++;
         if (wcnt > 1000) {
             return -3;
         }
+*/
     }
 end:
 
@@ -2912,6 +2914,14 @@ static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
         goto end; /* -33 */
     }    
     *rsp = *rlt;
+
+    if (*rlt == 0x1) {
+        sprintf(mrs->log, "succeed:"); 
+        print_dbg(&mrs->plog, mrs->log, n);
+    } else {
+        sprintf(mrs->log, "failed:"); 
+        print_dbg(&mrs->plog, mrs->log, n);
+    }
     sprintf(mrs->log, "2.wt get 0x%x\n", *rlt); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
@@ -2994,6 +3004,72 @@ end:
         sprintf(mrs->log, "E,%d,%d,%d", err, ret, brk);
     } else {
         sprintf(mrs->log, "D,%d,%d,%d", err, ret, brk);
+    }
+/*
+    if (brk) {
+        n = 0; rsp = 0;
+        n = cmdfunc_upd2host(mrs, 'r', &rsp);
+        sprintf(mrs->log, "failed:do=%d, error=%d ret=%d brk=%d n=%d rsp=0x%x", upd, err, ret, brk, n, rsp);
+    } else if ((ret) || (err)) {
+        sprintf(mrs->log, "failed:do=%d, error=%d ret=%d", upd, err, ret);         
+    } else {
+        sprintf(mrs->log, "succeed:do=%d, error=%d ret=%d", upd, err, ret);         
+    }
+ */
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_lh_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_lh_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_DAT;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, 'd', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+		
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_lh_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
     }
 /*
     if (brk) {
@@ -3180,7 +3256,7 @@ static int dbg(struct mainRes_s *mrs)
     char poll[32] = "poll";
 
     struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "op", cmdfunc_opcode}, 
-                                {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_01}};
+                                {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_01}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_lh_opcode}};
 
     p0_init(mrs);
 
@@ -5632,8 +5708,9 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sendbuf[7+n+1] = '\0';
         sendbuf[7+n+2] = '\0';
         ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
-        sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, sendbuf, rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
-        print_f(rs->plogs, "P5", rs->logs);
+        //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, sendbuf, rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
+        //print_f(rs->plogs, "P5", sendbuf);
+        printf("[p5]:%s\n", sendbuf);
 
         socketEnd:
         close(rs->psocket_r->connfd);
