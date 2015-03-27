@@ -50,7 +50,11 @@ typedef enum {
     SPY = 0,
     BULLET, // 1
     LASER,  // 2
-    SMAX,   // 3
+    AUTO_A,  // 3
+    AUTO_B,  // 4
+    AUTO_C,  // 4
+    AUTO_D,  // 4
+    SMAX,   // 5
 }state_e;
 
 typedef enum {
@@ -279,6 +283,26 @@ static int stlaser_02(struct psdata_s *data);
 static int stlaser_03(struct psdata_s *data);
 static int stlaser_04(struct psdata_s *data);
 static int stlaser_05(struct psdata_s *data);
+static int stauto_01(struct psdata_s *data);
+static int stauto_02(struct psdata_s *data);
+static int stauto_03(struct psdata_s *data);
+static int stauto_04(struct psdata_s *data);
+static int stauto_05(struct psdata_s *data);
+static int stauto_06(struct psdata_s *data);
+static int stauto_07(struct psdata_s *data);
+static int stauto_08(struct psdata_s *data);
+static int stauto_09(struct psdata_s *data);
+static int stauto_10(struct psdata_s *data);
+static int stauto_11(struct psdata_s *data);
+static int stauto_12(struct psdata_s *data);
+static int stauto_13(struct psdata_s *data);
+static int stauto_14(struct psdata_s *data);
+static int stauto_15(struct psdata_s *data);
+static int stauto_16(struct psdata_s *data);
+static int stauto_17(struct psdata_s *data);
+static int stauto_18(struct psdata_s *data);
+static int stauto_19(struct psdata_s *data);
+static int stauto_20(struct psdata_s *data);
 
 inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
 {
@@ -1093,6 +1117,56 @@ static int stlaser_05(struct psdata_s *data)
     return ps_next(data);
 
 }
+
+static int stauto_01(struct psdata_s *data)
+{ 
+    char str[128], ch = 0;
+    uint32_t rlt;
+    rlt = abs_result(data->result);	
+    sprintf(str, "01: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0);  
+    print_f(mlogPool, "auto", str);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 0; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+
+}
+
+static int stauto_02(struct psdata_s *data) {return 0;}
+static int stauto_03(struct psdata_s *data) {return 0;}
+static int stauto_04(struct psdata_s *data) {return 0;}
+static int stauto_05(struct psdata_s *data) {return 0;}
+static int stauto_06(struct psdata_s *data) {return 0;}
+static int stauto_07(struct psdata_s *data) {return 0;}
+static int stauto_08(struct psdata_s *data) {return 0;}
+static int stauto_09(struct psdata_s *data) {return 0;}
+static int stauto_10(struct psdata_s *data) {return 0;}
+static int stauto_11(struct psdata_s *data) {return 0;}
+static int stauto_12(struct psdata_s *data) {return 0;}
+static int stauto_13(struct psdata_s *data) {return 0;}
+static int stauto_14(struct psdata_s *data) {return 0;}
+static int stauto_15(struct psdata_s *data) {return 0;}
+static int stauto_16(struct psdata_s *data) {return 0;}
+static int stauto_17(struct psdata_s *data) {return 0;}
+static int stauto_18(struct psdata_s *data) {return 0;}
+static int stauto_19(struct psdata_s *data) {return 0;}
+static int stauto_20(struct psdata_s *data) {return 0;}
 
 static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p)
 {
@@ -2334,6 +2408,24 @@ static int fs23(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
+static int fs24(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs25(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs27(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs28(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs29(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs31(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs32(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs33(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs34(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs38(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs39(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+	
 static int p0(struct mainRes_s *mrs)
 {
 #define PS_NUM 24
@@ -2341,11 +2433,15 @@ static int p0(struct mainRes_s *mrs)
     char str[128], ch;
 
     struct modersp_s modesw;
-    struct fselec_s afselec[PS_NUM] = {{ 0, fs00},{ 1, fs01},{ 2, fs02},{ 3, fs03},{ 4, fs04},
+    struct fselec_s afselec[41] = {{ 0, fs00},{ 1, fs01},{ 2, fs02},{ 3, fs03},{ 4, fs04},
                                  { 5, fs05},{ 6, fs06},{ 7, fs07},{ 8, fs08},{ 9, fs09},
                                  {10, fs10},{11, fs11},{12, fs12},{13, fs13},{14, fs14},
                                  {15, fs15},{16, fs16},{17, fs17},{18, fs18},{19, fs19},
-                                 {20, fs20},{21, fs21},{22, fs22},{23, fs23},
+                                 {20, fs20},{21, fs21},{22, fs22},{23, fs23},{24, fs24},
+                                 {25, fs25},{26, fs26},{27, fs27},{28, fs28},{29, fs29},
+                                 {30, fs30},{31, fs31},{32, fs32},{33, fs33},{34, fs34},
+                                 {35, fs35},{36, fs36},{37, fs37},{38, fs38},{39, fs39},
+                                 {40, fs40}
                                 };
 
     p0_init(mrs);
@@ -2423,8 +2519,14 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     struct psdata_s stdata;
     stfunc pf[SMAX][PSMAX] = {{stspy_01, stspy_02, stspy_03, stspy_04, stspy_05},
                             {stbullet_01, stbullet_02, stbullet_03, stbullet_04, stbullet_05},
-                            {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05}};
-
+                            {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05},
+                            {stauto_01, stauto_02, stauto_03, stauto_04, stauto_05},
+                            {stauto_06, stauto_07, stauto_08, stauto_09, stauto_10},
+                            {stauto_11, stauto_12, stauto_13, stauto_14, stauto_15},
+                            {stauto_16, stauto_17, stauto_18, stauto_19, stauto_20}};
+    /* A.1 ~ A.4 for start sector 01 - 04*/
+    /* A.5 = A.8 for sector len   01 - 04*/
+    /* A.9 for sd sector transmitting using command mode */
     p1_init(rs);
     // wait for ch from p0
     // state machine control
