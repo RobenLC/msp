@@ -1803,6 +1803,7 @@ static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'G')){
+        modersp->r = 1;
         return 1;
     }
     return 0; 
@@ -1853,6 +1854,8 @@ static int fs04(struct mainRes_s *mrs, struct modersp_s *modersp)
             ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
             sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
             print_f(&mrs->plog, "fs04", mrs->log);
+
+            modersp->r = 1;
             return 1;
         } else {
             modersp->m = modersp->m - 1;        
@@ -1880,6 +1883,7 @@ static int fs06(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'B')){
+        modersp->r = 1;
         return 1;
     }
     return 0; 
@@ -1922,9 +1926,11 @@ static int fs08(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs08", mrs->log);
 
         if (p->opcode == OP_RDY) {
+            modersp->r = 1;
             return 1;
         } else {
             modersp->m = modersp->m - 1;        
+            modersp->r = 2;
             return 2;
         }
     }
@@ -1969,8 +1975,10 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         //print_f(&mrs->plog, "fs10", mrs->log);
 
         if (p->opcode == OP_DAT) {
+            modersp->r = 1;
             return 1;
         } else if (p->opcode == OP_DCM) {
+            modersp->r = 1;
             return 1;
         } else {
             modersp->m = modersp->m - 1;        
@@ -2017,9 +2025,11 @@ static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp)
         //print_f(&mrs->plog, "fs12", mrs->log);
 
         if (p->opcode == OP_DAT) {
+            modersp->r = 1;
             return 1;
         } else {
             modersp->m = modersp->m - 1;        
+            modersp->r = 2;
             return 2;
         }
     }
@@ -2064,6 +2074,7 @@ static int fs13(struct mainRes_s *mrs, struct modersp_s *modersp)
     ring_buf_init(&mrs->dataRx);
     mrs->dataRx.r->folw.seq = 1;
 
+    modersp->r = 1;
     return 1;
 }
 static int fs14(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -2126,12 +2137,13 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (ch == 'r') {
             modersp->m = modersp->m - 1;
             modersp->d += 1;
+            modersp->r = 2;
             return 2;
         }
         if (ch == 'e') {
             sprintf(mrs->log, "get ch:%c \n", ch);
             print_f(&mrs->plog, "fs16", mrs->log);
-
+            modersp->r = 1;
             return 1;
         }
     }
@@ -2179,6 +2191,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->m = 23;
         } else {
             modersp->m = modersp->m - 1; 
+            modersp->r = 2;
             return 2;
         }
     }
@@ -2200,6 +2213,7 @@ static int fs19(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs19", mrs->log);
 
+    modersp->r = 1;
     return 1;
 }
 
@@ -2264,6 +2278,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
 
+    modersp->r = 1;
     return 1;
 }
 
@@ -2315,13 +2330,14 @@ static int fs23(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs23", mrs->log);
 
+    modersp->r = 1;
     return 1;
 }
 
 static int p0(struct mainRes_s *mrs)
 {
 #define PS_NUM 24
-    int len, tmp;
+    int len, tmp, ret;
     char str[128], ch;
 
     struct modersp_s modesw;
@@ -2358,10 +2374,10 @@ static int p0(struct mainRes_s *mrs)
         }
 
         if ((modesw.m > 0) && (modesw.m < PS_NUM)) {
-            modesw.r = (*afselec[modesw.m].pfunc)(mrs, &modesw);
+            ret = (*afselec[modesw.m].pfunc)(mrs, &modesw);
             //sprintf(mrs->log, "pmode:%d rsp:%d\n", modesw.m, modesw.r);
             //print_f(&mrs->plog, "P0", mrs->log);
-            if (modesw.r == 1) {
+            if (ret == 1) {
                 tmp = modesw.m;
                 modesw.m = 0;
             }
