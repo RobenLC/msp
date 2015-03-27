@@ -48,9 +48,9 @@ typedef enum {
 }event_e;
 typedef enum {
     SPY = 0,
-    BULLET,
-    LASER,
-    SMAX,
+    BULLET, // 1
+    LASER,  // 2
+    SMAX,   // 3
 }state_e;
 
 typedef enum {
@@ -357,7 +357,8 @@ static int next_spy(struct psdata_s *data)
     char str[256];
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
-
+    evt = (data->result >> 8) & 0xff;
+	
     //sprintf(str, "%d-%d\n", pro, rlt); 
     //print_f(mlogPool, "spy", str); 
 
@@ -395,7 +396,7 @@ static int next_spy(struct psdata_s *data)
                 //print_f(mlogPool, "spy", str); 
                 //next = PSMAX;
                 next = PSSET; /* jump to next stage */
-                evt = 0x1;
+                evt = BULLET;
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -416,6 +417,7 @@ static uint32_t next_bullet(struct psdata_s *data)
     char str[256];
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
+    evt = (data->result >> 8) & 0xff;
 
     //sprintf(str, "%d-%d\n", pro, rlt); 
     //print_f(mlogPool, "bullet", str); 
@@ -454,7 +456,8 @@ static uint32_t next_bullet(struct psdata_s *data)
                 //print_f(mlogPool, "bullet", str); 
                 //next = PSMAX;
                 next = PSSET;
-                evt = 0x1; /* jump to next stage */
+                /* jump to next stage */
+                evt = LASER;
                 break;
             default:
                 sprintf(str, "default\n"); 
@@ -475,6 +478,7 @@ static int next_laser(struct psdata_s *data)
     char str[256];
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
+    evt = (data->result >> 8) & 0xff;
 
     //sprintf(str, "%d-%d\n", pro, rlt); 
     //print_f(mlogPool, "laser", str); 
@@ -513,7 +517,8 @@ static int next_laser(struct psdata_s *data)
                 //print_f(mlogPool, "laser", str); 
                 //next = PSMAX;
                 next = PSTSM;
-                evt = 0x1; /* jump to next stage */
+                /* jump to next stage */
+                evt = SPY;
                 break;
             default:
                 sprintf(str, "default\n"); 
@@ -590,19 +595,19 @@ static int ps_next(struct psdata_s *data)
         case SPY:
             ret = next_spy(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = BULLET; /* state change */
+            nxtst = evt; /* state change */
 
             break;
         case BULLET:
             ret = next_bullet(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = LASER; /* state change */
+            nxtst = evt; /* state change */
 
             break;
         case LASER:
             ret = next_laser(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = SPY; /* end the test loop */
+            nxtst = evt; /* end the test loop */
 
             break;
         default:
