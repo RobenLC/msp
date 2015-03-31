@@ -4504,8 +4504,8 @@ static int fs41(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
-    sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-    print_f(&mrs->plog, "fs41", mrs->log);
+    //sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    //print_f(&mrs->plog, "fs41", mrs->log);
 
     mrs->mchine.seqcnt += 1;
     if (mrs->mchine.seqcnt >= 0x8) {
@@ -4528,8 +4528,8 @@ static int fs42(struct mainRes_s *mrs, struct modersp_s *modersp)
         msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
 
         p = &mrs->mchine.get;
-        sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-        print_f(&mrs->plog, "fs42", mrs->log);
+        //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+        //print_f(&mrs->plog, "fs42", mrs->log);
 
         if (p->opcode == OP_QRY) {
             modersp->m = modersp->m + 1;
@@ -4545,8 +4545,8 @@ static int fs43(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
-    sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-    print_f(&mrs->plog, "fs43", mrs->log);
+    //sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    //print_f(&mrs->plog, "fs43", mrs->log);
 
     mrs->mchine.seqcnt += 1;
     if (mrs->mchine.seqcnt >= 0x8) {
@@ -4570,7 +4570,7 @@ static int fs44(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         c = &mrs->mchine.cur;
         p = &mrs->mchine.get;
-        sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+        sprintf(mrs->log, "get compare 0x%.2x/0x%.2x 0x%.2x/0x%.2x\n", p->opcode, c->opcode, p->data, c->data);
         print_f(&mrs->plog, "fs44", mrs->log);
 
         if (p->opcode == c->opcode) {

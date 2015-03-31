@@ -81,9 +81,9 @@ typedef enum {
     LASER,  // 2
     AUTO_A,  // 3
     AUTO_B,  // 4
-    AUTO_C,  // 4
-    AUTO_D,  // 4
-    SMAX,   // 5
+    AUTO_C,  // 5
+    AUTO_D,  // 6
+    SMAX,   // 7
 }state_e;
 
 typedef enum {
@@ -453,10 +453,10 @@ static int next_spy(struct psdata_s *data)
                     next = PSSET; /* jump to next stage */
                     evt = BULLET;
                     break;
-                case OP_DUL: /* latter */                         
+                case OP_DUL: /* latter */    
+                    break;
                 case OP_RD:                                       
                 case OP_WT:                                       
-                case OP_SDAT:                                     
                 case OP_STSEC_0:                                  
                 case OP_STSEC_1:                                  
                 case OP_STSEC_2:                                  
@@ -476,7 +476,11 @@ static int next_spy(struct psdata_s *data)
                 case OP_WIDTHAD_H:                                
                 case OP_WIDTHAD_L:                                
                 case OP_SCANLEN_H:                                
-                case OP_SCANLEN_L:                                
+                case OP_SCANLEN_L:                            
+                    next = PSSET; /* jump to next stage */
+                    evt = AUTO_A;
+                    break;
+                case OP_SDAT:                                     
                 default:
                     break;
                 }
@@ -627,6 +631,236 @@ static int next_laser(struct psdata_s *data)
     return emb_process(tmpRlt, next);
 }
 
+static int next_auto_A(struct psdata_s *data)
+{
+    int pro, rlt, next = -1;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+    evt = (data->result >> 8) & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "auto_A", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET: /* load file, prepare data and spi */
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "auto_A", str); 
+                next = PSTSM; /* jump to next stage */
+                evt = SPY;
+                break;
+            case PSACT: /* check RDY, and start transmitting */
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "auto_A", str); 
+                break;
+            case PSWT: /* end the transmitting and back to polling OP_QRY */
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "auto_A", str); 
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "auto_A", str); 
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "auto_A", str); 
+                break;
+            default:
+                sprintf(str, "default\n"); 
+                print_f(mlogPool, "laser", str); 
+                next = PSSET;
+                break;
+        }
+    }
+
+    if (next < 0) {
+        next = PSMAX; /* break */
+    }
+
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static int next_auto_B(struct psdata_s *data)
+{
+    int pro, rlt, next = -1;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+    evt = (data->result >> 8) & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "auto_A", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET: /* load file, prepare data and spi */
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "auto_B", str); 
+                break;
+            case PSACT: /* check RDY, and start transmitting */
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "auto_B", str); 
+                break;
+            case PSWT: /* end the transmitting and back to polling OP_QRY */
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "auto_B", str); 
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "auto_B", str); 
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "auto_B", str); 
+                break;
+            default:
+                sprintf(str, "default\n"); 
+                print_f(mlogPool, "laser", str); 
+                next = PSSET;
+                break;
+        }
+    }
+
+    if (next < 0) {
+        next = PSMAX; /* break */
+    }
+
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static int next_auto_C(struct psdata_s *data)
+{
+    int pro, rlt, next = -1;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+    evt = (data->result >> 8) & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "auto_A", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET: /* load file, prepare data and spi */
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "auto_C", str); 
+                break;
+            case PSACT: /* check RDY, and start transmitting */
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "auto_C", str); 
+                break;
+            case PSWT: /* end the transmitting and back to polling OP_QRY */
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "auto_C", str); 
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "auto_C", str); 
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "auto_C", str); 
+                break;
+            default:
+                sprintf(str, "default\n"); 
+                print_f(mlogPool, "laser", str); 
+                next = PSSET;
+                break;
+        }
+    }
+
+    if (next < 0) {
+        next = PSMAX; /* break */
+    }
+
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static int next_auto_D(struct psdata_s *data)
+{
+    int pro, rlt, next = -1;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+    evt = (data->result >> 8) & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "auto_A", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET: /* load file, prepare data and spi */
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                break;
+            case PSACT: /* check RDY, and start transmitting */
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                break;
+            case PSWT: /* end the transmitting and back to polling OP_QRY */
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                break;
+            default:
+                sprintf(str, "default\n"); 
+                print_f(mlogPool, "laser", str); 
+                next = PSSET;
+                break;
+        }
+    }
+
+    if (next < 0) {
+        next = PSMAX; /* break */
+    }
+
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static int next_error(struct psdata_s *data)
 {
     int pro, rlt, next;
@@ -701,6 +935,30 @@ static int ps_next(struct psdata_s *data)
             break;
         case LASER:
             ret = next_laser(data);
+            evt = (ret >> 24) & 0xff;
+            nxtst = evt; /* end the test loop */
+
+            break;
+        case AUTO_A:
+            ret = next_auto_A(data);
+            evt = (ret >> 24) & 0xff;
+            nxtst = evt; /* end the test loop */
+
+            break;
+        case AUTO_B:
+            ret = next_auto_B(data);
+            evt = (ret >> 24) & 0xff;
+            nxtst = evt; /* end the test loop */
+
+            break;
+        case AUTO_C:
+            ret = next_auto_C(data);
+            evt = (ret >> 24) & 0xff;
+            nxtst = evt; /* end the test loop */
+
+            break;
+        case AUTO_D:
+            ret = next_auto_D(data);
             evt = (ret >> 24) & 0xff;
             nxtst = evt; /* end the test loop */
 
@@ -870,13 +1128,18 @@ static int stspy_05(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
+    struct info16Bit_s *p;
+
     rlt = abs_result(data->result);	
 
-    sprintf(str, "op_05 - rlt:0x%.8x \n", rlt); 
-    print_f(mlogPool, "spy", str); 
+    //sprintf(str, "op_05 - rlt:0x%.8x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
+            p = &data->rs->pmch->get;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
             ch = 9; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
@@ -884,15 +1147,16 @@ static int stspy_05(struct psdata_s *data)
             //print_f(mlogPool, "spy", str);  
             break;
         case WAIT:
-            sprintf(str, "05: asnp: 0x%x\n", data->ansp0); 
+            p = &data->rs->pmch->get;
+            sprintf(str, "05: asnp: 0x%x, get pkt: 0x%x 0x%x\n", data->ansp0, p->opcode, p->data); 
             print_f(mlogPool, "spy", str);  
 
+            if (data->ansp0 == p->opcode)
             switch (data->ansp0) {				
             case OP_DAT: /* currently support */
-            case OP_DUL: /* latter */
+
             case OP_RD:
             case OP_WT:
-            case OP_SDAT:
             case OP_STSEC_0:
             case OP_STSEC_1:
             case OP_STSEC_2:
@@ -901,11 +1165,6 @@ static int stspy_05(struct psdata_s *data)
             case OP_STLEN_1:
             case OP_STLEN_2:
             case OP_STLEN_3:
-                sprintf(str, "go to next \n"); 
-                print_f(mlogPool, "spy", str);  
-
-                data->result = emb_result(data->result, NEXT);
-                break;
             case OP_FFORMAT:
             case OP_COLRMOD:
             case OP_COMPRAT:
@@ -918,6 +1177,13 @@ static int stspy_05(struct psdata_s *data)
             case OP_WIDTHAD_L:
             case OP_SCANLEN_H:
             case OP_SCANLEN_L:
+                sprintf(str, "go to next \n"); 
+                print_f(mlogPool, "spy", str);  
+
+                data->result = emb_result(data->result, NEXT);
+                break;
+            case OP_DUL: /* latter */
+            case OP_SDAT:
                 break;
             default:
                 break;
@@ -1230,20 +1496,34 @@ static int stauto_01(struct psdata_s *data)
 { 
     char str[128], ch = 0;
     uint32_t rlt;
+    struct info16Bit_s *p, *g;
+
     rlt = abs_result(data->result);	
     sprintf(str, "01: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0);  
     print_f(mlogPool, "auto", str);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            memset(p, 0, sizeof(struct info16Bit_s));
+            p->opcode = g->opcode;
+            p->data = g->data;
+
+            ch = 24; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
             break;
         case WAIT:
-            if (data->ansp0 == 1) {
+            g = &data->rs->pmch->get;
+
+            if (data->ansp0 == g->opcode) {
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
+                print_f(mlogPool, "auto", str);  
                 data->result = emb_result(data->result, NEXT);
-            }
+            }			
             break;
         case NEXT:
             break;
@@ -2541,8 +2821,51 @@ static int fs23(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
-static int fs24(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
-static int fs25(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs24(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    struct info16Bit_s *p;
+
+    p = &mrs->mchine.cur;
+    //sprintf(mrs->log, "put  0x%.2x 0x%.2x \n",p->opcode, p->data);
+    //print_f(&mrs->plog, "fs24", mrs->log);
+
+    //msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+    mrs->mchine.seqcnt += 1;
+    if (mrs->mchine.seqcnt >= 0x8) {
+        mrs->mchine.seqcnt = 0;
+    }
+	
+    mrs_ipc_put(mrs, "c", 1, 3);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs25(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *g;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        g = &mrs->mchine.get;
+        //sprintf(mrs->log, "pull 0x%.2x 0x%.2x \n", g->opcode, g->data);
+        //print_f(&mrs->plog, "fs25", mrs->log);
+
+        if (g->opcode) {
+            modersp->r = g->opcode;
+            return 1;
+        } else {
+            modersp->m = modersp->m - 1;        
+            return 2;
+        }
+    }
+    return 0; 
+}
+
 static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
 static int fs27(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
 static int fs28(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
@@ -2561,12 +2884,12 @@ static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
 	
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 24
+#define PS_NUM 41
     int len, tmp, ret;
     char str[128], ch;
 
     struct modersp_s modesw;
-    struct fselec_s afselec[41] = {{ 0, fs00},{ 1, fs01},{ 2, fs02},{ 3, fs03},{ 4, fs04},
+    struct fselec_s afselec[PS_NUM] = {{ 0, fs00},{ 1, fs01},{ 2, fs02},{ 3, fs03},{ 4, fs04},
                                  { 5, fs05},{ 6, fs06},{ 7, fs07},{ 8, fs08},{ 9, fs09},
                                  {10, fs10},{11, fs11},{12, fs12},{13, fs13},{14, fs14},
                                  {15, fs15},{16, fs16},{17, fs17},{18, fs18},{19, fs19},
