@@ -3156,7 +3156,7 @@ static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type)
         if (val > mask) {
             return -4;
         }
-        return val;
+        return 1;
     }
 	
     s = 0;
@@ -3168,7 +3168,7 @@ static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type)
     if (cnt == 0) return -5;
     if (cnt > 1) return -6;
 
-    return val;
+    return 2;
 }
 static int cmdfunc_opcode(int argc, char *argv[])
 {
@@ -3217,18 +3217,20 @@ static int cmdfunc_opcode(int argc, char *argv[])
 
     if (ctb) {
         cd = opcode[3];
+
         if (cd == ctb->opValue) {
             goto end;
         }
+
         ret = cmdfunc_opchk_single(cd, ctb->opMask, ctb->opBitlen, ctb->opType);
-        if (ret > 0) {
-            ctb->opValue = ret;
-            ctb->opStatus = ASPOP_STA_WR;
-        } else {
+        if (ret < 0) {
             ret = (ret * 10) -6;
+        } else {			
+            ctb->opValue = cd;
+            ctb->opStatus = ASPOP_STA_WR;
         }
         
-        sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x\n", ctb->opCode, ctb->opValue, val); 
+        sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d\n", ctb->opCode, ctb->opValue, cd, ret); 
         print_f(&mrs->plog, "DBG", mrs->log);
     } else {
         sprintf(mrs->log, "cmdfunc_opcode - 3\n"); 
@@ -3250,18 +3252,19 @@ end:
             sprintf(mrs->log, "failed: input 0x%x/0x%x, mask:0x%x, bitlen:%d, ret:%d", opcode[1], opcode[3], ctb->opMask, ctb->opBitlen, ret); 
         }
 
-    } else if (ret > 0) {
-        ch = 'p';
-        mrs_ipc_put(mrs, &ch, 1, 5);
-
-        sprintf(mrs->log, "succeed: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);	
     } else {
-        ch = 'p';
-        mrs_ipc_put(mrs, &ch, 1, 5);
+        if (ret == 0) {
+            ch = 'p';
+            mrs_ipc_put(mrs, &ch, 1, 5);
 
-        sprintf(mrs->log, "same: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);	
+            sprintf(mrs->log, "same: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);	
+        } else {
+            ch = 'p';
+            mrs_ipc_put(mrs, &ch, 1, 5);
+
+            sprintf(mrs->log, "succeed: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);	
+        } 
     }
-
     n = strlen(mrs->log);
     mrs_ipc_put(mrs, mrs->log, n, 5);
     
@@ -5607,9 +5610,9 @@ static int p4(struct procRes_s *rs)
 static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 {
     int px, pi, size, opsz, acusz, len, acu;
-    int ret, n, num, hd, be, ed, ln;
+    int ret, n, num, hd, be, ed, ln, fg;
     char ch, *recvbuf, *addr, *sendbuf;
-    char msg[256], opcode=0, param=0;
+    char msg[256], opcode=0, param=0, flag = 0;
     sprintf(rs->logs, "p5\n");
     print_f(rs->plogs, "P5", rs->logs);
 
@@ -5678,6 +5681,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         if (n <= 0) goto socketEnd;
         hd = atFindIdx(recvbuf, '!');
         if (hd < 0) goto socketEnd;
+        fg = atFindIdx(recvbuf, '+');
+        if (fg < 0) goto socketEnd;		
         be = atFindIdx(&recvbuf[hd], '[');
         if (be < 0) goto socketEnd;
         ed = atFindIdx(&recvbuf[hd], ']');
@@ -5689,12 +5694,21 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             goto socketEnd;
         }
 
-        sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]\n", n, &recvbuf[hd], hd, be, ed, ln);
+        sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, &recvbuf[hd], hd, be, ed, ln, fg);
         print_f(rs->plogs, "P5", rs->logs);
 
-        opcode = recvbuf[hd+1]; param = recvbuf[be-1];
-        sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]\n", opcode, param);
+        opcode = recvbuf[hd+1]; param = recvbuf[be-1]; flag = recvbuf[fg+1];
+        sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]flg[0x%x]\n", opcode, param, flag);
         print_f(rs->plogs, "P5", rs->logs);
+
+        /* android socket api can't send data with '\0' */
+        if ((fg+1) != (be-1)) {
+            if (param == 0xff) {
+                if (flag == 2) {
+                    param = 0;
+                }
+            }
+        }
 
         n = ed - be - 1;
         if ((n < 255) && (n > 0)) {
@@ -5769,6 +5783,9 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         printf("[p5]:%s\n", sendbuf);
 
         socketEnd:
+        sprintf(rs->logs, "END receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, recvbuf, hd, be, ed, ln, fg);
+        print_f(rs->plogs, "P5", rs->logs);
+
         close(rs->psocket_r->connfd);
         rs->psocket_r->connfd = 0;
     }
@@ -6323,7 +6340,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = 0;
             ctb->opType = ASPOP_TYPE_NONE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_0;
             ctb->opBitlen = 0;
             break;
@@ -6331,7 +6348,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_FFORMAT;
             ctb->opType = ASPOP_TYPE_SINGLE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
@@ -6339,7 +6356,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_COLRMOD;
             ctb->opType = ASPOP_TYPE_SINGLE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_4;
             ctb->opBitlen = 8;
             break;
@@ -6347,7 +6364,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_COMPRAT;
             ctb->opType = ASPOP_TYPE_SINGLE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
@@ -6355,7 +6372,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_SCANMOD;
             ctb->opType = ASPOP_TYPE_SINGLE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_2;
             ctb->opBitlen = 8;
             break;
@@ -6363,7 +6380,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_DATPATH;
             ctb->opType = ASPOP_TYPE_SINGLE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_4;
             ctb->opBitlen = 8;
             break;
@@ -6371,7 +6388,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_RESOLTN;
             ctb->opType = ASPOP_TYPE_SINGLE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_4;
             ctb->opBitlen = 8;
             break;
@@ -6379,7 +6396,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_SCANGAV;
             ctb->opType = ASPOP_TYPE_SINGLE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_2;
             ctb->opBitlen = 8;
             break;
@@ -6387,7 +6404,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_MAXWIDH;
             ctb->opType = ASPOP_TYPE_SINGLE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
@@ -6395,7 +6412,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_WIDTHAD_H;
             ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
@@ -6403,7 +6420,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_WIDTHAD_L;
             ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
@@ -6411,7 +6428,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_SCANLEN_H;
             ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
@@ -6419,7 +6436,7 @@ int main(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_SCANLEN_L;
             ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0;
+            ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
