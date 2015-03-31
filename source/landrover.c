@@ -23,6 +23,9 @@
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
 #define SPI_SPEED    40000000
 
+#define OP_MAX 0xff
+#define OP_NONE 0x00
+
 #define OP_PON 0x1
 #define OP_QRY 0x2
 #define OP_RDY 0x3
@@ -30,6 +33,32 @@
 #define OP_SCM 0x5
 #define OP_DCM 0x6
 #define OP_FIH  0x7
+#define OP_DUL 0x8
+#define OP_RD 0x9
+#define OP_WT 0xa
+#define OP_SDAT 0xb
+
+#define OP_STSEC_0  0x10
+#define OP_STSEC_1  0x11
+#define OP_STSEC_2  0x12
+#define OP_STSEC_3  0x13
+#define OP_STLEN_0  0x14
+#define OP_STLEN_1  0x15
+#define OP_STLEN_2  0x16
+#define OP_STLEN_3  0x17
+
+#define OP_FFORMAT      0x20
+#define OP_COLRMOD      0x21
+#define OP_COMPRAT      0x22
+#define OP_SCANMOD      0x23
+#define OP_DATPATH      0x24
+#define OP_RESOLTN       0x25
+#define OP_SCANGAV       0x26
+#define OP_MAXWIDH      0x27
+#define OP_WIDTHAD_H   0x28
+#define OP_WIDTHAD_L   0x29
+#define OP_SCANLEN_H    0x2a
+#define OP_SCANLEN_L    0x2b
 
 #define SPI_TRUNK_SZ   (32768)
 
@@ -376,14 +405,14 @@ inline uint32_t emb_process(uint32_t result, uint32_t flag)
 
 static int next_spy(struct psdata_s *data)
 {
-    int pro, rlt, next = 0;
+    int pro, rlt, next = -1;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
     evt = (data->result >> 8) & 0xff;
 	
-    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //sprintf(str, "next %d-%d %d [0x%x]\n", pro, rlt, evt, data->result); 
     //print_f(mlogPool, "spy", str); 
 
     tmpRlt = data->result;
@@ -416,11 +445,41 @@ static int next_spy(struct psdata_s *data)
                 next = PSTSM;
                 break;
             case PSTSM:
-                //sprintf(str, "PSTSM\n"); 
-                //print_f(mlogPool, "spy", str); 
+                sprintf(str, "PSTSM - ansp: %d\n", tmpAns); 
+                print_f(mlogPool, "spy", str); 
                 //next = PSMAX;
-                next = PSSET; /* jump to next stage */
-                evt = BULLET;
+                switch (tmpAns) {
+                case OP_DAT: /* currently support */              
+                    next = PSSET; /* jump to next stage */
+                    evt = BULLET;
+                    break;
+                case OP_DUL: /* latter */                         
+                case OP_RD:                                       
+                case OP_WT:                                       
+                case OP_SDAT:                                     
+                case OP_STSEC_0:                                  
+                case OP_STSEC_1:                                  
+                case OP_STSEC_2:                                  
+                case OP_STSEC_3:                                  
+                case OP_STLEN_0:                                  
+                case OP_STLEN_1:                                  
+                case OP_STLEN_2:                                  
+                case OP_STLEN_3:                                  
+                case OP_FFORMAT:                                  
+                case OP_COLRMOD:                                  
+                case OP_COMPRAT:                                  
+                case OP_SCANMOD:                                  
+                case OP_DATPATH:                                  
+                case OP_RESOLTN:                                  
+                case OP_SCANGAV:                                  
+                case OP_MAXWIDH:                                  
+                case OP_WIDTHAD_H:                                
+                case OP_WIDTHAD_L:                                
+                case OP_SCANLEN_H:                                
+                case OP_SCANLEN_L:                                
+                default:
+                    break;
+                }
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -430,13 +489,17 @@ static int next_spy(struct psdata_s *data)
         }
     }
 
+    if (next < 0) {
+        next = PSMAX; /* break */
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
 
 static uint32_t next_bullet(struct psdata_s *data)
 {
-    int pro, rlt, next = 0;
+    int pro, rlt, next = -1;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
     rlt = (data->result >> 16) & 0xff;
@@ -491,13 +554,17 @@ static uint32_t next_bullet(struct psdata_s *data)
         }
     }
 
+    if (next < 0) {
+        next = PSMAX; /* break */
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
 
 static int next_laser(struct psdata_s *data)
 {
-    int pro, rlt, next = 0;
+    int pro, rlt, next = -1;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
     rlt = (data->result >> 16) & 0xff;
@@ -550,6 +617,10 @@ static int next_laser(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+    }
+
+    if (next < 0) {
+        next = PSMAX; /* break */
     }
 
     tmpRlt = emb_event(tmpRlt, evt);
@@ -813,8 +884,45 @@ static int stspy_05(struct psdata_s *data)
             //print_f(mlogPool, "spy", str);  
             break;
         case WAIT:
-            if (data->ansp0 == 1)
+            sprintf(str, "05: asnp: 0x%x\n", data->ansp0); 
+            print_f(mlogPool, "spy", str);  
+
+            switch (data->ansp0) {				
+            case OP_DAT: /* currently support */
+            case OP_DUL: /* latter */
+            case OP_RD:
+            case OP_WT:
+            case OP_SDAT:
+            case OP_STSEC_0:
+            case OP_STSEC_1:
+            case OP_STSEC_2:
+            case OP_STSEC_3:
+            case OP_STLEN_0:
+            case OP_STLEN_1:
+            case OP_STLEN_2:
+            case OP_STLEN_3:
+                sprintf(str, "go to next \n"); 
+                print_f(mlogPool, "spy", str);  
+
                 data->result = emb_result(data->result, NEXT);
+                break;
+            case OP_FFORMAT:
+            case OP_COLRMOD:
+            case OP_COMPRAT:
+            case OP_SCANMOD:
+            case OP_DATPATH:
+            case OP_RESOLTN:
+            case OP_SCANGAV:
+            case OP_MAXWIDH:
+            case OP_WIDTHAD_H:
+            case OP_WIDTHAD_L:
+            case OP_SCANLEN_H:
+            case OP_SCANLEN_L:
+                break;
+            default:
+                break;
+            }
+			
             break;
         case NEXT:
             break;
@@ -2048,17 +2156,42 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
         //print_f(&mrs->plog, "fs10", mrs->log);
 
-        if (p->opcode == OP_DAT) {
-            modersp->r = 1;
+        switch (p->opcode) {
+        case OP_DAT: /* currently support */              
+        case OP_DUL: /* latter */                         
+        case OP_RD:                                       
+        case OP_WT:                                       
+        case OP_SDAT:                                     
+        case OP_STSEC_0:                                  
+        case OP_STSEC_1:                                  
+        case OP_STSEC_2:                                  
+        case OP_STSEC_3:                                  
+        case OP_STLEN_0:                                  
+        case OP_STLEN_1:                                  
+        case OP_STLEN_2:                                  
+        case OP_STLEN_3:                                  
+        case OP_FFORMAT:                                  
+        case OP_COLRMOD:                                  
+        case OP_COMPRAT:                                  
+        case OP_SCANMOD:                                  
+        case OP_DATPATH:                                  
+        case OP_RESOLTN:                                  
+        case OP_SCANGAV:                                  
+        case OP_MAXWIDH:                                  
+        case OP_WIDTHAD_H:                                
+        case OP_WIDTHAD_L:                                
+        case OP_SCANLEN_H:                                
+        case OP_SCANLEN_L:                              
+            modersp->r = p->opcode;
             return 1;
-        } else if (p->opcode == OP_DCM) {
-            modersp->r = 1;
-            return 1;
-        } else {
+            break;                                       
+        default:
             modersp->m = modersp->m - 1;        
             return 2;
+            break;
         }
     }
+
     return 0; 
 }
 
