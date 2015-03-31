@@ -5679,13 +5679,13 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
         n = read(rs->psocket_r->connfd, recvbuf, 1024);
         if (n <= 0) goto socketEnd;
-        hd = atFindIdx(recvbuf, '!');
+        hd = atFindIdx(recvbuf, 0xfe);
         if (hd < 0) goto socketEnd;
-        fg = atFindIdx(recvbuf, '+');
+        fg = atFindIdx(recvbuf, 0xfd);
         if (fg < 0) goto socketEnd;		
-        be = atFindIdx(&recvbuf[hd], '[');
+        be = atFindIdx(&recvbuf[hd], 0xfc);
         if (be < 0) goto socketEnd;
-        ed = atFindIdx(&recvbuf[hd], ']');
+        ed = atFindIdx(&recvbuf[hd], 0xfb);
         if (ed < 0) goto socketEnd;
         ln = atFindIdx(&recvbuf[hd], '\0');
 
@@ -5763,18 +5763,18 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         usleep(100000);
         memset(sendbuf, 0, 2048);
 
-        sendbuf[0] = '!';
+        sendbuf[0] = 0xfe;
         sendbuf[1] = ((opcode & 0x80) ? 1:0) + 1;
         sendbuf[2] = opcode & 0x7f;
-        sendbuf[3] = '+';
+        sendbuf[3] = 0xfd;
         //sendbuf[3] = 'P';//0x0;
-        sendbuf[6] = '[';
+        sendbuf[6] = 0xfc;
 
         n = rs_ipc_get(rcmd, &sendbuf[7], 2048 - 7);
         sendbuf[4] = ((param & 0x80) ? 1:0) + 1;
         sendbuf[5] = param & 0x7f;
 		
-        sendbuf[7+n] = ']';
+        sendbuf[7+n] = 0xfb;
         sendbuf[7+n+1] = '\0';
         sendbuf[7+n+2] = '\0';
         ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
@@ -5907,11 +5907,11 @@ static int p6(struct procRes_s *rs)
 		
         n = read(rs->psocket_at->connfd, recvbuf, 1024);
         if (n <= 0) goto socketEnd;
-        hd = atFindIdx(recvbuf, '!');
+        hd = atFindIdx(recvbuf, 0xfe);
         if (hd < 0) goto socketEnd;
-        be = atFindIdx(&recvbuf[hd], '[');
+        be = atFindIdx(&recvbuf[hd], 0xfc);
         if (be < 0) goto socketEnd;
-        ed = atFindIdx(&recvbuf[hd], ']');
+        ed = atFindIdx(&recvbuf[hd], 0xfb);
         if (ed < 0) goto socketEnd;
         ln = atFindIdx(&recvbuf[hd], '\0');
 
@@ -5955,11 +5955,11 @@ static int p6(struct procRes_s *rs)
             goto socketEnd;
         }
 
-        sendbuf[0] = '!';
+        sendbuf[0] = 0xfe;
         sendbuf[1] = 0x11;
-        sendbuf[2] = '+';
+        sendbuf[2] = 0xfd;
         sendbuf[3] = 0x01;
-        sendbuf[4] = '[';
+        sendbuf[4] = 0xfc;
         brt = fscur->ch;
         while (brt) {
             n = strlen(brt->dfLFN);
@@ -5971,7 +5971,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[3] = 'D';
             }
 
-            sendbuf[5+n] = ']';
+            sendbuf[5+n] = 0xfb;
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
