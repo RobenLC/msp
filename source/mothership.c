@@ -125,8 +125,19 @@ typedef enum {
     ASPOP_WIDTH_ADJ_H,
     ASPOP_WIDTH_ADJ_L,
     ASPOP_SCAN_LENS_H,
-    ASPOP_SCAN_LENS_L,
-    ASPOP_CODE_MAX, /* 13 */
+    ASPOP_SCAN_LENS_L, /* 12 */
+    ASPOP_SDFAT_RD,      /* 13 */
+    ASPOP_SDFAT_WT,
+    ASPOP_SDFAT_STR01,
+    ASPOP_SDFAT_STR02,
+    ASPOP_SDFAT_STR03,
+    ASPOP_SDFAT_STR04,
+    ASPOP_SDFAT_LEN01,
+    ASPOP_SDFAT_LEN02,
+    ASPOP_SDFAT_LEN03,
+    ASPOP_SDFAT_LEN04,
+    ASPOP_SDFAT_SDAT,
+    ASPOP_CODE_MAX, /* 24 */
 } aspOpCode_e;
 
 typedef enum {
@@ -6440,6 +6451,95 @@ int main(int argc, char *argv[])
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
+        case ASPOP_SDFAT_RD: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_RD;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_WT: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_WT;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_STR01: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_00;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_STR02: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_01;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_STR03: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_02;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_STR04: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_03;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_LEN01: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_00;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_LEN02: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_01;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_LEN03: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_02;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_LEN04: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_03;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFAT_SDAT: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_SDAT;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+
         default: break;
         }
     }
