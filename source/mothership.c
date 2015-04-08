@@ -6744,7 +6744,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 {
     int len;
     char ch[256];
-    if((!head) || (!str)) return (-1);
+    if (!str) return (-1);
 
     if (head)
         sprintf(ch, "[%s] %s", head, str);

@@ -39,6 +39,43 @@
 #define TSIZE (128*1024*1024)
 #define SPI_TRUNK_SZ             32768
 
+#define OP_PON 0x1
+#define OP_QRY 0x2
+#define OP_RDY 0x3
+#define OP_DAT 0x4
+#define OP_SCM 0x5
+#define OP_DCM 0x6
+#define OP_FIH  0x7
+#define OP_DUL 0x8
+#define OP_RD 0x9
+#define OP_WT 0xa
+#define OP_SDAT 0xb /* single data mode */
+
+#define OP_MAX 0xff
+#define OP_NONE 0x00
+
+#define OP_STSEC_0  0x10
+#define OP_STSEC_1  0x11
+#define OP_STSEC_2  0x12
+#define OP_STSEC_3  0x13
+#define OP_STLEN_0  0x14
+#define OP_STLEN_1  0x15
+#define OP_STLEN_2  0x16
+#define OP_STLEN_3  0x17
+
+#define OP_FFORMAT      0x20
+#define OP_COLRMOD      0x21
+#define OP_COMPRAT      0x22
+#define OP_SCANMOD      0x23
+#define OP_DATPATH      0x24
+#define OP_RESOLTN       0x25
+#define OP_SCANGAV       0x26
+#define OP_MAXWIDH      0x27
+#define OP_WIDTHAD_H   0x28
+#define OP_WIDTHAD_L   0x29
+#define OP_SCANLEN_H    0x2a
+#define OP_SCANLEN_L    0x2b
+
 typedef enum {
     ASPFS_ATTR_READ_ONLY = 0x01,
     ASPFS_ATTR_HIDDEN = 0x02,
@@ -2291,42 +2328,6 @@ struct sdbootsec_s{
         goto end;
     }
     if (sel == 22){ /* command mode test ex[22 num]*/
-#define OP_PON 0x1
-#define OP_QRY 0x2
-#define OP_RDY 0x3
-#define OP_DAT 0x4
-#define OP_SCM 0x5
-#define OP_DCM 0x6
-#define OP_FIH  0x7
-#define OP_DUL 0x8
-#define OP_RD 0x9
-#define OP_WT 0xa
-#define OP_SDAT 0xb
-
-#define OP_MAX 0xff
-#define OP_NONE 0x00
-
-#define OP_STSEC_0  0x10
-#define OP_STSEC_1  0x11
-#define OP_STSEC_2  0x12
-#define OP_STSEC_3  0x13
-#define OP_STLEN_0  0x14
-#define OP_STLEN_1  0x15
-#define OP_STLEN_2  0x16
-#define OP_STLEN_3  0x17
-
-#define OP_FFORMAT      0x20
-#define OP_COLRMOD      0x21
-#define OP_COMPRAT      0x22
-#define OP_SCANMOD      0x23
-#define OP_DATPATH      0x24
-#define OP_RESOLTN       0x25
-#define OP_SCANGAV       0x26
-#define OP_MAXWIDH      0x27
-#define OP_WIDTHAD_H   0x28
-#define OP_WIDTHAD_L   0x29
-#define OP_SCANLEN_H    0x2a
-#define OP_SCANLEN_L    0x2b
 
 #define ARRY_MAX  61
         int ret=0;
@@ -2356,7 +2357,6 @@ struct sdbootsec_s{
             printf("Error!! Index overflow!![%d]\n", arg0);
             goto end;
         }
-
 
         btidx = arg2 % 4;
         if (op[arg0] == OP_STSEC_0) {
@@ -2391,11 +2391,11 @@ struct sdbootsec_s{
         bitset = 0;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);  //SPI_IOC_WR_CTL_PIN
         printf("Set spi0 RDY: %d\n", bitset);
-*/
+
         bitset = 1;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
         printf("Set spi%d slve ready: %d\n", 0, bitset);
-
+*/
         bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
         if (ret == -1) 
@@ -2660,7 +2660,7 @@ struct sdbootsec_s{
 #define USE_SHARE_MEM 0
 #define SPI_THREAD_EN 1
 #define SEND_FILE 0
-#define SAVE_FILE 0
+#define SAVE_FILE 1
         FILE *f;
         int fsize, acusz, send, txsz, pktcnt, len=0;
         char *src, *dstBuff, *dstmp;

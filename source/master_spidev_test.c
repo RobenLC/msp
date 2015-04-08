@@ -828,6 +828,7 @@ static char spi1[] = "/dev/spidev32766.0";
         FILE *fp2, *fpd1, *fpd2;
         char svpath2[128], srcpath1[128], srcpath2[128];
 
+        strcpy(svpath2, data_save);
         fp2 = find_save(svpath2, data_save);
         if (!fp2) {
             printf("find save dst failed ret:%d\n", fp2);
