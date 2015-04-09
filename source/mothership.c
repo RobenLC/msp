@@ -500,8 +500,8 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
     r->dfstats = 0;
 
     r->dflen = strlen(dir);
-    sprintf(mlog, "[%s] len: %d\n", dir, r->dflen);
-    print_f(mlogPool, "FS", mlog);
+    //sprintf(mlog, "[%s] len: %d\n", dir, r->dflen);
+    //print_f(mlogPool, "FS", mlog);
     if (r->dflen > 255) r->dflen = 255;
     strncpy(r->dfLFN, dir, r->dflen);
 
@@ -526,8 +526,8 @@ static int mspFS_insertChilds(struct aspDirnFile_s *root)
         goto insertEnd;
     }
 
-    sprintf(mlog, "open directory [%s]\n", root->dfLFN);
-    print_f(mlogPool, "FS", mlog);
+    //sprintf(mlog, "open directory [%s]\n", root->dfLFN);
+    //print_f(mlogPool, "FS", mlog);
 
     if ((dp = opendir(root->dfLFN)) == NULL) {
         printf("Can`t open directory [%s]\n", root->dfLFN);
@@ -535,8 +535,8 @@ static int mspFS_insertChilds(struct aspDirnFile_s *root)
         goto insertEnd;
     }
 
-    sprintf(mlog, "open directory [%s] done\n", root->dfLFN);
-    print_f(mlogPool, "FS", mlog);
+    //sprintf(mlog, "open directory [%s] done\n", root->dfLFN);
+    //print_f(mlogPool, "FS", mlog);
 	
     chdir(root->dfLFN);
     while ((entry = readdir(dp)) != NULL) {
@@ -582,8 +582,8 @@ static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
     if (!c) {
         return (-3);
     }else {
-        sprintf(mlog, "alloc root fs first child done [0x%x]\n", c);
-        print_f(mlogPool, "FS", mlog);
+        //sprintf(mlog, "alloc root fs first child done [0x%x]\n", c);
+        //print_f(mlogPool, "FS", mlog);
     }
 
     c->pa = r;
@@ -670,8 +670,8 @@ static int mspFS_list(struct aspDirnFile_s *root, int depth)
 
     fs = root->ch;
     while (fs) {
-        sprintf(mlog, "%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
-        print_f(mlogPool, "FS", mlog);
+        //sprintf(mlog, "%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
+        //print_f(mlogPool, "FS", mlog);
         if (fs->dftype == ASPFS_TYPE_DIR) {
             mspFS_list(fs, depth + 4);
         }
@@ -692,8 +692,8 @@ static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, 
     struct aspDirnFile_s *brt;
 
     ret = strlen(path);
-    sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
-    print_f(mlogPool, "FS", mlog);
+    //sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
+    //print_f(mlogPool, "FS", mlog);
 
     ch = path;
     while (ret > 0) {
