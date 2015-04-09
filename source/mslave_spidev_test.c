@@ -2300,10 +2300,10 @@ struct sdbootsec_s{
         ret = ioctl(fm[spis], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
         printf("Set spi%d slve ready: %d\n", spis, bitset);
 
-        memset(tx_buff[0], TRUNK_SIZE, 0xaa);
+        memset(tx_buff[0], 0xaa, TRUNK_SIZE);
 
         while (1) {
-            memset(rx_buff[0], TRUNK_SIZE, 0x95);
+            memset(rx_buff[0], 0x95, TRUNK_SIZE);
 
             len = tx_data(fm[spis], rx_buff[0], tx_buff[0], 1, TRUNK_SIZE, 1024*1024);
 
