@@ -72,6 +72,7 @@
 #define OP_SCANLEN_H    0x2a
 #define OP_SCANLEN_L    0x2b
 
+#define SEC_LEN 512
 static void pabort(const char *s) 
 { 
     perror(s); 
@@ -86,6 +87,26 @@ static uint32_t speed = 30000000;
 static uint16_t delay; 
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
+
+static int mem_dump(char *src, int size)
+{
+    int inc;
+    if (!src) return -1;
+
+    inc = 0;
+    printf("memdump[0x%.8x] sz%d: \n", src, size);
+    while (inc < size) {
+        printf("%.2x ", *src);
+
+        inc++;
+        src++;
+        if (!((inc+1) % 16)) {
+            printf("\n");
+        }
+    }
+
+    return inc;
+}
 
 static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
 {
@@ -570,8 +591,138 @@ static char spi1[] = "/dev/spidev32766.0";
 		rxans[i] = i & 0x95;
 		tx[i] = i & 0x95;
 	}
+
+    if (sel == 19){ /* command mode test ex[19 startsec secNum filename.bin]*/ /* OP_WT */
+
+        int startSec = 0, secNum = 0;
+        int startAddr = 0, bLength = 0;
+        char diskpath[128];
+        FILE *dkf = 0;
+        char *outbuf, *total=0;
+        int ret = 0, len = 0, cnt = 0, acusz = 0, max = 0;
+        int sLen = 0;
+
+        startSec = arg0;
+        secNum = arg1;
+
+        /* open target file which will be transmitted */
+        strcpy(diskpath, argv[4]);
+        printf(" open file [%s] \n", diskpath);
+        dkf = fopen(diskpath, "r");
+       
+        if (!dkf) {
+            printf(" [%s] file open failed \n", diskpath);
+            goto end;
+        }	
+        printf(" [%s] file open succeed \n", diskpath);
+
+        bitset = 0;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        printf("Set spi%d data mode: %d\n", 0, bitset);
+
+        bitset = 1;
+        ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        printf("Set spi%d slve ready: %d\n", 0, bitset);
+
+        startAddr = startSec * SEC_LEN;
+        bLength = secNum * SEC_LEN;
+
+        ret = fseek(dkf, 0, SEEK_END);
+        if (ret) {
+            printf("seek file failed: ret:%d \n", ret);
+            goto end;
+        }
+
+        max = ftell(dkf);
+        if ((startAddr + bLength) > max) {
+            printf("dump size overflow start:%d len:%d max:%d\n", startAddr, bLength, max);
+            goto end;
+        } else {
+            printf("disk dump, start:%d len:%d max:%d\n", startAddr, bLength, max);
+        }
+
+        total = mmap(NULL, max, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+        if (!total) {
+            goto end;
+        }
+
+        ret = fseek(dkf, 0, SEEK_SET);
+        if (ret) {
+            printf("seek file failed: ret:%d \n", ret);
+            goto end;
+        }
+        
+        ret = fread(total, 1, max, dkf);
+        printf("read file size: %d/%d \n", ret, max);
+
+        outbuf = total + bLength;
+        mem_dump(outbuf, bLength);
+        acusz = bLength;
+
+        cnt = 0;
+        while (acusz>0) {
+            if (acusz > TRUNK_SIZE) {
+                sLen = TRUNK_SIZE;
+                acusz -= sLen;
+            } else {
+                sLen = acusz;
+                acusz = 0;
+            }
+
+            len = tx_data(fm[0], outbuf, outbuf, 1, sLen, 1024*1024);
+            printf("[%d]Send %d/%d bytes!!\n", cnt, len, sLen);
+
+            cnt++;
+            outbuf += len;
+    	 }
+
+        usleep(100000);
+
+        bitset = 0;
+        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        printf("[R]Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
+
+        usleep(100000);
+
+        bitset = 0;
+        ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("[R]Get spi%d RDY pin: %d \n", 0, bitset);
+
+        usleep(100000);
+
+        bitset = 0;
+        ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        printf("[R]Get spi%d RDY pin: %d \n", 0, bitset);
+
+        ret = fseek(dkf, startAddr, SEEK_SET);
+        if (ret) {
+            printf("seek file failed: ret:%d \n", ret);
+            goto end;
+        }
+
+        fclose(dkf);
+
+        printf(" reopen file [%s] \n", diskpath);
+        dkf = fopen(diskpath, "w+");
+       
+        if (!dkf) {
+            printf(" [%s] file reopen failed \n", diskpath);
+            goto end;
+        }	
+        printf(" [%s] file reopen succeed \n", diskpath);
+        
+        outbuf = total + bLength;
+        mem_dump(outbuf, bLength);
+        ret = fwrite(total, 1, max, dkf);
+        printf("write file size: %d/%d \n", ret, max);
+        fflush(dkf);
+        fclose(dkf);
+
+        munmap(total, max);
+        goto end;
+    }
+
     if (sel == 18){ /* command mode test ex[18 startsec secNum filename.bin]*/
-#define SEC_LEN 512
 
         int startSec = 0, secNum = 0;
         int startAddr = 0, bLength = 0;
