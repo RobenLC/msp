@@ -2643,6 +2643,7 @@ static int fs01(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     //print_f(&mrs->plog, "fs01", mrs->log);
+    /* wait until control pin become 0 */
 
     mrs_ipc_put(mrs, "g", 1, 3);
     modersp->m = modersp->m + 1;
@@ -2657,8 +2658,14 @@ static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'G')){
-        modersp->r = 1;
-        return 1;
+        if (modersp->d) {
+            modersp->m = modersp->d;
+            modersp->d = 0;
+            return 2;
+        } else {
+            modersp->r = 1;
+            return 1;
+        }
     }
     return 0; 
 }
@@ -2721,7 +2728,8 @@ static int fs05(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     //print_f(&mrs->plog, "fs05", mrs->log);
-
+    /* wait until control pin become 1 */
+	
     mrs_ipc_put(mrs, "b", 1, 3);
     modersp->m = modersp->m + 1;
     return 0; 
@@ -2735,8 +2743,14 @@ static int fs06(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'B')){
-        modersp->r = 1;
-        return 1;
+        if (modersp->d) {
+            modersp->m = modersp->d;
+            modersp->d = 0;
+            return 2;
+        } else {
+            modersp->r = 1;
+            return 1;
+        }
     }
     return 0; 
 }
@@ -3078,13 +3092,13 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs19(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset;
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     //printf("Set spi 0 slave ready: %d\n", bitset);
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs19", mrs->log);
 
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     //printf("Set spi 1 slave ready: %d\n", bitset);
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
@@ -3145,12 +3159,12 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Get RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
@@ -3437,14 +3451,14 @@ static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Get spi%d RDY pin: %d \n", 0, bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "spi0 set ready: %d\n", bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
-    modersp->d = 0;
-    modersp->m = modersp->m + 1;
-    return 0;
+    modersp->d = modersp->m + 1;
+    modersp->m = 1;
+    return 2;
 
 }
 

@@ -2088,7 +2088,7 @@ static int stbullet_05(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = 1; 
+            ch = 20; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             break;
@@ -2120,6 +2120,7 @@ static int stlaser_01(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+            usleep(300000);
             ch = 21; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
@@ -3519,6 +3520,7 @@ static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     usleep(modersp->v);
     modersp->m = modersp->d;
+    modersp->d = 0;
 
     if (modersp->m == -1) {
         modersp->r = 1;
@@ -3541,14 +3543,20 @@ static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     char ch;
     int len;
-    sprintf(mrs->log, "check RDY high \n");
+    sprintf(mrs->log, "check RDY high d:%d\n", modersp->d);
     print_f(&mrs->plog, "fs02", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((len > 0) && (ch == 'B')){
         //modersp->m = modersp->m + 1;
-        modersp->r = 1;
-        return 1;
+        if (modersp->d) {
+            modersp->m = modersp->d;
+            modersp->d = 0;
+            return 2;
+        } else {
+            modersp->r = 1;
+            return 1;
+        }
     }
     return 0; 
 }
@@ -3974,7 +3982,8 @@ static int fs19(struct mainRes_s *mrs, struct modersp_s *modersp)
         ring_buf_init(&mrs->dataRx);
         mrs->dataRx.r->folw.seq = 1;
 
-        modersp->m = modersp->m + 1;
+        modersp->d = 0;
+        modersp->m = 1;
         return 2;
     }
 
@@ -3986,6 +3995,11 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     int bitset, ret;
 
     bitset = 0;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
+    print_f(&mrs->plog, "fs20", mrs->log);
+
+    bitset = 0;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
@@ -3995,12 +4009,12 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
@@ -4015,6 +4029,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Stop spi1 spidev thread, ret: 0x%x\n", ret);
     print_f(&mrs->plog, "fs20", mrs->log);
 #endif
+
     modersp->r = 1;
     return 1;
 }
@@ -4424,7 +4439,8 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
         ring_buf_init(&mrs->cmdTx);
         mrs->dataRx.r->folw.seq = 1;
 
-        modersp->m = modersp->m + 1;
+        modersp->d = modersp->m + 1;
+        modersp->m = 1;
         return 2;
     }
 
@@ -4436,6 +4452,11 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
     int bitset, ret;
 
     bitset = 0;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
+    print_f(&mrs->plog, "fs37", mrs->log);
+
+    bitset = 0;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
@@ -4445,12 +4466,12 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
 
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
 
-    bitset = 0;
+    bitset = 1;
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
@@ -4685,6 +4706,7 @@ static int p0(struct mainRes_s *mrs)
             ch = modesw.r; /* response */
             modesw.r = 0;
             modesw.v = 0;
+            modesw.d = 0;
             modesw.m = -2;
             tmp = -1;
 
