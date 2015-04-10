@@ -63,6 +63,7 @@
 #define SEC_LEN 512
 
 #define SPI_TRUNK_SZ   (32768)
+#define DIRECT_WT_DISK    (0)
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -3289,7 +3290,6 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     int startSec = 0, secNum = 0;
     int startAddr = 0, bLength = 0, maxLen=0;
     int ret = 0;
-    FILE *fdk = 0;
     struct info16Bit_s *c, *p;
     struct DiskFile_s *pf;
 
@@ -3297,14 +3297,7 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs26", mrs->log);
 
     msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
-    fdk = mrs->mchine.fdsk.vsd;
     pf = &mrs->mchine.fdsk;
-
-    if (!fdk) {
-        sprintf(mrs->log, "can't read disk file 0x%x\n", fdk);
-        print_f(&mrs->plog, "fs26", mrs->log);
-        goto end;
-    }
 
     startSec = mrs->mchine.sdst.n;
     secNum = mrs->mchine.sdln.n;
@@ -3573,6 +3566,7 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs35", mrs->log);
 
         if (p->opcode == OP_RDY) {
+
             if (mrs->mchine.fdsk.rtops == OP_WT) {
                 modersp->m = 37;
                 return 2;
@@ -3608,7 +3602,9 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
         fd->rtops =  OP_RD;
     } else if (p->opcode == OP_WT) {
         fd->rtops =  OP_WT;
+#if DIRECT_WT_DISK 
         fp = fopen(diskname, "w+");	
+#endif
     } else {
         goto err;
     }
@@ -3659,14 +3655,15 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
         ret = fwrite(pf->sdt, 1, pf->rtMax, pf->vsd);
         sprintf(mrs->log, "write file size: %d/%d \n", ret, pf->rtMax);
         print_f(&mrs->plog, "fs37", mrs->log);
+        fflush(pf->vsd);
+        fsync((int)pf->vsd);
     } else {
         ret = -1;
         sprintf(mrs->log, "write file size: %d/%d failed!!!, fp == 0\n", ret, pf->rtMax);
         print_f(&mrs->plog, "fs37", mrs->log);
     }
 
-    fflush(pf->vsd);
-    fsync((int)pf->vsd);
+
     sync();
 
     pf->vsd = 0;
