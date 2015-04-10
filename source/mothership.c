@@ -1079,12 +1079,14 @@ static int next_spy(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "spy", str); 
-                next = PSWT;
+                //next = PSWT;
+                next = PSMAX; /* skip power on sequence */				
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
                 //print_f(mlogPool, "spy", str); 
-                next = PSRLT;
+                //next = PSRLT;
+                next = PSMAX; /* skip power on sequence */
                 break;
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
@@ -1801,7 +1803,7 @@ static int stspy_02(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = 3; 
+            ch = 5; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             //printf(str, "op_02: result: %x\n", data->result); 
@@ -3619,6 +3621,16 @@ static int fs05(struct mainRes_s *mrs, struct modersp_s *modersp)
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs05",mrs->log);
+
+    bitset = 0;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
+    print_f(&mrs->plog, "fs05", mrs->log);
+
+    bitset = 0;
+    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
+    print_f(&mrs->plog, "fs05", mrs->log);
 
     modersp->r = 1;
     return 1; 
@@ -6558,15 +6570,24 @@ int main(int argc, char *argv[])
 // spidev id
     int fd0, fd1;
     fd0 = open(spi0, O_RDWR);
-    if (fd0 < 0) 
-        printf("can't open device[%s]\n", spi0); 
-    else 
-        printf("open device[%s]\n", spi0); 
+    if (fd0 <= 0) {
+        sprintf(pmrs->log, "can't open device[%s]\n", spi0); 
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "open device[%s]\n", spi0); 
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+    }
     fd1 = open(spi1, O_RDWR);
-    if (fd1 < 0) 
-            printf("can't open device[%s]\n", spi1); 
-    else 
-        printf("open device[%s]\n", spi1); 
+    if (fd1 <= 0) {
+        sprintf(pmrs->log, "can't open device[%s]\n", spi1); 
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "open device[%s]\n", spi1); 
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+    }
+
 
     pmrs->sfm[0] = fd0;
     pmrs->sfm[1] = fd1;
@@ -6574,9 +6595,10 @@ int main(int argc, char *argv[])
     pmrs->smode |= SPI_MODE_1;
 
     /* set RDY pin to low before spi setup ready */
-    //bitset = 0;
-    //ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-   // printf("[t]Set RDY low at beginning\n");
+    bitset = 0;
+    ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(pmrs->log, "Set RDY low at beginning\n");
+    print_f(&pmrs->plog, "SPI", pmrs->log);
 
 
     bitset = 0;     

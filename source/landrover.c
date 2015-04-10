@@ -453,7 +453,9 @@ static int next_spy(struct psdata_s *data)
             case PSACT: /* check RDY, and start transmitting */
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "spy", str); 
-                next = PSWT;
+                //next = PSWT;
+                next = PSTSM; /* jump to next stage */
+                evt = SPY;
                 break;
             case PSWT: /* end the transmitting and back to polling OP_QRY */
                 //sprintf(str, "PSWT\n"); 
@@ -2662,25 +2664,23 @@ static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs03(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
+    int bitset = 0;
     struct info16Bit_s *p;
 
     //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     //print_f(&mrs->plog, "fs03", mrs->log);
 
-    p = &mrs->mchine.cur;
+    bitset = 1;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
+    print_f(&mrs->plog, "fs03", mrs->log);
+    bitset = 1;
+    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
+    print_f(&mrs->plog, "fs03", mrs->log);
 
-    mrs->mchine.seqcnt += 1;
-    if (mrs->mchine.seqcnt >= 0x8) {
-        mrs->mchine.seqcnt = 0;
-    }
-
-    p->opcode = OP_PON;
-    p->inout = 0;
-    p->seqnum = mrs->mchine.seqcnt;
-	
-    mrs_ipc_put(mrs, "c", 1, 3);
-    modersp->m = modersp->m + 1;
-    return 0; 
+    modersp->r = 1;
+    return 1; 
 }
 
 static int fs04(struct mainRes_s *mrs, struct modersp_s *modersp)
