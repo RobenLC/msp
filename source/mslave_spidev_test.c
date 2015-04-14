@@ -47,9 +47,12 @@
 #define OP_DCM 0x6
 #define OP_FIH  0x7
 #define OP_DUL 0x8
-#define OP_RD 0x9
-#define OP_WT 0xa
+#define OP_SDRD 0x9
+#define OP_SDWT 0xa
 #define OP_SDAT 0xb /* single data mode */
+#define OP_RGRD 0xc
+#define OP_RGWT 0xd
+#define OP_RGDAT 0xe
 
 #define OP_MAX 0xff
 #define OP_NONE 0x00
@@ -62,6 +65,8 @@
 #define OP_STLEN_1  0x15
 #define OP_STLEN_2  0x16
 #define OP_STLEN_3  0x17
+#define OP_RGADD_H  0x18
+#define OP_RGADD_L  0x19
 
 #define OP_FFORMAT      0x20
 #define OP_COLRMOD      0x21
@@ -165,10 +170,10 @@ struct sdFATable_s{
 };
 
 struct sdFAT_s{
-    struct sdbootsec_s  *fatBootsec;
-    struct sdFSinfo_s    *fatFSinfo;
-    struct sdFATable_s *fatTable;
-    struct directnFile_s *fatRootdir;
+    struct sdbootsec_s   *fatBootsec;
+    struct sdFSinfo_s     *fatFSinfo;
+    struct sdFATable_s   *fatTable;
+    struct directnFile_s   *fatRootdir;
 };
 
 static void pabort(const char *s) 
@@ -209,6 +214,10 @@ static int aspFS_list(struct directnFile_s *root, int depth);
 static int aspFS_search(struct directnFile_s **dir, struct directnFile_s *root, char *path);
 static int aspFS_showFolder(struct directnFile_s *root);
 static int aspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *root, char *path);
+static int aspFS_createFATRoot(struct sdFAT_s *pfat);
+static int aspFS_insertFATChilds(struct directnFile_s *root, char *dir, int max);
+static int aspFS_insertFATChild(struct directnFile_s *parent, struct directnFile_s *r);
+
 
 static int aspFS_deleteNote(struct directnFile_s *root, char *path);
 static int aspFS_save(struct directnFile_s *root, FILE fp);
@@ -390,6 +399,12 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         fs->dfclstnum = tmp32;
         tmp32 = raw[28] | (raw[29] << 8) | (raw[30] << 16) | (raw[31] << 24);
         fs->dflength = tmp32;
+
+        if (fs->dfattrib & ASPFS_ATTR_DIRECTORY) {
+            fs->dftype = ASPFS_TYPE_DIR;
+        } else {
+            fs->dftype = ASPFS_TYPE_FILE;
+        }
 
         fs->dfstats = ASPFS_STATUS_EN;
         ret = 0;
@@ -633,7 +648,7 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
 
         if (fs->dfstats != ASPFS_STATUS_EN) {
             
-        } else if (fs->dfattrib & 0x10) {
+        } else if (fs->dfattrib & ASPFS_ATTR_DIRECTORY) {
             if (strcmp(fs->dfSFN, ".") != 0 && 
                  strcmp(fs->dfSFN, "..") != 0 )  {
                 if (fs->dflen) {
@@ -654,7 +669,7 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
                 }            
             }
 
-        } else if (fs->dfattrib & 0x20) {
+        } else if (fs->dfattrib & ASPFS_ATTR_HIDDEN) {
             if (fs->dflen) {
                 printf("%*s%s\n", depth, "", fs->dfLFN, depth);
                 printf("%*s%s\n", depth, "", fs->dfSFN, depth);
@@ -863,6 +878,115 @@ static int aspFS_insertChildFile(struct directnFile_s *parent, char *str)
     }
  
     return 0;
+}
+
+static int aspFS_createFATRoot(struct sdFAT_s *pfat)
+{
+    DIR *dp;
+    struct directnFile_s *r = 0;
+
+    r = pfat->fatRootdir;
+    if (!r) return (-1);
+    memset(r, 0, sizeof(struct directnFile_s));
+
+    r->dftype = ASPFS_TYPE_ROOT;
+
+    return 0;
+}
+
+static int aspFS_insertFATChilds(struct directnFile_s *root, char *dir, int max)
+{
+#define TAB_DEPTH   4
+    int ret = 0, cnt = 0;
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
+    struct directnFile_s *dfs = 0;
+
+    char *dkbuf=0;
+
+    if (!root) {
+        printf("[R]root error 0x%x\n", root);
+        ret = -1;
+        goto insertEnd;
+    }
+
+    if (root->dflen) {
+        printf("[R]open directory [%s]\n", root->dfLFN);
+    } else {
+        printf("[R]open directory [%s]\n", root->dfSFN);
+    }
+
+    if ((!dir) || (max <=0)) {
+        printf("Can`t open directory \n");
+        ret = -2;
+        goto insertEnd;
+    }
+	
+    dkbuf = dir;
+    dfs = malloc(sizeof(struct directnFile_s));
+    if (!dfs) {
+        ret = -3;
+        goto insertEnd;
+    }
+
+    cnt = 0;
+    ret = aspRawParseDir(dkbuf, dfs, max);
+    printf(" raw parsing cnt: %d \n", ret);
+    while (max > 0) {
+        if (dfs->dfstats) {
+            printf("short name: %s \n", dfs->dfSFN);
+            if (dfs->dflen > 0) {
+                printf("long name: %s, len:%d \n", dfs->dfLFN, dfs->dflen);
+            }
+            debugPrintDir(dfs);
+            aspFS_insertFATChild(root, dfs);
+        }
+
+        dkbuf += ret;
+        max -= ret;
+        cnt++;
+		
+        dfs = malloc(sizeof(struct directnFile_s));
+        if (!dfs) {
+            ret = -3;
+            goto insertEnd;
+        }
+        ret = aspRawParseDir(dkbuf, dfs, max);
+        if (!ret) break;
+        printf("[%d] ret: %d, last:%d \n", cnt, ret, max);
+    }
+
+    printf(" raw parsing end: %d \n", ret);
+			
+insertEnd:
+
+    return ret;
+}
+static int aspFS_insertFATChild(struct directnFile_s *parent, struct directnFile_s *r)
+{
+    int ret=0;
+    struct directnFile_s *brt = 0;
+
+    r->pa = parent;
+    r->br = 0;
+    r->ch = 0;
+
+    if (parent->ch == 0) {
+        parent->ch = r;
+    } else {
+        brt = parent->ch;
+        if (brt->br == 0) {
+            brt->br = r;
+        } else {
+            r->br = brt->br;
+            brt->br = r;
+        }
+    }
+
+//    ret = aspFS_insertFATChilds(r);
+ 
+    return ret;
 }
 
 static int aspFS_list(struct directnFile_s *root, int depth)
@@ -2066,8 +2190,8 @@ redo:
         }
     
         munmap(dstmp, TSIZE);
-	//goto redo;
-       goto end;
+	 //goto redo;
+        goto end;
     }
     
 	
@@ -2116,6 +2240,7 @@ redo:
 
         int i, j;
         /* dump raw */
+		
 #if 0
         for (i = 0; i < (max/512); i++) {
             printf("[%d] \n", i);
@@ -2126,42 +2251,8 @@ redo:
             }
         }
 #endif
-#if TEST
-struct sdFAT_s{
-    struct sdbootsec_s  *fatBootsec;
-    struct sdFSinfo_s    *fatFSinfo;
-    struct sdFATable_s *fatTable;
-    struct directnFile_s *fatRootdir;
-};
-struct sdbootsec_s{
-    int secSt;              // status of boot sector 
-    int secJpcmd;      // jump command to the boot program
-    char secSysid[8];
-    int secSize;          // 512
-    int secPrClst;       // 4 8 16 32 64
-    int secResv;        // M 
-    int secNfat;         // should be 2
-    int secTotal;        // total sectors
-    int secIDm;         // must be 0xF8
-    int secPrfat;         // sectors per FAT
-    int secPrtrk;         // sectors per track
-    int secNsid;          // number of sides
-    int secNhid;          // number of hidden sectors
-    int secExtf;           // extension flag, specify the status of FAT mirroring
-    int secVers;          // File system version
-    int secRtclst;        // indicate the cluster number of root dir
-    int secFSif;           // indicate the sector number of FS info, will be 1 normally
-    int secBkbt;          // indicate the offset sector number of backup boot sector
-    int secPhdk;         // pyhsical disk number, should be 0x80
-    int secExtbt;        // extended boot record signature, should be 0x29
-    int secVoid;          // volume ID number
-    char secVola[12]; // volume label
-    char secFtyp[8];   // file system type in ascii
-    int secSign;          // shall be 0x55 (BP510) and 0xAA (BP511)
-    int secWhfat;        // indicate the sector of fat table
-    int secWhroot;      // indicate the sector of root dir
-};
-#endif
+
+
 #define SF0 (8 * 0)
 #define SF1 (8 * 1)
 #define SF2 (8 * 2)
@@ -2173,11 +2264,16 @@ struct sdbootsec_s{
 
         pfat = malloc(sizeof(struct sdFAT_s));
         pfat->fatBootsec = malloc(sizeof(struct sdbootsec_s));
+        memset(pfat->fatBootsec, 0, sizeof(struct sdbootsec_s));
         pfat->fatFSinfo = malloc(sizeof(struct sdFSinfo_s));
+        memset(pfat->fatFSinfo, 0, sizeof(struct sdFSinfo_s));
+        pfat->fatRootdir = malloc(sizeof(struct directnFile_s));
+        memset(pfat->fatRootdir, 0, sizeof(struct directnFile_s));
 
         int cnt;
-        struct directnFile_s * fsds;
-        fsds = malloc(sizeof(struct directnFile_s));
+        struct directnFile_s * fsds = 0;
+        fsds = pfat->fatRootdir;
+        aspFS_createFATRoot(pfat);
 
         switch (arg0) {
         case 0: /* read the boot sector */
@@ -2251,7 +2347,6 @@ struct sdbootsec_s{
             debugPrintBootSec(psec);
             break;
         case 1: /* read the fat table */
-
             cnt = 0;
             ret = aspRawParseDir(dkbuf, fsds, max);
             printf(" raw parsing cnt: %d \n", ret);
@@ -2278,6 +2373,9 @@ struct sdbootsec_s{
         case 2: /* read the dir tree */
             printf("[0x%x]root dir offset: %d per:%d\n", dkbuf, arg2, arg3);
             prinfatdir(dkbuf, max, arg2, 4, arg2, arg3);
+            break;
+        case 3:
+
             break;
         default:
             break;
@@ -2334,8 +2432,8 @@ struct sdbootsec_s{
         uint8_t tx8[4], rx8[4];
         uint8_t op[ARRY_MAX] = {	0xaa
 							, 	OP_PON,	 		OP_QRY,	 		OP_RDY,	 		OP_DAT,	 		OP_SCM			/* 0x01 -0x05 */
-							, 	OP_DCM,		 	OP_FIH,	 		OP_DUL,	 		OP_RD,	 		OP_WT          		/* 0x06 -0x0a */
-							, 	OP_SDAT,	 	OP_NONE,	 	OP_NONE,	 	OP_NONE,	 	OP_NONE      		/* 0x0b -0x0f  */
+							, 	OP_DCM,		 	OP_FIH,	 		OP_DUL,	 		OP_SDRD,	 	OP_SDWT          	/* 0x06 -0x0a */
+							, 	OP_SDAT,	 	OP_RGRD,	 	OP_RGWT,	 	OP_RGDAT,	 	OP_NONE      		/* 0x0b -0x0f  */
 							, 	OP_NONE,	 	OP_NONE,	 	OP_NONE,		OP_NONE,		OP_STSEC_0 		/* 0x10 -0x14  */
 							,	OP_STLEN_0,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE     		/* 0x15 -0x19  */
 							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE     		/* 0x1A -0x1E  */
