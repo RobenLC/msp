@@ -3001,7 +3001,9 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
             }
 			
             if ((!n) && (rsp == 0x1) && (pkt->opcode == ctb->opCode) && (pkt->data == ctb->opValue)) {
+            #if 0 /* remove for FPGA developing need */
                 ctb->opStatus = ASPOP_STA_UPD; 
+            #endif
             } else {
                 /*
                 sprintf(mrs->log, "<err++, n=%d rsp=%d opc:0x%x dat:0x%x>", n, rsp, pkt->opcode, pkt->data); 
