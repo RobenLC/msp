@@ -36,9 +36,12 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_DCM   0x6
 #define OP_FIH    0x7
 #define OP_DUL    0x8
-#define OP_RD      0x9
-#define OP_WT     0xa
-#define OP_SDAT   0xb
+#define OP_SDRD  0x9
+#define OP_SDWT 0xa
+#define OP_SDAT  0xb
+#define OP_RGRD 0xc
+#define OP_RGWT 0xd
+#define OP_RGDAT 0xe
 
 #define OP_STSEC_00  0x10
 #define OP_STSEC_01  0x11
@@ -48,6 +51,8 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_STLEN_01  0x15
 #define OP_STLEN_02  0x16
 #define OP_STLEN_03  0x17
+#define OP_RGADD_H  0x18
+#define OP_RGADD_L  0x19
 
 #define OP_FFORMAT      0x20
 #define OP_COLRMOD      0x21
@@ -61,6 +66,7 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_WIDTHAD_L   0x29
 #define OP_SCANLEN_H    0x2a
 #define OP_SCANLEN_L    0x2b
+#define OP_INTERIMG      0x2c
 
 #define OP_MSG               0x30
 #define OP_ERROR           0xe0
@@ -125,8 +131,9 @@ typedef enum {
     ASPOP_WIDTH_ADJ_H,
     ASPOP_WIDTH_ADJ_L,
     ASPOP_SCAN_LENS_H,
-    ASPOP_SCAN_LENS_L, /* 12 */
-    ASPOP_SDFAT_RD,      /* 13 */
+    ASPOP_SCAN_LENS_L,
+    ASPOP_INTER_IMG,     /* 13 */
+    ASPOP_SDFAT_RD,      /* 14 */
     ASPOP_SDFAT_WT,
     ASPOP_SDFAT_STR01,
     ASPOP_SDFAT_STR02,
@@ -6426,7 +6433,7 @@ int main(int argc, char *argv[])
             ctb->opCode = OP_DATPATH;
             ctb->opType = ASPOP_TYPE_SINGLE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_4;
+            ctb->opMask = ASPOP_MASK_5;
             ctb->opBitlen = 8;
             break;
         case ASPOP_RESOLUTION:
@@ -6485,9 +6492,17 @@ int main(int argc, char *argv[])
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
+        case ASPOP_INTER_IMG: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_INTERIMG;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_3;
+            ctb->opBitlen = 8;
+            break;
         case ASPOP_SDFAT_RD: 
             ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_RD;
+            ctb->opCode = OP_SDRD;
             ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_8;
@@ -6495,7 +6510,7 @@ int main(int argc, char *argv[])
             break;
         case ASPOP_SDFAT_WT: 
             ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_WT;
+            ctb->opCode = OP_SDWT;
             ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_8;
