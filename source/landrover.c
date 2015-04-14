@@ -40,6 +40,7 @@
 #define OP_RGRD 0xc
 #define OP_RGWT 0xd
 #define OP_RGDAT 0xe
+#define OP_ACTION 0x0f
 
 #define OP_STSEC_0  0x10
 #define OP_STSEC_1  0x11
@@ -517,6 +518,7 @@ static int next_spy(struct psdata_s *data)
                 case OP_SCANLEN_H:                                
                 case OP_SCANLEN_L:
                 case OP_INTERIMG:
+                case OP_ACTION:
                     next = PSSET; /* get and repeat value */
                     evt = AUTO_A;
                     break;
@@ -1264,6 +1266,7 @@ static int stspy_05(struct psdata_s *data)
             case OP_SCANLEN_L:
             case OP_INTERIMG:
             case OP_SDAT:
+            case OP_ACTION:
                 sprintf(str, "go to next \n"); 
                 print_f(mlogPool, "spy", str);  
 
@@ -2876,6 +2879,7 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_SCANLEN_H:                                
         case OP_SCANLEN_L:                              
         case OP_INTERIMG:
+        case OP_ACTION:
             modersp->r = p->opcode;
             return 1;
             break;                                       

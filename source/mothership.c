@@ -68,6 +68,8 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_SCANLEN_L    0x2b
 #define OP_INTERIMG      0x2c
 
+#define OP_ACTION          0x0f
+
 #define OP_MSG               0x30
 #define OP_ERROR           0xe0
 
@@ -3122,7 +3124,7 @@ static int cmdfunc_go_opcode(int argc, char *argv[])
     struct mainRes_s *mrs=0;
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
-    sprintf(mrs->log, "cmdfunc_go_opcode argc:%d\n", argc); 
+    sprintf(mrs->log, "cmdfunc_act_opcode argc:%d\n", argc); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
     pkt = &mrs->mchine.tmp;
@@ -3151,7 +3153,62 @@ static int cmdfunc_go_opcode(int argc, char *argv[])
          print_f(&mrs->plog, "DBG", mrs->log);
     }
 
-    sprintf(mrs->log, "cmdfunc_go_opcode n = %d, rsp = %d\n", n, rsp); 
+    sprintf(mrs->log, "cmdfunc_act_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_act_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_go_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_ACTION;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, 't', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+		
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_act_opcode n = %d, rsp = %d\n", n, rsp); 
     print_f(&mrs->plog, "DBG", mrs->log);
 end:
 
@@ -3336,7 +3393,7 @@ static int dbg(struct mainRes_s *mrs)
     char cmd[256], *addr[3], rsp[256], ch, *plog;
     char poll[32] = "poll";
 
-    struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "command", cmdfunc_01}, {2, "data", cmdfunc_01}, {3, "op", cmdfunc_opcode}, 
+    struct cmd_s cmdtab[8] = {{0, "poll", cmdfunc_01}, {1, "action", cmdfunc_act_opcode}, {2, "data", cmdfunc_01}, {3, "op", cmdfunc_opcode}, 
                                 {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_go_opcode}, {6, "reset", cmdfunc_01}, {7, "launch", cmdfunc_lh_opcode}};
 
     p0_init(mrs);
@@ -4780,7 +4837,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 't') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, DOUBLED, PSRLT);
+                } else if (cmd == 'a') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, DOUBLED, PSRLT);
                 }
+
                 if (cmdt != '\0') {
                     evt = stdata->result;
                     pi = (evt >> 8) & 0xff;
@@ -5772,7 +5833,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             goto socketEnd;
         }
 
-        if (opcode != 0x30) {
+        if (opcode != OP_MSG) {
             n = 0;
         }
 

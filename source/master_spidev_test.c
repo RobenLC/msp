@@ -43,9 +43,13 @@
 #define OP_DCM 0x6
 #define OP_FIH  0x7
 #define OP_DUL 0x8
-#define OP_RD 0x9
-#define OP_WT 0xa
+#define OP_SDRD 0x9
+#define OP_SDWT 0xa
 #define OP_SDAT 0xb
+#define OP_RGRD 0xc
+#define OP_RGWT 0xd
+#define OP_RGDAT 0xe
+#define OP_ACTION 0xf
 
 #define OP_MAX 0xff
 #define OP_NONE 0x00
@@ -58,6 +62,8 @@
 #define OP_STLEN_1  0x15
 #define OP_STLEN_2  0x16
 #define OP_STLEN_3  0x17
+#define OP_RGADD_H  0x18
+#define OP_RGADD_L  0x19
 
 #define OP_FFORMAT      0x20
 #define OP_COLRMOD      0x21
@@ -71,6 +77,7 @@
 #define OP_WIDTHAD_L   0x29
 #define OP_SCANLEN_H    0x2a
 #define OP_SCANLEN_L    0x2b
+#define OP_INTERIMG      0x2c
 
 #define SEC_LEN 512
 static void pabort(const char *s) 
@@ -592,7 +599,7 @@ static char spi1[] = "/dev/spidev32766.0";
 		tx[i] = i & 0x95;
 	}
 
-    if (sel == 19){ /* command mode test ex[19 startsec secNum filename.bin]*/ /* OP_WT */
+    if (sel == 19){ /* command mode test ex[19 startsec secNum filename.bin]*/ /* OP_SDWT */
 
         int startSec = 0, secNum = 0;
         int startAddr = 0, bLength = 0;
@@ -854,10 +861,10 @@ static char spi1[] = "/dev/spidev32766.0";
         uint8_t tx8[4], rx8[4];
         uint8_t op[ARRY_MAX] = {	0xaa
 							, 	OP_PON,	 		OP_QRY,	 		OP_RDY,	 		OP_DAT,	 		OP_SCM			/* 0x01 -0x05 */
-							, 	OP_DCM,		 	OP_FIH,	 		OP_DUL,	 		OP_RD,	 		OP_WT          		/* 0x06 -0x0a */
-							, 	OP_SDAT,	 	OP_NONE,	 	OP_NONE,	 	OP_NONE,	 	OP_NONE      		/* 0x0b -0x0f  */
+							, 	OP_DCM,		 	OP_FIH,	 		OP_DUL,	 		OP_SDRD,	 	OP_SDWT          	/* 0x06 -0x0a */
+							, 	OP_SDAT,	 	OP_RGRD,	 	OP_RGWT,	 	OP_RGDAT,	 	OP_ACTION		/* 0x0b -0x0f  */
 							, 	OP_NONE,	 	OP_NONE,	 	OP_NONE,		OP_NONE,		OP_STSEC_0 		/* 0x10 -0x14  */
-							,	OP_STLEN_0,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE     		/* 0x15 -0x19  */
+							,	OP_STLEN_0,		OP_NONE,		OP_NONE,		OP_RGADD_H,	OP_RGADD_L 		/* 0x15 -0x19  */
 							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE     		/* 0x1A -0x1E  */
 							,	OP_NONE,		OP_FFORMAT,		OP_COLRMOD,	OP_COMPRAT,	OP_SCANMOD     	/* 0x1F -0x23  */
 							,	OP_DATPATH,		OP_RESOLTN,		OP_SCANGAV,	OP_MAXWIDH,	OP_WIDTHAD_H	/* 0x24 -0x28  */
