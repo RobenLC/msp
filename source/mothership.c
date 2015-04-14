@@ -5809,8 +5809,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             goto socketEnd;
         }
 
-        sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, &recvbuf[hd], hd, be, ed, ln, fg);
-        print_f(rs->plogs, "P5", rs->logs);
+        //sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, &recvbuf[hd], hd, be, ed, ln, fg);
+        //print_f(rs->plogs, "P5", rs->logs);
 
         opcode = recvbuf[hd+1]; param = recvbuf[be-1]; flag = recvbuf[fg+1];
         sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]flg[0x%x]\n", opcode, param, flag);
@@ -5895,10 +5895,11 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
         //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, sendbuf, rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
         //print_f(rs->plogs, "P5", sendbuf);
-        printf("[p5]:%s\n", sendbuf);
+        //printf("[p5]:%s\n", sendbuf);
 
         socketEnd:
-        sprintf(rs->logs, "END receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, recvbuf, hd, be, ed, ln, fg);
+        //sprintf(rs->logs, "END receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, recvbuf, hd, be, ed, ln, fg);
+        sprintf(rs->logs, "END receive len[%d]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, hd, be, ed, ln, fg);
         print_f(rs->plogs, "P5", rs->logs);
 
         close(rs->psocket_r->connfd);
