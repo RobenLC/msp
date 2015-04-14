@@ -34,9 +34,12 @@
 #define OP_DCM 0x6
 #define OP_FIH  0x7
 #define OP_DUL 0x8
-#define OP_RD 0x9
-#define OP_WT 0xa
+#define OP_SDRD 0x9
+#define OP_SDWT 0xa
 #define OP_SDAT 0xb
+#define OP_RGRD 0xc
+#define OP_RGWT 0xd
+#define OP_RGDAT 0xe
 
 #define OP_STSEC_0  0x10
 #define OP_STSEC_1  0x11
@@ -46,6 +49,8 @@
 #define OP_STLEN_1  0x15
 #define OP_STLEN_2  0x16
 #define OP_STLEN_3  0x17
+#define OP_RGADD_H  0x18
+#define OP_RGADD_L  0x19
 
 #define OP_FFORMAT      0x20
 #define OP_COLRMOD      0x21
@@ -59,6 +64,7 @@
 #define OP_WIDTHAD_L   0x29
 #define OP_SCANLEN_H    0x2a
 #define OP_SCANLEN_L    0x2b
+#define OP_INTERIMG      0x2c
 
 #define SEC_LEN 512
 
@@ -479,8 +485,8 @@ static int next_spy(struct psdata_s *data)
                     break;
                 case OP_DUL: /* latter */    
                     break;
-                case OP_RD:                                       
-                case OP_WT:                                       
+                case OP_SDRD:                                       
+                case OP_SDWT:                                       
                     next = PSACT; /* get and repeat value */
                     evt = AUTO_A;
                     break;
@@ -509,7 +515,8 @@ static int next_spy(struct psdata_s *data)
                 case OP_WIDTHAD_H:                                
                 case OP_WIDTHAD_L:                                
                 case OP_SCANLEN_H:                                
-                case OP_SCANLEN_L:                            
+                case OP_SCANLEN_L:
+                case OP_INTERIMG:
                     next = PSSET; /* get and repeat value */
                     evt = AUTO_A;
                     break;
@@ -1233,8 +1240,8 @@ static int stspy_05(struct psdata_s *data)
             switch (data->ansp0) {				
             case OP_DAT: /* currently support */
 
-            case OP_RD:
-            case OP_WT:
+            case OP_SDRD:
+            case OP_SDWT:
             case OP_STSEC_0:
             case OP_STSEC_1:
             case OP_STSEC_2:
@@ -1255,6 +1262,7 @@ static int stspy_05(struct psdata_s *data)
             case OP_WIDTHAD_L:
             case OP_SCANLEN_H:
             case OP_SCANLEN_L:
+            case OP_INTERIMG:
             case OP_SDAT:
                 sprintf(str, "go to next \n"); 
                 print_f(mlogPool, "spy", str);  
@@ -1903,8 +1911,8 @@ static int stauto_06(struct psdata_s *data)
     uint32_t rlt;
     struct DiskFile_s *pf;
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_06", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_06", str);  
 
     switch (rlt) {
         case STINIT:
@@ -2844,8 +2852,8 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         switch (p->opcode) {
         case OP_DAT: /* currently support */              
         case OP_DUL: /* latter */                         
-        case OP_RD:                                       
-        case OP_WT:                                       
+        case OP_SDRD:                                       
+        case OP_SDWT:                                       
         case OP_SDAT:                                     
         case OP_STSEC_0:                                  
         case OP_STSEC_1:                                  
@@ -2867,6 +2875,7 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_WIDTHAD_L:                                
         case OP_SCANLEN_H:                                
         case OP_SCANLEN_L:                              
+        case OP_INTERIMG:
             modersp->r = p->opcode;
             return 1;
             break;                                       
@@ -3567,7 +3576,7 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (p->opcode == OP_RDY) {
 
-            if (mrs->mchine.fdsk.rtops == OP_WT) {
+            if (mrs->mchine.fdsk.rtops == OP_SDWT) {
                 modersp->m = 37;
                 return 2;
             } else {
@@ -3598,10 +3607,10 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "open disk file [%s], op:0x%x\n", diskname, p->opcode);
     print_f(&mrs->plog, "fs36", mrs->log);
 
-    if (p->opcode == OP_RD) {
-        fd->rtops =  OP_RD;
-    } else if (p->opcode == OP_WT) {
-        fd->rtops =  OP_WT;
+    if (p->opcode == OP_SDRD) {
+        fd->rtops =  OP_SDRD;
+    } else if (p->opcode == OP_SDWT) {
+        fd->rtops =  OP_SDWT;
 #if DIRECT_WT_DISK 
         fp = fopen(diskname, "w+");	
 #endif
