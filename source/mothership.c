@@ -67,6 +67,8 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_SCANLEN_H    0x2a
 #define OP_SCANLEN_L    0x2b
 #define OP_INTERIMG      0x2c
+#define OP_AFEIC            0x2d
+#define OP_EXTPULSE      0x2e
 
 #define OP_ACTION          0x0f
 
@@ -134,8 +136,10 @@ typedef enum {
     ASPOP_WIDTH_ADJ_L,
     ASPOP_SCAN_LENS_H,
     ASPOP_SCAN_LENS_L,
-    ASPOP_INTER_IMG,     /* 13 */
-    ASPOP_SDFAT_RD,      /* 14 */
+    ASPOP_INTER_IMG,     
+    ASPOP_AFEIC_SEL,     
+    ASPOP_EXT_PULSE,     /* 15 */
+    ASPOP_SDFAT_RD,      /* 16 */
     ASPOP_SDFAT_WT,
     ASPOP_SDFAT_STR01,
     ASPOP_SDFAT_STR02,
@@ -146,7 +150,7 @@ typedef enum {
     ASPOP_SDFAT_LEN03,
     ASPOP_SDFAT_LEN04,
     ASPOP_SDFAT_SDAT,
-    ASPOP_CODE_MAX, /* 24 */
+    ASPOP_CODE_MAX, /* 27 */
 } aspOpCode_e;
 
 typedef enum {
@@ -6564,6 +6568,22 @@ int main(int argc, char *argv[])
             ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
+        case ASPOP_AFEIC_SEL: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_AFEIC;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_5;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_EXT_PULSE: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_EXTPULSE;
+            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_4;
+            ctb->opBitlen = 8;
+            break;
         case ASPOP_SDFAT_RD: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_SDRD;
@@ -6700,7 +6720,6 @@ int main(int argc, char *argv[])
     ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(pmrs->log, "Set RDY low at beginning\n");
     print_f(&pmrs->plog, "SPI", pmrs->log);
-
 
     bitset = 0;     
     ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    

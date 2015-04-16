@@ -66,6 +66,8 @@
 #define OP_SCANLEN_H    0x2a
 #define OP_SCANLEN_L    0x2b
 #define OP_INTERIMG      0x2c
+#define OP_AFEIC            0x2d
+#define OP_EXTPULSE      0x2e
 
 #define SEC_LEN 512
 
@@ -518,6 +520,8 @@ static int next_spy(struct psdata_s *data)
                 case OP_SCANLEN_H:                                
                 case OP_SCANLEN_L:
                 case OP_INTERIMG:
+                case OP_AFEIC:
+                case OP_EXTPULSE:
                 case OP_ACTION:
                     next = PSSET; /* get and repeat value */
                     evt = AUTO_A;
@@ -1265,6 +1269,8 @@ static int stspy_05(struct psdata_s *data)
             case OP_SCANLEN_H:
             case OP_SCANLEN_L:
             case OP_INTERIMG:
+            case OP_AFEIC:
+            case OP_EXTPULSE:
             case OP_SDAT:
             case OP_ACTION:
                 sprintf(str, "go to next \n"); 
@@ -2879,6 +2885,8 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_SCANLEN_H:                                
         case OP_SCANLEN_L:                              
         case OP_INTERIMG:
+        case OP_AFEIC:
+        case OP_EXTPULSE:
         case OP_ACTION:
             modersp->r = p->opcode;
             return 1;
