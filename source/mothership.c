@@ -150,7 +150,12 @@ typedef enum {
     ASPOP_SDFAT_LEN03,
     ASPOP_SDFAT_LEN04,
     ASPOP_SDFAT_SDAT,
-    ASPOP_CODE_MAX, /* 27 */
+    ASPOP_REG_RD,
+    ASPOP_REG_WT,
+    ASPOP_REG_ADDRH,
+    ASPOP_REG_ADDRL,
+    ASPOP_REG_DAT,
+    ASPOP_CODE_MAX, /* 32 */
 } aspOpCode_e;
 
 typedef enum {
@@ -6688,7 +6693,46 @@ int main(int argc, char *argv[])
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
-
+        case ASPOP_REG_RD: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_RGRD;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_REG_WT: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_RGWT;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_REG_ADDRH: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_RGADD_H;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_REG_ADDRL: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_RGADD_L;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_REG_DAT: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_RGDAT;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
         default: break;
         }
     }
