@@ -194,6 +194,12 @@ struct DiskFile_s{
     int rtMax;
 };
 
+struct RegisterRW_s{
+    uint32_t rga16;
+    int rgidx;
+    int rgact;
+};
+
 struct machineCtrl_s{
     uint32_t seqcnt;
     struct info16Bit_s cur;
@@ -201,12 +207,19 @@ struct machineCtrl_s{
     struct SdAddrs_s sdst;
     struct SdAddrs_s sdln;
     struct DiskFile_s fdsk;
+    struct RegisterRW_s regp;
+};
+
+struct virtualReg_s {
+    uint32_t vrAddr;
+    uint32_t vrValue;
 };
 
 struct mainRes_s{
     int sid[6];
     int sfm[2];
     int smode;
+    struct virtualReg_s regTable[128];
     struct machineCtrl_s mchine;
     // 3 pipe
     struct pipe_s pipedn[7];
@@ -241,6 +254,7 @@ struct fselec_s{
 struct procRes_s{
     // pipe
     int spifd;
+    struct virtualReg_s *pregtb;
     struct pipe_s *ppipedn;
     struct pipe_s *ppipeup;
     struct shmem_s *pdataRx;
@@ -527,7 +541,18 @@ static int next_spy(struct psdata_s *data)
                     evt = AUTO_A;
                     break;
                 case OP_SDAT:                                     
-                    next = PSSET; /* get and repeat value */
+                    next = PSSET;
+                    evt = AUTO_B;
+                    break;
+                case OP_RGRD:
+                case OP_RGWT:
+                case OP_RGADD_H:
+                case OP_RGADD_L:
+                    next = PSACT;
+                    evt = AUTO_B;
+                    break;
+                case OP_RGDAT:
+                    next = PSWT;
                     evt = AUTO_B;
                     break;
                 default:
@@ -794,10 +819,14 @@ static int next_auto_B(struct psdata_s *data)
             case PSACT: /* check RDY, and start transmitting */
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "auto_B", str); 
+                next = PSTSM;
+                evt = SPY;
                 break;
             case PSWT: /* end the transmitting and back to polling OP_QRY */
                 //sprintf(str, "PSWT\n"); 
                 //print_f(mlogPool, "auto_B", str); 
+                next = PSTSM;
+                evt = SPY;
                 break;
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
@@ -1273,6 +1302,12 @@ static int stspy_05(struct psdata_s *data)
             case OP_EXTPULSE:
             case OP_SDAT:
             case OP_ACTION:
+            case OP_RGRD:
+            case OP_RGWT:
+            case OP_RGDAT:
+            case OP_RGADD_H:
+            case OP_RGADD_L:
+
                 sprintf(str, "go to next \n"); 
                 print_f(mlogPool, "spy", str);  
 
@@ -1951,8 +1986,198 @@ static int stauto_06(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stauto_07(struct psdata_s *data) {return 0;}
-static int stauto_08(struct psdata_s *data) {return 0;}
+static int stauto_07(struct psdata_s *data)
+{
+    char ch = 0;
+    uint32_t rlt;
+    struct DiskFile_s *pf;
+    struct procRes_s *rs;
+    struct info16Bit_s *c, *g;
+    struct RegisterRW_s *preg;
+
+    rs = data->rs;
+    rlt = abs_result(data->result);	
+
+    g = &rs->pmch->get;
+    c = &rs->pmch->cur;
+    preg = &rs->pmch->regp;
+
+    sprintf(rs->logs, "op07 result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(rs->plogs, "reg", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            memset(c, 0, sizeof(struct info16Bit_s));
+            c->opcode = g->opcode;
+            c->data = g->data;
+
+            ch = 38; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                if (g->opcode == OP_RGRD) {
+                    rs->pmch->regp.rgact = g->opcode;
+                    sprintf(rs->logs, "OP_RGRD 16bit addr:0x%.8x, go to next!!\n", preg->rga16);  
+                    print_f(rs->plogs, "reg", rs->logs);  
+                    data->result = emb_result(data->result, NEXT);
+                } else if (g->opcode == OP_RGWT) {
+                    rs->pmch->regp.rgact = g->opcode;
+                    sprintf(rs->logs, "OP_RGWT 16bit addr:0x%.8x, go to next!!\n", preg->rga16);  
+                    print_f(rs->plogs, "reg", rs->logs);  
+                    data->result = emb_result(data->result, NEXT);
+                } else if (g->opcode == OP_RGADD_H) {
+                    preg->rga16 &= 0xffff00ff;
+                    preg->rga16 |= g->data << 8;
+                    sprintf(rs->logs, "OP_RGADD_H 16bit addr:0x%.8x, go to next!!\n", preg->rga16);  
+                    print_f(rs->plogs, "reg", rs->logs);  
+                    data->result = emb_result(data->result, NEXT);
+                } else if (g->opcode == OP_RGADD_L) {
+                    preg->rga16 &= 0xffffff00;
+                    preg->rga16 |= g->data;
+                    sprintf(rs->logs, "OP_RGADD_L 16bit addr:0x%.8x, go to next!!\n", preg->rga16);  
+                    print_f(rs->plogs, "reg", rs->logs);  
+                    data->result = emb_result(data->result, NEXT);
+                } else {
+                    sprintf(rs->logs, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
+                    print_f(rs->plogs, "reg", rs->logs);  
+                    data->result = emb_result(data->result, BREAK);
+                }
+            } else if (data->ansp0 == 2) { 
+                sprintf(rs->logs, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, break!!\n", data->ansp0, g->opcode, g->data);  
+                print_f(rs->plogs, "reg", rs->logs);  
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_08(struct psdata_s *data)
+{
+    int i=0, idx=-1, avl=0;
+    char ch = 0;
+    uint32_t rlt;
+    struct DiskFile_s *pf;
+    struct procRes_s *rs;
+    struct info16Bit_s *c, *g;
+    struct RegisterRW_s *preg;
+    struct virtualReg_s *ptb;
+
+    rs = data->rs;
+    rlt = abs_result(data->result);	
+
+    g = &rs->pmch->get;
+    c = &rs->pmch->cur;
+    preg = &rs->pmch->regp;
+    ptb = rs->pregtb;
+
+    sprintf(rs->logs, "op08 result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(rs->plogs, "reg", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+           memset(c, 0, sizeof(struct info16Bit_s));
+           c->opcode = g->opcode;
+
+           idx = -1; avl = -1;
+           if (preg->rgact == OP_RGRD) {
+                for (i = 0; i < 128; i++) {
+                    if (avl < 0) {
+                        if (ptb[i].vrAddr == 0) {
+                            avl = i;
+                        }
+                    }
+                    if (ptb[i].vrAddr == preg->rga16) {
+                        idx = i; 
+                        break;
+                    }
+                }
+
+                if (idx < 0) {
+                    preg->rgidx = avl;
+                    c->data = 0;
+                } else {
+                    preg->rgidx = idx;
+                    c->data = ptb[idx].vrValue;
+                }
+                sprintf(rs->logs, "OP_RGRD rgact 0x%x, get reg data: 0x%x, idx:%d, avl:%d !!\n", preg->rgact, c->data, idx, avl);  
+                print_f(rs->plogs, "reg", rs->logs);  
+
+                ch = 38; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+
+                memset(g, 0, sizeof(struct info16Bit_s));
+            } else if (preg->rgact == OP_RGWT) {
+                c->data = g->data;
+                ch = 38; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+
+                memset(g, 0, sizeof(struct info16Bit_s));
+            } else {
+                sprintf(rs->logs, "unknown rgact 0x%x, get pkt: 0x%.2x 0x%.2x, break!!\n", preg->rgact, g->opcode, g->data);  
+                print_f(rs->plogs, "reg", rs->logs);  
+
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                if (preg->rgact == OP_RGWT) {
+                    idx = -1; avl = -1;
+                    for (i = 0; i < 128; i++) {
+                        if (avl < 0) {
+                            if (ptb[i].vrAddr == 0) {
+                                avl = i;
+                            }
+                        }
+
+                        if (ptb[i].vrAddr == preg->rga16) {
+                            idx = i; 
+                            break;
+                        }
+                    }
+
+                    if (idx < 0) {
+                        preg->rgidx = avl;
+                        ptb[avl].vrValue = g->data;
+                        ptb[avl].vrAddr = preg->rga16;
+                    } else {
+                        preg->rgidx = idx;
+                        ptb[idx].vrValue = g->data;
+                    }
+                }
+				
+                sprintf(rs->logs, "get op: 0x%.2x/0x%.2x, idx:%d, avl:%d, go to next!!\n", g->opcode, g->data, idx, avl);  
+                print_f(rs->plogs, "reg", rs->logs);  
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) { 
+                sprintf(rs->logs, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, break!!\n", data->ansp0, g->opcode, g->data);  
+                print_f(rs->plogs, "reg", rs->logs);  
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
 static int stauto_09(struct psdata_s *data) {return 0;}
 static int stauto_10(struct psdata_s *data) {return 0;}
 static int stauto_11(struct psdata_s *data) {return 0;}
@@ -2888,6 +3113,11 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_AFEIC:
         case OP_EXTPULSE:
         case OP_ACTION:
+        case OP_RGRD:
+        case OP_RGWT:
+        case OP_RGDAT:
+        case OP_RGADD_H:
+        case OP_RGADD_L:
             modersp->r = p->opcode;
             return 1;
             break;                                       
@@ -3699,8 +3929,63 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1; 
 }
 
-static int fs38(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
-static int fs39(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs38(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    struct info16Bit_s *p;
+
+    p = &mrs->mchine.cur;
+    sprintf(mrs->log, "put  0x%.2x 0x%.2x \n",p->opcode, p->data);
+    print_f(&mrs->plog, "fs38", mrs->log);
+
+    //msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+	
+    mrs_ipc_put(mrs, "c", 1, 3);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs39(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int ret = 0;
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *g, *c;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        c = &mrs->mchine.cur;
+        g = &mrs->mchine.get;
+        sprintf(mrs->log, "pull 0x%.2x 0x%.2x \n", g->opcode, g->data);
+        print_f(&mrs->plog, "fs39", mrs->log);
+
+        if (g->opcode) {
+            if (g->opcode == c->opcode) {
+                modersp->r = 1;
+            } else {
+                modersp->r = 2;
+            }
+
+            if (modersp->d) {
+                modersp->m = modersp->d;
+                modersp->d = 0;
+                ret = 2;
+            } else {
+                ret = 1;
+            }
+        } else {
+            modersp->r = 2;
+            ret = 1;
+        }
+        sprintf(mrs->log, "r:%d, d:%d m:%d, op:0x%x,0x%x\n",modersp->r, modersp->d, modersp->m, g->opcode, g->data);
+        print_f(&mrs->plog, "fs39", mrs->log);
+
+        return ret;
+    }
+    return 0; 
+}
+
 static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
 	
 static int p0(struct mainRes_s *mrs)
@@ -4855,6 +5140,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->psocket_t = &mrs->socket_t;	
 
     rs->pmch = &mrs->mchine;
+    rs->pregtb = mrs->regTable;
     return 0;
 }
 
