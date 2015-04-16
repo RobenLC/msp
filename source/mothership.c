@@ -3328,7 +3328,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
         print_f(&mrs->plog, "DBG", mrs->log);
     }
 
-    param = ctb->opvalue;
+    param = ctb->opValue;
 
 end:
 
