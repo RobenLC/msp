@@ -3258,7 +3258,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
 {
     int val=0;
     int n=0, ix=0, ret=0;
-    char ch=0, opcode[5];
+    char ch=0, opcode[5], param=0;
     uint32_t tg=0, cd=0;
     struct mainRes_s *mrs=0;
     mrs = (struct mainRes_s *)argv[0];
@@ -3285,7 +3285,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
     */
 
     if (n != 5) {ret = -2; goto end;}
-    if (opcode[0] != 0xaa) {ret = -3; goto end;}
+    if ((opcode[0] != 0xaa) && (opcode[0] != 0xad)) {ret = -3; goto end;}
     if (opcode[4] != 0xa5) {ret = -4; goto end;}
     if (opcode[2] != '/') {ret = -5; goto end;}
 
@@ -3299,7 +3299,14 @@ static int cmdfunc_opcode(int argc, char *argv[])
         ctb = 0;
     }
 
-    if (ctb) {
+    if (!ctb) {
+        sprintf(mrs->log, "cmdfunc_opcode - 3\n"); 
+        print_f(&mrs->plog, "DBG", mrs->log);
+        ret = -7;
+        goto end;
+    }
+
+    if (opcode[0] == 0xaa) {
         cd = opcode[3];
 
         if (cd == ctb->opValue) {
@@ -3314,13 +3321,14 @@ static int cmdfunc_opcode(int argc, char *argv[])
             ctb->opStatus = ASPOP_STA_WR;
         }
         
-        sprintf(mrs->log, "opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d\n", ctb->opCode, ctb->opValue, cd, ret); 
+        sprintf(mrs->log, "WT opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d\n", ctb->opCode, ctb->opValue, cd, ret); 
         print_f(&mrs->plog, "DBG", mrs->log);
     } else {
-        sprintf(mrs->log, "cmdfunc_opcode - 3\n"); 
+        sprintf(mrs->log, "RD opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d\n", ctb->opCode, ctb->opValue, cd, ret); 
         print_f(&mrs->plog, "DBG", mrs->log);
-        ret = -7;
     }
+
+    param = ctb->opvalue;
 
 end:
 
@@ -3348,6 +3356,7 @@ end:
 
             sprintf(mrs->log, "succeed: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);	
         } 
+        mrs_ipc_put(mrs, &param, 1, 5);		
     }
     n = strlen(mrs->log);
     mrs_ipc_put(mrs, mrs->log, n, 5);
@@ -5823,7 +5832,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         /* android socket api can't send data with '\0' */
         if ((fg+1) != (be-1)) {
             if (param == 0xff) {
-                if (flag == 2) {
+                if (flag & 0x2) {
                     param = 0;
                 }
             }
@@ -5848,8 +5857,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             //print_f(rs->plogs, "P5", rs->logs);
             
             ret = write(rs->psocket_r->connfd, msg, n);
-            //sprintf(rs->logs, "send back app [%s] size:%d/%d\n", recvbuf, ret, n);
-            //print_f(rs->plogs, "P5", rs->logs);
+            sprintf(rs->logs, "send back app [%s] size:%d/%d\n", msg, ret, n);
+            print_f(rs->plogs, "P5", rs->logs);
             rs_ipc_put(rcmd, msg, n);
         }else {
             msg[0] = 'o';
@@ -5860,8 +5869,12 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             ch = 0; n = 0;
             n = rs_ipc_get(rcmd, &ch, 1);
 
-            if (ch == 'o') {			
-                msg[0] = 0xaa;			
+            if (ch == 'o') {
+                if (flag & 0x04) { /* 0xaa = write, 0xad = read */
+                    msg[0] = 0xad; 
+                } else {
+                    msg[0] = 0xaa; 
+                }
                 msg[1] = opcode;
                 msg[2] = '/';
                 msg[3] = param;
@@ -5874,6 +5887,9 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
             if (ch != 'p') {			
                 opcode = OP_ERROR; 
+                n = rs_ipc_get(rcmd, &ch, 1);
+                param = ch;
+            } else {
                 n = rs_ipc_get(rcmd, &ch, 1);
                 param = ch;
             }
