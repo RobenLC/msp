@@ -4169,6 +4169,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
 
         if (cd == ctb->opValue) {
             ctb->opStatus = ASPOP_STA_WR;
+            param = ctb->opValue;
             goto end;
         }
 
@@ -6675,6 +6676,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         //printf("#");
         //sprintf(rs->logs, "#\n");
         //print_f(rs->plogs, "P5", rs->logs);
+        ret = -1;
 
         rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)NULL, NULL); 
         if (rs->psocket_r->connfd < 0) {
@@ -6738,7 +6740,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             //sprintf(rs->logs, "send to p0 [%s]\n", recvbuf);
             //print_f(rs->plogs, "P5", rs->logs);
             
-            ret = write(rs->psocket_r->connfd, msg, n);
+            //ret = write(rs->psocket_r->connfd, msg, n);
             sprintf(rs->logs, "send back app [%s] size:%d/%d\n", msg, ret, n);
             print_f(rs->plogs, "P5", rs->logs);
             rs_ipc_put(rcmd, msg, n);
@@ -6767,7 +6769,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             ch = 0; n = 0;
             n = rs_ipc_get(rcmd, &ch, 1);
 
-            if (ch != 'p') {			
+            if (ch != 'p') {
                 opcode = OP_ERROR; 
                 n = rs_ipc_get(rcmd, &ch, 1);
                 param = ch;
@@ -6777,7 +6779,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             }
         }
 
-        usleep(100000);
+        //usleep(100000);
         memset(sendbuf, 0, 2048);
 
         sendbuf[0] = 0xfe;
