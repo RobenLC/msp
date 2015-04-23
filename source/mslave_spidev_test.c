@@ -113,7 +113,7 @@ struct directnFile_s{
     uint32_t   dflength;
     struct directnFile_s *pa;
     struct directnFile_s *br;
-    struct directnFile_s *ch;	
+    struct directnFile_s *ch;   
 };
 
 struct pipe_s{
@@ -279,7 +279,7 @@ static char aspLnameFilter(char ch)
 {
     char def = '_', *p=0;
     char notAllow[16] = {0x22, 0x2a, 0x2b, 0x2c, 0x2c, 0x2f, 0x3a, 0x3b, 
-		                      0x3c, 0x3d, 0x3e, 0x3f, 0x5b, 0x5c, 0x5d, 0x7c};
+                              0x3c, 0x3d, 0x3e, 0x3f, 0x5b, 0x5c, 0x5d, 0x7c};
 
     if (ch == 0x0)  return ch;
     if (ch < 0x20)  return def;
@@ -329,7 +329,7 @@ static int aspLnameAbs(char *raw, char *dst)
     ret = aspNameCpy(raw, dst, 14, 6, 2);
     cnt += ret;
     if (ret != 6) return cnt;
-	
+    
     dst += ret;
     ret = aspNameCpy(raw, dst, 28, 2, 2);
     cnt += ret;
@@ -348,7 +348,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
     char ld=0, nd=0;
     if (!raw) return (-1);
     if (!fs) return (-2);
-    if (last < 32) return (-3);	
+    if (last < 32) return (-3); 
 
     if (fs->dfstats == ASPFS_STATUS_EN) return 0;
 
@@ -417,7 +417,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             return aspRawParseDir(raw, fs, last);
         }
         //printf("LONG file name parsing...\n");
-	
+    
         ret = 0;
         if (raw[11] != 0x0f) {
             ret = -5;
@@ -446,7 +446,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         ret = 32 + aspRawParseDir(nxraw, fs, last-32);
 
         plnN = fs->dfLFN;
-	 plnN += fs->dflen;
+     plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
         //printf("LONG file name parsing... go to next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
@@ -467,13 +467,13 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         }
         if (raw[13] != ((fs->dfstats >> 16) & 0xff)) {
             ret = -10;
-        }		
+        }       
         if (ret) {
             //printf("LONG file name parsing... broken here ret:%d\n", ret);
             //memset(fs, 0x00, sizeof(struct directnFile_s));
             goto fsparseEnd;
         }
-		
+        
         if ((ld & 0xf) == 0x01) {
             fs->dfstats = ASPFS_STATUS_DIS;
         } else {
@@ -486,7 +486,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         ret = 32 + aspRawParseDir(nxraw, fs, last-32);
 
         plnN = fs->dfLFN;
-	 plnN += fs->dflen;
+     plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
         //printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
@@ -605,7 +605,7 @@ struct directnFile_s{
     uint32_t   dflength;
     struct directnFile_s *pa;
     struct directnFile_s *br;
-    struct directnFile_s *ch;	
+    struct directnFile_s *ch;   
 };
 #endif
     printf("==========================================\n");
@@ -636,7 +636,7 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
     if ((shift * 512) > rsz) return;
 
     raw = df + (shift * 512);
-	
+    
     //printf("raw[0x%.8x] df[0x%.8x] rsz[%d]\n", raw, df, rsz);
 
     fs = malloc(sizeof(struct directnFile_s));
@@ -660,7 +660,7 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
                 sec = (fs->dfclstnum - 2) * per;
                 offset = root + sec;
                 nxraw = df + (offset * 512);
-			
+            
                 //printf("[0x%.8x]next clst:%d sec:%d offset:0x%.6x \n", nxraw, fs->dfclstnum, sec, offset);
                 if ((nxraw - df) > rsz) {
                     printf("overflow %d/%d \n", nxraw - df, rsz);
@@ -710,29 +710,29 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
 
 void printdir(char *dir, int depth)
 {
-	DIR *dp;
-	struct dirent *entry;
-	struct stat statbuf;
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
 
-	if ((dp = opendir(dir)) == NULL) {
-		fprintf(stderr, "Can`t open directory %s\n", dir);
-		return ;
-	}
-	
-	chdir(dir);
-	while ((entry = readdir(dp)) != NULL) {
-		lstat(entry->d_name, &statbuf);
-		if (S_ISDIR(statbuf.st_mode)) {
-			if (strcmp(entry->d_name, ".") == 0 || 
-				strcmp(entry->d_name, "..") == 0 )  
-				continue;	
-			printf("%*s%s\n", depth, "", entry->d_name, depth);
-			printdir(entry->d_name, depth+4);
-		} else
-			printf("%*s%s\n", depth, "", entry->d_name, depth);
-	}
-	chdir("..");
-	closedir(dp);	
+    if ((dp = opendir(dir)) == NULL) {
+        fprintf(stderr, "Can`t open directory %s\n", dir);
+        return ;
+    }
+    
+    chdir(dir);
+    while ((entry = readdir(dp)) != NULL) {
+        lstat(entry->d_name, &statbuf);
+        if (S_ISDIR(statbuf.st_mode)) {
+            if (strcmp(entry->d_name, ".") == 0 || 
+                strcmp(entry->d_name, "..") == 0 )  
+                continue;   
+            printf("%*s%s\n", depth, "", entry->d_name, depth);
+            printdir(entry->d_name, depth+4);
+        } else
+            printf("%*s%s\n", depth, "", entry->d_name, depth);
+    }
+    chdir("..");
+    closedir(dp);   
 }
 
 static int aspFS_createRoot(struct directnFile_s **root, char *dir)
@@ -794,14 +794,14 @@ static int aspFS_insertChilds(struct directnFile_s *root)
     }
 
     printf("[R]open directory [%s] done\n", root->dfLFN);
-	
+    
     chdir(root->dfLFN);
     while ((entry = readdir(dp)) != NULL) {
         lstat(entry->d_name, &statbuf);
         if (S_ISDIR(statbuf.st_mode)) {
             if (strcmp(entry->d_name, ".") == 0 || 
                 strcmp(entry->d_name, "..") == 0 ) {
-                continue;	
+                continue;   
             }
             printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
             //printdir(entry->d_name, TAB_DEPTH+4);
@@ -813,10 +813,10 @@ static int aspFS_insertChilds(struct directnFile_s *root)
             if (ret) goto insertEnd;
         }
     }
-    chdir("..");	
+    chdir("..");    
 
 insertEnd:
-    closedir(dp);	
+    closedir(dp);   
 
     return ret;
 }
@@ -1094,12 +1094,12 @@ static int aspFS_search(struct directnFile_s **dir, struct directnFile_s *root, 
     brt = root->ch;
     while (brt) {
         printf("comp[%s] [%s] \n", brt->dfLFN, &rmp[b][0]);
-	 if (strcmp("..", &rmp[b][0]) == 0) {
+     if (strcmp("..", &rmp[b][0]) == 0) {
             b++;
             if (brt->dftype != ASPFS_TYPE_ROOT) {
                 brt = brt->pa;
             }
-	 } else if (strcmp(".", &rmp[b][0]) == 0) {
+     } else if (strcmp(".", &rmp[b][0]) == 0) {
             b++;
         } else if (strcmp(brt->dfLFN, &rmp[b][0]) == 0) {
             b++;
@@ -1130,7 +1130,7 @@ static int aspFS_showFolder(struct directnFile_s *root)
     struct directnFile_s *brt = 0;
     if (!root) return (-1);
     if (root->dftype == ASPFS_TYPE_FILE) return (-2);
-	
+    
     printf("%s \n", root->dfLFN);
 
     brt = root->ch;
@@ -1192,8 +1192,8 @@ static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
     
     //clock_gettime(CLOCK_REALTIME, &curtime);
     past = e->tv_sec;
-    tbef = e->tv_nsec;		
-    lpast = past * 1000000000+tbef;	
+    tbef = e->tv_nsec;      
+    lpast = past * 1000000000+tbef; 
 
     if (lpast < lnow) {
         diff = -1;
@@ -1210,8 +1210,8 @@ static int test_gen(char *tx0, char *tx1, int len) {
     char ch1[64];
     az = 48;
     for (i = 0; i < 63; i++) {
-    	ch0[i] = az++;
-    	ch1[i] = az;
+        ch0[i] = az++;
+        ch1[i] = az;
     }
     ch0[i] = '\n';
     ch1[i] = '\n';
@@ -1624,7 +1624,7 @@ static char path[256];
     if (argc > 6) {
         printf(" [6]:%s \n", argv[6]);
         arg4 = atoi(argv[6]);
-    }	
+    }   
 
     buffsize = 1*1024*1024;
 
@@ -1667,7 +1667,7 @@ static char path[256];
 
     ret = test_gen(tx_buff[0], tx_buff[1], buffsize);
     printf("tx pattern gen size: %d/%d \n", ret, buffsize);
-	
+    
     int fd0, fd1;
     fd0 = open(spi0, O_RDWR);
     if (fd0 < 0) 
@@ -1721,8 +1721,8 @@ static char path[256];
        if (argc > 2) {
            strcpy(topdir, argv[2]);
        }
-	
-	printf("Directory scan of [%s], %d, %d, %d\n", topdir, ASPFS_TYPE_ROOT, ASPFS_TYPE_DIR, ASPFS_TYPE_FILE);
+    
+    printf("Directory scan of [%s], %d, %d, %d\n", topdir, ASPFS_TYPE_ROOT, ASPFS_TYPE_DIR, ASPFS_TYPE_FILE);
 
        ret = aspFS_createRoot(&root, topdir);
        if (ret != 0) printf("[R]aspFS_createRoot failed ret: %d \n", ret);
@@ -1748,14 +1748,14 @@ static char path[256];
            path[i] = ch;
            if (ch == '\n') {
                path[i] = '\0';
-	        break;
+            break;
            }
            i++;
        }
        printf("search [%s]\n", path);
-	   
+       
        ret = aspFS_search(&dfs, root, path);
-	if (!ret)   
+    if (!ret)   
            printf("ret = %d, search [%s], [%s]\n\n\n",ret ,path, dfs->dfLFN);
 
        aspFS_showFolder(dfs);
@@ -1770,7 +1770,7 @@ static char path[256];
                 path[i] = ch;
                 if (ch == '\n') {
                     path[i] = '\0';
-	             break;
+                 break;
                 }
                 i++;
             }
@@ -1778,7 +1778,7 @@ static char path[256];
             ret = aspFS_folderJump(&dfs, cur, path);
             printf("\n folder jump, ret: %d \n", ret);
             if (ret > 0) {
-                aspFS_showFolder(dfs);				
+                aspFS_showFolder(dfs);              
                 cur = dfs;
             }
 
@@ -1793,16 +1793,16 @@ static char path[256];
        if (argc > 2) {
            strcpy(topdir, argv[2]);
        }
-	
-	printf("Directory scan of %s\n", topdir);
-	printdir(topdir, 0);
-	printf("done.\n");
+    
+    printf("Directory scan of %s\n", topdir);
+    printdir(topdir, 0);
+    printf("done.\n");
 
-	goto end;
+    goto end;
     }
 
     if (sel == 26){ /* list the files in root ex[26]*/
-		
+        
   char name[256][256];
   DIR           *d;
   struct dirent *dir;
@@ -1851,12 +1851,12 @@ static char path[256];
 
 redo: 
 
-	sz = 0;
-	wtsz = 0;
-	lsz = 0;
-	pid = 0;
-	txhldsz = 0;
-	*tmp, buf='c';
+    sz = 0;
+    wtsz = 0;
+    lsz = 0;
+    pid = 0;
+    txhldsz = 0;
+    *tmp, buf='c';
         //tbuff = malloc(TSIZE);
         tbuff = rx_buff[0];
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -1968,9 +1968,9 @@ redo:
 
                     if (ret <= 0) {
                         //printf("[25] did get pipe, buf:%c\n", buf);
-			   continue;
+               continue;
                     }
-		
+        
                     if ((buf == '0') || (buf == '1')) {
                         cbuff[wtsz] = buf;
                         wtsz++;
@@ -2052,10 +2052,10 @@ redo:
                          tlast = 0 - test_time_diff(&tspi[0], &tspi[1], 1000);
                      }
                      tcost = test_time_diff(&tspi[0], &tdiff[0], 1000);
-					 
-			if (ret == 0) {
-				continue;
-			}
+                     
+            if (ret == 0) {
+                continue;
+            }
 
                     printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
 
@@ -2066,8 +2066,8 @@ redo:
 
                     if (ret < 0) {
 
-			   ret = 0 - ret;
-			   if (ret == 1) ret = 0;
+               ret = 0 - ret;
+               if (ret == 1) ret = 0;
 
                         dstBuff -= chunksize;
                         lsz = ret;
@@ -2085,9 +2085,9 @@ redo:
                 }
 
 
-	         bitset = 0;
-       	  ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
-    	         printf("Stop spi%d spidev thread, ret: %d\n", 0, ret);
+             bitset = 0;
+          ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+                 printf("Stop spi%d spidev thread, ret: %d\n", 0, ret);
                 
                 wtsz = 0;
                 while (1) {
@@ -2144,8 +2144,8 @@ redo:
             ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
 
             dstBuff += chunksize;
-			
-            while(1) {				
+            
+            while(1) {              
                 clock_gettime(CLOCK_REALTIME, &tspi[1]);            
                 
                 ret = ioctl(fm[1], _IOR(SPI_IOC_MAGIC, 15, __u32), dstBuff);  //SPI_IOC_PROBE_THREAD
@@ -2160,8 +2160,8 @@ redo:
 
 
                 if (ret == 0) {
-			continue;
-		  }
+            continue;
+          }
 
                 printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
 
@@ -2171,9 +2171,9 @@ redo:
                 }
                 if (ret < 0) {
 
-			ret = 0 - ret;
+            ret = 0 - ret;
                     if (ret == 1) ret = 0;
-					
+                    
                     dstBuff -= chunksize;
                     lsz = ret;
                     write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
@@ -2238,11 +2238,11 @@ redo:
         }
     
         munmap(dstmp, TSIZE);
-	 //goto redo;
+     //goto redo;
         goto end;
     }
     
-	
+    
     if (sel == 24){ /* command mode test ex[24 0/num 1/0]*/
         int ret=0, max=0;
         FILE *dkf;
@@ -2256,7 +2256,7 @@ redo:
         if (!dkf) {
             printf(" [%s] file open failed \n", diskpath);
             goto end;
-        }	
+        }   
         printf(" [%s] file open succeed \n", diskpath);
 
         ret = fseek(dkf, 0, SEEK_END);
@@ -2280,7 +2280,7 @@ redo:
             printf(" file seek failed!! ret:%d \n", ret);
             goto end;
         }
-		
+        
         ret = fread(dkbuf, 1, max, dkf);
         printf(" dk file read size: %d/%d \n", ret, max);
 
@@ -2288,7 +2288,7 @@ redo:
 
         int i, j;
         /* dump raw */
-		
+        
 #if 0
         for (i = 0; i < (max/512); i++) {
             printf("[%d] \n", i);
@@ -2456,11 +2456,11 @@ redo:
             br = ch->br;            
             while (br) {
                 if (br->dfattrib & ASPFS_ATTR_DIRECTORY) {
-                	offset = (br->dfclstnum - 2) * arg3;
-                	offset = offset * 512;
+                    offset = (br->dfclstnum - 2) * arg3;
+                    offset = offset * 512;
 
-                	next = root + offset;
-                	last = rootlast - offset;
+                    next = root + offset;
+                    last = rootlast - offset;
                      aspFS_insertFATChilds(br, next, last);
                 }
                 br = br->br;            
@@ -2469,7 +2469,7 @@ redo:
             break;
         default:
             break;
-        }	
+        }   
         goto end;
     }
     if (sel == 23){ /* command mode test ex[23 1/0]*/
@@ -2520,22 +2520,22 @@ redo:
 #define ARRY_MAX  61
         int ret=0;
         uint8_t tx8[4], rx8[4];
-        uint8_t op[ARRY_MAX] = {	0xaa
-							, 	OP_PON,	 		OP_QRY,	 		OP_RDY,	 		OP_DAT,	 		OP_SCM			/* 0x01 -0x05 */
-							, 	OP_DCM,		 	OP_FIH,	 		OP_DUL,	 		OP_SDRD,	 	OP_SDWT          	/* 0x06 -0x0a */
-							, 	OP_SDAT,	 	OP_RGRD,	 	OP_RGWT,	 	OP_RGDAT,	 	OP_NONE      		/* 0x0b -0x0f  */
-							, 	OP_NONE,	 	OP_NONE,	 	OP_NONE,		OP_NONE,		OP_STSEC_0 		/* 0x10 -0x14  */
-							,	OP_STLEN_0,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE     		/* 0x15 -0x19  */
-							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE     		/* 0x1A -0x1E  */
-							,	OP_NONE,		OP_FFORMAT,		OP_COLRMOD,	OP_COMPRAT,	OP_SCANMOD     	/* 0x1F -0x23  */
-							,	OP_DATPATH,		OP_RESOLTN,		OP_SCANGAV,	OP_MAXWIDH,	OP_WIDTHAD_H	/* 0x24 -0x28  */
-							,	OP_WIDTHAD_L,	OP_SCANLEN_H,	OP_SCANLEN_L,	OP_NONE,		OP_NONE		/* 0x29 -0x2D  */
-							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE		/* 0x2E -0x32  */
-							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE		/* 0x33 -0x37  */
-							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_MAX};		/* 0x38 -0x3C  */
+        uint8_t op[ARRY_MAX] = {    0xaa
+                            ,   OP_PON,         OP_QRY,         OP_RDY,         OP_DAT,         OP_SCM          /* 0x01 -0x05 */
+                            ,   OP_DCM,         OP_FIH,         OP_DUL,         OP_SDRD,        OP_SDWT             /* 0x06 -0x0a */
+                            ,   OP_SDAT,        OP_RGRD,        OP_RGWT,        OP_RGDAT,       OP_NONE             /* 0x0b -0x0f  */
+                            ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE,        OP_STSEC_0      /* 0x10 -0x14  */
+                            ,   OP_STLEN_0,     OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE             /* 0x15 -0x19  */
+                            ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE             /* 0x1A -0x1E  */
+                            ,   OP_NONE,        OP_FFORMAT,     OP_COLRMOD, OP_COMPRAT, OP_SCANMOD      /* 0x1F -0x23  */
+                            ,   OP_DATPATH,     OP_RESOLTN,     OP_SCANGAV, OP_MAXWIDH, OP_WIDTHAD_H    /* 0x24 -0x28  */
+                            ,   OP_WIDTHAD_L,   OP_SCANLEN_H,   OP_SCANLEN_L,   OP_NONE,        OP_NONE     /* 0x29 -0x2D  */
+                            ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE     /* 0x2E -0x32  */
+                            ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE     /* 0x33 -0x37  */
+                            ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE,        OP_MAX};        /* 0x38 -0x3C  */
 
-        uint8_t st[4] = {OP_STSEC_0, 	OP_STSEC_1,	OP_STSEC_2,	OP_STSEC_3};
-        uint8_t ln[4] = {OP_STLEN_0, 	OP_STLEN_1,	OP_STLEN_2,	OP_STLEN_3};
+        uint8_t st[4] = {OP_STSEC_0,    OP_STSEC_1, OP_STSEC_2, OP_STSEC_3};
+        uint8_t ln[4] = {OP_STLEN_0,    OP_STLEN_1, OP_STLEN_2, OP_STLEN_3};
         uint8_t staddr = 0, stlen = 0, btidx = 0;
 
         tx8[0] = op[arg0];
@@ -2621,7 +2621,7 @@ redo:
 
         tx8[1016] = 0x01;
         tx8[1017] = 0x01;
-		
+        
         tx8[1018] = 0x02;
         tx8[1019] = 0x02;
 
@@ -2694,21 +2694,21 @@ redo:
     }
 
        modeSel = 1;
-	mode &= ~SPI_MODE_3;
-	switch(modeSel) {
-		case 1:
-    			mode |= SPI_MODE_1;
-			break;
-		case 2:
-    			mode |= SPI_MODE_2;
-			break;
-		case 3:
-    			mode |= SPI_MODE_3;
-			break;
-		default:
-    			mode |= SPI_MODE_0;
-			break;
-	}
+    mode &= ~SPI_MODE_3;
+    switch(modeSel) {
+        case 1:
+                mode |= SPI_MODE_1;
+            break;
+        case 2:
+                mode |= SPI_MODE_2;
+            break;
+        case 3:
+                mode |= SPI_MODE_3;
+            break;
+        default:
+                mode |= SPI_MODE_0;
+            break;
+    }
 
         ret = ioctl(fm[0], SPI_IOC_WR_MODE, &mode);
         if (ret == -1) 
@@ -2772,9 +2772,9 @@ redo:
 
         acusz = 0; pktcnt = 0; send = 0;
         while (1) {
-			
+            
             send = tx_data(fm[0], rx_buff[0], tx_buff[0], 1, SPI_TRUNK_SZ, 1024*1024);
-		
+        
             if (send < 0) {
                 send = 0 - send;
             }
@@ -2807,7 +2807,7 @@ redo:
 
         acusz = 0; pktcnt = 0; send = 0;
         while (1) {
-			
+            
             send = tx_data(fm[1], rx_buff[1], tx_buff[1], 1, SPI_TRUNK_SZ, 1024*1024);
 
             if (send < 0) {
@@ -2837,10 +2837,10 @@ redo:
 
             pktcnt++;
         }
-		
+        
         }
-		
-		
+        
+        
         goto end;
     }
 
@@ -2852,7 +2852,7 @@ redo:
         FILE *f;
         int fsize, acusz, send, txsz, pktcnt, len=0;
         char *src, *dstBuff, *dstmp;
-        char *save, *svBuff, *svtmp;	
+        char *save, *svBuff, *svtmp;    
         int modeSel;
 #if SEND_FILE
         if (argc > 3) {
@@ -2864,11 +2864,11 @@ redo:
 #endif
 #if USE_SHARE_MEM 
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-	 memset(dstBuff, 0x95, TSIZE);
+     memset(dstBuff, 0x95, TSIZE);
         dstmp = dstBuff;
 #else
         dstBuff = rx_buff[0];
-	 memset(dstBuff, 0x95, buffsize);
+     memset(dstBuff, 0x95, buffsize);
         dstmp = dstBuff;
 #endif
 
@@ -2880,21 +2880,21 @@ redo:
 #endif
 
        modeSel = 1;
-	mode &= ~SPI_MODE_3;
-	switch(modeSel) {
-		case 1:
-    			mode |= SPI_MODE_1;
-			break;
-		case 2:
-    			mode |= SPI_MODE_2;
-			break;
-		case 3:
-    			mode |= SPI_MODE_3;
-			break;
-		default:
-    			mode |= SPI_MODE_0;
-			break;
-	}
+    mode &= ~SPI_MODE_3;
+    switch(modeSel) {
+        case 1:
+                mode |= SPI_MODE_1;
+            break;
+        case 2:
+                mode |= SPI_MODE_2;
+            break;
+        case 3:
+                mode |= SPI_MODE_3;
+            break;
+        default:
+                mode |= SPI_MODE_0;
+            break;
+    }
 
        arg0 = arg0 % 2;
 
@@ -3014,7 +3014,7 @@ redo:
 
         goto end;
     }
-	
+    
     if (sel == 18){ /* command mode test ex[18 1 ]*/
         int sid[2], pid, gid, size, pi, opsz;
         struct pipe_s pipe_t;
@@ -3022,7 +3022,7 @@ redo:
 
         char *shmtx, *dbgbuf[2], *rxbuf;
         char *tmptx, *pdbg ;
-		
+        
         shmtx  = mmap(NULL, 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
         dbgbuf[0] = mmap(NULL, 4*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
         dbgbuf[1] = mmap(NULL, 4*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -3044,27 +3044,27 @@ redo:
         // don't pull low RDY after every transmitting
 
         bits = 16;
-        ret = ioctl(fm[0], 	SPI_IOC_WR_BITS_PER_WORD, &bits);
+        ret = ioctl(fm[0],  SPI_IOC_WR_BITS_PER_WORD, &bits);
         printf("Set spi0 data wide: %d\n", bits);
 
-        ret = ioctl(fm[1], 	SPI_IOC_WR_BITS_PER_WORD, &bits);
+        ret = ioctl(fm[1],  SPI_IOC_WR_BITS_PER_WORD, &bits);
         printf("Set spi1 data wide: %d\n", bits);
-		
-	mode &= ~SPI_MODE_3;
-	switch(arg0) {
-		case 1:
-    			mode |= SPI_MODE_1;
-			break;
-		case 2:
-    			mode |= SPI_MODE_2;
-			break;
-		case 3:
-    			mode |= SPI_MODE_3;
-			break;
-		default:
-    			mode |= SPI_MODE_0;
-			break;
-	}
+        
+    mode &= ~SPI_MODE_3;
+    switch(arg0) {
+        case 1:
+                mode |= SPI_MODE_1;
+            break;
+        case 2:
+                mode |= SPI_MODE_2;
+            break;
+        case 3:
+                mode |= SPI_MODE_3;
+            break;
+        default:
+                mode |= SPI_MODE_0;
+            break;
+    }
         ret = ioctl(fm[0], SPI_IOC_WR_MODE, &mode);
         if (ret == -1) 
             pabort("can't set spi mode"); 
@@ -3084,17 +3084,17 @@ redo:
              rxbuf[0] = 'p';
              pdbg = dbgbuf[0];
              while (1) {
-		  //printf("!");
+          //printf("!");
                 msync(shmtx, 2, MS_SYNC);
-		  *pdbg = 0;
-		  pdbg +=1;
+          *pdbg = 0;
+          pdbg +=1;
 
                 memcpy(pdbg, shmtx, 2);
                 pdbg += 2;
 
-		  *pdbg = 0;
-		  pdbg +=1;
-				
+          *pdbg = 0;
+          pdbg +=1;
+                
                 ret = tx_data(fm[0], &rxbuf[1], shmtx, 1, 2, 1024);
                 //printf("[%d]%x, %x \n", gid, rxbuf[1], rxbuf[2]);
                 write(pipe_t.rt[1], rxbuf, 3);
@@ -3102,7 +3102,7 @@ redo:
                     size = pdbg - dbgbuf[0];
                     sprintf(str, "s0s%.8d", size);
                     write(pipe_t.rt[1], str, 11);
-		      pdbg = dbgbuf[0];
+              pdbg = dbgbuf[0];
                 }
                 if (rxbuf[2] == 0xee) {
                     write(pipe_t.rt[1], "e", 1);
@@ -3120,17 +3120,17 @@ redo:
                  rxbuf[0] = 'p';
                  pdbg = dbgbuf[1];
                  while (1) {
-	       	//printf("?");
-	                msync(shmtx, 2, MS_SYNC);
-			  *pdbg = 0;
-			  pdbg +=1;
+            //printf("?");
+                    msync(shmtx, 2, MS_SYNC);
+              *pdbg = 0;
+              pdbg +=1;
 
-	                memcpy(pdbg, shmtx, 2);
-       	         pdbg += 2;
+                    memcpy(pdbg, shmtx, 2);
+                 pdbg += 2;
 
-			  *pdbg = 0;
-			  pdbg +=1;
-				
+              *pdbg = 0;
+              pdbg +=1;
+                
                      ret = tx_data(fm[0], &rxbuf[1], shmtx, 1, 2, 1024);
                      //printf("[%d]%x, %x \n", gid, rxbuf[1], rxbuf[2]);
                      write(pipe_t.rt[1], rxbuf, 3);
@@ -3138,13 +3138,13 @@ redo:
                          size = pdbg - dbgbuf[1];
                          sprintf(str, "s1s%.8d", size);
                          write(pipe_t.rt[1], str, 11);
-			    pdbg = dbgbuf[1];
+                pdbg = dbgbuf[1];
                      }
                      if (rxbuf[2] == 0xee) {
                          write(pipe_t.rt[1], "e", 1);
                          break;
                      }
-	              //usleep(1);
+                  //usleep(1);
                  }
                  close(pipe_t.rt[1]);
             } else { // process 0
@@ -3161,26 +3161,26 @@ redo:
                     if (ret > 0) {
                         if (op == 'p') {
                                ret = read(pipe_t.rt[0], rxbuf, 2);
-       	                 printf("[%d] 0x%.2x 0x%.2x \n", gid, rxbuf[0], rxbuf[1]);
-	                        shmtx[0] = rxbuf[0];
-              	          shmtx[1] = rxbuf[1];
+                         printf("[%d] 0x%.2x 0x%.2x \n", gid, rxbuf[0], rxbuf[1]);
+                            shmtx[0] = rxbuf[0];
+                          shmtx[1] = rxbuf[1];
                         }
                         else if (op == 's') {
                                ret = read(pipe_t.rt[0], rxbuf, 10);
                                rxbuf[10] = '\0';
-       	                 printf("[%d] %c \"%s\" \n", gid, op, rxbuf);
+                         printf("[%d] %c \"%s\" \n", gid, op, rxbuf);
                                if (rxbuf[0] == '0') pi = 0;
                                else if (rxbuf[0] == '1') pi = 1;                               
                                else goto end;
                                size = strtoul(&rxbuf[2], &stop_at, 10);
                                opsz = 16 - (size % 16);
                                ret = fwrite(dbgbuf[pi], 1, size, fp);
-				   printf("[%d]file %d write size: %d\n", gid, fp, ret);
+                   printf("[%d]file %d write size: %d\n", gid, fp, ret);
                                ret = fwrite("================", 1, opsz, fp);
-				   printf("[%d]file %d write size: %d\n", gid, fp, ret);
+                   printf("[%d]file %d write size: %d\n", gid, fp, ret);
                         }
                         else if (op == 'e') {
-      	                     printf("[%d] %c \n", gid, op);
+                             printf("[%d] %c \n", gid, op);
                             break;
                         } else {
                             printf("[?] op:%x \n", op);
@@ -3197,10 +3197,10 @@ redo:
         goto end;
     }
     if (sel == 17){ /* command mode test ex[17 6]*/
-	int lsz=0, cnt=0;
-	char *ch;
-	
-	mode |= SPI_MODE_1;
+    int lsz=0, cnt=0;
+    char *ch;
+    
+    mode |= SPI_MODE_1;
         ret = ioctl(fd0, SPI_IOC_WR_MODE, &mode);    //?¼Ò¦¡ 
         if (ret == -1) 
             pabort("can't set spi mode"); 
@@ -3209,27 +3209,27 @@ redo:
         if (ret == -1) 
             pabort("can't get spi mode"); 
 
-	if (arg0 > 0)
-		lsz = arg0;
+    if (arg0 > 0)
+        lsz = arg0;
 
-	while (lsz) {
-		ch = tx_buff[lsz%2];
-		*ch = 0x30 + cnt;
+    while (lsz) {
+        ch = tx_buff[lsz%2];
+        *ch = 0x30 + cnt;
               ret = tx_data(fd0, rx_buff[0], tx_buff[lsz%2], 1, 512, 1024*1024);
-		if (ret != 512)
-			break;
-		lsz --;
-		cnt++;
-	}
-		
+        if (ret != 512)
+            break;
+        lsz --;
+        cnt++;
+    }
+        
         goto end;
     }
-		
+        
     if (sel == 16){ /* tx hold test ex[16 0 0]*/
-	arg1 = arg1%2;
+    arg1 = arg1%2;
        bitset = arg0;
-	ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-	printf("Set spi%d Tx Hold: %d\n", arg1, bitset);
+    ioctl(fm[arg1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    printf("Set spi%d Tx Hold: %d\n", arg1, bitset);
         goto end;
     }
 
@@ -3239,7 +3239,7 @@ redo:
         arg0 = arg0 % 2;
 
         mode &= ~SPI_MODE_3;
-	 mode |= SPI_MODE_1;
+     mode |= SPI_MODE_1;
 
         printf("select spi%d mode: 0x%x tx:0xf0\n", arg0, mode);
 
@@ -3272,7 +3272,7 @@ redo:
         else chunksize = SPI_TRUNK_SZ;
 
         printf("***chunk size: %d ***\n", chunksize);
-		
+        
         int pipefd[2];
         int pipefs[2];
         int pipefc[2];
@@ -3285,23 +3285,23 @@ redo:
         //tbuff = malloc(TSIZE);
         tbuff = rx_buff[0];
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-	 memset(dstBuff, 0x95, TSIZE);
+     memset(dstBuff, 0x95, TSIZE);
         dstmp = dstBuff;
 
-	switch(arg3) {
-		case 1:
-    			mode |= SPI_MODE_1;
-			break;
-		case 2:
-    			mode |= SPI_MODE_2;
-			break;
-		case 3:
-    			mode |= SPI_MODE_3;
-			break;
-		default:
-    			mode |= SPI_MODE_0;
-			break;
-	}
+    switch(arg3) {
+        case 1:
+                mode |= SPI_MODE_1;
+            break;
+        case 2:
+                mode |= SPI_MODE_2;
+            break;
+        case 3:
+                mode |= SPI_MODE_3;
+            break;
+        default:
+                mode |= SPI_MODE_0;
+            break;
+    }
         /*
          * spi mode 
          */ 
@@ -3347,7 +3347,7 @@ redo:
         bitset = 0;
         ret = ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi1 data mode: %d\n", bitset);
-	
+    
         struct timespec *tspi = (struct timespec *)mmap(NULL, sizeof(struct timespec) * 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
         if (!tspi) {
             printf("get share memory for timespec failed - %d\n", tspi);
@@ -3377,8 +3377,8 @@ redo:
             pid = fork();
             if (pid) {
                 //usleep(1000000);
-		uint8_t *cbuff;
-		cbuff = tx_buff[1];
+        uint8_t *cbuff;
+        cbuff = tx_buff[1];
                 printf("main process to monitor the p0 and p1 \n");
                 close(pipefd[0]); // close the read-end of the pipe, I'm not going to use it
                 close(pipefs[1]); // close the write-end of the pipe, I'm not going to use it
@@ -3389,14 +3389,14 @@ redo:
                 txhldsz = arg1;
                 
                 while (1) {
-                    //sleep(3);					
+                    //sleep(3);                 
                     ret = read(pipefc[0], &buf, 1); 
                     //printf("********//read %d, buf:%c//********\n", ret, buf);
                     if ((buf == '0') || (buf == '1')) {
-				cbuff[wtsz] = buf;
-                     	wtsz++;
+                cbuff[wtsz] = buf;
+                        wtsz++;
 
-			if (arg0) {						
+            if (arg0) {                     
                         if (wtsz == txhldsz) {
                             //printf("********//spi slave send signal to hold the data transmitting(%d/%d)//********\n", wtsz, txhldsz);
 
@@ -3408,29 +3408,29 @@ redo:
                             ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                             //printf("Set spi1 Tx Hold: %d\n", bitset);
 
-				if (arg2>0)
-					lsz = arg2;
-				else
-					lsz = 10;
+                if (arg2>0)
+                    lsz = arg2;
+                else
+                    lsz = 10;
 
-				while(lsz) {
-              	              bitset = 0;
-       	                     ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-	                            //printf("Set RDY: %d, dly:%d \n", bitset, arg2);
-					usleep(1);
+                while(lsz) {
+                              bitset = 0;
+                             ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                                //printf("Set RDY: %d, dly:%d \n", bitset, arg2);
+                    usleep(1);
                             
-                     	       bitset = 1;
-              	              ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-       	                     //printf("Set RDY: %d\n", bitset);
-					usleep(1);
-					
-					lsz --;
-				}
+                               bitset = 1;
+                              ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                             //printf("Set RDY: %d\n", bitset);
+                    usleep(1);
+                    
+                    lsz --;
+                }
 
-              	     //         bitset = 0;
-       	             //        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-	             //               printf("Set RDY: %d\n", bitset);
-                     //       	sleep(5);
+                     //         bitset = 0;
+                     //        ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                 //               printf("Set RDY: %d\n", bitset);
+                     //         sleep(5);
 
                             bitset = 0;
                             ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 13, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -3441,15 +3441,15 @@ redo:
                             //printf("Set spi1 Tx Hold: %d\n", bitset);
 
                         }   
-			   }
+               }
                     } else if (buf == 'e') {
                         ret = read(pipefc[0], lastaddr, 32); 
                         sz = atoi(lastaddr);
                         printf("********//main monitor, write count:%d, sz:%d str:%s//********\n", wtsz, sz, lastaddr);
-				for (sz = 0; sz < wtsz; sz++) {
-					printf("%c, ", cbuff[sz]);
-					if (!((sz+1) % 16)) printf("\n");
-				}
+                for (sz = 0; sz < wtsz; sz++) {
+                    printf("%c, ", cbuff[sz]);
+                    if (!((sz+1) % 16)) printf("\n");
+                }
                         break;
                     } else {
                         printf("********//main monitor, get buff:%c, ERROR!!!!//********\n", buf);
@@ -3481,22 +3481,22 @@ redo:
                      }
                      tcost = test_time_diff(&tspi[0], &tdiff[0], 1000);
                     //ret = tx_data(fm[0], dstBuff, NULL, 1, chunksize, 1024*1024);
-			//if (arg0) 
-                    		printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
+            //if (arg0) 
+                            printf("[p0]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
                     msync(dstBuff, ret, MS_SYNC);
 /*
 if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
-	char *ch;
-	ch = dstBuff;;
-	printf("0x%.8x: \n",(uint32_t)(ch - dstmp));
-	for (sel = 0; sel < 1024; sel++) {
-		printf("%.2x ", *ch);
-		if (!((sel + 1) % 16)) printf("\n");
-		ch++;
-	}
+    char *ch;
+    ch = dstBuff;;
+    printf("0x%.8x: \n",(uint32_t)(ch - dstmp));
+    for (sel = 0; sel < 1024; sel++) {
+        printf("%.2x ", *ch);
+        if (!((sel + 1) % 16)) printf("\n");
+        ch++;
+    }
 }
 */
-			dstBuff += ret + chunksize;
+            dstBuff += ret + chunksize;
                     if (ret != chunksize) {
                         dstBuff -= chunksize;
                         if (ret == 1) ret = 0;
@@ -3580,19 +3580,19 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                 }
                 tcost = test_time_diff(&tspi[1], &tdiff[1], 1000);
                 //ret = tx_data(fm[1], dstBuff, NULL, 1, chunksize, 1024*1024);
-		//if (arg0)		
+        //if (arg0)     
                 printf("[p1]rx %d - %d (%d us /%d us)\n", ret, wtsz++, tcost, tlast);
                 msync(dstBuff, ret, MS_SYNC);
 /*
 if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
-	char *ch;
-	ch = dstBuff;;
-	printf("0x%.8x: \n", (uint32_t)(ch - dstmp));
-	for (sel = 0; sel < 1024; sel++) {
-		printf("%.2x ", *ch);
-		if (!((sel + 1) % 16)) printf("\n");
-		ch++;
-	}
+    char *ch;
+    ch = dstBuff;;
+    printf("0x%.8x: \n", (uint32_t)(ch - dstmp));
+    for (sel = 0; sel < 1024; sel++) {
+        printf("%.2x ", *ch);
+        if (!((sel + 1) % 16)) printf("\n");
+        ch++;
+    }
 }
 */
                 dstBuff += ret + chunksize;
@@ -3661,7 +3661,7 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
     }
 
     if (sel == 13){ /* data mode test ex[13 1024 100 0]*/
-	arg2 = arg2 % 2;
+    arg2 = arg2 % 2;
         data_process(rx_buff[0], tx_buff[0], fp, fm[arg2], arg0, arg1);
         goto end;
     }               
