@@ -284,11 +284,19 @@ struct sdFATable_s{
     int ftbLen;
 };
 
+
+struct sdDirPool_s{
+    int dirMax;
+    int dirUsed;
+    struct directnFile_s   *dirPool;
+};
+
 struct sdFAT_s{
     struct sdbootsec_s   *fatBootsec;
     struct sdFSinfo_s     *fatFSinfo;
     struct sdFATable_s   *fatTable;
     struct directnFile_s   *fatRootdir;
+    struct sdDirPool_s    *fatDirPool;
 };
 
 struct psdata_s {
@@ -562,6 +570,22 @@ static int mspFS_showFolder(struct directnFile_s *root);
 static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *root, char *path);
 
 static int atFindIdx(char *str, char ch);
+
+static int mspFS_allocDir(struct mainRes_s *mrs, struct directnFile_s **dir)
+{
+    struct sdDirPool_s *pool;
+    pool = mrs->aspFat.fatDirPool;
+
+    if (pool->dirUsed >= pool->dirMax) {
+        *dir = 0;
+        return -1;
+    }
+
+    *dir = &pool->dirPool[pool->dirUsed];
+    pool->dirUsed += 1;
+
+    return 0;
+}
 
 static int mspFS_createRoot(struct directnFile_s **root, char *dir)
 {
@@ -7709,6 +7733,51 @@ int main(int argc, char *argv[])
             ctb->opBitlen);
     }
 
+    /* FAT */
+    pmrs->aspFat.fatBootsec = (struct sdbootsec_s *)mmap(NULL, sizeof(struct sdbootsec_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (!pmrs->aspFat.fatBootsec) {
+        sprintf(pmrs->log, "alloc share memory for FAT boot sector FAIL!!!\n", pmrs->aspFat.fatBootsec); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for FAT boot sector DONE [0x%x]!!!\n", pmrs->aspFat.fatBootsec); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+    }
+    
+    pmrs->aspFat.fatFSinfo = (struct sdFSinfo_s *)mmap(NULL, sizeof(struct sdFSinfo_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (!pmrs->aspFat.fatFSinfo) {
+        sprintf(pmrs->log, "alloc share memory for FAT file system info FAIL!!!\n", pmrs->aspFat.fatFSinfo); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for FAT file system info DONE [0x%x]!!!\n", pmrs->aspFat.fatFSinfo); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+    }
+
+    pmrs->aspFat.fatDirPool = (struct sdDirPool_s *)mmap(NULL, sizeof(struct sdDirPool_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (!pmrs->aspFat.fatDirPool) {
+        sprintf(pmrs->log, "alloc share memory for FAT dir pool FAIL!!!\n", pmrs->aspFat.fatDirPool); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for FAT dir pool DONE [0x%x]!!!\n", pmrs->aspFat.fatDirPool); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+    }
+
+    struct sdDirPool_s    *pool;
+    pool = pmrs->aspFat.fatDirPool;
+    pool->dirPool = (struct directnFile_s *)mmap(NULL, sizeof(struct directnFile_s) * 8192, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (!pool->dirPool) {
+        sprintf(pmrs->log, "alloc share memory for FAT dir pool content FAIL!!!\n", pool->dirPool); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for FAT dir pool content DONE [0x%x] , size is %d!!!\n", pool->dirPool, 8192); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+    }
+    pool->dirMax = 8192;
+    pool->dirUsed = 0;
+
 // spidev id
     int fd0, fd1;
     fd0 = open(spi0, O_RDWR);
@@ -8068,7 +8137,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pmch = &mrs->mchine;
     rs->pstdata = &mrs->stdata;
     rs->pcfgTable = mrs->configTable;
-    rs->psFat = mrs->aspFat;
+    rs->psFat = &mrs->aspFat;
 
     return 0;
 }
