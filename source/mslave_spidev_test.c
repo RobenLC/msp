@@ -358,10 +358,10 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 
     if ((ld == 0xe5) || (ld == 0x05)) {
         ret = -4;
-        memset(fs, 0x00, sizeof(struct directnFile_s));
+        //memset(fs, 0x00, sizeof(struct directnFile_s));
         goto fsparseEnd;
     } else if (ld == 0x00) {
-        memset(fs, 0x00, sizeof(struct directnFile_s));
+        //memset(fs, 0x00, sizeof(struct directnFile_s));
         return 0;
     } else if (fs->dfstats == ASPFS_STATUS_DIS) {
         if (fs->dflen) {
@@ -412,7 +412,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
     } else if ((ld & 0xf0) == 0x40) {
         nd = raw[32];
         if (nd != ((ld & 0xf) - 1)) {
-            memset(fs, 0x00, sizeof(struct directnFile_s));
+            //memset(fs, 0x00, sizeof(struct directnFile_s));
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
         }
@@ -426,11 +426,11 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             ret = -6;
         }
         if (ret) {
-            memset(fs, 0x00, sizeof(struct directnFile_s));
+            //memset(fs, 0x00, sizeof(struct directnFile_s));
             goto fsparseEnd;
         }
 
-        memset(fs, 0x00, sizeof(struct directnFile_s));
+        //memset(fs, 0x00, sizeof(struct directnFile_s));
 
         idx = ld & 0xf;
 
@@ -470,7 +470,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         }		
         if (ret) {
             //printf("LONG file name parsing... broken here ret:%d\n", ret);
-            memset(fs, 0x00, sizeof(struct directnFile_s));
+            //memset(fs, 0x00, sizeof(struct directnFile_s));
             goto fsparseEnd;
         }
 		
@@ -493,7 +493,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 
         return ret;
     }else {
-            memset(fs, 0x00, sizeof(struct directnFile_s));
+            //memset(fs, 0x00, sizeof(struct directnFile_s));
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
     }
@@ -647,8 +647,8 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
     while (1) {
 
         if (fs->dfstats != ASPFS_STATUS_EN) {
-            
         } else if (fs->dfattrib & ASPFS_ATTR_DIRECTORY) {
+            printf("**dir**\n");
             if (strcmp(fs->dfSFN, ".") != 0 && 
                  strcmp(fs->dfSFN, "..") != 0 )  {
                 if (fs->dflen) {
@@ -667,9 +667,25 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
                 } else {
                     prinfatdir(df, rsz, offset, depth+4, root, per);
                 }            
+            } else {
+                if (fs->dflen) {
+                    printf("%*s%s\n", depth, "", fs->dfLFN, depth);
+                    printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+                } else {
+                    printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+                }
             }
 
+        } else if (fs->dfattrib & ASPFS_ATTR_ARCHIVE) {
+            printf("**archive**\n");
+            if (fs->dflen) {
+                printf("%*s%s\n", depth, "", fs->dfLFN, depth);
+                printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+            } else {
+                printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+            }
         } else if (fs->dfattrib & ASPFS_ATTR_HIDDEN) {
+            printf("**hidden**\n");
             if (fs->dflen) {
                 printf("%*s%s\n", depth, "", fs->dfLFN, depth);
                 printf("%*s%s\n", depth, "", fs->dfSFN, depth);
@@ -677,7 +693,7 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
                 printf("%*s%s\n", depth, "", fs->dfSFN, depth);
             }
         } else {
-            printf("unknown! \n");     
+            printf("unknown! [0x%.4x]\n", fs->dfattrib);     
         }
 
         raw += ret;
@@ -882,14 +898,42 @@ static int aspFS_insertChildFile(struct directnFile_s *parent, char *str)
 
 static int aspFS_createFATRoot(struct sdFAT_s *pfat)
 {
-    DIR *dp;
-    struct directnFile_s *r = 0;
+    char dir[32] = "/";
+    struct directnFile_s *r = 0, *c = 0;
 
-    r = pfat->fatRootdir;
-    if (!r) return (-1);
+    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    if (!r) {
+        return (-1);
+    }
     memset(r, 0, sizeof(struct directnFile_s));
 
+    c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    if (!c) {
+        return (-2);
+    }
+    memset(c, 0, sizeof(struct directnFile_s));
+
+    c->pa = r;
+    c->br = 0;
+    c->ch = 0;
+    c->dftype = ASPFS_TYPE_DIR;
+    c->dfattrib = 0;
+    c->dfstats = 0;
+    c->dflen = 2;
+    strcpy(c->dfLFN, "..");
+
+    r->pa = 0;
+    r->br = 0;
+    r->ch = c;
     r->dftype = ASPFS_TYPE_ROOT;
+    r->dfattrib = 0;
+    r->dfstats = 0;
+
+    r->dflen = strlen(dir);
+    if (r->dflen > 255) r->dflen = 255;
+    strncpy(r->dfLFN, dir, r->dflen);
+
+    pfat->fatRootdir = r;
 
     return 0;
 }
@@ -918,26 +962,27 @@ static int aspFS_insertFATChilds(struct directnFile_s *root, char *dir, int max)
     }
 
     if ((!dir) || (max <=0)) {
-        printf("Can`t open directory \n");
+        printf("[R]Can`t open directory \n");
         ret = -2;
         goto insertEnd;
     }
-	
+
     dkbuf = dir;
     dfs = malloc(sizeof(struct directnFile_s));
     if (!dfs) {
         ret = -3;
         goto insertEnd;
     }
+    memset(dfs, 0, sizeof(struct directnFile_s));
 
     cnt = 0;
     ret = aspRawParseDir(dkbuf, dfs, max);
-    printf(" raw parsing cnt: %d \n", ret);
+    printf("[R]raw parsing cnt: %d \n", ret);
     while (max > 0) {
         if (dfs->dfstats) {
-            printf("short name: %s \n", dfs->dfSFN);
+            printf("[R]short name: %s \n", dfs->dfSFN);
             if (dfs->dflen > 0) {
-                printf("long name: %s, len:%d \n", dfs->dfLFN, dfs->dflen);
+                printf("[R]long name: %s, len:%d \n", dfs->dfLFN, dfs->dflen);
             }
             debugPrintDir(dfs);
             aspFS_insertFATChild(root, dfs);
@@ -946,23 +991,26 @@ static int aspFS_insertFATChilds(struct directnFile_s *root, char *dir, int max)
         dkbuf += ret;
         max -= ret;
         cnt++;
-		
+
         dfs = malloc(sizeof(struct directnFile_s));
         if (!dfs) {
             ret = -3;
             goto insertEnd;
         }
+        memset(dfs, 0, sizeof(struct directnFile_s));
+
         ret = aspRawParseDir(dkbuf, dfs, max);
         if (!ret) break;
         printf("[%d] ret: %d, last:%d \n", cnt, ret, max);
     }
 
-    printf(" raw parsing end: %d \n", ret);
-			
+    printf("[R]raw parsing end: %d \n", ret);
+
 insertEnd:
 
     return ret;
 }
+
 static int aspFS_insertFATChild(struct directnFile_s *parent, struct directnFile_s *r)
 {
     int ret=0;
@@ -2263,17 +2311,27 @@ redo:
         char *pr;
 
         pfat = malloc(sizeof(struct sdFAT_s));
+        memset(pfat, 0, sizeof(struct sdFAT_s));
+        
         pfat->fatBootsec = malloc(sizeof(struct sdbootsec_s));
         memset(pfat->fatBootsec, 0, sizeof(struct sdbootsec_s));
+        
         pfat->fatFSinfo = malloc(sizeof(struct sdFSinfo_s));
         memset(pfat->fatFSinfo, 0, sizeof(struct sdFSinfo_s));
-        pfat->fatRootdir = malloc(sizeof(struct directnFile_s));
-        memset(pfat->fatRootdir, 0, sizeof(struct directnFile_s));
+        
+        pfat->fatRootdir = 0;
+        pfat->fatTable = 0;
 
         int cnt;
         struct directnFile_s * fsds = 0;
-        fsds = pfat->fatRootdir;
-        aspFS_createFATRoot(pfat);
+
+        fsds = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+        memset(fsds, 0, sizeof(struct directnFile_s));
+
+        char *next, *root;
+        int last=0, rootlast;
+        int offset=0;
+        struct directnFile_s   *ch, *br;
 
         switch (arg0) {
         case 0: /* read the boot sector */
@@ -2375,7 +2433,39 @@ redo:
             prinfatdir(dkbuf, max, arg2, 4, arg2, arg3);
             break;
         case 3:
+            ret = aspFS_createFATRoot(pfat);
+            if (ret == 0) {
+                aspFS_insertFATChilds(pfat->fatRootdir, dkbuf, max);
+            }
+            break;
+        case 4:
 
+            offset = arg2 * 512;
+            root = dkbuf + offset;
+            rootlast = max - offset;
+            
+            ret = aspFS_createFATRoot(pfat);
+            if (ret == 0) {
+                aspFS_insertFATChilds(pfat->fatRootdir, root, rootlast);
+            }
+
+            ch = pfat->fatRootdir->ch;
+
+            if (!ch) break;
+            
+            br = ch->br;            
+            while (br) {
+                if (br->dfattrib & ASPFS_ATTR_DIRECTORY) {
+                	offset = (br->dfclstnum - 2) * arg3;
+                	offset = offset * 512;
+
+                	next = root + offset;
+                	last = rootlast - offset;
+                     aspFS_insertFATChilds(br, next, last);
+                }
+                br = br->br;            
+            }
+            
             break;
         default:
             break;
