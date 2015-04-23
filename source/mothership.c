@@ -196,15 +196,99 @@ struct aspConfig_s{
     uint32_t opBitlen;
 };
 
-struct aspDirnFile_s{
+typedef enum {
+    ASPFS_ATTR_READ_ONLY = 0x01,
+    ASPFS_ATTR_HIDDEN = 0x02,
+    ASPFS_ATTR_SYSTEM = 0x04,
+    ASPFS_ATTR_VOLUME_ID = 0x08,
+    ASPFS_ATTR_DIRECTORY = 0x10,
+    ASPFS_ATTR_ARCHIVE = 0x20,
+} aspFSattribute_e;
+
+typedef enum {
+    ASPFS_STATUS_NONE = 0,
+    ASPFS_STATUS_ING,
+    ASPFS_STATUS_EN,
+    ASPFS_STATUS_DIS,
+} aspFSstatus_e;
+
+struct directnFile_s{
     uint32_t   dftype;
     uint32_t   dfstats;
     char        dfLFN[256];
+    char        dfSFN[12];
     int           dflen;
     uint32_t   dfattrib;
-    struct aspDirnFile_s *pa;
-    struct aspDirnFile_s *br;
-    struct aspDirnFile_s *ch;   
+    uint32_t   dfcretime;
+    uint32_t   dfcredate;
+    uint32_t   dflstacdate;
+    uint32_t   dfrecotime;
+    uint32_t   dfrecodate;
+    uint32_t   dfclstnum;
+    uint32_t   dflength;
+    struct directnFile_s *pa;
+    struct directnFile_s *br;
+    struct directnFile_s *ch;   
+};
+
+struct pipe_s{
+    int rt[2];
+};
+
+struct sdRaw_s{
+    char rowBP[512];
+};
+
+struct sdbootsec_s{
+    int secSt;              // status of boot sector 
+    int secJpcmd;      // jump command to the boot program
+    char secSysid[8];
+    int secSize;          // 512
+    int secPrClst;       // 4 8 16 32 64
+    int secResv;        // M 
+    int secNfat;         // should be 2
+    int secTotal;        // total sectors
+    int secIDm;         // must be 0xF8
+    int secPrfat;         // sectors per FAT
+    int secPrtrk;         // sectors per track
+    int secNsid;          // number of sides
+    int secNhid;          // number of hidden sectors
+    int secExtf;           // extension flag, specify the status of FAT mirroring
+    int secVers;          // File system version
+    int secRtclst;        // indicate the cluster number of root dir
+    int secFSif;           // indicate the sector number of FS info, will be 1 normally
+    int secBkbt;          // indicate the offset sector number of backup boot sector
+    int secPhdk;         // pyhsical disk number, should be 0x80
+    int secExtbt;        // extended boot record signature, should be 0x29
+    int secVoid;          // volume ID number
+    char secVola[12]; // volume label
+    char secFtyp[12];   // file system type in ascii
+    int secSign;          // shall be 0x55 (BP510) and 0xAA (BP511)
+    int secWhfat;        // indicate the sector of fat table
+    int secWhroot;      // indicate the sector of root dir
+};
+
+struct sdFSinfo_s{
+    int finLdsn;            // lead ingnature, shall be 0x52 0x52 0x61 0x41
+    int finStsn;             // structure signature, shall be 0x72 0x72 0x41 0x61
+    int finFreClst;        // free cluster count
+    int finNxtFreClst;   // next free cluster
+    int finTrsn;             // shall be 0x00 0x00 0x55 0xaa
+};
+
+struct sdFATitem_s{
+    char fitBP[4];
+};
+struct sdFATable_s{
+    struct sdFATitem_s *ftbFat;
+    int ftbLen;
+};
+
+struct sdFAT_s{
+    struct sdbootsec_s   *fatBootsec;
+    struct sdFSinfo_s     *fatFSinfo;
+    struct sdFATable_s   *fatTable;
+    struct directnFile_s   *fatRootdir;
 };
 
 struct psdata_s {
@@ -226,10 +310,6 @@ struct cmd_s{
     int  id;
     char str[16];
     func pfunc;
-};
-
-struct pipe_s{
-    int rt[2];
 };
 
 struct ring_s{
@@ -292,8 +372,9 @@ struct mainRes_s{
     int sfm[2];
     int smode;
     struct psdata_s stdata;
+    struct sdFAT_s aspFat;
     struct aspConfig_s configTable[ASPOP_CODE_MAX];
-    struct aspDirnFile_s root_dirt;
+    struct directnFile_s root_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
     struct pipe_s pipedn[9];
@@ -332,6 +413,7 @@ struct procRes_s{
     // pipe
     int spifd;
     struct psdata_s *pstdata;
+    struct sdFAT_s *psFat;
     struct aspConfig_s *pcfgTable;
     struct pipe_s *ppipedn;
     struct pipe_s *ppipeup;
@@ -470,22 +552,22 @@ static int streg_18(struct psdata_s *data);
 static int streg_19(struct psdata_s *data);
 static int streg_20(struct psdata_s *data);
 
-static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir);
-static int mspFS_insertChilds(struct aspDirnFile_s *root);
-static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir);
-static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str);
-static int mspFS_list(struct aspDirnFile_s *root, int depth);
-static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path);
-static int mspFS_showFolder(struct aspDirnFile_s *root);
-static int mspFS_folderJump(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path);
+static int mspFS_createRoot(struct directnFile_s **root, char *dir);
+static int mspFS_insertChilds(struct directnFile_s *root);
+static int mspFS_insertChildDir(struct directnFile_s *parent, char *dir);
+static int mspFS_insertChildFile(struct directnFile_s *parent, char *str);
+static int mspFS_list(struct directnFile_s *root, int depth);
+static int mspFS_search(struct directnFile_s **dir, struct directnFile_s *root, char *path);
+static int mspFS_showFolder(struct directnFile_s *root);
+static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *root, char *path);
 
 static int atFindIdx(char *str, char ch);
 
-static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
+static int mspFS_createRoot(struct directnFile_s **root, char *dir)
 {
     char mlog[256];
     DIR *dp;
-    struct aspDirnFile_s *r = 0, *c = 0;
+    struct directnFile_s *r = 0, *c = 0;
 
     sprintf(mlog, "open directory [%s]\n", dir);
     print_f(mlogPool, "FS", mlog);
@@ -498,7 +580,7 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
     sprintf(mlog, "open directory [%s] done\n", dir);
     print_f(mlogPool, "FS", mlog);
 
-    r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!r) {
         return (-2);
     }else {
@@ -506,7 +588,7 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
             print_f(mlogPool, "FS", mlog);
     }
 
-    c = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!c) {
         return (-3);
     }else {
@@ -541,7 +623,7 @@ static int mspFS_createRoot(struct aspDirnFile_s **root, char *dir)
     return 0;
 }
 
-static int mspFS_insertChilds(struct aspDirnFile_s *root)
+static int mspFS_insertChilds(struct directnFile_s *root)
 {
 #define TAB_DEPTH   4
     int ret = 0;
@@ -596,20 +678,20 @@ insertEnd:
 
     return ret;
 }
-static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
+static int mspFS_insertChildDir(struct directnFile_s *parent, char *dir)
 {
     int ret;
     char mlog[256];
     DIR *dp;
     struct dirent *entry;
     struct stat statbuf;
-    struct aspDirnFile_s *r = 0, *c = 0;
-    struct aspDirnFile_s *brt = 0;
+    struct directnFile_s *r = 0, *c = 0;
+    struct directnFile_s *brt = 0;
 
-    r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!r) return (-2);
 
-    c = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!c) {
         return (-3);
     }else {
@@ -656,13 +738,13 @@ static int mspFS_insertChildDir(struct aspDirnFile_s *parent, char *dir)
     return ret;
 }
 
-static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str)
+static int mspFS_insertChildFile(struct directnFile_s *parent, char *str)
 {
     char mlog[256];
-    struct aspDirnFile_s *r = 0;
-    struct aspDirnFile_s *brt = 0;
+    struct directnFile_s *r = 0;
+    struct directnFile_s *brt = 0;
 
-    r = (struct aspDirnFile_s *) malloc(sizeof(struct aspDirnFile_s));
+    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!r) return (-2);
 
     r->pa = parent;
@@ -693,10 +775,10 @@ static int mspFS_insertChildFile(struct aspDirnFile_s *parent, char *str)
     return 0;
 }
 
-static int mspFS_list(struct aspDirnFile_s *root, int depth)
+static int mspFS_list(struct directnFile_s *root, int depth)
 {
     char mlog[256];
-    struct aspDirnFile_s *fs = 0;
+    struct directnFile_s *fs = 0;
     if (!root) return (-1);
 
     fs = root->ch;
@@ -712,7 +794,7 @@ static int mspFS_list(struct aspDirnFile_s *root, int depth)
     return 0;
 }
 
-static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path)
+static int mspFS_search(struct directnFile_s **dir, struct directnFile_s *root, char *path)
 {
     char mlog[256];
     int ret = 0;
@@ -720,7 +802,7 @@ static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, 
     char *ch;
     char rmp[16][256];
     int a = 0, b = 0;
-    struct aspDirnFile_s *brt;
+    struct directnFile_s *brt;
 
     ret = strlen(path);
     //sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
@@ -790,10 +872,10 @@ static int mspFS_search(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, 
     return ret;
 }
 
-static int mspFS_showFolder(struct aspDirnFile_s *root)
+static int mspFS_showFolder(struct directnFile_s *root)
 {
     char mlog[256];
-    struct aspDirnFile_s *brt = 0;
+    struct directnFile_s *brt = 0;
     if (!root) return (-1);
     if (root->dftype == ASPFS_TYPE_FILE) return (-2);
     
@@ -809,11 +891,11 @@ static int mspFS_showFolder(struct aspDirnFile_s *root)
     return 0;
 }
 
-static int mspFS_folderJump(struct aspDirnFile_s **dir, struct aspDirnFile_s *root, char *path)
+static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *root, char *path)
 {
     char mlog[256];
     int retval = 0;
-    struct aspDirnFile_s *brt;
+    struct directnFile_s *brt;
 
     if ((!path) || (!root) || (!dir)) return (-1);
     if (root->dftype == ASPFS_TYPE_FILE) return (-2);
@@ -6836,11 +6918,11 @@ static int p6(struct procRes_s *rs)
     char *recvbuf, *sendbuf;
     int ret, n, num, hd, be, ed, ln;
     
-    struct aspDirnFile_s *root = 0, *fscur = 0, *nxtf = 0;
-    struct aspDirnFile_s *brt;
+    struct directnFile_s *root = 0, *fscur = 0, *nxtf = 0;
+    struct directnFile_s *brt;
 
-    //char dir[256] = "/mnt/mmc2";
-    char dir[256] = "/root";
+    char dir[256] = "/mnt/mmc2";
+    //char dir[256] = "/root";
     char folder[256];
 
     sprintf(rs->logs, "p6\n");
@@ -7986,6 +8068,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pmch = &mrs->mchine;
     rs->pstdata = &mrs->stdata;
     rs->pcfgTable = mrs->configTable;
+    rs->psFat = mrs->aspFat;
+
     return 0;
 }
 
