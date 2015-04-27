@@ -1938,7 +1938,7 @@ static int stauto_05(struct psdata_s *data)
                 sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                 print_f(mlogPool, "auto_05", str);  
                 data->result = emb_result(data->result, NEXT);
-            }			
+            }
             break;
         case NEXT:
             break;
@@ -3540,7 +3540,7 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     int startSec = 0, secNum = 0;
     int startAddr = 0, bLength = 0, maxLen=0;
-    int ret = 0;
+    int ret = 0, len=0;
     struct info16Bit_s *c, *p;
     struct DiskFile_s *pf;
 
@@ -3552,14 +3552,31 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     startSec = mrs->mchine.sdst.n;
     secNum = mrs->mchine.sdln.n;
-    maxLen = mrs->mchine.fdsk.rtMax;
+    maxLen = pf->rtMax;
 
     startAddr = startSec * SEC_LEN;
     bLength = secNum * SEC_LEN;
 
-    if ((startAddr + bLength) > maxLen) {
+    if (bLength > maxLen) {
         ret = -1;
     }
+
+    if (!pf->vsd) {
+        ret = -2;
+    }
+
+    ret = fseek(pf->vsd, startAddr, SEEK_SET);
+    if (ret) {
+        sprintf(mrs->log, "seek to %d failed!!! \n", startAddr);
+        print_f(&mrs->plog, "fs26", mrs->log);
+        goto end;
+    }
+
+    len = fread(pf->sdt, 1, bLength, pf->vsd);
+    sprintf(mrs->log, "read file size: %d/%d \n", len, bLength);
+    print_f(&mrs->plog, "fs26", mrs->log);
+
+    msync(pf->sdt, bLength, MS_SYNC);
     
     if (!ret) {
         pf->rtlen = bLength;
@@ -3576,6 +3593,9 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
 end:
+
+    fclose(pf->vsd);
+    pf->vsd = 0;
 
     c = &mrs->mchine.cur;
 
@@ -3837,7 +3857,8 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret = -1;
     struct info16Bit_s *p, *c;
-    char diskname[128] = "/mnt/mmc2/disk_03.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_02.bin";
+    char diskname[128] = "/dev/mmcblk0";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -3845,6 +3866,20 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     fd = &mrs->mchine.fdsk;
     p = &mrs->mchine.get;
     c = &mrs->mchine.cur;
+
+    fd->vsd = fopen(diskname, "r");
+    if (fd->vsd == NULL) {
+        sprintf(mrs->log, "disk file [%s] open failed!!! \n", diskname);
+        print_f(&mrs->plog, "fs36", mrs->log);
+        goto err;
+    }
+
+    ret = fseek(fd->vsd, 0, SEEK_END);
+    if (ret) {
+        sprintf(mrs->log, "seek file [%s] failed!!! \n", diskname);
+        print_f(&mrs->plog, "fs36", mrs->log);
+        goto err;
+    }
 
     sprintf(mrs->log, "open disk file [%s], op:0x%x\n", diskname, p->opcode);
     print_f(&mrs->plog, "fs36", mrs->log);
@@ -3854,7 +3889,7 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     } else if (p->opcode == OP_SDWT) {
         fd->rtops =  OP_SDWT;
 #if DIRECT_WT_DISK 
-        fp = fopen(diskname, "w+");	
+        fp = fopen(diskname, "w+");
 #endif
     } else {
         goto err;
@@ -4492,8 +4527,9 @@ static int p4(struct procRes_s *rs)
         } else if (cmode == 5) {
             starts = rs->pmch->sdst.n * SEC_LEN;
             acusz = rs->pmch->sdln.n * SEC_LEN;
-            if ((starts + acusz) > rs->pmch->fdsk.rtMax) {
-                sprintf(rs->logs, "OP_SDAT failed due to size > max, st:%d,ln:%d,mx:%d\n", starts, acusz, rs->pmch->fdsk.rtMax);
+            
+            if (acusz > rs->pmch->fdsk.rtMax) {
+                sprintf(rs->logs, "OP_SDAT failed due to size > max, len:%d,mx:%d\n", acusz, rs->pmch->fdsk.rtMax);
                 print_f(rs->plogs, "P4", rs->logs);
 
                 rs_ipc_put(rs, "s", 1);
@@ -4509,7 +4545,7 @@ static int p4(struct procRes_s *rs)
                 continue;
             }
 
-            tx_buff = rs->pmch->fdsk.sdt + starts;
+            tx_buff = rs->pmch->fdsk.sdt;
             msync(tx_buff, acusz, MS_SYNC);
             shmem_dump(tx_buff, acusz);
 
@@ -4670,7 +4706,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
 int main(int argc, char *argv[])
 {
-char diskname[128] = "/mnt/mmc2/disk_03.bin";
+//char diskname[128] = "/mnt/mmc2/disk_02.bin";
+char diskname[128] = "/dev/mmcblk0";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 
@@ -4816,7 +4853,11 @@ static char spi0[] = "/dev/spidev32765.0";
         sprintf(pmrs->log, "get file [%s] size failed!!! \n", diskname);
         print_f(&pmrs->plog, "FDISK", pmrs->log);
         goto end;
-    } else {
+    } else if (pmrs->mchine.fdsk.rtMax < 0) {
+        pmrs->mchine.fdsk.rtMax = 16 * 1024 * 1024;
+        sprintf(pmrs->log, "size is unknown, set file [%s] size : %d!!! \n", diskname, pmrs->mchine.fdsk.rtMax);
+        print_f(&pmrs->plog, "FDISK", pmrs->log);
+    }else {
         sprintf(pmrs->log, "get file [%s] size : %d!!! \n", diskname, pmrs->mchine.fdsk.rtMax);
         print_f(&pmrs->plog, "FDISK", pmrs->log);
     }
@@ -4834,11 +4875,11 @@ static char spi0[] = "/dev/spidev32765.0";
         print_f(&pmrs->plog, "FDISK", pmrs->log);
         goto end;
     }
-        
+/*
     ret = fread(pmrs->mchine.fdsk.sdt, 1, pmrs->mchine.fdsk.rtMax, pmrs->mchine.fdsk.vsd);
     sprintf(pmrs->log, "read file size: %d/%d \n", ret, pmrs->mchine.fdsk.rtMax);
     print_f(&pmrs->plog, "FDISK", pmrs->log);
-
+*/
     fclose(pmrs->mchine.fdsk.vsd);
     pmrs->mchine.fdsk.vsd = 0;
 
