@@ -276,16 +276,22 @@ struct sdFSinfo_s{
     int finTrsn;             // shall be 0x00 0x00 0x55 0xaa
 };
 
-struct sdFATitem_s{
-    char fitBP[4];
-};
-struct sdFATable_s{
-    struct sdFATitem_s *ftbFat;
-    int ftbLen;
+struct adFATLinkList_s{
+    int ftStart;
+    int ftLen;
+    struct adFATLinkList_s *n;    
 };
 
+struct sdFATable_s{
+    char *ftbFat;
+    int ftbLen;
+    struct adFATLinkList_s *h;
+    struct adFATLinkList_s *c;
+};
 
 struct sdDirPool_s{
+    int dirBuffUsed;
+    char *dirParseBuff;
     int dirMax;
     int dirUsed;
     struct directnFile_s   *dirPool;
@@ -560,10 +566,10 @@ static int streg_18(struct psdata_s *data);
 static int streg_19(struct psdata_s *data);
 static int streg_20(struct psdata_s *data);
 
-static int mspFS_createRoot(struct directnFile_s **root, char *dir);
-static int mspFS_insertChilds(struct directnFile_s *root);
-static int mspFS_insertChildDir(struct directnFile_s *parent, char *dir);
-static int mspFS_insertChildFile(struct directnFile_s *parent, char *str);
+static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, char *dir);
+static int mspFS_insertChilds(struct sdFAT_s *psFat, struct directnFile_s *root);
+static int mspFS_insertChildDir(struct sdFAT_s *psFat, struct directnFile_s *parent, char *dir);
+static int mspFS_insertChildFile(struct sdFAT_s *psFat, struct directnFile_s *parent, char *str);
 static int mspFS_list(struct directnFile_s *root, int depth);
 static int mspFS_search(struct directnFile_s **dir, struct directnFile_s *root, char *path);
 static int mspFS_showFolder(struct directnFile_s *root);
@@ -571,10 +577,85 @@ static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *ro
 
 static int atFindIdx(char *str, char ch);
 
-static int mspFS_allocDir(struct mainRes_s *mrs, struct directnFile_s **dir)
+static int mspSD_createFATLinkList(struct adFATLinkList_s **list)
+{
+    struct adFATLinkList_s *newList=0;
+
+    newList = (struct adFATLinkList_s *)malloc(sizeof(struct adFATLinkList_s));
+    if (!newList) return -1;
+
+    memset(newList, 0, sizeof(struct adFATLinkList_s));
+
+    *list = newList;
+    return 0;
+}
+
+static int mspSD_getNextFAT(int idx, char *fat, int max) 
+{
+    char *ch;
+    int offset=0, val=0, i=0;
+
+    if (idx > max) return 0;
+    offset = idx * 4;
+
+    ch = fat + offset;
+
+    i = 0;
+    while (i < 4) {
+        val |= ch[i] << (i * 8);
+        i++;
+    }
+
+    return val;
+}
+
+static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char *fat, int max)
+{
+    int llen=0, lstr=0, nxt=0, cur=0, ret=0;
+    struct adFATLinkList_s *ls=0, *nt=0;
+    cur = idx;
+
+    ret = mspSD_createFATLinkList(&ls);
+    if (ret) return ret;
+
+    *head = ls;
+
+    lstr = cur; 
+    llen = 1;
+
+    nxt = mspSD_getNextFAT(cur, fat, max);
+    while (nxt) {
+        if (nxt == (cur+1)) {
+            cur = nxt;
+            nxt = 0;
+            llen += 1;
+        } else {
+            ls->ftStart = lstr;
+            ls->ftLen = llen;
+            ret = mspSD_createFATLinkList(&nt);
+            if (ret) return ret;
+            ls->n = nt;
+
+            cur = nxt;
+            lstr = cur;
+            llen = 1; 
+            ls = nt;
+        }
+        nxt = mspSD_getNextFAT(cur, fat, max);
+    }
+
+    ls->ftStart = lstr;
+    ls->ftLen - llen;
+    ls->n = 0;
+
+    return 0;
+}
+
+static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
 {
     struct sdDirPool_s *pool;
-    pool = mrs->aspFat.fatDirPool;
+    
+    pool = psFat->fatDirPool;
 
     if (pool->dirUsed >= pool->dirMax) {
         *dir = 0;
@@ -587,7 +668,7 @@ static int mspFS_allocDir(struct mainRes_s *mrs, struct directnFile_s **dir)
     return 0;
 }
 
-static int mspFS_createRoot(struct directnFile_s **root, char *dir)
+static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, char *dir)
 {
     char mlog[256];
     DIR *dp;
@@ -604,7 +685,8 @@ static int mspFS_createRoot(struct directnFile_s **root, char *dir)
     sprintf(mlog, "open directory [%s] done\n", dir);
     print_f(mlogPool, "FS", mlog);
 
-    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    mspFS_allocDir(psFat, &r);
+    //r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!r) {
         return (-2);
     }else {
@@ -612,7 +694,8 @@ static int mspFS_createRoot(struct directnFile_s **root, char *dir)
             print_f(mlogPool, "FS", mlog);
     }
 
-    c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    mspFS_allocDir(psFat, &c);
+    //c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!c) {
         return (-3);
     }else {
@@ -647,7 +730,7 @@ static int mspFS_createRoot(struct directnFile_s **root, char *dir)
     return 0;
 }
 
-static int mspFS_insertChilds(struct directnFile_s *root)
+static int mspFS_insertChilds(struct sdFAT_s *psFat, struct directnFile_s *root)
 {
 #define TAB_DEPTH   4
     int ret = 0;
@@ -686,12 +769,12 @@ static int mspFS_insertChilds(struct directnFile_s *root)
             //sprintf(mlog, "%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
             //print_f(mlogPool, "FS", mlog);
             //printdir(entry->d_name, TAB_DEPTH+4);
-            ret = mspFS_insertChildDir(root, entry->d_name);
+            ret = mspFS_insertChildDir(psFat, root, entry->d_name);
             if (ret) goto insertEnd;
         } else {
             //sprintf(mlog, "%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
             //print_f(mlogPool, "FS", mlog);
-            ret = mspFS_insertChildFile(root, entry->d_name);
+            ret = mspFS_insertChildFile(psFat, root, entry->d_name);
             if (ret) goto insertEnd;
         }
     }
@@ -702,7 +785,7 @@ insertEnd:
 
     return ret;
 }
-static int mspFS_insertChildDir(struct directnFile_s *parent, char *dir)
+static int mspFS_insertChildDir(struct sdFAT_s *psFat, struct directnFile_s *parent, char *dir)
 {
     int ret;
     char mlog[256];
@@ -712,10 +795,12 @@ static int mspFS_insertChildDir(struct directnFile_s *parent, char *dir)
     struct directnFile_s *r = 0, *c = 0;
     struct directnFile_s *brt = 0;
 
-    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    mspFS_allocDir(psFat, &r);
+    //r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!r) return (-2);
 
-    c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    mspFS_allocDir(psFat, &c);
+    //c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!c) {
         return (-3);
     }else {
@@ -757,18 +842,19 @@ static int mspFS_insertChildDir(struct directnFile_s *parent, char *dir)
         }
     }
 
-    ret = mspFS_insertChilds(r);
+    ret = mspFS_insertChilds(psFat, r);
  
     return ret;
 }
 
-static int mspFS_insertChildFile(struct directnFile_s *parent, char *str)
+static int mspFS_insertChildFile(struct sdFAT_s *psFat, struct directnFile_s *parent, char *str)
 {
     char mlog[256];
     struct directnFile_s *r = 0;
     struct directnFile_s *brt = 0;
 
-    r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    mspFS_allocDir(psFat, &r);
+    //r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
     if (!r) return (-2);
 
     r->pa = parent;
@@ -6942,7 +7028,7 @@ static int p6(struct procRes_s *rs)
     char *recvbuf, *sendbuf;
     int ret, n, num, hd, be, ed, ln;
     
-    struct directnFile_s *root = 0, *fscur = 0, *nxtf = 0;
+    struct directnFile_s *fscur = 0, *nxtf = 0;
     struct directnFile_s *brt;
 
     char dir[256] = "/mnt/mmc2";
@@ -6954,24 +7040,7 @@ static int p6(struct procRes_s *rs)
 
     p6_init(rs);
 
-    ret = mspFS_createRoot(&root, dir);
-    if (!ret) {
-        sprintf(rs->logs, "FS root [%s] create done, root:0x%x\n", dir, root);
-        print_f(rs->plogs, "P6", rs->logs);
-        ret = mspFS_insertChilds(root);
-        if (!ret) {
-            sprintf(rs->logs, "FS insert ch done\n");
-            print_f(rs->plogs, "P6", rs->logs);
-            mspFS_showFolder(root);
-            fscur = root;
-        } else {
-            sprintf(rs->logs, "FS insert ch failed\n");
-            print_f(rs->plogs, "P6", rs->logs);
-        }
-    } else {
-        sprintf(rs->logs, "FS root [%s] create failed ret:%d\n", ret);
-        print_f(rs->plogs, "P6", rs->logs);
-    }
+    fscur = rs->psFat->fatRootdir;
 
     recvbuf = malloc(1024);
     if (!recvbuf) {
@@ -7326,7 +7395,7 @@ int main(int argc, char *argv[])
 {
 //static char spi1[] = "/dev/spidev32766.0"; 
 //static char spi0[] = "/dev/spidev32765.0"; 
-
+    char dir[256] = "/mnt/mmc2";
     struct mainRes_s *pmrs;
     struct procRes_s rs[9];
     int ix, ret;
@@ -7777,6 +7846,34 @@ int main(int argc, char *argv[])
     }
     pool->dirMax = 8192;
     pool->dirUsed = 0;
+
+    pool->dirParseBuff = mmap(NULL, 2*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (!pool->dirParseBuff) {
+        sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer FAIL!!!\n"); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer DONE [0x%x] , size is %d!!!\n", pool->dirParseBuff, 2*1024*1024); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+    }
+    
+    ret = mspFS_createRoot(&pmrs->aspFat.fatRootdir, &pmrs->aspFat, dir);
+    if (!ret) {
+        sprintf(pmrs->log, "FS root [%s] create done, root:0x%x\n", dir, pmrs->aspFat.fatRootdir);
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+        ret = mspFS_insertChilds(&pmrs->aspFat, pmrs->aspFat.fatRootdir);
+        if (!ret) {
+            sprintf(pmrs->log, "FS insert ch done\n");
+            print_f(&pmrs->plog, "FAT", pmrs->log);
+            mspFS_showFolder( pmrs->aspFat.fatRootdir);
+        } else {
+            sprintf(pmrs->log, "FS insert ch failed\n");
+            print_f(&pmrs->plog, "FAT", pmrs->log);
+        }
+    } else {
+        sprintf(pmrs->log, "FS root [%s] create failed ret:%d\n", ret);
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+    }
 
 // spidev id
     int fd0, fd1;
