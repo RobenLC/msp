@@ -277,8 +277,8 @@ struct sdFSinfo_s{
 };
 
 struct adFATLinkList_s{
-    int ftStart;
-    int ftLen;
+    int ftStart;              // start cluster
+    int ftLen;                // cluster length
     struct adFATLinkList_s *n;    
 };
 
@@ -605,6 +605,8 @@ static int mspSD_getNextFAT(int idx, char *fat, int max)
         val |= ch[i] << (i * 8);
         i++;
     }
+
+    if (val == 0x0fffffff) return 0;
 
     return val;
 }
