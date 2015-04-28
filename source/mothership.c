@@ -6932,6 +6932,9 @@ static int p2(struct procRes_s *rs)
                 case 'n':
                     cmode = 6;
                     break;
+                case 's':
+                    cmode = 7;
+                    break;
                 default:
                     break;
             }
@@ -7084,6 +7087,43 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "spi0 recv end\n");
                 print_f(rs->plogs, "P2", rs->logs);
 
+            }
+            else if (cmode == 7) {
+                sprintf(rs->logs, "cmode: %d\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                pi = 0;  
+                while (1) {
+                    len = 0;
+                    len = ring_buf_get(rs->pcmdRx, &addr);
+                    if (len < 0) {
+                        usleep(100000);
+                        continue;
+                    }
+
+                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+                    sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    if (opsz == 0) {
+                        sprintf(rs->logs, "opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);    
+                        continue;
+                    }
+
+                    //msync(addr, len, MS_SYNC);
+                    ring_buf_prod(rs->pcmdRx);    
+                    if (opsz < 0) break;
+                    rs_ipc_put(rs, "p", 1);
+                    pi += 1;
+
+                }
+
+                opsz = 0 - opsz;
+                ring_buf_set_last(rs->pcmdRx, opsz);
+                rs_ipc_put(rs, "d", 1);
+                sprintf(rs->logs, "spi0 recv end\n");
+                print_f(rs->plogs, "P2", rs->logs);
             }else {
                 sprintf(rs->logs, "cmode: %d - 7\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
@@ -7465,13 +7505,12 @@ static int p4(struct procRes_s *rs)
                         rs_ipc_get(rs, &ch, 1);
                     }
                 }
-
-          while (ch != 'D') {
-                        sprintf(rs->logs, "%c clr\n", ch);
-                        print_f(rs->plogs, "P4", rs->logs);         
-                        ch = 0;
-                        rs_ipc_get(rs, &ch, 1);
-          }
+                while (ch != 'D') {
+                    sprintf(rs->logs, "%c clr\n", ch);
+                    print_f(rs->plogs, "P4", rs->logs);         
+                    ch = 0;
+                    rs_ipc_get(rs, &ch, 1);
+                }
 
                 rs_ipc_put(rs, "D", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
@@ -7598,12 +7637,12 @@ static int p4(struct procRes_s *rs)
                     }
                 }
 
-          while (ch != 'N') {
-                        sprintf(rs->logs, "%c clr\n", ch);
-                        print_f(rs->plogs, "P4", rs->logs);         
-                        ch = 0;
-                        rs_ipc_get(rs, &ch, 1);
-          }
+                while (ch != 'N') {
+                    sprintf(rs->logs, "%c clr\n", ch);
+                    print_f(rs->plogs, "P4", rs->logs);         
+                    ch = 0;
+                    rs_ipc_get(rs, &ch, 1);
+                }
 
                 rs_ipc_put(rs, "N", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
@@ -8173,13 +8212,12 @@ static int p7(struct procRes_s *rs)
                         rs_ipc_get(rs, &ch, 1);
                     }
                 }
-
-          while (ch != 'D') {
-                        sprintf(rs->logs, "%c clr\n", ch);
-                        print_f(rs->plogs, "P7", rs->logs);         
-                        ch = 0;
-                        rs_ipc_get(rs, &ch, 1);
-          }
+                while (ch != 'D') {
+                    sprintf(rs->logs, "%c clr\n", ch);
+                    print_f(rs->plogs, "P7", rs->logs);         
+                    ch = 0;
+                    rs_ipc_get(rs, &ch, 1);
+                }
 
                 rs_ipc_put(rs, "D", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, tx);
