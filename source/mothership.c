@@ -100,6 +100,7 @@ typedef enum {
     DOUBLED,
     REGE,
     REGF,
+    FATG,
     SMAX,
 }state_e;
 
@@ -562,9 +563,15 @@ static int streg_14(struct psdata_s *data);
 static int streg_15(struct psdata_s *data);
 static int streg_16(struct psdata_s *data);
 static int streg_17(struct psdata_s *data);
-static int streg_18(struct psdata_s *data);
-static int streg_19(struct psdata_s *data);
-static int streg_20(struct psdata_s *data);
+static int stfat_18(struct psdata_s *data);
+static int stfat_19(struct psdata_s *data);
+static int stfat_20(struct psdata_s *data);
+static int stfat_21(struct psdata_s *data);
+static int stfat_22(struct psdata_s *data);
+static int stfat_23(struct psdata_s *data);
+static int stfat_24(struct psdata_s *data);
+static int stfat_25(struct psdata_s *data);
+static int stfat_26(struct psdata_s *data);
 
 static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, char *dir);
 static int mspFS_insertChilds(struct sdFAT_s *psFat, struct directnFile_s *root);
@@ -574,6 +581,7 @@ static int mspFS_list(struct directnFile_s *root, int depth);
 static int mspFS_search(struct directnFile_s **dir, struct directnFile_s *root, char *path);
 static int mspFS_showFolder(struct directnFile_s *root);
 static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *root, char *path);
+static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char *fat, int max);
 
 static int atFindIdx(char *str, char ch);
 
@@ -2557,7 +2565,8 @@ static int streg_17(struct psdata_s *data)
                 ch = 41; 
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
-            }            break;
+            }            
+            break;
         case WAIT:
             if (data->ansp0 == 1) {
                 pdt = &pct[ASPOP_REG_DAT];
@@ -2583,17 +2592,16 @@ static int streg_17(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int streg_18(struct psdata_s *data)
-{ 
+static int stfat_18(struct psdata_s *data)
+{
     char str[128], ch = 0; 
-    uint32_t rlt;
     struct aspConfig_s *pct=0, *pdt=0;
-
-    pct = data->rs->pcfgTable;
+    uint32_t rlt;
     rlt = abs_result(data->result); 
+    pct = data->rs->pcfgTable;
 
-    sprintf(str, "op18 rlt:0x%x \n", rlt); 
-    print_f(mlogPool, "reg", str); 
+    sprintf(str, "op18 rlt:0x%.8x \n", data->result); 
+    print_f(mlogPool, "FAT", str); 
 
     switch (rlt) {
         case STINIT:
@@ -2623,17 +2631,17 @@ static int streg_18(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int streg_19(struct psdata_s *data)
+static int stfat_19(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
-    uint32_t rlt;
     struct aspConfig_s *pct=0, *pdt=0;
-
-    pct = data->rs->pcfgTable;
+    uint32_t rlt;
     rlt = abs_result(data->result); 
 
-    sprintf(str, "op19 rlt:0x%x \n", rlt); 
-    print_f(mlogPool, "reg", str); 
+    pct = data->rs->pcfgTable;
+
+    sprintf(str, "op19 rlt:0x%.8x \n", data->result); 
+    print_f(mlogPool, "FAT", str); 
 
     switch (rlt) {
         case STINIT:
@@ -2663,17 +2671,257 @@ static int streg_19(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int streg_20(struct psdata_s *data)
+static int stfat_20(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
-    uint32_t rlt;
     struct aspConfig_s *pct=0, *pdt=0;
-
-    pct = data->rs->pcfgTable;
+    uint32_t rlt;
     rlt = abs_result(data->result); 
 
-    sprintf(str, "op20 rlt:0x%x \n", rlt); 
-    print_f(mlogPool, "reg", str); 
+    pct = data->rs->pcfgTable;
+
+    sprintf(str, "op20 rlt:0x%.8x \n", data->result); 
+    print_f(mlogPool, "FAT", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 1; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_01: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfat_21(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    uint32_t rlt;
+    rlt = abs_result(data->result); 
+
+    pct = data->rs->pcfgTable;
+
+    sprintf(str, "op21 rlt:0x%.8x \n", data->result); 
+    print_f(mlogPool, "FAT", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 1; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_01: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfat_22(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    uint32_t rlt;
+    rlt = abs_result(data->result); 
+
+    pct = data->rs->pcfgTable;
+
+    sprintf(str, "op22 rlt:0x%.8x \n", data->result); 
+    print_f(mlogPool, "FAT", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 1; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_01: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfat_23(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    uint32_t rlt;
+    rlt = abs_result(data->result); 
+
+    pct = data->rs->pcfgTable;
+
+    sprintf(str, "op23 rlt:0x%.8x \n", data->result); 
+    print_f(mlogPool, "FAT", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 1; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_01: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfat_24(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    uint32_t rlt;
+    rlt = abs_result(data->result); 
+
+    pct = data->rs->pcfgTable;
+
+    sprintf(str, "op24 rlt:0x%.8x \n", data->result);
+    print_f(mlogPool, "FAT", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 1; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_01: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfat_25(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    uint32_t rlt;
+    rlt = abs_result(data->result); 
+
+    pct = data->rs->pcfgTable;
+
+    sprintf(str, "op25 rlt:0x%.8x \n", data->result);
+    print_f(mlogPool, "FAT", str); 
+
+    switch (rlt) {
+        case STINIT:
+            ch = 1; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf(str, "op_01: result: %x\n", data->result); 
+            //print_f(mlogPool, "spy", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfat_26(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    uint32_t rlt;
+    rlt = abs_result(data->result); 
+
+    pct = data->rs->pcfgTable;
+
+    sprintf(str, "op26 rlt:0x%.8x \n", data->result); 
+    print_f(mlogPool, "FAT", str); 
 
     switch (rlt) {
         case STINIT:
@@ -5670,7 +5918,7 @@ static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp)
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
 
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
-    print_f(&mrs->plog, "fs23", mrs->log);
+    print_f(&mrs->plog, "fs40", mrs->log);
 
     bitset = 1;
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
@@ -5765,7 +6013,12 @@ static int fs44(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
     return 0; 
 }
-static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+
+static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    
+    return 0;
+}
 static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
 static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
 static int fs48(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
@@ -5883,8 +6136,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05},
                             {stdob_01, stdob_02, stdob_03, stdob_04, stdob_05},
                             {stdob_06, stdob_07, stdob_08, stdob_09, stdob_10},
-                            {streg_11, streg_12, streg_13, streg_14, streg_15},
-                            {streg_16, streg_17, streg_18, streg_19, streg_20}};
+                            {streg_11, streg_12, streg_13, streg_14, streg_15}, // rege
+                            {streg_16, streg_17, stfat_18, stfat_19, stfat_20}, // regf
+                            {stfat_21, stfat_22, stfat_23, stfat_24, stfat_25}}; // fatg
 
     p1_init(rs);
     stdata = rs->pstdata;
