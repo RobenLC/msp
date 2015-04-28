@@ -241,8 +241,9 @@ typedef enum {
     ASPFAT_STATUS_INIT = 0x1,
     ASPFAT_STATUS_BOOT_SEC = 0x2,
     ASPFAT_STATUS_FS_INFO = 0x4,
-    ASPFAT_STATUS_ROOT_DIR = 0x8,
-    ASPFAT_STATUS_FOLDER = 0x10,
+    ASPFAT_STATUS_FAT = 0x8,
+    ASPFAT_STATUS_ROOT_DIR = 0x10,
+    ASPFAT_STATUS_FOLDER = 0x20,
 } aspFatStatus_e;
 
 
@@ -387,7 +388,7 @@ struct info16Bit_s{
     uint8_t     seqnum;
     uint8_t     opcode;
     uint8_t     data;
-    uint32_t   infocnt;
+    uint32_t   info;
 };
 
 struct machineCtrl_s{
@@ -604,6 +605,110 @@ static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *ro
 static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char *fat, int max);
 
 static int atFindIdx(char *str, char ch);
+
+static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
+
+void debugPrintBootSec(struct sdbootsec_s *psec)
+{
+            /* 0  Jump command */
+    printf("[0x%x]: /* 0  Jump command */ \n", psec->secJpcmd);
+            /* 3  system id */
+    printf("[%s]: /* 3  system id */\n", psec->secSysid);
+            /* 11 sector size */ 
+    printf("[%d]: /* 11 sector size */ \n", psec->secSize);
+            /* 13 sector per cluster */
+    printf("[%d]: /* 13 sector per cluster */\n", psec->secPrClst);
+            /* 14 reserved sector count*/
+    printf("[%d]: /* 14 reserved sector count*/\n", psec->secResv);            
+            /* 16 number of FATs */
+    printf("[%d]: /* 16 number of FATs */\n", psec->secNfat);
+            /* 17 skip, number of root dir entries */
+            /* 19 skip, total sectors */
+            /* 21 medium id */
+    printf("[0x%x]: /* 21 medium id */\n", psec->secIDm);
+            /* 22 skip, sector per FAT */
+            /* 24 sector per track */
+    printf("[%d]: /* 24 sector per track */\n", psec->secPrtrk);
+            /* 26 number of sides */
+    printf("[%d]: /* 26 number of sides */\n", psec->secNsid);
+            /* 28 number of hidded sectors */
+    printf("[%d]: /* 28 number of hidded sectors */\n", psec->secNhid);
+            /* 32 total sectors */
+    printf("[%d]: /* 32 total sectors */\n", psec->secTotal);
+            /* 36 sectors per FAT */
+    printf("[%d]: /* 36 sectors per FAT */\n", psec->secPrfat);
+            /* 40 extension flag */
+    printf("[0x%x]: /* 40 extension flag */\n", psec->secExtf);
+            /* 42 FS version */
+    printf("[0x%x]: /* 42 FS version */\n", psec->secVers); 
+            /* 44 root cluster */
+    printf("[%d]: /* 44 root cluster */\n", psec->secRtclst); 
+            /* 48 FS info */
+    printf("[0x%x]: /* 48 FS info */\n", psec->secFSif); 
+            /* 50 backup boot sector */
+    printf("[%d]: /* 50 backup boot sector */\n", psec->secBkbt); 
+            /* 64 physical disk number */
+    printf("[%d]: /* 64 physical disk number */\n", psec->secPhdk);
+            /* 66 extended boot record signature */
+    printf("[0x%x]: /* 66 extended boot record signature */\n", psec->secExtbt);
+            /* 67 volume ID number */
+    printf("[0x%x]: /* 67 volume ID number */\n", psec->secVoid); 
+            /* 71 to 81 volume label */
+    printf("[%s]: /* 71 to 81 volume label */\n", psec->secVola);
+            /* 82 to 89 file system type */
+    printf("[%s]: /* 82 to 89 file system type */\n", psec->secFtyp);
+            /* 510 signature word */
+    printf("[0x%x]: /* 510 signature word */\n", psec->secSign);
+            /* set the boot sector status to 1 */
+    printf("[0x%x]: /* boot sector status */\n", psec->secSt);
+            /* the start sector of fat table */
+    printf("[%d]: /* the start sector of fat table */\n", psec->secWhfat);
+            /* the start sector of root dir */
+    printf("[%d]: /* the start sector of root dir */\n", psec->secWhroot);
+
+}
+
+static uint32_t aspRawCompose(char * raw, int size)
+{
+    int sh[4] = {0, 8, 16, 24};
+    int i = 0;
+    uint32_t val = 0, tmp = 0;
+
+    while(i < size) {
+        tmp = raw[i];
+        val |= tmp << sh[i];
+        i++;
+    }
+    return val;
+}
+
+static int cfgValueOffset(int val, int offset)
+{
+    return (val >> offset) && 0xff;
+}
+
+static int cfgTableSet(struct aspConfig_s *table, int idx, int val)
+{
+    struct aspConfig_s *p=0;
+    int ret=0;
+
+    if (!table) return -1;
+    if (idx >= ASPOP_CODE_MAX) return -1;
+
+    p = &table[idx];
+    if (!p) return -2;
+
+    ret = cmdfunc_opchk_single(val, p->opMask, p->opBitlen, p->opType);
+    if (ret < 0) {
+        ret = (ret * 10) -3;
+        return ret;
+    } else {            
+        p->opValue = val;
+        p->opStatus = ASPOP_STA_WR;
+    }
+
+    return 0;
+}
 
 static int mspSD_createFATLinkList(struct adFATLinkList_s **list)
 {
@@ -1226,12 +1331,14 @@ static uint32_t next_FAT32H(struct psdata_s *data)
                 } else if (!(tmpAns & ASPFAT_STATUS_BOOT_SEC)) {
                     evt = REGF; 
                     next = PSWT;
+                } else if (!(tmpAns & ASPFAT_STATUS_FAT)) {
+                    evt = REGF; 
+                    next = PSWT;
                 } else if (!(tmpAns & ASPFAT_STATUS_ROOT_DIR)) {
                     evt = REGF; 
                     next = PSWT;
                 } else if (!(tmpAns & ASPFAT_STATUS_FOLDER)) {
-                    evt = REGF; 
-                    next = PSWT;
+                    next = PSMAX;
                 } else {
                     next = PSMAX;
                 }
@@ -3506,8 +3613,19 @@ static int stfat_29(struct psdata_s *data)
 
 static int stfat_30(struct psdata_s *data)
 { 
+    int ret=0, offset=0, val=0;
     struct sdFAT_s *pFat=0;
+    uint32_t secStr=0, secLen=0;
     char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
     uint32_t rlt;
     rlt = abs_result(data->result); 
     pFat = data->rs->psFat;
@@ -3517,18 +3635,59 @@ static int stfat_30(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+        
             if (pFat->fatStatus == ASPFAT_STATUS_INIT) {
-                data->ansp0 = pFat->fatStatus;
-                data->result = emb_result(data->result, NEXT);
-            } else if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
-                data->ansp0 = pFat->fatStatus;
-                data->result = emb_result(data->result, NEXT);
-            } else if (!(pFat->fatStatus & ASPFAT_STATUS_ROOT_DIR)) {
-                data->ansp0 = pFat->fatStatus;
-                data->result = emb_result(data->result, NEXT);
-            } else if (!(pFat->fatStatus & ASPFAT_STATUS_FOLDER)) {
-                data->ansp0 = pFat->fatStatus;
-                data->result = emb_result(data->result, NEXT);
+                secStr = 0;
+                secLen = 16;
+                c->info = secStr;
+                p->info = secLen;
+/*
+                cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
+
+                val = cfgValueOffset(secStr, 0);
+                cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+                val = cfgValueOffset(secStr, 8);
+                cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+                val = cfgValueOffset(secStr, 16);
+                cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+                val = cfgValueOffset(secStr, 24);
+                cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+                val = cfgValueOffset(secLen, 0);
+                cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+                val = cfgValueOffset(secLen, 8);
+                cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+                val = cfgValueOffset(secLen, 16);
+                cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+                val = cfgValueOffset(secLen, 24);
+                cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+                cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+*/
+
+                ch = 50;
+                data->result = emb_result(data->result, WAIT);
+            }
+            else if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
+                secStr = pFat->fatBootsec->secWhfat;
+                secLen = pFat->fatBootsec->secPrfat;
+
+                ch = 50;
+                data->result = emb_result(data->result, WAIT);
+            }
+            else if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
+                secStr = pFat->fatBootsec->secWhroot;
+                secLen = pFat->fatBootsec->secPrClst;
+                
+                ch = 50;
+                data->result = emb_result(data->result, WAIT);
+            }
+            else if (!(pFat->fatStatus & ASPFAT_STATUS_ROOT_DIR)) {
+                ch = 50;
+                data->result = emb_result(data->result, WAIT);
+            }
+            else if (!(pFat->fatStatus & ASPFAT_STATUS_FOLDER)) {
+                ch = 59; /* show the folder tree */
+                data->result = emb_result(data->result, WAIT);
             } else {
                 ch = 59; /* show the folder tree */
                 data->result = emb_result(data->result, WAIT);
@@ -3539,7 +3698,8 @@ static int stfat_30(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, EVTMAX);
+                data->ansp0 = pFat->fatStatus;
+                data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -6726,16 +6886,143 @@ static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};  
-static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};
-static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};
-static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};
-static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};
-static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}; 
-static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};
-static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};
-static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};
-static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;};/* show folder tree */
+static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+#define SF0 (8 * 0)
+#define SF1 (8 * 1)
+#define SF2 (8 * 2)
+#define SF3 (8 * 3)
+
+    int val=0, i=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pParBuf = &pfat->fatDirPool->parBuf;
+
+    if (pParBuf->dirBuffUsed) {
+        pr = pParBuf->dirParseBuff;
+        psec = pfat->fatBootsec;
+        /* 0  Jump command */
+        psec->secJpcmd = pr[0] | (pr[1] << SF1) | (pr[2] << SF2) | (pr[3] << SF3);
+        /* 3  system id */
+        for (i = 0; i < 8; i++) {
+            psec->secSysid[i] = pr[3+i];
+        }
+        psec->secSysid[8] = '\0';
+        /* 11 sector size */ 
+        psec->secSize = aspRawCompose(&pr[11], 2);
+        /* 13 sector per cluster */
+        psec->secPrClst = pr[13];
+        /* 14 reserved sector count*/
+        psec->secResv = aspRawCompose(&pr[14], 2);
+        /* 16 number of FATs */
+        psec->secNfat = pr[16];
+        /* 17 skip, number of root dir entries */
+        /* 19 skip, total sectors */
+        /* 21 medium id */
+        psec->secIDm = pr[21];
+        /* 22 skip, sector per FAT */
+        /* 24 sector per track */
+        psec->secPrtrk = aspRawCompose(&pr[24], 2);
+        /* 26 number of sides */
+        psec->secNsid = aspRawCompose(&pr[26], 2);
+        /* 28 number of hidded sectors */
+        psec->secNhid = aspRawCompose(&pr[28], 4);
+        /* 32 total sectors */
+        psec->secTotal = aspRawCompose(&pr[32], 4);
+        /* 36 sectors per FAT */
+        psec->secPrfat = aspRawCompose(&pr[36], 4);
+        /* 40 extension flag */
+        psec->secExtf = aspRawCompose(&pr[40], 2);
+        /* 42 FS version */
+        psec->secVers = aspRawCompose(&pr[42], 2); 
+        /* 44 root cluster */
+        psec->secRtclst = aspRawCompose(&pr[44], 4); 
+        /* 48 FS info */
+        psec->secFSif = aspRawCompose(&pr[48], 2); 
+        /* 50 backup boot sector */
+        psec->secBkbt = aspRawCompose(&pr[50], 2); 
+        /* 64 physical disk number */
+        psec->secPhdk = pr[64];
+        /* 66 extended boot record signature */
+        psec->secExtbt = pr[66];
+        /* 67 volume ID number */
+        psec->secVoid = aspRawCompose(&pr[67], 4); 
+        /* 71 to 81 volume label */
+        for (i = 0; i < 11; i++) {
+            psec->secVola[i] = pr[71+i];
+        }
+        psec->secVola[11] = '\0';
+        /* 82 to 89 file system type */
+        for (i = 0; i < 8; i++) {
+            psec->secFtyp[i] = pr[82+i];
+        }
+        psec->secFtyp[8] = '\0';
+        /* 510 signature word */
+        psec->secSign = aspRawCompose(&pr[510], 2); 
+
+        /* set the boot sector status to 1 */
+        psec->secSt = 1;
+
+        psec->secWhfat = psec->secResv;
+        psec->secWhroot = psec->secWhfat + psec->secPrfat * 2;
+
+        debugPrintBootSec(psec);
+        pParBuf->dirBuffUsed = 0;
+
+        if (psec->secSize == 512) {
+            pfat->fatStatus |= ASPFAT_STATUS_BOOT_SEC;
+        }
+
+    }else {
+        secStr = c->info;
+        secLen = p->info;
+
+        cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
+
+        val = cfgValueOffset(secStr, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+        val = cfgValueOffset(secLen, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+        cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+
+    }
+
+    modersp->r = 1;
+    return 1;
+}
+static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}/* show folder tree */
 
 static int p0(struct mainRes_s *mrs)
 {
