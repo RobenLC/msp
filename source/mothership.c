@@ -1158,9 +1158,9 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
     printf("[R]raw parsing cnt: %d \n", ret);
     while (max > 0) {
         if (dfs->dfstats) {
-            printf("[R]short name: %s \n", dfs->dfSFN);
+            //printf("[R]short name: %s \n", dfs->dfSFN);
             if (dfs->dflen > 0) {
-                printf("[R]long name: %s, len:%d \n", dfs->dfLFN, dfs->dflen);
+                //printf("[R]long name: %s, len:%d \n", dfs->dfLFN, dfs->dflen);
             }
 
             if (strcmp(dfs->dfSFN, ".") == 0 || 
@@ -1170,7 +1170,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
                 
             } else {
             
-                debugPrintDir(dfs);
+                //debugPrintDir(dfs);
                 aspFS_insertFATChild(root, dfs);
 
                 mspFS_allocDir(pfat, &dfs);
@@ -1188,7 +1188,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
         
         ret = aspRawParseDir(dkbuf, dfs, max);
         if (!ret) break;
-        printf("[%d] ret: %d, last:%d \n", cnt, ret, max);
+        //printf("[%d] ret: %d, last:%d \n", cnt, ret, max);
     }
 
     printf("[R]raw parsing end: %d \n", ret);
@@ -7453,8 +7453,8 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
     int ret, bitset;
     char ch;
 
-    sprintf(mrs->log, "%d\n", modersp->v++);
-    print_f(&mrs->plog, "fs47", mrs->log);
+    //sprintf(mrs->log, "%d\n", modersp->v++);
+    //print_f(&mrs->plog, "fs47", mrs->log);
 
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((ret > 0) && (ch == 'S')){
@@ -7482,8 +7482,8 @@ static int fs48(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "get OP_FIH \n");
-    print_f(&mrs->plog, "fs48", mrs->log);
+    //sprintf(mrs->log, "get OP_FIH \n");
+    //print_f(&mrs->plog, "fs48", mrs->log);
 
     p = &mrs->mchine.cur;
 
@@ -7920,7 +7920,11 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     return 1;
 }
-static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+
+    return 0;
+}
 static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
@@ -8027,7 +8031,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(10000);
+        usleep(100);
     }
 
     p0_end(mrs);
