@@ -300,7 +300,7 @@ struct adFATLinkList_s{
 };
 
 struct sdFATable_s{
-    char *ftbFat;
+    char *ftbFat1;
     int ftbLen;
     struct adFATLinkList_s *h;
     struct adFATLinkList_s *c;
@@ -4095,8 +4095,8 @@ static int stfat_28(struct psdata_s *data)
     pct = data->rs->pcfgTable;
     rlt = abs_result(data->result); 
 
-    //sprintf(rs->logs, "op_28 rlt:0x%x \n", rlt); 
-    //print_f(rs->plogs, "FAT", rs->logs);  
+    sprintf(rs->logs, "op_28 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "FAT", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -4149,20 +4149,38 @@ static int stfat_29(struct psdata_s *data)
     char str[128], ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
+    struct sdFAT_s *pFat=0;
+    struct info16Bit_s *p=0, *c=0;
 
+    pFat = data->rs->psFat;
+    
     rs = data->rs;
     rlt = abs_result(data->result); 
+    
+    p = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
 
-    //sprintf(rs->logs, "op_29 rlt:0x%x \n", rlt); 
-    //print_f(rs->plogs, "FAT", rs->logs);  
+    sprintf(rs->logs, "op_29 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "FAT", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 45; 
+
+            if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
+                ch = 45;             
+            } else {
+                if ((c->info == pFat->fatBootsec->secWhfat) && 
+                    (p->info == pFat->fatBootsec->secPrfat)) {
+                    ch = 54; 
+                } else {
+                    ch = 45; 
+                }
+            }
+
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            //sprintf(str, "op_29: result: %x\n", data->result); 
-            //print_f(mlogPool, "FAT", str);  
+            sprintf(rs->logs, "op_29: result: %x, goto %d, str:%d, len:%d\n", data->result, ch, c->info, p->info); 
+            print_f(rs->plogs, "FAT", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -4223,9 +4241,7 @@ static int stfat_30(struct psdata_s *data)
                 ch = 50;
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
-            }
-            /*
-            else if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
+            } else if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
                 secStr = pFat->fatBootsec->secWhfat;
                 secLen = pFat->fatBootsec->secPrfat;
 
@@ -4233,10 +4249,9 @@ static int stfat_30(struct psdata_s *data)
                 p->info = secLen;
                 
                 ch = 53;
+                rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
-            }
-            */
-            else if (!(pFat->fatStatus & ASPFAT_STATUS_ROOT_DIR)) {
+            } else if (!(pFat->fatStatus & ASPFAT_STATUS_ROOT_DIR)) {
                 secStr = pFat->fatBootsec->secWhroot;
                 secLen = pFat->fatBootsec->secPrClst;
 
@@ -4251,13 +4266,12 @@ static int stfat_30(struct psdata_s *data)
                 ch = 51;
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
-            }
-            else if (!(pFat->fatStatus & ASPFAT_STATUS_FOLDER)) {
-                ch = 52;
+            } else if (!(pFat->fatStatus & ASPFAT_STATUS_FOLDER)) {
 
                 sprintf(rs->logs, "FOLDER fat status:0x%.8x \n", secStr, secLen, pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
+                ch = 52;
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else {
@@ -5375,7 +5389,7 @@ static int p0_end(struct mainRes_s *mrs)
     munmap(mrs->dataRx.pp[0], 1024*SPI_TRUNK_SZ);
     munmap(mrs->dataTx.pp[0], 256*SPI_TRUNK_SZ);
     munmap(mrs->cmdRx.pp[0], 256*SPI_TRUNK_SZ);
-    munmap(mrs->cmdTx.pp[0], 512*SPI_TRUNK_SZ);
+    munmap(mrs->cmdTx.pp[0], 256*SPI_TRUNK_SZ);
     free(mrs->dataRx.pp);
     free(mrs->cmdRx.pp);
     free(mrs->dataTx.pp);
@@ -7915,6 +7929,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 2;
     }
     else {
+        pfat->fatStatus |= ASPFAT_STATUS_FOLDER;
         modersp->r = 3;
     }
 
@@ -7922,11 +7937,184 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
+#define FAT_FILE (1)
 
+#if FAT_FILE
+    FILE *f;
+    char fatPath[128] = "/mnt/mmc2/fatTab.bin";
+#endif
+
+    int val=0, i=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct sdFATable_s   *pftb=0;
+
+    sprintf(mrs->log, "read FAT  \n");
+    print_f(&mrs->plog, "fs53", mrs->log);
+
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pftb = pfat->fatTable;
+    pParBuf = &pfat->fatDirPool->parBuf;
+
+    if (pftb->ftbFat1) {
+        sprintf(mrs->log, "get FAT table, addr:0x%.8x, len:%d\n", pftb->ftbFat1, pftb->ftbLen);
+        print_f(&mrs->plog, "fs53", mrs->log);
+        
+#if FAT_FILE
+        f = fopen(fatPath, "w+");
+
+        fwrite(pftb->ftbFat1, 1, pftb->ftbLen, f);
+        fflush(f);
+        fclose(f);
+
+        free(pftb->ftbFat1);
+        pftb->ftbFat1 = 0;
+        pftb->ftbLen = 0;
+
+        sprintf(mrs->log, "FAT table save to [%s] size:%d\n", fatPath, pftb->ftbLen);
+        print_f(&mrs->plog, "fs53", mrs->log);
+#endif
+
+        pfat->fatStatus |= ASPFAT_STATUS_FAT;
+        modersp->r = 1;
+    }else {
+        secStr = c->info;
+        secLen = p->info;
+
+        sprintf(mrs->log, "buff empty, set str:%d, len:%d \n", secStr, secLen);
+        print_f(&mrs->plog, "fs53", mrs->log);
+
+        cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
+
+        val = cfgValueOffset(secStr, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+        val = cfgValueOffset(secLen, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+        cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+
+        modersp->r = 2;
+    }
+
+    return 1;
+}
+static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    int bitset=0;
+    
+    bitset = 0;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
+    print_f(&mrs->plog, "fs54", mrs->log);
+
+    sprintf(mrs->log, "trigger spi0 \n");
+    print_f(&mrs->plog, "fs54", mrs->log);
+
+    mrs_ipc_put(mrs, "n", 1, 1);
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    modersp->m = modersp->m + 1;
     return 0;
 }
-static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
-static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int val=0, pi=0, ret=0, len=0, bitset=0;
+    char *pr=0, ch=0, *addr=0;
+    uint32_t secStr=0, secLen=0;
+    
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct sdFATable_s   *pftb=0;
+
+    sprintf(mrs->log, "read FAT  \n");
+    print_f(&mrs->plog, "fs55", mrs->log);
+
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pfat = &mrs->aspFat;
+    pftb = pfat->fatTable;
+
+    ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    while (ret > 0) {
+        if ((ch == 'p') || (ch == 'd')){
+            if (!pftb->ftbFat1) {
+                secLen = p->info;
+                val = secLen * 512;
+                pftb->ftbFat1 = malloc(val);
+                if (!pftb->ftbFat1) {
+                    sprintf(mrs->log, "malloc for FAT table FAIL!! \n");
+                    print_f(&mrs->plog, "fs55", mrs->log);
+
+                    modersp->r = 2;
+                    return 1;
+                }
+                sprintf(mrs->log, "FAT table size: %d\n", val);
+                print_f(&mrs->plog, "fs55", mrs->log);
+
+                pftb->ftbLen = 0;
+            }
+        
+            modersp->v += 1;
+            len = ring_buf_cons(&mrs->cmdRx, &addr);
+            if (len >= 0) {
+                pi++;
+                msync(addr, len, MS_SYNC);
+                /* send data to wifi socket */
+                if (len != 0) {
+                    pr = pftb->ftbFat1 + pftb->ftbLen;
+                    memcpy(pr, addr, len);
+                    pftb->ftbLen += len;
+                    sprintf(mrs->log, "%d get fat len:%d, total:%d\n", pi, len, pftb->ftbLen);
+                    print_f(&mrs->plog, "fs55", mrs->log);
+                }
+            } else {
+                sprintf(mrs->log, "end, len:%d\n", len);
+                print_f(&mrs->plog, "fs55", mrs->log);
+            }
+
+            if (ch == 'd') {
+                sprintf(mrs->log, "spi0 %d end\n", modersp->v);
+                print_f(&mrs->plog, "fs55", mrs->log);
+                
+                bitset = 0;
+                ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                sprintf(mrs->log, "set RDY pin %d\n",bitset);
+                print_f(&mrs->plog, "fs55", mrs->log);
+                usleep(300000);
+
+                modersp->m = 48;
+                return 2;
+            }
+        }
+
+        ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    }
+    
+    return 0;
+}
 static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
@@ -8628,13 +8816,12 @@ static int p3(struct procRes_s *rs)
                     //print_f(rs->plogs, "P3", rs->logs);
 
                     clock_gettime(CLOCK_REALTIME, &tnow);
-
-            if (opsz == 0) {
+                    if (opsz == 0) {
                         //sprintf(rs->logs, "opsz:%d\n", opsz);
-                     //print_f(rs->plogs, "P3", rs->logs);  
-                           //usleep(1000);
-                continue;
-            }
+                        //print_f(rs->plogs, "P3", rs->logs);  
+                        //usleep(1000);
+                        continue;
+                    }
 
                     msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
@@ -10057,6 +10244,16 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
 
+    pmrs->aspFat.fatTable = (struct sdFATable_s *)mmap(NULL, sizeof(struct sdFATable_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    if (!pmrs->aspFat.fatTable) {
+        sprintf(pmrs->log, "alloc share memory for FAT table FAIL!!!\n", pmrs->aspFat.fatTable); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for FAT table DONE [0x%x]!!!\n", pmrs->aspFat.fatTable); 
+        print_f(&pmrs->plog, "FAT", pmrs->log);
+    }
+
     pmrs->aspFat.fatDirPool = (struct sdDirPool_s *)mmap(NULL, sizeof(struct sdDirPool_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     if (!pmrs->aspFat.fatDirPool) {
         sprintf(pmrs->log, "alloc share memory for FAT dir pool FAIL!!!\n", pmrs->aspFat.fatDirPool); 
@@ -10239,15 +10436,15 @@ int main(int argc, char *argv[])
                             dbg(pmrs);
                         } else {
                             pmrs->sid[6] = fork();
-                if (!pmrs->sid[6]) {
+                            if (!pmrs->sid[6]) {
                                 p6(&rs[7]);
-                } else {
+                            } else {
                                 pmrs->sid[7] = fork();
-                    if (!pmrs->sid[7]) {
+                                if (!pmrs->sid[7]) {
                                     p7(&rs[8]);
-                    } else {                
+                                } else {                
                                     p0(pmrs);
-                    }
+                                }
                             }
                         }
                     }
