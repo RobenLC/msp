@@ -1171,7 +1171,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
                 
             } else {
             
-                debugPrintDir(dfs);
+                //debugPrintDir(dfs);
                 aspFS_insertFATChild(root, dfs);
 
                 mspFS_allocDir(pfat, &dfs);
@@ -1305,6 +1305,10 @@ static int mspSD_getNextFAT(int idx, char *fat, int max)
         printf(" ERROR!! Get next FAT idx: %d\n", idx);
         return -1;
     }
+
+    if (!idx) {
+        return 0;
+    }
     offset = idx * 4;
 
     ch = fat + offset;
@@ -1331,6 +1335,8 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char 
     if (ret) return ret;
 
     *head = ls;
+
+    if (cur < 2) cur = 0;
 
     lstr = cur; 
     llen = 1;
@@ -1364,6 +1370,11 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char 
             ls = ls->n;
         }
         nxt = mspSD_getNextFAT(cur, fat, max);
+    }
+
+    if (!lstr) {
+        llen = 0;
+        printf("  empty %d, %d\n", lstr, llen);
     }
 
     ls->ftStart = lstr;
@@ -7719,11 +7730,18 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
     pParBuf = &pfat->fatDirPool->parBuf;
+    psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
 
-    if (pParBuf->dirBuffUsed) {
+    if (pftb->c) {
+        pftb->c = pftb->c->n;
+    }
+
+    if ((!pftb->c) && (pParBuf->dirBuffUsed)) {
         sprintf(mrs->log, "parsing, buff  size:%d\n", pParBuf->dirBuffUsed);
         print_f(&mrs->plog, "fs51", mrs->log);
+
+        pftb->h = 0;
         
         pr = pParBuf->dirParseBuff;
 
@@ -7767,29 +7785,6 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
                 }
             }
 
-            msync(pftb->ftbFat1, pftb->ftbLen, MS_SYNC);
-            pflsh = 0;
-            
-            sprintf(mrs->log, "SFN:[%s] type[0x%x] \n", br->dfSFN, br->dftype);
-            print_f(&mrs->plog, "fs51", mrs->log);
-            
-            ret = mspSD_parseFAT2LinkList(&pflsh, br->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
-            if (ret) {
-                sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
-                print_f(&mrs->plog, "fs51", mrs->log);
-            }
-
-            while (pflsh) {
-                sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflsh->ftStart, pflsh->ftLen);
-                print_f(&mrs->plog, "fs51", mrs->log);
-
-                pflnt = pflsh;
-                memset(pflnt, 0, sizeof(struct adFATLinkList_s));
-                free(pflnt);
-
-                pflsh = pflsh->n;
-            }
-
             br = br->br;            
         }
 
@@ -7798,23 +7793,30 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         modersp->r = 1;
     }else {
-        
-        secStr = c->info;
-        secLen = p->info;
 
-        ret = mspSD_parseFAT2LinkList(&pflsh, 2, pftb->ftbFat1, pftb->ftbLen/4);
+        if (!pftb->h) {
+            pflsh = 0;
+            ret = mspSD_parseFAT2LinkList(&pflsh, psec->secRtclst, pftb->ftbFat1, pftb->ftbLen/4);
+            if (ret) {
+                sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+                print_f(&mrs->plog, "fs51", mrs->log);
+            }
+            pflnt = pflsh;
+            while (pflnt) {
+                sprintf(mrs->log, "show root FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+                print_f(&mrs->plog, "fs51", mrs->log);
+                pflnt = pflnt->n;
+            }
+            pftb->h = pflsh;
+            pftb->c = pftb->h;
+        }
 
-        if (ret) {
-            sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
-            print_f(&mrs->plog, "fs51", mrs->log);
-        }
-        
-        pflnt = pflsh;
-        while (pflnt) {
-            sprintf(mrs->log, "str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
-            print_f(&mrs->plog, "fs51", mrs->log);
-            pflnt = pflnt->n;
-        }
+        pflnt = pftb->c;
+                 
+        secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
+        secLen = pflnt->ftLen;
+
+        if (secLen < 16) secLen = 16;
 
         sprintf(mrs->log, "buff empty, set str:%d, len:%d \n", secStr, secLen);
         print_f(&mrs->plog, "fs51", mrs->log);
@@ -7879,7 +7881,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
             pftb->c = pftb->c->n;
         }
 
-        if ((!pftb->c) && (pParBuf->dirBuffUsed)) {        
+        if ((!pftb->c) && (pParBuf->dirBuffUsed)) {
             sprintf(mrs->log, "parsing, buff  size:%d\n", pParBuf->dirBuffUsed);
             print_f(&mrs->plog, "fs52", mrs->log);
 
@@ -7923,6 +7925,24 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
                         }
                     }
                 }
+/*
+                pflsh = 0;
+                ret = mspSD_parseFAT2LinkList(&pflsh, br->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
+                if (ret) {
+                    sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+                    print_f(&mrs->plog, "fs52", mrs->log);
+                } else {
+                    sprintf(mrs->log, "show FAT for /root/%s\n", br->dfSFN);
+                    print_f(&mrs->plog, "fs52", mrs->log);
+                }
+                
+                pflnt = pflsh;
+                while (pflnt) {
+                    sprintf(mrs->log, "check list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+                    print_f(&mrs->plog, "fs52", mrs->log);
+                    pflnt = pflnt->n;
+                }
+*/
                 br = br->br;
             }
 
@@ -8080,6 +8100,8 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
 #endif
 
         pfat->fatStatus |= ASPFAT_STATUS_FAT;
+        msync(pftb->ftbFat1, pftb->ftbLen, MS_SYNC);
+
         modersp->r = 1;
     }else {
         secStr = c->info;
