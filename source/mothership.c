@@ -495,6 +495,7 @@ static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs);
 static int time_diff(struct timespec *s, struct timespec *e, int unit);
 //file rw open, save to file for debug
 static int file_save_get(FILE **fp, char *path1);
+static FILE *find_save(char *dst, char *tmple);
 //res put in
 static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx);
 //p0: control, monitor, and debug
@@ -1134,9 +1135,9 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
     }
 
     if (root->dflen) {
-        printf("[R]open directory [%s]\n", root->dfLFN);
+        printf("[R]open directory [%s] - %d\n", root->dfLFN, root->dfclstnum);
     } else {
-        printf("[R]open directory [%s]\n", root->dfSFN);
+        printf("[R]open directory [%s] - %d\n", root->dfSFN, root->dfclstnum);
     }
 
     if ((!dir) || (max <=0)) {
@@ -1170,7 +1171,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
                 
             } else {
             
-                //debugPrintDir(dfs);
+                debugPrintDir(dfs);
                 aspFS_insertFATChild(root, dfs);
 
                 mspFS_allocDir(pfat, &dfs);
@@ -1297,9 +1298,13 @@ static int mspSD_createFATLinkList(struct adFATLinkList_s **list)
 static int mspSD_getNextFAT(int idx, char *fat, int max) 
 {
     char *ch;
-    int offset=0, val=0, i=0;
+    int offset=0, i=0;
+    uint32_t val = 0;
 
-    if (idx > max) return 0;
+    if (idx > max) {
+        printf(" ERROR!! Get next FAT idx: %d\n", idx);
+        return -1;
+    }
     offset = idx * 4;
 
     ch = fat + offset;
@@ -1310,9 +1315,10 @@ static int mspSD_getNextFAT(int idx, char *fat, int max)
         i++;
     }
 
-    if (val == 0x0fffffff) return 0;
+    //printf("   Get next FAT val: %d\n", val);
 
-    return val;
+
+    return val;    
 }
 
 static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char *fat, int max)
@@ -1328,9 +1334,18 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char 
 
     lstr = cur; 
     llen = 1;
-
+    printf("  start %d, %d\n", lstr, llen);
+    
     nxt = mspSD_getNextFAT(cur, fat, max);
     while (nxt) {
+        if (nxt == 0x0fffffff) {
+            printf("  end %d, %d\n", lstr, llen);
+            break;
+        } else if (nxt < 0) {
+            printf("  error %d, %d\n", lstr, llen);
+            break;
+        }
+    
         if (nxt == (cur+1)) {
             cur = nxt;
             nxt = 0;
@@ -1338,20 +1353,21 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char 
         } else {
             ls->ftStart = lstr;
             ls->ftLen = llen;
-            ret = mspSD_createFATLinkList(&nt);
+            ret = mspSD_createFATLinkList(&ls->n);
             if (ret) return ret;
-            ls->n = nt;
+
+            printf("  diff nxt:%d, cur:%d str:%d, len:%d\n", nxt, cur, lstr, llen);
 
             cur = nxt;
             lstr = cur;
             llen = 1; 
-            ls = nt;
+            ls = ls->n;
         }
         nxt = mspSD_getNextFAT(cur, fat, max);
     }
 
     ls->ftStart = lstr;
-    ls->ftLen - llen;
+    ls->ftLen = llen;
     ls->n = 0;
 
     return 0;
@@ -7694,6 +7710,8 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p=0, *c=0;
     struct directnFile_s *curDir=0, *ch=0, *br=0;
     struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct sdFATable_s   *pftb=0;
     
     c = &mrs->mchine.cur;
     p = &mrs->mchine.tmp;
@@ -7701,6 +7719,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
     pParBuf = &pfat->fatDirPool->parBuf;
+    pftb = pfat->fatTable;
 
     if (pParBuf->dirBuffUsed) {
         sprintf(mrs->log, "parsing, buff  size:%d\n", pParBuf->dirBuffUsed);
@@ -7748,6 +7767,29 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
                 }
             }
 
+            msync(pftb->ftbFat1, pftb->ftbLen, MS_SYNC);
+            pflsh = 0;
+            
+            sprintf(mrs->log, "SFN:[%s] type[0x%x] \n", br->dfSFN, br->dftype);
+            print_f(&mrs->plog, "fs51", mrs->log);
+            
+            ret = mspSD_parseFAT2LinkList(&pflsh, br->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
+            if (ret) {
+                sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+                print_f(&mrs->plog, "fs51", mrs->log);
+            }
+
+            while (pflsh) {
+                sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflsh->ftStart, pflsh->ftLen);
+                print_f(&mrs->plog, "fs51", mrs->log);
+
+                pflnt = pflsh;
+                memset(pflnt, 0, sizeof(struct adFATLinkList_s));
+                free(pflnt);
+
+                pflsh = pflsh->n;
+            }
+
             br = br->br;            
         }
 
@@ -7756,8 +7798,23 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         modersp->r = 1;
     }else {
+        
         secStr = c->info;
         secLen = p->info;
+
+        ret = mspSD_parseFAT2LinkList(&pflsh, 2, pftb->ftbFat1, pftb->ftbLen/4);
+
+        if (ret) {
+            sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+            print_f(&mrs->plog, "fs51", mrs->log);
+        }
+        
+        pflnt = pflsh;
+        while (pflnt) {
+            sprintf(mrs->log, "str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+            print_f(&mrs->plog, "fs51", mrs->log);
+            pflnt = pflnt->n;
+        }
 
         sprintf(mrs->log, "buff empty, set str:%d, len:%d \n", secStr, secLen);
         print_f(&mrs->plog, "fs51", mrs->log);
@@ -7802,7 +7859,9 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p=0, *c=0;
     struct directnFile_s *curDir=0, *ch=0, *br=0, *pa=0;
     struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
-
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct sdFATable_s   *pftb=0;
+    
     c = &mrs->mchine.cur;
     p = &mrs->mchine.tmp;
     
@@ -7810,14 +7869,21 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
     pfat = &mrs->aspFat;
     pParBuf = &pfat->fatDirPool->parBuf;
     psec = pfat->fatBootsec;
-
+    pftb = pfat->fatTable;
+    
     if (mrs->folder_dirt) {
         pfhead = mrs->folder_dirt;
         curDir = pfhead->fdObj;
-        
-        if (pParBuf->dirBuffUsed) {
+
+        if (pftb->c) {
+            pftb->c = pftb->c->n;
+        }
+
+        if ((!pftb->c) && (pParBuf->dirBuffUsed)) {        
             sprintf(mrs->log, "parsing, buff  size:%d\n", pParBuf->dirBuffUsed);
             print_f(&mrs->plog, "fs52", mrs->log);
+
+            pftb->h = 0;
 
             pr = pParBuf->dirParseBuff;
             last = pParBuf->dirBuffUsed;
@@ -7872,9 +7938,30 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
         pfhead = mrs->folder_dirt;
         curDir = pfhead->fdObj;
 
-        secStr = (curDir->dfclstnum - 2) * psec->secPrClst + psec->secWhroot;
-        secLen = psec->secPrClst;
+        if (!pftb->h) {
+            pflsh = 0;
+            ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
+            if (ret) {
+                sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+                print_f(&mrs->plog, "fs52", mrs->log);
+            }
+            pflnt = pflsh;
+            while (pflnt) {
+                sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+                print_f(&mrs->plog, "fs52", mrs->log);
+                pflnt = pflnt->n;
+            }
+            pftb->h = pflsh;
+            pftb->c = pftb->h;
+        }
+
+        pflnt = pftb->c;
                  
+        secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
+        secLen = pflnt->ftLen;
+        //secStr = (curDir->dfclstnum - 2) * psec->secPrClst + psec->secWhroot;
+        //secLen = psec->secPrClst;
+
         if (secLen < 16) secLen = 16;
         memset(strPath[0], 0, 256);
 
@@ -7940,11 +8027,12 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
 #define FAT_FILE (1)
 
 #if FAT_FILE
-    FILE *f;
-    char fatPath[128] = "/mnt/mmc2/fatTab.bin";
+    FILE *f=0;
+    char fatPath[128] = "/mnt/mmc2/fatTab_%d.bin";
+    char fatDst[128];
 #endif
 
-    int val=0, i=0;
+    int val=0, i=0, ret = 0;
     char *pr=0;
     uint32_t secStr=0, secLen=0;
     struct aspConfig_s *pct=0;
@@ -7970,18 +8058,25 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs53", mrs->log);
         
 #if FAT_FILE
-        f = fopen(fatPath, "w+");
+        //ret = file_save_get(&f, fatPath);
+        f = find_save(fatDst, fatPath);
+        //f = fopen(fatPath, "w+");
 
-        fwrite(pftb->ftbFat1, 1, pftb->ftbLen, f);
-        fflush(f);
-        fclose(f);
-
+        if (f) {
+            fwrite(pftb->ftbFat1, 1, pftb->ftbLen, f);
+            fflush(f);
+            fclose(f);
+            sprintf(mrs->log, "FAT table save to [%s] size:%d\n", fatDst, pftb->ftbLen);
+            print_f(&mrs->plog, "fs53", mrs->log);
+        } else {
+            sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", fatPath);
+            print_f(&mrs->plog, "fs53", mrs->log);
+        }
+/*
         free(pftb->ftbFat1);
         pftb->ftbFat1 = 0;
         pftb->ftbLen = 0;
-
-        sprintf(mrs->log, "FAT table save to [%s] size:%d\n", fatPath, pftb->ftbLen);
-        print_f(&mrs->plog, "fs53", mrs->log);
+*/
 #endif
 
         pfat->fatStatus |= ASPFAT_STATUS_FAT;
@@ -8063,7 +8158,8 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
             if (!pftb->ftbFat1) {
                 secLen = p->info;
                 val = secLen * 512;
-                pftb->ftbFat1 = malloc(val);
+                //pftb->ftbFat1 = malloc(val);
+                pftb->ftbFat1 = mmap(NULL, val, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
                 if (!pftb->ftbFat1) {
                     sprintf(mrs->log, "malloc for FAT table FAIL!! \n");
                     print_f(&mrs->plog, "fs55", mrs->log);
@@ -8642,7 +8738,7 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
                 
-                addr = pabuf->dirParseBuff;
+                addr = pabuf->dirParseBuff + pabuf->dirBuffUsed;
                 len = 0;
                 pi = 0;  
                 while (1) {
@@ -8668,7 +8764,7 @@ static int p2(struct procRes_s *rs)
 
                 len += opsz;
 
-                pabuf->dirBuffUsed = len;
+                pabuf->dirBuffUsed += len;
                 msync(pabuf->dirParseBuff, len, MS_SYNC);
                 rs_ipc_put(rs, "S", 1);
 
@@ -10610,6 +10706,24 @@ static int time_diff(struct timespec *s, struct timespec *e, int unit)
     }
 
     return diff;
+}
+
+static FILE *find_save(char *dst, char *tmple)
+{
+    int i;
+    FILE *f;
+    for (i =0; i < 1000; i++) {
+        sprintf(dst, tmple, i);
+        f = fopen(dst, "r");
+        if (!f) {
+            printf("open file [%s]\n", dst);
+            break;
+        } else {
+            //printf("open file [%s] succeed \n", dst);
+        }
+    }
+    f = fopen(dst, "w");
+    return f;
 }
 
 static int file_save_get(FILE **fp, char *path1)
