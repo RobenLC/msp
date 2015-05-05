@@ -92,6 +92,7 @@ typedef enum {
     BREAK,
     EVTMAX,
 }event_e;
+
 typedef enum {
     SPY = 0,
     BULLET,
@@ -213,6 +214,12 @@ typedef enum {
     ASPFS_STATUS_EN,
     ASPFS_STATUS_DIS,
 } aspFSstatus_e;
+
+struct supdataBack_s{
+    struct supdataBack_s   *n;
+    int supdataUsed;
+    char supdataBuff[SPI_TRUNK_SZ];
+};
 
 struct directnFile_s{
     uint32_t   dftype;
@@ -412,6 +419,7 @@ struct mainRes_s{
     struct sdFAT_s aspFat;
     struct aspConfig_s configTable[ASPOP_CODE_MAX];
     struct folderQueue_s *folder_dirt;
+    struct supdataBack_s *supdata;
     struct machineCtrl_s mchine;
     // 3 pipe
     struct pipe_s pipedn[9];
@@ -1626,8 +1634,14 @@ static int mspFS_list(struct directnFile_s *root, int depth)
 
     fs = root->ch;
     while (fs) {
-        //sprintf(mlog, "%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
-        //print_f(mlogPool, "FS", mlog);
+        if (fs->dflen) {
+            sprintf(mlog, "%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
+            print_f(mlogPool, "FS", mlog);
+        } else {
+            sprintf(mlog, "%*s%s[%d]\n", depth, "", fs->dfSFN, fs->dftype);
+            print_f(mlogPool, "FS", mlog);
+        }
+
         if (fs->dftype == ASPFS_TYPE_DIR) {
             mspFS_list(fs, depth + 4);
         }
@@ -4250,7 +4264,7 @@ static int stfat_30(struct psdata_s *data)
     rlt = abs_result(data->result); 
     pFat = data->rs->psFat;
 
-    sprintf(rs->logs, "op_30 rlt:0x%x \n", rlt); 
+    sprintf(rs->logs, "op_30 rlt:0x%x fat:0x%.8x\n", rlt, pFat->fatStatus); 
     print_f(rs->plogs, "FAT", rs->logs);  
 
     switch (rlt) {
@@ -4302,7 +4316,7 @@ static int stfat_30(struct psdata_s *data)
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else {
-                ch = 59; /* show the folder tree */
+                ch = 56; /* show the folder tree */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             }
@@ -8037,7 +8051,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
     else {
         pfat->fatStatus |= ASPFAT_STATUS_FOLDER;
-        modersp->r = 3;
+        modersp->r = 1;
     }
 
     return 1;
@@ -8136,6 +8150,7 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     return 1;
 }
+
 static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
     int bitset=0;
@@ -8233,7 +8248,22 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     return 0;
 }
-static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{ 
+    struct sdFAT_s *pfat=0;
+    struct directnFile_s *curDir=0;
+
+    sprintf(mrs->log, "show the tree!!!  \n");
+    print_f(&mrs->plog, "fs56", mrs->log);
+
+    pfat = &mrs->aspFat;
+    curDir = pfat->fatRootdir;
+    
+    mspFS_list(curDir, 4);
+
+    modersp->r = 3;    
+    return 1;
+}
 static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 
