@@ -103,6 +103,7 @@ typedef enum {
     REGF,
     FATG,
     FATH,
+    SUPI,
     SMAX,
 }state_e;
 
@@ -607,6 +608,11 @@ static int stfat_27(struct psdata_s *data);
 static int stfat_28(struct psdata_s *data);
 static int stfat_29(struct psdata_s *data);
 static int stfat_30(struct psdata_s *data);
+static int stsup_31(struct psdata_s *data);
+static int stsup_32(struct psdata_s *data);
+static int stsup_33(struct psdata_s *data);
+static int stsup_34(struct psdata_s *data);
+static int stsup_35(struct psdata_s *data);
 
 static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, char *dir);
 static int mspFS_insertChilds(struct sdFAT_s *psFat, struct directnFile_s *root);
@@ -1903,6 +1909,68 @@ inline uint32_t emb_process(uint32_t result, uint32_t flag)
     return result;
 }
 
+static uint32_t next_SUPI(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSACT;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSRLT;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSTSM;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSMAX;
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static uint32_t next_FAT32H(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
@@ -2584,6 +2652,11 @@ static int ps_next(struct psdata_s *data)
             break;
         case FATH:
             ret = next_FAT32H(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case SUPI:
+            ret = next_SUPI(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -6359,6 +6432,16 @@ static int hd56(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd57(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd58(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd59(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd60(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd61(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd62(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd63(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd64(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd65(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd66(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd67(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd68(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd69(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -8264,18 +8347,25 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
     modersp->r = 3;    
     return 1;
 }
+
 static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 
-static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)  /* show folder tree */
-{
-    modersp->r = 1;    
-    return 1;
-}
+static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 60
+#define PS_NUM 70
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -8290,9 +8380,11 @@ static int p0(struct mainRes_s *mrs)
                                  {30, fs30},{31, fs31},{32, fs32},{33, fs33},{34, fs34},
                                  {35, fs35},{36, fs36},{37, fs37},{38, fs38},{39, fs39},
                                  {40, fs40},{41, fs41},{42, fs42},{43, fs43},{44, fs44},
-                                 {40, fs45},{41, fs46},{42, fs47},{43, fs48},{44, fs49},
-                                 {40, fs50},{41, fs51},{42, fs52},{43, fs53},{44, fs54},
-                                 {40, fs55},{41, fs56},{42, fs57},{43, fs58},{44, fs59}};
+                                 {45, fs45},{46, fs46},{47, fs47},{48, fs48},{49, fs49},
+                                 {50, fs50},{51, fs51},{52, fs52},{53, fs53},{54, fs54},
+                                 {55, fs55},{56, fs56},{57, fs57},{58, fs58},{59, fs59},
+                                 {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64},
+                                 {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69}};
 
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -8303,9 +8395,11 @@ static int p0(struct mainRes_s *mrs)
                                  {30, hd30},{31, hd31},{32, hd32},{33, hd33},{34, hd34},
                                  {35, hd35},{36, hd36},{37, hd37},{38, hd38},{39, hd39},
                                  {40, hd40},{41, hd41},{42, hd42},{43, hd43},{44, hd44},
-                                 {40, hd45},{41, hd46},{42, hd47},{43, hd48},{44, hd49},
-                                 {40, hd50},{41, hd51},{42, hd52},{43, hd53},{44, hd54},
-                                 {40, hd55},{41, hd56},{42, hd57},{43, hd58},{44, hd59}};
+                                 {45, hd45},{46, hd46},{47, hd47},{48, hd48},{49, hd49},
+                                 {50, hd50},{51, hd51},{52, hd52},{53, hd53},{54, hd54},
+                                 {55, hd55},{56, hd56},{57, hd57},{58, hd58},{59, hd59},
+                                 {60, hd60},{61, hd61},{62, hd62},{63, hd63},{64, hd64},
+                                 {65, hd65},{66, hd66},{67, hd67},{68, hd68},{69, hd69}};
 
     p0_init(mrs);
 
