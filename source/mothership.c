@@ -42,6 +42,7 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_RGRD 0xc
 #define OP_RGWT 0xd
 #define OP_RGDAT 0xe
+#define OP_ACTION  0x0f
 
 #define OP_STSEC_00  0x10
 #define OP_STSEC_01  0x11
@@ -70,9 +71,10 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_AFEIC            0x2d
 #define OP_EXTPULSE      0x2e
 
-#define OP_ACTION          0x0f
-
 #define OP_MSG               0x30
+
+#define OP_SUP               0x31
+
 #define OP_ERROR           0xe0
 
 #define SPI_MAX_TXSZ  (1024 * 1024)
@@ -161,6 +163,7 @@ typedef enum {
     ASPOP_REG_ADDRH,
     ASPOP_REG_ADDRL,
     ASPOP_REG_DAT,
+    ASPOP_SUP_SAVE,
     ASPOP_CODE_MAX, /* 32 */
 } aspOpCode_e;
 
@@ -174,6 +177,7 @@ typedef enum {
     ASPOP_MASK_6 = 0x3f,
     ASPOP_MASK_7 = 0x7f,
     ASPOP_MASK_8 = 0xff,
+    ASPOP_MASK_32 = 0xffffffff,
 } aspOpMask_e;
 
 typedef enum {
@@ -334,6 +338,9 @@ struct sdFAT_s{
     struct sdFATable_s   *fatTable;
     struct directnFile_s   *fatRootdir;
     struct sdDirPool_s    *fatDirPool;
+    struct supdataBack_s *fatSupdata;
+    struct supdataBack_s *fatSupcur;
+
 };
 
 struct psdata_s {
@@ -368,6 +375,7 @@ struct ring_p{
     struct ring_s prelead;
     struct ring_s predual;
     struct ring_s folw;
+    struct ring_s psudo;
 };
 
 struct socket_s{
@@ -420,7 +428,6 @@ struct mainRes_s{
     struct sdFAT_s aspFat;
     struct aspConfig_s configTable[ASPOP_CODE_MAX];
     struct folderQueue_s *folder_dirt;
-    struct supdataBack_s *supdata;
     struct machineCtrl_s mchine;
     // 3 pipe
     struct pipe_s pipedn[9];
@@ -751,7 +758,7 @@ static int cfgValueOffset(int val, int offset)
     return (val >> offset) & 0xff;
 }
 
-static int cfgTableSet(struct aspConfig_s *table, int idx, int val)
+static int cfgTableSet(struct aspConfig_s *table, int idx, uint32_t val)
 {
     struct aspConfig_s *p=0;
     int ret=0;
@@ -770,6 +777,25 @@ static int cfgTableSet(struct aspConfig_s *table, int idx, int val)
         p->opValue = val;
         p->opStatus = ASPOP_STA_WR;
     }
+
+    return 0;
+}
+
+static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval)
+{
+    struct aspConfig_s *p=0;
+    int ret=0;
+
+    if (!rval) return -1;
+    if (!table) return -1;
+    if (idx >= ASPOP_CODE_MAX) return -1;
+
+    p = &table[idx];
+    if (!p) return -2;
+
+    if (p->opStatus == ASPOP_STA_NONE) return -3;
+
+    *rval = p->opValue;
 
     return 0;
 }
@@ -2515,7 +2541,12 @@ static int next_laser(struct psdata_s *data)
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "laser", str); 
                 //next = PSWT;
-                next = PSMAX;
+                if (tmpAns == 1) {
+                    next = PSMAX;
+                } else {
+                    next = PSSET;
+                    evt = SUPI; 
+                }
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -2531,7 +2562,7 @@ static int next_laser(struct psdata_s *data)
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "laser", str); 
                 next = PSSET;
-                evt = 0x1; /* jump to next stage */
+                evt = SPY; 
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -2623,7 +2654,8 @@ static int ps_next(struct psdata_s *data)
         case LASER:
             ret = next_laser(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = SPY; /* end the test loop */
+            if (evt) nxtst = evt; /* long jump */
+            //if (evt == 0x1) nxtst = SPY; /* end the test loop */
             break;
         case DOUBLEC:
             ret = next_doubleC(data);
@@ -4420,6 +4452,106 @@ static int stfat_30(struct psdata_s *data)
 
     return ps_next(data);
 }
+
+static int stsup_31(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct sdFAT_s *pFat=0;
+    struct info16Bit_s *p=0, *c=0;
+
+    pFat = data->rs->psFat;
+    
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    p = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
+
+    sprintf(rs->logs, "op_31 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SUP", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 60;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_31: result: %x, goto %d, str:%d, len:%d\n", data->result, ch, c->info, p->info); 
+            print_f(rs->plogs, "SUP", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsup_32(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct sdFAT_s *pFat=0;
+    struct info16Bit_s *p=0, *c=0;
+
+    pFat = data->rs->psFat;
+    
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    p = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
+
+    sprintf(rs->logs, "op_32 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SUP", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 0; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_32: result: %x, goto %d, str:%d, len:%d\n", data->result, ch, c->info, p->info); 
+            print_f(rs->plogs, "SUP", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
 static int stspy_01(struct psdata_s *data)
 { 
     // keep polling, kind of idle mode
@@ -4817,8 +4949,11 @@ static int stlaser_01(struct psdata_s *data)
 }
 static int stlaser_02(struct psdata_s *data) 
 { 
+    int ret=0;
     char str[128], ch = 0;
-    uint32_t rlt;
+    uint32_t rlt, val=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+    
     rlt = abs_result(data->result); 
     //sprintf(str, "op_02: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0);  
     //print_f(mlogPool, "laser", str);  
@@ -4831,6 +4966,19 @@ static int stlaser_02(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+                pct = data->rs->pcfgTable;
+                ret = cfgTableGet(pct, ASPOP_SUP_SAVE, &val);
+                if (ret) {
+                    sprintf(str, "ASPOP_SUP_SAVE not available, ret:%d\n", ret);  
+                    print_f(mlogPool, "laser", str);  
+                } else {
+                    sprintf(str, "ASPOP_SUP_SAVE : 0x%.8x \n", val);  
+                    print_f(mlogPool, "laser", str);  
+                    if (val) {
+                        data->ansp0 = 2;
+                    }
+                }
+
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -5056,6 +5204,8 @@ static int ring_buf_init(struct shmem_s *pp)
     pp->r->predual.seq = 1;
     pp->r->folw.run = 0;
     pp->r->folw.seq = 0;
+    pp->r->psudo.run = 0;
+    pp->r->psudo.seq = 0;
     pp->lastflg = 0;
     pp->lastsz = 0;
     pp->dualsz = 0;
@@ -5253,6 +5403,58 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         } else {
             if ((pp->r->folw.run == pp->r->lead.run) &&
              (pp->r->folw.seq == pp->r->lead.seq)) {
+                return pp->lastsz;
+            }
+        }
+    }
+    msync(pp, sizeof(struct shmem_s), MS_SYNC);
+    return pp->chksz;
+}
+
+static int ring_buf_cons_dual_psudo(struct shmem_s *pp, char **addr, int sel)
+{
+    char str[128];
+    int dualn = 0;
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+
+    folwn = pp->r->psudo.run * pp->slotn + pp->r->psudo.seq;
+    dualn = pp->r->dual.run * pp->slotn + pp->r->dual.seq;
+    leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
+    if (dualn > leadn) {
+        dist = dualn - folwn;
+    } else {
+        dist = leadn - folwn;
+    }
+
+    //sprintf(str, "[cons], d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
+    //print_f(mlogPool, "ring", str);
+
+    if ((pp->lastflg) && (dist < 1)) return (-1);
+    if (dist < 1)  return (-2);
+
+    if ((pp->r->psudo.seq + 1) < pp->slotn) {
+        *addr = pp->pp[pp->r->psudo.seq + 1];
+        pp->r->psudo.seq += 1;
+    } else {
+        *addr = pp->pp[0];
+        pp->r->psudo.seq = 0;
+        pp->r->psudo.run += 1;
+    }
+
+    if ((pp->lastflg) && (dist == 1)) {
+        sprintf(str, "[clast] f:%d %d, d:%d %d l: %d %d \n", pp->r->psudo.run, pp->r->psudo.seq, 
+            pp->r->dual.run, pp->r->dual.seq, pp->r->lead.run, pp->r->lead.seq);
+        print_f(mlogPool, "ring", str);
+        if (dualn > leadn) {
+            if ((pp->r->psudo.run == pp->r->dual.run) &&
+             (pp->r->psudo.seq == pp->r->dual.seq)) {
+                return pp->dualsz;
+            }
+        } else {
+            if ((pp->r->psudo.run == pp->r->lead.run) &&
+             (pp->r->psudo.seq == pp->r->lead.seq)) {
                 return pp->lastsz;
             }
         }
@@ -6725,7 +6927,7 @@ static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp)
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
 
-    sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs12", mrs->log);
     
     mrs_ipc_put(mrs, "c", 1, 1);
@@ -6772,7 +6974,7 @@ static int fs14(struct mainRes_s *mrs, struct modersp_s *modersp)
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
 
-    sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs14", mrs->log);
     
     mrs_ipc_put(mrs, "c", 1, 1);
@@ -6796,6 +6998,10 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (p->opcode == OP_DAT) {
             modersp->m = modersp->m + 1;
+            return 2;
+        } else if (p->opcode == OP_SUP) {
+            modersp->d = modersp->m + 1;
+            modersp->m = 57;
             return 2;
         } else {
             modersp->m = modersp->m - 1;        
@@ -6850,15 +7056,39 @@ static int fs17(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
+    struct sdFAT_s *pfat=0;
+    struct supdataBack_s *s=0, *sc=0;
+
+    int len=0;
+    char *addr = 0, *dst=0;
     int ret, bitset;
     char ch;
 
     //sprintf(mrs->log, "%d\n", modersp->v);
     //print_f(&mrs->plog, "fs18", mrs->log);
-
+    pfat = &mrs->aspFat;
+    sc = pfat->fatSupcur;
+    
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     while (ret > 0) {
         if (ch == 'p') {
+            if (sc) {
+                len = ring_buf_cons_dual_psudo(&mrs->dataRx, &addr, modersp->v);
+                sprintf(mrs->log, "1. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                print_f(&mrs->plog, "fs18", mrs->log);
+
+                if (len >= 0) {
+                    dst = sc->supdataBuff;
+                    memcpy(dst, addr, len);
+                    sc->supdataUsed = len;
+
+                    s = malloc(sizeof(struct supdataBack_s));
+                    memset(s, 0, sizeof(struct supdataBack_s));
+                    sc->n = s;
+                    sc = sc->n;
+                }
+            }
+            
             modersp->v += 1;
             mrs_ipc_put(mrs, "d", 1, 3);
         }
@@ -6874,9 +7104,27 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
         ret = mrs_ipc_get(mrs, &ch, 1, 1);
     }
 
+
+
     ret = mrs_ipc_get(mrs, &ch, 1, 2);
     while (ret > 0) {
         if (ch == 'p') {
+            if (sc) {
+                len = ring_buf_cons_dual_psudo(&mrs->dataRx, &addr, modersp->v);
+                sprintf(mrs->log, "2. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                print_f(&mrs->plog, "fs18", mrs->log);
+
+                if (len >= 0) {
+                    dst = sc->supdataBuff;
+                    memcpy(dst, addr, len);
+                    sc->supdataUsed = len;
+
+                    s = malloc(sizeof(struct supdataBack_s));
+                    memset(s, 0, sizeof(struct supdataBack_s));
+                    sc->n = s;
+                    sc = sc->n;
+                }
+            }
             modersp->v += 1;
             mrs_ipc_put(mrs, "d", 1, 3);
         }
@@ -6893,6 +7141,24 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     if (modersp->r == 0x3) {
+        if (sc) {
+            len = ring_buf_cons_dual_psudo(&mrs->dataRx, &addr, modersp->v);
+            while (len >= 0) {
+                sprintf(mrs->log, "3. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                print_f(&mrs->plog, "fs18", mrs->log);
+
+                dst = sc->supdataBuff;
+                memcpy(dst, addr, len);
+                sc->supdataUsed = len;
+                
+                s = malloc(sizeof(struct supdataBack_s));
+                memset(s, 0, sizeof(struct supdataBack_s));
+                sc->n = s;
+                sc = sc->n;
+                len = ring_buf_cons_dual_psudo(&mrs->dataRx, &addr, modersp->v);
+            }
+            pfat->fatSupcur = 0;
+        }
         mrs_ipc_put(mrs, "D", 1, 3);
         sprintf(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs18", mrs->log);
@@ -6914,6 +7180,7 @@ static int fs19(struct mainRes_s *mrs, struct modersp_s *modersp)
     if ((len > 0) && (ch == 'D')) {
         ring_buf_init(&mrs->dataRx);
         mrs->dataRx.r->folw.seq = 1;
+        mrs->dataRx.r->psudo.seq = 1;
 
         modersp->d = 0;
         modersp->m = 1;
@@ -7370,8 +7637,7 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     if ((len > 0) && (ch == 'N')) {
         ring_buf_init(&mrs->cmdRx);
         ring_buf_init(&mrs->cmdTx);
-        mrs->dataRx.r->folw.seq = 1;
-
+        
         modersp->d = modersp->m + 1;
         modersp->m = 1;
         return 2;
@@ -8348,14 +8614,168 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
-static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
-static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
-static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
 
-static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
-static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
-static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
-static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
+    p->opcode = OP_SUP;
+    p->data = 0;
+
+    sprintf(mrs->log, "set opcode OP_SUP: 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    print_f(&mrs->plog, "fs57", mrs->log);
+    
+    mrs_ipc_put(mrs, "c", 1, 1);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        p = &mrs->mchine.get;
+        sprintf(mrs->log, "get opcode 0x%.2x 0x%.2x \n", p->opcode, p->data);
+        print_f(&mrs->plog, "fs58", mrs->log);
+
+        if (p->opcode == OP_SUP) {
+            modersp->m = modersp->m + 1;
+            return 2;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
+static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int ret=0;
+    uint32_t val=0;
+    struct supdataBack_s *s=0;
+    struct aspConfig_s *pct=0;
+    struct sdFAT_s *pfat=0;
+
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+
+    sprintf(mrs->log, "initial the fatSupdata !!!  \n");
+    print_f(&mrs->plog, "fs59", mrs->log);
+
+    s = malloc(sizeof(struct supdataBack_s));
+    if (!s) {
+        sprintf(mrs->log, "FAIL to initial the fatSupdata !!! \n");
+        print_f(&mrs->plog, "fs59", mrs->log);
+
+        modersp->r = 2;
+        return 1;
+    }
+
+    cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
+    pfat->fatSupdata = s;
+    pfat->fatSupcur = pfat->fatSupdata;
+
+end:
+
+    if (modersp->d) {
+        modersp->m = modersp->d;
+        modersp->d = 0;
+        return 2;
+    } else {
+        modersp->r = 2;
+        return 1;
+    }
+}
+
+static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
+
+    p->opcode = OP_SUP;
+    p->data = 0;
+
+    sprintf(mrs->log, "set opcode OP_SUP: 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    print_f(&mrs->plog, "fs60", mrs->log);
+    
+    mrs_ipc_put(mrs, "c", 1, 1);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        p = &mrs->mchine.get;
+        sprintf(mrs->log, "get opcode 0x%.2x 0x%.2x \n", p->opcode, p->data);
+        print_f(&mrs->plog, "fs61", mrs->log);
+
+        if (p->opcode == OP_QRY) {
+            modersp->m = modersp->m + 1;            
+            return 2;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
+static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
+
+    p->opcode = OP_SUP;
+    p->data = 0;
+
+    sprintf(mrs->log, "set opcode OP_SUP: 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    print_f(&mrs->plog, "fs62", mrs->log);
+    
+    mrs_ipc_put(mrs, "c", 1, 1);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        p = &mrs->mchine.get;
+        sprintf(mrs->log, "get opcode 0x%.2x 0x%.2x \n", p->opcode, p->data);
+        print_f(&mrs->plog, "fs63", mrs->log);
+
+        if (p->opcode == OP_SUP) {
+            modersp->m = modersp->m + 1;            
+            return 2;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
 static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
 static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp) { return 0;}
@@ -10457,6 +10877,14 @@ int main(int argc, char *argv[])
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
+        case ASPOP_SUP_SAVE: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_SUP;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_32;
+            ctb->opBitlen = 32;
+            break;
         default: break;
         }
     }
@@ -10655,6 +11083,7 @@ int main(int argc, char *argv[])
 //  Share memory init
     ring_buf_init(&pmrs->dataRx);
     pmrs->dataRx.r->folw.seq = 1;
+    pmrs->dataRx.r->psudo.seq = 1;
     ring_buf_init(&pmrs->dataTx);
     ring_buf_init(&pmrs->cmdRx);
     ring_buf_init(&pmrs->cmdTx);
