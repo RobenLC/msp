@@ -3554,6 +3554,10 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     secNum = mrs->mchine.sdln.n;
     maxLen = pf->rtMax;
 
+    sprintf(mrs->log, "secStr: %d secLen: %d\n", startSec, secNum);
+    print_f(&mrs->plog, "fs26", mrs->log);
+
+
     startAddr = startSec * SEC_LEN;
     bLength = secNum * SEC_LEN;
 
@@ -3858,7 +3862,7 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     int ret = -1;
     struct info16Bit_s *p, *c;
     //char diskname[128] = "/mnt/mmc2/disk_02.bin";
-    char diskname[128] = "/dev/mmcblk0";
+    char diskname[128] = "/dev/mmcblk0p1";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -4547,7 +4551,7 @@ static int p4(struct procRes_s *rs)
 
             tx_buff = rs->pmch->fdsk.sdt;
             msync(tx_buff, acusz, MS_SYNC);
-            shmem_dump(tx_buff, acusz);
+            //shmem_dump(tx_buff, acusz);
 
             pi = 0;
             while (acusz>0) {
@@ -4707,7 +4711,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 int main(int argc, char *argv[])
 {
 //char diskname[128] = "/mnt/mmc2/disk_02.bin";
-char diskname[128] = "/dev/mmcblk0";
+char diskname[128] = "/dev/mmcblk0p1";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 
