@@ -1020,7 +1020,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         ret = 32 + aspRawParseDir(nxraw, fs, last-32);
 
         plnN = fs->dfLFN;
-     plnN += fs->dflen;
+        plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
         //printf("LONG file name parsing... go to next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
@@ -8717,10 +8717,13 @@ static int p2(struct procRes_s *rs)
                 }
 
                 opsz = 0 - opsz;
+
+                if (opsz == 1) opsz = 0;
+
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
-                //sprintf(rs->logs, "spi0 recv end\n");
-                //print_f(rs->plogs, "P2", rs->logs);
+                sprintf(rs->logs, "spi0 recv end, the last sector size: %d\n", opsz);
+                print_f(rs->plogs, "P2", rs->logs);
             }else if (cmode == 6) {
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
@@ -8964,10 +8967,14 @@ static int p3(struct procRes_s *rs)
                 }
 
                 opsz = 0 - opsz;
+
+                if (opsz == 1) opsz = 0;
+
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
-                //sprintf(rs->logs, "spi1 recv end\n");
-                //print_f(rs->plogs, "P3", rs->logs);
+
+                sprintf(rs->logs, "spi1 recv end, the last sector size: %d\n", opsz);
+                print_f(rs->plogs, "P3", rs->logs);
             }else  if (cmode == 6) {
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P3", rs->logs);
