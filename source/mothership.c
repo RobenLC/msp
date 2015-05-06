@@ -4469,8 +4469,8 @@ static int stsup_31(struct psdata_s *data)
     p = &rs->pmch->tmp;
     c = &rs->pmch->cur;
 
-    sprintf(rs->logs, "op_31 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SUP", rs->logs);  
+    //sprintf(rs->logs, "op_31 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SUP", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -4519,8 +4519,8 @@ static int stsup_32(struct psdata_s *data)
     p = &rs->pmch->tmp;
     c = &rs->pmch->cur;
 
-    sprintf(rs->logs, "op_32 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SUP", rs->logs);  
+    //sprintf(rs->logs, "op_32 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SUP", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -5431,8 +5431,8 @@ static int ring_buf_get(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
 
     dist = leadn - folwn;
-    //sprintf(str, "get d:%d, %d \n", dist, leadn, folwn);
-    //print_f(mlogPool, "ring", str);
+    sprintf(str, "get d:%d, %d \n", dist, leadn, folwn);
+    print_f(mlogPool, "ring", str);
 
     if (dist > (pp->slotn - 2))  return -1;
 
@@ -5621,8 +5621,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
 
-    //sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
-    //print_f(mlogPool, "ring", str);
+    sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
+    print_f(mlogPool, "ring", str);
 
     if (dist < 1)  return -1;
 
@@ -7234,10 +7234,12 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                     memset(s, 0, sizeof(struct supdataBack_s));
                     sc->n = s;
                     sc = sc->n;
+
+                    modersp->v += 1;                    
+                    pfat->fatSupcur = sc;
                 }
             }
             
-            modersp->v += 1;
             mrs_ipc_put(mrs, "d", 1, 3);
         }
 
@@ -7271,9 +7273,11 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                     memset(s, 0, sizeof(struct supdataBack_s));
                     sc->n = s;
                     sc = sc->n;
+
+                    modersp->v += 1;  
+                    pfat->fatSupcur = sc;
                 }
             }
-            modersp->v += 1;
             mrs_ipc_put(mrs, "d", 1, 3);
         }
 
@@ -7303,6 +7307,9 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                 memset(s, 0, sizeof(struct supdataBack_s));
                 sc->n = s;
                 sc = sc->n;
+
+                pfat->fatSupcur = sc;
+                modersp->v += 1;  
                 len = ring_buf_cons_dual_psudo(&mrs->dataRx, &addr, modersp->v);
             }
             pfat->fatSupcur = 0;
@@ -7310,6 +7317,9 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs_ipc_put(mrs, "D", 1, 3);
         sprintf(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs18", mrs->log);
+
+        mrs->mchine.cur.info = modersp->v;
+        
         modersp->m = modersp->m + 1;
         return 2;
     }
@@ -8929,7 +8939,9 @@ static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0 \n");
     print_f(&mrs->plog, "fs64", mrs->log);
 
-
+    ring_buf_init(&mrs->dataTx);
+    mrs->dataTx.r->folw.seq = 1;
+    
     mrs_ipc_put(mrs, "k", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
@@ -8946,44 +8958,56 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0, cnt=0;;
     char *addr = 0;
 
-    sprintf(mrs->log, "start spi0 tx, cnt:%d\n", modersp->v);
+    modersp->v = mrs->mchine.cur.info;
+
+    sprintf(mrs->log, "start \n");
     print_f(&mrs->plog, "fs65", mrs->log);
     pfat = &mrs->aspFat;
     sh = pfat->fatSupdata;
     sc = pfat->fatSupcur;
 
-    if (!sc) {
+    if (sc) {
         sprintf(mrs->log, "the current should not here!!! sc:0x%.8x\n", (uint32_t)sc);
+        print_f(&mrs->plog, "fs65", mrs->log);
+    }
+    
+    if (!sh) {
+        sprintf(mrs->log, "the head should not here!!! sh:0x%.8x\n", (uint32_t)sh);
         print_f(&mrs->plog, "fs65", mrs->log);
     }
 
     while (sh) {
+    
         len = ring_buf_get(&mrs->dataTx, &addr);
         if (len <= 0) {
-            sprintf(mrs->log, "WARNING!!! buff len:%d \n", len);
+            sprintf(mrs->log, "WARNING, len:%d \n", len);
             print_f(&mrs->plog, "fs65", mrs->log);
             break;
         } else if (len != SPI_TRUNK_SZ) {
-            sprintf(mrs->log, "WARNING!!! buff len not equal to %d, len:%d \n", SPI_TRUNK_SZ, len);
+            sprintf(mrs->log, "WARNING, buff len not equal to %d, len:%d \n", SPI_TRUNK_SZ, len);
             print_f(&mrs->plog, "fs65", mrs->log);
         } 
 
-        memcpy(addr, sh->supdataBuff, len);
+        if (sh) {
+            mrs_ipc_put(mrs, "k", 1, 1);
+            sprintf(mrs->log, "cnt:%d\n", modersp->c);
+            print_f(&mrs->plog, "fs65", mrs->log);
+        }
 
+        memcpy(addr, sh->supdataBuff, len);
         ring_buf_prod(&mrs->dataTx);
-        mrs_ipc_put(mrs, "k", 1, 1);
 
         modersp->c += 1;
 
         s = sh;
         sh = sh->n;
-        
+
         pfat->fatSupdata = sh;
         free(s);
     }
 
     if (sh) {
-        sprintf(mrs->log, "tx not complete cnt:%d total:%d len:%d\n", modersp->c, modersp->v, len);
+        sprintf(mrs->log, "not yet, cnt:%d \n", modersp->c);
         print_f(&mrs->plog, "fs65", mrs->log);
 
         return 0;
@@ -9003,8 +9027,8 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "wait spi0 tx end\n");
-    print_f(&mrs->plog, "fs66", mrs->log);
+    //sprintf(mrs->log, "wait spi0 tx end\n");
+    //print_f(&mrs->plog, "fs66", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 1);
     if (len > 0) {
@@ -9368,8 +9392,8 @@ static int p2(struct procRes_s *rs)
 
         ret = rs_ipc_get(rs, &ch, 1);
         if (ret > 0) {
-            //sprintf(rs->logs, "recv ch: %c\n", ch);
-            //print_f(rs->plogs, "P2", rs->logs);
+            sprintf(rs->logs, "recv ch: %c\n", ch);
+            print_f(rs->plogs, "P2", rs->logs);
             switch (ch) {
                 case 'g':
                     cmode = 1;
@@ -9398,7 +9422,7 @@ static int p2(struct procRes_s *rs)
                     cmode = 7;
                     break;
                 case 'k':
-                    cmode = 8;
+                    cmode = 9;
                     break;
                 default:
                     break;
@@ -9599,18 +9623,18 @@ static int p2(struct procRes_s *rs)
                 while (1) {
                     len = ring_buf_cons(rs->pdataTx, &addr);
                     if (len >= 0) {
-                        pi++;
-                    
                         msync(addr, len, MS_SYNC);
                         if (len != 0) {
-                            #if 1 /*debug*/
-                            //opsz = write(rs->psocket_t->connfd, addr, len);
+                            pi++;
+                            #if 1
                             opsz = mtx_data(rs->spifd, addr, NULL, SPI_TRUNK_SZ, tr);
                             #else
                             opsz = len;
                             #endif
                             sprintf(rs->logs, "tx len:%d cnt:%d \n", opsz, pi);
                             print_f(rs->plogs, "P2", rs->logs);         
+
+                            if (opsz < 0) break;
                         }
                     } else {
                         sprintf(rs->logs, "tx len:%d cnt:%d- end\n", opsz, pi);
@@ -9621,6 +9645,8 @@ static int p2(struct procRes_s *rs)
                     if (ch != 'K') {
                         ch = 0;
                         rs_ipc_get(rs, &ch, 1);
+                        sprintf(rs->logs, "ch:%c\n", ch);
+                        print_f(rs->plogs, "P2", rs->logs);         
                     }
                 }
 
@@ -9634,7 +9660,37 @@ static int p2(struct procRes_s *rs)
                 rs_ipc_put(rs, "K", 1);
                 sprintf(rs->logs, "tx cnt:%d - end\n", pi);
                 print_f(rs->plogs, "P2", rs->logs);         
-                break;
+            }
+            else if (cmode == 9) {
+                pi = 0;
+                sprintf(rs->logs, "cmode: %d \n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+                while (1) {
+                    rs_ipc_get(rs, &ch, 1);
+                    if (ch == 'K') {
+                        break;
+                    }
+
+                    len = ring_buf_cons(rs->pdataTx, &addr);
+                    
+                    sprintf(rs->logs, "9 ch:%c len:%d addr:0x%.8x\n", ch, len, addr);
+                    print_f(rs->plogs, "P2", rs->logs);          
+
+                    if (len > 0) {
+                        opsz = mtx_data(rs->spifd, NULL, addr, len, tr);
+                        pi++;
+                    }
+                    
+                    if (opsz < 0) break;
+                }
+
+                while (ch != 'K') {
+                    rs_ipc_get(rs, &ch, 1);
+                }
+
+                rs_ipc_put(rs, "K", 1);
+                sprintf(rs->logs, "tx cnt:%d - end\n", pi);
+                print_f(rs->plogs, "P2", rs->logs);         
             }
             else {
                 sprintf(rs->logs, "cmode: %d \n", cmode);
@@ -10844,10 +10900,10 @@ int main(int argc, char *argv[])
 
     /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 256*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 512*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->dataTx.pp) goto end;
     pmrs->dataTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataTx.totsz = 256*SPI_TRUNK_SZ;
+    pmrs->dataTx.totsz = 512*SPI_TRUNK_SZ;
     pmrs->dataTx.chksz = SPI_TRUNK_SZ;
     pmrs->dataTx.svdist = 12;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataTx.totsz, pmrs->dataTx.pp);
