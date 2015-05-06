@@ -71,6 +71,8 @@
 
 #define SEC_LEN 512
 
+#define OP_SUP               0x31
+
 #define SPI_TRUNK_SZ   (32768)
 #define DIRECT_WT_DISK    (0)
 
@@ -175,7 +177,7 @@ struct info16Bit_s{
     uint8_t     seqnum;
     uint8_t     opcode;
     uint8_t     data;
-    uint32_t   infocnt;
+    uint32_t   info;
 };
 
 struct SdAddrs_s{
@@ -378,6 +380,27 @@ static int stauto_18(struct psdata_s *data);
 static int stauto_19(struct psdata_s *data);
 static int stauto_20(struct psdata_s *data);
 
+FILE *find_save(char *dst, char *tmple)
+{
+    int i;
+    FILE *f=0;
+    for (i =0; i < 1000; i++) {
+        f = 0;
+        sprintf(dst, tmple, i);
+        f = fopen(dst, "r");
+        if (!f) {
+            printf("open file [%s]\n", dst);
+            break;
+        } else {
+            //printf("open file [%s] succeed \n", dst);
+            fclose(f);
+        }
+    }
+    
+    f = fopen(dst, "w");
+    return f;
+}
+
 inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
 {
     p->data = info & 0xff;
@@ -497,8 +520,10 @@ static int next_spy(struct psdata_s *data)
                 //next = PSMAX;
                 switch (tmpAns) {
                 case OP_DAT: /* currently support */              
-                    next = PSSET; /* jump to next stage */
-                    evt = BULLET;
+                    //next = PSSET; /* jump to next stage */
+                    //evt = BULLET;
+                    next = PSRLT; /* for OP_SUP */
+                    evt = AUTO_B;
                     break;
                 case OP_DUL: /* latter */    
                     break;
@@ -555,6 +580,11 @@ static int next_spy(struct psdata_s *data)
                     next = PSWT;
                     evt = AUTO_B;
                     break;
+                case OP_SUP: /* TODO */              
+                    next = PSTSM; /* jump to next stage */
+                    evt = AUTO_B;
+                    break;
+
                 default:
                     break;
                 }
@@ -831,10 +861,14 @@ static int next_auto_B(struct psdata_s *data)
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
                 //print_f(mlogPool, "auto_B", str); 
+                next = PSACT;
+                evt = BULLET;
                 break;
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "auto_B", str); 
+                next = PSSET;
+                evt = AUTO_C;
                 break;
             default:
                 sprintf(str, "default\n"); 
@@ -881,14 +915,17 @@ static int next_auto_C(struct psdata_s *data)
             case PSSET: /* load file, prepare data and spi */
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "auto_C", str); 
+                next = PSACT;
                 break;
             case PSACT: /* check RDY, and start transmitting */
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "auto_C", str); 
+                next = PSWT;
                 break;
             case PSWT: /* end the transmitting and back to polling OP_QRY */
                 //sprintf(str, "PSWT\n"); 
                 //print_f(mlogPool, "auto_C", str); 
+                next = PSRLT;
                 break;
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
@@ -1272,7 +1309,7 @@ static int stspy_05(struct psdata_s *data)
             print_f(mlogPool, "spy", str);  
 
             if (data->ansp0 == p->opcode)
-            switch (data->ansp0) {				
+            switch (data->ansp0) {
             case OP_DAT: /* currently support */
 
             case OP_SDRD:
@@ -1307,6 +1344,7 @@ static int stspy_05(struct psdata_s *data)
             case OP_RGDAT:
             case OP_RGADD_H:
             case OP_RGADD_L:
+            case OP_SUP:
 
                 sprintf(str, "go to next \n"); 
                 print_f(mlogPool, "spy", str);  
@@ -1319,7 +1357,6 @@ static int stspy_05(struct psdata_s *data)
             default:
                 break;
             }
-			
             break;
         case NEXT:
             break;
@@ -1358,7 +1395,7 @@ static int stbullet_01(struct psdata_s *data)
                 sprintf(str, "op_01: %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
                 print_f(mlogPool, "bullet", str);  
             }
-			
+
             break;
         case NEXT:
             break;
@@ -2158,7 +2195,7 @@ static int stauto_08(struct psdata_s *data)
                         ptb[idx].vrValue = g->data;
                     }
                 }
-				
+
                 sprintf(rs->logs, "get op: 0x%.2x/0x%.2x, idx:%d, avl:%d, go to next!!\n", g->opcode, g->data, idx, avl);  
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, NEXT);
@@ -2178,12 +2215,227 @@ static int stauto_08(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stauto_09(struct psdata_s *data) {return 0;}
-static int stauto_10(struct psdata_s *data) {return 0;}
-static int stauto_11(struct psdata_s *data) {return 0;}
-static int stauto_12(struct psdata_s *data) {return 0;}
-static int stauto_13(struct psdata_s *data) {return 0;}
-static int stauto_14(struct psdata_s *data) {return 0;}
+static int stauto_09(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct info16Bit_s *c, *g;    
+
+    rs = data->rs;
+    g = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_09", str);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 40; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+static int stauto_10(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct info16Bit_s *c, *g;    
+
+    rs = data->rs;
+    g = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_10", str);  
+
+    switch (rlt) {
+        case STINIT:
+            if (c->info) {
+                ch = 42; 
+                g->info = 0;
+            } else {
+                ch = 17; 
+            }
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+static int stauto_11(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    
+    rlt = abs_result(data->result);	
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_11", str);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 44; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_12(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct info16Bit_s *c, *g;    
+
+    rs = data->rs;
+    g = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_12", str);  
+
+    switch (rlt) {
+        case STINIT:
+            if (g->info) {
+                if (c->info == g->info) {
+                    c->info = 0;
+                    g->info = 0;
+                }
+            }
+            ch = 20; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_13(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_13", str);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 17; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_14(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_14", str);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 7; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, BREAK);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
 static int stauto_15(struct psdata_s *data) {return 0;}
 static int stauto_16(struct psdata_s *data) {return 0;}
 static int stauto_17(struct psdata_s *data) {return 0;}
@@ -3003,8 +3255,8 @@ static int fs07(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p;
 
     p = &mrs->mchine.cur;
-    //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-    //print_f(&mrs->plog, "fs07", mrs->log);
+    sprintf(mrs->log, "set 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    print_f(&mrs->plog, "fs07", mrs->log);
 
     mrs->mchine.seqcnt += 1;
     if (mrs->mchine.seqcnt >= 0x8) {
@@ -3118,6 +3370,7 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_RGDAT:
         case OP_RGADD_H:
         case OP_RGADD_L:
+        case OP_SUP:
             modersp->r = p->opcode;
             return 1;
             break;                                       
@@ -3147,7 +3400,7 @@ static int fs11(struct mainRes_s *mrs, struct modersp_s *modersp)
     p->opcode = OP_DAT;
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
-	
+
     mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
     return 0; 
@@ -3387,7 +3640,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    sleep(1);
+    usleep(150000);
 
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -3411,6 +3664,8 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Get RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
+    usleep(100000);
+    
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
@@ -4025,11 +4280,189 @@ static int fs39(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
-	
+static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    struct info16Bit_s *p;
+
+    p = &mrs->mchine.cur;
+
+    sprintf(mrs->log, "set 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    print_f(&mrs->plog, "fs40", mrs->log);
+
+    mrs->mchine.seqcnt += 1;
+    if (mrs->mchine.seqcnt >= 0x8) {
+        mrs->mchine.seqcnt = 0;
+    }
+
+    p->opcode = OP_SUP;
+    p->data = 0;
+
+    mrs_ipc_put(mrs, "c", 1, 3);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs41(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        p = &mrs->mchine.get;
+
+        sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
+        print_f(&mrs->plog, "fs41", mrs->log);
+
+        if (p->opcode == OP_DAT) {
+            modersp->m = modersp->m + 1;
+            return 2;
+        } else {
+            modersp->m = modersp->m - 1;        
+            return 2;
+        }
+    }
+    return 0; 
+}
+
+static int fs42(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
+
+    sprintf(mrs->log, "set 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    print_f(&mrs->plog, "fs2", mrs->log);
+
+    mrs->mchine.seqcnt += 1;
+    if (mrs->mchine.seqcnt >= 0x8) {
+        mrs->mchine.seqcnt = 0;
+    }
+
+    p->opcode = OP_SUP;
+    p->data = 0;
+    
+    mrs_ipc_put(mrs, "c", 1, 3);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs43(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        p = &mrs->mchine.get;
+
+        sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
+        print_f(&mrs->plog, "fs43", mrs->log);
+
+        if (p->opcode == OP_SUP) {
+            if (modersp->d) {
+                modersp->m = modersp->d;
+                modersp->d = 0;
+                return 2;
+            } else {
+                modersp->r = 1;
+                return 1;
+            }
+        } else {
+            modersp->m = modersp->m - 1;        
+            modersp->r = 2;
+            return 2;
+        }
+    }
+    return 0; 
+}
+
+static int fs44(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    sprintf(mrs->log, "find back file\n");
+    print_f(&mrs->plog, "fs44", mrs->log);
+
+    mrs_ipc_put(mrs, "k", 1, 1);
+    mrs_ipc_put(mrs, "b", 1, 3);
+    
+    modersp->m = modersp->m + 1;
+    return 2;
+}
+
+static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    int len=0;
+    char ch=0;
+
+    sprintf(mrs->log, "wait for CTL pin to be high \n");
+    print_f(&mrs->plog, "fs45", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'B')){
+        modersp->v = 0;
+        mrs_ipc_put(mrs, "k", 1, 3);
+        modersp->m = modersp->m + 1;
+        return 2;
+    }
+
+    return 0; 
+}
+
+static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    int len=0;
+    char ch=0;
+
+    //sprintf(mrs->log, "cnt: %d\n", modersp->v);
+    //print_f(&mrs->plog, "fs46", mrs->log);
+
+    while (len) {
+        len = mrs_ipc_get(mrs, &ch, 1, 3);
+        if (len > 0) {
+            modersp->v += 1;
+
+            sprintf(mrs->log, "cnt: %d ch:%c\n", modersp->v, ch);
+            print_f(&mrs->plog, "fs46", mrs->log);
+
+            if (ch == 'k') {
+                mrs_ipc_put(mrs, "k", 1, 1);
+            } else if (ch == 'K') {
+                mrs_ipc_put(mrs, "K", 1, 1);
+                modersp->m = modersp->m + 1;
+                return 2;
+            }
+        }
+    }
+    return 0; 
+
+}
+static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    int len=0;
+    char ch=0;
+
+    sprintf(mrs->log, "save file done \n");
+    print_f(&mrs->plog, "fs47", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'K')){
+        modersp->r = 1;
+        return 1;
+    }
+
+    return 0; 
+}
+static int fs48(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 41
+#define PS_NUM 50
     int len, tmp, ret;
     char str[128], ch;
 
@@ -4042,8 +4475,8 @@ static int p0(struct mainRes_s *mrs)
                                  {25, fs25},{26, fs26},{27, fs27},{28, fs28},{29, fs29},
                                  {30, fs30},{31, fs31},{32, fs32},{33, fs33},{34, fs34},
                                  {35, fs35},{36, fs36},{37, fs37},{38, fs38},{39, fs39},
-                                 {40, fs40}
-                                };
+                                 {40, fs40},{41, fs41},{42, fs42},{43, fs43},{44, fs44},
+                                 {45, fs45},{46, fs46},{47, fs47},{48, fs48},{49, fs49}};
 
     p0_init(mrs);
 
@@ -4198,9 +4631,12 @@ static int p2(struct procRes_s *rs)
 {
     /* spi0 */
     char ch;
-    int totsz=0, fsize=0, pi=0, len;
+    int totsz=0, fsize=0, pi=0, len, opsz=0;
     char *addr;
+    char filedst[128];
     char filename[128] = "/mnt/mmc2/handmade.jpg";
+    char fileback[128] = "/mnt/mmc2/rx/back_%d.jpg";
+    
     //char filename[128] = "/mnt/mmc2/hilldesert.jpg";
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/pattern2.txt";
@@ -4246,6 +4682,7 @@ static int p2(struct procRes_s *rs)
                     }
                 }
 
+                totsz = 0;
                 pi = 0;
                 len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                 fsize = fread(addr, 1, len, fp);
@@ -4254,7 +4691,6 @@ static int p2(struct procRes_s *rs)
                     ring_buf_prod_dual(rs->pdataRx, pi);
                     pi++;
                     rs_ipc_put(rs, "r", 1);
-					
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     fsize = fread(addr, 1, len, fp);
                     totsz += fsize;
@@ -4264,6 +4700,8 @@ static int p2(struct procRes_s *rs)
                 ring_buf_set_last_dual(rs->pdataRx, fsize, pi);
                 rs_ipc_put(rs, "r", 1);
                 rs_ipc_put(rs, "e", 1);
+
+                rs->pmch->cur.info = totsz;
 
                 sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
                 print_f(rs->plogs, "P2", rs->logs);
@@ -4335,7 +4773,6 @@ static int p2(struct procRes_s *rs)
                     ring_buf_prod_dual(rs->pdataRx, pi);
                     pi++;
                     rs_ipc_put(rs, "r", 1);
-					
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     fsize = fread(addr, 1, len, fp);
                     totsz += fsize;
@@ -4350,6 +4787,67 @@ static int p2(struct procRes_s *rs)
                 print_f(rs->plogs, "P2", rs->logs);
 
                 fclose(fp);
+            }
+
+            if (ch == 'k') { 
+                fp = find_save(filedst, fileback);
+                if (fp) {
+                    sprintf(rs->logs, "file save back to [%s]\n",filedst);
+                    print_f(rs->plogs, "P2", rs->logs); 
+                } else {
+                    sprintf(rs->logs, "FAIL to find file [%s]\n",fileback);
+                    print_f(rs->plogs, "P2", rs->logs); 
+                }
+                
+                totsz = rs->pmch->cur.info;
+                sprintf(rs->logs, "total size: %d\n", totsz);
+                print_f(rs->plogs, "P2", rs->logs); 
+
+                totsz = 0;
+                pi = 0;
+                while (1) {
+                    len = ring_buf_cons(rs->pdataTx, &addr);
+                    if (len >= 0) {
+                        pi++;
+                    
+                        msync(addr, len, MS_SYNC);
+                        if (len != 0) {
+                            #if 1 /*debug*/
+                            //opsz = write(rs->psocket_t->connfd, addr, len);
+                            //opsz = mtx_data(rs->spifd, addr, NULL, SPI_TRUNK_SZ, tr);
+                            opsz = fwrite(addr, 1, len, fp);
+                            totsz += opsz;
+                            #else
+                            opsz = len;
+                            #endif
+                            sprintf(rs->logs, "file save len:%d cnt:%d total:%d \n", opsz, pi, totsz);
+                            print_f(rs->plogs, "P2", rs->logs);         
+                        }
+                    } else {
+                        sprintf(rs->logs, "file save len:%d cnt:%d total:%d - end\n", opsz, pi, totsz);
+                        print_f(rs->plogs, "P2", rs->logs);         
+                        break;
+                    }
+
+                    if (ch != 'K') {
+                        ch = 0;
+                        rs_ipc_get(rs, &ch, 1);
+                    }
+                }
+
+                while (ch != 'K') {
+                    sprintf(rs->logs, "%c clr\n", ch);
+                    print_f(rs->plogs, "P2", rs->logs);         
+                    ch = 0;
+                    rs_ipc_get(rs, &ch, 1);
+                }
+
+                fclose(fp);
+
+                rs_ipc_put(rs, "K", 1);
+                sprintf(rs->logs, "file save cnt:%d total:%d- end\n", pi, totsz);
+                print_f(rs->plogs, "P2", rs->logs);      
+                
             }
         }
     }
@@ -4385,9 +4883,9 @@ static int p3(struct procRes_s *rs)
 
 static int p4(struct procRes_s *rs)
 {
-    char ch, *tx, *rx, *tx_buff;
+    char ch, *tx, *rx, *tx_buff, *addr=0;
     uint16_t *tx16, *rx16, in16;
-    int len = 0, cmode = 0, ret, pi=0, acusz=0, starts=0;
+    int len = 0, cmode = 0, ret, pi=0, acusz=0, starts=0, opsz=0, totsz;
     int slen=0;
     uint32_t bitset;
 
@@ -4438,6 +4936,9 @@ static int p4(struct procRes_s *rs)
                     break;
                 case 's':
                     cmode = 5;
+                    break;
+                case 'k':
+                    cmode = 6;
                     break;
                 default:
                     break;
@@ -4571,6 +5072,53 @@ static int p4(struct procRes_s *rs)
             }
 
             rs_ipc_put(rs, "S", 1);
+        }
+        else if (cmode == 6) {
+        
+            totsz = rs->pmch->cur.info;
+            sprintf(rs->logs, "get total size:%d\n", totsz);
+            print_f(rs->plogs, "P4", rs->logs);
+
+            acusz = 0;
+
+            while (totsz) {
+                len = ring_buf_get(rs->pdataTx, &addr);
+
+                if (len <= 0) {
+                    sprintf(rs->logs, "WARNING!!! get buff len:%d\n", len);
+                    print_f(rs->plogs, "P4", rs->logs);
+
+                    continue;
+                }
+
+                if (totsz < len) {
+                    len = totsz;
+                }
+                
+                opsz = mtx_data(rs->spifd, addr, NULL, 1, len, 1024*1024);  
+
+                if (opsz <= 0) {
+                    sprintf(rs->logs, "ERROR!!! tx %d/%d acusz:%d\n", opsz, len, acusz);
+                    print_f(rs->plogs, "P4", rs->logs);
+                    break;
+                }
+
+                acusz += opsz;
+                totsz -= opsz;
+                
+                sprintf(rs->logs, "tx %d/%d acusz:%d\n", opsz, len, acusz);
+                print_f(rs->plogs, "P4", rs->logs);
+
+                rs_ipc_put(rs, "k", 1);          
+            }
+
+            totsz = rs->pmch->cur.info;
+            rs->pmch->get.info = acusz;
+            
+            rs_ipc_put(rs, "K", 1);                      
+            sprintf(rs->logs, "tx acusz:%d totsz:%d - end\n", acusz, totsz);
+            print_f(rs->plogs, "P4", rs->logs);
+
         }
 
     }
@@ -4767,7 +5315,7 @@ static char spi0[] = "/dev/spidev32765.0";
     pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 4096*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->dataRx.pp) goto end;
     pmrs->dataRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataRx.totsz = 2048*SPI_TRUNK_SZ;
+    pmrs->dataRx.totsz = 4096*SPI_TRUNK_SZ;
     pmrs->dataRx.chksz = SPI_TRUNK_SZ;
     pmrs->dataRx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataRx.totsz, pmrs->dataRx.pp);
@@ -4783,12 +5331,12 @@ static char spi0[] = "/dev/spidev32765.0";
 
     /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 1*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 256*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->dataTx.pp) goto end;
     pmrs->dataTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataTx.totsz = 1*SPI_TRUNK_SZ;
+    pmrs->dataTx.totsz = 256*SPI_TRUNK_SZ;
     pmrs->dataTx.chksz = SPI_TRUNK_SZ;
-    pmrs->dataTx.svdist = 1;
+    pmrs->dataTx.svdist = 8;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataTx.totsz, pmrs->dataTx.pp);
     //print_f(&pmrs->plog, "minit_result", pmrs->log);
     //for (ix = 0; ix < pmrs->dataTx.slotn; ix++) {
