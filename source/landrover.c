@@ -4706,16 +4706,14 @@ static int p2(struct procRes_s *rs)
             //print_f(rs->plogs, "P2", rs->logs);
 
             if (ch == 'r') {
-                if (fp == NULL) {
-                    fp = fopen(filename, "r");
-                    if (!fp) {
-                        sprintf(rs->logs, "file read [%s] failed \n", filename);
-                        print_f(rs->plogs, "P2", rs->logs);
-                        continue;
-                    } else {
-                        sprintf(rs->logs, "file read [%s] ok \n", filename);
-                        print_f(rs->plogs, "P2", rs->logs);
-                    }
+                fp = fopen(filename, "r");
+                if (!fp) {
+                    sprintf(rs->logs, "file read [%s] failed \n", filename);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    continue;
+                } else {
+                    sprintf(rs->logs, "file read [%s] ok \n", filename);
+                    print_f(rs->plogs, "P2", rs->logs);
                 }
 
                 totsz = 0;
@@ -4725,7 +4723,8 @@ static int p2(struct procRes_s *rs)
                 if (ret) {
                     sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
                     print_f(rs->plogs, "P2", rs->logs);
-                }
+                } 
+                
                 max = ftell(fp);
                 sprintf(rs->logs, " file [%s] size: %d \n", filename, max);
                 print_f(rs->plogs, "P2", rs->logs);
