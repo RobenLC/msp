@@ -1192,8 +1192,8 @@ static int stspy_02(struct psdata_s *data)
 
     rlt = abs_result(data->result);	
 
-    sprintf(str, "op_02 - rlt:0x%.8x \n", rlt); 
-    print_f(mlogPool, "spy", str); 
+    //sprintf(str, "op_02 - rlt:0x%.8x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
@@ -1257,8 +1257,8 @@ static int stspy_04(struct psdata_s *data)
     uint32_t rlt;
     rlt = abs_result(data->result);	
 
-    sprintf(str, "op_04 - rlt:0x%.8x \n", rlt); 
-    print_f(mlogPool, "spy", str); 
+    //sprintf(str, "op_04 - rlt:0x%.8x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
@@ -1376,8 +1376,8 @@ static int stbullet_01(struct psdata_s *data)
     rs = data->rs;
     p = &rs->pmch->get;
     rlt = abs_result(data->result);	
-    sprintf(str, "op_01: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0); 
-    print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_01: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0); 
+    //print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1412,8 +1412,8 @@ static int stbullet_02(struct psdata_s *data)
     uint32_t rlt;
     char str[128], ch = 0; 
     rlt = abs_result(data->result);	
-    sprintf(str, "op_02: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0); 
-    print_f(mlogPool, "bullet", str);  
+    //sprintf(str, "op_02: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0); 
+    //print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1550,8 +1550,8 @@ static int stlaser_02(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    sprintf(str, "op_02: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0);  
-    print_f(mlogPool, "laser", str);  
+    //sprintf(str, "op_02: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0);  
+    //print_f(mlogPool, "laser", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1635,8 +1635,8 @@ static int stlaser_05(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     rlt = abs_result(data->result);	
-    sprintf(str, "op_05: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0);  
-    print_f(mlogPool, "laser", str);  
+    //sprintf(str, "op_05: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0);  
+    //print_f(mlogPool, "laser", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1667,8 +1667,8 @@ static int stauto_01(struct psdata_s *data)
     struct info16Bit_s *p, *g;
 
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_01", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_01", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1715,8 +1715,8 @@ static int stauto_02(struct psdata_s *data)
     FILE *fp=0;
 
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_02", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_02", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1769,8 +1769,8 @@ static int stauto_03(struct psdata_s *data)
     struct SdAddrs_s *s, *m;
 	
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_03", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_03", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1851,10 +1851,10 @@ static int stauto_04(struct psdata_s *data)
     uint32_t rlt;
     struct info16Bit_s *p, *g;
     struct SdAddrs_s *m;
-	
-    rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_04", str);  
+
+    rlt = abs_result(data->result);
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_04", str);  
 
     switch (rlt) {
         case STINIT:
@@ -1935,10 +1935,10 @@ static int stauto_05(struct psdata_s *data)
     struct info16Bit_s *p, *g;
     struct SdAddrs_s *s, *m;
     FILE *fp;
-	
-    rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_05", str);  
+
+    rlt = abs_result(data->result);
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_05", str);  
 
     switch (rlt) {
         case STINIT:
@@ -2039,8 +2039,8 @@ static int stauto_07(struct psdata_s *data)
     c = &rs->pmch->cur;
     preg = &rs->pmch->regp;
 
-    sprintf(rs->logs, "op07 result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(rs->plogs, "reg", rs->logs);  
+    //sprintf(rs->logs, "op07 result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(rs->plogs, "reg", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -2118,8 +2118,8 @@ static int stauto_08(struct psdata_s *data)
     preg = &rs->pmch->regp;
     ptb = rs->pregtb;
 
-    sprintf(rs->logs, "op08 result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(rs->plogs, "reg", rs->logs);  
+    //sprintf(rs->logs, "op08 result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(rs->plogs, "reg", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -2227,8 +2227,8 @@ static int stauto_09(struct psdata_s *data)
     c = &rs->pmch->cur;
 
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_09", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_09", str);  
 
     switch (rlt) {
         case STINIT:
@@ -2265,8 +2265,8 @@ static int stauto_10(struct psdata_s *data)
     c = &rs->pmch->cur;
 
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_10", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_10", str);  
 
     switch (rlt) {
         case STINIT:
@@ -2340,8 +2340,8 @@ static int stauto_12(struct psdata_s *data)
     c = &rs->pmch->cur;
 
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_12", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_12", str);  
 
     switch (rlt) {
         case STINIT:
@@ -2378,8 +2378,8 @@ static int stauto_13(struct psdata_s *data)
     uint32_t rlt;
     
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_13", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_13", str);  
 
     switch (rlt) {
         case STINIT:
@@ -2410,8 +2410,8 @@ static int stauto_14(struct psdata_s *data)
     uint32_t rlt;
     
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_14", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_14", str);  
 
     switch (rlt) {
         case STINIT:
@@ -2582,8 +2582,8 @@ static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel)
     }
 
     dist = dualn - folwn;
-    sprintf(str, "get d:%d, %d /%d \n", dist, dualn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "get d:%d, %d /%d \n", dist, dualn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if (dist > (pp->slotn - 3))  return -1;
 
@@ -2633,8 +2633,8 @@ static int ring_buf_get(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
 
     dist = leadn - folwn;
-    sprintf(str, "get d:%d, %d \n", dist, leadn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "get d:%d, %d \n", dist, leadn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if (dist > (pp->slotn - 2))  return -1;
 
@@ -2710,6 +2710,7 @@ static int ring_buf_prod(struct shmem_s *pp)
 
 static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
 {
+    int ret=-1;
     char str[128];
     int dualn = 0;
     int leadn = 0;
@@ -2747,17 +2748,27 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         if (dualn > leadn) {
             if ((pp->r->folw.run == pp->r->dual.run) &&
              (pp->r->folw.seq == pp->r->dual.seq)) {
-                return pp->dualsz;
+                //return pp->dualsz;
+                ret = pp->dualsz;
             }
         } else {
             if ((pp->r->folw.run == pp->r->lead.run) &&
              (pp->r->folw.seq == pp->r->lead.seq)) {
-                return pp->lastsz;
+                //return pp->lastsz;
+                ret = pp->lastsz;
             }
         }
     }
+
+    if (ret < 0) {
+        ret = pp->chksz; 
+    }
+
+    sprintf(str, "cons dual len:%d \n", ret);
+    print_f(mlogPool, "ring", str);
+
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
-    return pp->chksz;
+    return ret;
 }
 
 static int ring_buf_cons(struct shmem_s *pp, char **addr)
@@ -2771,8 +2782,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
 
-    sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if (dist < 1)  return -1;
 
@@ -4421,6 +4432,8 @@ static int fs44(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "can't get bits per word"); 
         print_f(&mrs->plog, "fs13", mrs->log);
     }
+
+    ring_buf_init(&mrs->dataTx);
     
     //mrs_ipc_put(mrs, "k", 1, 1);
     mrs_ipc_put(mrs, "b", 1, 3);
@@ -4670,7 +4683,8 @@ static int p2(struct procRes_s *rs)
     int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0;
     char *addr;
     char filedst[128];
-    char filename[128] = "/mnt/mmc2/handmade.jpg";
+    //char filename[128] = "/mnt/mmc2/handmade.jpg";
+    char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/rx/back_%d.jpg";
     
     //char filename[128] = "/mnt/mmc2/hilldesert.jpg";
@@ -4734,10 +4748,9 @@ static int p2(struct procRes_s *rs)
                     sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
                     print_f(rs->plogs, "P2", rs->logs);
                 }
-                
-                while (max) {
-                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
 
+                while (1) {
+                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);            
                     if (max < len) {
                         len = max;
                     }
@@ -4746,46 +4759,17 @@ static int p2(struct procRes_s *rs)
                     
                     totsz += fsize;
                     max -= len;
-                    
                     sprintf(rs->logs, " %d [%d] - %d/%d\n", pi, fsize, totsz, max);
                     print_f(rs->plogs, "P2", rs->logs);
 
-                    if (fsize != len) break;
                     ring_buf_prod_dual(rs->pdataRx, pi);
-                    pi++;
-                    rs_ipc_put(rs, "r", 1);
-                }
-                
-#if 0
-                len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
-                fsize = fread(addr, 1, len, fp);
-                totsz += fsize;
-                while (fsize == len) {
-                    ring_buf_prod_dual(rs->pdataRx, pi);
-                    pi++;
-                    rs_ipc_put(rs, "r", 1);
-                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
-                    fsize = fread(addr, 1, len, fp);
-                    totsz += fsize;
-                }
-                totsz += fsize;
-
-                while (1) {
-                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
-                    fsize = fread(addr, 1, len, fp);
-                    totsz += fsize;
                     
-                    sprintf(rs->logs, " %d [%d] - %d\n", pi, fsize, totsz);
-                    print_f(rs->plogs, "P2", rs->logs);
-
-                    if (fsize != len) break;
-                    ring_buf_prod_dual(rs->pdataRx, pi);
+                    if (!max) break;
                     pi++;
                     rs_ipc_put(rs, "r", 1);
+                    
                 }
-#endif
 
-                ring_buf_prod_dual(rs->pdataRx, pi);
                 ring_buf_set_last_dual(rs->pdataRx, fsize, pi);
                 rs_ipc_put(rs, "r", 1);
                 rs_ipc_put(rs, "e", 1);
@@ -4896,7 +4880,7 @@ static int p2(struct procRes_s *rs)
                 pi = 0;
                 while (1) {
                     len = ring_buf_cons(rs->pdataTx, &addr);
-                    if (len >= 0) {
+                    if (len > 0) {
                         pi++;
                     
                         msync(addr, len, MS_SYNC);
@@ -4909,13 +4893,13 @@ static int p2(struct procRes_s *rs)
                             #else
                             opsz = len;
                             #endif
-                            sprintf(rs->logs, "file save len:%d cnt:%d total:%d \n", opsz, pi, totsz);
+                            sprintf(rs->logs, " %d/%d c:%d t:%d \n", opsz, len, pi, totsz);
                             print_f(rs->plogs, "P2", rs->logs);        
 
                             memset(addr, 0x95, len);
                         }
                     } else {
-                        sprintf(rs->logs, "file save len:%d cnt:%d total:%d - end\n", opsz, pi, totsz);
+                        sprintf(rs->logs, "save len:%d cnt:%d total:%d -loop end\n", opsz, pi, totsz);
                         print_f(rs->plogs, "P2", rs->logs);         
                         break;
                     }
@@ -5096,8 +5080,8 @@ static int p4(struct procRes_s *rs)
                 //opsz = write(rs->psocket_t->connfd, addr, size);
                 opsz = mtx_data(rs->spifd, NULL, addr, 1, size, 1024*1024);
                 //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-                //sprintf(rs->logs, "[%d] socket tx %d %d\n", rs->spifd, opsz, size);
-                //print_f(rs->plogs, "P4", rs->logs);
+                sprintf(rs->logs, "%d/%d\n", opsz, size);
+                print_f(rs->plogs, "P4", rs->logs);
 
                 pi+=2;
 
@@ -5174,44 +5158,45 @@ static int p4(struct procRes_s *rs)
 
             acusz = 0;
 
-            while (totsz) {
+            while (1) {
                 len = ring_buf_get(rs->pdataTx, &addr);
 
-                if (len <= 0) {
-                    sprintf(rs->logs, "WARNING!!! get buff len:%d\n", len);
+                if (len > 0) {
+                    memset(addr, 0xaa, len);
+                
+                    if (totsz < len) {
+                        len = totsz;
+                    }
+                
+                    opsz = mtx_data(rs->spifd, addr, addr, 1, len, 1024*1024);  
+
+
+                    if (opsz <= 0) {
+                        sprintf(rs->logs, "ERROR!!! tx %d/%d acusz:%d\n", opsz, len, acusz);
+                        print_f(rs->plogs, "P4", rs->logs);
+                        break;
+                    }
+                    
+                    acusz += opsz;
+                    totsz -= opsz;
+                    
+                    sprintf(rs->logs, "tx %d/%d acusz:%d t:%d\n", opsz, len, acusz, totsz);
                     print_f(rs->plogs, "P4", rs->logs);
 
-                    continue;
+                    if (!totsz) break;
+
+                    ring_buf_prod(rs->pdataTx);
+                
+                    rs_ipc_put(rs, "k", 1);          
                 }
-
-                memset(addr, 0xaa, len);
-                
-                if (totsz < len) {
-                    len = totsz;
-                }
-                
-                opsz = mtx_data(rs->spifd, addr, addr, 1, len, 1024*1024);  
-
-                if (opsz <= 0) {
-                    sprintf(rs->logs, "ERROR!!! tx %d/%d acusz:%d\n", opsz, len, acusz);
-                    print_f(rs->plogs, "P4", rs->logs);
-                    break;
-                }
-
-                ring_buf_prod(rs->pdataTx);
-                
-                acusz += opsz;
-                totsz -= opsz;
-                
-                sprintf(rs->logs, "tx %d/%d acusz:%d\n", opsz, len, acusz);
-                print_f(rs->plogs, "P4", rs->logs);
-
-                rs_ipc_put(rs, "k", 1);          
             }
 
             totsz = rs->pmch->cur.info;
             rs->pmch->get.info = acusz;
-            
+
+            ring_buf_prod(rs->pdataTx);
+            ring_buf_set_last(rs->pdataTx, opsz);
+            rs_ipc_put(rs, "k", 1);          
             rs_ipc_put(rs, "K", 1);                      
             sprintf(rs->logs, "tx acusz:%d totsz:%d - end\n", acusz, totsz);
             print_f(rs->plogs, "P4", rs->logs);
@@ -5320,8 +5305,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                 //opsz = write(rs->psocket_t->connfd, addr, size);
                 opsz = mtx_data(rs->spifd, NULL, addr, 1, size, 1024*1024);
                 //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-                //sprintf(rs->logs, "[%d] socket tx %d %d\n", rs->spifd, opsz, size);
-                //print_f(rs->plogs, "P5", rs->logs);
+                sprintf(rs->logs, "%d/%d\n", opsz, size);
+                print_f(rs->plogs, "P5", rs->logs);
 
                 pi+=2;
                 rs_ipc_put(rs, "r", 1);
