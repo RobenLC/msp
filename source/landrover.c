@@ -4384,10 +4384,45 @@ static int fs43(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs44(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    sprintf(mrs->log, "find back file\n");
-    print_f(&mrs->plog, "fs44", mrs->log);
+    int bitset=0, ret;
 
-    mrs_ipc_put(mrs, "k", 1, 1);
+    sprintf(mrs->log, "set up\n");
+    print_f(&mrs->plog, "fs44", mrs->log);
+    
+
+    bitset = 0;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
+    print_f(&mrs->plog, "fs13", mrs->log);
+    bitset = 0;
+    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
+    print_f(&mrs->plog, "fs13", mrs->log);
+
+    int bits = 8;
+    ret = ioctl(mrs->sfm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
+    if (ret == -1) {
+        sprintf(mrs->log, "can't set bits per word"); 
+        print_f(&mrs->plog, "fs13", mrs->log);
+    }
+    ret = ioctl(mrs->sfm[0], SPI_IOC_RD_BITS_PER_WORD, &bits); 
+    if (ret == -1) {
+        sprintf(mrs->log, "can't get bits per word"); 
+        print_f(&mrs->plog, "fs13", mrs->log);
+    }
+
+    ret = ioctl(mrs->sfm[1], SPI_IOC_WR_BITS_PER_WORD, &bits);
+    if (ret == -1) {
+        sprintf(mrs->log, "can't set bits per word"); 
+        print_f(&mrs->plog, "fs13", mrs->log);
+    }
+    ret = ioctl(mrs->sfm[1], SPI_IOC_RD_BITS_PER_WORD, &bits); 
+    if (ret == -1) {
+        sprintf(mrs->log, "can't get bits per word"); 
+        print_f(&mrs->plog, "fs13", mrs->log);
+    }
+    
+    //mrs_ipc_put(mrs, "k", 1, 1);
     mrs_ipc_put(mrs, "b", 1, 3);
     
     modersp->m = modersp->m + 1;
@@ -4399,8 +4434,8 @@ static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0;
     char ch=0;
 
-    sprintf(mrs->log, "wait for CTL pin to be high \n");
-    print_f(&mrs->plog, "fs45", mrs->log);
+    //sprintf(mrs->log, "wait for CTL pin to be high \n");
+    //print_f(&mrs->plog, "fs45", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'B')){
@@ -4421,8 +4456,8 @@ static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp)
     //sprintf(mrs->log, "cnt: %d\n", modersp->v);
     //print_f(&mrs->plog, "fs46", mrs->log);
 
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
     while (len) {
-        len = mrs_ipc_get(mrs, &ch, 1, 3);
         if (len > 0) {
             modersp->v += 1;
 
@@ -4437,6 +4472,7 @@ static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp)
                 return 2;
             }
         }
+        len = mrs_ipc_get(mrs, &ch, 1, 3);
     }
     return 0; 
 
@@ -4446,8 +4482,8 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0;
     char ch=0;
 
-    sprintf(mrs->log, "save file done \n");
-    print_f(&mrs->plog, "fs47", mrs->log);
+    //sprintf(mrs->log, "save file done \n");
+    //print_f(&mrs->plog, "fs47", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((len > 0) && (ch == 'K')){
@@ -4631,7 +4667,7 @@ static int p2(struct procRes_s *rs)
 {
     /* spi0 */
     char ch;
-    int totsz=0, fsize=0, pi=0, len, opsz=0;
+    int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0;
     char *addr;
     char filedst[128];
     char filename[128] = "/mnt/mmc2/handmade.jpg";
@@ -4684,6 +4720,44 @@ static int p2(struct procRes_s *rs)
 
                 totsz = 0;
                 pi = 0;
+                
+                ret = fseek(fp, 0, SEEK_END);
+                if (ret) {
+                    sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+                max = ftell(fp);
+                sprintf(rs->logs, " file [%s] size: %d \n", filename, max);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                ret = fseek(fp, 0, SEEK_SET);
+                if (ret) {
+                    sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+                
+                while (max) {
+                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
+
+                    if (max < len) {
+                        len = max;
+                    }
+                    
+                    fsize = fread(addr, 1, len, fp);
+                    
+                    totsz += fsize;
+                    max -= len;
+                    
+                    sprintf(rs->logs, " %d [%d] - %d/%d\n", pi, fsize, totsz, max);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    if (fsize != len) break;
+                    ring_buf_prod_dual(rs->pdataRx, pi);
+                    pi++;
+                    rs_ipc_put(rs, "r", 1);
+                }
+                
+#if 0
                 len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                 fsize = fread(addr, 1, len, fp);
                 totsz += fsize;
@@ -4695,6 +4769,22 @@ static int p2(struct procRes_s *rs)
                     fsize = fread(addr, 1, len, fp);
                     totsz += fsize;
                 }
+                totsz += fsize;
+
+                while (1) {
+                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
+                    fsize = fread(addr, 1, len, fp);
+                    totsz += fsize;
+                    
+                    sprintf(rs->logs, " %d [%d] - %d\n", pi, fsize, totsz);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    if (fsize != len) break;
+                    ring_buf_prod_dual(rs->pdataRx, pi);
+                    pi++;
+                    rs_ipc_put(rs, "r", 1);
+                }
+#endif
 
                 ring_buf_prod_dual(rs->pdataRx, pi);
                 ring_buf_set_last_dual(rs->pdataRx, fsize, pi);
@@ -4821,7 +4911,9 @@ static int p2(struct procRes_s *rs)
                             opsz = len;
                             #endif
                             sprintf(rs->logs, "file save len:%d cnt:%d total:%d \n", opsz, pi, totsz);
-                            print_f(rs->plogs, "P2", rs->logs);         
+                            print_f(rs->plogs, "P2", rs->logs);        
+
+                            memset(addr, 0x95, len);
                         }
                     } else {
                         sprintf(rs->logs, "file save len:%d cnt:%d total:%d - end\n", opsz, pi, totsz);
@@ -4842,6 +4934,8 @@ static int p2(struct procRes_s *rs)
                     rs_ipc_get(rs, &ch, 1);
                 }
 
+                sync();
+                fflush(fp);
                 fclose(fp);
 
                 rs_ipc_put(rs, "K", 1);
@@ -5091,11 +5185,13 @@ static int p4(struct procRes_s *rs)
                     continue;
                 }
 
+                memset(addr, 0xaa, len);
+                
                 if (totsz < len) {
                     len = totsz;
                 }
                 
-                opsz = mtx_data(rs->spifd, addr, NULL, 1, len, 1024*1024);  
+                opsz = mtx_data(rs->spifd, addr, addr, 1, len, 1024*1024);  
 
                 if (opsz <= 0) {
                     sprintf(rs->logs, "ERROR!!! tx %d/%d acusz:%d\n", opsz, len, acusz);
@@ -5103,6 +5199,8 @@ static int p4(struct procRes_s *rs)
                     break;
                 }
 
+                ring_buf_prod(rs->pdataTx);
+                
                 acusz += opsz;
                 totsz -= opsz;
                 
