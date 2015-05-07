@@ -409,7 +409,7 @@ struct info16Bit_s{
     uint8_t     seqnum;
     uint8_t     opcode;
     uint8_t     data;
-    uint32_t   info;
+    uint32_t   opinfo;
 };
 
 struct machineCtrl_s{
@@ -4315,8 +4315,8 @@ static int stfat_29(struct psdata_s *data)
             if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
                 ch = 45;             
             } else {
-                if ((c->info == pFat->fatBootsec->secWhfat) && 
-                    (p->info == pFat->fatBootsec->secPrfat)) {
+                if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
+                    (p->opinfo == pFat->fatBootsec->secPrfat)) {
                     ch = 54; 
                 } else {
                     ch = 45; 
@@ -4325,7 +4325,7 @@ static int stfat_29(struct psdata_s *data)
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_29: result: %x, goto %d, str:%d, len:%d\n", data->result, ch, c->info, p->info); 
+            sprintf(rs->logs, "op_29: result: %x, goto %d, str:%d, len:%d\n", data->result, ch, c->opinfo, p->opinfo); 
             print_f(rs->plogs, "FAT", rs->logs);  
             break;
         case WAIT:
@@ -4378,8 +4378,8 @@ static int stfat_30(struct psdata_s *data)
             if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
                 secStr = 0;
                 secLen = 16;
-                c->info = secStr;
-                p->info = secLen;
+                c->opinfo = secStr;
+                p->opinfo = secLen;
 
                 sprintf(rs->logs, "BOOT_SEC secStr:%d, secLen:%d, fat status:0x%.8x \n", secStr, secLen, pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
@@ -4391,8 +4391,8 @@ static int stfat_30(struct psdata_s *data)
                 secStr = pFat->fatBootsec->secWhfat;
                 secLen = pFat->fatBootsec->secPrfat;
 
-                c->info = secStr;
-                p->info = secLen;
+                c->opinfo = secStr;
+                p->opinfo = secLen;
                 
                 ch = 53;
                 rs_ipc_put(data->rs, &ch, 1);
@@ -4403,8 +4403,8 @@ static int stfat_30(struct psdata_s *data)
 
                 if (secLen < 16) secLen = 16;
 
-                c->info = secStr;
-                p->info = secLen;
+                c->opinfo = secStr;
+                p->opinfo = secLen;
 
                 sprintf(rs->logs, "ROOT_DIR secStr:%d, secLen:%d, fat status:0x%.8x \n", secStr, secLen, pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
@@ -4474,6 +4474,7 @@ static int stsup_31(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+
             ch = 60;
 
             rs_ipc_put(data->rs, &ch, 1);
@@ -7318,7 +7319,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs18", mrs->log);
 
-        mrs->mchine.cur.info = modersp->v;
+        mrs->mchine.cur.opinfo = modersp->v;
         
         modersp->m = modersp->m + 1;
         return 2;
@@ -8197,8 +8198,8 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         modersp->r = 1;
     }else {
-        secStr = c->info;
-        secLen = p->info;
+        secStr = c->opinfo;
+        secLen = p->opinfo;
 
         sprintf(mrs->log, "buff empty, set str:%d, len:%d \n", secStr, secLen);
         print_f(&mrs->plog, "fs50", mrs->log);
@@ -8625,8 +8626,8 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         modersp->r = 1;
     }else {
-        secStr = c->info;
-        secLen = p->info;
+        secStr = c->opinfo;
+        secLen = p->opinfo;
 
         sprintf(mrs->log, "buff empty, set str:%d, len:%d \n", secStr, secLen);
         print_f(&mrs->plog, "fs53", mrs->log);
@@ -8700,7 +8701,7 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
     while (ret > 0) {
         if ((ch == 'p') || (ch == 'd')){
             if (!pftb->ftbFat1) {
-                secLen = p->info;
+                secLen = p->opinfo;
                 val = secLen * 512;
                 //pftb->ftbFat1 = malloc(val);
                 pftb->ftbFat1 = mmap(NULL, val, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
@@ -8936,11 +8937,29 @@ static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
+#define SUP_FILE (1)
+
+#if SUP_FILE
+    FILE *f=0;
+    char supPath[128] = "/mnt/mmc2/rx/supBack_%d.bin";
+    char supDst[128];
+#endif
+
     sprintf(mrs->log, "trigger spi0 \n");
     print_f(&mrs->plog, "fs64", mrs->log);
 
     ring_buf_init(&mrs->dataTx);
-    mrs->dataTx.r->folw.seq = 1;
+    //mrs->dataTx.r->folw.seq = 1;
+    
+#if SUP_FILE
+    f = find_save(supDst, supPath);
+    if (f) {
+        sprintf(mrs->log, "save sup back to [%s] \n", supDst);
+        print_f(&mrs->plog, "fs64", mrs->log);
+
+        mrs->mchine.cur.opinfo = (uint32_t)f;
+    }
+#endif
     
     mrs_ipc_put(mrs, "k", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
@@ -8952,13 +8971,14 @@ static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
+    FILE *f=0;
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *s=0, *sc=0, *sh=0;
 
     int len=0, cnt=0;;
     char *addr = 0;
 
-    modersp->v = mrs->mchine.cur.info;
+    modersp->v = mrs->mchine.cur.opinfo;
 
     sprintf(mrs->log, "start \n");
     print_f(&mrs->plog, "fs65", mrs->log);
@@ -8966,6 +8986,8 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
     sh = pfat->fatSupdata;
     sc = pfat->fatSupcur;
 
+    f = (FILE *)mrs->mchine.cur.opinfo;
+        
     if (sc) {
         sprintf(mrs->log, "the current should not here!!! sc:0x%.8x\n", (uint32_t)sc);
         print_f(&mrs->plog, "fs65", mrs->log);
@@ -8994,6 +9016,15 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs65", mrs->log);
         }
 
+        if (f) {
+            fwrite(sh->supdataBuff, 1, len, f);
+            sprintf(mrs->log, "sup back save to [0x%.8x] len:%d\n", (uint32_t)f, len);
+            print_f(&mrs->plog, "fs65", mrs->log);
+        } else {
+            sprintf(mrs->log, "sup back save NONE \n");
+            print_f(&mrs->plog, "fs65", mrs->log);
+        }
+
         memcpy(addr, sh->supdataBuff, len);
         ring_buf_prod(&mrs->dataTx);
 
@@ -9016,6 +9047,12 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "tx done:%d total:%d\n", modersp->c, modersp->v);
         print_f(&mrs->plog, "fs65", mrs->log);
         modersp->m = modersp->m + 1;
+
+        if (f) {
+            fclose(f);
+            mrs->mchine.cur.opinfo = 0;
+        }
+        
         return 2;
     }
     
@@ -9677,7 +9714,7 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);          
 
                     if (len > 0) {
-                        opsz = mtx_data(rs->spifd, NULL, addr, len, tr);
+                        opsz = mtx_data(rs->spifd, addr, addr, len, tr);
                         pi++;
                     }
                     
