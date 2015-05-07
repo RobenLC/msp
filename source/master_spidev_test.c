@@ -79,6 +79,8 @@
 #define OP_SCANLEN_L    0x2b
 #define OP_INTERIMG      0x2c
 
+#define OP_SUP               0x31
+
 #define SEC_LEN 512
 static void pabort(const char *s) 
 { 
@@ -643,11 +645,12 @@ static char spi1[] = "/dev/spidev32766.0";
         max = ftell(dkf);
         if ((startAddr + bLength) > max) {
             printf("dump size overflow start:%d len:%d max:%d\n", startAddr, bLength, max);
-            goto end;
+            //goto end;
         } else {
             printf("disk dump, start:%d len:%d max:%d\n", startAddr, bLength, max);
         }
 
+        max = startAddr + bLength;
         total = mmap(NULL, max, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
         if (!total) {
             goto end;
@@ -662,7 +665,7 @@ static char spi1[] = "/dev/spidev32766.0";
         ret = fread(total, 1, max, dkf);
         printf("read file size: %d/%d \n", ret, max);
 
-        outbuf = total + bLength;
+        outbuf = total + startAddr;
         mem_dump(outbuf, bLength);
         acusz = bLength;
 
@@ -710,15 +713,21 @@ static char spi1[] = "/dev/spidev32766.0";
         fclose(dkf);
 
         printf(" reopen file [%s] \n", diskpath);
-        dkf = fopen(diskpath, "w+");
+        dkf = fopen(diskpath, "rw");
        
         if (!dkf) {
             printf(" [%s] file reopen failed \n", diskpath);
             goto end;
-        }	
+        }
         printf(" [%s] file reopen succeed \n", diskpath);
+
+        ret = fseek(dkf, 0, SEEK_SET);
+        if (ret) {
+            printf("seek file failed: ret:%d \n", ret);
+            goto end;
+        }
         
-        outbuf = total + bLength;
+        outbuf = total + startAddr;
         mem_dump(outbuf, bLength);
         ret = fwrite(total, 1, max, dkf);
         printf("write file size: %d/%d \n", ret, max);
@@ -773,7 +782,7 @@ static char spi1[] = "/dev/spidev32766.0";
         max = ftell(dkf);
         if ((startAddr + bLength) > max) {
             printf("dump size overflow start:%d len:%d max:%d\n", startAddr, bLength, max);
-            goto end;
+            //goto end;
         } else {
             printf("disk dump, start:%d len:%d max:%d\n", startAddr, bLength, max);
         }
@@ -869,7 +878,7 @@ static char spi1[] = "/dev/spidev32766.0";
 							,	OP_NONE,		OP_FFORMAT,		OP_COLRMOD,	OP_COMPRAT,	OP_SCANMOD     	/* 0x1F -0x23  */
 							,	OP_DATPATH,		OP_RESOLTN,		OP_SCANGAV,	OP_MAXWIDH,	OP_WIDTHAD_H	/* 0x24 -0x28  */
 							,	OP_WIDTHAD_L,	OP_SCANLEN_H,	OP_SCANLEN_L,	OP_NONE,		OP_NONE		/* 0x29 -0x2D  */
-							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE		/* 0x2E -0x32  */
+							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_SUP,		OP_NONE		/* 0x2E -0x32  */
 							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE		/* 0x33 -0x37  */
 							,	OP_NONE,		OP_NONE,		OP_NONE,		OP_NONE,		OP_MAX};		/* 0x38 -0x3C  */
         uint8_t st[4] = {OP_STSEC_0, OP_STSEC_1, OP_STSEC_2, OP_STSEC_3};
@@ -1356,7 +1365,7 @@ static char spi1[] = "/dev/spidev32766.0";
     if (sel == 13) { /* continuous command mode [13 20 path pktsize spi] ex: 13 20 ./01.mp3 512 1*/
 #define TSIZE (128*1024*1024)
 #define PKTSZ  SPI_TRUNK_SZ
-#define SAVE_FILE 0
+#define SAVE_FILE 1
 #define USE_SHARE_MEM 1
 #define MEASURE_TIME_DIFF 1
 
@@ -1559,7 +1568,7 @@ static char spi1[] = "/dev/spidev32766.0";
             printf("time cose: %llu s, bandwidth: %llu MBits/s \n",  tmp/1000000000, ((fsize*8)/((lpast - lnow)/1000000)) /1000 );            
         }
 
-        sleep(2);
+        usleep(500000);
 
         bitset = 1;
         ioctl(fm[arg3], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
