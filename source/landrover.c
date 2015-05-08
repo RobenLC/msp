@@ -21,7 +21,7 @@
 #define SPI_MODE_1		(0|SPI_CPHA)
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
-#define SPI_SPEED    40000000
+#define SPI_SPEED    20000000
 
 #define OP_MAX 0xff
 #define OP_NONE 0x00
@@ -4680,17 +4680,18 @@ static int p2(struct procRes_s *rs)
 {
     /* spi0 */
     char ch;
-    int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0;
+    int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0, tlen=0;
     char *addr;
     char filedst[128];
     //char filename[128] = "/mnt/mmc2/handmade.jpg";
     char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/rx/back_%d.jpg";
-    
+    char fileout[128] = "/mnt/mmc2/tx/sample_%d.bin";
+
     //char filename[128] = "/mnt/mmc2/hilldesert.jpg";
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/pattern2.txt";
-    FILE *fp = NULL;
+    FILE *fp = NULL, *fout=NULL;
 	
     if (infpath[0] != '\0') {
         strcpy(filename, infpath);
@@ -4705,6 +4706,7 @@ static int p2(struct procRes_s *rs)
         sprintf(rs->logs, "file read [%s] ok \n", filename);
         print_f(rs->plogs, "P2", rs->logs);
     }
+    fclose(fp);
 
     sprintf(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
@@ -4720,6 +4722,15 @@ static int p2(struct procRes_s *rs)
             //print_f(rs->plogs, "P2", rs->logs);
 
             if (ch == 'r') {
+                fout = find_save(filedst, fileout);
+                if (fout) {
+                    sprintf(rs->logs, "file save back to [%s]\n",filedst);
+                    print_f(rs->plogs, "P2", rs->logs); 
+                } else {
+                    sprintf(rs->logs, "FAIL to find file [%s]\n",fileback);
+                    print_f(rs->plogs, "P2", rs->logs); 
+                }
+
                 fp = fopen(filename, "r");
                 if (!fp) {
                     sprintf(rs->logs, "file read [%s] failed \n", filename);
@@ -4750,19 +4761,32 @@ static int p2(struct procRes_s *rs)
                 }
 
                 while (1) {
-                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);            
+                    len = ring_buf_get_dual(rs->pdataRx, &addr, pi);      
+                    memset(addr, 0xff, len);
                     if (max < len) {
                         len = max;
                     }
+
+                    ret = fseek(fp, totsz, SEEK_SET);
+                    if (ret) {
+                        sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
+                        print_f(rs->plogs, "P2", rs->logs);
+                    }
+
+                    msync(addr, len, MS_SYNC);
                     
                     fsize = fread(addr, 1, len, fp);
+
                     
                     totsz += fsize;
                     max -= len;
-                    sprintf(rs->logs, " %d [%d] - %d/%d\n", pi, fsize, totsz, max);
-                    print_f(rs->plogs, "P2", rs->logs);
 
                     ring_buf_prod_dual(rs->pdataRx, pi);
+
+                    tlen = fwrite(addr, 1, len, fout);
+
+                    sprintf(rs->logs, " %d %d/%d/%d - %d/%d\n", pi, fsize, tlen, len, totsz, max);
+                    print_f(rs->plogs, "P2", rs->logs);
                     
                     if (!max) break;
                     pi++;
@@ -4770,6 +4794,15 @@ static int p2(struct procRes_s *rs)
                     
                 }
 
+                /* align to SPI_TRUNK_SZ */
+                if (fsize < SPI_TRUNK_SZ) {
+                    fsize = SPI_TRUNK_SZ;
+                }
+                tlen = totsz % SPI_TRUNK_SZ;
+                if (tlen) {
+                    totsz = totsz + SPI_TRUNK_SZ - tlen;
+                }
+                
                 ring_buf_set_last_dual(rs->pdataRx, fsize, pi);
                 rs_ipc_put(rs, "r", 1);
                 rs_ipc_put(rs, "e", 1);
@@ -4779,6 +4812,8 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
                 print_f(rs->plogs, "P2", rs->logs);
 
+                fflush(fout);
+                fclose(fout);
                 fclose(fp);
                 fp = NULL;
             }
@@ -4960,6 +4995,12 @@ static int p3(struct procRes_s *rs)
 
 static int p4(struct procRes_s *rs)
 {
+#define OUT_SAVE (1)
+
+#if OUT_SAVE
+    char fileout[128] = "/mnt/mmc2/tx/sample_xx.bin";
+    FILE *fout = NULL;
+#endif
     char ch, *tx, *rx, *tx_buff, *addr=0;
     uint16_t *tx16, *rx16, in16;
     int len = 0, cmode = 0, ret, pi=0, acusz=0, starts=0, opsz=0, totsz;
@@ -5076,11 +5117,31 @@ static int p4(struct procRes_s *rs)
                 //print_f(rs->plogs, "P4", rs->logs);
                  
                 msync(addr, size, MS_SYNC);
+
+#if OUT_SAVE
+                fout = fopen(fileout, "a+");
+                if (!fout) {
+                    sprintf(rs->logs, "file read [%s] failed \n", fileout);
+                    print_f(rs->plogs, "P4", rs->logs);
+                } else {
+                    sprintf(rs->logs, "file read [%s] ok \n", fileout);
+                    print_f(rs->plogs, "P4", rs->logs);
+
+                    slen = fwrite(addr, 1, size, fout);
+
+                    fflush(fout);
+                    fclose(fout);
+                    fout = NULL;
+
+                }
+#endif
+
                 /* send data to wifi socket */
                 //opsz = write(rs->psocket_t->connfd, addr, size);
                 opsz = mtx_data(rs->spifd, NULL, addr, 1, size, 1024*1024);
                 //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-                sprintf(rs->logs, "%d/%d\n", opsz, size);
+
+                sprintf(rs->logs, "%d/%d, %d\n", opsz, size, slen);
                 print_f(rs->plogs, "P4", rs->logs);
 
                 pi+=2;

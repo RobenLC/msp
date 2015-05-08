@@ -8996,7 +8996,7 @@ static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 #if SUP_FILE
     FILE *f=0;
-    char supPath[128] = "/mnt/mmc2/rx/supBack_%d.bin";
+    char supPath[128] = "/mnt/mmc2/tx/supBack_%d.bin";
     char supDst[128];
 #endif
 
@@ -9472,6 +9472,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
 static int p2(struct procRes_s *rs)
 {
+#define IN_SAVE (1)
+#if IN_SAVE
+    char filename[128] = "/mnt/mmc2/tx/input_x1.bin";
+    FILE *fin = NULL;
+#endif
     struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer));
     struct timespec tnow;
     struct sdParseBuff_s *pabuf=0;
@@ -9600,6 +9605,8 @@ static int p2(struct procRes_s *rs)
 
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
+                    memset(addr, 0xff, len);
+                    
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
 #if SPI_KTHREAD_USE
                     opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
@@ -9607,6 +9614,23 @@ static int p2(struct procRes_s *rs)
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 
 #endif                    
+#if IN_SAVE
+                   msync(addr, len, MS_SYNC);
+                   fin = fopen(filename, "a+");
+                    if (!fin) {
+                        sprintf(rs->logs, "file read [%s] failed \n", filename);
+                        print_f(rs->plogs, "P4", rs->logs);
+                    } else {
+                        sprintf(rs->logs, "file read [%s] ok \n", filename);
+                        print_f(rs->plogs, "P4", rs->logs);
+
+                        ret = fwrite(addr, 1, len, fin);
+
+                        fflush(fin);
+                        fclose(fin);
+                        fin = NULL;
+                }
+#endif
                     //printf("0 spi %d\n", opsz);
                     sprintf(rs->logs, "recv %d/%d\n", opsz, len);
                     print_f(rs->plogs, "P2", rs->logs);
@@ -9648,6 +9672,7 @@ static int p2(struct procRes_s *rs)
                 if (opsz == 1) opsz = 0;
 
                 if (opsz > 0) {
+                    opsz = SPI_TRUNK_SZ;
                     ring_buf_prod_dual(rs->pdataRx, pi);
                 }
 
@@ -9839,6 +9864,12 @@ static int p2(struct procRes_s *rs)
 
 static int p3(struct procRes_s *rs)
 {
+#define IN_SAVE (1)
+#if IN_SAVE
+    char filename[128] = "/mnt/mmc2/tx/input_x2.bin";
+    FILE *fin = NULL;
+#endif
+
     struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer));
     struct timespec tnow;
     int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait;
@@ -9936,6 +9967,7 @@ static int p3(struct procRes_s *rs)
 
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
+                    memset(addr, 0xff, len);
 
                     clock_gettime(CLOCK_REALTIME, rs->tm[1]);
 #if SPI_KTHREAD_USE
@@ -9944,6 +9976,23 @@ static int p3(struct procRes_s *rs)
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
 
+#if IN_SAVE
+                   msync(addr, len, MS_SYNC);
+                   fin = fopen(filename, "a+");
+                    if (!fin) {
+                        sprintf(rs->logs, "file read [%s] failed \n", filename);
+                        print_f(rs->plogs, "P4", rs->logs);
+                    } else {
+                        sprintf(rs->logs, "file read [%s] ok \n", filename);
+                        print_f(rs->plogs, "P4", rs->logs);
+
+                        ret = fwrite(addr, 1, len, fin);
+
+                        fflush(fin);
+                        fclose(fin);
+                        fin = NULL;
+                }
+#endif
                     sprintf(rs->logs, "recv %d/%d\n", opsz, len);
                     print_f(rs->plogs, "P3", rs->logs);
 
@@ -9983,6 +10032,7 @@ static int p3(struct procRes_s *rs)
                 if (opsz == 1) opsz = 0;
 
                 if (opsz > 0) {
+                    opsz = SPI_TRUNK_SZ;
                     ring_buf_prod_dual(rs->pdataRx, pi);
                 }
 
