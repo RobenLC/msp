@@ -7068,6 +7068,14 @@ static int fs09(struct mainRes_s *mrs, struct modersp_s *modersp)
             error_handle(mrs->log, 1967);
         }
     }
+
+    if ((len > 0) && (ch == 'X')) {
+            sprintf(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs09", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
+
     return 0; 
 }
 
@@ -7505,6 +7513,14 @@ static int fs22(struct mainRes_s *mrs, struct modersp_s *modersp)
             error_handle("get FIH failed", 2238);
         }
     }
+    
+    if ((len > 0) && (ch == 'X')) {
+            sprintf(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs22", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
+
     return 0; 
 }
 
@@ -7950,6 +7966,14 @@ static int fs39(struct mainRes_s *mrs, struct modersp_s *modersp)
             error_handle("get FIH failed", 3741);
         }
     }
+    
+    if ((len > 0) && (ch == 'X')) {
+            sprintf(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs39", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
+
     return 0; 
 }
 
@@ -8159,6 +8183,14 @@ static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 1;
         }
     }
+    
+    if ((len > 0) && (ch == 'X')) {
+            sprintf(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs49", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
+
     return 0; 
 }
 
@@ -9590,6 +9622,12 @@ static int p2(struct procRes_s *rs)
                     abs_info(&rs->pmch->get, recv16);
                     rs_ipc_put(rs, "C", 1);
                 } else {
+                    sprintf(rs->logs, "ch = X \n");
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    bitset = 0;
+                    ioctl(rs->spifd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+
                     rs_ipc_put(rs, "X", 1);                
                 }
                 sprintf(rs->logs, "recv 0x%.2x 0x%.2x len=%d\n", rx8[0], rx8[1], len);
