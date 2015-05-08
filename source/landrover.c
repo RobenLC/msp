@@ -4688,7 +4688,7 @@ static int p2(struct procRes_s *rs)
     char filedst[128];
     char filename[128] = "/mnt/mmc2/handmade.jpg";
     //char filename[128] = "/mnt/mmc2/textfile_02.bin";
-    char fileback[128] = "/mnt/mmc2/rx/back_%d.jpg";
+    char fileback[128] = "/mnt/mmc2/tx/recv_%d.bin";
 #if SAVE_OUT
     char fileout[128] = "/mnt/mmc2/tx/sample_%d.bin";
 #endif
