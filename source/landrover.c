@@ -233,6 +233,7 @@ struct mainRes_s{
     struct shmem_s cmdRx; /* cmdRx for spi0 */
     struct shmem_s cmdTx;
     // file save
+    FILE *fptn;
     FILE *fs;
     // file log
     FILE *flog;
@@ -2659,8 +2660,8 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
     }
     pp->lastflg += 1;
 
-    sprintf(str, "[last] d:%d l:%d flg:%d \n", pp->dualsz, pp->lastsz, pp->lastflg);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "[last] d:%d l:%d flg:%d \n", pp->dualsz, pp->lastsz, pp->lastflg);
+    //print_f(mlogPool, "ring", str);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return pp->lastflg;
@@ -2726,8 +2727,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         dist = leadn - folwn;
     }
 
-    sprintf(str, "cons d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "cons d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
@@ -2764,8 +2765,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         ret = pp->chksz; 
     }
 
-    sprintf(str, "cons dual len:%d \n", ret);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "cons dual len:%d \n", ret);
+    //print_f(mlogPool, "ring", str);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return ret;
@@ -4678,16 +4679,19 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
 static int p2(struct procRes_s *rs)
 {
+#define SAVE_OUT (0)
+
     /* spi0 */
     char ch;
     int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0, tlen=0;
     char *addr;
     char filedst[128];
-    //char filename[128] = "/mnt/mmc2/handmade.jpg";
-    char filename[128] = "/mnt/mmc2/textfile_02.bin";
+    char filename[128] = "/mnt/mmc2/handmade.jpg";
+    //char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/rx/back_%d.jpg";
+#if SAVE_OUT
     char fileout[128] = "/mnt/mmc2/tx/sample_%d.bin";
-
+#endif
     //char filename[128] = "/mnt/mmc2/hilldesert.jpg";
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/pattern2.txt";
@@ -4722,6 +4726,7 @@ static int p2(struct procRes_s *rs)
             //print_f(rs->plogs, "P2", rs->logs);
 
             if (ch == 'r') {
+#if SAVE_OUT
                 fout = find_save(filedst, fileout);
                 if (fout) {
                     sprintf(rs->logs, "file save back to [%s]\n",filedst);
@@ -4730,7 +4735,7 @@ static int p2(struct procRes_s *rs)
                     sprintf(rs->logs, "FAIL to find file [%s]\n",fileback);
                     print_f(rs->plogs, "P2", rs->logs); 
                 }
-
+#endif
                 fp = fopen(filename, "r");
                 if (!fp) {
                     sprintf(rs->logs, "file read [%s] failed \n", filename);
@@ -4782,9 +4787,9 @@ static int p2(struct procRes_s *rs)
                     max -= len;
 
                     ring_buf_prod_dual(rs->pdataRx, pi);
-
+#if SAVE_OUT
                     tlen = fwrite(addr, 1, len, fout);
-
+#endif
                     sprintf(rs->logs, " %d %d/%d/%d - %d/%d\n", pi, fsize, tlen, len, totsz, max);
                     print_f(rs->plogs, "P2", rs->logs);
                     
@@ -4811,9 +4816,10 @@ static int p2(struct procRes_s *rs)
 
                 sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
                 print_f(rs->plogs, "P2", rs->logs);
-
+#if SAVE_OUT
                 fflush(fout);
                 fclose(fout);
+#endif
                 fclose(fp);
                 fp = NULL;
             }
@@ -4928,7 +4934,7 @@ static int p2(struct procRes_s *rs)
                             #else
                             opsz = len;
                             #endif
-                            sprintf(rs->logs, " %d/%d c:%d t:%d \n", opsz, len, pi, totsz);
+                            sprintf(rs->logs, "w %d/%d \n", opsz, totsz);
                             print_f(rs->plogs, "P2", rs->logs);        
 
                             memset(addr, 0x95, len);
@@ -4995,7 +5001,7 @@ static int p3(struct procRes_s *rs)
 
 static int p4(struct procRes_s *rs)
 {
-#define OUT_SAVE (1)
+#define OUT_SAVE (0)
 
 #if OUT_SAVE
     char fileout[128] = "/mnt/mmc2/tx/sample_xx.bin";
@@ -5241,7 +5247,7 @@ static int p4(struct procRes_s *rs)
                     acusz += opsz;
                     totsz -= opsz;
                     
-                    sprintf(rs->logs, "tx %d/%d acusz:%d t:%d\n", opsz, len, acusz, totsz);
+                    sprintf(rs->logs, "t %d / %d\n", opsz, totsz);
                     print_f(rs->plogs, "P4", rs->logs);
 
                     if (!totsz) break;

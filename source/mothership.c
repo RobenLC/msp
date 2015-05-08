@@ -5381,8 +5381,8 @@ static int ring_buf_get_dual(struct shmem_s *pp, char **addr, int sel)
     }
 
     dist = dualn - folwn;
-    sprintf(str, "get d:%d, %d /%d \n", dist, dualn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "get d:%d, %d /%d \n", dist, dualn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if (dist > (pp->slotn - 3))  return -1;
 
@@ -5432,8 +5432,8 @@ static int ring_buf_get(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
 
     dist = leadn - folwn;
-    sprintf(str, "get d:%d, %d \n", dist, leadn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "get d:%d, %d \n", dist, leadn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if (dist > (pp->slotn - 2))  return -1;
 
@@ -5462,8 +5462,8 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
     }
     pp->lastflg += 1;
 
-    sprintf(str, "[last] d:%d l:%d flg:%d \n", pp->dualsz, pp->lastsz, pp->lastflg);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "[last] d:%d l:%d flg:%d \n", pp->dualsz, pp->lastsz, pp->lastflg);
+    //print_f(mlogPool, "ring", str);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return pp->lastflg;
@@ -5502,8 +5502,8 @@ static int ring_buf_prod_dual(struct shmem_s *pp, int sel)
     }
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
 
-    sprintf(str, "prod %d %d, %d %d\n", pp->r->lead.run, pp->r->lead.seq, pp->r->dual.run, pp->r->dual.seq);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "prod %d %d, %d %d\n", pp->r->lead.run, pp->r->lead.seq, pp->r->dual.run, pp->r->dual.seq);
+    //print_f(mlogPool, "ring", str);
 
     return 0;
 }
@@ -5520,8 +5520,8 @@ static int ring_buf_prod(struct shmem_s *pp)
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     
-    sprintf(str, "prod %d %d/\n", pp->r->lead.run, pp->r->lead.seq);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "prod %d %d/\n", pp->r->lead.run, pp->r->lead.seq);
+    //print_f(mlogPool, "ring", str);
 
     return 0;
 }
@@ -5544,8 +5544,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         dist = leadn - folwn;
     }
 
-    sprintf(str, "cons d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "cons d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
@@ -5583,8 +5583,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
     }
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     
-    sprintf(str, "cons dual len: %d \n", ret);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "cons dual len: %d \n", ret);
+    //print_f(mlogPool, "ring", str);
 
     return ret;
 }
@@ -5645,8 +5645,8 @@ static int ring_buf_cons_dual_psudo(struct shmem_s *pp, char **addr, int sel)
         ret = pp->chksz;
     }
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
-    sprintf(str, "psudo len %d \n", ret);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "psudo len %d \n", ret);
+    //print_f(mlogPool, "ring", str);
 
     return ret;
 }
@@ -5662,8 +5662,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
 
-    sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
+    //print_f(mlogPool, "ring", str);
 
     if (dist < 1)  return -1;
 
@@ -7012,7 +7012,10 @@ static int fs07(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 2;
         }
     }
+    
     if ((len > 0) && (ch == 'X')) {
+            sprintf(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs07", mrs->log);
             modersp->m = modersp->m - 1;        
             return 2;
     }
@@ -9645,7 +9648,7 @@ static int p2(struct procRes_s *rs)
                 }
 #endif
                     //printf("0 spi %d\n", opsz);
-                    sprintf(rs->logs, "recv %d/%d\n", opsz, len);
+                    sprintf(rs->logs, "r %d\n", opsz, len);
                     print_f(rs->plogs, "P2", rs->logs);
                     clock_gettime(CLOCK_REALTIME, &tnow);
                     if (opsz == 0) {
@@ -9666,7 +9669,7 @@ static int p2(struct procRes_s *rs)
                     //print_f(rs->plogs, "P2", rs->logs);                 
 
                     if (tdiff < 0) {
-                        sprintf(rs->logs, "!!!t %d - %d!!!\n", tdiff, len);
+                        sprintf(rs->logs, "!!t %d - %d!!\n", tdiff, len);
                         print_f(rs->plogs, "P2", rs->logs);
                     }
                     
@@ -9737,7 +9740,7 @@ static int p2(struct procRes_s *rs)
                 pi = 0;  
                 while (1) {
                     opsz = mtx_data(rs->spifd, addr, NULL, SPI_TRUNK_SZ, tr);
-                    sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                    sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 
                     if (opsz == 0) {
@@ -9778,7 +9781,7 @@ static int p2(struct procRes_s *rs)
                             #else
                             opsz = len;
                             #endif
-                            sprintf(rs->logs, "tx len:%d cnt:%d \n", opsz, pi);
+                            sprintf(rs->logs, "t %d c %d \n", opsz, pi);
                             print_f(rs->plogs, "P2", rs->logs);         
 
                             if (opsz < 0) break;
@@ -9821,7 +9824,7 @@ static int p2(struct procRes_s *rs)
 
                     len = ring_buf_cons(rs->pdataTx, &addr);
                     
-                    sprintf(rs->logs, "send len:%d\n", len);
+                    sprintf(rs->logs, "t %d\n", len);
                     print_f(rs->plogs, "P2", rs->logs);          
 
                     if (len > 0) {
@@ -10005,7 +10008,7 @@ static int p3(struct procRes_s *rs)
                         fin = NULL;
                 }
 #endif
-                    sprintf(rs->logs, "recv %d/%d\n", opsz, len);
+                    sprintf(rs->logs, "r %d\n", opsz, len);
                     print_f(rs->plogs, "P3", rs->logs);
 
                     clock_gettime(CLOCK_REALTIME, &tnow);
@@ -10026,7 +10029,7 @@ static int p3(struct procRes_s *rs)
                     //sprintf(rs->logs, "t %d us\n", tdiff);
                     //print_f(rs->plogs, "P3", rs->logs);
                     if (tdiff < 0) {                    
-                        sprintf(rs->logs, "!!!t %d - %d!!!\n", tdiff, len);
+                        sprintf(rs->logs, "!!t %d - %d!!\n", tdiff, len);
                         print_f(rs->plogs, "P3", rs->logs);
                     }
                     //shmem_dump(addr, 32);
@@ -10062,7 +10065,7 @@ static int p3(struct procRes_s *rs)
                 while (len > 0) {
 
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
-                    sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                    sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P3", rs->logs);
 
                     if (opsz == 0) {
@@ -10239,7 +10242,7 @@ static int p4(struct procRes_s *rs)
                             opsz = len;
 #endif
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-                            sprintf(rs->logs, "send %d/%d %d \n", opsz, len, pi);
+                            sprintf(rs->logs, "t %d -%d \n", opsz, pi);
                             print_f(rs->plogs, "P4", rs->logs);         
 #if MSP_P4_SAVE_DAT
                             fwrite(addr, 1, len, rs->fdat_s);
@@ -10374,7 +10377,7 @@ static int p4(struct procRes_s *rs)
                             #else
                             opsz = len;
                             #endif
-                            sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_t->connfd, opsz, pi);
+                            sprintf(rs->logs, "tx %d -%d \n", opsz, pi);
                             print_f(rs->plogs, "P4", rs->logs);         
                         }
                     } else {
