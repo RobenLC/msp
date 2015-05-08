@@ -7012,6 +7012,10 @@ static int fs07(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 2;
         }
     }
+    if ((len > 0) && (ch == 'X')) {
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
     return 0; 
 }
 
@@ -9582,6 +9586,8 @@ static int p2(struct procRes_s *rs)
                     recv16 = rx8[1] | (rx8[0] << 8);
                     abs_info(&rs->pmch->get, recv16);
                     rs_ipc_put(rs, "C", 1);
+                } else {
+                    rs_ipc_put(rs, "X", 1);                
                 }
                 sprintf(rs->logs, "recv 0x%.2x 0x%.2x len=%d\n", rx8[0], rx8[1], len);
                 print_f(rs->plogs, "P2", rs->logs);
