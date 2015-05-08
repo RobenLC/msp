@@ -5448,11 +5448,13 @@ static int ring_buf_get(struct shmem_s *pp, char **addr)
 
 static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
 {
+    int tlen=0;
     char str[128];
     sel = sel % 2;
 
-    if (size != SPI_TRUNK_SZ) {
-        size = SPI_TRUNK_SZ;
+    tlen = size % 1024;
+    if (tlen) {
+        size = size + 1024 - tlen;
     }
 
     if (sel) {
@@ -5462,7 +5464,7 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
     }
     pp->lastflg += 1;
 
-    //sprintf(str, "[last] d:%d l:%d flg:%d \n", pp->dualsz, pp->lastsz, pp->lastflg);
+    //sprintf(str, "set last d:%d l:%d f:%d \n", pp->dualsz, pp->lastsz, pp->lastflg);
     //print_f(mlogPool, "ring", str);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
@@ -5471,12 +5473,18 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
 
 static int ring_buf_set_last(struct shmem_s *pp, int size)
 {
-    if (size != SPI_TRUNK_SZ) {
-        size = SPI_TRUNK_SZ;
+    char str[128];
+    int tlen=0;
+    tlen = size % 1024;
+    if (tlen) {
+        size = size + 1024 - tlen;
     }
 
     pp->lastsz = size;
     pp->lastflg = 1;
+
+    //sprintf(str, "set last l:%d f:%d \n", pp->lastsz, pp->lastflg);
+    //print_f(mlogPool, "ring", str);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return pp->lastflg;
@@ -9526,7 +9534,7 @@ static int p2(struct procRes_s *rs)
     struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer));
     struct timespec tnow;
     struct sdParseBuff_s *pabuf=0;
-    int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait;
+    int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait, tlen=0;
     int bitset, totsz=0;
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4];
@@ -9726,7 +9734,6 @@ static int p2(struct procRes_s *rs)
                 if (opsz == 1) opsz = 0;
 
                 if (opsz > 0) {
-                    opsz = SPI_TRUNK_SZ;
                     ring_buf_prod_dual(rs->pdataRx, pi);
                 }
 
@@ -10085,7 +10092,6 @@ static int p3(struct procRes_s *rs)
                 if (opsz == 1) opsz = 0;
 
                 if (opsz > 0) {
-                    opsz = SPI_TRUNK_SZ;
                     ring_buf_prod_dual(rs->pdataRx, pi);
                 }
 

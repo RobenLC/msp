@@ -4800,14 +4800,22 @@ static int p2(struct procRes_s *rs)
                 }
 
                 /* align to SPI_TRUNK_SZ */
-                if (fsize < SPI_TRUNK_SZ) {
-                    fsize = SPI_TRUNK_SZ;
-                }
-                tlen = totsz % SPI_TRUNK_SZ;
+                tlen = fsize % 1024;
+                sprintf(rs->logs, "1.r %d sz %d \n", tlen, fsize);
+                print_f(rs->plogs, "P2", rs->logs);
+
                 if (tlen) {
-                    totsz = totsz + SPI_TRUNK_SZ - tlen;
+                    fsize = fsize + 1024 - tlen;
                 }
-                
+
+                tlen = totsz % 1024;
+                sprintf(rs->logs, "2.r %d sz %d \n", tlen, totsz);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                if (tlen) {
+                    totsz = totsz + 1024 - tlen;
+                }
+
                 ring_buf_set_last_dual(rs->pdataRx, fsize, pi);
                 rs_ipc_put(rs, "r", 1);
                 rs_ipc_put(rs, "e", 1);
