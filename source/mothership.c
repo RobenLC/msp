@@ -5451,6 +5451,10 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
     char str[128];
     sel = sel % 2;
 
+    if (size != SPI_TRUNK_SZ) {
+        size = SPI_TRUNK_SZ;
+    }
+
     if (sel) {
         pp->dualsz = size;
     } else {
@@ -5467,6 +5471,10 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
 
 static int ring_buf_set_last(struct shmem_s *pp, int size)
 {
+    if (size != SPI_TRUNK_SZ) {
+        size = SPI_TRUNK_SZ;
+    }
+
     pp->lastsz = size;
     pp->lastflg = 1;
 
@@ -8990,7 +8998,7 @@ static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define SUP_FILE (1)
+#define SUP_FILE (0)
 static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
 
@@ -9469,10 +9477,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     p1_end(rs);
     return 0;
 }
-
+#define IN_SAVE (0)
 static int p2(struct procRes_s *rs)
 {
-#define IN_SAVE (1)
 #if IN_SAVE
     char filename[128] = "/mnt/mmc2/tx/input_x1.bin";
     FILE *fin = NULL;
@@ -9864,7 +9871,6 @@ static int p2(struct procRes_s *rs)
 
 static int p3(struct procRes_s *rs)
 {
-#define IN_SAVE (1)
 #if IN_SAVE
     char filename[128] = "/mnt/mmc2/tx/input_x2.bin";
     FILE *fin = NULL;
