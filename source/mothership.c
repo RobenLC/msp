@@ -25,7 +25,8 @@
 #define SPI_MODE_1      (0|SPI_CPHA)
 #define SPI_MODE_2      (SPI_CPOL|0)
 #define SPI_MODE_3      (SPI_CPOL|SPI_CPHA)
-static char spi1[] = "/dev/spidev32766.0"; 
+//static char spi1[] = "/dev/spidev32766.0"; 
+static char *spi1 = 0;
 static char spi0[] = "/dev/spidev32765.0"; 
 
 #define OP_PON   0x1
@@ -554,6 +555,7 @@ static int rs_ipc_put(struct procRes_s *rs, char *str, int size);
 static int rs_ipc_get(struct procRes_s *rs, char *str, int size);
 static int mrs_ipc_put(struct mainRes_s *mrs, char *str, int size, int idx);
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx);
+static int msp_spi_conf(int dev, int flag, void *bitset);
 static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct spi_ioc_transfer *tr);
 
 static int ring_buf_init(struct shmem_s *pp);
@@ -5699,6 +5701,21 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     return pp->chksz;
 }
 
+static int msp_spi_conf(int dev, int flag, void *bitset)
+{
+    char str[128];
+    int ret;
+    
+    if (!dev) {
+        sprintf(str, "spi device id == 0\n");
+        print_f(mlogPool, "spi-config", str);
+        return -1;
+    }
+    ret = ioctl(dev, flag, bitset);
+
+    return ret;
+}
+
 static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct spi_ioc_transfer *tr)
 {
     char mlog[256];
@@ -5713,7 +5730,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
     tr->speed_hz = 1000000;
     tr->bits_per_word = 8;
 
-    ret = ioctl(fd, SPI_IOC_MESSAGE(1), tr);
+    ret = msp_spi_conf(fd, SPI_IOC_MESSAGE(1), tr);
     if (ret < 0) {
         //sprintf(mlog, "can't send spi message\n");
         //print_f(mlogPool, "SPI", mlog);
@@ -6801,7 +6818,7 @@ static int hd42(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret=0, bitset;
     bitset = 0;
-    ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "set sp0 ctl pin=%d ret=%d\n", bitset, ret);
     print_f(&mrs->plog, "ERROR42", mrs->log);
 
@@ -6812,7 +6829,7 @@ static int hd44(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret=0, bitset;
     bitset = 0;
-    ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "set sp0 ctl pin=%d ret=%d\n", bitset, ret);
     print_f(&mrs->plog, "ERROR44", mrs->log);
 
@@ -6956,21 +6973,21 @@ static int fs05(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs05", mrs->log);
     bitset = 1;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs05", mrs->log);
     bitset = 1;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs05",mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
     print_f(&mrs->plog, "fs05", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs05", mrs->log);
 
@@ -7229,22 +7246,22 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset=0, ret;
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs16", mrs->log);
     bitset = 0;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs16", mrs->log);
 
 #if SPI_KTHREAD_USE
     bitset = 0;
-    ret = ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
     print_f(&mrs->plog, "fs16", mrs->log);
 
     bitset = 0;
-    ret = ioctl(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    ret = msp_spi_conf(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi1 spidev thread, ret: 0x%x\n", ret);
     print_f(&mrs->plog, "fs16", mrs->log);
 #endif
@@ -7440,37 +7457,37 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     int bitset, ret;
 
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
 
     bitset = 1;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
 
     bitset = 1;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
 #if SPI_KTHREAD_USE
     bitset = 0;
-    ret = ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+    ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
     sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
     print_f(&mrs->plog, "fs20", mrs->log);
 
     bitset = 0;
-    ret = ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+    ret = msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
     sprintf(mrs->log, "Stop spi1 spidev thread, ret: 0x%x\n", ret);
     print_f(&mrs->plog, "fs20", mrs->log);
 #endif
@@ -7536,13 +7553,13 @@ static int fs23(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset;
     bitset = 1;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
 
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs23", mrs->log);
 
     bitset = 1;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
 
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs23", mrs->log);
@@ -7557,58 +7574,58 @@ static int fs24(struct mainRes_s *mrs, struct modersp_s *modersp)
     usleep(1);
 
     bitset = 1;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     bitset = 1;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     usleep(1000);
 
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     sleep(1);
 
     bitset = 1;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     bitset = 1;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     usleep(1000);
 
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+    msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
     sprintf(mrs->log, "[%d]Get RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+    msp_spi_conf(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
     sprintf(mrs->log, "[%d]Get RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs24", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs24", mrs->log);
 
@@ -7795,11 +7812,11 @@ static int fs33(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset=0, ret;
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs33", mrs->log);
     bitset = 0;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs33", mrs->log);
 
@@ -7904,27 +7921,27 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
     int bitset, ret;
 
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
     print_f(&mrs->plog, "fs37", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
 
     bitset = 0;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
 
     bitset = 1;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
 
     bitset = 1;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
 
@@ -7989,13 +8006,13 @@ static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset;
     bitset = 1;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
 
     sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs40", mrs->log);
 
     bitset = 1;
-    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
 
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs40", mrs->log);
@@ -8092,7 +8109,7 @@ static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset=0, ret;
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs45", mrs->log);
 
@@ -8131,7 +8148,7 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->m = modersp->m + 1;
 
         bitset = 0;
-        ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs47", mrs->log);
 
@@ -8774,7 +8791,7 @@ static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp)
     int bitset=0;
     
     bitset = 0;
-    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs54", mrs->log);
 
@@ -8851,7 +8868,7 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                 print_f(&mrs->plog, "fs55", mrs->log);
                 
                 bitset = 0;
-                ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                 sprintf(mrs->log, "set RDY pin %d\n",bitset);
                 print_f(&mrs->plog, "fs55", mrs->log);
                 usleep(300000);
@@ -9198,7 +9215,7 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (ch == 'K') {
 
             bitset = 0;
-            ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+            msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs66", mrs->log);
             usleep(300000);
@@ -9599,13 +9616,13 @@ static int p2(struct procRes_s *rs)
                 //print_f(rs->plogs, "P2", rs->logs);
 
                 bitset = 1;
-                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                 //sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
                 //print_f(rs->plogs, "P2", rs->logs);
 
                 while (1) {
                     bitset = 1;
-                    ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                     //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
                     //print_f(rs->plogs, "P2", rs->logs);
                     if (bitset == 0) break;
@@ -9634,7 +9651,7 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);
 
                     bitset = 0;
-                    ioctl(rs->spifd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                    msp_spi_conf(rs->spifd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
 
                     rs_ipc_put(rs, "X", 1);                
                 }
@@ -9646,13 +9663,13 @@ static int p2(struct procRes_s *rs)
                 //print_f(rs->plogs, "P2", rs->logs);
 
                 bitset = 0;
-                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                 //sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
                 //print_f(rs->plogs, "P2", rs->logs);
             
                 while (1) {
                     bitset = 0;
-                    ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                     //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
                     //print_f(rs->plogs, "P4", rs->logs);
             
@@ -9671,7 +9688,7 @@ static int p2(struct procRes_s *rs)
                     
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
 #if SPI_KTHREAD_USE
-                    opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
 #else
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 
@@ -9936,8 +9953,18 @@ static int p3(struct procRes_s *rs)
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4];
     char *addr, *laddr;
-    sprintf(rs->logs, "p3\n");
+    sprintf(rs->logs, "p3, spidev:%d \n", rs->spifd);
     print_f(rs->plogs, "P3", rs->logs);
+
+    while (!rs->spifd) {
+        ch = 0;
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret > 0) {
+            sprintf(rs->logs, "get ch:%c\n", ch);
+            print_f(rs->plogs, "P3", rs->logs);
+            rs_ipc_put(rs, "x", 1);
+        }
+    }
 
     p3_init(rs);
     // wait for ch from p0
@@ -9980,13 +10007,13 @@ static int p3(struct procRes_s *rs)
             }
             if (cmode == 1) {
                 bitset = 1;
-                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                 //sprintf(rs->logs, "Check if RDY pin == 0 (pin:%d)\n", bitset);
                 //print_f(rs->plogs, "P3", rs->logs);
 
                 while (1) {
                     bitset = 1;
-                    ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                     //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
                     //print_f(rs->plogs, "P3", rs->logs);
                     if (bitset == 0) break;
@@ -10006,13 +10033,13 @@ static int p3(struct procRes_s *rs)
                 }
             } else if (cmode == 4) {
                 bitset = 0;
-                ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                 //sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
                 //print_f(rs->plogs, "P3", rs->logs);
             
                 while (1) {
                     bitset = 0;
-                    ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                     //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
                     //print_f(rs->plogs, "P4", rs->logs);
             
@@ -10031,7 +10058,7 @@ static int p3(struct procRes_s *rs)
 
                     clock_gettime(CLOCK_REALTIME, rs->tm[1]);
 #if SPI_KTHREAD_USE
-                    opsz = ioctl(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
 #else
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
@@ -11580,16 +11607,19 @@ int main(int argc, char *argv[])
         sprintf(pmrs->log, "open device[%s]\n", spi0); 
         print_f(&pmrs->plog, "SPI", pmrs->log);
     }
-    fd1 = open(spi1, O_RDWR);
-    if (fd1 <= 0) {
-        sprintf(pmrs->log, "can't open device[%s]\n", spi1); 
-        print_f(&pmrs->plog, "SPI", pmrs->log);
-        goto end;
+    if (spi1) {
+        fd1 = open(spi1, O_RDWR);
+        if (fd1 <= 0) {
+            sprintf(pmrs->log, "can't open device[%s]\n", spi1); 
+            print_f(&pmrs->plog, "SPI", pmrs->log);
+            fd1 = 0;
+        } else {
+            sprintf(pmrs->log, "open device[%s]\n", spi1); 
+            print_f(&pmrs->plog, "SPI", pmrs->log);
+        }
     } else {
-        sprintf(pmrs->log, "open device[%s]\n", spi1); 
-        print_f(&pmrs->plog, "SPI", pmrs->log);
+        fd1 = 0;
     }
-
 
     pmrs->sfm[0] = fd0;
     pmrs->sfm[1] = fd1;
@@ -11598,34 +11628,34 @@ int main(int argc, char *argv[])
 
     /* set RDY pin to low before spi setup ready */
     bitset = 0;
-    ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(pmrs->log, "Set RDY low at beginning\n");
     print_f(&pmrs->plog, "SPI", pmrs->log);
 
     bitset = 0;     
-    ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
+    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
     bitset = 1;    
-    ioctl(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
     /*
      * spi mode 
      */ 
-    ret = ioctl(pmrs->sfm[0], SPI_IOC_WR_MODE, &pmrs->smode);
+    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_WR_MODE, &pmrs->smode);
     if (ret == -1) 
         printf("can't set spi mode\n"); 
     
-    ret = ioctl(pmrs->sfm[0], SPI_IOC_RD_MODE, &pmrs->smode);
+    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_RD_MODE, &pmrs->smode);
     if (ret == -1) 
         printf("can't get spi mode\n"); 
     
     /*
      * spi mode 
      */ 
-    ret = ioctl(pmrs->sfm[1], SPI_IOC_WR_MODE, &pmrs->smode); 
+    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_WR_MODE, &pmrs->smode); 
     if (ret == -1) 
         printf("can't set spi mode\n"); 
     
-    ret = ioctl(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
+    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
     if (ret == -1) 
         printf("can't get spi mode\n"); 
 
