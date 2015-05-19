@@ -36,7 +36,7 @@
 #define SPI_RX_QUAD 0x800         /* receive with 4 wires */
 #define BUFF_SIZE  2048
 
-#define TSIZE (128*1024*1024)
+#define TSIZE (32*1024*1024)
 #define SPI_TRUNK_SZ             32768
 
 #define OP_PON 0x1
@@ -81,6 +81,8 @@
 #define OP_SCANLEN_H    0x2a
 #define OP_SCANLEN_L    0x2b
 
+#define OP_SUP               0x31
+
 typedef enum {
     ASPFS_ATTR_READ_ONLY = 0x01,
     ASPFS_ATTR_HIDDEN = 0x02,
@@ -101,7 +103,7 @@ struct directnFile_s{
     uint32_t   dftype;
     uint32_t   dfstats;
     char        dfLFN[256];
-    char        dfSFN[12];
+    char        dfSFN[16];
     int           dflen;
     uint32_t   dfattrib;
     uint32_t   dfcretime;
@@ -192,7 +194,7 @@ static void pabort(const char *s)
 */
 static const char *device = "/dev/spidev32765.0"; 
 static const char *data_path = "/mnt/mmc2/tmp/1.jpg"; 
-static uint8_t mode; 
+static uint32_t mode; 
 static uint8_t bits = 8; 
 static uint32_t speed = 1000000; 
 static uint16_t delay; 
@@ -228,6 +230,17 @@ static int aspFS_getFilelist(char *flst, struct directnFile_s *note);
 static int aspSD_getRoot();
 static int aspSD_getDir();
 
+static int spi_config(int dev, int flag, uint32_t *bitset) {
+    int ret;
+    
+    if (!dev) {
+        printf("spi device id error, dev:%d\n", dev);
+        return -1;
+    }
+    ret = ioctl(dev, flag, bitset);
+
+    return ret;
+}
 static void aspFSrmspace(char *str, int len)
 {
     int sc=0;
@@ -1529,6 +1542,7 @@ static int chk_reply(char * rx, char *ans, int sz)
     else
         return 0;
 }
+
 FILE *find_save(char *dst, char *tmple)
 {
     int i;
@@ -1573,7 +1587,8 @@ static int data_process(char *rx, char *tx, FILE *fp, int fd, int pktsz, int num
 int main(int argc, char *argv[]) 
 { 
 static char spi0[] = "/dev/spidev32765.0"; 
-static char spi1[] = "/dev/spidev32766.0"; 
+//static char spi1[] = "/dev/spidev32766.0"; 
+static char *spi1 = 0;
 //static char data_wifi[] = "/mnt/mmc2/tmp/1.jpg"; 
 static char data_save[] = "/mnt/mmc2/rx/%d.bin"; 
 static char path[256];
@@ -1674,30 +1689,37 @@ static char path[256];
         printf("can't open device[%s]\n", spi0); 
     else 
         printf("open device[%s]\n", spi0); 
-    fd1 = open(spi1, O_RDWR);
-    if (fd1 < 0) 
-            printf("can't open device[%s]\n", spi1); 
-    else 
-        printf("open device[%s]\n", spi1); 
+        
+    if (spi1) {
+        fd1 = open(spi1, O_RDWR);
+        if (fd1 <= 0) {
+                fd1 = 0;
+                printf("can't open device[%s]\n", spi1); 
+        } else {
+            printf("open device[%s]\n", spi1); 
+        }
+    } else {
+        fd1 = 0;
+    }
 
-        int fm[2] = {fd0, fd1};
+    int fm[2] = {fd0, fd1};
+    ret = spi_config(fm[0], SPI_IOC_WR_MODE, &mode);
+    if (ret == -1) 
+        pabort("can't set spi mode"); 
 
-        ret = ioctl(fm[0], SPI_IOC_WR_MODE, &mode);
-        if (ret == -1) 
-            pabort("can't set spi mode"); 
- 
-        ret = ioctl(fm[0], SPI_IOC_RD_MODE, &mode);
-        if (ret == -1) 
-            pabort("can't get spi mode"); 
-
-        ret = ioctl(fm[1], SPI_IOC_WR_MODE, &mode);
-        if (ret == -1) 
-            pabort("can't set spi mode"); 
- 
-        ret = ioctl(fm[1], SPI_IOC_RD_MODE, &mode);
-        if (ret == -1) 
-            pabort("can't get spi mode"); 
-
+    ret = spi_config(fm[0], SPI_IOC_RD_MODE, &mode);
+    if (ret == -1) 
+        pabort("can't get spi mode"); 
+    if (fm[1]) {
+        ret = spi_config(fm[1], SPI_IOC_WR_MODE, &mode);
+        if (ret == -1) {
+            printf("can't set spi mode"); 
+        }
+        ret = spi_config(fm[1], SPI_IOC_RD_MODE, &mode);
+        if (ret == -1) {
+            printf("can't get spi mode"); 
+        }
+    }
     char rxans[512];
     char tx[512];
     char rx[512];
@@ -1709,10 +1731,10 @@ static char path[256];
 
     
     bitset = 0;
-    ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+    spi_config(fm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
     bitset = 1;
-    ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+    spi_config(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
     if (sel == 28){ /* list the files in root ex[28]*/
        struct directnFile_s *root = 0;
@@ -2530,7 +2552,7 @@ redo:
                             ,   OP_NONE,        OP_FFORMAT,     OP_COLRMOD, OP_COMPRAT, OP_SCANMOD      /* 0x1F -0x23  */
                             ,   OP_DATPATH,     OP_RESOLTN,     OP_SCANGAV, OP_MAXWIDH, OP_WIDTHAD_H    /* 0x24 -0x28  */
                             ,   OP_WIDTHAD_L,   OP_SCANLEN_H,   OP_SCANLEN_L,   OP_NONE,        OP_NONE     /* 0x29 -0x2D  */
-                            ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE     /* 0x2E -0x32  */
+                            ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_SUP,        OP_NONE     /* 0x2E -0x32  */
                             ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE     /* 0x33 -0x37  */
                             ,   OP_NONE,        OP_NONE,        OP_NONE,        OP_NONE,        OP_MAX};        /* 0x38 -0x3C  */
 

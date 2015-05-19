@@ -11109,10 +11109,10 @@ int main(int argc, char *argv[])
 // initial share parameter
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 1024*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->dataRx.pp) goto end;
     pmrs->dataRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataRx.totsz = 1024*SPI_TRUNK_SZ;
+    pmrs->dataRx.totsz = 128*SPI_TRUNK_SZ;
     pmrs->dataRx.chksz = SPI_TRUNK_SZ;
     pmrs->dataRx.svdist = 8;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataRx.totsz, pmrs->dataRx.pp);
@@ -11128,10 +11128,10 @@ int main(int argc, char *argv[])
 
     /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 512*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->dataTx.pp) goto end;
     pmrs->dataTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataTx.totsz = 512*SPI_TRUNK_SZ;
+    pmrs->dataTx.totsz = 128*SPI_TRUNK_SZ;
     pmrs->dataTx.chksz = SPI_TRUNK_SZ;
     pmrs->dataTx.svdist = 12;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataTx.totsz, pmrs->dataTx.pp);
@@ -11147,10 +11147,10 @@ int main(int argc, char *argv[])
 
     /* cmd mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 256*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->cmdRx.pp) goto end;
     pmrs->cmdRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdRx.totsz = 256*SPI_TRUNK_SZ;;
+    pmrs->cmdRx.totsz = 128*SPI_TRUNK_SZ;;
     pmrs->cmdRx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdRx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdRx.totsz, pmrs->cmdRx.pp);
@@ -11166,10 +11166,10 @@ int main(int argc, char *argv[])
     
     /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 256*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->cmdTx.pp) goto end;
     pmrs->cmdTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdTx.totsz = 256*SPI_TRUNK_SZ;
+    pmrs->cmdTx.totsz = 128*SPI_TRUNK_SZ;
     pmrs->cmdTx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdTx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
