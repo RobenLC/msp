@@ -16,6 +16,8 @@
 #include <dirent.h>
 #include <sys/stat.h>  
 
+#define SPI1_ENABLE (1)
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
  
 #define SPI_CPHA  0x01          /* clock phase */
@@ -241,6 +243,7 @@ static int spi_config(int dev, int flag, uint32_t *bitset) {
 
     return ret;
 }
+
 static void aspFSrmspace(char *str, int len)
 {
     int sc=0;
@@ -1587,8 +1590,11 @@ static int data_process(char *rx, char *tx, FILE *fp, int fd, int pktsz, int num
 int main(int argc, char *argv[]) 
 { 
 static char spi0[] = "/dev/spidev32765.0"; 
-//static char spi1[] = "/dev/spidev32766.0"; 
+#if SPI1_ENABLE
+static char spi1[] = "/dev/spidev32766.0"; 
+#else
 static char *spi1 = 0;
+#endif
 //static char data_wifi[] = "/mnt/mmc2/tmp/1.jpg"; 
 static char data_save[] = "/mnt/mmc2/rx/%d.bin"; 
 static char path[256];
