@@ -4789,6 +4789,8 @@ static int p2(struct procRes_s *rs)
                     ring_buf_prod_dual(rs->pdataRx, pi);
 #if SAVE_OUT
                     tlen = fwrite(addr, 1, len, fout);
+#else
+                    tlen = len;
 #endif
                     sprintf(rs->logs, " %d %d/%d/%d - %d/%d\n", pi, fsize, tlen, len, totsz, max);
                     print_f(rs->plogs, "P2", rs->logs);
@@ -4798,7 +4800,7 @@ static int p2(struct procRes_s *rs)
                     rs_ipc_put(rs, "r", 1);
                     
                 }
-
+#if SAVE_OUT
                 /* align to SPI_TRUNK_SZ */
                 tlen = fsize % 1024;
                 sprintf(rs->logs, "1.r %d sz %d \n", tlen, fsize);
@@ -4815,7 +4817,7 @@ static int p2(struct procRes_s *rs)
                 if (tlen) {
                     totsz = totsz + 1024 - tlen;
                 }
-
+#endif
                 ring_buf_set_last_dual(rs->pdataRx, fsize, pi);
                 rs_ipc_put(rs, "r", 1);
                 rs_ipc_put(rs, "e", 1);
@@ -5633,11 +5635,15 @@ static char spi0[] = "/dev/spidev32765.0";
     speed = SPI_SPEED;
     ret = ioctl(pmrs->sfm[0], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?速率 
     if (ret == -1) 
-        printf("can't set max speed hz"); 
+        printf("can't set max speed hz\n"); 
+    else 
+        printf("set spi0 max speed: %d hz\n", speed); 
         
     ret = ioctl(pmrs->sfm[1], SPI_IOC_WR_MAX_SPEED_HZ, &speed);   //?速率 
     if (ret == -1) 
-        printf("can't set max speed hz"); 
+        printf("can't set max speed hz\n"); 
+    else 
+        printf("set spi1 max speed: %d hz\n", speed); 
 
     /*
      * spi mode 
