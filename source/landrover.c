@@ -339,7 +339,7 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel);
 static int ring_buf_get(struct shmem_s *pp, char **addr);
 static int ring_buf_set_last(struct shmem_s *pp, int size);
 static int ring_buf_prod(struct shmem_s *pp);
-static int ring_buf_cons(struct shmem_s *pp, char **addr);
+static int ring_buf_cons(struct shmem_s *pp, char **addr, int *len);
 static int ring_buf_info_len(struct shmem_s *pp);
 static int shmem_from_str(char **addr, char *dst, char *sz);
 static int shmem_dump(char *src, int size);
@@ -526,7 +526,7 @@ static int next_spy(struct psdata_s *data)
                     next = PSRLT; /* for OP_SUP */
                     evt = AUTO_B;
                     break;
-                case OP_DUL: /* latter */    
+                case OP_DUL: /* TODO */    
                     break;
                 case OP_SDRD:                                       
                 case OP_SDWT:                                       
@@ -581,7 +581,7 @@ static int next_spy(struct psdata_s *data)
                     next = PSWT;
                     evt = AUTO_B;
                     break;
-                case OP_SUP: /* TODO */              
+                case OP_SUP:
                     next = PSTSM; /* jump to next stage */
                     evt = AUTO_B;
                     break;
@@ -928,7 +928,7 @@ static int next_auto_C(struct psdata_s *data)
                 //print_f(mlogPool, "auto_C", str); 
                 next = PSRLT;
                 break;
-            case PSRLT:
+            case PSRLT: /* LAST */
                 //sprintf(str, "PSRLT\n"); 
                 //print_f(mlogPool, "auto_C", str); 
                 break;
@@ -2772,7 +2772,7 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
     return ret;
 }
 
-static int ring_buf_cons(struct shmem_s *pp, char **addr)
+static int ring_buf_cons(struct shmem_s *pp, char **addr, int *len)
 {
     char str[128];
     int leadn = 0;
@@ -2785,6 +2785,7 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
 
     //sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
     //print_f(mlogPool, "ring", str);
+    *len = 0;
 
     if (dist < 1)  return -1;
 
@@ -2800,13 +2801,16 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     if ((pp->lastflg) && (dist == 1)) {
         if ((pp->r->folw.run == pp->r->lead.run) &&
             (pp->r->folw.seq == pp->r->lead.seq)) {
-            return pp->lastsz;
+
+            *len = pp->lastsz;
+            return -2;
         }
     }
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
 
-    return pp->chksz;
+    *len = pp->chksz;
+    return 0;
 }
 
 static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pksz, int maxsz)
@@ -4930,15 +4934,13 @@ static int p2(struct procRes_s *rs)
                 totsz = 0;
                 pi = 0;
                 while (1) {
-                    len = ring_buf_cons(rs->pdataTx, &addr);
-                    if (len > 0) {
-                        pi++;
-                    
-                        msync(addr, len, MS_SYNC);
-                        if (len != 0) {
+                    ret = ring_buf_cons(rs->pdataTx, &addr, &len);
+                    if ((ret == 0) ||(ret == -2)) {
+
+                        if (len > 0) {
+                            pi++;                    
+                            msync(addr, len, MS_SYNC);
                             #if 1 /*debug*/
-                            //opsz = write(rs->psocket_t->connfd, addr, len);
-                            //opsz = mtx_data(rs->spifd, addr, NULL, SPI_TRUNK_SZ, tr);
                             opsz = fwrite(addr, 1, len, fp);
                             totsz += opsz;
                             #else
@@ -4949,10 +4951,15 @@ static int p2(struct procRes_s *rs)
 
                             memset(addr, 0x95, len);
                         }
+
+                        if (ret == -2) {
+                            sprintf(rs->logs, "save len:%d cnt:%d total:%d -loop end\n", opsz, pi, totsz);
+                            print_f(rs->plogs, "P2", rs->logs);         
+                            break;
+                        }
                     } else {
-                        sprintf(rs->logs, "save len:%d cnt:%d total:%d -loop end\n", opsz, pi, totsz);
+                        sprintf(rs->logs, "wait for buffer, ret:%d\n", ret);
                         print_f(rs->plogs, "P2", rs->logs);         
-                        break;
                     }
 
                     if (ch != 'K') {
@@ -4976,6 +4983,105 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "file save cnt:%d total:%d- end\n", pi, totsz);
                 print_f(rs->plogs, "P2", rs->logs);      
                 
+            }
+
+            if (ch == 's') { /*single*/
+                fp = fopen(filename, "r");
+                if (!fp) {
+                    sprintf(rs->logs, "file read [%s] failed \n", filename);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    continue;
+                } else {
+                    sprintf(rs->logs, "file read [%s] ok \n", filename);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                totsz = 0;
+                pi = 0;
+                
+                ret = fseek(fp, 0, SEEK_END);
+                if (ret) {
+                    sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);
+                } 
+                
+                max = ftell(fp);
+                sprintf(rs->logs, " file [%s] size: %d \n", filename, max);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                ret = fseek(fp, 0, SEEK_SET);
+                if (ret) {
+                    sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                while (1) {
+                    len = 0;
+                    len = ring_buf_get(rs->pdataTx, &addr);
+                    while (len <= 0) {
+                        usleep(100000);
+                        len = ring_buf_get(rs->pdataTx, &addr);
+                    }
+
+                    memset(addr, 0xff, len);
+                    if (max < len) {
+                        len = max;
+                    }
+
+                    ret = fseek(fp, totsz, SEEK_SET);
+                    if (ret) {
+                        sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
+                        print_f(rs->plogs, "P2", rs->logs);
+                    }
+
+                    msync(addr, len, MS_SYNC);
+                    
+                    fsize = fread(addr, 1, len, fp);
+
+                    
+                    totsz += fsize;
+                    max -= len;
+
+                    ring_buf_prod(rs->pdataTx);
+                    tlen = len;
+                    sprintf(rs->logs, " %d %d/%d/%d - %d/%d\n", pi, fsize, tlen, len, totsz, max);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    
+                    if (!max) break;
+                    pi++;
+                    rs_ipc_put(rs, "r", 1);
+                    
+                }
+                
+
+                /* align to SPI_TRUNK_SZ */
+                tlen = fsize % 1024;
+                sprintf(rs->logs, "1.r %d sz %d \n", tlen, fsize);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                if (tlen) {
+                    fsize = fsize + 1024 - tlen;
+                }
+
+                tlen = totsz % 1024;
+                sprintf(rs->logs, "2.r %d sz %d \n", tlen, totsz);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                if (tlen) {
+                    totsz = totsz + 1024 - tlen;
+                }
+
+                ring_buf_set_last(rs->pdataTx, fsize);
+                rs_ipc_put(rs, "r", 1);
+                rs_ipc_put(rs, "e", 1);
+
+                rs->pmch->cur.info = totsz;
+
+                sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                fclose(fp);
+                fp = NULL;
             }
         }
     }
