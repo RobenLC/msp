@@ -1365,7 +1365,7 @@ static char spi1[] = "/dev/spidev32766.0";
     if (sel == 13) { /* continuous command mode [13 20 path pktsize spi] ex: 13 20 ./01.mp3 512 1*/
 #define TSIZE (128*1024*1024)
 #define PKTSZ  SPI_TRUNK_SZ
-#define SAVE_FILE 1
+#define SAVE_FILE 0
 #define USE_SHARE_MEM 1
 #define MEASURE_TIME_DIFF 1
 
@@ -1535,13 +1535,14 @@ static char spi1[] = "/dev/spidev32766.0";
 #endif
         torg = lpast;
 
+#if 0
             if (remainsz == 0) {
                 /* pull low RDY right away at the end of tx */
                 bitset = 0;
                 ioctl(fm[arg3], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                 printf("[R]Set spi%d RDY pin: %d\n",  arg3, bitset);
             }
-
+#endif
             if (pkcnt == 0) {
                 clock_gettime(CLOCK_REALTIME, &curtime);
                 cur = curtime.tv_sec;
