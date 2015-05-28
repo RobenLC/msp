@@ -10320,12 +10320,12 @@ static int p2(struct procRes_s *rs)
 
                     len = ring_buf_cons(rs->pdataTx, &addr);
 
-                    if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
-
                     sprintf(rs->logs, "t %d\n", len);
                     print_f(rs->plogs, "P2", rs->logs);          
 
                     if (len > 0) {
+                        if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
+
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
                         pi++;
                         if (opsz < 0) break;
