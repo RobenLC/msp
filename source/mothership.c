@@ -19,7 +19,7 @@
 #include <sys/stat.h>  
 
 //main()
-#define SPI1_ENABLE (1) 
+#define SPI1_ENABLE (0) 
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
 #define SPI_MODE_0      (0|0)
@@ -9750,7 +9750,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(100);
+        usleep(10000);
     }
 
     p0_end(mrs);
@@ -10495,10 +10495,15 @@ static int p3(struct procRes_s *rs)
                     clock_gettime(CLOCK_REALTIME, rs->tm[1]);
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
-#else
+#else // #if SPI_KTHREAD_USE
+#if SPI1_ENABLE
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
-#endif
+#else // #if SPI1_ENABLE
+                    opsz = SPI_TRUNK_SZ;
+#endif // #if SPI1_ENABLE
+#endif // #if SPI_KTHREAD_USE
 
+#if SPI1_ENABLE
 #if IN_SAVE
                    msync(addr, len, MS_SYNC);
                    fin = fopen(filename, "a+");
@@ -10543,7 +10548,16 @@ static int p3(struct procRes_s *rs)
                     //shmem_dump(addr, 32);
                     //msync(addr, len, MS_SYNC);
                     if (opsz < 0) break;
-                    
+#else // #if SPI1_ENABLE
+                    bitset = 1;
+                    msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                    //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
+                    //print_f(rs->plogs, "P3", rs->logs);
+                    if (bitset == 0) {
+                        opsz = -1;
+                        break;
+                    }
+#endif // #if SPI1_ENABLE
                     ring_buf_prod_dual(rs->pdataRx, pi);
 
                     rs_ipc_put(rs, "p", 1);
@@ -10608,7 +10622,8 @@ static int p3(struct procRes_s *rs)
 
 static int p4(struct procRes_s *rs)
 {
-    int px, pi, ret=0, len, opsz;
+    float flsize, fltime;
+    int px, pi, ret=0, len, opsz, totsz, tdiff;
     int cmode, acuhk, errtor=0;
     char ch, str[128];
     char *addr;
@@ -10887,6 +10902,8 @@ static int p4(struct procRes_s *rs)
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
 #endif
+                clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                totsz = 0;
                 pi = 0;
                 while (1) {
                     len = ring_buf_cons(rs->pcmdRx, &addr);
@@ -10909,6 +10926,7 @@ static int p4(struct procRes_s *rs)
                             fwrite(addr, 1, len, rs->fdat_s);
                             fflush(rs->fdat_s);
 #endif
+                            totsz += opsz;
                         }
                     } else {
                         sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, opsz, pi);
@@ -10921,6 +10939,15 @@ static int p4(struct procRes_s *rs)
                         rs_ipc_get(rs, &ch, 1);
                     }
                 }
+
+                clock_gettime(CLOCK_REALTIME, rs->tm[1]);
+
+                tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
+
+                flsize = totsz;
+                fltime = tdiff;
+                sprintf(rs->logs, "time:%d us, totsz:%d bytes, thoutghput: %f MBits\n", tdiff, totsz, (flsize*8)/fltime);
+                print_f(rs->plogs, "P4", rs->logs);
 
                 while (ch != 'N') {
                     sprintf(rs->logs, "%c clr\n", ch);
@@ -12080,7 +12107,7 @@ int main(int argc, char *argv[])
             print_f(&pmrs->plog, "SPI", pmrs->log);
         }
     } else {
-        fd1 = 0;
+        fd1 = fd0;
     }
 
     pmrs->sfm[0] = fd0;
