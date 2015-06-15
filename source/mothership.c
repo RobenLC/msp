@@ -19,7 +19,7 @@
 #include <sys/stat.h>  
 
 //main()
-#define SPI1_ENABLE (0) 
+#define SPI1_ENABLE (1) 
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
 #define SPI_MODE_0      (0|0)
@@ -85,7 +85,7 @@ static char spi0[] = "/dev/spidev32765.0";
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
 
-#define SPI_KTHREAD_USE    (0) /* can't work, has bug */
+#define SPI_KTHREAD_USE    (1) /* can't work, has bug */
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -498,6 +498,7 @@ struct procRes_s{
     FILE *fdat_s;
     // time measurement
     struct timespec *tm[2];
+    struct timespec tdf[2];
     char logs[256];
     struct socket_s *psocket_r;
     struct socket_s *psocket_t;
@@ -5790,8 +5791,8 @@ static int ring_buf_prod_dual(struct shmem_s *pp, int sel)
     }
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
 
-    //sprintf(str, "prod %d %d, %d %d\n", pp->r->lead.run, pp->r->lead.seq, pp->r->dual.run, pp->r->dual.seq);
-    //print_f(mlogPool, "ring", str);
+    sprintf(str, "prod %d %d, %d %d\n", pp->r->lead.run, pp->r->lead.seq, pp->r->dual.run, pp->r->dual.seq);
+    print_f(mlogPool, "ring", str);
 
     return 0;
 }
@@ -5832,8 +5833,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         dist = leadn - folwn;
     }
 
-    //sprintf(str, "cons d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
-    //print_f(mlogPool, "ring", str);
+    sprintf(str, "cons d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
+    print_f(mlogPool, "ring", str);
 
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
@@ -9540,7 +9541,7 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
-    int len=0, bitset=0;
+    int len=0, bitset=0, ret=0;
     char ch=0;
     struct info16Bit_s *p;
 
@@ -9554,7 +9555,7 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs66", mrs->log);
 
         if (ch == 'K') {
-
+        
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
@@ -9572,8 +9573,16 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
+    int bitset, ret;
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs67", mrs->log);
+
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs67", mrs->log);
+#endif
 
     mrs_ipc_put(mrs, "n", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
@@ -9619,7 +9628,7 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
-    int len=0, bitset=0;
+    int len=0, bitset=0, ret=0;
     char ch=0;
     struct info16Bit_s *p;
 
@@ -9635,6 +9644,13 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (ch == 'N') {
 
             ring_buf_init(&mrs->cmdRx);
+
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+    sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs69", mrs->log);
+#endif
 
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -9966,6 +9982,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     return 0;
 }
 #define IN_SAVE (0)
+#define TIME_MEASURE (0)
 static int p2(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -10110,10 +10127,17 @@ static int p2(struct procRes_s *rs)
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     memset(addr, 0xff, len);
                     msync(addr, len, MS_SYNC);                    
-
+#if  TIME_MEASURE
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+#endif
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    while (opsz == 0) {
+                        usleep(1000);
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
+                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);  
+                    }
 #else
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 
@@ -10139,15 +10163,9 @@ static int p2(struct procRes_s *rs)
                     //printf("0 spi %d\n", opsz);
                     sprintf(rs->logs, "r %d / %d\n", opsz, len);
                     print_f(rs->plogs, "P2", rs->logs);
+                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);                    
+#if TIME_MEASURE 
                     clock_gettime(CLOCK_REALTIME, &tnow);
-                    if (opsz == 0) {
-                        //sprintf(rs->logs, "opsz:%d\n", opsz);
-                        //print_f(rs->plogs, "P2", rs->logs);  
-                        //usleep(1000);
-                        continue;
-                    }
-
-                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
                     tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
                     if (tdiff == -1) {
@@ -10161,7 +10179,7 @@ static int p2(struct procRes_s *rs)
                         sprintf(rs->logs, "!!t %d - %d!!\n", tdiff, len);
                         print_f(rs->plogs, "P2", rs->logs);
                     }
-                    
+#endif
                     if (opsz < 0) break;
                     
                     //msync(addr, len, MS_SYNC);
@@ -10197,11 +10215,20 @@ static int p2(struct procRes_s *rs)
 
                         opsz = 0;
                         while (opsz == 0) {
-                            opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
-
+#if SPI_KTHREAD_USE
+                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    if (opsz == 0) {
+                        usleep(1000);
+                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);  
+                        continue;
+                    }
+#else
+                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+#endif
                             //usleep(10000);
-                            sprintf(rs->logs, "spi0 recv %d\n", opsz);
-                            print_f(rs->plogs, "P2", rs->logs);
+                            //sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                            //print_f(rs->plogs, "P2", rs->logs);
                         }
 
                         //msync(addr, len, MS_SYNC);
@@ -10277,8 +10304,8 @@ static int p2(struct procRes_s *rs)
                             #else
                             opsz = len;
                             #endif
-                            sprintf(rs->logs, "t %d c %d \n", opsz, pi);
-                            print_f(rs->plogs, "P2", rs->logs);         
+                            //sprintf(rs->logs, "t %d c %d \n", opsz, pi);
+                            //print_f(rs->plogs, "P2", rs->logs);         
 
                             if (opsz < 0) break;
                         }
@@ -10302,7 +10329,6 @@ static int p2(struct procRes_s *rs)
                     ch = 0;
                     rs_ipc_get(rs, &ch, 1);
                 }
-
                 rs_ipc_put(rs, "K", 1);
                 sprintf(rs->logs, "tx cnt:%d - end\n", pi);
                 print_f(rs->plogs, "P2", rs->logs);         
@@ -10318,15 +10344,25 @@ static int p2(struct procRes_s *rs)
                         rs_ipc_get(rs, &ch, 1);
                     }
 
+
                     len = ring_buf_cons(rs->pdataTx, &addr);
 
-                    sprintf(rs->logs, "t %d\n", len);
-                    print_f(rs->plogs, "P2", rs->logs);          
+                    //sprintf(rs->logs, "t %d\n", len);
+                    //print_f(rs->plogs, "P2", rs->logs);          
 
                     if (len > 0) {
                         if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
-
+#if SPI_KTHREAD_USE
+                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    while (opsz == 0) {
+                        usleep(1000);
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
+                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);  
+                    }
+#else
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
+#endif
                         pi++;
                         if (opsz < 0) break;
                         totsz += opsz;
@@ -10492,16 +10528,24 @@ static int p3(struct procRes_s *rs)
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     memset(addr, 0xaa, len);
                     msync(addr, len, MS_SYNC);
+#if TIME_MEASURE
                     clock_gettime(CLOCK_REALTIME, rs->tm[1]);
+#endif
+#if SPI1_ENABLE
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    while (opsz == 0) {
+                        usleep(1000);
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
+                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);  
+                    }
 #else // #if SPI_KTHREAD_USE
-#if SPI1_ENABLE
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+#endif // #if SPI_KTHREAD_USE
 #else // #if SPI1_ENABLE
                     opsz = SPI_TRUNK_SZ;
 #endif // #if SPI1_ENABLE
-#endif // #if SPI_KTHREAD_USE
 
 #if SPI1_ENABLE
 #if IN_SAVE
@@ -10523,7 +10567,9 @@ static int p3(struct procRes_s *rs)
 #endif
                     sprintf(rs->logs, "r %d / %d\n", opsz, len);
                     print_f(rs->plogs, "P3", rs->logs);
+                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
+#if TIME_MEASURE
                     clock_gettime(CLOCK_REALTIME, &tnow);
                     if (opsz == 0) {
                         //sprintf(rs->logs, "opsz:%d\n", opsz);
@@ -10531,8 +10577,6 @@ static int p3(struct procRes_s *rs)
                         //usleep(1000);
                         continue;
                     }
-
-                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
                     tdiff = time_diff(rs->tm[1], rs->tm[0], 1000);
                     if (tdiff == -1) {
@@ -10545,6 +10589,7 @@ static int p3(struct procRes_s *rs)
                         sprintf(rs->logs, "!!t %d - %d!!\n", tdiff, len);
                         print_f(rs->plogs, "P3", rs->logs);
                     }
+#endif
                     //shmem_dump(addr, 32);
                     //msync(addr, len, MS_SYNC);
                     if (opsz < 0) break;
@@ -10590,7 +10635,18 @@ static int p3(struct procRes_s *rs)
 
                         opsz = 0;
                         while (opsz == 0) {
+#if SPI_KTHREAD_USE
+                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    while (opsz == 0) {
+                        usleep(1000);
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
+                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);  
+                    }
+
+#else // #if SPI_KTHREAD_USE
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+#endif
                             sprintf(rs->logs, "r %d\n", opsz);
                             print_f(rs->plogs, "P3", rs->logs);
                         }
@@ -10745,6 +10801,11 @@ static int p4(struct procRes_s *rs)
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
 #endif
+                totsz = 0;
+                clock_gettime(CLOCK_REALTIME, &rs->tdf[0]);
+                sprintf(rs->logs, "start at %ds\n", rs->tdf[0].tv_sec);
+                print_f(rs->plogs, "P4", rs->logs);                         
+                
                 while (1) {
                     len = ring_buf_cons_dual(rs->pdataRx, &addr, pi);
                     if (len >= 0) {
@@ -10753,21 +10814,25 @@ static int p4(struct procRes_s *rs)
                     
                         msync(addr, len, MS_SYNC);
                         /* send data to wifi socket */
-                        sprintf(rs->logs, " %d -%d \n", len, pi);
-                        print_f(rs->plogs, "P4", rs->logs);         
+                        //sprintf(rs->logs, " %d -%d \n", len, pi);
+                        //print_f(rs->plogs, "P4", rs->logs);         
                         if (len != 0) {
 #if 1 /* debug */
                             opsz = write(rs->psocket_t->connfd, addr, len);
 #else
                             opsz = len;
 #endif
+                            totsz += len;
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-                            sprintf(rs->logs, "t %d -%d \n", opsz, pi);
-                            print_f(rs->plogs, "P4", rs->logs);         
+                            //sprintf(rs->logs, "t %d -%d \n", opsz, pi);
+                            //print_f(rs->plogs, "P4", rs->logs);         
 #if MSP_P4_SAVE_DAT
                             fwrite(addr, 1, len, rs->fdat_s);
                             fflush(rs->fdat_s);
 #endif
+                        } else {
+                            sprintf(rs->logs, "len:%d \n", len);
+                            print_f(rs->plogs, "P4", rs->logs);         
                         }
                     } else {
                         sprintf(rs->logs, "socket tx %d %d- end\n", opsz, pi);
@@ -10780,12 +10845,24 @@ static int p4(struct procRes_s *rs)
                         rs_ipc_get(rs, &ch, 1);
                     }
                 }
+                
+                clock_gettime(CLOCK_REALTIME, &rs->tdf[1]);
+                sprintf(rs->logs, "end at %ds\n", rs->tdf[1].tv_sec);
+                print_f(rs->plogs, "P4", rs->logs);                         
+                
                 while (ch != 'D') {
                     sprintf(rs->logs, "%c clr\n", ch);
                     print_f(rs->plogs, "P4", rs->logs);         
                     ch = 0;
                     rs_ipc_get(rs, &ch, 1);
                 }
+
+                tdiff = time_diff(&rs->tdf[0], &rs->tdf[1], 1000);
+
+                flsize = totsz;
+                fltime = tdiff;
+                sprintf(rs->logs, "time:%d us, totsz:%d bytes, thoutghput: %f MBits\n", tdiff, totsz, (flsize*8)/fltime);
+                print_f(rs->plogs, "P4", rs->logs);
 
                 rs_ipc_put(rs, "D", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
@@ -10902,7 +10979,7 @@ static int p4(struct procRes_s *rs)
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
 #endif
-                clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                clock_gettime(CLOCK_REALTIME, &rs->tdf[0]);
                 totsz = 0;
                 pi = 0;
                 while (1) {
@@ -10920,13 +10997,16 @@ static int p4(struct procRes_s *rs)
                             #else
                             opsz = len;
                             #endif
-                            sprintf(rs->logs, "tx %d -%d \n", opsz, pi);
-                            print_f(rs->plogs, "P4", rs->logs);      
+                            //sprintf(rs->logs, "tx %d -%d \n", opsz, pi);
+                            //print_f(rs->plogs, "P4", rs->logs);      
 #if MSP_P4_SAVE_DAT
                             fwrite(addr, 1, len, rs->fdat_s);
                             fflush(rs->fdat_s);
 #endif
                             totsz += opsz;
+                        } else {
+                            sprintf(rs->logs, "len:%d \n", len);
+                            print_f(rs->plogs, "P4", rs->logs);         
                         }
                     } else {
                         sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, opsz, pi);
@@ -10940,9 +11020,9 @@ static int p4(struct procRes_s *rs)
                     }
                 }
 
-                clock_gettime(CLOCK_REALTIME, rs->tm[1]);
+                clock_gettime(CLOCK_REALTIME, &rs->tdf[1]);
 
-                tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
+                tdiff = time_diff(&rs->tdf[0], &rs->tdf[1], 1000);
 
                 flsize = totsz;
                 fltime = tdiff;
