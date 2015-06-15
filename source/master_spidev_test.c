@@ -1367,7 +1367,7 @@ static char spi1[] = "/dev/spidev32766.0";
 #define PKTSZ  SPI_TRUNK_SZ
 #define SAVE_FILE 0
 #define USE_SHARE_MEM 1
-#define MEASURE_TIME_DIFF 1
+#define MEASURE_TIME_DIFF 0
 
         int chunksize, acusz;
         chunksize = PKTSZ;
@@ -1569,13 +1569,13 @@ static char spi1[] = "/dev/spidev32766.0";
             printf("time cose: %llu s, bandwidth: %llu MBits/s \n",  tmp/1000000000, ((fsize*8)/((lpast - lnow)/1000000)) /1000 );            
         }
 
-        usleep(500000);
+        usleep(50000);
 
-        bitset = 1;
+        bitset = 0;
         ioctl(fm[arg3], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[R]Set spi%d RDY pin: %d, finished!! \n", arg3, bitset);
 
-        usleep(100);
+        usleep(300000);
 		
         ioctl(fm[arg3], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("[R]Get spi%d RDY pin: %d, finished!! \n", arg3, bitset);
@@ -1662,6 +1662,9 @@ static char spi1[] = "/dev/spidev32766.0";
 
 	}
     if (sel == 11) { /* dual channel data mode ex:[./master_spi.bin 11 50 file_path 30720 30720 sleepus]*/
+
+#define TIME_DIFF_MEAS  (1)
+
 	#define TSIZE (128*1024*1024)
 	#define PKTSZ  SPI_TRUNK_SZ
 	int chunksize;
@@ -1856,17 +1859,21 @@ static char spi1[] = "/dev/spidev32766.0";
 			}
 
                      ret = read(pipefc[0], &buf, 1); 
+#if TIME_DIFF_MEAS
                      clock_gettime(CLOCK_REALTIME, &tdiff[0]);            
+#endif
 			ret = tx_data(fm[0], NULL, srcBuff, pknum, pksize, 1024*1024);
+#if TIME_DIFF_MEAS
                      clock_gettime(CLOCK_REALTIME, &tspi[0]);   
-                     msync(tspi, sizeof(struct timespec)*2, MS_SYNC);
                      tlast = test_time_diff(&tspi[1], &tdiff[0], 1000);
                      tcost = test_time_diff(&tdiff[0], &tspi[0], 1000);
-
 			printf("[p0] tx %d (%d us /%d us)\n", ret, tcost, tlast);
+
                      if (arg4) {
                          usleep(arg4);
                      }
+#endif
+                     msync(tspi, sizeof(struct timespec)*2, MS_SYNC);
                      write(pipefd[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
@@ -1916,11 +1923,12 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
                      //tnow = curtime.tv_nsec;
                      //now = cur * 1000000000+tnow;
                      //printf("[p1] enter %d t:%llu %llu %llu\n", remainsz,cur,tnow, lnow/1000000);
-                     
-                     clock_gettime(CLOCK_REALTIME, &tdiff[1]);            
+#if TIME_DIFF_MEAS                     
+                     clock_gettime(CLOCK_REALTIME, &tdiff[1]); 
+#endif          
 			ret = tx_data(fm[1], NULL, srcBuff, pknum, pksize, 1024*1024);		 
+#if TIME_DIFF_MEAS                     
                      clock_gettime(CLOCK_REALTIME, &tspi[1]);   
-                     msync(tspi, sizeof(struct timespec) * 2, MS_SYNC);
                      tlast = test_time_diff(&tspi[0], &tdiff[1], 1000);
                      tcost = test_time_diff(&tdiff[1], &tspi[1], 1000);
 
@@ -1928,6 +1936,8 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
                      if (arg4) {
                          usleep(arg4);
                      }
+#endif
+                     msync(tspi, sizeof(struct timespec) * 2, MS_SYNC);
                      write(pipefc[1], "d", 1); // send the content of argv[1] to the reader
 /*
 if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
@@ -1962,7 +1972,7 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         }
 
 	
-	sleep(3);
+	usleep(3000);
 
         bitset = 1;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -1973,7 +1983,7 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset,pkcnt);
 
-	sleep(1);
+        usleep(300000);
 	
         bitset = 0;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -1983,7 +1993,7 @@ if (((srcBuff - srctmp) < 0x28B9005) && ((srcBuff - srctmp) > 0x28B8005)) {
         ioctl(fm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         printf("[%d]Set RDY pin: %d cnt:%d\n", pid, bitset, pkcnt);
 
-	sleep(2);
+        usleep(300000);
 	
         bitset = 1;
         ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
