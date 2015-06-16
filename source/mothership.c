@@ -8155,6 +8155,18 @@ static int fs33(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs33", mrs->log);
 
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs33", mrs->log);
+
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi1 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs33", mrs->log);
+#endif
+
     modersp->r = 1;
     return 1;
 }
@@ -8286,6 +8298,18 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
     msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs37", mrs->log);
+
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+    sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs37", mrs->log);
+
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+    sprintf(mrs->log, "Stop spi1 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs37", mrs->log);
+#endif
 
     modersp->r = 1;
     return 1;
@@ -8455,6 +8479,13 @@ static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs45", mrs->log);
 
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs16", mrs->log);
+#endif
+
     modersp->m = modersp->m + 1;
     return 2;
 }
@@ -8488,6 +8519,13 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs47", mrs->log);
         
         modersp->m = modersp->m + 1;
+
+#if SPI_KTHREAD_USE
+         bitset = 0;
+         ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+         sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+         print_f(&mrs->plog, "fs47", mrs->log);
+#endif
 
         bitset = 0;
         msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -9130,12 +9168,19 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    int bitset=0;
+    int bitset=0, ret=0;
     
     bitset = 0;
     msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs54", mrs->log);
+
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs54", mrs->log);
+#endif
 
     sprintf(mrs->log, "trigger spi0 \n");
     print_f(&mrs->plog, "fs54", mrs->log);
@@ -9213,6 +9258,13 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                 msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                 sprintf(mrs->log, "set RDY pin %d\n",bitset);
                 print_f(&mrs->plog, "fs55", mrs->log);
+
+#if SPI_KTHREAD_USE
+                bitset = 0;
+                ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+                sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+                print_f(&mrs->plog, "fs55", mrs->log);
+#endif
                 usleep(300000);
 
                 modersp->m = 48;
@@ -9560,6 +9612,13 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs66", mrs->log);
+
+#if SPI_KTHREAD_USE
+            bitset = 0;
+            ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+            sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+            print_f(&mrs->plog, "fs66", mrs->log);
+#endif
             usleep(300000);
 
             modersp->r = 1;            
@@ -9646,10 +9705,10 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
             ring_buf_init(&mrs->cmdRx);
 
 #if SPI_KTHREAD_USE
-    bitset = 0;
-    ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
-    sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
-    print_f(&mrs->plog, "fs69", mrs->log);
+            bitset = 0;
+            ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+            sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+            print_f(&mrs->plog, "fs69", mrs->log);
 #endif
 
             bitset = 0;
@@ -10262,7 +10321,17 @@ static int p2(struct procRes_s *rs)
                 len = 0;
                 pi = 0;  
                 while (1) {
+#if SPI_KTHREAD_USE
+                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    while (opsz == 0) {
+                        usleep(1000);
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);  
+                    }
+#else
                     opsz = mtx_data(rs->spifd, addr, NULL, SPI_TRUNK_SZ, tr);
+#endif
                     sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 
