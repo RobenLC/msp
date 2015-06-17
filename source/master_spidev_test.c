@@ -666,7 +666,7 @@ static char spi1[] = "/dev/spidev32766.0";
         printf("read file size: %d/%d \n", ret, max);
 
         outbuf = total + startAddr;
-        mem_dump(outbuf, bLength);
+        //mem_dump(outbuf, bLength);
         acusz = bLength;
 
         cnt = 0;
@@ -728,7 +728,7 @@ static char spi1[] = "/dev/spidev32766.0";
         }
         
         outbuf = total + startAddr;
-        mem_dump(outbuf, bLength);
+        //mem_dump(outbuf, bLength);
         ret = fwrite(total, 1, max, dkf);
         printf("write file size: %d/%d \n", ret, max);
         fflush(dkf);
