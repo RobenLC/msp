@@ -1141,7 +1141,7 @@ fsparseEnd:
 
 static int aspFS_createFATRoot(struct sdFAT_s *pfat)
 {
-    char dir[32] = "/";
+    char dir[32] = "root";
     struct directnFile_s *r = 0, *c = 0;
 
     mspFS_allocDir(pfat, &r);
@@ -1707,9 +1707,11 @@ static int mspFS_search(struct directnFile_s **dir, struct directnFile_s *root, 
     struct directnFile_s *brt;
 
     ret = strlen(path);
-    //sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
-    //print_f(mlogPool, "FS", mlog);
+    sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
+    print_f(mlogPool, "FS", mlog);
 
+    memset(rmp, 0, 16*256);
+    
     ch = path;
     while (ret > 0) {
         if (*ch == split) {
@@ -1720,8 +1722,8 @@ static int mspFS_search(struct directnFile_s **dir, struct directnFile_s *root, 
         } else {
             rmp[a][b] = *ch;
             b++;
-            sprintf(mlog, "%x ", *ch);
-            print_f(mlogPool, "FS", mlog);
+            //sprintf(mlog, "%x ", *ch);
+            //print_f(mlogPool, "FS", mlog);
         }
         ch++;
         ret --;
@@ -1739,16 +1741,34 @@ static int mspFS_search(struct directnFile_s **dir, struct directnFile_s *root, 
     b = 0;
     brt = root->ch;
     while (brt) {
-        sprintf(mlog, "comp[%s] [%s] \n", brt->dfLFN, &rmp[b][0]);
+        sprintf(mlog, "%d/ %s\n", b, brt->dfSFN);
         print_f(mlogPool, "FS", mlog);
-     if (strcmp("..", &rmp[b][0]) == 0) {
+        if ((b < a) && (brt->dftype != ASPFS_TYPE_DIR)) {
+            //sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+            //print_f(mlogPool, "FS", mlog);
+            brt = brt->br;
+        }
+        else if ((b == a) && (brt->dftype == ASPFS_TYPE_DIR)) {
+            //sprintf(mlog, "skip folder in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+            //print_f(mlogPool, "FS", mlog);
+            brt = brt->br;
+        }
+        else if (strcmp("..", &rmp[b][0]) == 0) {
             b++;
-            if (brt->dftype != ASPFS_TYPE_ROOT) {
+            if (brt->pa->dftype != ASPFS_TYPE_ROOT) {
                 brt = brt->pa;
             }
-     } else if (strcmp(".", &rmp[b][0]) == 0) {
+        } else if (strcmp(".", &rmp[b][0]) == 0) {
             b++;
         } else if (strcmp(brt->dfLFN, &rmp[b][0]) == 0) {
+            b++;
+            if (b > a) {
+               *dir = brt;
+                ret = 0;
+                break;
+            }
+            brt = brt->ch;
+        } else if (strcmp(brt->dfSFN, &rmp[b][0]) == 0) {
             b++;
             if (b > a) {
                *dir = brt;
@@ -1765,8 +1785,8 @@ static int mspFS_search(struct directnFile_s **dir, struct directnFile_s *root, 
     print_f(mlogPool, "FS", mlog);
 
     while((brt) && (b>=0)) {
-        sprintf(mlog, "[%d][%s][%s] \n", b, &rmp[b][0], brt->dfLFN);
-        print_f(mlogPool, "FS", mlog);
+        //sprintf(mlog, "[%d][%s][%s] \n", b, &rmp[b][0], brt->dfLFN);
+        //print_f(mlogPool, "FS", mlog);
         b--;
         brt = brt->pa;
     }
@@ -11346,9 +11366,12 @@ static int p6(struct procRes_s *rs)
 {
     char *recvbuf, *sendbuf;
     int ret, n, num, hd, be, ed, ln, cnt=0;
-    
+    char opc=0;
+    char opcode=0, param=0, flag = 0;
+
     struct directnFile_s *fscur = 0, *nxtf = 0;
     struct directnFile_s *brt;
+    struct directnFile_s *dnld;
 
     char dir[256] = "/mnt/mmc2";
     //char dir[256] = "/root";
@@ -11431,6 +11454,10 @@ static int p6(struct procRes_s *rs)
         ed = atFindIdx(&recvbuf[hd], 0xfb);
         if (ed < 0) goto socketEnd;
         ln = atFindIdx(&recvbuf[hd], '\0');
+        
+        opcode = recvbuf[hd+1]; param = recvbuf[be-1];
+        sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]\n", opcode, param);
+        print_f(rs->plogs, "P6", rs->logs);
 
         n = strlen(&recvbuf[hd]);
         if (n <= 0) {
@@ -11451,69 +11478,105 @@ static int p6(struct procRes_s *rs)
             goto socketEnd;
         }
 
-        sprintf(rs->logs, "jump folder:[%s]\n", folder);
+        sprintf(rs->logs, "get folder:[%s]\n", folder);
         print_f(rs->plogs, "P6", rs->logs);
 
-        nxtf = 0;
-        ret = mspFS_folderJump(&nxtf, fscur, folder);
-        if (ret < 0) {
-            sprintf(rs->logs, "jump folder:[%s] failed, ret:%d\n", folder, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            nxtf = fscur;
-        }
-
-        if (nxtf) {
-            sprintf(rs->logs, "jump folder:[%s] done, ret:%d, get next folder: 0x%x\n", folder, ret, nxtf);
-            print_f(rs->plogs, "P6", rs->logs);
-            fscur = nxtf;
-        } else {
-            sprintf(rs->logs, "jump folder:[%s] failed, ret:%d, get next folder == 0\n", folder, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            goto socketEnd;
-        }
-
         sendbuf[0] = 0xfe;
-        sendbuf[1] = 0x11;
+        sendbuf[1] = opcode;
         sendbuf[2] = 0xfd;
-        sendbuf[3] = 0x01;
+        sendbuf[3] = 0x01; /*??*/
         sendbuf[4] = 0xfc;
-        brt = fscur->ch;
+            
+        if (opcode == 0x12) { /* download file */
+            ret = mspFS_search(&dnld, rs->psFat->fatRootdir, folder);
+            if (ret) {
+                sprintf(rs->logs, "search file failed ret=%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
 
-        while (brt) {
-            while ((strcmp(brt->dfSFN, "..") == 0) || (strcmp(brt->dfSFN, ".") == 0)) {
-                brt = brt->br;            
-            }
-
-            if (brt->dflen) {
-                n = strlen(brt->dfLFN);
-                memcpy(&sendbuf[5], brt->dfLFN, n);
-            } else {
-                n = strlen(brt->dfSFN);
-                memcpy(&sendbuf[5], brt->dfSFN, n);
-            }
-
-            if (brt->dftype == ASPFS_TYPE_FILE) {
                 sendbuf[3] = 'F';
             } else {
+                sprintf(rs->logs, "search file OK ret=%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
                 sendbuf[3] = 'D';
+                mspFS_showFolder(dnld);
             }
 
-            sendbuf[5+n] = 0xfb;
-            sendbuf[5+n+1] = '\n';
-            sendbuf[5+n+2] = '\0';
-            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            sendbuf[5] = 0xfb;
+            sendbuf[5+1] = '\n';
+            sendbuf[5+2] = '\0';
 
-            brt = brt->br;
-            cnt++;
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+        } 
+        else if (opcode == 0x11) { /* folder list */
+            nxtf = 0;
+            ret = mspFS_folderJump(&nxtf, fscur, folder);
+            if (ret < 0) {
+                sprintf(rs->logs, "jump folder:[%s] failed, ret:%d\n", folder, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                nxtf = fscur;
+            }
+
+            if (nxtf) {
+                sprintf(rs->logs, "jump folder:[%s] done, ret:%d, get next folder: 0x%x\n", folder, ret, nxtf);
+                print_f(rs->plogs, "P6", rs->logs);
+                fscur = nxtf;
+            } else {
+                sprintf(rs->logs, "jump folder:[%s] failed, ret:%d, get next folder == 0\n", folder, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                sendbuf[1] = 0x10;
+                sendbuf[3] = 'E';
+                sendbuf[5+1] = '\n';
+                sendbuf[5+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                goto socketEnd;
+            }
+
+            brt = fscur->ch;
+
+            while (brt) {
+                while ((strcmp(brt->dfSFN, "..") == 0) || (strcmp(brt->dfSFN, ".") == 0)) {
+                    brt = brt->br;           
+                }
+
+                if (brt->dflen) {
+                    n = strlen(brt->dfLFN);
+                    memcpy(&sendbuf[5], brt->dfLFN, n);
+                } else {
+                    n = strlen(brt->dfSFN);
+                    memcpy(&sendbuf[5], brt->dfSFN, n);
+                }
+
+                if (brt->dftype == ASPFS_TYPE_FILE) {
+                    sendbuf[3] = 'F';
+                } else {
+                    sendbuf[3] = 'D';
+                }
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                brt = brt->br;
+                cnt++;
+            }
+
+            if (cnt == 0) {
+                fscur = rs->psFat->fatRootdir;
+            }
+
         }
 
         socketEnd:
-
-        if (cnt == 0) {
-            fscur = rs->psFat->fatRootdir;
-        }
         
         close(rs->psocket_at->connfd);
         rs->psocket_at->connfd = 0;
