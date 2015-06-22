@@ -267,6 +267,8 @@ typedef enum {
     ASPFAT_STATUS_FAT = 0x8,
     ASPFAT_STATUS_ROOT_DIR = 0x10,
     ASPFAT_STATUS_FOLDER = 0x20,
+    ASPFAT_STATUS_SDRD = 0x40,
+    ASPFAT_STATUS_SDWT = 0x80,
 } aspFatStatus_e;
 
 
@@ -1806,7 +1808,7 @@ static int mspFS_showFolder(struct directnFile_s *root)
 
     brt = root->ch;
     while (brt) {
-        sprintf(mlog, "|-[%c] %s\n", brt->dftype == ASPFS_TYPE_DIR?'D':'F', brt->dfLFN);
+        sprintf(mlog, "|-[%c] %s\n", brt->dftype == ASPFS_TYPE_DIR?'D':'F', brt->dfLFN==NULL?brt->dfSFN:brt->dfLFN);
         print_f(mlogPool, "FS", mlog);
         brt = brt->br;
     }
@@ -4515,11 +4517,24 @@ static int stfat_30(struct psdata_s *data)
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else if (!(pFat->fatStatus & ASPFAT_STATUS_FOLDER)) {
-
-                sprintf(rs->logs, "FOLDER fat status:0x%.8x \n", secStr, secLen, pFat->fatStatus); 
+                sprintf(rs->logs, "FOLDER fat status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
                 ch = 52;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_SDRD)) {
+                sprintf(rs->logs, "SD Read to APP status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 0; /* TODO: APP->MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_SDWT)) {
+                sprintf(rs->logs, "APP write to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 0; /* TODO: LOV->MSP->APP */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else {
@@ -7273,8 +7288,6 @@ static int fs03(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs03", mrs->log);
 
-
-
     mrs->mchine.seqcnt += 1;
     if (mrs->mchine.seqcnt >= 0x8) {
         mrs->mchine.seqcnt = 0;
@@ -8783,7 +8796,9 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     pftb = pfat->fatTable;
 
     if (pftb->c) {
-        pftb->c = pftb->c->n;
+        pflnt = pftb->c;
+        pftb->c = pflnt->n;
+        free(pflnt);
     }
 
     if ((!pftb->c) && (pParBuf->dirBuffUsed)) {
@@ -8802,7 +8817,8 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (pfat->fatRootdir->ch->dfSFN) {
             pfat->fatStatus |= ASPFAT_STATUS_ROOT_DIR;
         }
-
+        
+#if 0 /* do folder parsing anyway */
         curDir = pfat->fatRootdir;
         br= curDir->ch;
         if (!br) {
@@ -8810,6 +8826,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r = 1;
             return 1;
         }
+#endif
 
         while (br) {
             if (br->dftype == ASPFS_TYPE_DIR) {
@@ -8927,7 +8944,9 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
         curDir = pfhead->fdObj;
 
         if (pftb->c) {
-            pftb->c = pftb->c->n;
+            pflnt = pftb->c;
+            pftb->c = pflnt->n;
+            free(pflnt);
         }
 
         if ((!pftb->c) && (pParBuf->dirBuffUsed)) {
@@ -9014,6 +9033,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
                 sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
                 print_f(&mrs->plog, "fs52", mrs->log);
             }
+            /* debug */
             pflnt = pflsh;
             while (pflnt) {
                 sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
@@ -9553,7 +9573,6 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs65", mrs->log);
         } 
 
-
         //sprintf(mrs->log, "cnt:%d\n", modersp->c);
         //print_f(&mrs->plog, "fs65", mrs->log);
         
@@ -9565,9 +9584,9 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 #if SUP_FILE
             if (f) {
-               fwrite(sh->supdataBuff, 1, len, f);
-               sprintf(mrs->log, "sup save len:%d\n", len);
-               print_f(&mrs->plog, "fs65", mrs->log);
+                fwrite(sh->supdataBuff, 1, len, f);
+                sprintf(mrs->log, "sup save len:%d\n", len);
+                print_f(&mrs->plog, "fs65", mrs->log);
             } else {
                 sprintf(mrs->log, "sup back save NONE \n");
                 print_f(&mrs->plog, "fs65", mrs->log);
@@ -9868,10 +9887,10 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05},
                             {stdob_01, stdob_02, stdob_03, stdob_04, stdob_05},
                             {stdob_06, stdob_07, stdob_08, stdob_09, stdob_10},
-                            {streg_11, streg_12, streg_13, streg_14, streg_15}, // rege
-                            {streg_16, streg_17, stfat_18, stfat_19, stfat_20}, // regf
-                            {stfat_21, stfat_22, stfat_23, stfat_24, stfat_25}, // fatg
-                            {stfat_26, stfat_27, stfat_28, stfat_29, stfat_30}, // fath
+                            {streg_11, streg_12, streg_13, streg_14, streg_15}, // REGE
+                            {streg_16, streg_17, stfat_18, stfat_19, stfat_20}, // REGF
+                            {stfat_21, stfat_22, stfat_23, stfat_24, stfat_25}, // FATG
+                            {stfat_26, stfat_27, stfat_28, stfat_29, stfat_30}, // FATH
                             {stsup_31, stsup_32, stsup_33, stsup_34, stsup_35}, // sup
                             {stsin_36, stsin_37, stsin_38, stsin_39, stsin_40}}; // sig
 
@@ -11202,7 +11221,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sprintf(rs->logs, "p5 get listen ret: %d", ret);
         error_handle(rs->logs, 3320);
     }
-
+    
     while (1) {
         //printf("#");
         //sprintf(rs->logs, "#\n");
@@ -11373,6 +11392,16 @@ static int p6(struct procRes_s *rs)
     struct directnFile_s *brt;
     struct directnFile_s *dnld;
 
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct sdFAT_s *pfat=0;
+    struct sdFATable_s   *pftb=0;
+    uint32_t secStr=0, secLen=0;
+
+    pct = rs->pcfgTable;
+    pfat = rs->psFat;
+    pftb = pfat->fatTable;
+
     char dir[256] = "/mnt/mmc2";
     //char dir[256] = "/root";
     char folder[256];
@@ -11499,7 +11528,33 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
 
                 sendbuf[3] = 'D';
-                mspFS_showFolder(dnld);
+                mspFS_showFolder(dnld->pa);
+                secStr = (dnld->dfclstnum - 2)*rs->psFat->fatBootsec->secPrClst + rs->psFat->fatBootsec->secWhroot;
+                secLen = dnld->dflength / 512 + ((dnld->dflength%512)==0?0:1);
+                sprintf(rs->logs, "start sector:%d sector len:%d\n", secStr, secLen);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                if (!pftb->h) {
+                    pflsh = 0;
+                    ret = mspSD_parseFAT2LinkList(&pflsh, dnld->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
+                    if (ret) {
+                        sprintf(rs->logs, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+                        print_f(rs->plogs, "P6", rs->logs);
+                    }
+                    /* debug */
+                    pflnt = pflsh;
+                    while (pflnt) {
+                        sprintf(rs->logs, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+                        print_f(rs->plogs, "P6", rs->logs);
+                        pflnt = pflnt->n;
+                    }
+                    pftb->h = pflsh;
+                    pftb->c = pftb->h;
+                } else {
+                    sprintf(rs->logs, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                
             }
 
             sendbuf[5] = 0xfb;
@@ -11526,7 +11581,7 @@ static int p6(struct procRes_s *rs)
             } else {
                 sprintf(rs->logs, "jump folder:[%s] failed, ret:%d, get next folder == 0\n", folder, ret);
                 print_f(rs->plogs, "P6", rs->logs);
-
+                
                 sendbuf[1] = 0x10;
                 sendbuf[3] = 'E';
                 sendbuf[5+1] = '\n';
