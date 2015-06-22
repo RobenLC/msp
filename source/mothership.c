@@ -345,10 +345,11 @@ struct sdFAT_s{
     struct sdFSinfo_s     *fatFSinfo;
     struct sdFATable_s   *fatTable;
     struct directnFile_s   *fatRootdir;
+    struct directnFile_s    *fatFileDnld;
+    struct directnFile_s    *fatFileUpld;
     struct sdDirPool_s    *fatDirPool;
     struct supdataBack_s *fatSupdata;
     struct supdataBack_s *fatSupcur;
-
 };
 
 struct psdata_s {
@@ -631,10 +632,10 @@ static int stsup_33(struct psdata_s *data);
 static int stsup_34(struct psdata_s *data);
 static int stsup_35(struct psdata_s *data);
 static int stsin_36(struct psdata_s *data);
-static int stsin_37(struct psdata_s *data);
-static int stsin_38(struct psdata_s *data);
-static int stsin_39(struct psdata_s *data);
-static int stsin_40(struct psdata_s *data);
+static int stdow_37(struct psdata_s *data);
+static int stdow_38(struct psdata_s *data);
+static int stdow_39(struct psdata_s *data);
+static int stdow_40(struct psdata_s *data);
 
 static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, char *dir);
 static int mspFS_insertChilds(struct sdFAT_s *psFat, struct directnFile_s *root);
@@ -1998,7 +1999,8 @@ static uint32_t next_SINJ(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSTSM;
+                evt = FATH; 
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -4419,7 +4421,9 @@ static int stfat_29(struct psdata_s *data)
             if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
                 ch = 45;             
             } else {
-                if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
+                if (pFat->fatStatus & ASPFAT_STATUS_SDRD) {
+                    ch = 67;
+                } else if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
                     (p->opinfo == pFat->fatBootsec->secPrfat)) {
                     ch = 54; 
                 } else {
@@ -4527,7 +4531,7 @@ static int stfat_30(struct psdata_s *data)
                 sprintf(rs->logs, "SD Read to APP status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 0; /* TODO: APP->MSP->LOV */
+                ch = 71; /* TODO: APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else if ((pFat->fatStatus & ASPFAT_STATUS_SDWT)) {
@@ -4846,7 +4850,7 @@ static int stsin_36(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsin_37(struct psdata_s *data)
+static int stdow_37(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -4856,11 +4860,11 @@ static int stsin_37(struct psdata_s *data)
     rlt = abs_result(data->result); 
 
     sprintf(rs->logs, "op_37 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SIN", rs->logs);  
+    print_f(rs->plogs, "DOW", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
+            ch = 70; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_37: result: %x, goto %d\n", data->result, ch); 
@@ -4870,7 +4874,7 @@ static int stsin_37(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -4888,7 +4892,7 @@ static int stsin_37(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsin_38(struct psdata_s *data)
+static int stdow_38(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -4930,7 +4934,7 @@ static int stsin_38(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsin_39(struct psdata_s *data)
+static int stdow_39(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -4972,7 +4976,7 @@ static int stsin_39(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsin_40(struct psdata_s *data)
+static int stdow_40(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -6841,6 +6845,62 @@ end:
 
     return ret;
 }
+
+static int cmdfunc_dnld_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_dnld_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SCM;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, 'h', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_dnld_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type)
 {
     int cnt=0, s=0;
@@ -7016,7 +7076,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 10
+#define CMD_SIZE 11
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -7024,7 +7084,7 @@ static int dbg(struct mainRes_s *mrs)
 
     struct cmd_s cmdtab[CMD_SIZE] = {{0, "poll", cmdfunc_01}, {1, "action", cmdfunc_act_opcode}, {2, "rgw", cmdfunc_regw_opcode}, {3, "op", cmdfunc_opcode}, 
                                 {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_go_opcode}, {6, "rgr", cmdfunc_regr_opcode}, {7, "launch", cmdfunc_lh_opcode},
-                                {8, "boot", cmdfunc_boot_opcode}, {9, "single", cmdfunc_single_opcode}};
+                                {8, "boot", cmdfunc_boot_opcode}, {9, "single", cmdfunc_single_opcode}, {10, "dnld", cmdfunc_dnld_opcode}};
 
     p0_init(mrs);
 
@@ -7230,6 +7290,11 @@ static int hd66(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd67(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd68(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd69(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd70(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd71(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd72(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd73(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd74(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -9766,9 +9831,148 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
+static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    int val=0, i=0, ret=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct directnFile_s *curDir=0, *ch=0, *br=0;
+    struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct sdFATable_s   *pftb=0;
+    
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pParBuf = &pfat->fatDirPool->parBuf;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
+
+    if (!pfat->fatFileDnld) {
+        modersp->r = 2;
+        return 1;
+    }
+
+    curDir = pfat->fatFileDnld;
+    if (!pftb->h) {
+        pflsh = 0;
+        ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
+        if (ret) {
+            sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+            print_f(&mrs->plog, "fs70", mrs->log);
+        }
+        /* debug */
+        pflnt = pflsh;
+        while (pflnt) {
+            sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+            print_f(&mrs->plog, "fs70", mrs->log);
+            pflnt = pflnt->n;
+        }
+        pftb->h = pflsh;
+        pftb->c = pftb->h;
+
+        pfat->fatStatus |= ASPFAT_STATUS_SDRD;
+        modersp->r = 1;
+    } else {
+        sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+        print_f(&mrs->plog, "fs70", mrs->log);
+        modersp->r = 2;
+    }
+
+    return 1;
+}
+
+static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    int val=0, i=0, ret=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct directnFile_s *curDir=0, *ch=0, *br=0;
+    struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct sdFATable_s   *pftb=0;
+
+    sprintf(mrs->log, "get SD cur:0x%.8x \n", pftb->c);
+    print_f(&mrs->plog, "fs71", mrs->log);
+
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pParBuf = &pfat->fatDirPool->parBuf;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
+
+    if (pftb->c) {
+        pflnt = pftb->c;
+        pftb->c = pflnt->n;
+        free(pflnt);
+    }
+
+    if (pftb->c) {
+        pflnt = pftb->c;
+                 
+        secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
+        secLen = pflnt->ftLen;
+
+        if (secLen < 16) secLen = 16;
+
+        sprintf(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
+        print_f(&mrs->plog, "fs71", mrs->log);
+
+        cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
+
+        val = cfgValueOffset(secStr, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+        val = cfgValueOffset(secLen, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+        cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+        
+        modersp->r = 2;
+    }else {
+        pftb->h = 0;
+        pfat->fatStatus &= ~ASPFAT_STATUS_SDRD;    
+        modersp->r = 3;
+    }
+
+    return 1;
+}
+static int fs72(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    return 0;
+}
+static int fs73(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 70
+#define PS_NUM 75
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -9787,7 +9991,8 @@ static int p0(struct mainRes_s *mrs)
                                  {50, fs50},{51, fs51},{52, fs52},{53, fs53},{54, fs54},
                                  {55, fs55},{56, fs56},{57, fs57},{58, fs58},{59, fs59},
                                  {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64},
-                                 {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69}};
+                                 {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69},
+                                 {65, fs70},{66, fs71},{67, fs72},{68, fs73},{69, fs74}};
 
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -9802,7 +10007,8 @@ static int p0(struct mainRes_s *mrs)
                                  {50, hd50},{51, hd51},{52, hd52},{53, hd53},{54, hd54},
                                  {55, hd55},{56, hd56},{57, hd57},{58, hd58},{59, hd59},
                                  {60, hd60},{61, hd61},{62, hd62},{63, hd63},{64, hd64},
-                                 {65, hd65},{66, hd66},{67, hd67},{68, hd68},{69, hd69}};
+                                 {65, hd65},{66, hd66},{67, hd67},{68, hd68},{69, hd69},
+                                 {60, hd70},{61, hd71},{62, hd72},{63, hd73},{64, hd74}};
 
     p0_init(mrs);
 
@@ -9891,8 +10097,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {streg_16, streg_17, stfat_18, stfat_19, stfat_20}, // REGF
                             {stfat_21, stfat_22, stfat_23, stfat_24, stfat_25}, // FATG
                             {stfat_26, stfat_27, stfat_28, stfat_29, stfat_30}, // FATH
-                            {stsup_31, stsup_32, stsup_33, stsup_34, stsup_35}, // sup
-                            {stsin_36, stsin_37, stsin_38, stsin_39, stsin_40}}; // sig
+                            {stsup_31, stsup_32, stsup_33, stsup_34, stsup_35}, // SUPI
+                            {stsin_36, stdow_37, stdow_38, stdow_39, stdow_40}}; // SINJ
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -9942,6 +10148,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 's') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, SUPI, PSWT);
+                } else if (cmd == 'h') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, SINJ, PSACT);
                 }
 
 
@@ -11527,13 +11736,22 @@ static int p6(struct procRes_s *rs)
                 sprintf(rs->logs, "search file OK ret=%d\n", ret);
                 print_f(rs->plogs, "P6", rs->logs);
 
-                sendbuf[3] = 'D';
                 mspFS_showFolder(dnld->pa);
                 secStr = (dnld->dfclstnum - 2)*rs->psFat->fatBootsec->secPrClst + rs->psFat->fatBootsec->secWhroot;
                 secLen = dnld->dflength / 512 + ((dnld->dflength%512)==0?0:1);
                 sprintf(rs->logs, "start sector:%d sector len:%d\n", secStr, secLen);
                 print_f(rs->plogs, "P6", rs->logs);
 
+#if 1
+                if (pfat->fatFileDnld) {
+                    sprintf(rs->logs, "SD read file to APP (pendding) status:0x%.8x\n", pfat->fatStatus);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    sendbuf[3] = 'P'; /* pendding */
+                } else {
+                    pfat->fatFileDnld = dnld;
+                    sendbuf[3] = 'D';
+                }
+#else
                 if (!pftb->h) {
                     pflsh = 0;
                     ret = mspSD_parseFAT2LinkList(&pflsh, dnld->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
@@ -11554,7 +11772,7 @@ static int p6(struct procRes_s *rs)
                     sprintf(rs->logs, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);
                 }
-                
+#endif
             }
 
             sendbuf[5] = 0xfb;
