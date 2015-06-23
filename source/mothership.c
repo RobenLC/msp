@@ -11907,13 +11907,17 @@ static int p6(struct procRes_s *rs)
 #endif
             }
 
-            sendbuf[5] = 0xfb;
-            sendbuf[5+1] = '\n';
-            sendbuf[5+2] = '\0';
+            sprintf(rs->logs, "%s,%d,0x%.8x", dnld->dfSFN, dnld->dflength, dnld->dftype);
+            n = strlen(rs->logs);
+            memcpy(&sendbuf[5], rs->logs, n);
 
-            ret = write(rs->psocket_at->connfd, sendbuf, 5+3);
-            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+3, sendbuf, rs->psocket_at->connfd, ret);
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            
         } 
         else if (opcode == 0x11) { /* folder list */
             nxtf = 0;
