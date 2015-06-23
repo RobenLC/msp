@@ -23,7 +23,7 @@
 #define SPI_MODE_1		(0|SPI_CPHA)
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
-#define SPI_SPEED    30000000
+#define SPI_SPEED    10000000
 
 #define OP_MAX 0xff
 #define OP_NONE 0x00
@@ -523,10 +523,13 @@ static int next_spy(struct psdata_s *data)
                 //next = PSMAX;
                 switch (tmpAns) {
                 case OP_DAT: /* currently support */              
-                    //next = PSSET; /* jump to next stage */
-                    //evt = BULLET;
-                    next = PSRLT; /* for OP_SUP */
-                    evt = AUTO_B;
+                #if 1
+                    next = PSSET; /* jump to next stage */
+                    evt = BULLET;
+                #else
+                    //next = PSRLT; /* for OP_SUP */
+                    //evt = AUTO_B;
+                #endif
                     break;
                 case OP_DUL: /* TODO */    
                     next = PSACT;
@@ -3996,11 +3999,29 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs26", mrs->log);
         goto end;
     }
+#if 1
+    char *buff=pf->sdt; 
+    int totsz = bLength;
 
+    while (totsz) {
+        if (totsz < 32768) {
+            len = totsz;
+            totsz = 0;
+        } else {
+            len = 32768;
+            totsz -= 32768;
+        }
+    
+        len = fread(buff, 1, len, pf->vsd);
+        sprintf(mrs->log, "read file size: %d/%d \n", len, totsz);
+        print_f(&mrs->plog, "fs26", mrs->log);
+        buff += len;
+    }
+#else
     len = fread(pf->sdt, 1, bLength, pf->vsd);
     sprintf(mrs->log, "read file size: %d/%d \n", len, bLength);
     print_f(&mrs->plog, "fs26", mrs->log);
-
+#endif
     msync(pf->sdt, bLength, MS_SYNC);
     
     if (!ret) {
@@ -4282,8 +4303,12 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret = -1;
     struct info16Bit_s *p, *c;
-    //char diskname[128] = "/mnt/mmc2/disk_02.bin";
-    char diskname[128] = "/dev/mmcblk0p1";
+    //char diskname[128] = "/mnt/mmc2/disk_04.bin";
+    //char diskname[128] = "/dev/mmcblk0p1";
+    //char diskname[128] = "/dev/mmcblk0";
+    //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
+    //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
+    char diskname[128] = "/mnt/mmc2/onefile.dsk";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -5152,7 +5177,8 @@ static int p2(struct procRes_s *rs)
     int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0, tlen=0;
     char *addr;
     char filedst[128];
-    char filename[128] = "/mnt/mmc2/handmade.jpg";
+    char filename[128] = "/mnt/mmc2/sample1.mp4";
+    //char filename[128] = "/mnt/mmc2/handmade.jpg";
     //char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/tx/recv_%d.bin";
 #if SAVE_OUT
@@ -6214,8 +6240,12 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
 int main(int argc, char *argv[])
 {
-//char diskname[128] = "/mnt/mmc2/disk_02.bin";
-char diskname[128] = "/dev/mmcblk0p1";
+//char diskname[128] = "/mnt/mmc2/disk_04.bin";
+//char diskname[128] = "/dev/mmcblk0p1";
+//char diskname[128] = "/dev/mmcblk0";
+//char diskname[128] = "/mnt/mmc2/empty_256.dsk";
+//char diskname[128] = "/mnt/mmc2/folder_256.dsk";
+char diskname[128] = "/mnt/mmc2/onefile.dsk";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 
@@ -6357,6 +6387,7 @@ static char spi0[] = "/dev/spidev32765.0";
     }
 
     pmrs->mchine.fdsk.rtMax = ftell(pmrs->mchine.fdsk.vsd);
+    //pmrs->mchine.fdsk.rtMax = -1;
     if (!pmrs->mchine.fdsk.rtMax) {
         sprintf(pmrs->log, "get file [%s] size failed!!! \n", diskname);
         print_f(&pmrs->plog, "FDISK", pmrs->log);
