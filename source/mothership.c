@@ -4412,8 +4412,8 @@ static int stfat_29(struct psdata_s *data)
     p = &rs->pmch->tmp;
     c = &rs->pmch->cur;
 
-    sprintf(rs->logs, "op_29 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "FAT", rs->logs);  
+    //sprintf(rs->logs, "op_29 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "FAT", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -4422,7 +4422,7 @@ static int stfat_29(struct psdata_s *data)
                 ch = 45;             
             } else {
                 if (pFat->fatStatus & ASPFAT_STATUS_SDRD) {
-                    ch = 67;
+                    ch = 72;
                 } else if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
                     (p->opinfo == pFat->fatBootsec->secPrfat)) {
                     ch = 54; 
@@ -4867,8 +4867,8 @@ static int stdow_37(struct psdata_s *data)
             ch = 70; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_37: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SIN", rs->logs);  
+            sprintf(rs->logs, "op_37: result: 0x%x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "DOW", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -5803,8 +5803,8 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
     pp->lastsz = size;
     pp->lastflg = 1;
 
-    //sprintf(str, "set last l:%d f:%d \n", pp->lastsz, pp->lastflg);
-    //print_f(mlogPool, "ring", str);
+    sprintf(str, "set last l:%d f:%d \n", pp->lastsz, pp->lastflg);
+    print_f(mlogPool, "ring", str);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return pp->lastflg;
@@ -5990,8 +5990,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
 
-    //sprintf(str, "cons, d: %d %d/%d \n", dist, leadn, folwn);
-    //print_f(mlogPool, "ring", str);
+    sprintf(str, "cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
+    print_f(mlogPool, "ring", str);
 
     if (dist < 1)  return -1;
 
@@ -8883,9 +8883,11 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
             pfat->fatStatus |= ASPFAT_STATUS_ROOT_DIR;
         }
         
-#if 0 /* do folder parsing anyway */
+
         curDir = pfat->fatRootdir;
         br= curDir->ch;
+
+#if 1 /* do folder parsing anyway */
         if (!br) {
             pfat->fatStatus |= ASPFAT_STATUS_FOLDER;
             modersp->r = 1;
@@ -8945,7 +8947,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt = pftb->c;
                  
         secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
-        secLen = pflnt->ftLen;
+        secLen = pflnt->ftLen * psec->secPrClst;
 
         if (secLen < 16) secLen = 16;
 
@@ -9112,7 +9114,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt = pftb->c;
                  
         secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
-        secLen = pflnt->ftLen;
+        secLen = pflnt->ftLen * psec->secPrClst;
         //secStr = (curDir->dfclstnum - 2) * psec->secPrClst + psec->secWhroot;
         //secLen = psec->secPrClst;
 
@@ -9289,6 +9291,8 @@ static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     sprintf(mrs->log, "trigger spi0 \n");
     print_f(&mrs->plog, "fs54", mrs->log);
+
+    ring_buf_init(&mrs->cmdRx);
 
     mrs_ipc_put(mrs, "n", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
@@ -9747,6 +9751,8 @@ static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs67", mrs->log);
 #endif
 
+    ring_buf_init(&mrs->cmdRx);
+
     mrs_ipc_put(mrs, "n", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
@@ -9855,11 +9861,14 @@ static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp)
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
 
+    sprintf(mrs->log, "download file: %s \n", pfat->fatFileDnld->dfSFN);
+    print_f(&mrs->plog, "fs70", mrs->log);
+
     if (!pfat->fatFileDnld) {
         modersp->r = 2;
         return 1;
     }
-
+   
     curDir = pfat->fatFileDnld;
     if (!pftb->h) {
         pflsh = 0;
@@ -9893,7 +9902,7 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int val=0, i=0, ret=0;
     char *pr=0;
-    uint32_t secStr=0, secLen=0;
+    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -9904,8 +9913,6 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
     struct sdFATable_s   *pftb=0;
 
-    sprintf(mrs->log, "get SD cur:0x%.8x \n", pftb->c);
-    print_f(&mrs->plog, "fs71", mrs->log);
 
     c = &mrs->mchine.cur;
     p = &mrs->mchine.tmp;
@@ -9916,17 +9923,44 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
 
-    if (pftb->c) {
-        pflnt = pftb->c;
-        pftb->c = pflnt->n;
-        free(pflnt);
+    curDir = pfat->fatFileDnld;
+    if (!curDir) {
+        sprintf(mrs->log, "get SD cur failed\n");
+        print_f(&mrs->plog, "fs71", mrs->log);
+
+        modersp->r = 4;
+        return 1;
     }
+
+    sprintf(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
+    print_f(&mrs->plog, "fs71", mrs->log);
 
     if (pftb->c) {
         pflnt = pftb->c;
                  
         secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
-        secLen = pflnt->ftLen;
+
+        if (!pflnt->n) {
+            if (!(curDir->dflength % 512)) {
+                secFile = curDir->dflength / 512;
+            } else {
+                secFile = (curDir->dflength / 512) + 1;
+            }
+            sprintf(mrs->log, "secFile: %d\n", secFile);
+            print_f(&mrs->plog, "fs71", mrs->log);
+
+            if (!(secFile % psec->secPrClst) ) {
+                lstsec = psec->secPrClst;
+            } else {
+                lstsec = secFile % psec->secPrClst;
+            }
+            sprintf(mrs->log, "lstsec: %d\n", lstsec);
+            print_f(&mrs->plog, "fs71", mrs->log);
+            
+            secLen = (pflnt->ftLen - 1) * psec->secPrClst + lstsec;
+        } else {
+            secLen = pflnt->ftLen * psec->secPrClst;
+        }
 
         if (secLen < 16) secLen = 16;
 
@@ -9955,20 +9989,118 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
         
         modersp->r = 2;
+
+        pftb->c = pflnt->n;
+        free(pflnt);
+
     }else {
         pftb->h = 0;
         pfat->fatStatus &= ~ASPFAT_STATUS_SDRD;    
+        pfat->fatFileDnld = 0;
         modersp->r = 3;
     }
 
     return 1;
 }
+
 static int fs72(struct mainRes_s *mrs, struct modersp_s *modersp) 
-{
-    return 0;
+{ 
+    int bitset, ret;
+    sprintf(mrs->log, "trigger spi0\n");
+    print_f(&mrs->plog, "fs72", mrs->log);
+
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs72", mrs->log);
+#endif
+
+    ring_buf_init(&mrs->cmdRx);
+
+    mrs_ipc_put(mrs, "n", 1, 1);
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    modersp->m = modersp->m + 1;
+    return 2;
 }
-static int fs73(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
-static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs73(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{ 
+    int ret, bitset;
+    char ch;
+
+    //sprintf(mrs->log, "%d\n", modersp->v);
+    //print_f(&mrs->plog, "fs73", mrs->log);
+
+    ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    while (ret > 0) {
+        if (ch == 'p') {
+            modersp->v += 1;
+            mrs_ipc_put(mrs, "n", 1, 3);
+        }
+
+        if (ch == 'd') {
+            sprintf(mrs->log, "0 %d end\n", modersp->v);
+            print_f(&mrs->plog, "fs73", mrs->log);
+
+            mrs_ipc_put(mrs, "n", 1, 3);
+            modersp->r |= 0x1;
+            //mrs_ipc_put(mrs, "e", 1, 3);
+        }
+        ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    }
+
+    if (modersp->r & 0x1) {
+        mrs_ipc_put(mrs, "N", 1, 3);
+        sprintf(mrs->log, "%d end\n", modersp->v);
+        print_f(&mrs->plog, "fs73", mrs->log);
+        modersp->m = modersp->m + 1;
+        return 2;
+    }
+
+    return 0; 
+}
+static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{ 
+    int len=0, bitset=0, ret=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    //sprintf(mrs->log, "wait spi0 tx end\n");
+    //print_f(&mrs->plog, "fs74", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if (len > 0) {
+
+        sprintf(mrs->log, "ch: %c - end\n", ch);
+        print_f(&mrs->plog, "fs74", mrs->log);
+
+        if (ch == 'N') {
+
+            ring_buf_init(&mrs->cmdRx);
+
+#if SPI_KTHREAD_USE
+            bitset = 0;
+            ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+            sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+            print_f(&mrs->plog, "fs74", mrs->log);
+#endif
+
+            bitset = 0;
+            msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+            sprintf(mrs->log, "set RDY pin %d\n",bitset);
+            print_f(&mrs->plog, "fs74", mrs->log);
+            usleep(300000);
+
+            modersp->m = 48;            
+            return 2;
+        } else  {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
 
 static int p0(struct mainRes_s *mrs)
 {
@@ -10522,16 +10654,16 @@ static int p2(struct procRes_s *rs)
 
                         opsz = 0;
                         while (opsz == 0) {
-#if SPI_KTHREAD_USE
-                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
-                    if (opsz == 0) {
-                        usleep(1000);
-                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
-                        print_f(rs->plogs, "P2", rs->logs);  
-                        continue;
-                    }
+#if SPI_KTHREAD_USE                    
+                            opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                            if (opsz == 0) {
+                                usleep(1000);
+                                sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                                print_f(rs->plogs, "P2", rs->logs);  
+                                continue;
+                            }
 #else
-                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+                            opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
                             //usleep(10000);
                             //sprintf(rs->logs, "spi0 recv %d\n", opsz);
@@ -10541,8 +10673,8 @@ static int p2(struct procRes_s *rs)
                         //msync(addr, len, MS_SYNC);
                         ring_buf_prod(rs->pcmdRx);    
                         if (opsz < 0) {
-                            //sprintf(rs->logs, "opsz:%d break!\n", opsz);
-                            //print_f(rs->plogs, "P2", rs->logs);    
+                            sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                            print_f(rs->plogs, "P2", rs->logs);    
                             break;
                         }
                         rs_ipc_put(rs, "p", 1);
