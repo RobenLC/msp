@@ -193,6 +193,13 @@ typedef enum {
     ASPOP_TYPE_VALUE,
 } aspOpType_e;
 
+
+struct aspInfoSplit_s{
+    char *infoStr;
+    int     infoLen;
+    struct aspInfoSplit_s *n;
+};
+
 struct aspWaitRlt_s{
     char *wtRlt; /* size == 16bytes */
     int  wtMs;
@@ -814,6 +821,115 @@ static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval)
     *rval = p->opValue;
 
     return 0;
+}
+
+static int asp_idxofch(char *str, char ch, int start, int max) 
+{
+    int i=0, ret=-1;
+    char *p=0;
+
+    if (start >= max) return -2;
+
+    p = str + start;
+    
+    while (start < max) {
+
+        if (*p == ch) {
+            //printf("%c ", *p);
+            return start;
+        } else {
+            //printf("x%c", *p);
+        }
+
+        p++;
+        start++;
+    }
+    
+    return ret;
+}
+
+static int asp_strsplit(struct aspInfoSplit_s **info, char *str, int max)
+{
+    char log[256];
+    int len, cnt;
+    int cur, nex, ret;
+    struct aspInfoSplit_s *h=0, *p=0, *c=0;
+
+    cur = 0;
+    cnt = 0;
+    
+    while (cur < max) {
+        ret = asp_idxofch(str, ',', cur, max);
+        if (ret >= 0) {
+            nex = ret;
+            p = malloc(sizeof(struct aspInfoSplit_s));
+            memset(p, 0, sizeof(struct aspInfoSplit_s));            
+            cnt++;
+        } else {
+            p = malloc(sizeof(struct aspInfoSplit_s));
+            memset(p, 0, sizeof(struct aspInfoSplit_s));            
+            cnt++;
+            nex = max;
+        }
+    
+        len = nex - cur;
+
+        if (len == 0) {
+            cur = nex+1;            
+            free(p);
+            continue;
+        }
+        
+        p->infoStr = malloc(len+1);
+        p->infoLen = len;
+        memcpy(p->infoStr, str+cur,  len);
+
+        p->infoStr[len] = '\0';
+
+        sprintf(log, "%d, %s\n", p->infoLen, p->infoStr);
+        print_f(mlogPool, "SPLT", log);
+
+        cur = nex+1;
+
+        if (c) {
+            c->n = p;
+        }
+        
+        c = p;
+        
+        if (!h) {
+            h = c;
+        }
+
+    }
+
+    *info = h;
+    return cnt;
+}
+
+static struct aspInfoSplit_s *asp_getInfo(struct aspInfoSplit_s *info, int idx) 
+{
+    int i=0;
+    
+    while (i < idx) {
+        i++;
+        if (!info) break;
+        info = info->n;
+    }
+
+    return info;
+}
+static struct aspInfoSplit_s *asp_freeInfo(struct aspInfoSplit_s *info) 
+{
+    struct aspInfoSplit_s *nex=0;
+    if (!info) return 0;
+    nex = info->n;
+
+    printf("free[%s]\n", info->infoStr);
+
+    free(info->infoStr);
+    free(info);
+    return nex;
 }
 
 static uint8_t aspFSchecksum(uint8_t *pFcbName)
@@ -11842,6 +11958,8 @@ static int p6(struct procRes_s *rs)
     struct sdFATable_s   *pftb=0;
     uint32_t secStr=0, secLen=0;
 
+    struct aspInfoSplit_s *strinfo=0, *nexinfo=0;
+    
     pct = rs->pcfgTable;
     pfat = rs->psFat;
     pftb = pfat->fatTable;
@@ -12117,6 +12235,78 @@ static int p6(struct procRes_s *rs)
         else if (opcode == 0x13) { /* upload file */
             sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
+
+            ret = asp_strsplit(&strinfo, folder, n);
+            if (ret > 0) {
+                sprintf(rs->logs, "split str found, ret:%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                /*
+                nexinfo = strinfo;
+                i = 0;
+                while (nexinfo) {
+                    sprintf(rs->logs, "%d.[%s],len:%d \n", i, nexinfo->infoStr, nexinfo->infoLen);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    nexinfo = nexinfo->n;
+                    i++;
+                }
+                */
+                for (i = 0; i < ret; i++) {
+                    nexinfo = asp_getInfo(strinfo, i);
+                    if (nexinfo) {
+                        sprintf(rs->logs, "%d.[%s]\n", i, nexinfo->infoStr);
+                        print_f(rs->plogs, "P6", rs->logs);
+                    }
+                }
+                
+
+                nexinfo = asp_getInfo(strinfo, 8);
+                if (nexinfo) {
+                    sprintf(rs->logs, "%d.%s\n", i, nexinfo->infoStr);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+            
+                ret = mspFS_FileSearch(&dnld, rs->psFat->fatRootdir, nexinfo->infoStr);
+                if (ret) {
+                    sprintf(rs->logs, "search upload file[%s], not found ret=%d\n", nexinfo->infoStr, ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    sendbuf[3] = 'O';
+                } else {
+                    sendbuf[3] = 'W';            
+                }
+
+                nexinfo = asp_getInfo(strinfo, 8);
+                if (nexinfo) {
+                    sprintf(rs->logs, "%d.%s\n", 8, nexinfo->infoStr);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    if (strcmp("ASP", nexinfo->infoStr) != 0) {
+                        sendbuf[3] = 'F';
+                    }
+                } else {
+                    sendbuf[3] = 'F';
+                }
+                
+            }
+            else {
+                sendbuf[3] = 'F';
+                sprintf(rs->logs, "split str not found, ret:%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            n = 0;
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            nexinfo = strinfo;
+            while(nexinfo) {
+                nexinfo = asp_freeInfo(nexinfo);
+            }
+
         }
         else {
             sprintf(rs->logs, "error!! get opcode = 0x%x\n", opcode);
