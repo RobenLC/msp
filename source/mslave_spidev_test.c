@@ -1750,7 +1750,7 @@ static char path[256];
            strcpy(topdir, argv[2]);
        }
     
-    printf("Directory scan of [%s], %d, %d, %d\n", topdir, ASPFS_TYPE_ROOT, ASPFS_TYPE_DIR, ASPFS_TYPE_FILE);
+       printf("Directory scan of [%s], %d, %d, %d\n", topdir, ASPFS_TYPE_ROOT, ASPFS_TYPE_DIR, ASPFS_TYPE_FILE);
 
        ret = aspFS_createRoot(&root, topdir);
        if (ret != 0) printf("[R]aspFS_createRoot failed ret: %d \n", ret);
@@ -1767,7 +1767,7 @@ static char path[256];
        char path[256];
        struct directnFile_s *dfs, *cur;
 
-#if 0
+#if 1
        i = 0;
        while (1) {
            ch = fgetc(stdin);

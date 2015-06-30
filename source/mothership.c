@@ -86,7 +86,7 @@ static char spi0[] = "/dev/spidev32765.0";
 #define SPI_TRUNK_SZ   (32768)
 
 #define SPI_KTHREAD_USE    (1) /* can't work, has bug */
-
+#define DIR_POOL_SIZE (20480)
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -321,14 +321,14 @@ struct sdFSinfo_s{
 };
 
 struct adFATLinkList_s{
-    int ftStart;              // start cluster
-    int ftLen;                // cluster length
+    uint32_t ftStart;              // start cluster
+    uint32_t ftLen;                // cluster length
     struct adFATLinkList_s *n;    
 };
 
 struct sdFATable_s{
-    char *ftbFat1;
-    int ftbLen;
+    uint8_t *ftbFat1;
+    uint32_t ftbLen;
     struct adFATLinkList_s *h;
     struct adFATLinkList_s *c;
 };
@@ -652,7 +652,7 @@ static int mspFS_list(struct directnFile_s *root, int depth);
 static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *root, char *path);
 static int mspFS_showFolder(struct directnFile_s *root);
 static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *root, char *path);
-static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char *fat, int max);
+static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, uint8_t *fat, uint32_t max);
 
 static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir);
 static int aspFS_createFATRoot(struct sdFAT_s *pfat);
@@ -1467,15 +1467,15 @@ static int mspSD_createFATLinkList(struct adFATLinkList_s **list)
     return 0;
 }
 
-static int mspSD_getNextFAT(int idx, char *fat, int max) 
+static uint32_t mspSD_getNextFAT(uint32_t idx, uint8_t *fat, uint32_t max) 
 {
-    char *ch;
-    int offset=0, i=0;
+    uint8_t *uch;
+    uint32_t offset=0, i=0;
     uint32_t val = 0;
 
     if (idx > max) {
-        printf(" ERROR!! Get next FAT idx: %d\n", idx);
-        return -1;
+        printf(" ERROR!! Get next FAT idx: %d > max: %d\n", idx, max);
+        return 0xffffffff;
     }
 
     if (!idx) {
@@ -1483,23 +1483,23 @@ static int mspSD_getNextFAT(int idx, char *fat, int max)
     }
     offset = idx * 4;
 
-    ch = fat + offset;
+    uch = fat + offset;
 
     i = 0;
     while (i < 4) {
-        val |= ch[i] << (i * 8);
+        val |= uch[i] << (i * 8);
         i++;
     }
 
-    //printf("   Get next FAT val: %d\n", val);
+    printf("   Get next FAT val: %d\n", val);
 
 
     return val;    
 }
 
-static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char *fat, int max)
+static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, uint8_t *fat, uint32_t max)
 {
-    int llen=0, lstr=0, nxt=0, cur=0, ret=0;
+    uint32_t llen=0, lstr=0, nxt=0, cur=0, ret=0;
     struct adFATLinkList_s *ls=0, *nt=0;
     cur = idx;
 
@@ -1508,7 +1508,9 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char 
 
     *head = ls;
 
-    if (cur < 2) cur = 0;
+    if (cur < 2) {
+        return -2;
+    }
 
     lstr = cur; 
     llen = 1;
@@ -1519,8 +1521,9 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char 
         if (nxt == 0x0fffffff) {
             printf("  end %d, %d\n", lstr, llen);
             break;
-        } else if (nxt < 0) {
+        } else if (nxt == 0xffffffff) {
             printf("  error %d, %d\n", lstr, llen);
+            return -1;
             break;
         }
     
@@ -1558,6 +1561,7 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, int idx, char 
 
 static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
 {
+    char mlog[256];
     struct sdDirPool_s *pool;
     
     pool = psFat->fatDirPool;
@@ -1569,6 +1573,9 @@ static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
 
     *dir = &pool->dirPool[pool->dirUsed];
     pool->dirUsed += 1;
+    
+    sprintf(mlog, "Pool [%d] used\n", pool->dirUsed);
+    print_f(mlogPool, "FS", mlog);
 
     return 0;
 }
@@ -1827,7 +1834,7 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
 
     ret = strlen(path);
     sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfLFN, ret);
-    print_f(mlogPool, "FS", mlog);
+    print_f(mlogPool, "FSRH", mlog);
 
     memset(rmp, 0, 16*256);
     
@@ -1849,11 +1856,11 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
     }
 
     sprintf(mlog, "\n a:%d, b:%d \n", a, b);
-    print_f(mlogPool, "FS", mlog);
+    print_f(mlogPool, "FSRH", mlog);
 
     for (b = 0; b <= a; b++) {
         sprintf(mlog, "[%d.%d]%s \n", a, b, rmp[b]);
-        print_f(mlogPool, "FS", mlog);
+        print_f(mlogPool, "FSRH", mlog);
     }
 
     ret = -1;
@@ -1861,15 +1868,15 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
     brt = root;
     while (brt) {
         sprintf(mlog, "%d/ %s\n", b, brt->dfSFN);
-        print_f(mlogPool, "FS", mlog);
+        print_f(mlogPool, "FSRH", mlog);
         if ((b < a) && (brt->dftype == ASPFS_TYPE_FILE)) {
-            //sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
-            //print_f(mlogPool, "FS", mlog);
+            sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+            print_f(mlogPool, "FSRH", mlog);
             brt = brt->br;
         }
         else if ((b == a) && (brt->dftype == ASPFS_TYPE_DIR)) {
-            //sprintf(mlog, "skip folder in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
-            //print_f(mlogPool, "FS", mlog);
+            sprintf(mlog, "skip folder in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+            print_f(mlogPool, "FSRH", mlog);
             brt = brt->br;
         }
         else if (strcmp("..", &rmp[b][0]) == 0) {
@@ -1899,15 +1906,15 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
     }
 
     sprintf(mlog, "path len: %d, match num: %d, brt:0x%x \n", a, b, brt);
-    print_f(mlogPool, "FS", mlog);
-
+    print_f(mlogPool, "FSRH", mlog);
+/*
     while((brt) && (b>=0)) {
         //sprintf(mlog, "[%d][%s][%s] \n", b, &rmp[b][0], brt->dfLFN);
         //print_f(mlogPool, "FS", mlog);
         b--;
         brt = brt->pa;
     }
-
+*/
     return ret;
 }
 
@@ -1923,7 +1930,7 @@ static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *
 
     ret = strlen(path);
     sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfSFN, ret);
-    print_f(mlogPool, "FS", mlog);
+    print_f(mlogPool, "DSRH", mlog);
 
     memset(rmp, 0, 16*256);
     
@@ -1944,28 +1951,29 @@ static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *
         ret --;
     }
 
+    /* TODO: fix the hanging bug */
     sprintf(mlog, "\n a:%d, b:%d \n", a, b);
-    print_f(mlogPool, "FS", mlog);
+    print_f(mlogPool, "DSRH", mlog);
 
     for (b = 0; b <= a; b++) {
         sprintf(mlog, "[%d.%d]%s \n", a, b, rmp[b]);
-        print_f(mlogPool, "FS", mlog);
+        print_f(mlogPool, "DSRH", mlog);
     }
 
     ret = -1;
     b = 0;
     brt = root;
     while (brt) {
-        sprintf(mlog, "%d/ %s\n", b, brt->dfSFN);
-        print_f(mlogPool, "FS", mlog);
+        sprintf(mlog, "%d. %s\n", b, brt->dfSFN);
+        print_f(mlogPool, "DSRH", mlog);
         if ((b < a) && (brt->dftype == ASPFS_TYPE_FILE)) {
-            //sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
-            //print_f(mlogPool, "FS", mlog);
+            sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+            print_f(mlogPool, "DSRH", mlog);
             brt = brt->br;
         }
         else if ((b == a) && (brt->dftype == ASPFS_TYPE_FILE)) {
-            //sprintf(mlog, "skip folder in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
-            //print_f(mlogPool, "FS", mlog);
+            sprintf(mlog, "skip folder in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+            print_f(mlogPool, "DSRH", mlog);
             brt = brt->br;
         }
         else if (strcmp("..", &rmp[b][0]) == 0) {
@@ -2000,7 +2008,7 @@ static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *
     }
 
     sprintf(mlog, "path len: %d, match num: %d, brt:%s \n", a, b, brt->dfSFN);
-    print_f(mlogPool, "FS", mlog);
+    print_f(mlogPool, "DSRH", mlog);
 
 /*
     while((brt) && (b>=0)) {
@@ -4649,7 +4657,7 @@ static int stfat_29(struct psdata_s *data)
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_29: result: %x, goto %d, str:%d, len:%d\n", data->result, ch, c->opinfo, p->opinfo); 
+            sprintf(rs->logs, "op_29: result: %x, goto %d, fatStatus: %x\n", data->result, ch, pFat->fatStatus); 
             print_f(rs->plogs, "FAT", rs->logs);  
             break;
         case WAIT:
@@ -4774,6 +4782,8 @@ static int stfat_30(struct psdata_s *data)
             } else if (data->ansp0 == 3) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
                 data->result = emb_result(data->result, EVTMAX);
             }
             break;
@@ -9103,7 +9113,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         curDir = pfat->fatRootdir;
         br= curDir->ch;
 
-#if 1 /* do folder parsing anyway */
+#if 0 /* do folder parsing anyway */
         if (!br) {
             pfat->fatStatus |= ASPFAT_STATUS_FOLDER;
             modersp->r = 1;
@@ -9149,6 +9159,8 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
             if (ret) {
                 sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
                 print_f(&mrs->plog, "fs51", mrs->log);
+                modersp->r = 3;
+                return 1;
             }
             pflnt = pflsh;
             while (pflnt) {
@@ -9311,10 +9323,16 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (!pftb->h) {
             pflsh = 0;
+            if (curDir->dfclstnum == 0) { /* cluster number is 0, bypass */
+                modersp->r = 1;
+                return 1;
+            }
             ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
             if (ret) {
-                sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+                sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
                 print_f(&mrs->plog, "fs52", mrs->log);
+                modersp->r = 3;
+                return 1;
             }
             /* debug */
             pflnt = pflsh;
@@ -9328,9 +9346,12 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
 
         pflnt = pftb->c;
+
+        sprintf(mrs->log, "[%d x %d + %d], n",pflnt->ftStart - 2, psec->secPrClst, psec->secWhroot);
+        print_f(&mrs->plog, "fs52", mrs->log);
                  
-        secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
-        secLen = pflnt->ftLen * psec->secPrClst;
+        secStr = (pflnt->ftStart - 2) * (uint32_t)psec->secPrClst + (uint32_t)psec->secWhroot;
+        secLen = pflnt->ftLen * (uint32_t)psec->secPrClst;
         //secStr = (curDir->dfclstnum - 2) * psec->secPrClst + psec->secWhroot;
         //secLen = psec->secPrClst;
 
@@ -9362,7 +9383,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
             
         }
 
-        sprintf(mrs->log, "NEXT parsing dir[%s], set str:%d, len:%d \n", strFullPath, secStr, secLen);
+        sprintf(mrs->log, "NEXT parsing dir[%s], set str:%d, len:%d(%d) \n", strFullPath, secStr, secLen, pflnt->ftStart);
         print_f(&mrs->plog, "fs52", mrs->log);
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
@@ -10089,10 +10110,17 @@ static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp)
     curDir = pfat->fatFileDnld;
     if (!pftb->h) {
         pflsh = 0;
+        if (curDir->dfclstnum == 0) { /* cluster number is 0, bypass */
+            modersp->r = 1;
+            return 1;
+        }
+
         ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
         if (ret) {
-            sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
+            sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
             print_f(&mrs->plog, "fs70", mrs->log);
+            modersp->r = 3;
+            return 1;
         }
         /* debug */
         pflnt = pflsh;
@@ -12139,6 +12167,8 @@ static int p6(struct procRes_s *rs)
                 sprintf(rs->logs, "search file OK ret=%d\n", ret);
                 print_f(rs->plogs, "P6", rs->logs);
 
+                sprintf(rs->logs, "show folder: \n");
+                print_f(rs->plogs, "P6", rs->logs);
                 mspFS_showFolder(dnld->pa);
                 secStr = (dnld->dfclstnum - 2)*rs->psFat->fatBootsec->secPrClst + rs->psFat->fatBootsec->secWhroot;
                 secLen = dnld->dflength / 512 + ((dnld->dflength%512)==0?0:1);
@@ -12151,6 +12181,7 @@ static int p6(struct procRes_s *rs)
                     sendbuf[3] = 'P'; /* pendding */
                 } else {
                     pfat->fatFileDnld = dnld;
+                    pftb->h = 0;
                     sendbuf[3] = 'D';
                 }
                 sprintf(rs->logs, "%s,%d,0x%.8x", (dnld->dflen == 0)?dnld->dfSFN:dnld->dfLFN, dnld->dflength, dnld->dftype);
@@ -12990,28 +13021,29 @@ int main(int argc, char *argv[])
 
     struct sdDirPool_s    *pool;
     pool = pmrs->aspFat.fatDirPool;
-    pool->dirPool = (struct directnFile_s *)mmap(NULL, sizeof(struct directnFile_s) * 8192, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pool->dirPool = (struct directnFile_s *)mmap(NULL, sizeof(struct directnFile_s) * DIR_POOL_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     if (!pool->dirPool) {
         sprintf(pmrs->log, "alloc share memory for FAT dir pool content FAIL!!!\n", pool->dirPool); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
         goto end;
     } else {
-        sprintf(pmrs->log, "alloc share memory for FAT dir pool content DONE [0x%x] , size is %d!!!\n", pool->dirPool, 8192); 
+        sprintf(pmrs->log, "alloc share memory for FAT dir pool content DONE [0x%x] , size is %d x %d = %d bytes!!!\n", pool->dirPool, DIR_POOL_SIZE, sizeof(struct directnFile_s),sizeof(struct directnFile_s)*DIR_POOL_SIZE); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
+        memset(pool->dirPool, 0, sizeof(struct directnFile_s)*DIR_POOL_SIZE);
     }
-    pool->dirMax = 8192;
+    pool->dirMax = DIR_POOL_SIZE;
     pool->dirUsed = 0;
     
-    pool->parBuf.dirParseBuff = mmap(NULL, 2*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pool->parBuf.dirParseBuff = mmap(NULL, 8*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     if (!pool->parBuf.dirParseBuff) {
         sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer FAIL!!!\n"); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
         goto end;
     } else {
-        sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer DONE [0x%x] , size is %d!!!\n", pool->parBuf.dirParseBuff, 2*1024*1024); 
+        sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer DONE [0x%x] , size is %d!!!\n", pool->parBuf.dirParseBuff, 8*1024*1024); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
-    pool->parBuf.dirBuffMax = 2*1024*1024;
+    pool->parBuf.dirBuffMax = 8*1024*1024;
     pool->parBuf.dirBuffUsed = 0;
 
     pmrs->aspFat.fatStatus = ASPFAT_STATUS_INIT;
@@ -13238,10 +13270,12 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
     char ch[256];
     if (!str) return (-1);
 
-    if (head)
+    if (head) {
+        if (!strcmp(head, "P2")) return 0;
         sprintf(ch, "[%s] %s", head, str);
-    else 
+    } else {
         sprintf(ch, "%s", str);
+    }
 
     printf("%s",ch);
 

@@ -3962,8 +3962,9 @@ static int fs25(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     char ch=0;
-    int startSec = 0, secNum = 0;
-    int startAddr = 0, bLength = 0, maxLen=0;
+    uint8_t *uch;
+    uint32_t startSec = 0, secNum = 0;
+    uint32_t startAddr = 0, bLength = 0, maxLen=0;
     int ret = 0, len=0;
     struct info16Bit_s *c, *p;
     struct DiskFile_s *pf;
@@ -3974,11 +3975,12 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
     pf = &mrs->mchine.fdsk;
 
+    uch = mrs->mchine.sdst.d;
     startSec = mrs->mchine.sdst.n;
     secNum = mrs->mchine.sdln.n;
     maxLen = pf->rtMax;
 
-    sprintf(mrs->log, "secStr: %d secLen: %d\n", startSec, secNum);
+    sprintf(mrs->log, "secStr: %d (%x,%x,%x,%x), secLen: %d\n", startSec, uch[0], uch[1], uch[2], uch[3], secNum);
     print_f(&mrs->plog, "fs26", mrs->log);
 
 
@@ -4303,12 +4305,14 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret = -1;
     struct info16Bit_s *p, *c;
-    //char diskname[128] = "/mnt/mmc2/disk_04.bin";
+    char diskname[128] = "/mnt/mmc2/disk_golden.bin";
+    //char diskname[128] = "/mnt/mmc2/debug_fat.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_05.bin";
     //char diskname[128] = "/dev/mmcblk0p1";
     //char diskname[128] = "/dev/mmcblk0";
     //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
     //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
-    char diskname[128] = "/mnt/mmc2/onefile.dsk";
+    //char diskname[128] = "/mnt/mmc2/onefile.dsk";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -5177,8 +5181,8 @@ static int p2(struct procRes_s *rs)
     int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0, tlen=0;
     char *addr;
     char filedst[128];
-    char filename[128] = "/mnt/mmc2/sample1.mp4";
-    //char filename[128] = "/mnt/mmc2/handmade.jpg";
+    //char filename[128] = "/mnt/mmc2/sample1.mp4";
+    char filename[128] = "/mnt/mmc2/handmade.jpg";
     //char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/tx/recv_%d.bin";
 #if SAVE_OUT
@@ -6240,12 +6244,14 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
 int main(int argc, char *argv[])
 {
-//char diskname[128] = "/mnt/mmc2/disk_04.bin";
+char diskname[128] = "/mnt/mmc2/disk_golden.bin";
+//char diskname[128] = "/mnt/mmc2/debug_fat.bin";
+//char diskname[128] = "/mnt/mmc2/disk_05.bin";
 //char diskname[128] = "/dev/mmcblk0p1";
 //char diskname[128] = "/dev/mmcblk0";
 //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
 //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
-char diskname[128] = "/mnt/mmc2/onefile.dsk";
+//char diskname[128] = "/mnt/mmc2/onefile.dsk";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 
