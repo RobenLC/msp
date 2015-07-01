@@ -4736,10 +4736,10 @@ static int stfat_30(struct psdata_s *data)
                 secStr = pFat->fatBootsec->secWhroot;
                 secLen = pFat->fatBootsec->secPrClst;
 
-                if (secLen < 16) secLen = 16;
-
                 c->opinfo = secStr;
                 p->opinfo = secLen;
+
+                if (secLen < 16) secLen = 16;
 
                 sprintf(rs->logs, "ROOT_DIR secStr:%d, secLen:%d, fat status:0x%.8x \n", secStr, secLen, pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
@@ -9180,6 +9180,9 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
         secLen = pflnt->ftLen * psec->secPrClst;
 
+        c->opinfo = secStr;
+        p->opinfo = secLen;
+
         if (secLen < 16) secLen = 16;
 
         sprintf(mrs->log, "buff empty, set str:%d, len:%d \n", secStr, secLen);
@@ -9353,6 +9356,9 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
         secLen = pflnt->ftLen * (uint32_t)psec->secPrClst;
         //secStr = (curDir->dfclstnum - 2) * psec->secPrClst + psec->secWhroot;
         //secLen = psec->secPrClst;
+
+        c->opinfo = secStr;
+        p->opinfo = secLen;
 
         if (secLen < 16) secLen = 16;
         
@@ -10202,6 +10208,9 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
             secLen = pflnt->ftLen * psec->secPrClst;
         }
 
+        c->opinfo = secStr;
+        p->opinfo = secLen;
+
         if (secLen < 16) secLen = 16;
 
         sprintf(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
@@ -10674,10 +10683,17 @@ static int p2(struct procRes_s *rs)
     int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait, tlen=0;
     int bitset, totsz=0;
     uint16_t send16, recv16;
+    uint32_t secStr=0, secLen=0, datLen=0;
+    struct info16Bit_s *p=0, *c=0;
+
     char ch, str[128], rx8[4], tx8[4];
     char *addr, *laddr;
     sprintf(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
+
+    c = &rs->pmch->cur;
+    p = &rs->pmch->tmp;
+    
     p2_init(rs);
     // wait for ch from p0
     // in charge of spi0 data mode
@@ -10933,6 +10949,10 @@ static int p2(struct procRes_s *rs)
 
             }
             else if (cmode == 7) {
+                secStr = c->opinfo;
+                secLen = p->opinfo;
+                datLen = secLen * 512;
+
                 pabuf = &rs->psFat->fatDirPool->parBuf;
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
@@ -10972,6 +10992,12 @@ static int p2(struct procRes_s *rs)
                 if (opsz == 1) opsz = 0;
 
                 len += opsz;
+
+                if (len != datLen) {
+                    sprintf(rs->logs, "total len: %d, actual len: %d\n", len, datLen);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    len = datLen; 
+                }
 
                 pabuf->dirBuffUsed += len;
                 msync(pabuf->dirParseBuff, len, MS_SYNC);
@@ -12175,9 +12201,15 @@ static int p6(struct procRes_s *rs)
                     print_f(rs->plogs, "P6", rs->logs);
                     sendbuf[3] = 'P'; /* pendding */
                 } else {
-                    pfat->fatFileDnld = dnld;
-                    pftb->h = 0;
-                    sendbuf[3] = 'D';
+                    if (dnld->dflength) {
+                        pfat->fatFileDnld = dnld;
+                        pftb->h = 0;
+                        sendbuf[3] = 'D';
+                    } else {
+                        sprintf(rs->logs, "SD read file to APP (empty) status:0x%.8x\n", pfat->fatStatus);
+                        print_f(rs->plogs, "P6", rs->logs);
+                        sendbuf[3] = 'Z'; /* zero size */
+                    }
                 }
                 sprintf(rs->logs, "%s,%d,0x%.8x", (dnld->dflen == 0)?dnld->dfSFN:dnld->dfLFN, dnld->dflength, dnld->dftype);
                 n = strlen(rs->logs);
@@ -13266,7 +13298,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
     if (!str) return (-1);
 
     if (head) {
-        if (!strcmp(head, "P2")) return 0;
+        //if (!strcmp(head, "P2")) return 0;
         sprintf(ch, "[%s] %s", head, str);
     } else {
         sprintf(ch, "%s", str);
