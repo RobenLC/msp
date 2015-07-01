@@ -1509,7 +1509,7 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
     *head = ls;
 
     if (cur < 2) {
-        return -2;
+        cur = 0;
     }
 
     lstr = cur; 
@@ -1518,7 +1518,10 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
     
     nxt = mspSD_getNextFAT(cur, fat, max);
     while (nxt) {
-        if (nxt == 0x0fffffff) {
+        if (nxt == 0x0ffffff8) {
+            printf("  empty %d, %d\n", lstr, llen);
+            break;
+        } else if (nxt == 0x0fffffff) {
             printf("  end %d, %d\n", lstr, llen);
             break;
         } else if (nxt == 0xffffffff) {
@@ -9323,10 +9326,6 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (!pftb->h) {
             pflsh = 0;
-            if (curDir->dfclstnum == 0) { /* cluster number is 0, bypass */
-                modersp->r = 1;
-                return 1;
-            }
             ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
             if (ret) {
                 sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
@@ -10110,10 +10109,6 @@ static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp)
     curDir = pfat->fatFileDnld;
     if (!pftb->h) {
         pflsh = 0;
-        if (curDir->dfclstnum == 0) { /* cluster number is 0, bypass */
-            modersp->r = 1;
-            return 1;
-        }
 
         ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
         if (ret) {
