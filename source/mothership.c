@@ -1497,7 +1497,7 @@ static uint32_t mspSD_getNextFAT(uint32_t idx, uint8_t *fat, uint32_t max)
     return val;    
 }
 
-static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, uint8_t *fat, uint32_t max)
+inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, uint8_t *fat, uint32_t max)
 {
     uint32_t llen=0, lstr=0, nxt=0, cur=0, ret=0;
     struct adFATLinkList_s *ls=0, *nt=0;
@@ -1562,6 +1562,101 @@ static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
     return 0;
 }
 
+inline uint32_t mspSD_getNextFreeFAT(uint32_t idx, uint8_t *fat, uint32_t max) 
+{
+    uint8_t *uch;
+    uint32_t offset=0, i=0;
+    uint32_t val = 0;
+
+    if (idx > max) {
+        printf(" ERROR!! Get next Free FAT idx: %d > max: %d\n", idx, max);
+        return 0xffffffff;
+    }
+
+    offset = idx * 4;
+
+    uch = fat + offset;
+
+    i = 0;
+    while (i < 4) {
+        val |= uch[i] << (i * 8);
+        i++;
+    }
+
+    //printf("   Get next Free FAT val: %d\n", val);
+
+    return val;    
+}
+
+static int mspSD_getFreeFATList(struct adFATLinkList_s **head, uint32_t idx, uint8_t *fat, uint32_t max)
+{
+    uint32_t llen=0, lstr=0, nxt=0, cur=0, ret=0, ocp=0, fri=0;
+    struct adFATLinkList_s *ls=0, *nt=0;
+    cur = idx;
+
+    ret = mspSD_createFATLinkList(&ls);
+    if (ret) return ret;
+
+    *head = ls;
+
+    lstr = cur; 
+    llen = 0;
+    printf("  start %d, %d\n", lstr, llen);
+
+    while (cur < max) {
+        nxt = mspSD_getNextFreeFAT(cur, fat, max);
+
+        if (nxt == 0x0ffffff8) {
+            printf(" search start ...\n");
+        } else if (nxt == 0xffffffff) {
+            printf(" just start ... \n");
+        } else if (nxt == 0x0fffffff) {
+            ocp++;
+            //printf("  [%d] ocp %d\n", cur, ocp);
+        } else if (nxt == 0xffffffff) {
+            printf("  [%d] error %d, %d\n", cur, lstr, llen);
+            return -1;
+        } else {
+
+            if (!nxt) {
+                fri ++;
+                if (!lstr) {
+                    lstr = cur;
+                }
+                llen += 1;
+            } else {
+                if (lstr) {
+                    ls->ftStart = lstr;
+                    ls->ftLen = llen;
+                    ret = mspSD_createFATLinkList(&ls->n);
+                    if (ret) return ret;
+
+                    printf(" free sector, start:%d len:%d \n", lstr, llen);
+
+                    lstr = 0;
+                    llen = 0; 
+                    ls = ls->n;
+                } else {
+                    ocp++;
+                    //printf("  [%d] ocp %d\n", cur, ocp);
+                }
+            }
+        }
+        cur++;
+    }
+
+    if (ls->n) {
+        free(ls->n);
+        ls->n = 0;
+    } else {
+        ls->ftStart = lstr;
+        ls->ftLen = llen;
+    }
+
+    printf(" total free cluster %d, total used cluster %d \n", fri, ocp);
+    
+    return 0;
+}
 static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
 {
     char mlog[256];
@@ -9158,7 +9253,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (!pftb->h) {
             pflsh = 0;
-            ret = mspSD_parseFAT2LinkList(&pflsh, psec->secRtclst, pftb->ftbFat1, pftb->ftbLen/4);
+            ret = mspSD_parseFAT2LinkList(&pflsh, psec->secRtclst, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
             if (ret) {
                 sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d \n", ret);
                 print_f(&mrs->plog, "fs51", mrs->log);
@@ -9329,7 +9424,8 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (!pftb->h) {
             pflsh = 0;
-            ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
+
+            ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
             if (ret) {
                 sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
                 print_f(&mrs->plog, "fs52", mrs->log);
@@ -9440,7 +9536,8 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdParseBuff_s *pParBuf=0;
     struct info16Bit_s *p=0, *c=0;
     struct sdFATable_s   *pftb=0;
-
+    struct adFATLinkList_s *pfatfree=0, *pflnt=0;
+    
     sprintf(mrs->log, "read FAT  \n");
     print_f(&mrs->plog, "fs53", mrs->log);
 
@@ -9450,6 +9547,7 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
     pftb = pfat->fatTable;
+    psec = pfat->fatBootsec;
     pParBuf = &pfat->fatDirPool->parBuf;
 
     if (pftb->ftbFat1) {
@@ -9477,6 +9575,28 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
         pftb->ftbLen = 0;
 */
 #endif
+        sprintf(mrs->log, "total sector: %d, root sector: %d, free cluster: %d vs secPerfat: %d\n", psec->secTotal, psec->secWhroot, (psec->secTotal - psec->secWhroot) / psec->secPrClst, psec->secPrfat);
+        print_f(&mrs->plog, "fs53", mrs->log);
+
+        ret = mspSD_getFreeFATList(&pfatfree, 0, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
+        if (!ret) {
+            sprintf(mrs->log, "show FAT free space \n");
+            print_f(&mrs->plog, "fs53", mrs->log);
+
+            val = 0;
+            pflnt = pfatfree;
+            while (pflnt) {
+                val += pflnt->ftLen;
+                sprintf(mrs->log, "start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
+                print_f(&mrs->plog, "fs53", mrs->log);
+                pflnt = pflnt->n;
+            }
+        } else {
+            sprintf(mrs->log, "parse FAT free space failed, ret:0x%x \n", ret);
+            print_f(&mrs->plog, "fs53", mrs->log);
+        }
+        sprintf(mrs->log, "total free cluster: %d, free sector: %d (%d) \n", val, val * psec->secPrClst, val * psec->secPrClst * psec->secSize);
+        print_f(&mrs->plog, "fs53", mrs->log);        
 
         pfat->fatStatus |= ASPFAT_STATUS_FAT;
         msync(pftb->ftbFat1, pftb->ftbLen, MS_SYNC);
@@ -10116,7 +10236,7 @@ static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp)
     if (!pftb->h) {
         pflsh = 0;
 
-        ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, pftb->ftbLen/4);
+        ret = mspSD_parseFAT2LinkList(&pflsh, curDir->dfclstnum, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
         if (ret) {
             sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
             print_f(&mrs->plog, "fs70", mrs->log);
