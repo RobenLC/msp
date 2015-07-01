@@ -11398,8 +11398,18 @@ static int p4(struct procRes_s *rs)
     int cmode, acuhk, errtor=0;
     char ch, str[128];
     char *addr;
+    struct info16Bit_s *p=0, *c=0;
+    uint32_t secStr=0, secLen=0, datLen=0;
+    struct sdFAT_s *pfat=0;
+    struct sdFATable_s   *pftb=0;
+
+    pfat = rs->psFat;
+    pftb = pfat->fatTable;
     sprintf(rs->logs, "p4\n");
     print_f(rs->plogs, "P4", rs->logs);
+
+    c = &rs->pmch->cur;
+    p = &rs->pmch->tmp;
 
     p4_init(rs);
     // wait for ch from p0
@@ -11704,8 +11714,8 @@ static int p4(struct procRes_s *rs)
                     
                         msync(addr, len, MS_SYNC);
                         /* send data to wifi socket */
-                        //sprintf(rs->logs, " %d -%d \n", len, pi);
-                        //print_f(rs->plogs, "P4", rs->logs);         
+                        sprintf(rs->logs, " %d -%d \n", len, pi);
+                        print_f(rs->plogs, "P4", rs->logs);         
                         if (len != 0) {
                             #if 1 /*debug*/
                             opsz = write(rs->psocket_t->connfd, addr, len);
@@ -11757,7 +11767,9 @@ static int p4(struct procRes_s *rs)
 #if MSP_P4_SAVE_DAT
                 fclose(rs->fdat_s);
 #endif
-                break;
+                if (!pftb->c) {
+                    break;
+                }
             }
             else {
                 sprintf(rs->logs, "cmode: %d - 7\n", cmode);
