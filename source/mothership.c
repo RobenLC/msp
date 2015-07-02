@@ -647,9 +647,9 @@ static int stsup_34(struct psdata_s *data);
 static int stsup_35(struct psdata_s *data);
 static int stsin_36(struct psdata_s *data);
 static int stdow_37(struct psdata_s *data);
-static int stdow_38(struct psdata_s *data);
-static int stdow_39(struct psdata_s *data);
-static int stdow_40(struct psdata_s *data);
+static int stupd_38(struct psdata_s *data);
+static int stupd_39(struct psdata_s *data);
+static int stupd_40(struct psdata_s *data);
 
 static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, char *dir);
 static int mspFS_insertChilds(struct sdFAT_s *psFat, struct directnFile_s *root);
@@ -1663,6 +1663,71 @@ static int mspSD_getFreeFATList(struct adFATLinkList_s **head, uint32_t idx, uin
     
     return 0;
 }
+
+static int mspSD_allocFreeFATList(struct adFATLinkList_s **head, uint32_t length, struct adFATLinkList_s *f, struct adFATLinkList_s **n)
+{
+    int ret=0;
+    uint32_t str=0, len=0, acu=0;
+    struct adFATLinkList_s *c=0, *t=0;
+    struct adFATLinkList_s *ls=0, *nt=0;
+    
+    if (!f) return -1;
+    ret = mspSD_createFATLinkList(&ls);
+    if (ret) return ret;
+
+    *head = ls;
+    c = f;
+    
+    while (length) {
+        if (!c) {
+            return -2;
+        }
+
+        str = c->ftStart;
+        len = c->ftLen;
+        if (len > length) {
+            ls->ftStart = str;
+            ls->ftLen = length;
+            
+            len = len - length;
+            str = str + length;
+
+            c->ftStart = str;
+            c->ftLen = len;
+            length = 0;
+            t = ls;
+            break;
+        } else {
+            length = length - len;
+            nt = c;
+            
+            ret = mspSD_createFATLinkList(&ls->n);
+            if (ret) return ret;
+
+            ls->ftStart = str;
+            ls->ftLen = len;
+            t = ls;
+            ls = ls->n;
+        }
+        
+        c = c->n;        
+        
+        if (nt) {
+            free(nt);
+            nt = 0;
+        }
+    }
+
+    if (!ls->ftLen) {
+        free(ls);
+        t->n = 0;
+    }
+
+    *n = c;
+
+    return 0;
+}
+
 static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
 {
     char mlog[256];
@@ -5226,7 +5291,7 @@ static int stdow_37(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stdow_38(struct psdata_s *data)
+static int stupd_38(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -5236,15 +5301,15 @@ static int stdow_38(struct psdata_s *data)
     rlt = abs_result(data->result); 
 
     sprintf(rs->logs, "op_38 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SIN", rs->logs);  
+    print_f(rs->plogs, "UPD", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
+            ch = 75; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_38: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SIN", rs->logs);  
+            print_f(rs->plogs, "UPD", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -5268,7 +5333,7 @@ static int stdow_38(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stdow_39(struct psdata_s *data)
+static int stupd_39(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -5278,7 +5343,7 @@ static int stdow_39(struct psdata_s *data)
     rlt = abs_result(data->result); 
 
     sprintf(rs->logs, "op_39 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SIN", rs->logs);  
+    print_f(rs->plogs, "UPD", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -5286,7 +5351,7 @@ static int stdow_39(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_39: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SIN", rs->logs);  
+            print_f(rs->plogs, "UPD", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -5310,7 +5375,7 @@ static int stdow_39(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stdow_40(struct psdata_s *data)
+static int stupd_40(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -5320,7 +5385,7 @@ static int stdow_40(struct psdata_s *data)
     rlt = abs_result(data->result); 
 
     sprintf(rs->logs, "op_40 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SIN", rs->logs);  
+    print_f(rs->plogs, "UPD", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -5328,7 +5393,7 @@ static int stdow_40(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_40: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SIN", rs->logs);  
+            print_f(rs->plogs, "UPD", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -7235,6 +7300,63 @@ end:
 
     return ret;
 }
+
+static int cmdfunc_upld_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_upld_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SCM;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, 'u', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_upld_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type)
 {
     int cnt=0, s=0;
@@ -7410,7 +7532,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 11
+#define CMD_SIZE 12
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -7418,7 +7540,7 @@ static int dbg(struct mainRes_s *mrs)
 
     struct cmd_s cmdtab[CMD_SIZE] = {{0, "poll", cmdfunc_01}, {1, "action", cmdfunc_act_opcode}, {2, "rgw", cmdfunc_regw_opcode}, {3, "op", cmdfunc_opcode}, 
                                 {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_go_opcode}, {6, "rgr", cmdfunc_regr_opcode}, {7, "launch", cmdfunc_lh_opcode},
-                                {8, "boot", cmdfunc_boot_opcode}, {9, "single", cmdfunc_single_opcode}, {10, "dnld", cmdfunc_dnld_opcode}};
+                                {8, "boot", cmdfunc_boot_opcode}, {9, "single", cmdfunc_single_opcode}, {10, "dnld", cmdfunc_dnld_opcode}, {11, "upld", cmdfunc_upld_opcode}};
 
     p0_init(mrs);
 
@@ -7629,6 +7751,11 @@ static int hd71(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd72(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd73(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd74(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd75(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd76(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd77(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd78(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd79(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -10489,9 +10616,126 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
+static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    int val=0, i=0, ret=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0, clstByte=0, clstLen=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct directnFile_s *curDir=0, *ch=0, *br=0;
+    struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct adFATLinkList_s *pfre=0, *pnxf=0;
+    struct sdFATable_s   *pftb=0;
+    
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pParBuf = &pfat->fatDirPool->parBuf;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
+    clstByte = psec->secSize * psec->secPrClst;
+    if (!clstByte) {
+        sprintf(mrs->log, "ERROR!! bytes number of cluster is zero \n");
+        print_f(&mrs->plog, "fs75", mrs->log);
+
+        modersp->r = 3;
+        return 1;
+    }
+
+    pfre = pftb->ftbMng.f;
+    if (!pfre) {
+        sprintf(mrs->log, "Error!! free space link list is empty \n");
+        print_f(&mrs->plog, "fs75", mrs->log);
+        modersp->r = 3;
+        return 1;
+    }
+    
+    sprintf(mrs->log, "upload file: %s \n", pfat->fatFileUpld->dfSFN);
+    print_f(&mrs->plog, "fs75", mrs->log);
+
+    if (!pfat->fatFileUpld) {
+        modersp->r = 3;
+        return 1;
+    }
+   
+    curDir = pfat->fatFileUpld;
+    if (!pftb->h) {
+        pflsh = 0;
+
+        if (curDir->dflength % clstByte) {
+            clstLen = (curDir->dflength / clstByte) + 1;
+        } else {
+            clstLen = (curDir->dflength / clstByte);        
+        }
+
+        ret = mspSD_allocFreeFATList(&pflsh, clstLen, pfre, &pnxf);
+        if (ret) {
+            sprintf(mrs->log, "free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
+            print_f(&mrs->plog, "fs75", mrs->log);
+            modersp->r = 3;
+            return 1;
+        }
+        
+        /* debug */
+        sprintf(mrs->log, "show allocated FAT list: \n");
+        print_f(&mrs->plog, "fs75", mrs->log);
+
+        val = 0;
+        pflnt = pflsh;
+        while (pflnt) {
+            val += pflnt->ftLen;
+            sprintf(mrs->log, "str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
+            print_f(&mrs->plog, "fs75", mrs->log);
+            pflnt = pflnt->n;
+        }
+        sprintf(mrs->log, "total allocated cluster is %d!! \n", val);
+        print_f(&mrs->plog, "fs75", mrs->log);
+
+        
+        pftb->h = pflsh;
+        pftb->c = pftb->h;
+
+        pfat->fatStatus |= ASPFAT_STATUS_SDWT;
+        modersp->r = 1;
+    } else {
+        sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!! pending!! \n", ret);
+        print_f(&mrs->plog, "fs75", mrs->log);
+        modersp->r = 2;
+    }
+
+    return 1;
+    return 0;
+}
+static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    return 0;
+}
+
+static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    return 0;
+}
+
+static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    return 0;
+}
+
+static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    return 0;
+}
+
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 75
+#define PS_NUM 80
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -10511,8 +10755,9 @@ static int p0(struct mainRes_s *mrs)
                                  {55, fs55},{56, fs56},{57, fs57},{58, fs58},{59, fs59},
                                  {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64},
                                  {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69},
-                                 {65, fs70},{66, fs71},{67, fs72},{68, fs73},{69, fs74}};
-
+                                 {65, fs70},{66, fs71},{67, fs72},{68, fs73},{69, fs74},
+                                 {65, fs75},{66, fs76},{67, fs77},{68, fs78},{69, fs79}};
+                                 
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
                                  {10, hd10},{11, hd11},{12, hd12},{13, hd13},{14, hd14},
@@ -10527,7 +10772,8 @@ static int p0(struct mainRes_s *mrs)
                                  {55, hd55},{56, hd56},{57, hd57},{58, hd58},{59, hd59},
                                  {60, hd60},{61, hd61},{62, hd62},{63, hd63},{64, hd64},
                                  {65, hd65},{66, hd66},{67, hd67},{68, hd68},{69, hd69},
-                                 {60, hd70},{61, hd71},{62, hd72},{63, hd73},{64, hd74}};
+                                 {60, hd70},{61, hd71},{62, hd72},{63, hd73},{64, hd74},
+                                 {65, hd75},{66, hd76},{67, hd77},{68, hd78},{69, hd79}};
 
     p0_init(mrs);
 
@@ -10617,7 +10863,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stfat_21, stfat_22, stfat_23, stfat_24, stfat_25}, // FATG
                             {stfat_26, stfat_27, stfat_28, stfat_29, stfat_30}, // FATH
                             {stsup_31, stsup_32, stsup_33, stsup_34, stsup_35}, // SUPI
-                            {stsin_36, stdow_37, stdow_38, stdow_39, stdow_40}}; // SINJ
+                            {stsin_36, stdow_37, stupd_38, stupd_39, stupd_40}}; // SINJ
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -10670,7 +10916,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'h') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, SINJ, PSACT);
+                } else if (cmd == 'u') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, SINJ, PSWT);
                 }
+
 
 
                 if (cmdt != '\0') {
@@ -12639,6 +12889,8 @@ static int p6(struct procRes_s *rs)
 */                        
                         aspFS_insertFATChild(fscur, upld);
 
+                        pfat->fatFileUpld = upld;
+                        
                         debugPrintDir(upld);
                         pfat->fatFileDnld = upld;
                     }
