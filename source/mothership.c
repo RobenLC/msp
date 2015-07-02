@@ -1500,7 +1500,6 @@ static uint32_t mspSD_getNextFAT(uint32_t idx, uint8_t *fat, uint32_t max)
 
     printf("   Get next FAT val: %d\n", val);
 
-
     return val;    
 }
 
@@ -1974,7 +1973,11 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
     while (brt) {
         sprintf(mlog, "%d/ %s\n", b, brt->dfSFN);
         print_f(mlogPool, "FSRH", mlog);
-        if ((b < a) && (brt->dftype == ASPFS_TYPE_FILE)) {
+        if (brt->dfstats != ASPFS_STATUS_EN) {
+            sprintf(mlog, "skip disable file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+            print_f(mlogPool, "FSRH", mlog);
+            brt = brt->br;
+        } else if ((b < a) && (brt->dftype == ASPFS_TYPE_FILE)) {
             sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
             print_f(mlogPool, "FSRH", mlog);
             brt = brt->br;
@@ -9763,6 +9766,7 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     return 0;
 }
+
 static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
     struct sdFAT_s *pfat=0;
@@ -12139,14 +12143,15 @@ static int p6(struct procRes_s *rs)
     char strFullPath[528];
     char strPath[32][16];
     char *recvbuf, *sendbuf, *pr;
-    int ret, n, num, hd, be, ed, ln, cnt=0, i;
+    int ret, n, num, hd, be, ed, ln, cnt=0, i, len=0;
     char opc=0;
     char opcode=0, param=0, flag = 0;
     uint32_t clstSize=0;
+    uint8_t adata[3], atime[3];
 
     struct directnFile_s *fscur = 0, *nxtf = 0;
     struct directnFile_s *brt, *pa;
-    struct directnFile_s *dnld;
+    struct directnFile_s *dnld=0, *upld=0;
 
     struct aspConfig_s *pct=0, *pdt=0;
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
@@ -12480,9 +12485,9 @@ static int p6(struct procRes_s *rs)
                     sendbuf[3] = 'W';            
                 }
 
-                nexinfo = asp_getInfo(strinfo, 8);
+                nexinfo = asp_getInfo(strinfo, 9);
                 if (nexinfo) {
-                    sprintf(rs->logs, "%d.%s\n", 8, nexinfo->infoStr);
+                    sprintf(rs->logs, "%d.%s\n", 9, nexinfo->infoStr);
                     print_f(rs->plogs, "P6", rs->logs);
 
                     if (strcmp("ASP", nexinfo->infoStr) != 0) {
@@ -12492,9 +12497,9 @@ static int p6(struct procRes_s *rs)
                     sendbuf[3] = 'F';
                 }
 
-                nexinfo = asp_getInfo(strinfo, 1);
+                nexinfo = asp_getInfo(strinfo, 2);
                 if (nexinfo) {
-                    sprintf(rs->logs, "%d.%s\n", 1, nexinfo->infoStr);
+                    sprintf(rs->logs, "%d.%s\n", 2, nexinfo->infoStr);
                     print_f(rs->plogs, "P6", rs->logs);
                 } else {
                     sendbuf[3] = 'F';
@@ -12505,7 +12510,9 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
 
                 clstSize = pfat->fatBootsec->secSize * pfat->fatBootsec->secPrClst;
-                if (cnt % num) {
+                if (num == 0) {
+                    cnt = 0;
+                } else if (cnt % num) {
                     cnt = num / clstSize + 1;
                 } else {
                     cnt = num / clstSize;
@@ -12513,6 +12520,128 @@ static int p6(struct procRes_s *rs)
 
                 if (cnt > pftb->ftbMng.ftfreeClst) {
                     sendbuf[3] = 'F';
+                } else {
+                    mspFS_allocDir(pfat, &upld);
+                    if (!upld) {
+                        sendbuf[3] = 'F';
+                    } else {
+                        memset(upld, 0, sizeof(struct directnFile_s));
+                        upld->dftype = ASPFS_TYPE_FILE;
+                        upld->dfstats = ASPFS_STATUS_DIS;
+                        upld->dfattrib = ASPFS_ATTR_ARCHIVE;
+                        upld->dfclstnum = 0; /* start cluster */
+
+                        for (i = 0 ; i < 3; i++) {
+                            nexinfo = asp_getInfo(strinfo, 3+i);
+                            if (nexinfo) {
+                                adata[i] = atoi(nexinfo->infoStr);
+                                sprintf(rs->logs, "%d.%s = %d\n", 2+i, nexinfo->infoStr, adata[i]);
+                                print_f(rs->plogs, "P6", rs->logs);
+                            } else {
+                                break;
+                            } 
+                        }
+
+                        for (i = 0 ; i < 3; i++) {
+                            nexinfo = asp_getInfo(strinfo, 6+i);
+                            if (nexinfo) {
+                                atime[i] = atoi(nexinfo->infoStr);
+                                sprintf(rs->logs, "%d.%s = %d\n", 5+i, nexinfo->infoStr, atime[i]);
+                                print_f(rs->plogs, "P6", rs->logs);
+                            } else {
+                                break;
+                            } 
+                        }
+                        
+                        upld->dfcredate = (((adata[0] - 1980) << 16) | (adata[1] << 8) | adata[2]);
+                        upld->dfcretime = ((atime[0] << 16) | (atime[1] << 8) | atime[2]);;
+                        upld->dflstacdate = (((adata[0] - 1980) << 16) | (adata[1] << 8) | adata[2]);
+                        upld->dfrecodate = (((adata[0] - 1980) << 16) | (adata[1] << 8) | adata[2]);
+                        upld->dfrecotime = ((atime[0]  << 16) | (atime[1] << 8) | atime[2]);;
+
+                        upld->dflength = num; /* file length */
+                        
+                        nexinfo = asp_getInfo(strinfo, 1);
+                        if (nexinfo) {
+                            sprintf(rs->logs, "%d.%s\n", 1, nexinfo->infoStr);
+                            print_f(rs->plogs, "P6", rs->logs);
+                        } else {
+                            sendbuf[3] = 'F';
+                        } 
+                        
+                        len = strlen(nexinfo->infoStr);
+                        if (len > 255) {
+                            len = 255;
+                        }
+
+                        ret = asp_idxofch(nexinfo->infoStr, '.', 0, len);
+                        if (ret == -1) {
+                            if (len > 11) {
+                                strncpy(upld->dfSFN, nexinfo->infoStr, 10);
+                                upld->dfSFN[10] = '~';
+                                upld->dfSFN[11] = '\0';
+                                strncpy(upld->dfLFN,  nexinfo->infoStr, len);
+                                upld->dflen = len;
+                                upld->dfLFN[len] = '\0';
+                            } else {
+                                strncpy(upld->dfSFN, nexinfo->infoStr, len);
+                                upld->dfSFN[len] = '\0';
+                            }
+                        } else {
+                            if (ret == (len - 1 - 3)) {
+                                if (len > 12) {
+                                    strncpy(upld->dfSFN, nexinfo->infoStr, 7);
+                                    upld->dfSFN[7] = '~';
+                                    upld->dfSFN[8] = '.';
+                                    strncpy(&upld->dfSFN[9], &nexinfo->infoStr[len -3], 3);
+                                    upld->dfSFN[12] = '\0';
+                                    strncpy(upld->dfLFN,  nexinfo->infoStr, len);
+                                    upld->dflen = len;
+                                    upld->dfLFN[len] = '\0';
+                                } else {
+                                    strncpy(upld->dfSFN, nexinfo->infoStr, len);
+                                    upld->dfSFN[len] = '\0';                        
+                                }
+                            } else {
+                                if (len > 11) {
+                                    strncpy(upld->dfSFN, nexinfo->infoStr, 10);
+                                    upld->dfSFN[10] = '~';
+                                    upld->dfSFN[11] = '\0';
+                                    strncpy(upld->dfLFN,  nexinfo->infoStr, len);
+                                    upld->dflen = len;
+                                    upld->dfLFN[len] = '\0';
+                                } else {
+                                    strncpy(upld->dfSFN, nexinfo->infoStr, len);
+                                    upld->dfSFN[len] = '\0';
+                                }
+                            }
+                        }
+
+                        sprintf(rs->logs, "SFN[%s] LFS[%s] len:%d\n", upld->dfSFN, upld->dfLFN, upld->dflen);
+                        print_f(rs->plogs, "P6", rs->logs);
+/*
+                        nexinfo = asp_getInfo(strinfo, 0);
+                        if (nexinfo) {
+                            sprintf(rs->logs, "%d.%s\n", 0, nexinfo->infoStr);
+                            print_f(rs->plogs, "P6", rs->logs);
+                        } else {
+                            break;
+                        } 
+
+                        ret = mspFS_FileSearch(&dnld, rs->psFat->fatRootdir, nexinfo->infoStr);
+                        if (ret) {
+                            sprintf(rs->logs, "search upload file[%s], not found ret=%d\n", nexinfo->infoStr, ret);
+                            print_f(rs->plogs, "P6", rs->logs);
+                            sendbuf[3] = 'O';
+                        } else {
+                            sendbuf[3] = 'W';            
+                        }
+*/                        
+                        aspFS_insertFATChild(fscur, upld);
+
+                        debugPrintDir(upld);
+                        pfat->fatFileDnld = upld;
+                    }
                 }
 
                 sprintf(rs->logs, "new file need %d clst, available %d clst\n", cnt, pftb->ftbMng.ftfreeClst);
