@@ -320,6 +320,12 @@ struct sdFSinfo_s{
     int finTrsn;             // shall be 0x00 0x00 0x55 0xaa
 };
 
+struct adFATSpaceInfo_s{
+    uint32_t  ftfreeClst;
+    uint32_t  ftusedClst;
+    struct adFATLinkList_s *f;    
+};
+
 struct adFATLinkList_s{
     uint32_t ftStart;              // start cluster
     uint32_t ftLen;                // cluster length
@@ -331,6 +337,7 @@ struct sdFATable_s{
     uint32_t ftbLen;
     struct adFATLinkList_s *h;
     struct adFATLinkList_s *c;
+    struct adFATSpaceInfo_s ftbMng;
 };
 
 struct sdParseBuff_s{
@@ -925,7 +932,7 @@ static struct aspInfoSplit_s *asp_freeInfo(struct aspInfoSplit_s *info)
     if (!info) return 0;
     nex = info->n;
 
-    printf("free[%s]\n", info->infoStr);
+    //printf("free[%s]\n", info->infoStr);
 
     free(info->infoStr);
     free(info);
@@ -9529,7 +9536,7 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     int val=0, i=0, ret = 0;
     char *pr=0;
-    uint32_t secStr=0, secLen=0;
+    uint32_t secStr=0, secLen=0, freeClst=0, usedClst=0, totClst=0;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -9578,30 +9585,37 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "total sector: %d, root sector: %d, free cluster: %d vs secPerfat: %d\n", psec->secTotal, psec->secWhroot, (psec->secTotal - psec->secWhroot) / psec->secPrClst, psec->secPrfat);
         print_f(&mrs->plog, "fs53", mrs->log);
 
-        ret = mspSD_getFreeFATList(&pfatfree, 0, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
+        totClst = (psec->secTotal - psec->secWhroot) / psec->secPrClst;
+        ret = mspSD_getFreeFATList(&pfatfree, 0, pftb->ftbFat1, totClst);
         if (!ret) {
             sprintf(mrs->log, "show FAT free space \n");
             print_f(&mrs->plog, "fs53", mrs->log);
 
-            val = 0;
+            freeClst = 0;
             pflnt = pfatfree;
             while (pflnt) {
-                val += pflnt->ftLen;
+                freeClst += pflnt->ftLen;
                 sprintf(mrs->log, "start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
                 print_f(&mrs->plog, "fs53", mrs->log);
                 pflnt = pflnt->n;
             }
+            sprintf(mrs->log, "total free cluster: %d, free sector: %d (%d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+            print_f(&mrs->plog, "fs53", mrs->log);     
+            usedClst = totClst - freeClst;
+            
+            pftb->ftbMng.ftfreeClst = freeClst;
+            pftb->ftbMng.ftusedClst = usedClst;
+            pftb->ftbMng.f = pfatfree;
+            
+            pfat->fatStatus |= ASPFAT_STATUS_FAT;
+            msync(pftb->ftbFat1, pftb->ftbLen, MS_SYNC);
+            
+            modersp->r = 1;
         } else {
             sprintf(mrs->log, "parse FAT free space failed, ret:0x%x \n", ret);
             print_f(&mrs->plog, "fs53", mrs->log);
+            modersp->r = 3;
         }
-        sprintf(mrs->log, "total free cluster: %d, free sector: %d (%d) \n", val, val * psec->secPrClst, val * psec->secPrClst * psec->secSize);
-        print_f(&mrs->plog, "fs53", mrs->log);        
-
-        pfat->fatStatus |= ASPFAT_STATUS_FAT;
-        msync(pftb->ftbFat1, pftb->ftbLen, MS_SYNC);
-
-        modersp->r = 1;
     }else {
         secStr = c->opinfo;
         secLen = p->opinfo;
@@ -12128,6 +12142,7 @@ static int p6(struct procRes_s *rs)
     int ret, n, num, hd, be, ed, ln, cnt=0, i;
     char opc=0;
     char opcode=0, param=0, flag = 0;
+    uint32_t clstSize=0;
 
     struct directnFile_s *fscur = 0, *nxtf = 0;
     struct directnFile_s *brt, *pa;
@@ -12388,7 +12403,7 @@ static int p6(struct procRes_s *rs)
             brt = fscur->ch;
 
             while (brt) {
-                while ((strcmp(brt->dfSFN, "..") == 0) || (strcmp(brt->dfSFN, ".") == 0)) {
+                while ((strcmp(brt->dfSFN, "..") == 0) || (strcmp(brt->dfSFN, ".") == 0) || (brt->dfstats != ASPFS_STATUS_EN)) {
                     brt = brt->br;           
                 }
 
@@ -12449,9 +12464,9 @@ static int p6(struct procRes_s *rs)
                 }
                 
 
-                nexinfo = asp_getInfo(strinfo, 8);
+                nexinfo = asp_getInfo(strinfo, 0);
                 if (nexinfo) {
-                    sprintf(rs->logs, "%d.%s\n", i, nexinfo->infoStr);
+                    sprintf(rs->logs, "%d.%s\n", 0, nexinfo->infoStr);
                     print_f(rs->plogs, "P6", rs->logs);
                 }
             
@@ -12476,6 +12491,32 @@ static int p6(struct procRes_s *rs)
                 } else {
                     sendbuf[3] = 'F';
                 }
+
+                nexinfo = asp_getInfo(strinfo, 1);
+                if (nexinfo) {
+                    sprintf(rs->logs, "%d.%s\n", 1, nexinfo->infoStr);
+                    print_f(rs->plogs, "P6", rs->logs);
+                } else {
+                    sendbuf[3] = 'F';
+                }
+
+                num = atoi(nexinfo->infoStr);
+                sprintf(rs->logs, "file length: %d\n", num);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                clstSize = pfat->fatBootsec->secSize * pfat->fatBootsec->secPrClst;
+                if (cnt % num) {
+                    cnt = num / clstSize + 1;
+                } else {
+                    cnt = num / clstSize;
+                }
+
+                if (cnt > pftb->ftbMng.ftfreeClst) {
+                    sendbuf[3] = 'F';
+                }
+
+                sprintf(rs->logs, "new file need %d clst, available %d clst\n", cnt, pftb->ftbMng.ftfreeClst);
+                print_f(rs->plogs, "P6", rs->logs);
                 
             }
             else {
@@ -12492,6 +12533,7 @@ static int p6(struct procRes_s *rs)
             sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
+            /* free memory */
             nexinfo = strinfo;
             while(nexinfo) {
                 nexinfo = asp_freeInfo(nexinfo);
