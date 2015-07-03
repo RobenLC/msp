@@ -10855,18 +10855,65 @@ static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
+    int val=0, i=0, ret=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct directnFile_s *curDir=0, *ch=0, *br=0;
+    struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct sdFATable_s   *pftb=0;
+
+
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pParBuf = &pfat->fatDirPool->parBuf;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
     sprintf(mrs->log, "FAT table upload to SD\n");
     print_f(&mrs->plog, "fs78", mrs->log);
 
+    pfat->fatStatus &= ~ASPFAT_STATUS_FATWT;    
     modersp->r = 1;
     return 1;
 }
 
 static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
+    int val=0, i=0, ret=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct directnFile_s *curDir=0, *ch=0, *br=0;
+    struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct sdFATable_s   *pftb=0;
+
+
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pParBuf = &pfat->fatDirPool->parBuf;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
+    
     sprintf(mrs->log, "DFE upload to SD\n");
     print_f(&mrs->plog, "fs79", mrs->log);
 
+    pfat->fatStatus &= ~ASPFAT_STATUS_DFEWT;    
     modersp->r = 1;
     return 1;
 }
