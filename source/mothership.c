@@ -11038,11 +11038,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     sprintf(rs->logs, "p1\n");
     print_f(rs->plogs, "P1", rs->logs);
     struct psdata_s *stdata;
-    stfunc pf[SMAX][PSMAX] = {{stspy_01, stspy_02, stspy_03, stspy_04, stspy_05},
-                            {stbullet_01, stbullet_02, stbullet_03, stbullet_04, stbullet_05},
-                            {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05},
-                            {stdob_01, stdob_02, stdob_03, stdob_04, stdob_05},
-                            {stdob_06, stdob_07, stdob_08, stdob_09, stdob_10},
+    stfunc pf[SMAX][PSMAX] = {{stspy_01, stspy_02, stspy_03, stspy_04, stspy_05}, //SPY
+                            {stbullet_01, stbullet_02, stbullet_03, stbullet_04, stbullet_05}, //BULLET
+                            {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05}, // LASER
+                            {stdob_01, stdob_02, stdob_03, stdob_04, stdob_05}, // DOUBLEC
+                            {stdob_06, stdob_07, stdob_08, stdob_09, stdob_10}, // DOUBLED
                             {streg_11, streg_12, streg_13, streg_14, streg_15}, // REGE
                             {streg_16, streg_17, stfat_18, stfat_19, stfat_20}, // REGF
                             {stfat_21, stfat_22, stfat_23, stfat_24, stfat_25}, // FATG
@@ -11312,6 +11312,9 @@ static int p2(struct procRes_s *rs)
                     break;
                 case 'k':
                     cmode = 9;
+                    break;
+                case 'u':
+                    cmode = 10;
                     break;
                 default:
                     break;
@@ -11671,27 +11674,61 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "tx cnt:%d - end\n", pi);
                 print_f(rs->plogs, "P2", rs->logs);         
             }
+
+            else if (cmode == 10) {
+                totsz = 0;
+                pi = 0;
+                sprintf(rs->logs, "cmode: %d \n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+                
+                while (1) {
+                    if (ch != 'U') {
+                        rs_ipc_get(rs, &ch, 1);
+                    }
+
+                    len = ring_buf_cons(rs->pcmdTx, &addr);
+
+                    sprintf(rs->logs, "u t %d\n", len);
+                    print_f(rs->plogs, "P2", rs->logs);          
+
+                    if (len > 0) {
+                        if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
+#if SPI_KTHREAD_USE
+                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    while (opsz == 0) {
+                        usleep(1000);
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
+                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);  
+                    }
+#else
+                        opsz = mtx_data(rs->spifd, addr, addr, len, tr);
+#endif
+                        pi++;
+                        if (opsz < 0) break;
+                        totsz += opsz;
+                    }
+                    if ((len < 0) && (ch == 'U')) break;
+                }
+
+                opsz = 0 - opsz;
+                if (opsz > 0) {
+                    totsz += opsz;
+                }
+
+                while (ch != 'U') {
+                    rs_ipc_get(rs, &ch, 1);
+                }
+
+                rs_ipc_put(rs, "U", 1);
+                sprintf(rs->logs, "tx cnt:%d - end\n", pi);
+                print_f(rs->plogs, "P2", rs->logs);                     
+            }
+
             else {
                 sprintf(rs->logs, "cmode: %d \n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
             }
-
-/*
-            else if (cmode == 2) {
-                len = ring_buf_cons(rs->pcmdTx, &addr);
-                if (len >= 0) {
-                    msync(addr, len, MS_SYNC);
-                    // send data to spi command mode
-                    opsz = mtx_data(rs->spifd, NULL, addr, len, 1024*1024);
-                    //sprintf(rs->logs, "[%d] spi tx %d\n", px, opsz);
-                    //print_f(rs->plogs, "P2", rs->logs);
-                    px++;
-                } else {
-                    sprintf(rs->logs, "[%d] spi tx cons ret:%d\n", px, len);
-                    print_f(rs->plogs, "P2", rs->logs);
-                }
-            }
-*/
 
         }
     }
@@ -12074,6 +12111,9 @@ static int p4(struct procRes_s *rs)
                 case 'n':
                     cmode = 4;
                     break;
+                case 'u':
+                    cmode = 5;
+                    break;
                 default:
                     break;
             }
@@ -12171,6 +12211,10 @@ static int p4(struct procRes_s *rs)
                 break;
             }
             else if (cmode == 2) {
+                secStr = c->opinfo;
+                secLen = p->opinfo;
+                datLen = secLen * 512;
+            
                 px = 0;
 
                 len = 0;
@@ -12263,7 +12307,9 @@ static int p4(struct procRes_s *rs)
                 print_f(rs->plogs, "P4", rs->logs);
 
                 rs_ipc_put(rs, "C", 1);
-                break;
+                if (!pftb->c) {
+                    break;
+                }
             }
             else if (cmode == 4) {
 #if MSP_P4_SAVE_DAT
@@ -12340,6 +12386,128 @@ static int p4(struct procRes_s *rs)
 #if MSP_P4_SAVE_DAT
                 fclose(rs->fdat_s);
 #endif
+                if (!pftb->c) {
+                    break;
+                }
+            }
+            else if (cmode == 5) {
+                secStr = c->opinfo;
+                secLen = p->opinfo;
+                datLen = secLen * 512;
+            
+                px = 0;
+
+                len = 0;
+                len = ring_buf_get(rs->pcmdTx, &addr);
+                while (len <= 0) {
+                    usleep(10000000);
+                    len = ring_buf_get(rs->pcmdTx, &addr);
+                }
+                
+                if (len > datLen) {
+                    len = datLen;
+                    datLen = 0;
+                } else {
+                    datLen = datLen - len;
+                }
+                
+                acuhk = 0;
+                opsz = read(rs->psocket_t->connfd, addr, len);
+                while (opsz <= 0) {
+                    //sprintf(rs->logs, "[wait] socket receive %d/%d bytes from %d\n", px, opsz, len, rs->psocket_t->connfd);
+                    //print_f(rs->plogs, "P4", rs->logs);
+                    opsz = read(rs->psocket_t->connfd, addr, len);
+                }
+
+                addr += opsz;
+                acuhk += opsz;
+                while ((opsz < len) && (opsz > 0)) {
+                    len = len - opsz;
+
+                    errtor = 0;
+                    opsz = read(rs->psocket_t->connfd, addr, len);
+                    while (opsz <= 0) {
+                        if (errtor > 3) break;
+                        opsz = read(rs->psocket_t->connfd, addr, len);
+                        errtor ++;
+                    }
+
+                    addr += opsz;
+                    acuhk += opsz;
+                }
+                
+                //sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d, n:%d\n", px, acuhk, len, rs->psocket_t->connfd, n);
+                //print_f(rs->plogs, "P4", rs->logs);
+                if (datLen == 0) {
+                    ring_buf_set_last(rs->pcmdTx, acuhk);
+                } else {
+                    px++;
+                    ring_buf_prod(rs->pcmdTx);
+                    rs_ipc_put(rs, "u", 1);
+                }
+
+                if (datLen >= 0) {
+                while (1) {
+                    len = 0;
+                    len = ring_buf_get(rs->pcmdTx, &addr);
+                    while (len <= 0) {
+                        usleep(10000000);
+                        len = ring_buf_get(rs->pcmdTx, &addr);
+                    }
+
+                    if (len > datLen) {
+                        len = datLen;
+                        datLen = 0;
+                    } else {
+                        datLen = datLen - len;
+                    }
+
+                    acuhk = 0;
+
+                    errtor = 0;
+                    opsz = read(rs->psocket_t->connfd, addr, len);
+                    while (opsz <= 0) {
+                        if (errtor > 3) break;
+                        opsz = read(rs->psocket_t->connfd, addr, len);
+                        errtor ++;
+                    }
+
+                    addr += opsz;
+                    acuhk += opsz;
+                    while ((opsz < len) && (opsz > 0)) {
+                        len = len - opsz;
+
+                        errtor = 0;
+                        opsz = read(rs->psocket_t->connfd, addr, len);
+                        while (opsz <= 0) {
+                            if (errtor > 3) break;
+                            opsz = read(rs->psocket_t->connfd, addr, len);
+                            errtor ++;
+                        }
+
+                        addr += opsz;
+                        acuhk += opsz;
+                    }
+                    
+                    //sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d n:%d\n", px, acuhk, len, rs->psocket_t->connfd, opsz);
+                    //print_f(rs->plogs, "P4", rs->logs);
+                    px++;
+
+                    if (datLen == 0) break;
+                    
+                    ring_buf_prod(rs->pcmdTx);
+                    //if (opsz <= 0) break;
+                    //shmem_dump(addr, 32);
+
+                    rs_ipc_put(rs, "u", 1);
+                }
+                }
+                ring_buf_set_last(rs->pcmdTx, acuhk);
+
+                sprintf(rs->logs, "[%d] socket receive %d/%d bytes end\n", px, opsz, len);
+                print_f(rs->plogs, "P4", rs->logs);
+
+                rs_ipc_put(rs, "U", 1);
                 if (!pftb->c) {
                     break;
                 }
