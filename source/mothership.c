@@ -276,6 +276,8 @@ typedef enum {
     ASPFAT_STATUS_FOLDER = 0x20,
     ASPFAT_STATUS_SDRD = 0x40,
     ASPFAT_STATUS_SDWT = 0x80,
+    ASPFAT_STATUS_FATWT = 0x100,
+    ASPFAT_STATUS_DFEWT = 0x200,
 } aspFatStatus_e;
 
 
@@ -2402,7 +2404,8 @@ static uint32_t next_SINJ(struct psdata_s *data)
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSTSM;
+                evt = FATH; 
                 break;
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
@@ -2544,6 +2547,9 @@ static uint32_t next_FAT32H(struct psdata_s *data)
                 } else if (tmpAns == 2) {
                     evt = REGF; 
                     next = PSWT;
+                } else if (tmpAns == 3) {
+                    evt = REGF; 
+                    next = PSRLT;
                 } else {
                     next = PSMAX;
                 }
@@ -4820,6 +4826,8 @@ static int stfat_29(struct psdata_s *data)
             } else {
                 if (pFat->fatStatus & ASPFAT_STATUS_SDRD) {
                     ch = 72;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_SDWT) {
+                    ch = 77;
                 } else if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
                     (p->opinfo == pFat->fatBootsec->secPrfat)) {
                     ch = 54; 
@@ -4928,14 +4936,28 @@ static int stfat_30(struct psdata_s *data)
                 sprintf(rs->logs, "SD Read to APP status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 71; /* TODO: APP->MSP->LOV */
+                ch = 71; /* TODO: LOV->MSP->APP */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else if ((pFat->fatStatus & ASPFAT_STATUS_SDWT)) {
-                sprintf(rs->logs, "APP write to SD status:0x%.8x \n", pFat->fatStatus); 
+                sprintf(rs->logs, "APP write data to SD status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 0; /* TODO: LOV->MSP->APP */
+                ch = 76; /* TODO: APP->MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_FATWT)) {
+                sprintf(rs->logs, "APP write FAT to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 78; /* TODO: APP->MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_DFEWT)) {
+                sprintf(rs->logs, "APP write DFE to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 79; /* TODO: APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else {
@@ -9498,7 +9520,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
                 sprintf(mrs->log, "ERROR!! folder [%s] should have child\n", curDir->dfSFN);
                 print_f(&mrs->plog, "fs52", mrs->log);
 
-                modersp->r = 4;
+                modersp->r = 0xed;
                 return 1;
             }
             
@@ -9566,7 +9588,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
             if (ret) {
                 sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
                 print_f(&mrs->plog, "fs52", mrs->log);
-                modersp->r = 3;
+                modersp->r = 0xed;
                 return 1;
             }
             /* debug */
@@ -9744,7 +9766,7 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
         } else {
             sprintf(mrs->log, "parse FAT free space failed, ret:0x%x \n", ret);
             print_f(&mrs->plog, "fs53", mrs->log);
-            modersp->r = 3;
+            modersp->r = 0xed;
         }
     }else {
         secStr = c->opinfo;
@@ -9907,7 +9929,7 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     mspFS_list(curDir, 4);
 
-    modersp->r = 3;    
+    modersp->r = 0xed;    
     return 1;
 }
 
@@ -10439,7 +10461,7 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get SD cur failed\n");
         print_f(&mrs->plog, "fs71", mrs->log);
 
-        modersp->r = 4;
+        modersp->r = 0xed;
         return 1;
     }
 
@@ -10511,7 +10533,7 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
         pftb->h = 0;
         pfat->fatStatus &= ~ASPFAT_STATUS_SDRD;    
         pfat->fatFileDnld = 0;
-        modersp->r = 3;
+        modersp->r = 1;
     }
 
     return 1;
@@ -10703,6 +10725,8 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
         pftb->c = pftb->h;
 
         pfat->fatStatus |= ASPFAT_STATUS_SDWT;
+        pfat->fatStatus |= ASPFAT_STATUS_FATWT;
+        pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
         modersp->r = 1;
     } else {
         sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!! pending!! \n", ret);
@@ -10711,26 +10735,140 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     return 1;
-    return 0;
 }
 static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    return 0;
+    int val=0, i=0, ret=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct directnFile_s *curDir=0, *ch=0, *br=0;
+    struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct sdFATable_s   *pftb=0;
+
+
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pParBuf = &pfat->fatDirPool->parBuf;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
+
+    curDir = pfat->fatFileUpld;
+    if (!curDir) {
+        sprintf(mrs->log, "get SD cur failed\n");
+        print_f(&mrs->plog, "fs76", mrs->log);
+
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    sprintf(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
+    print_f(&mrs->plog, "fs76", mrs->log);
+
+    if (pftb->c) {
+        pflnt = pftb->c;
+                 
+        secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
+
+        if (!pflnt->n) {
+            if (!(curDir->dflength % 512)) {
+                secFile = curDir->dflength / 512;
+            } else {
+                secFile = (curDir->dflength / 512) + 1;
+            }
+            sprintf(mrs->log, "secFile: %d\n", secFile);
+            print_f(&mrs->plog, "fs76", mrs->log);
+
+            if (!(secFile % psec->secPrClst) ) {
+                lstsec = psec->secPrClst;
+            } else {
+                lstsec = secFile % psec->secPrClst;
+            }
+            sprintf(mrs->log, "lstsec: %d\n", lstsec);
+            print_f(&mrs->plog, "fs76", mrs->log);
+            
+            secLen = (pflnt->ftLen - 1) * psec->secPrClst + lstsec;
+        } else {
+            secLen = pflnt->ftLen * psec->secPrClst;
+        }
+
+        c->opinfo = secStr;
+        p->opinfo = secLen;
+
+        if (secLen < 16) secLen = 16;
+
+        sprintf(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
+        print_f(&mrs->plog, "fs76", mrs->log);
+
+        cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
+
+        val = cfgValueOffset(secStr, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+        val = cfgValueOffset(secLen, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+        cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+        
+        modersp->r = 3; /*3 is for SDWT*/
+
+        pftb->c = pflnt->n;
+        free(pflnt);
+
+    }else {
+        pfat->fatStatus &= ~ASPFAT_STATUS_SDWT;    
+        //pfat->fatFileUpld = 0;
+        //pftb->h = 0;
+        modersp->r = 1;
+    }
+
+    return 1;
 }
 
 static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    return 0;
+    sprintf(mrs->log, "data flow upload to SD\n");
+    print_f(&mrs->plog, "fs77", mrs->log);
+
+    modersp->r = 1;
+    return 1;
 }
 
 static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    return 0;
+    sprintf(mrs->log, "FAT table upload to SD\n");
+    print_f(&mrs->plog, "fs78", mrs->log);
+
+    modersp->r = 1;
+    return 1;
 }
 
 static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    return 0;
+    sprintf(mrs->log, "DFE upload to SD\n");
+    print_f(&mrs->plog, "fs79", mrs->log);
+
+    modersp->r = 1;
+    return 1;
 }
 
 static int p0(struct mainRes_s *mrs)
