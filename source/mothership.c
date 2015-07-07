@@ -11209,6 +11209,8 @@ static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp)
     ring_buf_init(&mrs->cmdTx);
 
     mrs_ipc_put(mrs, "u", 1, 3);
+    mrs_ipc_put(mrs, "u", 1, 8);
+    mrs_ipc_put(mrs, "u", 1, 8);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
     modersp->m = modersp->m + 1;
@@ -11228,6 +11230,7 @@ static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (ch == 'u') {
             modersp->v += 1;
             mrs_ipc_put(mrs, "u", 1, 1);
+            mrs_ipc_put(mrs, "u", 1, 8);
         }
 
         if (ch == 'U') {
@@ -11235,6 +11238,9 @@ static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs78", mrs->log);
 
             mrs_ipc_put(mrs, "U", 1, 1);
+
+            mrs_ipc_put(mrs, "U", 1, 8);
+            
             modersp->r |= 0x1;
         }
         ret = mrs_ipc_get(mrs, &ch, 1, 3);
@@ -13888,6 +13894,11 @@ static int p7(struct procRes_s *rs)
     char ch=0, *addr=0;
     int ret=0, len=0, num=0, tx=0;
     int cmode;
+    struct sdFAT_s *pfat=0;
+    struct sdFATable_s   *pftb=0;
+
+    pfat = rs->psFat;
+    pftb = pfat->fatTable;
 
     sprintf(rs->logs, "p7\n");
     print_f(rs->plogs, "P7", rs->logs);
@@ -13950,6 +13961,9 @@ static int p7(struct procRes_s *rs)
                     break;
                 case 'd':
                     cmode = 3;
+                    break;
+                case 'u':
+                    cmode = 4;
                     break;
                 default:
                     break;
@@ -14070,6 +14084,29 @@ static int p7(struct procRes_s *rs)
                 fclose(rs->fdat_s[0]);
 #endif
                 break;
+            }
+            else if (cmode == 4) {
+                sprintf(rs->logs, "ready for tx \n");
+                print_f(rs->plogs, "P7", rs->logs);       
+
+                while (1) {
+                    rs_ipc_get(rs, &ch, 1);
+                    ret = write(rs->psocket_n->connfd, &ch, 1);
+                    sprintf(rs->logs, "socket tx %c, ret:%d\n", ch, ret);
+                    print_f(rs->plogs, "P7", rs->logs);       
+
+                    if (ch == 'U') break;
+                }
+                rs_ipc_put(rs, "U", 1);
+                sprintf(rs->logs, "%c socket tx %d - end\n", ch, tx);
+                print_f(rs->plogs, "P7", rs->logs);       
+                
+                if (!pftb->c) {
+                    sprintf(rs->logs, "connect break \n");
+                    print_f(rs->plogs, "P7", rs->logs);       
+
+                    break;
+                }
             }
             else {
                 sprintf(rs->logs, "cmode: %d - 7\n", cmode);

@@ -4043,11 +4043,12 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
         ret = -1;
         goto end;
     }
-
+#if 0 /* pre load in main, so don't have to do it again */
     if (!pf->vsd) {
         ret = -2;
         goto end;
     }
+
 
     ret = fseek(pf->vsd, startAddr, SEEK_SET);
     if (ret) {
@@ -4055,7 +4056,7 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs26", mrs->log);
         goto end;
     }
-#if 0 /* pre load in main, so don't have to do it again */
+
     char *buff=pf->sdt; 
     int totsz = bLength;
 
@@ -4095,10 +4096,10 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
 end:
-
+/*
     fclose(pf->vsd);
     pf->vsd = 0;
-
+*/
     c = &mrs->mchine.cur;
 
     c->opcode = 0xe0;
@@ -4376,7 +4377,7 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     fd = &mrs->mchine.fdsk;
     p = &mrs->mchine.get;
     c = &mrs->mchine.cur;
-
+/*
     fd->vsd = fopen(diskname, "r");
     if (fd->vsd == NULL) {
         sprintf(mrs->log, "disk file [%s] open failed!!! \n", diskname);
@@ -4390,7 +4391,7 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs36", mrs->log);
         goto err;
     }
-
+*/
     sprintf(mrs->log, "open disk file [%s], op:0x%x\n", diskname, p->opcode);
     print_f(&mrs->plog, "fs36", mrs->log);
 
@@ -4449,7 +4450,8 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
     msync(pf->sdt, pf->rtMax, MS_SYNC);
-
+    
+/*
     ret = fseek(pf->vsd, 0, SEEK_SET);
     if (ret) {
         sprintf(mrs->log, "seek file to zero failed!!! \n");
@@ -4459,12 +4461,12 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     if (pf->vsd) {
-#if 0 /* write to bin */
+#if 0
         msync(pf->sdt, acusz, MS_SYNC);            
         ret = fwrite(pf->sdt, 1, acusz, mrs->fs);
         fflush(mrs->fs);
         sync();
-//#else /* write total FAT */
+//#else 
         ret = fwrite(pf->sdt, 1, pf->rtMax, pf->vsd);
 #endif
         sprintf(mrs->log, "write file size: %d/%d \n", ret, pf->rtMax);
@@ -4483,6 +4485,7 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     fclose(pf->vsd);
     pf->vsd = 0;
+*/
     pf->rtops = 0 ;
 
     if (ret > 0) {
@@ -6628,10 +6631,10 @@ static char spi0[] = "/dev/spidev32765.0";
     ret = fread(pmrs->mchine.fdsk.sdt, 1, pmrs->mchine.fdsk.rtMax, pmrs->mchine.fdsk.vsd);
     sprintf(pmrs->log, "read file size: %d/%d \n", ret, pmrs->mchine.fdsk.rtMax);
     print_f(&pmrs->plog, "FDISK", pmrs->log);
-
+/*
     fclose(pmrs->mchine.fdsk.vsd);
     pmrs->mchine.fdsk.vsd = 0;
-
+*/
     ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
     if (ret) {printf("get save file failed\n"); return 0;}
     //ret = fwrite("test file write \n", 1, 16, pmrs->fs);
