@@ -514,7 +514,7 @@ struct procRes_s{
     // save log file
     FILE *flog_s;
     // save data file
-    FILE *fdat_s;
+    FILE *fdat_s[3];
     // time measurement
     struct timespec *tm[2];
     struct timespec tdf[2];
@@ -4950,14 +4950,14 @@ static int stfat_30(struct psdata_s *data)
                 sprintf(rs->logs, "APP write FAT to SD status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 78; /* TODO: APP->MSP->LOV */
+                ch = 80; /* TODO: APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else if ((pFat->fatStatus & ASPFAT_STATUS_DFEWT)) {
                 sprintf(rs->logs, "APP write DFE to SD status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 79; /* TODO: APP->MSP->LOV */
+                ch = 81; /* TODO: APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else {
@@ -7778,6 +7778,11 @@ static int hd76(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd77(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd78(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd79(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd80(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd81(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd82(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd83(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd84(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -10846,14 +10851,107 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
+    int bitset, ret;
     sprintf(mrs->log, "data flow upload to SD\n");
     print_f(&mrs->plog, "fs77", mrs->log);
 
-    modersp->r = 1;
-    return 1;
+    sprintf(mrs->log, "trigger spi0\n");
+    print_f(&mrs->plog, "fs77", mrs->log);
+
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs77", mrs->log);
+#endif
+
+    ring_buf_init(&mrs->cmdTx);
+
+    mrs_ipc_put(mrs, "u", 1, 3);
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    modersp->m = modersp->m + 1;
+    return 2;
 }
 
 static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{ 
+    int ret, bitset;
+    char ch;
+
+    //sprintf(mrs->log, "%d\n", modersp->v);
+    //print_f(&mrs->plog, "fs78", mrs->log);
+
+    ret = mrs_ipc_get(mrs, &ch, 1, 3);
+    while (ret > 0) {
+        if (ch == 'u') {
+            modersp->v += 1;
+            mrs_ipc_put(mrs, "u", 1, 1);
+        }
+
+        if (ch == 'U') {
+            sprintf(mrs->log, "0 %d end\n", modersp->v);
+            print_f(&mrs->plog, "fs78", mrs->log);
+
+            mrs_ipc_put(mrs, "U", 1, 1);
+            modersp->r |= 0x1;
+        }
+        ret = mrs_ipc_get(mrs, &ch, 1, 3);
+    }
+
+    if (modersp->r & 0x1) {
+        sprintf(mrs->log, "%d end\n", modersp->v);
+        print_f(&mrs->plog, "fs78", mrs->log);
+        modersp->m = modersp->m + 1;
+        return 2;
+    }
+
+    return 0; 
+}
+
+static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{ 
+    int len=0, bitset=0, ret=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    //sprintf(mrs->log, "wait spi0 tx end\n");
+    //print_f(&mrs->plog, "fs79", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if (len > 0) {
+
+        sprintf(mrs->log, "ch: %c - end\n", ch);
+        print_f(&mrs->plog, "fs79", mrs->log);
+
+        if (ch == 'U') {
+
+            ring_buf_init(&mrs->cmdTx);
+
+#if SPI_KTHREAD_USE
+            bitset = 0;
+            ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+            sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+            print_f(&mrs->plog, "fs79", mrs->log);
+#endif
+
+            bitset = 0;
+            msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+            sprintf(mrs->log, "set RDY pin %d\n",bitset);
+            print_f(&mrs->plog, "fs79", mrs->log);
+            usleep(300000);
+
+            modersp->m = 48;            
+            return 2;
+        } else  {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
+static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
     int val=0, i=0, ret=0;
     char *pr=0;
@@ -10885,7 +10983,7 @@ static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
-static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp) 
+static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
     int val=0, i=0, ret=0;
     char *pr=0;
@@ -10918,9 +11016,13 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
+static int fs82(struct mainRes_s *mrs, struct modersp_s *modersp) { return 1;}
+static int fs83(struct mainRes_s *mrs, struct modersp_s *modersp) { return 1;}
+static int fs84(struct mainRes_s *mrs, struct modersp_s *modersp) { return 1;}
+
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 80
+#define PS_NUM 85
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -10941,7 +11043,8 @@ static int p0(struct mainRes_s *mrs)
                                  {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64},
                                  {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69},
                                  {65, fs70},{66, fs71},{67, fs72},{68, fs73},{69, fs74},
-                                 {65, fs75},{66, fs76},{67, fs77},{68, fs78},{69, fs79}};
+                                 {65, fs75},{66, fs76},{67, fs77},{68, fs78},{69, fs79},
+                                 {65, fs80},{66, fs81},{67, fs82},{68, fs83},{69, fs84}};                                 
                                  
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -10958,7 +11061,8 @@ static int p0(struct mainRes_s *mrs)
                                  {60, hd60},{61, hd61},{62, hd62},{63, hd63},{64, hd64},
                                  {65, hd65},{66, hd66},{67, hd67},{68, hd68},{69, hd69},
                                  {60, hd70},{61, hd71},{62, hd72},{63, hd73},{64, hd74},
-                                 {65, hd75},{66, hd76},{67, hd77},{68, hd78},{69, hd79}};
+                                 {65, hd75},{66, hd76},{67, hd77},{68, hd78},{69, hd79},
+                                 {60, hd80},{61, hd81},{62, hd82},{63, hd83},{64, hd84}};
 
     p0_init(mrs);
 
@@ -11242,12 +11346,15 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     p1_end(rs);
     return 0;
 }
+
+#define MSP_P4_SAVE_DAT (1)
+#define MSP_P2_SAVE_DAT (1)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
 static int p2(struct procRes_s *rs)
 {
 #if IN_SAVE
-    char filename[128] = "/mnt/mmc2/tx/input_x1.bin";
+    char filename[128] = "/mnt/mmc2/tx/input_x3.bin";
     FILE *fin = NULL;
 #endif
     struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer));
@@ -11389,6 +11496,17 @@ static int p2(struct procRes_s *rs)
                 }
                 if (bitset) rs_ipc_put(rs, "B", 1);
             }else if (cmode == 5) {
+#if MSP_P2_SAVE_DAT
+                ret = file_save_get(&rs->fdat_s[1], "/mnt/mmc2/tx/p2%d.dat");
+                if (ret) {
+                    sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);         
+                    while(1);
+                } else {
+                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[1]);
+                    print_f(rs->plogs, "P2", rs->logs);         
+                }
+#endif
                 //sprintf(rs->logs, "cmode: %d\n", cmode);
                 //print_f(rs->plogs, "P2", rs->logs);
 
@@ -11414,22 +11532,10 @@ static int p2(struct procRes_s *rs)
 
 #endif        
 
-#if IN_SAVE
-                   msync(addr, len, MS_SYNC);
-                   fin = fopen(filename, "a+");
-                    if (!fin) {
-                        sprintf(rs->logs, "file read [%s] failed \n", filename);
-                        print_f(rs->plogs, "P4", rs->logs);
-                    } else {
-                        sprintf(rs->logs, "file read [%s] ok \n", filename);
-                        print_f(rs->plogs, "P4", rs->logs);
-
-                        ret = fwrite(addr, 1, len, fin);
-
-                        fflush(fin);
-                        fclose(fin);
-                        fin = NULL;
-                }
+#if MSP_P2_SAVE_DAT
+                    msync(addr, len, MS_SYNC);                    
+                    fwrite(addr, 1, len, rs->fdat_s[1]);
+                    fflush(rs->fdat_s[1]);
 #endif
                     //printf("0 spi %d\n", opsz);
                     sprintf(rs->logs, "r %d / %d\n", opsz, len);
@@ -11473,6 +11579,10 @@ static int p2(struct procRes_s *rs)
                 rs_ipc_put(rs, "d", 1);
                 sprintf(rs->logs, "spi0 recv end, the last sector size: %d\n", opsz);
                 print_f(rs->plogs, "P2", rs->logs);
+
+#if MSP_P2_SAVE_DAT
+                fclose(rs->fdat_s[1]);
+#endif
             }else if (cmode == 6) {
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
@@ -11676,6 +11786,18 @@ static int p2(struct procRes_s *rs)
             }
 
             else if (cmode == 10) {
+#if MSP_P2_SAVE_DAT
+                ret = file_save_get(&rs->fdat_s[1], "/mnt/mmc2/tx/p2%d.dat");
+                if (ret) {
+                    sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);         
+                    while(1);
+                } else {
+                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[1]);
+                    print_f(rs->plogs, "P2", rs->logs);         
+                }
+#endif
+
                 totsz = 0;
                 pi = 0;
                 sprintf(rs->logs, "cmode: %d \n", cmode);
@@ -11692,7 +11814,14 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);          
 
                     if (len > 0) {
+#if MSP_P2_SAVE_DAT
+                    msync(addr, len, MS_SYNC);                    
+                    fwrite(addr, 1, len, rs->fdat_s[1]);
+                    fflush(rs->fdat_s[1]);
+#endif
+
                         if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
+
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
@@ -11704,6 +11833,7 @@ static int p2(struct procRes_s *rs)
 #else
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
 #endif
+
                         pi++;
                         if (opsz < 0) break;
                         totsz += opsz;
@@ -11722,7 +11852,11 @@ static int p2(struct procRes_s *rs)
 
                 rs_ipc_put(rs, "U", 1);
                 sprintf(rs->logs, "tx cnt:%d - end\n", pi);
-                print_f(rs->plogs, "P2", rs->logs);                     
+                print_f(rs->plogs, "P2", rs->logs);            
+
+#if MSP_P2_SAVE_DAT
+                fclose(rs->fdat_s[1]);
+#endif
             }
 
             else {
@@ -11999,15 +12133,13 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define MSP_P4_SAVE_DAT (0)
-
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
     int px, pi, ret=0, len, opsz, totsz, tdiff;
     int cmode, acuhk, errtor=0;
     char ch, str[128];
-    char *addr;
+    char *addr, *pre;
     struct info16Bit_s *p=0, *c=0;
     uint32_t secStr=0, secLen=0, datLen=0;
     struct sdFAT_s *pfat=0;
@@ -12129,13 +12261,13 @@ static int p4(struct procRes_s *rs)
             } 
             else if (cmode == 1) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s, "/mnt/mmc2/tx/%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/%d.dat");
                 if (ret) {
                     sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P4", rs->logs);         
                     while(1);
                 } else {
-                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s);
+                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
 #endif
@@ -12165,8 +12297,8 @@ static int p4(struct procRes_s *rs)
                             //sprintf(rs->logs, "t %d -%d \n", opsz, pi);
                             //print_f(rs->plogs, "P4", rs->logs);         
 #if MSP_P4_SAVE_DAT
-                            fwrite(addr, 1, len, rs->fdat_s);
-                            fflush(rs->fdat_s);
+                            fwrite(addr, 1, len, rs->fdat_s[0]);
+                            fflush(rs->fdat_s[0]);
 #endif
                         } else {
                             sprintf(rs->logs, "len:%d \n", len);
@@ -12206,7 +12338,7 @@ static int p4(struct procRes_s *rs)
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
                 print_f(rs->plogs, "P4", rs->logs);         
 #if MSP_P4_SAVE_DAT
-                fclose(rs->fdat_s);
+                fclose(rs->fdat_s[0]);
 #endif
                 break;
             }
@@ -12313,13 +12445,13 @@ static int p4(struct procRes_s *rs)
             }
             else if (cmode == 4) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s, "/mnt/mmc2/tx/%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/%d.dat");
                 if (ret) {
                     sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P4", rs->logs);         
                     while(1);
                 } else {
-                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s);
+                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
 #endif
@@ -12344,8 +12476,8 @@ static int p4(struct procRes_s *rs)
                             //sprintf(rs->logs, "tx %d -%d \n", opsz, pi);
                             //print_f(rs->plogs, "P4", rs->logs);      
 #if MSP_P4_SAVE_DAT
-                            fwrite(addr, 1, len, rs->fdat_s);
-                            fflush(rs->fdat_s);
+                            fwrite(addr, 1, len, rs->fdat_s[0]);
+                            fflush(rs->fdat_s[0]);
 #endif
                             totsz += opsz;
                         } else {
@@ -12384,13 +12516,24 @@ static int p4(struct procRes_s *rs)
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, pi);
                 print_f(rs->plogs, "P4", rs->logs);         
 #if MSP_P4_SAVE_DAT
-                fclose(rs->fdat_s);
+                fclose(rs->fdat_s[0]);
 #endif
                 if (!pftb->c) {
                     break;
                 }
             }
             else if (cmode == 5) {
+#if MSP_P4_SAVE_DAT
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/%d.dat");
+                if (ret) {
+                    sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                    print_f(rs->plogs, "P4", rs->logs);         
+                    while(1);
+                } else {
+                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
+                    print_f(rs->plogs, "P4", rs->logs);         
+                }
+#endif
                 secStr = c->opinfo;
                 secLen = p->opinfo;
                 datLen = secLen * 512;
@@ -12410,7 +12553,8 @@ static int p4(struct procRes_s *rs)
                 } else {
                     datLen = datLen - len;
                 }
-                
+
+                pre = addr;
                 acuhk = 0;
                 opsz = read(rs->psocket_t->connfd, addr, len);
                 while (opsz <= 0) {
@@ -12439,11 +12583,19 @@ static int p4(struct procRes_s *rs)
                 //sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d, n:%d\n", px, acuhk, len, rs->psocket_t->connfd, n);
                 //print_f(rs->plogs, "P4", rs->logs);
                 if (datLen == 0) {
+#if MSP_P4_SAVE_DAT 
+                    fwrite(pre, 1, acuhk, rs->fdat_s[0]);
+                    fflush(rs->fdat_s[0]);
+#endif
                     ring_buf_set_last(rs->pcmdTx, acuhk);
                 } else {
                     px++;
                     ring_buf_prod(rs->pcmdTx);
                     rs_ipc_put(rs, "u", 1);
+#if MSP_P4_SAVE_DAT 
+                    fwrite(pre, 1, acuhk, rs->fdat_s[0]);
+                    fflush(rs->fdat_s[0]);
+#endif
                 }
 
                 if (datLen >= 0) {
@@ -12463,6 +12615,7 @@ static int p4(struct procRes_s *rs)
                     }
 
                     acuhk = 0;
+                    pre = addr;
 
                     errtor = 0;
                     opsz = read(rs->psocket_t->connfd, addr, len);
@@ -12492,16 +12645,24 @@ static int p4(struct procRes_s *rs)
                     //sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d n:%d\n", px, acuhk, len, rs->psocket_t->connfd, opsz);
                     //print_f(rs->plogs, "P4", rs->logs);
                     px++;
-
-                    if (datLen == 0) break;
+#if MSP_P4_SAVE_DAT 
+                    fwrite(pre, 1, acuhk, rs->fdat_s[0]);
+                    fflush(rs->fdat_s[0]);
+#endif
                     
                     ring_buf_prod(rs->pcmdTx);
+
+                    if (datLen == 0) break;
                     //if (opsz <= 0) break;
                     //shmem_dump(addr, 32);
 
                     rs_ipc_put(rs, "u", 1);
                 }
                 }
+
+#if MSP_P4_SAVE_DAT
+                fclose(rs->fdat_s[0]);
+#endif
                 ring_buf_set_last(rs->pcmdTx, acuhk);
 
                 sprintf(rs->logs, "[%d] socket receive %d/%d bytes end\n", px, opsz, len);
@@ -13416,13 +13577,13 @@ static int p7(struct procRes_s *rs)
             }
             else if (cmode == 3) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s, "/mnt/mmc2/tx/%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/%d.dat");
                 if (ret) {
                     sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P7", rs->logs);         
                     while(1);
                 } else {
-                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s);
+                    sprintf(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
                     print_f(rs->plogs, "P7", rs->logs);         
                 }
 #endif
@@ -13447,8 +13608,8 @@ static int p7(struct procRes_s *rs)
                             //sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_n->connfd, num, tx);
                             //print_f(rs->plogs, "P7", rs->logs);         
 #if MSP_P4_SAVE_DAT
-                            fwrite(addr, 1, len, rs->fdat_s);
-                            fflush(rs->fdat_s);
+                            fwrite(addr, 1, len, rs->fdat_s[0]);
+                            fflush(rs->fdat_s[0]);
 #endif
                         }
                     } else {
@@ -13473,7 +13634,7 @@ static int p7(struct procRes_s *rs)
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, tx);
                 print_f(rs->plogs, "P7", rs->logs);         
 #if MSP_P4_SAVE_DAT
-                fclose(rs->fdat_s);
+                fclose(rs->fdat_s[0]);
 #endif
                 break;
             }
