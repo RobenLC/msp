@@ -74,6 +74,7 @@
 #define SEC_LEN 512
 
 #define OP_SUP               0x31
+#define OP_SAVE             0x32
 
 #define SPI_TRUNK_SZ   (32768)
 #define DIRECT_WT_DISK    (1)
@@ -575,6 +576,10 @@ static int next_spy(struct psdata_s *data)
                     next = PSSET; /* get and repeat value */
                     evt = AUTO_A;
                     break;
+                case OP_SAVE:
+                    next = PSRLT; 
+                    evt = AUTO_D;
+                    break;
                 case OP_SDAT:                                     
                     next = PSSET;
                     evt = AUTO_B;
@@ -1012,6 +1017,8 @@ static int next_auto_D(struct psdata_s *data)
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
                 //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
                 break;
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
@@ -1367,7 +1374,7 @@ static int stspy_05(struct psdata_s *data)
             case OP_SUP:
             case OP_SCM:
             case OP_DUL: /* latter */
-            
+            case OP_SAVE:
                 sprintf(str, "go to next \n"); 
                 print_f(mlogPool, "spy", str);  
 
@@ -2582,7 +2589,49 @@ static int stauto_18(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stauto_19(struct psdata_s *data) {return 0;}
+static int stauto_19(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+
+    rlt = abs_result(data->result);	
+    sprintf(str, "op_19 result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "save", str);  
+
+    switch (rlt) {
+        case STINIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            memset(p, 0, sizeof(struct info16Bit_s));
+            p->opcode = g->opcode;
+            p->data = g->data;
+
+            ch = 58; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+
+            if (data->ansp0 == g->opcode) {
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
+                print_f(mlogPool, "auto_01", str);  
+                data->result = emb_result(data->result, NEXT);
+            }			
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+
+}
 static int stauto_20(struct psdata_s *data) {return 0;}
 
 static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p)
@@ -3529,6 +3578,7 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_RGADD_L:
         case OP_SUP:
         case OP_SCM:
+        case OP_SAVE:
             modersp->r = p->opcode;
             return 1;
             break;                                       
@@ -4414,7 +4464,7 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
         ret = fwrite(pf->sdt, 1, acusz, mrs->fs);
         fflush(mrs->fs);
         sync();
-#else /* write total FAT */
+//#else /* write total FAT */
         ret = fwrite(pf->sdt, 1, pf->rtMax, pf->vsd);
 #endif
         sprintf(mrs->log, "write file size: %d/%d \n", ret, pf->rtMax);
@@ -4429,7 +4479,7 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
 
-    sync();
+    //sync();
 
     fclose(pf->vsd);
     pf->vsd = 0;
@@ -5026,7 +5076,69 @@ static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    int ret = -1;
+    struct info16Bit_s *p, *c;
+    char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_rx127_255log.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_golden.bin";
+    //char diskname[128] = "/mnt/mmc2/debug_fat.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_05.bin";
+    //char diskname[128] = "/dev/mmcblk0p1";
+    //char diskname[128] = "/dev/mmcblk0";
+    //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
+    //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
+    //char diskname[128] = "/mnt/mmc2/onefile.dsk";
+    struct DiskFile_s *fd;
+    FILE *fp=0;
+
+    fd = &mrs->mchine.fdsk;
+    p = &mrs->mchine.get;
+    c = &mrs->mchine.cur;
+
+    fp = fopen(diskname, "w+");
+    if (fp == NULL) {
+        sprintf(mrs->log, "save disk file [%s] open failed!!! \n", diskname);
+        print_f(&mrs->plog, "fs58", mrs->log);
+        modersp->r = 2;
+        return 1;
+    }
+
+    ret = fseek(fp, 0, SEEK_SET);
+    if (ret) {
+        sprintf(mrs->log, "seek file [%s] failed!!! \n", diskname);
+        print_f(&mrs->plog, "fs58", mrs->log);
+        modersp->r = 2;
+        return 1;
+    }
+
+    sprintf(mrs->log, "start to write disk file [%s], op:0x%x\n", diskname, p->opcode);
+    print_f(&mrs->plog, "fs58", mrs->log);
+
+    if (!fd->sdt) {
+        sprintf(mrs->log, "ERROR!!! memory is not existed, opcodet: 0x%.2x/0x%.2x !!!\n", p->opcode, p->data);  
+        print_f(&mrs->plog, "fs58", mrs->log);
+        modersp->r = 2;
+        return 1;
+    } else {
+    
+        ret = fwrite(fd->sdt, 1, fd->rtMax, fp);
+
+        sprintf(mrs->log, "write file size: %d/%d \n", ret, fd->rtMax);
+        print_f(&mrs->plog, "fs58", mrs->log);
+        fflush(fd->vsd);
+        fsync((int)fd->vsd);        
+    }
+
+    fclose(fp);
+    
+    sync();
+    
+    modersp->d = 0;    
+    modersp->m = 24;
+    return 2;
+}
 static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
 
 static int p0(struct mainRes_s *mrs)
