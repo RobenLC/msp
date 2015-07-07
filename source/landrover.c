@@ -76,7 +76,7 @@
 #define OP_SUP               0x31
 
 #define SPI_TRUNK_SZ   (32768)
-#define DIRECT_WT_DISK    (0)
+#define DIRECT_WT_DISK    (1)
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -239,6 +239,7 @@ struct mainRes_s{
     FILE *fs;
     // file log
     FILE *flog;
+    FILE *fdat;
     // time measurement
     struct timespec time[2];
     // log buffer
@@ -280,6 +281,7 @@ struct procRes_s{
     FILE *fs_s;
     // save log file
     FILE *flog_s;
+    FILE *fdat_s;
     // time measurement
     struct timespec *tm[2];
     char logs[256];
@@ -2982,9 +2984,9 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pks
     }
     
     ret = ioctl(fd, SPI_IOC_MESSAGE(i), tr);
-    if (ret < 0)
-        printf("can't send spi message\n");
-    
+    if (ret < 0) {
+        printf("can't send spi message, ret: %d\n", ret);
+    }
     //printf("tx/rx len: %d\n", ret);
     
     free(tr);
@@ -3989,10 +3991,12 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     if (bLength > maxLen) {
         ret = -1;
+        goto end;
     }
 
     if (!pf->vsd) {
         ret = -2;
+        goto end;
     }
 
     ret = fseek(pf->vsd, startAddr, SEEK_SET);
@@ -4001,7 +4005,7 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs26", mrs->log);
         goto end;
     }
-#if 1
+#if 0 /* pre load in main, so don't have to do it again */
     char *buff=pf->sdt; 
     int totsz = bLength;
 
@@ -4019,13 +4023,13 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs26", mrs->log);
         buff += len;
     }
-#else
+//#else
     len = fread(pf->sdt, 1, bLength, pf->vsd);
     sprintf(mrs->log, "read file size: %d/%d \n", len, bLength);
     print_f(&mrs->plog, "fs26", mrs->log);
-#endif
     msync(pf->sdt, bLength, MS_SYNC);
-    
+#endif
+
     if (!ret) {
         pf->rtlen = bLength;
 
@@ -4305,7 +4309,9 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret = -1;
     struct info16Bit_s *p, *c;
-    char diskname[128] = "/mnt/mmc2/disk_golden.bin";
+    char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_rx127_255log.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_golden.bin";
     //char diskname[128] = "/mnt/mmc2/debug_fat.bin";
     //char diskname[128] = "/mnt/mmc2/disk_05.bin";
     //char diskname[128] = "/dev/mmcblk0p1";
@@ -4379,11 +4385,14 @@ err:
 
 static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
+    int acusz = 0;
     int ret=0;
     int len=0;
     char ch=0;
     struct DiskFile_s *pf;
-
+    //acusz = rs->pmch->sdln.n * SEC_LEN;
+    acusz = mrs->mchine.sdln.n * SEC_LEN;
+            
     pf = &mrs->mchine.fdsk;
     sprintf(mrs->log, "save to file size: %d\n", pf->rtMax);
     print_f(&mrs->plog, "fs37", mrs->log);
@@ -4391,12 +4400,28 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
     msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
     msync(pf->sdt, pf->rtMax, MS_SYNC);
 
+    ret = fseek(pf->vsd, 0, SEEK_SET);
+    if (ret) {
+        sprintf(mrs->log, "seek file to zero failed!!! \n");
+        print_f(&mrs->plog, "fs37", mrs->log);
+        modersp->r = 2;
+        return 1;
+    }
+
     if (pf->vsd) {
+#if 0 /* write to bin */
+        msync(pf->sdt, acusz, MS_SYNC);            
+        ret = fwrite(pf->sdt, 1, acusz, mrs->fs);
+        fflush(mrs->fs);
+        sync();
+#else /* write total FAT */
         ret = fwrite(pf->sdt, 1, pf->rtMax, pf->vsd);
+#endif
         sprintf(mrs->log, "write file size: %d/%d \n", ret, pf->rtMax);
         print_f(&mrs->plog, "fs37", mrs->log);
         fflush(pf->vsd);
         fsync((int)pf->vsd);
+        
     } else {
         ret = -1;
         sprintf(mrs->log, "write file size: %d/%d failed!!!, fp == 0\n", ret, pf->rtMax);
@@ -4406,6 +4431,7 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     sync();
 
+    fclose(pf->vsd);
     pf->vsd = 0;
     pf->rtops = 0 ;
 
@@ -5097,13 +5123,13 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     sprintf(rs->logs, "p1\n");
     print_f(rs->plogs, "P1", rs->logs);
     struct psdata_s stdata;
-    stfunc pf[SMAX][PSMAX] = {{stspy_01, stspy_02, stspy_03, stspy_04, stspy_05},
-                            {stbullet_01, stbullet_02, stbullet_03, stbullet_04, stbullet_05},
-                            {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05},
-                            {stauto_01, stauto_02, stauto_03, stauto_04, stauto_05},
-                            {stauto_06, stauto_07, stauto_08, stauto_09, stauto_10},
-                            {stauto_11, stauto_12, stauto_13, stauto_14, stauto_15},
-                            {stauto_16, stauto_17, stauto_18, stauto_19, stauto_20}};
+    stfunc pf[SMAX][PSMAX] = {{stspy_01, stspy_02, stspy_03, stspy_04, stspy_05}, // SPY
+                            {stbullet_01, stbullet_02, stbullet_03, stbullet_04, stbullet_05}, // BULLET
+                            {stlaser_01, stlaser_02, stlaser_03, stlaser_04, stlaser_05},  // LASER
+                            {stauto_01, stauto_02, stauto_03, stauto_04, stauto_05}, // AUTO_A
+                            {stauto_06, stauto_07, stauto_08, stauto_09, stauto_10}, // AUTO_B
+                            {stauto_11, stauto_12, stauto_13, stauto_14, stauto_15}, // AUTO_C
+                            {stauto_16, stauto_17, stauto_18, stauto_19, stauto_20}}; // AUTO_D
     /* A.1 ~ A.4 for start sector 01 - 04*/
     /* A.5 = A.8 for sector len   01 - 04*/
     /* A.9 for sd sector transmitting using command mode */
@@ -5724,6 +5750,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
+#define MSP_P4_SAVE_DAT (0)
 static int p4(struct procRes_s *rs)
 {
 #define OUT_SAVE (0)
@@ -5733,19 +5760,22 @@ static int p4(struct procRes_s *rs)
     FILE *fout = NULL;
 #endif
     float flsize, fltime;
-    char ch, *tx, *rx, *tx_buff, *addr=0;
+    char ch, *tx, *rx, *tx_buff, *rx_buff, *addr=0;
     uint16_t *tx16, *rx16, in16;
     int len = 0, cmode = 0, ret, pi=0, acusz=0, starts=0, opsz=0, totsz, tdiff;
     int slen=0;
     uint32_t bitset;
-
+    struct DiskFile_s *pf;
+    
     sprintf(rs->logs, "p4\n");
     print_f(rs->plogs, "P4", rs->logs);
 
     p4_init(rs);
 
+    pf = &rs->pmch->fdsk;
     tx = malloc(64);
     rx = malloc(64);
+    rx_buff = malloc(SPI_TRUNK_SZ);
 
     int i;
     for (i = 0; i < 64; i+=4) {
@@ -5903,6 +5933,22 @@ static int p4(struct procRes_s *rs)
             }
             if (bitset) rs_ipc_put(rs, "B", 1);
         } else if (cmode == 5) {
+#if MSP_P4_SAVE_DAT
+                rs->fdat_s = 0;
+                if (pf->rtops ==  OP_SDWT) {
+                    ret = file_save_get(&rs->fdat_s, "/mnt/mmc2/tx/%d.dat");
+                    /*
+                    if (ret) {
+                        sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                        print_f(rs->plogs, "P4", rs->logs);         
+                        while(1);
+                    } else {
+                        sprintf(rs->logs, "get tx log data file ok - %d, f: %x\n", ret, rs->fdat_s);
+                        print_f(rs->plogs, "P4", rs->logs);         
+                    }
+                    */
+                }
+#endif
             starts = rs->pmch->sdst.n * SEC_LEN;
             acusz = rs->pmch->sdln.n * SEC_LEN;
             
@@ -5923,7 +5969,7 @@ static int p4(struct procRes_s *rs)
                 continue;
             }
 
-            tx_buff = rs->pmch->fdsk.sdt;
+            tx_buff = rs->pmch->fdsk.sdt + starts;
             msync(tx_buff, acusz, MS_SYNC);
             //shmem_dump(tx_buff, acusz);
 
@@ -5937,14 +5983,57 @@ static int p4(struct procRes_s *rs)
                     acusz = 0;
                 }
 
-                len = mtx_data(rs->spifd, tx_buff, tx_buff, 1, slen, 1024*1024);
+                if (pf->rtops ==  OP_SDWT) {
+                    len = mtx_data(rs->spifd, tx_buff, rx_buff, 1, slen, 1024*1024);
+
+#if OUT_SAVE
+                fout = fopen(fileout, "a+");
+                if (!fout) {
+                    sprintf(rs->logs, "file read [%s] failed \n", fileout);
+                    print_f(rs->plogs, "P4", rs->logs);
+                } else {
+                    sprintf(rs->logs, "file read [%s] ok \n", fileout);
+                    print_f(rs->plogs, "P4", rs->logs);
+
+                    slen = fwrite(tx_buff, 1, slen, fout);
+
+                    fflush(fout);
+                    fclose(fout);
+                    fout = NULL;
+
+                }
+#endif
+                } else if (pf->rtops ==  OP_SDRD) {
+                    len = mtx_data(rs->spifd, rx_buff, tx_buff, 1, slen, 1024*1024);                
+                } else {
+                    len = 0;
+                }
+
+
+
+                //shmem_dump(tx_buff, 512);
                 sprintf(rs->logs, "%d.Send %d/%d bytes!!\n", pi, len, slen);
                 print_f(rs->plogs, "P4", rs->logs);
+
+#if MSP_P4_SAVE_DAT
+                if (rs->fdat_s) {
+                    msync(tx_buff, slen, MS_SYNC);
+                    fwrite(tx_buff, 1, slen, rs->fdat_s);
+                }
+#endif
                 pi++;
                 tx_buff += len;
             }
 
             rs_ipc_put(rs, "S", 1);
+
+#if MSP_P4_SAVE_DAT
+            if (rs->fdat_s) {
+                fflush(rs->fdat_s);
+                fclose(rs->fdat_s);
+            }
+#endif
+            rs->fdat_s = 0;
         }
         else if (cmode == 6) {
         
@@ -6244,7 +6333,9 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
 int main(int argc, char *argv[])
 {
-char diskname[128] = "/mnt/mmc2/disk_golden.bin";
+char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
+//char diskname[128] = "/mnt/mmc2/disk_rx127_255log.bin";
+//char diskname[128] = "/mnt/mmc2/disk_golden.bin";
 //char diskname[128] = "/mnt/mmc2/debug_fat.bin";
 //char diskname[128] = "/mnt/mmc2/disk_05.bin";
 //char diskname[128] = "/dev/mmcblk0p1";
@@ -6402,6 +6493,7 @@ static char spi0[] = "/dev/spidev32765.0";
         pmrs->mchine.fdsk.rtMax = 16 * 1024 * 1024;
         sprintf(pmrs->log, "size is unknown, set file [%s] size : %d!!! \n", diskname, pmrs->mchine.fdsk.rtMax);
         print_f(&pmrs->plog, "FDISK", pmrs->log);
+        goto end;
     }else {
         sprintf(pmrs->log, "get file [%s] size : %d!!! \n", diskname, pmrs->mchine.fdsk.rtMax);
         print_f(&pmrs->plog, "FDISK", pmrs->log);
@@ -6420,11 +6512,11 @@ static char spi0[] = "/dev/spidev32765.0";
         print_f(&pmrs->plog, "FDISK", pmrs->log);
         goto end;
     }
-/*
+
     ret = fread(pmrs->mchine.fdsk.sdt, 1, pmrs->mchine.fdsk.rtMax, pmrs->mchine.fdsk.vsd);
     sprintf(pmrs->log, "read file size: %d/%d \n", ret, pmrs->mchine.fdsk.rtMax);
     print_f(&pmrs->plog, "FDISK", pmrs->log);
-*/
+
     fclose(pmrs->mchine.fdsk.vsd);
     pmrs->mchine.fdsk.vsd = 0;
 
@@ -6693,7 +6785,7 @@ static int file_save_get(FILE **fp, char *path1)
         sprintf(dst, temp, i);
         f = fopen(dst, "r");
         if (!f) {
-            sprintf(flog, "open file [%s]", dst);
+            sprintf(flog, "open file [%s]\n", dst);
             print_f(mlogPool, "save", flog);
             break;
         } else
@@ -6713,6 +6805,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pdataTx = &mrs->dataTx;
     rs->fs_s = mrs->fs;
     rs->flog_s = mrs->flog;
+    rs->fdat_s = mrs->fdat;
     rs->tm[0] = &mrs->time[0];
     rs->tm[1] = &mrs->time[1];
 
