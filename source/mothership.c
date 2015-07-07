@@ -1427,10 +1427,10 @@ static int mspFS_insertFATChildDir(struct sdFAT_s *pfat, struct directnFile_s *p
     c->ch = 0;
     c->dftype = ASPFS_TYPE_DIR;
     c->dfattrib = 0;
-    c->dfstats = 0;
-    c->dflen = 2;
-    strcpy(c->dfLFN, "..");
-
+    c->dfstats = ASPFS_STATUS_EN;
+    c->dflen = 0;
+    strcpy(c->dfSFN, "..");
+    
     if (parent->ch == 0) {
         parent->ch = c;
     } else {
@@ -13603,12 +13603,11 @@ static int p6(struct procRes_s *rs)
             brt = fscur->ch;
 
             while (brt) {
-                while ((strcmp(brt->dfSFN, "..") == 0) || (strcmp(brt->dfSFN, ".") == 0)) {
+                while ((brt->dfstats != ASPFS_STATUS_EN) || (strcmp(brt->dfSFN, ".") == 0)) {
+                    sprintf(rs->logs, "file status[0x%.8x] name[%s] type[0x%.8x] \n", brt->dfstats, brt->dfSFN, brt->dftype);
+                    print_f(rs->plogs, "P6", rs->logs);
                     brt = brt->br;           
                 }
-
-                sprintf(rs->logs, "file status[0x%.8x] name[%s] type[0x%.8x] \n", brt->dfstats, brt->dfSFN, brt->dftype);
-                print_f(rs->plogs, "P6", rs->logs);
 
                 if (brt->dflen) {
                     n = strlen(brt->dfLFN);
