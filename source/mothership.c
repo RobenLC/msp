@@ -11444,8 +11444,9 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->m = 48;            
             return 2;
         } else  {
-            modersp->r = 2;
-            return 1;
+            //modersp->r = 2;
+            //modersp->c += 1;
+            return 0;
         }
     }
     return 0; 
@@ -11956,7 +11957,7 @@ static int p2(struct procRes_s *rs)
     int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait, tlen=0;
     int bitset, totsz=0;
     uint16_t send16, recv16;
-    uint32_t secStr=0, secLen=0, datLen=0;
+    uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
     struct info16Bit_s *p=0, *c=0;
 
     char ch, str[128], rx8[4], tx8[4];
@@ -12231,11 +12232,16 @@ static int p2(struct procRes_s *rs)
                 secStr = c->opinfo;
                 secLen = p->opinfo;
                 datLen = secLen * 512;
+                minLen = 16 * 512;
 
                 pabuf = &rs->psFat->fatDirPool->parBuf;
-                sprintf(rs->logs, "cmode: %d\n", cmode);
+                sprintf(rs->logs, "cmode: %d, ready for rx %d/%d\n", cmode, datLen, minLen);
                 print_f(rs->plogs, "P2", rs->logs);
-                
+/*
+                if (datLen < minLen) {
+                    datLen = minLen;
+                }
+*/
                 addr = pabuf->dirParseBuff + pabuf->dirBuffUsed;
                 len = 0;
                 pi = 0;  
@@ -12734,7 +12740,7 @@ static int p4(struct procRes_s *rs)
     char ch, str[128];
     char *addr, *pre;
     struct info16Bit_s *p=0, *c=0;
-    uint32_t secStr=0, secLen=0, datLen=0;
+    uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
 
@@ -12939,7 +12945,12 @@ static int p4(struct procRes_s *rs)
                 secStr = c->opinfo;
                 secLen = p->opinfo;
                 datLen = secLen * 512;
-            
+                minLen = 16 * 512;
+
+                if (datLen < minLen) {
+                    datLen = minLen;
+                }
+
                 px = 0;
 
                 len = 0;
@@ -13130,9 +13141,15 @@ static int p4(struct procRes_s *rs)
                 secStr = c->opinfo;
                 secLen = p->opinfo;
                 datLen = secLen * 512;
-                sprintf(rs->logs, "ready for tx len: %d\n", datLen);
+                minLen = 16 * 512;
+
+                sprintf(rs->logs, "ready for tx len: %d/%d\n", datLen, minLen);
                 print_f(rs->plogs, "P4", rs->logs);         
-            
+
+                if (datLen < minLen) {
+                    datLen = minLen;
+                }
+
                 px = 0;
 
                 len = 0;
@@ -13180,24 +13197,26 @@ static int p4(struct procRes_s *rs)
 
                 sprintf(rs->logs, "socket rx %d\n", acuhk);
                 print_f(rs->plogs, "P4", rs->logs);
+
                 
                 if (datLen == 0) {
 #if MSP_P4_SAVE_DAT 
                     fwrite(pre, 1, acuhk, rs->fdat_s[0]);
                     fflush(rs->fdat_s[0]);
 #endif
+                    ring_buf_prod(rs->pcmdTx);
                     ring_buf_set_last(rs->pcmdTx, acuhk);
                 } else {
                     px++;
                     ring_buf_prod(rs->pcmdTx);
-                    rs_ipc_put(rs, "u", 1);
 #if MSP_P4_SAVE_DAT 
                     fwrite(pre, 1, acuhk, rs->fdat_s[0]);
                     fflush(rs->fdat_s[0]);
 #endif
                 }
-
-                if (datLen >= 0) {
+                rs_ipc_put(rs, "u", 1);
+                
+                if (datLen > 0) {
                 while (1) {
                     len = 0;
                     len = ring_buf_get(rs->pcmdTx, &addr);
@@ -14075,7 +14094,7 @@ static int p7(struct procRes_s *rs)
     int cmode;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
-    uint32_t secStr=0, secLen=0, datLen=0;
+    uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
     struct info16Bit_s *p=0, *c=0;
     
     pfat = rs->psFat;
@@ -14269,13 +14288,18 @@ static int p7(struct procRes_s *rs)
 #endif
                 break;
             }
-            else if (cmode == 4) {
-                sprintf(rs->logs, "ready for tx \n");
-                print_f(rs->plogs, "P7", rs->logs);
-                
+            else if (cmode == 4) {                
                 secStr = c->opinfo;
                 secLen = p->opinfo;
                 datLen = secLen * 512;
+                minLen = 16 * 512;
+
+                sprintf(rs->logs, "ready for tx %d/%d\n", datLen, minLen);
+                print_f(rs->plogs, "P7", rs->logs);
+
+                if (datLen < minLen) {
+                    datLen = minLen;
+                }
 
                 rs_ipc_get(rs, &ch, 1);
 
