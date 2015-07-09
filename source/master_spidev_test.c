@@ -80,6 +80,7 @@
 #define OP_INTERIMG      0x2c
 
 #define OP_SUP               0x31
+#define OP_SAVE             0x32
 
 #define SEC_LEN 512
 static void pabort(const char *s) 
@@ -92,7 +93,7 @@ static const char *device = "/dev/spidev32765.0";
 char data_path[256] = "/root/tx/1.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
-static uint32_t speed = 30000000; 
+static uint32_t speed = 20000000; 
 static uint16_t delay; 
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
@@ -601,8 +602,10 @@ static char spi1[] = "/dev/spidev32766.0";
 		tx[i] = i & 0x95;
 	}
 
-    if (sel == 19){ /* command mode test ex[19 startsec secNum filename.bin]*/ /* OP_SDWT */
+    if (sel == 19){ /* command mode test ex[19 startsec secNum filename.bin clusterSize]*/ /* OP_SDWT */
+#define FAT_TKSZ 4096
 
+        int clustSize = 0;
         int startSec = 0, secNum = 0;
         int startAddr = 0, bLength = 0;
         char diskpath[128];
@@ -613,6 +616,11 @@ static char spi1[] = "/dev/spidev32766.0";
 
         startSec = arg0;
         secNum = arg1;
+        clustSize = arg3;
+
+        if (clustSize == 0) {
+            clustSize = 512;
+        }
 
         /* open target file which will be transmitted */
         strcpy(diskpath, argv[4]);
@@ -671,21 +679,22 @@ static char spi1[] = "/dev/spidev32766.0";
 
         cnt = 0;
         while (acusz>0) {
-            if (acusz > TRUNK_SIZE) {
-                sLen = TRUNK_SIZE;
+            if (acusz > clustSize) {
+                sLen = clustSize;
                 acusz -= sLen;
             } else {
                 sLen = acusz;
                 acusz = 0;
             }
 
+            msync(outbuf, sLen, MS_SYNC);
             len = tx_data(fm[0], outbuf, outbuf, 1, sLen, 1024*1024);
             printf("[%d]Send %d/%d bytes!!\n", cnt, len, sLen);
 
             cnt++;
             outbuf += len;
     	 }
-
+/*
         usleep(100000);
 
         bitset = 0;
@@ -732,6 +741,7 @@ static char spi1[] = "/dev/spidev32766.0";
         ret = fwrite(total, 1, max, dkf);
         printf("write file size: %d/%d \n", ret, max);
         fflush(dkf);
+*/        
         fclose(dkf);
 
         munmap(total, max);
@@ -814,7 +824,7 @@ static char spi1[] = "/dev/spidev32766.0";
             cnt++;
             outbuf += len;
     	 }
-
+/*
         usleep(100000);
 
         bitset = 0;
@@ -832,7 +842,9 @@ static char spi1[] = "/dev/spidev32766.0";
         bitset = 0;
         ioctl(fm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
         printf("[R]Get spi%d RDY pin: %d \n", 0, bitset);
+*/
 
+        printf("end!!!\n");
         goto end;
     }
 
