@@ -77,7 +77,7 @@
 #define OP_SAVE             0x32
 
 #define SPI_TRUNK_SZ   (32768)
-#define DIRECT_WT_DISK    (1)
+#define DIRECT_WT_DISK    (0)
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -1968,14 +1968,14 @@ static int stauto_05(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            fp = data->rs->pmch->fdsk.vsd;
+            //fp = data->rs->pmch->fdsk.vsd;
             s = &data->rs->pmch->sdst;
             m = &data->rs->pmch->sdln;
             g = &data->rs->pmch->get;
             p = &data->rs->pmch->cur;
             memset(p, 0, sizeof(struct info16Bit_s));
 
-            if ((s->f == 0xf) && (m->f == 0xf) && (fp)) {
+            if ((s->f == 0xf) && (m->f == 0xf)) {
                 p->opcode = g->opcode;
                 p->data = g->data;
 
@@ -6631,10 +6631,10 @@ static char spi0[] = "/dev/spidev32765.0";
     ret = fread(pmrs->mchine.fdsk.sdt, 1, pmrs->mchine.fdsk.rtMax, pmrs->mchine.fdsk.vsd);
     sprintf(pmrs->log, "read file size: %d/%d \n", ret, pmrs->mchine.fdsk.rtMax);
     print_f(&pmrs->plog, "FDISK", pmrs->log);
-/*
+
     fclose(pmrs->mchine.fdsk.vsd);
     pmrs->mchine.fdsk.vsd = 0;
-*/
+
     ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
     if (ret) {printf("get save file failed\n"); return 0;}
     //ret = fwrite("test file write \n", 1, 16, pmrs->fs);
