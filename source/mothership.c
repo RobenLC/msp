@@ -11362,10 +11362,9 @@ static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp)
     ring_buf_init(&mrs->cmdTx);
 
     mrs_ipc_put(mrs, "u", 1, 3);
-    mrs_ipc_put(mrs, "u", 1, 8);
-    mrs_ipc_put(mrs, "u", 1, 8);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
-
+    mrs_ipc_put(mrs, "u", 1, 8);
+            
     modersp->m = modersp->m + 1;
     return 2;
 }
@@ -11383,6 +11382,7 @@ static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (ch == 'u') {
             modersp->v += 1;
             mrs_ipc_put(mrs, "u", 1, 1);
+        } else if (ch == 'h'){
             mrs_ipc_put(mrs, "u", 1, 8);
         }
 
@@ -11512,6 +11512,9 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs79", mrs->log);
 
     pfat->fatStatus &= ~ASPFAT_STATUS_DFEWT;    
+
+    pftb->h = 0;
+
     modersp->r = 1;
     return 1;
 }
@@ -11937,8 +11940,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     return 0;
 }
 
-#define MSP_P4_SAVE_DAT (1)
-#define MSP_P2_SAVE_DAT (1)
+#define MSP_P4_SAVE_DAT (0)
+#define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
 static int p2(struct procRes_s *rs)
@@ -13127,13 +13130,15 @@ static int p4(struct procRes_s *rs)
                 secStr = c->opinfo;
                 secLen = p->opinfo;
                 datLen = secLen * 512;
+                sprintf(rs->logs, "ready for tx len: %d\n", datLen);
+                print_f(rs->plogs, "P4", rs->logs);         
             
                 px = 0;
 
                 len = 0;
                 len = ring_buf_get(rs->pcmdTx, &addr);
                 while (len <= 0) {
-                    usleep(10000000);
+                    usleep(1000000);
                     len = ring_buf_get(rs->pcmdTx, &addr);
                 }
                 
@@ -13146,10 +13151,13 @@ static int p4(struct procRes_s *rs)
 
                 pre = addr;
                 acuhk = 0;
+
+                rs_ipc_put(rs, "h", 1);
                 opsz = read(rs->psocket_t->connfd, addr, len);
                 while (opsz <= 0) {
-                    //sprintf(rs->logs, "[wait] socket receive %d/%d bytes from %d\n", px, opsz, len, rs->psocket_t->connfd);
-                    //print_f(rs->plogs, "P4", rs->logs);
+                    rs_ipc_put(rs, "h", 1);
+                    sprintf(rs->logs, "[wait] %d\n", opsz);
+                    print_f(rs->plogs, "P4", rs->logs);
                     opsz = read(rs->psocket_t->connfd, addr, len);
                 }
 
@@ -13169,9 +13177,10 @@ static int p4(struct procRes_s *rs)
                     addr += opsz;
                     acuhk += opsz;
                 }
+
+                sprintf(rs->logs, "socket rx %d\n", acuhk);
+                print_f(rs->plogs, "P4", rs->logs);
                 
-                //sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d, n:%d\n", px, acuhk, len, rs->psocket_t->connfd, n);
-                //print_f(rs->plogs, "P4", rs->logs);
                 if (datLen == 0) {
 #if MSP_P4_SAVE_DAT 
                     fwrite(pre, 1, acuhk, rs->fdat_s[0]);
@@ -13193,6 +13202,7 @@ static int p4(struct procRes_s *rs)
                     len = 0;
                     len = ring_buf_get(rs->pcmdTx, &addr);
                     while (len <= 0) {
+                        rs_ipc_put(rs, "h", 1);
                         usleep(10000000);
                         len = ring_buf_get(rs->pcmdTx, &addr);
                     }
@@ -13210,6 +13220,10 @@ static int p4(struct procRes_s *rs)
                     errtor = 0;
                     opsz = read(rs->psocket_t->connfd, addr, len);
                     while (opsz <= 0) {
+                        rs_ipc_put(rs, "h", 1);
+                        sprintf(rs->logs, "[wait] %d\n", opsz);
+                        print_f(rs->plogs, "P4", rs->logs);
+
                         if (errtor > 3) break;
                         opsz = read(rs->psocket_t->connfd, addr, len);
                         errtor ++;
@@ -13223,6 +13237,10 @@ static int p4(struct procRes_s *rs)
                         errtor = 0;
                         opsz = read(rs->psocket_t->connfd, addr, len);
                         while (opsz <= 0) {
+                            rs_ipc_put(rs, "h", 1);
+                            sprintf(rs->logs, "[wait] %d\n", opsz);
+                            print_f(rs->plogs, "P4", rs->logs);
+
                             if (errtor > 3) break;
                             opsz = read(rs->psocket_t->connfd, addr, len);
                             errtor ++;
@@ -13232,8 +13250,8 @@ static int p4(struct procRes_s *rs)
                         acuhk += opsz;
                     }
                     
-                    //sprintf(rs->logs, "[%d] socket receive %d/%d bytes from %d n:%d\n", px, acuhk, len, rs->psocket_t->connfd, opsz);
-                    //print_f(rs->plogs, "P4", rs->logs);
+                    sprintf(rs->logs, "socket rx %d\n", acuhk);
+                    print_f(rs->plogs, "P4", rs->logs);
                     px++;
 #if MSP_P4_SAVE_DAT 
                     fwrite(pre, 1, acuhk, rs->fdat_s[0]);
@@ -13875,7 +13893,7 @@ static int p6(struct procRes_s *rs)
                 clstSize = pfat->fatBootsec->secSize * pfat->fatBootsec->secPrClst;
                 if (num == 0) {
                     cnt = 0;
-                } else if (cnt % num) {
+                } else if (num % clstSize) {
                     cnt = num / clstSize + 1;
                 } else {
                     cnt = num / clstSize;
@@ -14051,17 +14069,23 @@ static int p6(struct procRes_s *rs)
 
 static int p7(struct procRes_s *rs)
 {
+    char chbuf[32];
     char ch=0, *addr=0;
     int ret=0, len=0, num=0, tx=0;
     int cmode;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
-
+    uint32_t secStr=0, secLen=0, datLen=0;
+    struct info16Bit_s *p=0, *c=0;
+    
     pfat = rs->psFat;
     pftb = pfat->fatTable;
 
     sprintf(rs->logs, "p7\n");
     print_f(rs->plogs, "P7", rs->logs);
+
+    c = &rs->pmch->cur;
+    p = &rs->pmch->tmp;
 
     p7_init(rs);
 
@@ -14247,21 +14271,36 @@ static int p7(struct procRes_s *rs)
             }
             else if (cmode == 4) {
                 sprintf(rs->logs, "ready for tx \n");
-                print_f(rs->plogs, "P7", rs->logs);       
+                print_f(rs->plogs, "P7", rs->logs);
+                
+                secStr = c->opinfo;
+                secLen = p->opinfo;
+                datLen = secLen * 512;
 
+                rs_ipc_get(rs, &ch, 1);
+
+                memset(chbuf, 0, 32);
+                sprintf(chbuf, "%d\0", datLen);
+                ret = write(rs->psocket_n->connfd, chbuf, strlen(chbuf));
+                sprintf(rs->logs, "get %c socket tx [%s], ret:%d\n", ch, chbuf, ret);
+                print_f(rs->plogs, "P7", rs->logs);       
+                
                 while (1) {
                     rs_ipc_get(rs, &ch, 1);
-                    ret = write(rs->psocket_n->connfd, &ch, 1);
-                    sprintf(rs->logs, "socket tx %c, ret:%d\n", ch, ret);
-                    print_f(rs->plogs, "P7", rs->logs);       
-
                     if (ch == 'U') break;
                 }
+                
                 rs_ipc_put(rs, "U", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, tx);
                 print_f(rs->plogs, "P7", rs->logs);       
                 
                 if (!pftb->c) {
+                    memset(chbuf, 0, 32);
+                    sprintf(chbuf, "%c\0", ch);
+                    ret = write(rs->psocket_n->connfd, chbuf, strlen(chbuf));
+                    sprintf(rs->logs, "send %c to APP to notice the end, ret:%d\n", ch, ret);
+                    print_f(rs->plogs, "P7", rs->logs);       
+                
                     sprintf(rs->logs, "connect break \n");
                     print_f(rs->plogs, "P7", rs->logs);       
 
@@ -14388,10 +14427,10 @@ int main(int argc, char *argv[])
     
     /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 512*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
     if (!pmrs->cmdTx.pp) goto end;
     pmrs->cmdTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdTx.totsz = 128*SPI_TRUNK_SZ;
+    pmrs->cmdTx.totsz = 512*SPI_TRUNK_SZ;
     pmrs->cmdTx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdTx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
