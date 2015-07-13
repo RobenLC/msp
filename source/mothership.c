@@ -667,6 +667,7 @@ static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *ro
 static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, uint8_t *fat, uint32_t max);
 
 static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir);
+inline uint32_t mspSD_getNextFreeFAT(uint32_t idx, uint8_t *fat, uint32_t max) ;
 static int aspFS_createFATRoot(struct sdFAT_s *pfat);
 static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *root, char *dir, int max);
 static int aspFS_insertFATChild(struct directnFile_s *parent, struct directnFile_s *r);
@@ -1464,6 +1465,83 @@ static int aspFS_list(struct directnFile_s *root, int depth)
     }
 
     return 0;
+}
+
+static int mspSD_WriteFAT(int idx, int val, uint8_t *fat, uint32_t max) 
+{
+    uint8_t *uch;
+    uint32_t offset=0, i=0;
+
+    if (idx > max) {
+        printf(" ERROR!! Get next Free FAT idx: %d > max: %d\n", idx, max);
+        return 0xffffffff;
+    }
+
+    offset = idx * 4;
+
+    uch = fat + offset;
+
+    i = 0;
+    while (i < 4) {
+        uch[i] = val >> (i * 8);
+        i++;
+    }
+
+    //printf("FAT val: %.2x - %.2x - %.2x - %.2x\n", uch[0], uch[1], uch[2], uch[3]);
+
+    return 0;    
+}
+
+static int mspSD_writeList2FAT(int start, int length, uint8_t *fat, uint32_t max) 
+{
+    int i=0, ret=0;
+    int cur=0;
+
+    if (!length) return -1;
+
+    cur = start;
+    for (i = 0; i < length; i++) {
+        if (cur > max) return -2;
+        ret = mspSD_WriteFAT(cur, cur+1, fat, max);
+        if (ret) return -3;
+        cur++;
+    }
+
+    return 0;
+}
+
+static int mspSD_updLocalFAT(struct adFATLinkList_s *list, uint8_t *fat, uint32_t max) 
+{
+    int ret=0;
+    uint32_t val=0;
+    struct adFATLinkList_s *cur, *pre;
+    if (!list) return -1;
+    if (!fat) return -2;
+
+    cur = list;
+
+    while (cur) {
+        val = mspSD_getNextFreeFAT(cur->ftStart, fat, max);
+        if (val) {
+            printf("  [FS] Error!!! FAT should be zero val = 0x%x \n", val);
+        } else {
+            printf("  [FS] start FAT is zero idx: %d len: %d\n", cur->ftStart, cur->ftLen);
+        }
+
+        ret = mspSD_writeList2FAT(cur->ftStart, cur->ftLen, fat, max);
+        if (ret) return -3;
+        pre = cur;
+        cur = cur->n;
+        if (cur) {
+            mspSD_WriteFAT(pre->ftStart+pre->ftLen-1, cur->ftStart, fat, max);
+            printf("  [FS] CONT last idx: %d, next start: %d\n", pre->ftStart+pre->ftLen-1, cur->ftStart);
+        } else {
+            mspSD_WriteFAT(pre->ftStart+pre->ftLen-1, 0x0fffffff, fat, max);
+            printf("  [FS] END last idx: %d, next start: %d\n", pre->ftStart+pre->ftLen-1);
+        }
+    }
+    
+    return 0;    
 }
 
 static int mspSD_rangeFATLinkList(struct adFATLinkList_s *list, int *start, int *length)
@@ -11501,6 +11579,10 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
+
+    FILE *f=0;
+    char fatPath[128] = "/mnt/mmc2/fatTab.bin";
+
     int val=0, i=0, ret=0;
     char *pr=0;
     uint32_t secStr=0, secLen=0, secFile=0, lstsec;
@@ -11514,7 +11596,6 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
     struct sdFATable_s   *pftb=0;
 
-
     c = &mrs->mchine.cur;
     p = &mrs->mchine.tmp;
     
@@ -11524,16 +11605,36 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
     sprintf(mrs->log, "FAT table upload to SD\n");
-    print_f(&mrs->plog, "fs78", mrs->log);
+    print_f(&mrs->plog, "fs80", mrs->log);
 
     if (pftb->h) {
         pflnt = pftb->h;
+
+        ret = mspSD_updLocalFAT(pflnt, pftb->ftbFat1, pftb->ftbLen);
+        if (ret) {
+            sprintf(mrs->log, "update local FAT failed!!! ret: %d \n", ret);
+            print_f(&mrs->plog, "fs80", mrs->log);
+        }
+
+        f = fopen(fatPath, "w+");
+
+        if (f) {
+            msync(pftb->ftbFat1, pftb->ftbLen, MS_SYNC);
+            fwrite(pftb->ftbFat1, 1, pftb->ftbLen, f);
+            fflush(f);
+            fclose(f);
+            sprintf(mrs->log, "FAT table save to [%s] size:%d\n", fatPath, pftb->ftbLen);
+            print_f(&mrs->plog, "fs80", mrs->log);
+        } else {
+            sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", fatPath);
+            print_f(&mrs->plog, "fs80", mrs->log);
+        }
 
         secStr = 0; secLen = 0;
         mspSD_rangeFATLinkList(pflnt, &secFile, &lstsec);
 
         sprintf(mrs->log, "FAT table upload to SD, secStr: %d, secLen: %d\n", secFile, lstsec);
-        print_f(&mrs->plog, "fs78", mrs->log);
+        print_f(&mrs->plog, "fs80", mrs->log);
 
         secFile = (secFile * 4) / 512;
         lstsec = ((lstsec * 4) / 512) + 1;
@@ -11552,7 +11653,7 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (secLen < 16) secLen = 16;
 
         sprintf(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
-        print_f(&mrs->plog, "fs76", mrs->log);
+        print_f(&mrs->plog, "fs80", mrs->log);
 
         cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
 
@@ -11619,7 +11720,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     pftb = pfat->fatTable;
     
     sprintf(mrs->log, "DFE upload to SD\n");
-    print_f(&mrs->plog, "fs79", mrs->log);
+    print_f(&mrs->plog, "fs81", mrs->log);
 
     pfat->fatStatus &= ~ASPFAT_STATUS_DFEWT;    
 
@@ -11697,7 +11798,7 @@ static int fs84(struct mainRes_s *mrs, struct modersp_s *modersp)
     p->data = 0;
 
     sprintf(mrs->log, "set opcode OP_SAVE: 0x%.2x 0x%.2x \n", p->opcode, p->data);
-    print_f(&mrs->plog, "fs83", mrs->log);
+    print_f(&mrs->plog, "fs84", mrs->log);
     
     mrs_ipc_put(mrs, "c", 1, 1);
     modersp->m = modersp->m + 1;
@@ -11716,7 +11817,7 @@ static int fs85(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         p = &mrs->mchine.get;
         sprintf(mrs->log, "get opcode 0x%.2x 0x%.2x \n", p->opcode, p->data);
-        print_f(&mrs->plog, "fs84", mrs->log);
+        print_f(&mrs->plog, "fs85", mrs->log);
 
         if (p->opcode == OP_QRY) {
             modersp->m = modersp->m + 1;
@@ -11738,7 +11839,7 @@ static int fs86(struct mainRes_s *mrs, struct modersp_s *modersp)
     p->data = 0;
 
     sprintf(mrs->log, "set opcode OP_SAVE: 0x%.2x 0x%.2x \n", p->opcode, p->data);
-    print_f(&mrs->plog, "fs85", mrs->log);
+    print_f(&mrs->plog, "fs86", mrs->log);
     
     mrs_ipc_put(mrs, "c", 1, 1);
     modersp->m = modersp->m + 1;
@@ -11757,7 +11858,7 @@ static int fs87(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         p = &mrs->mchine.get;
         sprintf(mrs->log, "get opcode 0x%.2x 0x%.2x \n", p->opcode, p->data);
-        print_f(&mrs->plog, "fs86", mrs->log);
+        print_f(&mrs->plog, "fs87", mrs->log);
 
         if (p->opcode == OP_SAVE) {
             modersp->r = 1;
