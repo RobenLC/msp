@@ -11652,6 +11652,7 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "FAT table upload to SD\n");
     print_f(&mrs->plog, "fs80", mrs->log);
 
+    curDir = pfat->fatFileUpld;
     if (pftb->h) {
         pflnt = pftb->h;
 
@@ -11723,15 +11724,18 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         modersp->r = 3; /*3 is for SDWT*/
 
-        pflnt = pftb->h;
+        curDir->dfclstnum = pflnt->ftStart;
+
         while (pflnt) {
             pflsh = pflnt;
             pflnt = pflnt->n;
             free(pflsh);
         }
         pftb->h = 0;
+       
     }else {
-        pfat->fatStatus &= ~ASPFAT_STATUS_FATWT;    
+        pfat->fatStatus &= ~ASPFAT_STATUS_FATWT;
+        //curDir->dfstats = ASPFS_STATUS_EN;
         //pfat->fatFileUpld = 0;
         modersp->r = 1;
     }
