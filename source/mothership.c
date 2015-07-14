@@ -258,6 +258,8 @@ struct directnFile_s{
     struct directnFile_s *pa;
     struct directnFile_s *br;
     struct directnFile_s *ch;   
+
+    struct adFATLinkList_s *fln;
 };
 
 struct folderQueue_s{
@@ -945,14 +947,17 @@ static struct aspInfoSplit_s *asp_freeInfo(struct aspInfoSplit_s *info)
     return nex;
 }
 
-static uint8_t aspFSchecksum(uint8_t *pFcbName)
+static uint8_t aspFSchecksum(uint8_t *pch)
 {
-    int len=0;
-    uint8_t sum=0;
+    int i=0;
+    uint8_t sum=0, ch=0;
 
-    for (len=11; len != 0; len--) {
-        sum = ((sum & 0x1) ? 0x80 : 0) + (sum >> 1) + *pFcbName;
-        pFcbName++;
+    sum = 0;
+    for (i=0; i < 11; i++) {
+        sum = ((sum & 0x01) ? 0x80:0) | (sum >> 1);
+        ch = *pch;
+        sum += ch;
+        pch++;
     }
 
     return sum;
@@ -961,11 +966,31 @@ static uint8_t aspFSchecksum(uint8_t *pFcbName)
 static char aspLnameFilter(char ch)
 {
     char def = '_', *p=0;
-    char notAllow[16] = {0x22, 0x2a, 0x2b, 0x2c, 0x2c, 0x2f, 0x3a, 0x3b, 
-                              0x3c, 0x3d, 0x3e, 0x3f, 0x5b, 0x5c, 0x5d, 0x7c};
+    char notAllow[10] = {0x22, 0x2a, 0x2f, 0x3a, 0x3c, 
+                                     0x3e, 0x3f, 0x5c, 0x7c, 0x7f};
 
     if (ch == 0x0)  return ch;
     if (ch < 0x20)  return def;
+    if (ch > 0x7f)  return def;
+
+    p = notAllow + 15;
+    while (p >= notAllow) {
+        if (*p == ch) return def;
+        p --;
+    }
+
+    return ch;
+}
+
+static char aspSnameFilter(char ch)
+{
+    char def = '_', *p=0;
+    char notAllow[16] = {0x22, 0x2a, 0x2b, 0x2c, 0x2f, 0x3a, 0x3b, 0x3c, 
+                                     0x3d, 0x3e, 0x3f, 0x5b, 0x5c, 0x5d, 0x7c, 0x7f};
+
+    if (ch == 0x0)  return ch;
+    if (ch < 0x20)  return def;
+    if (ch > 0x7f)  return def;
 
     p = notAllow + 15;
     while (p >= notAllow) {
@@ -985,7 +1010,13 @@ static int aspNameCpy(char *raw, char *dst, int offset, int len, int jump)
     for (i = 0; i < len; i++) {
         idx = offset+i*jump;
         if (idx > 32) return (-1);
-        ch = aspLnameFilter(raw[idx]);
+        
+        if (jump == 2) { /* Long file name */
+            ch = aspLnameFilter(raw[idx]);
+        } else { /* short file name */
+            ch = aspSnameFilter(raw[idx]);
+        }
+
         if (ch == 0xff) return cnt;
         *dst = ch;
         dst ++;
@@ -1101,23 +1132,29 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
     } else if (ld == 0x00) {
         //memset(fs, 0x00, sizeof(struct directnFile_s));
         return 0;
-    } else if (fs->dfstats == ASPFS_STATUS_DIS) {
-        if (fs->dflen) {
-            //printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
-            sum = aspFSchecksum(raw);
-            if (sum != (fs->dfstats >> 16) & 0xff) {
-                ret = -11;
-                //memset(fs, 0x00, sizeof(struct directnFile_s));
-                //printf("checksum error: %x / %x\n", sum, (fs->dfstats >> 16) & 0xff);
-                //goto fsparseEnd;
-            }
-        }
+    } else if ((fs->dfstats & 0xff) == ASPFS_STATUS_DIS) {
         pstN = fs->dfSFN;
         ret = aspNameCpy(raw, pstN, 0, 11, 1);
         if (ret != 11) {
             memset(fs, 0x00, sizeof(struct directnFile_s));
-            //printf("short name copy error ret:%d \n", ret);
+            printf("\nERROR!!short name copy error ret:%d \n", ret);
             goto fsparseEnd;
+        }
+
+        idx = (fs->dfstats >> 8) & 0xf;
+        if (idx) {
+            sum = aspFSchecksum((uint8_t*)pstN);
+            printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
+            if (sum != (fs->dfstats >> 16) & 0xff) {
+                ret = -11;
+                //memset(fs, 0x00, sizeof(struct directnFile_s));
+                printf("WARNING!!! checksum error: 0x%x / 0x%x [%s]\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
+                //goto fsparseEnd;
+            } else {
+                printf("\nCONGING!!! checksum match: 0x%x / 0x%x [%s]\n\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
+            }
+        } else {
+            printf("\nSHORT file name parsing... [len:%d]\n", fs->dflen);
         }
 
         cnt = aspFSrmspace(pstN, 11);
@@ -1175,7 +1212,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
         }
-        //printf("LONG file name parsing...\n");
+        printf("LONG file name parsing...\n");
     
         ret = 0;
         if (raw[11] != 0x0f) {
@@ -1195,10 +1232,14 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 
         if (idx == 0x01) {
             fs->dfstats = ASPFS_STATUS_DIS;
+            fs->dfstats |= (ld & 0xf) << 8;
+            fs->dfstats |= (raw[13] & 0xff) << 16;
+            printf("WARNING!!! get checksum: 0x%x - 1.0\n", (fs->dfstats >> 16) & 0xff);
         } else {
             fs->dfstats = ASPFS_STATUS_ING;
             fs->dfstats |= (ld & 0xf) << 8;
             fs->dfstats |= (raw[13] & 0xff) << 16;
+            printf("WARNING!!! get checksum: 0x%x - 1.1\n", (fs->dfstats >> 16) & 0xff);
         }
 
         nxraw = raw+32;
@@ -1228,17 +1269,21 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             ret = -10;
         }       
         if (ret) {
-            //printf("LONG file name parsing... broken here ret:%d\n", ret);
+            printf("\nERROR!!LONG file name parsing... broken here ret:%d\n", ret);
             //memset(fs, 0x00, sizeof(struct directnFile_s));
             goto fsparseEnd;
         }
         
         if ((ld & 0xf) == 0x01) {
             fs->dfstats = ASPFS_STATUS_DIS;
+            fs->dfstats |= (ld & 0xf) << 8;
+            fs->dfstats |= (raw[13] & 0xff) << 16;
+            printf("WARNING!!! get checksum: 0x%x - 2.0\n", (fs->dfstats >> 16) & 0xff);
         } else {
             fs->dfstats = ASPFS_STATUS_ING;
             fs->dfstats |= (ld & 0xf) << 8;
             fs->dfstats |= (raw[13] & 0xff) << 16;
+            printf("WARNING!!! get checksum: 0x%x - 2.1\n", (fs->dfstats >> 16) & 0xff);
         }
 
         nxraw = raw+32;
@@ -1248,7 +1293,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
-        //printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
+        printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
 
         return ret;
     }else {
@@ -9967,7 +10012,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     if (pftb->c) {
         pflnt = pftb->c;
         pftb->c = pflnt->n;
-        free(pflnt);
+        //free(pflnt);
     }
 
     if ((!pftb->c) && (pParBuf->dirBuffUsed)) {
@@ -10225,7 +10270,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         pflnt = pftb->c;
 
-        sprintf(mrs->log, "[%d x %d + %d], n",pflnt->ftStart - 2, psec->secPrClst, psec->secWhroot);
+        sprintf(mrs->log, "[%d x %d + %d] \n",pflnt->ftStart - 2, psec->secPrClst, psec->secWhroot);
         print_f(&mrs->plog, "fs52", mrs->log);
                  
         secStr = (pflnt->ftStart - 2) * (uint32_t)psec->secPrClst + (uint32_t)psec->secWhroot;
