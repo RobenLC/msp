@@ -674,7 +674,12 @@ inline uint32_t mspSD_getNextFreeFAT(uint32_t idx, uint8_t *fat, uint32_t max) ;
 static int aspFS_createFATRoot(struct sdFAT_s *pfat);
 static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *root, char *dir, int max);
 static int aspFS_insertFATChild(struct directnFile_s *parent, struct directnFile_s *r);
-
+static uint8_t aspFSchecksum(uint8_t *pch);
+static char aspLnameFilter(char ch);
+static char aspSnameFilter(char ch);
+static uint32_t aspFSdateCps(uint32_t val);
+static uint32_t aspFStimeCps(uint32_t val);
+static int aspNameCpyfromRaw(char *raw, char *dst, int offset, int len, int jump);
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
@@ -948,6 +953,278 @@ static struct aspInfoSplit_s *asp_freeInfo(struct aspInfoSplit_s *info)
     return nex;
 }
 
+static int aspNameCpyfromName(char *name, char *dst, int offset, int len, int jump)
+{
+    char ch=0;
+    int i=0, cnt=0, idx=0;
+
+    if (!len) return 0;
+
+    cnt = 0;
+    for (i = 0; i < len; i++) {
+        idx = offset + i*jump;
+        
+        if (jump == 2) { /* Long file name */
+            ch = aspLnameFilter(name[i]);
+        } else { /* short file name */
+            ch = aspSnameFilter(name[i]);
+        }
+
+        if (ch == 0xff) return cnt;
+        dst[idx] = ch;
+        cnt++;
+        if (ch == 0) return cnt;
+    }
+
+    //printf("cpy cnt:%d \n", cnt);
+    return cnt;
+}
+
+static int aspCompirseSFN(uint8_t *pc, struct directnFile_s *pf, uint8_t *sfn)
+{
+    uint32_t tmp32=0;
+    struct directnFile_s *fs=0;
+    uint8_t *raw=0;
+
+    if (!pc) return -1;
+    if (!pf) return -2;
+
+    fs = pf;
+    raw = pc;
+
+    memset(raw, 0, 32);
+
+    printf("  [%x] type \n", pf->dftype);
+    printf("  [%x] status \n", pf->dfstats);
+    printf("  [%s] long file name, len:%d\n", pf->dfLFN, pf->dflen);
+    printf("  [%s] short file name \n", pf->dfSFN);
+    printf("  [%s] short file name - 2\n", sfn);
+    printf("  [%x] attribute \n", pf->dfattrib);
+    printf("  [%.2d:%.2d:%.2d] H:M:S created time \n", (pf->dfcretime >> 16) & 0xff, (pf->dfcretime >> 8) & 0xff, ((pf->dfcretime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] Y:M:D created date \n", ((pf->dfcredate >> 16) & 0xff) + 1980, (pf->dfcredate >> 8) & 0xff, (pf->dfcredate >> 0) & 0xff);
+    printf("  [%.2d:%.2d:%.2d] Y:M:D access date \n", ((pf->dflstacdate >> 16) & 0xff) + 1980, (pf->dflstacdate >> 8) & 0xff, (pf->dflstacdate >> 0) & 0xff);
+    printf("  [%.2d:%.2d:%.2d] H:M:S recorded time \n", (pf->dfrecotime >> 16) & 0xff, (pf->dfrecotime >> 8) & 0xff, ((pf->dfrecotime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] Y:M:D recorded date \n", ((pf->dfrecodate >> 16) & 0xff) + 1980, (pf->dfrecodate >> 8) & 0xff, (pf->dfrecodate >> 0) & 0xff);
+    printf("  [%d] cluster number \n", pf->dfclstnum);
+    printf("  [%d] file length \n", pf->dflength);
+
+    if (fs->dfattrib & ASPFS_ATTR_DIRECTORY) {
+        raw[11] = ASPFS_ATTR_DIRECTORY;
+    } else {
+        raw[11] = ASPFS_ATTR_ARCHIVE;
+    }
+
+    tmp32 = aspFStimeCps(fs->dfcretime);
+    raw[14] = tmp32 & 0xff;
+    raw[15] = (tmp32 >> 8) & 0xff;
+
+    tmp32 = aspFSdateCps(fs->dfcredate);
+    raw[16] = tmp32 & 0xff;
+    raw[17] = (tmp32 >> 8) & 0xff;
+
+    tmp32 = aspFSdateCps(fs->dflstacdate);
+    raw[18] = tmp32 & 0xff;
+    raw[19] = (tmp32 >> 8) & 0xff;
+
+    tmp32 = aspFStimeCps(fs->dfrecotime);
+    raw[22] = tmp32 & 0xff;
+    raw[23] = (tmp32 >> 8) & 0xff;
+
+    tmp32 = aspFSdateCps(fs->dfrecodate);
+    raw[24] = tmp32 & 0xff;
+    raw[25] = (tmp32 >> 8) & 0xff;
+
+    tmp32 = fs->dfclstnum;
+    raw[26] = tmp32 & 0xff;
+    raw[27] = (tmp32 >> 8) & 0xff;
+    raw[20] = (tmp32 >> 16) & 0xff;
+    raw[21] = (tmp32 >> 24) & 0xff;
+
+    tmp32 = fs->dflength;
+    raw[28] = tmp32 & 0xff;
+    raw[29] = (tmp32 >> 8) & 0xff;
+    raw[30] = (tmp32 >> 16) & 0xff;
+    raw[31] = (tmp32 >> 24) & 0xff;
+
+    aspNameCpyfromName(sfn, raw, 0, 11, 1);
+    
+    return 32;
+}
+
+static int aspCompirseLFN(uint8_t *pc, char *name, uint8_t chksum, int size)
+{
+    char *c=0;
+    uint8_t *p=0;
+    int num=0, rst=0, i = 0, cnt=0;
+    if (!pc) return -1;
+    if (!name) return -2;
+
+    if (size > 255) size = 255;
+    
+    rst = size % 13;
+    num = (rst == 0) ? (size/13) : (size/13+1);
+
+    printf("  LFN[%s] num: %d, rst: %d\n", name, num, rst);
+
+    p = pc;
+    c = name;
+    for (i = num; i > 0; i--) {
+        memset(p, 0, 32);
+        p[0] = i & 0x0f;
+        p[11] = 0x0f;
+        p[12] = 0x00;
+        p[13] = chksum;
+        p[26] = 0x00;
+        p[27] = 0x00;
+
+        c = name + ((i - 1) * 13);
+        if (i == num) {
+            p[0] |= 0x40;
+            if (rst) {
+                if (rst > 5) {
+                    aspNameCpyfromName(c, p, 1, 5, 2);
+                    rst -= 5;
+                } else {
+                    aspNameCpyfromName(c, p, 1, rst, 2);
+                    memset(p+1+rst*2, 0xff, (5-rst)*2);
+                    rst = 0;
+                }
+                c += 5;
+                
+                if (rst > 6) {
+                    aspNameCpyfromName(c, p, 14, 6, 2);
+                    rst -= 6;
+                } else {
+                    aspNameCpyfromName(c, p, 14, rst, 2);
+                    memset(p+14+rst*2, 0xff, (6-rst)*2);
+                    rst = 0;
+                }
+                c += 6;
+                
+                if (rst > 2) {
+                    printf("ERROR!! rst should not (> 2) rst: %d \n", rst);
+                    aspNameCpyfromName(c, p, 28, 2, 2);
+                    rst = 0;
+                } else {
+                    aspNameCpyfromName(c, p, 28, rst, 2);
+                    memset(p+28+rst*2, 0xff, (2-rst)*2);
+                    rst = 0;
+                }                
+            } else {
+                aspNameCpyfromName(c, p, 1, 5, 2);
+                c += 5;
+                aspNameCpyfromName(c, p, 14, 6, 2);
+                c += 6;
+                aspNameCpyfromName(c, p, 28, 2, 2);
+            }
+        } else {
+            aspNameCpyfromName(c, p, 1, 5, 2);
+            c += 5;
+            aspNameCpyfromName(c, p, 14, 6, 2);
+            c += 6;
+            aspNameCpyfromName(c, p, 28, 2, 2);
+        }
+        p += 32;
+    }
+
+    return (p - pc);
+}
+
+static int aspFindDot(char *name, int size)
+{
+    int i=0;
+    char *p=0;
+
+    if (!name) return -1;
+
+    p = name;
+
+    i = 0;
+    while (i < size) {
+        if (*p == '.') {
+            return i;
+        }
+        i++;
+        p++;
+    }
+
+    return -2;
+}
+
+static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
+{
+    uint8_t chksum = 0;
+    uint8_t *p=0, tmSFN[16];
+    int ret=0, len=0;
+    if (!pc) return -1;
+    if (!fs) return -2;
+
+    memset(tmSFN, 0, 16);
+    ret = aspFindDot(fs->dfSFN, strlen(fs->dfSFN));
+    if (ret < 0) {
+        printf("  SFN do not have dot, ret: %d\n", ret);
+        aspNameCpyfromName(fs->dfSFN, tmSFN, 0, strlen(fs->dfSFN), 1);
+    } else {
+        printf("  SFN have dot, at [%d]\n", ret);
+        aspNameCpyfromName(fs->dfSFN, tmSFN, 0, ret, 1);
+        aspNameCpyfromName(fs->dfSFN+ret+1, tmSFN, ret, 3, 1);
+    }
+
+    chksum = aspFSchecksum(tmSFN);
+    printf("  tmSFN: [%s], chksum: 0x%.2x\n", tmSFN, chksum);
+    
+    p = pc;
+    if (fs->dflen) {
+        len = aspCompirseLFN(p, fs->dfLFN, chksum, fs->dflen);
+        if (len > 0) {
+            printf("  LFN get, len: %d\n", len);
+            shmem_dump(p, len);
+            p = p + len;
+        } else {
+            printf("  ERROR!!! LFN get failed, len: %d\n", len);        
+        }
+    }
+
+    len = aspCompirseSFN(p, fs, tmSFN);
+    if (len > 0) {
+        printf("  SFN get, len: %d\n", len);
+        shmem_dump(p, len);
+        p = p + len;
+    } else {
+        printf("  ERROR!!! SFN get failed, len: %d\n", len);        
+    }
+    
+    return (p - pc);
+}
+
+static int aspFindFreeDEF(uint8_t **ppc, uint8_t *pc, int max, int itvl)
+{
+    int i=0, j=0;
+    uint8_t *p=0;
+
+    p = pc;
+    while (i < max) {
+        if (*p == 0) {
+            j = 0;
+            while (j < itvl) { 
+                if (p[j] != 0) break;
+                j++;
+            }
+
+            if (j == itvl) {
+                *ppc = p;
+                return (max - i);
+            }
+        }
+        p += itvl;
+        i += itvl;
+    }
+
+    *ppc = pc + max;
+    
+    return -1;
+}
+
 static uint8_t aspFSchecksum(uint8_t *pch)
 {
     int i=0;
@@ -974,7 +1251,7 @@ static char aspLnameFilter(char ch)
     if (ch < 0x20)  return def;
     if (ch > 0x7f)  return def;
 
-    p = notAllow + 15;
+    p = notAllow + 9;
     while (p >= notAllow) {
         if (*p == ch) return def;
         p --;
@@ -992,6 +1269,9 @@ static char aspSnameFilter(char ch)
     if (ch == 0x0)  return ch;
     if (ch < 0x20)  return def;
     if (ch > 0x7f)  return def;
+    if ((ch > 0x60) && ch < (0x7b)) {
+        ch -= 0x20;
+    }
 
     p = notAllow + 15;
     while (p >= notAllow) {
@@ -1002,7 +1282,7 @@ static char aspSnameFilter(char ch)
     return ch;
 }
 
-static int aspNameCpy(char *raw, char *dst, int offset, int len, int jump)
+static int aspNameCpyfromRaw(char *raw, char *dst, int offset, int len, int jump)
 {
     char ch=0;
     int i=0, cnt=0, idx=0;
@@ -1074,6 +1354,19 @@ static uint32_t aspFSdateAsb(uint32_t fst)
     return val;
 }
 
+static uint32_t aspFSdateCps(uint32_t val)
+{
+    uint32_t fst=0, y=0, m=0, d=0;
+
+    d = val & 0xf; // 0 -4, 5bits
+    m = (val >> 8) & 0xf; // 5 - 8, 4bits
+    y = (val >> 16) & 0x7f; // 9 - 15, 7bits
+
+    fst = (y << 9) | (m << 5) | d;
+    
+    return fst;
+}
+
 static uint32_t aspFStimeAsb(uint32_t fst)
 {
     uint32_t val=0, s=0, m=0, h=0;
@@ -1084,6 +1377,18 @@ static uint32_t aspFStimeAsb(uint32_t fst)
     return val;
 }
 
+static uint32_t aspFStimeCps(uint32_t val)
+{
+    uint32_t fst=0, s=0, m=0, h=0;
+    s = val & 0x1f; // 0 -4, 5bits
+    m = (val >> 8) & 0x3f; // 5 - 10, 6bits
+    h = (val >> 16) & 0x1f; // 11 - 15, 5bits
+
+    fst = (h << 11) | (m << 5) | s;
+    
+    return fst;
+}
+
 static int aspLnameAbs(char *raw, char *dst) 
 {
     int cnt=0, ret=0;
@@ -1091,17 +1396,17 @@ static int aspLnameAbs(char *raw, char *dst)
     if (!raw) return (-1);
     if (!dst) return (-2);
 
-    ret = aspNameCpy(raw, dst, 1, 5, 2);
+    ret = aspNameCpyfromRaw(raw, dst, 1, 5, 2);
     cnt += ret;
     if (ret != 5) return cnt;
 
     dst += ret;
-    ret = aspNameCpy(raw, dst, 14, 6, 2);
+    ret = aspNameCpyfromRaw(raw, dst, 14, 6, 2);
     cnt += ret;
     if (ret != 6) return cnt;
     
     dst += ret;
-    ret = aspNameCpy(raw, dst, 28, 2, 2);
+    ret = aspNameCpyfromRaw(raw, dst, 28, 2, 2);
     cnt += ret;
 
     //printf("name abs cnt:%d\n", cnt);
@@ -1135,7 +1440,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         return 0;
     } else if ((fs->dfstats & 0xff) == ASPFS_STATUS_DIS) {
         pstN = fs->dfSFN;
-        ret = aspNameCpy(raw, pstN, 0, 11, 1);
+        ret = aspNameCpyfromRaw(raw, pstN, 0, 11, 1);
         if (ret != 11) {
             memset(fs, 0x00, sizeof(struct directnFile_s));
             printf("\nERROR!!short name copy error ret:%d \n", ret);
@@ -1161,7 +1466,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         cnt = aspFSrmspace(pstN, 11);
         if (cnt == 0) {
             memset(pstN, 0, 16);
-            ret = aspNameCpy(raw, pstN, 0, 8, 1);
+            ret = aspNameCpyfromRaw(raw, pstN, 0, 8, 1);
             if (ret != 8) {
                 memset(fs, 0x00, sizeof(struct directnFile_s));
                 //printf("short name copy error ret:%d \n", ret);
@@ -1171,7 +1476,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             pstN += strlen(pstN);
             *pstN = '.';
             pstN += 1;
-            ret = aspNameCpy(raw, pstN, 8, 3, 1);
+            ret = aspNameCpyfromRaw(raw, pstN, 8, 3, 1);
             if (ret != 3) {
                 memset(fs, 0x00, sizeof(struct directnFile_s));
                 //printf("short name copy error ret:%d \n", ret);
@@ -1666,7 +1971,8 @@ static uint32_t mspSD_getNextFAT(uint32_t idx, uint8_t *fat, uint32_t max)
     offset = idx * 4;
 
     uch = fat + offset;
-
+    msync(uch, 16, MS_SYNC);
+    
     i = 0;
     while (i < 4) {
         val |= uch[i] << (i * 8);
@@ -1680,6 +1986,7 @@ static uint32_t mspSD_getNextFAT(uint32_t idx, uint8_t *fat, uint32_t max)
 
 inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, uint8_t *fat, uint32_t max)
 {
+    struct adFATLinkList_s *p=0;
     uint32_t llen=0, lstr=0, nxt=0, cur=0, ret=0;
     struct adFATLinkList_s *ls=0, *nt=0;
     cur = idx;
@@ -1710,7 +2017,9 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
             return -1;
             break;
         }
-    
+
+        printf("  compare nxt:%d and cur:%d\n", nxt, cur);    
+        
         if (nxt == (cur+1)) {
             cur = nxt;
             nxt = 0;
@@ -1718,7 +2027,15 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
         } else {
             ls->ftStart = lstr;
             ls->ftLen = llen;
-            ret = mspSD_createFATLinkList(&ls->n);
+            printf("  to get new Link list \n");
+            //usleep(500000);
+            p = (struct adFATLinkList_s*)malloc(sizeof(struct adFATLinkList_s));
+            //usleep(500000);
+            printf("  get memory: 0x%.8x\n", p);
+            ls->n = (struct adFATLinkList_s*) p;
+            //ret = mspSD_createFATLinkList(&ls->n);
+            printf("  get return: %d\n", ret);
+            //usleep(500000);
             if (ret) return ret;
 
             printf("  diff nxt:%d, cur:%d str:%d, len:%d\n", nxt, cur, lstr, llen);
@@ -1729,6 +2046,7 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
             ls = ls->n;
         }
         nxt = mspSD_getNextFAT(cur, fat, max);
+        printf("  return nxt:%d\n", nxt);
     }
 
     if (!lstr) {
@@ -11667,8 +11985,8 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs80", mrs->log);
 
     curDir = pfat->fatFileUpld;
-    if (pftb->h) {
-        pflnt = pftb->h;
+    if (pftb->c) {
+        pflnt = pftb->c;
 
         ret = mspSD_updLocalFAT(pflnt, pftb->ftbFat1, pftb->ftbLen);
         if (ret) {
@@ -11738,16 +12056,7 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         modersp->r = 3; /*3 is for SDWT*/
 
-        curDir->dfclstnum = pflnt->ftStart;
-
-        pflnt = pftb->h;
-        while (pflnt) {
-            pflsh = pflnt;
-            pflnt = pflnt->n;
-            free(pflsh);
-        }
-        pftb->h = 0;
-       
+       pftb->c = 0;
     }else {
         pfat->fatStatus &= ~ASPFAT_STATUS_FATWT;
         //curDir->dfstats = ASPFS_STATUS_EN;
@@ -11760,8 +12069,8 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    int val=0, i=0, ret=0;
-    char *pr=0;
+    int val=0, i=0, ret=0, fLen=0, len=0;
+    uint8_t *pdef=0;
     uint32_t secStr=0, secLen=0, secFile=0, lstsec;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
@@ -11771,8 +12080,9 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct directnFile_s *curDir=0, *ch=0, *br=0, *pa=0;
     struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct adFATLinkList_s *padd=0;
     struct sdFATable_s   *pftb=0;
-
+    struct adFATLinkList_s *pfre=0, *pnxf=0;    
 
     c = &mrs->mchine.cur;
     p = &mrs->mchine.tmp;
@@ -11786,10 +12096,6 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "DFE read from SD\n");
     print_f(&mrs->plog, "fs81", mrs->log);
 
-#if 1
-    pfat->fatStatus &= ~ASPFAT_STATUS_DFERD;   
-    modersp->r = 1;
-#else
     curDir = pfat->fatFileUpld;
     if (!curDir) {
         sprintf(mrs->log, "DFE read from SD\n");
@@ -11807,18 +12113,118 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs81", mrs->log);
 
             msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
+            /* debug */
             shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
+            /* TODO: fill the DEF */
+            
+            /* find the free space, slot unit is 32 bytes */
+            fLen = aspFindFreeDEF(&pdef, pParBuf->dirParseBuff, pParBuf->dirBuffUsed, 32);
+            
+            /* calculate the DEF */                 
+            len = aspCompirseDEF(pdef, curDir);
+            if (len > 0) {
+                sprintf(mrs->log, "compirse DEF len:%d(free:%d)\n", len, fLen);
+                print_f(&mrs->plog, "fs81", mrs->log);
+
+                shmem_dump(pdef, len);
+            } else {
+                sprintf(mrs->log, "ERROR!!! compirse DEF failed, ret len:%d(free:%d)\n", len, fLen);
+                print_f(&mrs->plog, "fs81", mrs->log);
+            }
+            
+            if ((fLen == -1) || ((fLen > 0) && (len > fLen))) {
+                /* no space */
+                /* allocate FAT to folder */
+                pfre = pftb->ftbMng.f;
+                if (!pfre) {
+                    sprintf(mrs->log, "Error!! free space link list is empty \n");
+                    print_f(&mrs->plog, "fs81", mrs->log);
+                    modersp->r = 0xed;
+                    return 1;
+                }
+
+                sprintf(mrs->log, "folder allocate new cluster for file: %s \n", curDir->dfSFN);
+                print_f(&mrs->plog, "fs81", mrs->log);
+
+                if (!pftb->h) {
+                    padd = 0;
+
+                    ret = mspSD_allocFreeFATList(&padd, 1, pfre, &pnxf);
+                    if (ret) {
+                        sprintf(mrs->log, "free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
+                        print_f(&mrs->plog, "fs81", mrs->log);
+                        modersp->r = 0xed;
+                        return 1;
+                    }
+
+                    /* debug */
+                    sprintf(mrs->log, "show allocated FAT list: \n");
+                    print_f(&mrs->plog, "fs81", mrs->log);
+
+                    val = 0;
+                    pflnt = padd;
+                    while (pflnt) {
+                        val += pflnt->ftLen;
+                        sprintf(mrs->log, "free space str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
+                        print_f(&mrs->plog, "fs81", mrs->log);
+                        pflnt = pflnt->n;
+                    }
+                    sprintf(mrs->log, "total allocated cluster is %d!! \n", val);
+                    print_f(&mrs->plog, "fs81", mrs->log);
+
+                    pflsh = 0;
+                    ret = mspSD_parseFAT2LinkList(&pflsh, pa->dfclstnum, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
+                    if (ret) {
+                        sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
+                        print_f(&mrs->plog, "fs81", mrs->log);
+                        modersp->r = 0xed;
+                        return 1;
+                    }
+
+                    /* debug */
+                    pflnt = pflsh;
+                    while (1) {
+                        sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+                        print_f(&mrs->plog, "fs81", mrs->log);
+                        if (!pflnt->n) break;
+                        pflnt = pflnt->n;
+                    }       
+                    pflnt->n = padd;
+                    
+                    pftb->h = pflsh;
+                    pftb->c = pftb->h;
+                }else {
+                    sprintf(mrs->log, "ERROR!!! pftb->h != 0, 0x%x\n", pftb->h);
+                    print_f(&mrs->plog, "fs81", mrs->log);
+                }
+                
+                /* enable FAT update flag */
+                pfat->fatStatus |= ASPFAT_STATUS_FATWT;   
+            }
+            
             pfat->fatStatus &= ~ASPFAT_STATUS_DFERD;   
             modersp->r = 1;
         } else {
             sprintf(mrs->log, "Size of used parse buffer should not be zero, folder[%s]\n", pa->dfSFN);
             print_f(&mrs->plog, "fs81", mrs->log);
 
+            
             free(pfdirt);            
             mrs->folder_dirt = 0;
             modersp->r = 0xed;
         }
     } else {
+
+        pflnt = pftb->h;
+        curDir->dfclstnum = pflnt->ftStart;
+
+        while (pflnt) {
+            pflsh = pflnt;
+            pflnt = pflnt->n;
+            free(pflsh);
+        }
+        pftb->h = 0;
+
         pa = curDir->pa;
         pfdirt = malloc(sizeof(struct folderQueue_s));
         pfdirt->fdObj = pa;
@@ -11900,12 +12306,23 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
 
         modersp->r = 2;
+
+        /* goto the last cluster */
+        pflnt = pftb->h;
+        while (pflnt) {
+            sprintf(mrs->log, "free FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+            print_f(&mrs->plog, "fs81", mrs->log);
+            pflsh = pflnt;
+            pflnt = pflnt->n;
+            free(pflsh);
+        }
+        pftb->h = 0;
         
         mrs->folder_dirt = pfdirt;
         pParBuf->dirBuffUsed = 0;
         memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffMax);
     }
-#endif
+
     return 1;
 }
 
