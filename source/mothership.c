@@ -684,6 +684,11 @@ static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 
+void aspFree(void *p)
+{
+    printf("  free 0x%.8x \n", p);
+    //free(p);
+}
 void debugPrintBootSec(struct sdbootsec_s *psec)
 {
             /* 0  Jump command */
@@ -897,7 +902,7 @@ static int asp_strsplit(struct aspInfoSplit_s **info, char *str, int max)
 
         if (len == 0) {
             cur = nex+1;            
-            free(p);
+            aspFree(p);
             continue;
         }
         
@@ -948,8 +953,8 @@ static struct aspInfoSplit_s *asp_freeInfo(struct aspInfoSplit_s *info)
 
     //printf("free[%s]\n", info->infoStr);
 
-    free(info->infoStr);
-    free(info);
+    aspFree(info->infoStr);
+    aspFree(info);
     return nex;
 }
 
@@ -2027,15 +2032,8 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
         } else {
             ls->ftStart = lstr;
             ls->ftLen = llen;
-            printf("  to get new Link list \n");
-            //usleep(500000);
-            p = (struct adFATLinkList_s*)malloc(sizeof(struct adFATLinkList_s));
-            //usleep(500000);
-            printf("  get memory: 0x%.8x\n", p);
-            ls->n = (struct adFATLinkList_s*) p;
-            //ret = mspSD_createFATLinkList(&ls->n);
-            printf("  get return: %d\n", ret);
-            //usleep(500000);
+
+            ret = mspSD_createFATLinkList(&ls->n);
             if (ret) return ret;
 
             printf("  diff nxt:%d, cur:%d str:%d, len:%d\n", nxt, cur, lstr, llen);
@@ -2145,7 +2143,7 @@ static int mspSD_getFreeFATList(struct adFATLinkList_s **head, uint32_t idx, uin
     }
 
     if (ls->n) {
-        free(ls->n);
+        aspFree(ls->n);
         ls->n = 0;
     } else {
         ls->ftStart = lstr;
@@ -2206,14 +2204,14 @@ static int mspSD_allocFreeFATList(struct adFATLinkList_s **head, uint32_t length
         c = c->n;        
         
         if (nt) {
-            free(nt);
+            aspFree(nt);
             nt = 0;
         }
     }
 
     if (!ls->ftLen) {
         t->n = 0;
-        free(ls);
+        aspFree(ls);
     }
 
     *n = c;
@@ -7590,10 +7588,10 @@ static int p0_end(struct mainRes_s *mrs)
     munmap(mrs->dataTx.pp[0], 256*SPI_TRUNK_SZ);
     munmap(mrs->cmdRx.pp[0], 256*SPI_TRUNK_SZ);
     munmap(mrs->cmdTx.pp[0], 256*SPI_TRUNK_SZ);
-    free(mrs->dataRx.pp);
-    free(mrs->cmdRx.pp);
-    free(mrs->dataTx.pp);
-    free(mrs->cmdTx.pp);
+    aspFree(mrs->dataRx.pp);
+    aspFree(mrs->cmdRx.pp);
+    aspFree(mrs->dataTx.pp);
+    aspFree(mrs->cmdTx.pp);
     return 0;
 }
 
@@ -9327,7 +9325,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
             while (s) {
                 sc = s;
                 s = s->n;
-                free(sc);
+                aspFree(sc);
             }
             pfat->fatSupcur = 0;
         }
@@ -10343,7 +10341,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     if (pftb->c) {
         pflnt = pftb->c;
         pftb->c = pflnt->n;
-        free(pflnt);
+        aspFree(pflnt);
     }
 
     if ((!pftb->c) && (pParBuf->dirBuffUsed)) {
@@ -10498,7 +10496,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (pftb->c) {
             pflnt = pftb->c;
             pftb->c = pflnt->n;
-            free(pflnt);
+            aspFree(pflnt);
         }
 
         if ((!pftb->c) && (pParBuf->dirBuffUsed)) {
@@ -10569,7 +10567,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
             pParBuf->dirBuffUsed = 0;
             
             mrs->folder_dirt = pfhead->fdnxt;
-            free(pfhead);
+            aspFree(pfhead);
             
         }
     }
@@ -10726,7 +10724,7 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs53", mrs->log);
         }
 /*
-        free(pftb->ftbFat1);
+        aspFree(pftb->ftbFat1);
         pftb->ftbFat1 = 0;
         pftb->ftbLen = 0;
 */
@@ -11203,7 +11201,7 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
         sh = sh->n;
 
         pfat->fatSupdata = sh;
-        free(s);
+        aspFree(s);
     }
 
     if (sh) {
@@ -11527,7 +11525,7 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 2;
 
         pftb->c = pflnt->n;
-        free(pflnt);
+        aspFree(pflnt);
 
     }else {
         pftb->h = 0;
@@ -11833,7 +11831,7 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 3; /*3 is for SDWT*/
 
         pftb->c = pflnt->n;
-        //free(pflnt);
+        //aspFree(pflnt);
 
     }else {
         pfat->fatStatus &= ~ASPFAT_STATUS_SDWT;    
@@ -12209,7 +12207,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs81", mrs->log);
 
             
-            free(pfdirt);            
+            aspFree(pfdirt);            
             mrs->folder_dirt = 0;
             modersp->r = 0xed;
         }
@@ -12221,7 +12219,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
         while (pflnt) {
             pflsh = pflnt;
             pflnt = pflnt->n;
-            free(pflsh);
+            aspFree(pflsh);
         }
         pftb->h = 0;
 
@@ -12256,7 +12254,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs81", mrs->log);
 
             modersp->r = 0xed;
-            free(pfdirt);            
+            aspFree(pfdirt);            
             return 1;
         }
 
@@ -12314,7 +12312,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs81", mrs->log);
             pflsh = pflnt;
             pflnt = pflnt->n;
-            free(pflsh);
+            aspFree(pflsh);
         }
         pftb->h = 0;
         
@@ -12501,7 +12499,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
     while (pflnt) {
         pflsh = pflnt;
         pflnt = pflnt->n;
-        free(pflsh);
+        aspFree(pflsh);
     }
     pftb->h = 0;
 */
@@ -13463,7 +13461,7 @@ static int p2(struct procRes_s *rs)
                     len = datLen; 
                 }
 
-                free(laddr);
+                aspFree(laddr);
                 rs_ipc_put(rs, "F", 1);
 
                 sprintf(rs->logs, "spi0 recv end - total len: %d\n", len);
