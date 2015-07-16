@@ -11839,7 +11839,7 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     }else {
         pfat->fatStatus &= ~ASPFAT_STATUS_SDWT;    
-        //pftb->c = pftb->h;
+        pftb->c = pftb->h;
         //pfat->fatFileUpld = 0;
         //pftb->h = 0;
         modersp->r = 1;
