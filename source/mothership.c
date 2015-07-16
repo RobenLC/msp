@@ -1442,7 +1442,8 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         goto fsparseEnd;
     } else if (ld == 0x00) {
         //memset(fs, 0x00, sizeof(struct directnFile_s));
-        return 0;
+        //return 0;
+        goto fsparseEnd;
     } else if ((fs->dfstats & 0xff) == ASPFS_STATUS_DIS) {
         pstN = fs->dfSFN;
         ret = aspNameCpyfromRaw(raw, pstN, 0, 11, 1);
@@ -11959,7 +11960,6 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-
     FILE *f=0;
     char fatPath[128] = "/mnt/mmc2/fatTab.bin";
 
@@ -12084,6 +12084,8 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
+    FILE *f=0;
+    char clstPath[128] = "/mnt/mmc2/clstnew.bin";
     int val=0, i=0, ret=0, fLen=0, len=0;
     uint8_t *pdef=0;
     uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
@@ -12148,6 +12150,19 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             }
             
             if ((fLen == -1) || ((fLen > 0) && (len > fLen))) {
+                f = fopen(clstPath, "w+");
+                if (f) {
+                    msync(pdef, len, MS_SYNC);
+                    fwrite(pdef, 1, len, f);
+                    fflush(f);
+                    fclose(f);
+                    sprintf(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
+                    print_f(&mrs->plog, "fs81", mrs->log);
+                } else {
+                    sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
+                    print_f(&mrs->plog, "fs81", mrs->log);
+                }
+                
                 /* no space */
                 /* allocate FAT to folder */
                 pfre = pftb->ftbMng.f;
