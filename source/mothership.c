@@ -1448,24 +1448,24 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         ret = aspNameCpyfromRaw(raw, pstN, 0, 11, 1);
         if (ret != 11) {
             memset(fs, 0x00, sizeof(struct directnFile_s));
-            printf("\nERROR!!short name copy error ret:%d \n", ret);
+            printf("\nERROR!!short name [%s] copy error ret:%d \n", pstN, ret);
             goto fsparseEnd;
         }
 
         idx = (fs->dfstats >> 8) & 0xf;
         if (idx) {
             sum = aspFSchecksum((uint8_t*)pstN);
-            printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
+            //printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
             if (sum != (fs->dfstats >> 16) & 0xff) {
                 ret = -11;
                 //memset(fs, 0x00, sizeof(struct directnFile_s));
                 printf("WARNING!!! checksum error: 0x%x / 0x%x [%s]\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
                 //goto fsparseEnd;
             } else {
-                printf("\nCONGING!!! checksum match: 0x%x / 0x%x [%s]\n\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
+                printf("CONGING!!! checksum match: 0x%x / 0x%x [%s]\n\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
             }
         } else {
-            printf("\nSHORT file name parsing... [len:%d]\n", fs->dflen);
+            //printf("\nSHORT file name parsing... [len:%d]\n", fs->dflen);
         }
 
         cnt = aspFSrmspace(pstN, 11);
@@ -1523,7 +1523,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
         }
-        printf("LONG file name parsing...\n");
+        //printf("LONG file name parsing...\n");
     
         ret = 0;
         if (raw[11] != 0x0f) {
@@ -1545,12 +1545,12 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             fs->dfstats = ASPFS_STATUS_DIS;
             fs->dfstats |= (ld & 0xf) << 8;
             fs->dfstats |= (raw[13] & 0xff) << 16;
-            printf("WARNING!!! get checksum: 0x%x - 1.0\n", (fs->dfstats >> 16) & 0xff);
+            //printf("WARNING!!! get checksum: 0x%x - 1.0\n", (fs->dfstats >> 16) & 0xff);
         } else {
             fs->dfstats = ASPFS_STATUS_ING;
             fs->dfstats |= (ld & 0xf) << 8;
             fs->dfstats |= (raw[13] & 0xff) << 16;
-            printf("WARNING!!! get checksum: 0x%x - 1.1\n", (fs->dfstats >> 16) & 0xff);
+            //printf("WARNING!!! get checksum: 0x%x - 1.1\n", (fs->dfstats >> 16) & 0xff);
         }
 
         nxraw = raw+32;
@@ -1589,12 +1589,12 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             fs->dfstats = ASPFS_STATUS_DIS;
             fs->dfstats |= (ld & 0xf) << 8;
             fs->dfstats |= (raw[13] & 0xff) << 16;
-            printf("WARNING!!! get checksum: 0x%x - 2.0\n", (fs->dfstats >> 16) & 0xff);
+            //printf("WARNING!!! get checksum: 0x%x - 2.0\n", (fs->dfstats >> 16) & 0xff);
         } else {
             fs->dfstats = ASPFS_STATUS_ING;
             fs->dfstats |= (ld & 0xf) << 8;
             fs->dfstats |= (raw[13] & 0xff) << 16;
-            printf("WARNING!!! get checksum: 0x%x - 2.1\n", (fs->dfstats >> 16) & 0xff);
+            //printf("WARNING!!! get checksum: 0x%x - 2.1\n", (fs->dfstats >> 16) & 0xff);
         }
 
         nxraw = raw+32;
@@ -1604,7 +1604,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
-        printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
+        //printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
 
         return ret;
     }else {
@@ -2237,8 +2237,8 @@ static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
     *dir = &pool->dirPool[pool->dirUsed];
     pool->dirUsed += 1;
     
-    sprintf(mlog, "Pool [%d] used\n", pool->dirUsed);
-    print_f(mlogPool, "FS", mlog);
+    //sprintf(mlog, "Pool [%d] used\n", pool->dirUsed);
+    //print_f(mlogPool, "FS", mlog);
 
     return 0;
 }
@@ -2561,11 +2561,11 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
     b = 0; t = 0;
     brt = root;
     while (brt) {
-        sprintf(mlog, "b:%d, [%s][0x%x][0x%x] pa[%s]\n", b, brt->dfSFN, brt->dfstats, brt->dftype, (brt->pa == 0)?"NONE":brt->pa->dfSFN);
-        print_f(mlogPool, "FSRH2", mlog);
+        //sprintf(mlog, "b:%d, [%s][0x%x][0x%x] pa[%s]\n", b, brt->dfSFN, brt->dfstats, brt->dftype, (brt->pa == 0)?"NONE":brt->pa->dfSFN);
+        //print_f(mlogPool, "FSRH2", mlog);
         if (brt->dfstats != ASPFS_STATUS_EN) {
-            sprintf(mlog, "skip disable file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
-            print_f(mlogPool, "FSRH2", mlog);
+            //sprintf(mlog, "skip disable file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+            //print_f(mlogPool, "FSRH2", mlog);
         } else if (b == a) {
             if ((brt->dftype == type) || (brt->dftype == ASPFS_TYPE_ROOT)) {
                 if ((strcmp(brt->dfLFN, &rmp[b][0]) == 0) || 
@@ -2577,8 +2577,8 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
             }
         } else {
             if (brt->dftype == ASPFS_TYPE_FILE) {
-                sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
-                print_f(mlogPool, "FSRH2", mlog);
+                //sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
+                //print_f(mlogPool, "FSRH2", mlog);
             } else {
                 if ((strcmp(brt->dfLFN, &rmp[b][0]) == 0) || 
                     (strcmp(brt->dfSFN, &rmp[b][0]) == 0)) {
@@ -2591,8 +2591,8 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
             t = b;
             brt = brt->ch;
             if (!brt) break;
-            sprintf(mlog, "Next folder[%s] pa[%s]!!!\n", brt->dfSFN, brt->pa->dfSFN);
-            print_f(mlogPool, "FSRH2", mlog);
+            //sprintf(mlog, "Next folder[%s] pa[%s]!!!\n", brt->dfSFN, brt->pa->dfSFN);
+            //print_f(mlogPool, "FSRH2", mlog);
         } else {
             brt = brt->br;
         }
@@ -10926,7 +10926,8 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
     curDir = pfat->fatRootdir;
 
     if (!(pfat->fatStatus & ASPFAT_STATUS_BOOT)) {
-        mspFS_listDetail(curDir, 4);
+        //mspFS_listDetail(curDir, 4);
+        mspFS_list(curDir, 4);
         pfat->fatStatus |= ASPFAT_STATUS_BOOT;
     }
 
@@ -11838,6 +11839,7 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     }else {
         pfat->fatStatus &= ~ASPFAT_STATUS_SDWT;    
+        //pftb->c = pftb->h;
         //pfat->fatFileUpld = 0;
         //pftb->h = 0;
         modersp->r = 1;
@@ -14857,8 +14859,8 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                print_f(rs->plogs, "P6", rs->logs);
+                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                //print_f(rs->plogs, "P6", rs->logs);
 
                 brt = brt->br;
                 cnt++;
