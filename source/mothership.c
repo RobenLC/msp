@@ -1880,7 +1880,7 @@ static int mspSD_updLocalFAT(struct adFATLinkList_s *list, uint8_t *fat, uint32_
     while (cur) {
         val = mspSD_getNextFreeFAT(cur->ftStart, fat, max);
         if (val) {
-            printf("  [FS] Error!!! FAT should be zero val = 0x%x \n", val);
+            printf("  [FS] Warning!!! FAT should be zero val = 0x%x \n", val);
         } else {
             printf("  [FS] start FAT is zero idx: %d len: %d\n", cur->ftStart, cur->ftLen);
         }
@@ -1901,7 +1901,7 @@ static int mspSD_updLocalFAT(struct adFATLinkList_s *list, uint8_t *fat, uint32_
     return 0;    
 }
 
-static int mspSD_rangeFATLinkList(struct adFATLinkList_s *list, int *start, int *length)
+static int mspSD_rangeFATLinkList(struct adFATLinkList_s *list, int *start, int *last)
 {
     int upb=-1, lob=-1;
     int bgn=0, end=0;
@@ -1909,13 +1909,15 @@ static int mspSD_rangeFATLinkList(struct adFATLinkList_s *list, int *start, int 
 
     if (!list) return -1;
     if (!start) return -2;
-    if (!length) return -3;
+    if (!last) return -3;
     
     cur = list;
 
     while (cur) {
         bgn = cur->ftStart;
         end = bgn + cur->ftLen;
+
+        printf("  range: [%d + %d = %d]\n", bgn, cur->ftLen, end);
 
         if (lob < 0) {
             lob = bgn;
@@ -1934,6 +1936,7 @@ static int mspSD_rangeFATLinkList(struct adFATLinkList_s *list, int *start, int 
         }
         
         cur = cur->n;
+        printf("  range: [lob:%d, upb:%d]\n", lob, upb);
     }
 
     if ((upb < 0) || (lob < 0)) {
@@ -1941,7 +1944,7 @@ static int mspSD_rangeFATLinkList(struct adFATLinkList_s *list, int *start, int 
     } 
 
     *start = lob;
-    *length = upb - lob;
+    *last = upb;
     
     return 0;
 }
@@ -11433,7 +11436,7 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int val=0, i=0, ret=0;
     char *pr=0;
-    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
+    uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -11473,17 +11476,17 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (!pflnt->n) {
             if (!(curDir->dflength % 512)) {
-                secFile = curDir->dflength / 512;
+                fstsec = curDir->dflength / 512;
             } else {
-                secFile = (curDir->dflength / 512) + 1;
+                fstsec = (curDir->dflength / 512) + 1;
             }
-            sprintf(mrs->log, "secFile: %d\n", secFile);
+            sprintf(mrs->log, "fstsec: %d\n", fstsec);
             print_f(&mrs->plog, "fs71", mrs->log);
 
-            if (!(secFile % psec->secPrClst) ) {
+            if (!(fstsec % psec->secPrClst) ) {
                 lstsec = psec->secPrClst;
             } else {
-                lstsec = secFile % psec->secPrClst;
+                lstsec = fstsec % psec->secPrClst;
             }
             sprintf(mrs->log, "lstsec: %d\n", lstsec);
             print_f(&mrs->plog, "fs71", mrs->log);
@@ -11739,7 +11742,7 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int val=0, i=0, ret=0;
     char *pr=0;
-    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
+    uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -11779,17 +11782,17 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (!pflnt->n) {
             if (!(curDir->dflength % 512)) {
-                secFile = curDir->dflength / 512;
+                fstsec = curDir->dflength / 512;
             } else {
-                secFile = (curDir->dflength / 512) + 1;
+                fstsec = (curDir->dflength / 512) + 1;
             }
-            sprintf(mrs->log, "secFile: %d\n", secFile);
+            sprintf(mrs->log, "fstsec: %d\n", fstsec);
             print_f(&mrs->plog, "fs76", mrs->log);
 
-            if (!(secFile % psec->secPrClst) ) {
+            if (!(fstsec % psec->secPrClst) ) {
                 lstsec = psec->secPrClst;
             } else {
-                lstsec = secFile % psec->secPrClst;
+                lstsec = fstsec % psec->secPrClst;
             }
             sprintf(mrs->log, "lstsec: %d\n", lstsec);
             print_f(&mrs->plog, "fs76", mrs->log);
@@ -11960,7 +11963,7 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     int val=0, i=0, ret=0;
     char *pr=0;
-    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
+    uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -12007,29 +12010,41 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
 
         secStr = 0; secLen = 0;
-        mspSD_rangeFATLinkList(pflnt, &secFile, &lstsec);
+        ret = mspSD_rangeFATLinkList(pflnt, &fstsec, &lstsec);
+        if (ret) {
+            sprintf(mrs->log, "find range of FAT table failed ret:%d, secStr: %d, secLen: %d\n", ret, fstsec, lstsec);
+            print_f(&mrs->plog, "fs80", mrs->log);    
+            fstsec = 2;
+            lstsec = psec->secPrfat;
+        }
 
-        sprintf(mrs->log, "FAT table upload to SD, secStr: %d, secLen: %d\n", secFile, lstsec);
+        sprintf(mrs->log, "FAT table upload to SD, fstsec: %d, lstsec: %d (FAT offset)\n", fstsec, lstsec);
         print_f(&mrs->plog, "fs80", mrs->log);
 
-        secFile = (secFile * 4) / 512;
+        fstsec = (fstsec * 4) / 512;
         lstsec = ((lstsec * 4) / 512) + 1;
-
+        
+        sprintf(mrs->log, "FAT table upload to SD, fstsec: %d, lstsec: %d (sector)\n", fstsec, lstsec);
+        print_f(&mrs->plog, "fs80", mrs->log);
+/*
         val = SPI_TRUNK_SZ / 512;
         if ((lstsec % val) < 16) {
             lstsec = lstsec + (16 - (lstsec % val));
         }
-
-        secStr = psec->secWhfat + secFile;
-        secLen = lstsec;
+        
+        sprintf(mrs->log, "FAT table upload to SD, fstsec: %d, lstsec: %d - 3\n", fstsec, lstsec);
+        print_f(&mrs->plog, "fs80", mrs->log);
+*/
+        secStr = psec->secWhfat + fstsec;
+        secLen = lstsec - fstsec;
 
         c->opinfo = secStr;
         p->opinfo = secLen;
-
-        if (secLen < 16) secLen = 16;
-
+        
         sprintf(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
         print_f(&mrs->plog, "fs80", mrs->log);
+
+        if (secLen < 16) secLen = 16;
 
         cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
 
@@ -12054,7 +12069,7 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         modersp->r = 3; /*3 is for SDWT*/
 
-       pftb->c = 0;
+        pftb->c = 0;
     }else {
         pfat->fatStatus &= ~ASPFAT_STATUS_FATWT;
         //curDir->dfstats = ASPFS_STATUS_EN;
@@ -12069,7 +12084,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int val=0, i=0, ret=0, fLen=0, len=0;
     uint8_t *pdef=0;
-    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
+    uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -12469,7 +12484,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int val=0, i=0, ret=0;
     char *pr=0;
-    uint32_t secStr=0, secLen=0, secFile=0, lstsec;
+    uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -13431,8 +13446,12 @@ static int p2(struct procRes_s *rs)
                     }
 #else
                     msync(addr, tlen, MS_SYNC);                    
+                    shmem_dump(addr, datLen);
                     opsz = mtx_data(rs->spifd, addr, addr, tlen, tr);
+                    msync(addr, tlen, MS_SYNC);                    
+                    shmem_dump(addr, datLen);
 #endif
+
                     sprintf(rs->logs, "r (%d)\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 
