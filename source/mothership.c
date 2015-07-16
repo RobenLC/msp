@@ -12130,12 +12130,16 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs81", mrs->log);
 
             msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
-            /* debug */
-            shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
+            
             /* TODO: fill the DEF */
             
             /* find the free space, slot unit is 32 bytes */
             fLen = aspFindFreeDEF(&pdef, pParBuf->dirParseBuff, pParBuf->dirBuffUsed, 32);
+
+            /* debug */
+            if (fLen > 0) {
+                shmem_dump(pParBuf->dirParseBuff + (((pParBuf->dirBuffUsed - fLen) > 512)?(pParBuf->dirBuffUsed - fLen - 512):(pParBuf->dirBuffUsed - fLen)), fLen+512);
+            }
             
             /* calculate the DEF */                 
             len = aspCompirseDEF(pdef, curDir);
@@ -12150,6 +12154,10 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             }
             
             if ((fLen == -1) || ((fLen > 0) && (len > fLen))) {
+
+                sprintf(mrs->log, "  free:%d, need:%d\n", fLen, len);
+                print_f(&mrs->plog, "fs81", mrs->log);
+                
                 f = fopen(clstPath, "w+");
                 if (f) {
                     msync(pdef, len, MS_SYNC);
@@ -12217,11 +12225,13 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                         sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
                         print_f(&mrs->plog, "fs81", mrs->log);
                         if (!pflnt->n) break;
+                        pnxf = pflnt;
                         pflnt = pflnt->n;
+                        aspFree(pnxf);
                     }       
-                    pflnt->n = padd;
                     
-                    pftb->h = pflsh;
+                    pflnt->n = padd; 
+                    pftb->h = pflnt;
                     pftb->c = pftb->h;
                 }else {
                     sprintf(mrs->log, "ERROR!!! pftb->h != 0, 0x%x\n", pftb->h);
@@ -13440,6 +13450,7 @@ static int p2(struct procRes_s *rs)
                 if (datLen < minLen) {
                     datLen = minLen;
                 }
+                
                 laddr = addr;
                 addr = addr + (secStr - psec->secWhfat) * 512;
 
@@ -13465,8 +13476,6 @@ static int p2(struct procRes_s *rs)
                     msync(addr, tlen, MS_SYNC);                    
                     shmem_dump(addr, datLen);
                     opsz = mtx_data(rs->spifd, addr, addr, tlen, tr);
-                    msync(addr, tlen, MS_SYNC);                    
-                    shmem_dump(addr, datLen);
 #endif
 
                     sprintf(rs->logs, "r (%d)\n", opsz);
