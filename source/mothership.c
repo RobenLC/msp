@@ -13229,7 +13229,7 @@ static int p2(struct procRes_s *rs)
                     len = datLen; 
                 }
 
-                pabuf->dirBuffUsed += len;
+                pabuf->dirBuffUsed += datLen;
                 msync(pabuf->dirParseBuff, len, MS_SYNC);
                 rs_ipc_put(rs, "S", 1);
 
