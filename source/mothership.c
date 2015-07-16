@@ -283,7 +283,8 @@ typedef enum {
     ASPFAT_STATUS_FATWT = 0x100,
     ASPFAT_STATUS_DFEWT = 0x200,
     ASPFAT_STATUS_BOOT = 0x400,
-    ASPFAT_STATUS_DFERD = 0x800,
+    ASPFAT_STATUS_DFECHK = 0x800,
+    ASPFAT_STATUS_DFERD = 0x1000,
 } aspFatStatus_e;
 
 
@@ -1180,7 +1181,7 @@ static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
     
     p = pc;
     if (fs->dflen) {
-        len = aspCompirseLFN(p, fs->dfLFN, chksum, fs->dflen);
+        len = aspCompirseLFN(p, fs->dfLFN, chksum, fs->dflen+1);
         if (len > 0) {
             printf("  LFN get, len: %d\n", len);
             shmem_dump(p, len);
@@ -2850,7 +2851,7 @@ static int mspFS_showFolder(struct directnFile_s *root)
 
     brt = root->ch;
     while (brt) {
-        sprintf(mlog, "|-[%c] %s\n", brt->dftype == ASPFS_TYPE_DIR?'D':'F', brt->dfLFN==NULL?brt->dfSFN:brt->dfLFN);
+        sprintf(mlog, "|-[%c] %s\n", brt->dftype == ASPFS_TYPE_DIR?'D':'F', brt->dflen==0?brt->dfSFN:brt->dfLFN);
         print_f(mlogPool, "FS", mlog);
         brt = brt->br;
     }
@@ -5538,10 +5539,12 @@ static int stfat_29(struct psdata_s *data)
                     ch = 77;
                 } else if (pFat->fatStatus & ASPFAT_STATUS_FATWT) {
                     ch = 82;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_DFECHK) {
+                    ch = 45;
                 } else if (pFat->fatStatus & ASPFAT_STATUS_DFERD) {
                     ch = 45;
                 } else if (pFat->fatStatus & ASPFAT_STATUS_DFEWT) {
-                    ch = 45; /*TODO*/
+                    ch = 89; /*TODO*/
                 } else if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
                     (p->opinfo == pFat->fatBootsec->secPrfat)) {
                     ch = 54; 
@@ -5667,7 +5670,7 @@ static int stfat_30(struct psdata_s *data)
                 ch = 80; /* TODO: APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
-            } else if ((pFat->fatStatus & ASPFAT_STATUS_DFERD)) {
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_DFECHK)) {
                 sprintf(rs->logs, "APP read DFE from SD status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
@@ -8776,7 +8779,11 @@ static int hd86(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd87(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd88(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd89(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
-
+static int hd90(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd91(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd92(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd93(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd94(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -11729,7 +11736,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         pfat->fatStatus |= ASPFAT_STATUS_SDWT;
         pfat->fatStatus |= ASPFAT_STATUS_FATWT;
-        pfat->fatStatus |= ASPFAT_STATUS_DFERD;
+        pfat->fatStatus |= ASPFAT_STATUS_DFECHK;
         pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
         modersp->r = 1;
     } else {
@@ -12241,8 +12248,9 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 /* enable FAT update flag */
                 pfat->fatStatus |= ASPFAT_STATUS_FATWT;   
             }
-            
-            pfat->fatStatus &= ~ASPFAT_STATUS_DFERD;   
+
+            pParBuf->dirBuffUsed = 0;
+            pfat->fatStatus &= ~ASPFAT_STATUS_DFECHK;   
             modersp->r = 1;
         } else {
             sprintf(mrs->log, "Size of used parse buffer should not be zero, folder[%s]\n", pa->dfSFN);
@@ -12257,6 +12265,8 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         pflnt = pftb->h;
         curDir->dfclstnum = pflnt->ftStart;
+        sprintf(mrs->log, "set upload file [%s] start cluster: %d, size:%d\n", curDir->dfSFN, curDir->dfclstnum, curDir->dflength);
+        print_f(&mrs->plog, "fs81", mrs->log);
 
         while (pflnt) {
             pflsh = pflnt;
@@ -12509,8 +12519,12 @@ static int fs87(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    int val=0, i=0, ret=0;
-    char *pr=0;
+    FILE *f=0;
+    char clstPath[128] = "/mnt/mmc2/clstnew.bin";
+    
+    uint8_t *pdef=0;
+    int val=0, i=0, ret=0, fLen=0, len=0;
+    char *pr=0, *addr=0;
     uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
@@ -12521,7 +12535,6 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
     struct sdFATable_s   *pftb=0;
-
 
     c = &mrs->mchine.cur;
     p = &mrs->mchine.tmp;
@@ -12534,26 +12547,287 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     sprintf(mrs->log, "DFE upload to SD\n");
     print_f(&mrs->plog, "fs88", mrs->log);
-    
-    pfat->fatStatus &= ~ASPFAT_STATUS_DFEWT;    
-/*
-    pflnt = pftb->h;
-    while (pflnt) {
-        pflsh = pflnt;
-        pflnt = pflnt->n;
-        aspFree(pflsh);
+
+    curDir = pfat->fatFileUpld;
+
+    if (pParBuf->dirBuffUsed) {
+        pfat->fatStatus &= ~ASPFAT_STATUS_DFERD;
+        if (!pftb->c) {
+            sprintf(mrs->log, "  pftb->c should not be NULL \n");
+            print_f(&mrs->plog, "fs88", mrs->log);
+
+            modersp->r = 0xed;
+            return 1;
+        }
+        pflnt = pftb->c;
+        
+        msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
+        shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
+        /* find the free space, slot unit is 32 bytes */
+        fLen = aspFindFreeDEF(&pdef, pParBuf->dirParseBuff, pParBuf->dirBuffUsed, 32);
+
+        /* debug */
+        if (fLen > 0) {
+            shmem_dump(pParBuf->dirParseBuff + (((pParBuf->dirBuffUsed - fLen) > 512)?(pParBuf->dirBuffUsed - fLen - 512):(pParBuf->dirBuffUsed - fLen)), fLen+512);
+        } else {
+            sprintf(mrs->log, "  ERROR!!! cluster has no space! ret:%d \n", fLen);
+            print_f(&mrs->plog, "fs88", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        f = fopen(clstPath, "r");
+
+        ret = fseek(f, 0, SEEK_END);
+        if (ret) {
+            sprintf(mrs->log, " file seek failed!! ret:%d \n", ret);
+            print_f(&mrs->plog, "fs88", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        } 
+                
+        len = ftell(f);
+        sprintf(mrs->log, " file [%s] size: %d \n", clstPath, len);
+        print_f(&mrs->plog, "fs88", mrs->log);
+
+        ret = fseek(f, 0, SEEK_SET);
+        if (ret) {
+            sprintf(mrs->log, " file seek failed!! ret:%d \n", ret);
+            print_f(&mrs->plog, "fs88", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+
+        pr = malloc(len);
+        if (!pr) {
+            sprintf(mrs->log, " malloc failed ret: %d \n", pr);
+            print_f(&mrs->plog, "fs88", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        ret = fread(pr, 1, len, f);
+        fclose(f);
+
+        sprintf(mrs->log, "FAT file read size: %d/%d free:%d\n", ret, len, fLen);
+        print_f(&mrs->plog, "fs88", mrs->log);
+
+        //addr = pParBuf->dirParseBuff + (pParBuf->dirBuffUsed - fLen);
+
+        if (len > fLen) {
+            shmem_dump(pdef, fLen);
+            memcpy(pdef, pr,  fLen);
+            shmem_dump(pdef, fLen);
+
+            pr += fLen;
+            len -= fLen;
+        } else {
+            shmem_dump(pdef, len);
+            memcpy(pdef, pr,  len);
+            shmem_dump(pdef, len);
+            len = 0;
+        }
+
+        if (len) {
+            f = fopen(clstPath, "w+");
+            if (f) {
+                msync(pr, len, MS_SYNC);
+                shmem_dump(pr, len);
+                fwrite(pr, 1, len, f);
+                fflush(f);
+                fclose(f);
+                sprintf(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
+                print_f(&mrs->plog, "fs81", mrs->log);
+            } else {
+                sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
+                print_f(&mrs->plog, "fs81", mrs->log);
+            }
+        } else {
+            f = fopen(clstPath, "w+");
+            if (f) {
+                fclose(f);
+                sprintf(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
+                print_f(&mrs->plog, "fs81", mrs->log);
+            } else {
+                sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
+                print_f(&mrs->plog, "fs81", mrs->log);
+            }
+        }
+
+        secStr = (pflnt->ftStart - 2) * (uint32_t)psec->secPrClst + (uint32_t)psec->secWhroot;
+        secLen = pflnt->ftLen * (uint32_t)psec->secPrClst;
+        
+        c->opinfo = secStr;
+        p->opinfo = secLen;
+        
+        sprintf(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
+        print_f(&mrs->plog, "fs88", mrs->log);
+
+        if (secLen < 16) secLen = 16;
+
+        cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
+
+        val = cfgValueOffset(secStr, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+        val = cfgValueOffset(secLen, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+        cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+        
+        modersp->r = 3; /*2 is for FAT_WT*/
+
+        pftb->c = pflnt->n;
+        pftb->h = 0;
+        aspFree(pflnt);
+        pParBuf->dirBuffUsed = 0;
     }
-    pftb->h = 0;
-*/
-    pfat->fatFileUpld = 0;
-    modersp->r = 1;
+    else if (pftb->c) {
+        pflnt = pftb->c;
+
+        secStr = (pflnt->ftStart - 2) * (uint32_t)psec->secPrClst + (uint32_t)psec->secWhroot;
+        secLen = pflnt->ftLen * (uint32_t)psec->secPrClst;
+
+        if ((!pftb->h) && (!pflnt->n)) {
+            pParBuf->dirBuffUsed = secLen * 512;
+            memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffUsed);    
+            modersp->r = 1;
+        } else {
+        
+            c->opinfo = secStr;
+            p->opinfo = secLen;
+
+            sprintf(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
+            print_f(&mrs->plog, "fs88", mrs->log);
+
+            if (secLen < 16) secLen = 16;
+
+            cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
+
+            val = cfgValueOffset(secStr, 0);
+            cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+            val = cfgValueOffset(secStr, 8);
+            cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+            val = cfgValueOffset(secStr, 16);
+            cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+            val = cfgValueOffset(secStr, 24);
+            cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+            val = cfgValueOffset(secLen, 0);
+            cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+            val = cfgValueOffset(secLen, 8);
+            cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+            val = cfgValueOffset(secLen, 16);
+            cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+            val = cfgValueOffset(secLen, 24);
+            cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+            cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+        
+            modersp->r = 2; /*2 is for FAT_RD*/
+
+            pfat->fatStatus |= ASPFAT_STATUS_DFERD;
+            pParBuf->dirBuffUsed = 0;
+            memset(pParBuf->dirParseBuff, 0, secLen * 512);
+        }
+    }else {
+        if (pftb->h) {
+            sprintf(mrs->log, " BEGIN... \n");
+            print_f(&mrs->plog, "fs88", mrs->log);
+
+            pftb->c = pftb->h;
+        } else {
+            sprintf(mrs->log, " END... \n");
+            print_f(&mrs->plog, "fs88", mrs->log);
+
+            pfat->fatStatus &= ~ASPFAT_STATUS_DFEWT;    
+            pfat->fatFileUpld = 0;
+            curDir->dfstats = ASPFS_STATUS_EN;
+            //curDir->dfstats = ASPFS_STATUS_EN;
+            //pfat->fatFileUpld = 0;
+        }
+        modersp->r = 1;
+    }
+
     return 1;
 }
-static int fs89(struct mainRes_s *mrs, struct modersp_s *modersp){ return 1;}
+static int fs89(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int bitset, ret;
+    sprintf(mrs->log, "trigger spi0\n");
+    print_f(&mrs->plog, "fs89", mrs->log);
+
+#if SPI_KTHREAD_USE
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs89", mrs->log);
+#endif
+
+    mrs_ipc_put(mrs, "w", 1, 1);
+
+    modersp->m = modersp->m + 1;
+    return 2;
+}
+
+static int fs90(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int len=0, bitset=0, ret=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    //sprintf(mrs->log, "wait spi0 tx end\n");
+    //print_f(&mrs->plog, "fs90", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if (len > 0) {
+
+        sprintf(mrs->log, "ch: %c - end\n", ch);
+        print_f(&mrs->plog, "fs90", mrs->log);
+
+        if (ch == 'W') {
+
+#if SPI_KTHREAD_USE
+            bitset = 0;
+            ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+            sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+            print_f(&mrs->plog, "fs90", mrs->log);
+#endif
+
+            bitset = 0;
+            msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+            sprintf(mrs->log, "set RDY pin %d\n",bitset);
+            print_f(&mrs->plog, "fs90", mrs->log);
+            usleep(500000);
+
+            modersp->m = 48;            
+            return 2;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
+static int fs91(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs92(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 90
+#define PS_NUM 95
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -12575,8 +12849,9 @@ static int p0(struct mainRes_s *mrs)
                                  {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69},
                                  {65, fs70},{66, fs71},{67, fs72},{68, fs73},{69, fs74},
                                  {65, fs75},{66, fs76},{67, fs77},{68, fs78},{69, fs79},
-                                 {65, fs80},{66, fs81},{67, fs82},{68, fs83},{69, fs84},                                 
-                                 {65, fs85},{66, fs86},{67, fs87},{68, fs88},{69, fs89}};
+                                 {65, fs80},{66, fs81},{67, fs82},{68, fs83},{69, fs84},
+                                 {65, fs85},{66, fs86},{67, fs87},{68, fs88},{69, fs89},
+                                 {65, fs90},{66, fs91},{67, fs92},{68, fs93},{69, fs94}};                                 
                                  
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -12595,7 +12870,8 @@ static int p0(struct mainRes_s *mrs)
                                  {60, hd70},{61, hd71},{62, hd72},{63, hd73},{64, hd74},
                                  {65, hd75},{66, hd76},{67, hd77},{68, hd78},{69, hd79},
                                  {60, hd80},{61, hd81},{62, hd82},{63, hd83},{64, hd84},
-                                 {65, hd85},{66, hd86},{67, hd87},{68, hd88},{69, hd89}};
+                                 {65, hd85},{66, hd86},{67, hd87},{68, hd88},{69, hd89},
+                                 {60, hd90},{61, hd91},{62, hd92},{63, hd93},{64, hd94}};
 
     p0_init(mrs);
 
@@ -12909,7 +13185,7 @@ static int p2(struct procRes_s *rs)
     struct sdbootsec_s   *psec=0;
     
     char ch, str[128], rx8[4], tx8[4];
-    char *addr, *laddr;
+    char *addr, *laddr, *rx_buff;
     sprintf(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
 
@@ -12926,6 +13202,7 @@ static int p2(struct procRes_s *rs)
     // 'd': data mode, store the incomming infom into share memory
     // send 'd' to notice the p0 that we have incomming data chunk
 
+    rx_buff = malloc(SPI_TRUNK_SZ);
     ch = '2';
 
     while (1) {
@@ -12971,6 +13248,9 @@ static int p2(struct procRes_s *rs)
                     break;
                 case 'f':
                     cmode = 11;
+                    break;
+                case 'w':
+                    cmode = 12;
                     break;
                 default:
                     break;
@@ -13190,7 +13470,7 @@ static int p2(struct procRes_s *rs)
                 minLen = 16 * 512;
 
                 pabuf = &rs->psFat->fatDirPool->parBuf;
-                sprintf(rs->logs, "cmode: %d, ready for rx %d/%d\n", cmode, datLen, minLen);
+                sprintf(rs->logs, "cmode: %d, ready for rx %d/%d, secStr:%d, secLen:%d\n", cmode, datLen, minLen, secStr, secLen);
                 print_f(rs->plogs, "P2", rs->logs);
 /*
                 if (datLen < minLen) {
@@ -13436,9 +13716,11 @@ static int p2(struct procRes_s *rs)
 
                 ret = fread(addr, 1, maxsz, fp);
 
+                fclose(fp);
+
                 sprintf(rs->logs, "FAT file read size: %d/%d \n", ret, maxsz);
                 print_f(rs->plogs, "P2", rs->logs);
-
+                
                 secStr = c->opinfo;
                 secLen = p->opinfo;
                 datLen = secLen * 512;
@@ -13446,11 +13728,11 @@ static int p2(struct procRes_s *rs)
 
                 sprintf(rs->logs, "ready for rx %d/%d, %d/%d\n", secStr, psec->secWhfat, datLen, minLen);
                 print_f(rs->plogs, "P2", rs->logs);
-
+/*
                 if (datLen < minLen) {
                     datLen = minLen;
                 }
-                
+*/
                 laddr = addr;
                 addr = addr + (secStr - psec->secWhfat) * 512;
 
@@ -13508,6 +13790,72 @@ static int p2(struct procRes_s *rs)
 
                 aspFree(laddr);
                 rs_ipc_put(rs, "F", 1);
+
+                sprintf(rs->logs, "spi0 recv end - total len: %d\n", len);
+                print_f(rs->plogs, "P2", rs->logs);
+            }
+            else if (cmode == 12) {
+                secStr = c->opinfo;
+                secLen = p->opinfo;
+                datLen = secLen * 512;
+                minLen = 16 * 512;
+
+                pabuf = &rs->psFat->fatDirPool->parBuf;
+                sprintf(rs->logs, "cmode: %d, ready for rx %d/%d\n", cmode, datLen, minLen);
+                print_f(rs->plogs, "P2", rs->logs);
+/*
+                if (datLen < minLen) {
+                    datLen = minLen;
+                }
+*/
+
+                addr = pabuf->dirParseBuff;
+                msync(addr, psec->secPrClst*512, MS_SYNC);
+                shmem_dump(addr, psec->secPrClst*512);
+                
+                len = 0;
+                pi = 0;  
+                while (1) {
+#if SPI_KTHREAD_USE
+                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                    while (opsz == 0) {
+                        usleep(1000);
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);  
+                    }
+#else
+                    msync(addr, SPI_TRUNK_SZ, MS_SYNC);
+                    opsz = mtx_data(rs->spifd, rx_buff, addr, SPI_TRUNK_SZ, tr);
+#endif
+                    sprintf(rs->logs, "r %d\n", opsz);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    if (opsz == 0) {
+                        sprintf(rs->logs, "opsz:%d\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);    
+                        continue;
+                    }
+
+                    if (opsz < 0) break;
+                    
+                    addr += opsz;
+                    len += opsz;
+                    pi += 1;
+                }
+
+                opsz = 0 - opsz;
+                if (opsz == 1) opsz = 0;
+
+                len += opsz;
+
+                if (len != datLen) {
+                    sprintf(rs->logs, "total len: %d, actual len: %d\n", len, datLen);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    len = datLen; 
+                }
+
+                rs_ipc_put(rs, "W", 1);
 
                 sprintf(rs->logs, "spi0 recv end - total len: %d\n", len);
                 print_f(rs->plogs, "P2", rs->logs);
@@ -14795,7 +15143,7 @@ static int p6(struct procRes_s *rs)
                 mspFS_showFolder(dnld->pa);
                 secStr = (dnld->dfclstnum - 2)*rs->psFat->fatBootsec->secPrClst + rs->psFat->fatBootsec->secWhroot;
                 secLen = dnld->dflength / 512 + ((dnld->dflength%512)==0?0:1);
-                sprintf(rs->logs, "start sector:%d sector len:%d\n", secStr, secLen);
+                sprintf(rs->logs, "start sector:%d sector len:%d, clstStr:%d, size:%d\n", secStr, secLen, dnld->dfclstnum, dnld->dflength);
                 print_f(rs->plogs, "P6", rs->logs);
 
                 if (pfat->fatFileDnld) {
@@ -14883,8 +15231,8 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                //print_f(rs->plogs, "P6", rs->logs);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
 
                 brt = brt->br;
                 cnt++;
