@@ -1480,7 +1480,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 
         idx = (fs->dfstats >> 8) & 0xf;
         if (idx) {
-            sum = aspFSchecksum((uint8_t*)pstN);
+            sum = aspFSchecksum((uint8_t*)raw);
             //printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
             if (sum != (fs->dfstats >> 16) & 0xff) {
                 ret = -11;
@@ -1541,6 +1541,23 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 
         fs->dfstats = ASPFS_STATUS_EN;
         ret = 0;
+
+        if (fs->dfattrib > ASPFS_ATTR_ARCHIVE) {
+            ret = -12;
+        }
+        if (fs->dfattrib & ASPFS_ATTR_DIRECTORY) {
+            if (fs->dflength > 0) {
+                ret = -13;
+            }
+        } 
+        if (!fs->dfclstnum) {
+            ret = -14;
+        }
+
+        if (ret) {
+            memset(fs, 0x00, sizeof(struct directnFile_s));
+        }
+        
         goto fsparseEnd;
     } else if ((ld & 0xf0) == 0x40) {
         nd = raw[32];
