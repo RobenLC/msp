@@ -1484,9 +1484,9 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             //printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
             if (sum != (fs->dfstats >> 16) & 0xff) {
                 ret = -11;
-                //memset(fs, 0x00, sizeof(struct directnFile_s));
+                memset(fs, 0x00, sizeof(struct directnFile_s));
                 printf("WARNING!!! checksum error: 0x%x / 0x%x [%s]\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
-                //goto fsparseEnd;
+                goto fsparseEnd;
             } else {
                 printf("CONGING!!! checksum match: 0x%x / 0x%x [%s]\n\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
             }
