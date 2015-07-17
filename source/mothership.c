@@ -1165,7 +1165,7 @@ static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
     if (!pc) return -1;
     if (!fs) return -2;
 
-    memset(tmSFN, 0, 16);
+    memset(tmSFN, 0x20, 16);
     ret = aspFindDot(fs->dfSFN, strlen(fs->dfSFN));
     if (ret < 0) {
         printf("  SFN do not have dot, ret: %d\n", ret);
@@ -1173,7 +1173,7 @@ static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
     } else {
         printf("  SFN have dot, at [%d]\n", ret);
         aspNameCpyfromName(fs->dfSFN, tmSFN, 0, ret, 1);
-        aspNameCpyfromName(fs->dfSFN+ret+1, tmSFN, ret, 3, 1);
+        aspNameCpyfromName(fs->dfSFN+ret+1, tmSFN, 8, 3, 1);
     }
 
     chksum = aspFSchecksum(tmSFN);
@@ -2481,7 +2481,7 @@ static int mspFS_listDetail(struct directnFile_s *root, int depth)
         debugPrintDir(fs);
 
         if (fs->dftype == ASPFS_TYPE_DIR) {
-            mspFS_list(fs, depth + 4);
+            mspFS_listDetail(fs, depth + 4);
         }
         fs = fs->br;
     }
@@ -10425,9 +10425,12 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
                 modersp->r = 3;
                 return 1;
             }
+            sprintf(mrs->log, "show root FAT link str:\n");
+            print_f(&mrs->plog, "fs51", mrs->log);
+
             pflnt = pflsh;
             while (pflnt) {
-                sprintf(mrs->log, "show root FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+                sprintf(mrs->log, "    str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
                 print_f(&mrs->plog, "fs51", mrs->log);
                 pflnt = pflnt->n;
             }
@@ -10598,9 +10601,12 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
                 return 1;
             }
             /* debug */
+            sprintf(mrs->log, "show FAT link for [%s]:\n", curDir->dfSFN);
+            print_f(&mrs->plog, "fs52", mrs->log);
+
             pflnt = pflsh;
             while (pflnt) {
-                sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+                sprintf(mrs->log, "    str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
                 print_f(&mrs->plog, "fs52", mrs->log);
                 pflnt = pflnt->n;
             }
@@ -10934,8 +10940,8 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
     curDir = pfat->fatRootdir;
 
     if (!(pfat->fatStatus & ASPFAT_STATUS_BOOT)) {
-        //mspFS_listDetail(curDir, 4);
-        mspFS_list(curDir, 4);
+        mspFS_listDetail(curDir, 4);
+        //mspFS_list(curDir, 4);
         pfat->fatStatus |= ASPFAT_STATUS_BOOT;
     }
 
@@ -11421,9 +11427,12 @@ static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 1;
         }
         /* debug */
+        sprintf(mrs->log, "show FAT link for [%s]:\n", curDir->dfSFN);
+        print_f(&mrs->plog, "fs70", mrs->log);
+
         pflnt = pflsh;
         while (pflnt) {
-            sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+            sprintf(mrs->log, "    str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
             print_f(&mrs->plog, "fs70", mrs->log);
             pflnt = pflnt->n;
         }
@@ -11723,7 +11732,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt = pflsh;
         while (pflnt) {
             val += pflnt->ftLen;
-            sprintf(mrs->log, "str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
+            sprintf(mrs->log, "    str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
             print_f(&mrs->plog, "fs75", mrs->log);
             pflnt = pflnt->n;
         }
@@ -12106,7 +12115,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
     struct adFATLinkList_s *padd=0;
     struct sdFATable_s   *pftb=0;
-    struct adFATLinkList_s *pfre=0, *pnxf=0;    
+    struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst;    
 
     c = &mrs->mchine.cur;
     p = &mrs->mchine.tmp;
@@ -12159,24 +12168,47 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 sprintf(mrs->log, "ERROR!!! compirse DEF failed, ret len:%d(free:%d)\n", len, fLen);
                 print_f(&mrs->plog, "fs81", mrs->log);
             }
+
+            f = fopen(clstPath, "w+");
+            if (f) {
+                msync(pdef, len, MS_SYNC);
+                fwrite(pdef, 1, len, f);
+                fflush(f);
+                fclose(f);
+                sprintf(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
+                print_f(&mrs->plog, "fs81", mrs->log);
+            } else {
+                sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
+                print_f(&mrs->plog, "fs81", mrs->log);
+            }
             
+            pflsh = 0;
+            ret = mspSD_parseFAT2LinkList(&pflsh, pa->dfclstnum, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
+            if (ret) {
+                sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
+                print_f(&mrs->plog, "fs81", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            /* debug */
+            sprintf(mrs->log, "show FAT link for [%s]:\n", pa->dfSFN);
+            print_f(&mrs->plog, "fs81", mrs->log);
+
+            pclst = pflsh;
+            while (1) {
+                sprintf(mrs->log, "    str:%d len:%d for \n", pclst->ftStart, pclst->ftLen, pa->dfSFN);
+                print_f(&mrs->plog, "fs81", mrs->log);
+                if (!pclst->n) break;
+                pnxf = pclst;
+                pclst = pclst->n;
+                aspFree(pnxf);
+            }       
+                    
             if ((fLen == -1) || ((fLen > 0) && (len > fLen))) {
 
                 sprintf(mrs->log, "  free:%d, need:%d\n", fLen, len);
                 print_f(&mrs->plog, "fs81", mrs->log);
-                
-                f = fopen(clstPath, "w+");
-                if (f) {
-                    msync(pdef, len, MS_SYNC);
-                    fwrite(pdef, 1, len, f);
-                    fflush(f);
-                    fclose(f);
-                    sprintf(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
-                    print_f(&mrs->plog, "fs81", mrs->log);
-                } else {
-                    sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
-                    print_f(&mrs->plog, "fs81", mrs->log);
-                }
                 
                 /* no space */
                 /* allocate FAT to folder */
@@ -12203,43 +12235,21 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                     }
 
                     /* debug */
-                    sprintf(mrs->log, "show allocated FAT list: \n");
+                    sprintf(mrs->log, "show allocated free FAT list: \n");
                     print_f(&mrs->plog, "fs81", mrs->log);
 
                     val = 0;
                     pflnt = padd;
                     while (pflnt) {
                         val += pflnt->ftLen;
-                        sprintf(mrs->log, "free space str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
+                        sprintf(mrs->log, "    str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
                         print_f(&mrs->plog, "fs81", mrs->log);
                         pflnt = pflnt->n;
                     }
                     sprintf(mrs->log, "total allocated cluster is %d!! \n", val);
                     print_f(&mrs->plog, "fs81", mrs->log);
-
-                    pflsh = 0;
-                    ret = mspSD_parseFAT2LinkList(&pflsh, pa->dfclstnum, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
-                    if (ret) {
-                        sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
-                        print_f(&mrs->plog, "fs81", mrs->log);
-                        modersp->r = 0xed;
-                        return 1;
-                    }
-
-                    /* debug */
-                    pflnt = pflsh;
-                    while (1) {
-                        sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
-                        print_f(&mrs->plog, "fs81", mrs->log);
-                        if (!pflnt->n) break;
-                        pnxf = pflnt;
-                        pflnt = pflnt->n;
-                        aspFree(pnxf);
-                    }       
                     
-                    pflnt->n = padd; 
-                    pftb->h = pflnt;
-                    pftb->c = pftb->h;
+                    pclst->n = padd; 
                 }else {
                     sprintf(mrs->log, "ERROR!!! pftb->h != 0, 0x%x\n", pftb->h);
                     print_f(&mrs->plog, "fs81", mrs->log);
@@ -12249,6 +12259,10 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 pfat->fatStatus |= ASPFAT_STATUS_FATWT;   
             }
 
+            /* for cluster DEF update */
+            pftb->h = pclst;
+            pftb->c = pftb->h;
+                    
             pParBuf->dirBuffUsed = 0;
             pfat->fatStatus &= ~ASPFAT_STATUS_DFECHK;   
             modersp->r = 1;
@@ -12291,9 +12305,12 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 return 1;
             }
             /* debug */
+            sprintf(mrs->log, "show FAT link for [%s]:\n", pa->dfSFN);
+            print_f(&mrs->plog, "fs81", mrs->log);
+
             pflnt = pflsh;
             while (pflnt) {
-                sprintf(mrs->log, "show FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+                sprintf(mrs->log, "    str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
                 print_f(&mrs->plog, "fs81", mrs->log);
                 pflnt = pflnt->n;
             }
@@ -12358,9 +12375,12 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 2;
 
         /* goto the last cluster */
+        sprintf(mrs->log, "free FAT link for [%s]:\n", curDir->dfSFN);
+        print_f(&mrs->plog, "fs81", mrs->log);
+
         pflnt = pftb->h;
         while (pflnt) {
-            sprintf(mrs->log, "free FAT list str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+            sprintf(mrs->log, "    str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
             print_f(&mrs->plog, "fs81", mrs->log);
             pflsh = pflnt;
             pflnt = pflnt->n;
