@@ -677,10 +677,12 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
 static int aspFS_insertFATChild(struct directnFile_s *parent, struct directnFile_s *r);
 static uint8_t aspFSchecksum(uint8_t *pch);
 static char aspLnameFilter(char ch);
-static char aspSnameFilter(char ch);
+static char aspSnameFilterIn(char ch);
+static char aspSnameFilterOut(char ch);
 static uint32_t aspFSdateCps(uint32_t val);
 static uint32_t aspFStimeCps(uint32_t val);
 static int aspNameCpyfromRaw(char *raw, char *dst, int offset, int len, int jump);
+static int aspNameCpyfromName(char *raw, char *dst, int offset, int len, int jump);
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
@@ -973,7 +975,7 @@ static int aspNameCpyfromName(char *name, char *dst, int offset, int len, int ju
         if (jump == 2) { /* Long file name */
             ch = aspLnameFilter(name[i]);
         } else { /* short file name */
-            ch = aspSnameFilter(name[i]);
+            ch = aspSnameFilterIn(name[i]);
         }
 
         if (ch == 0xff) return cnt;
@@ -1266,7 +1268,29 @@ static char aspLnameFilter(char ch)
     return ch;
 }
 
-static char aspSnameFilter(char ch)
+static char aspSnameFilterOut(char ch)
+{
+    char def = '_', *p=0;
+    char notAllow[16] = {0x22, 0x2a, 0x2b, 0x2c, 0x2f, 0x3a, 0x3b, 0x3c, 
+                                     0x3d, 0x3e, 0x3f, 0x5b, 0x5c, 0x5d, 0x7c, 0x7f};
+
+    if (ch == 0x0)  return ch;
+    if (ch < 0x20)  return def;
+    if (ch > 0x7f)  return def;
+    if ((ch > 0x40) && ch < (0x5b)) {
+        ch += 0x20;
+    }
+
+    p = notAllow + 15;
+    while (p >= notAllow) {
+        if (*p == ch) return def;
+        p --;
+    }
+
+    return ch;
+}
+
+static char aspSnameFilterIn(char ch)
 {
     char def = '_', *p=0;
     char notAllow[16] = {0x22, 0x2a, 0x2b, 0x2c, 0x2f, 0x3a, 0x3b, 0x3c, 
@@ -1301,7 +1325,7 @@ static int aspNameCpyfromRaw(char *raw, char *dst, int offset, int len, int jump
         if (jump == 2) { /* Long file name */
             ch = aspLnameFilter(raw[idx]);
         } else { /* short file name */
-            ch = aspSnameFilter(raw[idx]);
+            ch = aspSnameFilterOut(raw[idx]);
         }
 
         if (ch == 0xff) return cnt;
@@ -2481,7 +2505,7 @@ static int mspFS_listDetail(struct directnFile_s *root, int depth)
         debugPrintDir(fs);
 
         if (fs->dftype == ASPFS_TYPE_DIR) {
-            mspFS_listDetail(fs, depth + 4);
+            mspFS_list(fs, depth + 4);
         }
         fs = fs->br;
     }
