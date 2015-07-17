@@ -15268,7 +15268,8 @@ static int p6(struct procRes_s *rs)
             brt = fscur->ch;
 
             while (brt) {
-                while ((brt->dfstats != ASPFS_STATUS_EN) || (strcmp(brt->dfSFN, ".") == 0)) {
+                while ((brt->dfstats != ASPFS_STATUS_EN) || (strcmp(brt->dfSFN, ".") == 0) 
+                       || (brt->dfattrib & ASPFS_ATTR_HIDDEN) || (brt->dfattrib & ASPFS_ATTR_SYSTEM)) {
                     sprintf(rs->logs, "file status[0x%.8x] name[%s] type[0x%.8x] \n", brt->dfstats, brt->dfSFN, brt->dftype);
                     print_f(rs->plogs, "P6", rs->logs);
                     brt = brt->br;           
