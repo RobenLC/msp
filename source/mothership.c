@@ -2561,7 +2561,8 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
     int ret = 0;
     char split = '/';
     char *ch;
-    char rmp[16][256];
+    char rmp[32][128];
+    //char **rmp;
     int a = 0, b = 0, t = 0;
     struct directnFile_s *brt;
 
@@ -2569,7 +2570,7 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
     sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfSFN, ret);
     print_f(mlogPool, "FSRH2", mlog);
 
-    memset(rmp, 0, 16*256);
+    memset(rmp, 0, 32*128);
     
     ch = path;
     while (ret > 0) {
@@ -2623,9 +2624,20 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
                 //sprintf(mlog, "skip file in path [%s][%s][%s] \n", brt->dfLFN, brt->dfSFN, &rmp[b][0]);
                 //print_f(mlogPool, "FSRH2", mlog);
             } else {
-                if ((strcmp(brt->dfLFN, &rmp[b][0]) == 0) || 
-                    (strcmp(brt->dfSFN, &rmp[b][0]) == 0)) {
-                    b++;
+                if (brt->dflen) {
+                    if (brt->dflen < 128) {
+                        if (strcmp(brt->dfLFN, &rmp[b][0]) == 0) {
+                            b++;
+                        }
+                    } else {
+                        if (strcmp(brt->dfSFN, &rmp[b][0]) == 0) {
+                            b++;
+                        }
+                    }
+                } else {
+                    if (strcmp(brt->dfSFN, &rmp[b][0]) == 0) {
+                        b++;
+                    }
                 }
             }
         }
@@ -2662,6 +2674,7 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
 */
     }
 
+    aspFree(rmp);
     return ret;
 }
 
@@ -2671,7 +2684,8 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
     int ret = 0;
     char split = '/';
     char *ch;
-    char rmp[16][256];
+    char rmp[32][128];
+    //char **rmp;
     int a = 0, b = 0;
     struct directnFile_s *brt;
 
@@ -2679,7 +2693,7 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
     sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfSFN, ret);
     print_f(mlogPool, "FSRH", mlog);
 
-    memset(rmp, 0, 16*256);
+    memset(rmp, 0, 32*128);
     
     ch = path;
     while (ret > 0) {
@@ -2772,7 +2786,8 @@ static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *
     int ret = 0;
     char split = '/';
     char *ch;
-    char rmp[16][256];
+    char rmp[32][128];
+    //char **rmp;
     int a = 0, b = 0;
     struct directnFile_s *brt;
 
@@ -2780,7 +2795,8 @@ static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *
     sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfSFN, ret);
     print_f(mlogPool, "DSRH", mlog);
 
-    memset(rmp, 0, 16*256);
+    //rmp = malloc(256*256);
+    memset(rmp, 0, 32*128);
     
     ch = path;
     while (ret > 0) {
@@ -15003,8 +15019,9 @@ static int atFindIdx(char *str, char ch)
 }
 static int p6(struct procRes_s *rs)
 {
-    char strFullPath[528];
-    char strPath[32][16];
+    char strFullPath[1024];
+    char strPath[32][128];
+    //char **strPath; 
     char *recvbuf, *sendbuf, *pr;
     int ret, n, num, hd, be, ed, ln, cnt=0, i, len=0;
     char opc=0;
@@ -15154,12 +15171,13 @@ static int p6(struct procRes_s *rs)
             }
             
             n = 0;
-            memset(strPath[0], 0, 512);
+
+            memset(strPath, 0, 32*128);
 
             pa = fscur;
             i = 0;
             while(pa) {
-                strcpy(strPath[i], pa->dfSFN);
+                strcpy(strPath[i],((pa->dflen > 0) && (pa->dflen < 128))? pa->dfLFN:pa->dfSFN);
                 pa = pa->pa;
                 i++;
                 if (i >= 32) break;
@@ -15352,7 +15370,14 @@ static int p6(struct procRes_s *rs)
 
                     sendbuf[3] = 'O';
                 } else {
-                    sendbuf[3] = 'W';            
+                    sprintf(rs->logs, "search upload file[%s], found ret=%d\n", nexinfo->infoStr, ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    if (recvbuf[be-1] == 'O')  {
+                        sendbuf[3] = 'O';
+                    } else {
+                        sendbuf[3] = 'W';            
+                    }
                 }
 
                 nexinfo = asp_getInfo(strinfo, 9);
@@ -15388,7 +15413,15 @@ static int p6(struct procRes_s *rs)
                     cnt = num / clstSize;
                 }
 
-                if (cnt > pftb->ftbMng.ftfreeClst) {
+                if (sendbuf[3] == 'W') {
+                    nexinfo = asp_getInfo(strinfo, 0);
+                    if (nexinfo) {
+                        sprintf(rs->logs, "%d.%s\n", 0, nexinfo->infoStr);
+                        print_f(rs->plogs, "P6", rs->logs);
+                        n = strlen(nexinfo->infoStr);
+                        memcpy(&sendbuf[5], nexinfo->infoStr, n);
+                    }
+                } else if (cnt > pftb->ftbMng.ftfreeClst) {
                     sendbuf[3] = 'F';
                 } else {
                     mspFS_allocDir(pfat, &upld);
