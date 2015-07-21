@@ -2740,7 +2740,7 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
                 break;
             }
             brt = brt->ch;
-        } else if (strcmp(brt->dfSFN, &rmp[b][0]) == 0) {
+        } else if ((!brt->dflen) && (strcmp(brt->dfSFN, &rmp[b][0]) == 0)) {
             b++;
             if (b > a) {
                *dir = brt;
@@ -2853,7 +2853,7 @@ static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *
                 break;
             }
             brt = brt->ch;
-        } else if (strcmp(brt->dfSFN, &rmp[b][0]) == 0) {
+        } else if ((!brt->dflen) && (strcmp(brt->dfSFN, &rmp[b][0]) == 0)) {
             b++;
             if (b > a) {
                *dir = brt;
