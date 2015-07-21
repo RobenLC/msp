@@ -12195,7 +12195,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             /* debug */
             if (fLen > 0) {
-                shmem_dump(pParBuf->dirParseBuff + (((pParBuf->dirBuffUsed - fLen) > 512)?(pParBuf->dirBuffUsed - fLen - 512):(pParBuf->dirBuffUsed - fLen)), fLen+512);
+                //shmem_dump(pParBuf->dirParseBuff + (((pParBuf->dirBuffUsed - fLen) > 512)?(pParBuf->dirBuffUsed - fLen - 512):(pParBuf->dirBuffUsed - fLen)), fLen+512);
             }
             
             /* calculate the DEF */                 
@@ -12204,7 +12204,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 sprintf(mrs->log, "compirse DEF len:%d(free:%d)\n", len, fLen);
                 print_f(&mrs->plog, "fs81", mrs->log);
 
-                shmem_dump(pdef, len);
+                //shmem_dump(pdef, len);
             } else {
                 sprintf(mrs->log, "ERROR!!! compirse DEF failed, ret len:%d(free:%d)\n", len, fLen);
                 print_f(&mrs->plog, "fs81", mrs->log);
@@ -12292,8 +12292,11 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                     
                     pclst->n = padd; 
                 }else {
+                    aspFree(pclst);
                     sprintf(mrs->log, "ERROR!!! pftb->h != 0, 0x%x\n", pftb->h);
                     print_f(&mrs->plog, "fs81", mrs->log);
+                    modersp->r = 0xed;
+                    return 1;
                 }
                 
                 /* enable FAT update flag */
@@ -12306,6 +12309,8 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                     
             pParBuf->dirBuffUsed = 0;
             pfat->fatStatus &= ~ASPFAT_STATUS_DFECHK;   
+            aspFree(pfdirt);         
+            mrs->folder_dirt = 0;
             modersp->r = 1;
         } else {
             sprintf(mrs->log, "Size of used parse buffer should not be zero, folder[%s]\n", pa->dfSFN);
@@ -12623,13 +12628,13 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt = pftb->c;
         
         msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
-        shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
+        //shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
         /* find the free space, slot unit is 32 bytes */
         fLen = aspFindFreeDEF(&pdef, pParBuf->dirParseBuff, pParBuf->dirBuffUsed, 32);
 
         /* debug */
         if (fLen > 0) {
-            shmem_dump(pParBuf->dirParseBuff + (((pParBuf->dirBuffUsed - fLen) > 512)?(pParBuf->dirBuffUsed - fLen - 512):(pParBuf->dirBuffUsed - fLen)), fLen+512);
+            //shmem_dump(pParBuf->dirParseBuff + (((pParBuf->dirBuffUsed - fLen) > 512)?(pParBuf->dirBuffUsed - fLen - 512):(pParBuf->dirBuffUsed - fLen)), fLen+512);
         } else {
             sprintf(mrs->log, "  ERROR!!! cluster has no space! ret:%d \n", fLen);
             print_f(&mrs->plog, "fs88", mrs->log);
@@ -12676,16 +12681,16 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
         //addr = pParBuf->dirParseBuff + (pParBuf->dirBuffUsed - fLen);
 
         if (len > fLen) {
-            shmem_dump(pdef, fLen);
+            //shmem_dump(pdef, fLen);
             memcpy(pdef, pr,  fLen);
-            shmem_dump(pdef, fLen);
+            //shmem_dump(pdef, fLen);
 
             pr += fLen;
             len -= fLen;
         } else {
-            shmem_dump(pdef, len);
+            //shmem_dump(pdef, len);
             memcpy(pdef, pr,  len);
-            shmem_dump(pdef, len);
+            //shmem_dump(pdef, len);
             len = 0;
         }
 
@@ -12693,7 +12698,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
             f = fopen(clstPath, "w+");
             if (f) {
                 msync(pr, len, MS_SYNC);
-                shmem_dump(pr, len);
+                //shmem_dump(pr, len);
                 fwrite(pr, 1, len, f);
                 fflush(f);
                 fclose(f);
@@ -12814,6 +12819,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
             pfat->fatStatus &= ~ASPFAT_STATUS_DFEWT;    
             pfat->fatFileUpld = 0;
             curDir->dfstats = ASPFS_STATUS_EN;
+            mrs->folder_dirt = 0;
             //curDir->dfstats = ASPFS_STATUS_EN;
             //pfat->fatFileUpld = 0;
         }
@@ -13817,7 +13823,7 @@ static int p2(struct procRes_s *rs)
                     }
 #else
                     msync(addr, tlen, MS_SYNC);                    
-                    shmem_dump(addr, datLen);
+                    //shmem_dump(addr, datLen);
                     opsz = mtx_data(rs->spifd, addr, addr, tlen, tr);
 #endif
 
@@ -13872,7 +13878,7 @@ static int p2(struct procRes_s *rs)
 
                 addr = pabuf->dirParseBuff;
                 msync(addr, psec->secPrClst*512, MS_SYNC);
-                shmem_dump(addr, psec->secPrClst*512);
+                //shmem_dump(addr, psec->secPrClst*512);
                 
                 len = 0;
                 pi = 0;  
