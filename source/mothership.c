@@ -15365,7 +15365,7 @@ static int p6(struct procRes_s *rs)
                 }
             
                 //ret = mspFS_FileSearch(&dnld, rs->psFat->fatRootdir, nexinfo->infoStr);
-                ret = mspFS_Search(&dnld, rs->psFat->fatRootdir, nexinfo->infoStr, ASPFS_TYPE_FILE);
+                ret = mspFS_Search(&upld, rs->psFat->fatRootdir, nexinfo->infoStr, ASPFS_TYPE_FILE);
                 if (ret) {
                     sprintf(rs->logs, "search upload file[%s], not found ret=%d\n", nexinfo->infoStr, ret);
                     print_f(rs->plogs, "P6", rs->logs);
@@ -15420,9 +15420,9 @@ static int p6(struct procRes_s *rs)
                     if (nexinfo) {
                         sprintf(rs->logs, "%d.%s\n", 0, nexinfo->infoStr);
                         print_f(rs->plogs, "P6", rs->logs);
-                        n = strlen(nexinfo->infoStr);
-                        memcpy(&sendbuf[5], nexinfo->infoStr, n);
                     }
+                    sprintf(rs->logs, "WARNING!!! file [%s] existed !!\n", nexinfo->infoStr);
+                    print_f(rs->plogs, "P6", rs->logs);
                 } else if (cnt > pftb->ftbMng.ftfreeClst) {
                     sendbuf[3] = 'F';
                 } else {
