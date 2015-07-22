@@ -15199,7 +15199,7 @@ static int p6(struct procRes_s *rs)
             *pr = '\0';
             
             sendbuf[3] = 'R';
-            sprintf(rs->logs, "%s,%s,%c", strFullPath, fscur->dfSFN, (fscur->dftype==ASPFS_TYPE_ROOT)?'R':((fscur->dftype==ASPFS_TYPE_DIR)?'D':'F'));
+            sprintf(rs->logs, "%s,%s,%c", strFullPath, ((fscur->dflen > 0) && (fscur->dflen < 128))? fscur->dfLFN:fscur->dfSFN, (fscur->dftype==ASPFS_TYPE_ROOT)?'R':((fscur->dftype==ASPFS_TYPE_DIR)?'D':'F'));
             n = strlen(rs->logs);
             if (n > 256) n = 256;
             memcpy(&sendbuf[5], rs->logs, n);
@@ -15246,9 +15246,10 @@ static int p6(struct procRes_s *rs)
                         sendbuf[3] = 'Z'; /* zero size */
                     }
                 }
-                sprintf(rs->logs, "%s,%d,0x%.8x", (dnld->dflen == 0)?dnld->dfSFN:dnld->dfLFN, dnld->dflength, dnld->dftype);
-                n = strlen(rs->logs);
-                memcpy(&sendbuf[5], rs->logs, n);
+                memset(strFullPath, 0, 1024);
+                sprintf(strFullPath, "%s,%d,0x%.8x", (dnld->dflen == 0)?dnld->dfSFN:dnld->dfLFN, dnld->dflength, dnld->dftype);
+                n = strlen(strFullPath);
+                memcpy(&sendbuf[5], strFullPath, n);
             }
 
             sendbuf[5+n] = 0xfb;
@@ -15334,6 +15335,7 @@ static int p6(struct procRes_s *rs)
             print_f(rs->plogs, "P6", rs->logs);
 
             ret = asp_strsplit(&strinfo, folder, n);
+            n = 0;
             if (ret > 0) {
                 sprintf(rs->logs, "split str found, ret:%d\n", ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -15548,6 +15550,11 @@ static int p6(struct procRes_s *rs)
                     }
                 }
 
+                memset(strFullPath, 0, 1024);
+                sprintf(strFullPath, "%s,%d,0x%.8x", (upld->dflen == 0)?upld->dfSFN:upld->dfLFN, upld->dflength, upld->dftype);
+                n = strlen(strFullPath);
+                memcpy(&sendbuf[5], strFullPath, n);
+                
                 sprintf(rs->logs, "new file need %d clst, available %d clst\n", cnt, pftb->ftbMng.ftfreeClst);
                 print_f(rs->plogs, "P6", rs->logs);
                 
@@ -15558,7 +15565,6 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
             }
 
-            n = 0;
             sendbuf[5+n] = 0xfb;
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
