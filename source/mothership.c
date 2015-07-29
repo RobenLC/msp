@@ -134,8 +134,9 @@ typedef enum {
 
 typedef enum {
     ASPOP_STA_NONE = 0x0,
-    ASPOP_STA_WR,
-    ASPOP_STA_UPD,
+    ASPOP_STA_WR = 0x01,
+    ASPOP_STA_UPD = 0x02,
+    ASPOP_STA_APP = 0x04,
 } aspOpSt_e;
 
 typedef enum {
@@ -7802,7 +7803,7 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
         ctb = &mrs->configTable[ix];
         if (!ctb) {ret = -5; goto end;}
-        if (ctb->opStatus == ASPOP_STA_WR) {
+        if (ctb->opStatus & ASPOP_STA_APP) {
             n = 0; rsp = 0;
             /* set data for update to scanner */
             pkt->opcode = ctb->opCode;
@@ -8507,7 +8508,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
         cd = opcode[3];
 
         if (cd == ctb->opValue) {
-            ctb->opStatus = ASPOP_STA_WR;
+            ctb->opStatus |= ASPOP_STA_APP;
             param = ctb->opValue;
             goto end;
         }
@@ -8517,7 +8518,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
             ret = (ret * 10) -6;
         } else {            
             ctb->opValue = cd;
-            ctb->opStatus = ASPOP_STA_WR;
+            ctb->opStatus |= ASPOP_STA_APP;
         }
         
         sprintf(mrs->log, "WT opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d\n", ctb->opCode, ctb->opValue, cd, ret); 
@@ -11541,7 +11542,7 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    sprintf(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
+    sprintf(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, (curDir->dflen==0)?curDir->dfSFN:curDir->dfLFN, curDir->dflength);
     print_f(&mrs->plog, "fs71", mrs->log);
 
     if (pftb->c) {
@@ -11678,8 +11679,8 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    //sprintf(mrs->log, "wait spi0 tx end\n");
-    //print_f(&mrs->plog, "fs74", mrs->log);
+    sprintf(mrs->log, "wait spi0 tx end\n");
+    print_f(&mrs->plog, "fs74", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if (len > 0) {
@@ -11773,35 +11774,44 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
             clstLen = (curDir->dflength / clstByte);        
         }
 
-        ret = mspSD_allocFreeFATList(&pflsh, clstLen, pfre, &pnxf);
-        if (ret) {
-            sprintf(mrs->log, "free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
-            print_f(&mrs->plog, "fs75", mrs->log);
-            modersp->r = 0xed;
-            return 1;
-        }
-        
-        /* debug */
-        sprintf(mrs->log, "show allocated FAT list: \n");
+        sprintf(mrs->log, "needed cluster length: %d \n", clstLen);
         print_f(&mrs->plog, "fs75", mrs->log);
-
-        val = 0;
-        pflnt = pflsh;
-        while (pflnt) {
-            val += pflnt->ftLen;
-            sprintf(mrs->log, "    str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
+        
+        if (clstLen) {
+            ret = mspSD_allocFreeFATList(&pflsh, clstLen, pfre, &pnxf);
+            if (ret) {
+                sprintf(mrs->log, "free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
+                print_f(&mrs->plog, "fs75", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+        
+            /* debug */
+            sprintf(mrs->log, "show allocated FAT list: \n");
             print_f(&mrs->plog, "fs75", mrs->log);
-            pflnt = pflnt->n;
-        }
-        sprintf(mrs->log, "total allocated cluster is %d!! \n", val);
-        print_f(&mrs->plog, "fs75", mrs->log);
+
+            val = 0;
+            pflnt = pflsh;
+            while (pflnt) {
+                val += pflnt->ftLen;
+                sprintf(mrs->log, "    str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
+                print_f(&mrs->plog, "fs75", mrs->log);
+                pflnt = pflnt->n;
+            }
+            sprintf(mrs->log, "total allocated cluster is %d!! \n", val);
+            print_f(&mrs->plog, "fs75", mrs->log);
 
         
-        pftb->h = pflsh;
-        pftb->c = pftb->h;
+            pftb->h = pflsh;
+            pftb->c = pftb->h;
 
-        pfat->fatStatus |= ASPFAT_STATUS_SDWT;
-        pfat->fatStatus |= ASPFAT_STATUS_FATWT;
+            pfat->fatStatus |= ASPFAT_STATUS_SDWT;
+            pfat->fatStatus |= ASPFAT_STATUS_FATWT;
+        }else {
+            pftb->h = 0;
+            pftb->c = 0;
+        }
+
         pfat->fatStatus |= ASPFAT_STATUS_DFECHK;
         pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
         modersp->r = 1;
@@ -12183,7 +12193,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
     
-    sprintf(mrs->log, "DFE read from SD\n");
+    sprintf(mrs->log, "DFE read from SD (0x%x)\n", pfat->fatFileUpld);
     print_f(&mrs->plog, "fs81", mrs->log);
 
     curDir = pfat->fatFileUpld;
@@ -12331,7 +12341,6 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
         } else {
             sprintf(mrs->log, "Size of used parse buffer should not be zero, folder[%s]\n", pa->dfSFN);
             print_f(&mrs->plog, "fs81", mrs->log);
-
             
             aspFree(pfdirt);            
             mrs->folder_dirt = 0;
@@ -12339,17 +12348,19 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
     } else {
 
-        pflnt = pftb->h;
-        curDir->dfclstnum = pflnt->ftStart;
-        sprintf(mrs->log, "set upload file [%s] start cluster: %d, size:%d\n", curDir->dfSFN, curDir->dfclstnum, curDir->dflength);
-        print_f(&mrs->plog, "fs81", mrs->log);
+        if (pftb->h) {
+            pflnt = pftb->h;
+            curDir->dfclstnum = pflnt->ftStart;
+            sprintf(mrs->log, "set upload file [%s] start cluster: %d, size:%d\n", curDir->dfSFN, curDir->dfclstnum, curDir->dflength);
+            print_f(&mrs->plog, "fs81", mrs->log);
 
-        while (pflnt) {
-            pflsh = pflnt;
-            pflnt = pflnt->n;
-            aspFree(pflsh);
+            while (pflnt) {
+                pflsh = pflnt;
+                pflnt = pflnt->n;
+                aspFree(pflsh);
+            }
+            pftb->h = 0;
         }
-        pftb->h = 0;
 
         pa = curDir->pa;
         pfdirt = malloc(sizeof(struct folderQueue_s));
@@ -13520,8 +13531,8 @@ static int p2(struct procRes_s *rs)
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
                             //usleep(10000);
-                            //sprintf(rs->logs, "spi0 recv %d\n", opsz);
-                            //print_f(rs->plogs, "P2", rs->logs);
+                            sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                            print_f(rs->plogs, "P2", rs->logs);
                         }
 
                         //msync(addr, len, MS_SYNC);
@@ -14345,7 +14356,7 @@ static int p4(struct procRes_s *rs)
             } 
             else if (cmode == 1) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p4%d.dat");
                 if (ret) {
                     sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P4", rs->logs);         
@@ -14534,7 +14545,7 @@ static int p4(struct procRes_s *rs)
             }
             else if (cmode == 4) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p4%d.dat");
                 if (ret) {
                     sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P4", rs->logs);         
@@ -14613,7 +14624,7 @@ static int p4(struct procRes_s *rs)
             }
             else if (cmode == 5) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p4%d.dat");
                 if (ret) {
                     sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P4", rs->logs);         
@@ -15425,6 +15436,8 @@ static int p6(struct procRes_s *rs)
                     print_f(rs->plogs, "P6", rs->logs);
                 } else if (cnt > pftb->ftbMng.ftfreeClst) {
                     sendbuf[3] = 'F';
+                } else if (pfat->fatFileUpld) {
+                    sendbuf[3] = 'P';
                 } else {
                     mspFS_allocDir(pfat, &upld);
                     if (!upld) {
@@ -15735,7 +15748,7 @@ static int p7(struct procRes_s *rs)
             }
             else if (cmode == 3) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p4%d.dat");
                 if (ret) {
                     sprintf(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P7", rs->logs);         
