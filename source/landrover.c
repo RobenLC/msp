@@ -2620,7 +2620,7 @@ static int stauto_19(struct psdata_s *data)
                 sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                 print_f(mlogPool, "auto_01", str);  
                 data->result = emb_result(data->result, NEXT);
-            }			
+            }
             break;
         case NEXT:
             break;
@@ -2692,12 +2692,12 @@ static int shmem_dump(char *src, int size)
         sprintf(str, "%.2x ", *src);
         print_f(NULL, NULL, str);
 
-        inc++;
-        src++;
         if (!((inc+1) % 16)) {
             sprintf(str, "\n");
             print_f(NULL, NULL, str);
         }
+        inc++;
+        src++;
     }
 
     return inc;
@@ -4360,7 +4360,7 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret = -1;
     struct info16Bit_s *p, *c;
-    char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
     //char diskname[128] = "/mnt/mmc2/disk_rx127_255log.bin";
     //char diskname[128] = "/mnt/mmc2/disk_golden.bin";
     //char diskname[128] = "/mnt/mmc2/debug_fat.bin";
@@ -4369,7 +4369,7 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/dev/mmcblk0";
     //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
     //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
-    //char diskname[128] = "/mnt/mmc2/onefile.dsk";
+    char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -5083,7 +5083,7 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret = -1;
     struct info16Bit_s *p, *c;
-    char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
     //char diskname[128] = "/mnt/mmc2/disk_rx127_255log.bin";
     //char diskname[128] = "/mnt/mmc2/disk_golden.bin";
     //char diskname[128] = "/mnt/mmc2/debug_fat.bin";
@@ -5092,7 +5092,7 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/dev/mmcblk0";
     //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
     //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
-    //char diskname[128] = "/mnt/mmc2/onefile.dsk";
+    char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -5871,7 +5871,7 @@ static int p4(struct procRes_s *rs)
 #define OUT_SAVE (0)
 
 #if OUT_SAVE
-    char fileout[128] = "/mnt/mmc2/tx/sample_xx.bin";
+    char fileout[128] = "/mnt/mmc2/tx/fat_lov.bin";
     FILE *fout = NULL;
 #endif
     float flsize, fltime;
@@ -6100,7 +6100,7 @@ static int p4(struct procRes_s *rs)
 
                 if (pf->rtops ==  OP_SDWT) {
                     len = mtx_data(rs->spifd, tx_buff, rx_buff, 1, slen, 1024*1024);
-
+                    //shmem_dump(tx_buff, len);
 #if OUT_SAVE
                 fout = fopen(fileout, "a+");
                 if (!fout) {
@@ -6124,9 +6124,6 @@ static int p4(struct procRes_s *rs)
                     len = 0;
                 }
 
-
-
-                //shmem_dump(tx_buff, 512);
                 sprintf(rs->logs, "%d.Send %d/%d bytes!!\n", pi, len, slen);
                 print_f(rs->plogs, "P4", rs->logs);
 
@@ -6448,7 +6445,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
 int main(int argc, char *argv[])
 {
-char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
+//char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
 //char diskname[128] = "/mnt/mmc2/disk_rx127_255log.bin";
 //char diskname[128] = "/mnt/mmc2/disk_golden.bin";
 //char diskname[128] = "/mnt/mmc2/debug_fat.bin";
@@ -6457,7 +6454,7 @@ char diskname[128] = "/mnt/mmc2/disk_rmImg.bin";
 //char diskname[128] = "/dev/mmcblk0";
 //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
 //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
-//char diskname[128] = "/mnt/mmc2/onefile.dsk";
+char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 
