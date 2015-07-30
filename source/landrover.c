@@ -28,54 +28,60 @@
 #define OP_MAX 0xff
 #define OP_NONE 0x00
 
-#define OP_PON 0x1
-#define OP_QRY 0x2
-#define OP_RDY 0x3
-#define OP_DAT 0x4
-#define OP_SCM 0x5
-#define OP_DCM 0x6
-#define OP_FIH  0x7
-#define OP_DUL 0x8
-#define OP_SDRD 0x9
-#define OP_SDWT 0xa
-#define OP_SDAT 0xb
-#define OP_RGRD 0xc
-#define OP_RGWT 0xd
-#define OP_RGDAT 0xe
-#define OP_ACTION 0x0f
+/* flow operation */
+#define OP_PON          0x1                
+#define OP_QRY          0x2
+#define OP_RDY          0x3                
+#define OP_SINGLE       0x4
+#define OP_DOUBLE       0x5
+#define OP_ACTION       0x6
+#define OP_FIH          0x7
+/* SD read write operation */               
+#define OP_SDRD          0x20
+#define OP_SDWT          0x21
+#define OP_STSEC_00     0x22
+#define OP_STSEC_01     0x23
+#define OP_STSEC_02     0x24
+#define OP_STSEC_03     0x25
+#define OP_STLEN_00     0x26
+#define OP_STLEN_01     0x27
+#define OP_STLEN_02     0x28
+#define OP_STLEN_03     0x29
+#define OP_SDAT         0x2a
+#define OP_FREESEC      0x2b
+#define OP_USEDSEC      0x2c
+/* scanner parameters */
+#define OP_MSG          0x30       
+#define OP_FFORMAT      0x31
+#define OP_COLRMOD      0x32
+#define OP_COMPRAT      0x33
+#define OP_RESOLTN      0x34
+#define OP_SCANGAV      0x35
+#define OP_MAXWIDH      0x36
+#define OP_WIDTHAD_H    0x37
+#define OP_WIDTHAD_L    0x38
+#define OP_SCANLEN_H    0x39
+#define OP_SCANLEN_L    0x3a
+#define OP_INTERIMG     0x3b
+#define OP_AFEIC        0x3c
+#define OP_EXTPULSE     0x3d
+#define OP_SUPBACK      0x3e
+#define OP_LOG          0x3f
+#define OP_RGRD          0x40
+#define OP_RGWT          0x41
+#define OP_RGDAT        0x42
+#define OP_RGADD_H      0x43
+#define OP_RGADD_L      0x44
 
-#define OP_STSEC_0  0x10
-#define OP_STSEC_1  0x11
-#define OP_STSEC_2  0x12
-#define OP_STSEC_3  0x13
-#define OP_STLEN_0  0x14
-#define OP_STLEN_1  0x15
-#define OP_STLEN_2  0x16
-#define OP_STLEN_3  0x17
-#define OP_RGADD_H  0x18
-#define OP_RGADD_L  0x19
+#define OP_DAT 0x08
+#define OP_SCM 0x09
+#define OP_DUL 0x0a
 
-#define OP_FFORMAT      0x20
-#define OP_COLRMOD      0x21
-#define OP_COMPRAT      0x22
-#define OP_SCANMOD      0x23
-#define OP_DATPATH      0x24
-#define OP_RESOLTN       0x25
-#define OP_SCANGAV       0x26
-#define OP_MAXWIDH      0x27
-#define OP_WIDTHAD_H   0x28
-#define OP_WIDTHAD_L   0x29
-#define OP_SCANLEN_H    0x2a
-#define OP_SCANLEN_L    0x2b
-#define OP_INTERIMG      0x2c
-#define OP_AFEIC            0x2d
-#define OP_EXTPULSE      0x2e
+/* debug */
+#define OP_SAVE         0x70
+#define OP_ERROR        0x7e
 
 #define SEC_LEN 512
-
-#define OP_SUP               0x31
-#define OP_SAVE             0x32
-
 #define SPI_TRUNK_SZ   (32768)
 #define DIRECT_WT_DISK    (0)
 
@@ -92,6 +98,7 @@ typedef enum {
     BREAK,
     EVTMAX,
 }event_e;
+
 typedef enum {
     SPY = 0,
     BULLET, // 1
@@ -111,6 +118,23 @@ typedef enum {
     PSTSM,
     PSMAX,
 }status_e;
+
+typedef enum {
+    SINSCAN_NONE=0,
+    SINSCAN_WIFI_ONLY,
+    SINSCAN_SD_ONLY,
+    SINSCAN_WIFI_SD,
+    SINSCAN_WHIT_BLNC,
+    SINSCAN_USB,
+    SINSCAN_DUAL_STRM,
+    SINSCAN_DUAL_SD,
+} singleScan_e;
+
+typedef enum {
+    DOUSCAN_NONE=0,
+    DOUSCAN_WIFI_ONLY,
+    DOUSCAN_WHITE_BAL,
+} doubleScan_e;
 
 struct psdata_s {
     uint32_t result;
@@ -530,7 +554,7 @@ static int next_spy(struct psdata_s *data)
                     next = PSSET; /* jump to next stage */
                     evt = BULLET;
                 #else
-                    //next = PSRLT; /* for OP_SUP */
+                    //next = PSRLT; /* for OP_SUPBACK */
                     //evt = AUTO_B;
                 #endif
                     break;
@@ -543,25 +567,23 @@ static int next_spy(struct psdata_s *data)
                     next = PSACT; /* get and repeat value */
                     evt = AUTO_A;
                     break;
-                case OP_STSEC_0:                                  
-                case OP_STSEC_1:                                  
-                case OP_STSEC_2:                                  
-                case OP_STSEC_3:                                  
+                case OP_STSEC_00:                                  
+                case OP_STSEC_01:                                  
+                case OP_STSEC_02:                                  
+                case OP_STSEC_03:                                  
                     next = PSWT; /* get and repeat value */
                     evt = AUTO_A;
                     break;
-                case OP_STLEN_0:                                  
-                case OP_STLEN_1:                                  
-                case OP_STLEN_2:                                  
-                case OP_STLEN_3:                                  
+                case OP_STLEN_00:                                  
+                case OP_STLEN_01:                                  
+                case OP_STLEN_02:                                  
+                case OP_STLEN_03:                                  
                     next = PSRLT; /* get and repeat value */
                     evt = AUTO_A;
                     break;
                 case OP_FFORMAT:                                  
                 case OP_COLRMOD:                                  
                 case OP_COMPRAT:                                  
-                case OP_SCANMOD:                                  
-                case OP_DATPATH:                                  
                 case OP_RESOLTN:                                  
                 case OP_SCANGAV:                                  
                 case OP_MAXWIDH:                                  
@@ -595,7 +617,7 @@ static int next_spy(struct psdata_s *data)
                     next = PSWT;
                     evt = AUTO_B;
                     break;
-                case OP_SUP:
+                case OP_SUPBACK:
                     next = PSTSM; /* jump to next stage */
                     evt = AUTO_B;
                     break;
@@ -1341,19 +1363,17 @@ static int stspy_05(struct psdata_s *data)
 
             case OP_SDRD:
             case OP_SDWT:
-            case OP_STSEC_0:
-            case OP_STSEC_1:
-            case OP_STSEC_2:
-            case OP_STSEC_3:
-            case OP_STLEN_0:
-            case OP_STLEN_1:
-            case OP_STLEN_2:
-            case OP_STLEN_3:
+            case OP_STSEC_00:
+            case OP_STSEC_01:
+            case OP_STSEC_02:
+            case OP_STSEC_03:
+            case OP_STLEN_00:
+            case OP_STLEN_01:
+            case OP_STLEN_02:
+            case OP_STLEN_03:
             case OP_FFORMAT:
             case OP_COLRMOD:
             case OP_COMPRAT:
-            case OP_SCANMOD:
-            case OP_DATPATH:
             case OP_RESOLTN:
             case OP_SCANGAV:
             case OP_MAXWIDH:
@@ -1371,7 +1391,7 @@ static int stspy_05(struct psdata_s *data)
             case OP_RGDAT:
             case OP_RGADD_H:
             case OP_RGADD_L:
-            case OP_SUP:
+            case OP_SUPBACK:
             case OP_SCM:
             case OP_DUL: /* latter */
             case OP_SAVE:
@@ -1808,11 +1828,11 @@ static int stauto_03(struct psdata_s *data)
             op = g->opcode;
 
             switch (op) {
-            case OP_STSEC_0:
-            case OP_STSEC_1:
-            case OP_STSEC_2:
-            case OP_STSEC_3:
-                ix = op & 0xf;
+            case OP_STSEC_00:
+            case OP_STSEC_01:
+            case OP_STSEC_02:
+            case OP_STSEC_03:
+                ix = (op - OP_STSEC_00) & 0xf;
                 s->d[ix] = g->data;
                 s->f &= ~(0x1 << ix);
 
@@ -1836,14 +1856,14 @@ static int stauto_03(struct psdata_s *data)
             g = &data->rs->pmch->get;
             op = g->opcode;
             switch (op) {
-            case OP_STSEC_0:
-            case OP_STSEC_1:
-            case OP_STSEC_2:
-            case OP_STSEC_3:
+            case OP_STSEC_00:
+            case OP_STSEC_01:
+            case OP_STSEC_02:
+            case OP_STSEC_03:
                 s = &data->rs->pmch->sdst;
 
                 if (data->ansp0 == op) {
-                    ix = op & 0xf;
+                    ix = (op - OP_STSEC_00) & 0xf;
                     if (s->d[ix] == g->data) {
                         s->f |= 0x1 << ix;
                     } else {
@@ -1892,11 +1912,11 @@ static int stauto_04(struct psdata_s *data)
             op = g->opcode;
 
             switch (op) {
-            case OP_STLEN_0:
-            case OP_STLEN_1:
-            case OP_STLEN_2:
-            case OP_STLEN_3:
-                ix = (op - OP_STLEN_0) & 0xf;
+            case OP_STLEN_00:
+            case OP_STLEN_01:
+            case OP_STLEN_02:
+            case OP_STLEN_03:
+                ix = (op - OP_STLEN_00) & 0xf;
                 m->d[ix] = g->data;
                 m->f &= ~(0x1 << ix);
 
@@ -1920,14 +1940,14 @@ static int stauto_04(struct psdata_s *data)
             g = &data->rs->pmch->get;
             op = g->opcode;
             switch (op) {
-            case OP_STLEN_0:
-            case OP_STLEN_1:
-            case OP_STLEN_2:
-            case OP_STLEN_3:
+            case OP_STLEN_00:
+            case OP_STLEN_01:
+            case OP_STLEN_02:
+            case OP_STLEN_03:
                 m = &data->rs->pmch->sdln;
 
                 if (data->ansp0 == op) {
-                    ix = (op - OP_STLEN_0) & 0xf;
+                    ix = (op - OP_STLEN_00) & 0xf;
                     if (m->d[ix] == g->data) {
                         m->f |= 0x1 << ix;
                     } else {
@@ -3547,19 +3567,17 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_SDRD:                                       
         case OP_SDWT:                                       
         case OP_SDAT:                                     
-        case OP_STSEC_0:                                  
-        case OP_STSEC_1:                                  
-        case OP_STSEC_2:                                  
-        case OP_STSEC_3:                                  
-        case OP_STLEN_0:                                  
-        case OP_STLEN_1:                                  
-        case OP_STLEN_2:                                  
-        case OP_STLEN_3:                                  
+        case OP_STSEC_00:                                  
+        case OP_STSEC_01:                                  
+        case OP_STSEC_02:                                  
+        case OP_STSEC_03:                                  
+        case OP_STLEN_00:                                  
+        case OP_STLEN_01:                                  
+        case OP_STLEN_02:                                  
+        case OP_STLEN_03:                                  
         case OP_FFORMAT:                                  
         case OP_COLRMOD:                                  
         case OP_COMPRAT:                                  
-        case OP_SCANMOD:                                  
-        case OP_DATPATH:                                  
         case OP_RESOLTN:                                  
         case OP_SCANGAV:                                  
         case OP_MAXWIDH:                                  
@@ -3576,7 +3594,7 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_RGDAT:
         case OP_RGADD_H:
         case OP_RGADD_L:
-        case OP_SUP:
+        case OP_SUPBACK:
         case OP_SCM:
         case OP_SAVE:
             modersp->r = p->opcode;
@@ -4568,7 +4586,7 @@ static int fs40(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_SUP;
+    p->opcode = OP_SUPBACK;
     p->data = 0;
 
     mrs_ipc_put(mrs, "c", 1, 3);
@@ -4615,7 +4633,7 @@ static int fs42(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_SUP;
+    p->opcode = OP_SUPBACK;
     p->data = 0;
     
     mrs_ipc_put(mrs, "c", 1, 3);
@@ -4638,7 +4656,7 @@ static int fs43(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs43", mrs->log);
 
-        if (p->opcode == OP_SUP) {
+        if (p->opcode == OP_SUPBACK) {
             if (modersp->d) {
                 modersp->m = modersp->d;
                 modersp->d = 0;
