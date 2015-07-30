@@ -33,55 +33,58 @@ static char *spi1 = 0;
 #endif //#if SPI1_ENABLE
 static char spi0[] = "/dev/spidev32765.0"; 
 
-#define OP_PON   0x1
-#define OP_QRY   0x2
-#define OP_RDY   0x3
-#define OP_DAT   0x4
-#define OP_SCM   0x5
-#define OP_DCM   0x6
-#define OP_FIH    0x7
-#define OP_DUL    0x8
-#define OP_SDRD  0x9
-#define OP_SDWT 0xa
-#define OP_SDAT  0xb
-#define OP_RGRD 0xc
-#define OP_RGWT 0xd
-#define OP_RGDAT 0xe
-#define OP_ACTION  0x0f
+/* flow operation */
+#define OP_PON          0x1                
+#define OP_QRY          0x2
+#define OP_RDY          0x3                
+#define OP_SINGLE       0x4
+#define OP_DOUBLE       0x5
+#define OP_ACTION       0x6
+#define OP_FIH          0x7
+/* SD read write operation */               
+#define OP_SDRD          0x20
+#define OP_SDWT          0x21
+#define OP_STSEC_00     0x22
+#define OP_STSEC_01     0x23
+#define OP_STSEC_02     0x24
+#define OP_STSEC_03     0x25
+#define OP_STLEN_00     0x26
+#define OP_STLEN_01     0x27
+#define OP_STLEN_02     0x28
+#define OP_STLEN_03     0x29
+#define OP_SDAT         0x2a
+#define OP_FREESEC      0x2b
+#define OP_USEDSEC      0x2c
+/* scanner parameters */
+#define OP_MSG          0x30       
+#define OP_FFORMAT      0x31
+#define OP_COLRMOD      0x32
+#define OP_COMPRAT      0x33
+#define OP_RESOLTN      0x34
+#define OP_SCANGAV      0x35
+#define OP_MAXWIDH      0x36
+#define OP_WIDTHAD_H    0x37
+#define OP_WIDTHAD_L    0x38
+#define OP_SCANLEN_H    0x39
+#define OP_SCANLEN_L    0x3a
+#define OP_INTERIMG     0x3b
+#define OP_AFEIC        0x3c
+#define OP_EXTPULSE     0x3d
+#define OP_SUPBACK      0x3e
+#define OP_LOG          0x3f
+#define OP_RGRD          0x40
+#define OP_RGWT          0x41
+#define OP_RGDAT        0x42
+#define OP_RGADD_H      0x43
+#define OP_RGADD_L      0x44
 
-#define OP_STSEC_00  0x10
-#define OP_STSEC_01  0x11
-#define OP_STSEC_02  0x12
-#define OP_STSEC_03  0x13
-#define OP_STLEN_00  0x14
-#define OP_STLEN_01  0x15
-#define OP_STLEN_02  0x16
-#define OP_STLEN_03  0x17
-#define OP_RGADD_H  0x18
-#define OP_RGADD_L  0x19
+#define OP_DAT 0x08
+#define OP_SCM 0x09
+#define OP_DUL 0x0a
 
-#define OP_FFORMAT      0x20
-#define OP_COLRMOD      0x21
-#define OP_COMPRAT      0x22
-#define OP_SCANMOD      0x23
-#define OP_DATPATH      0x24
-#define OP_RESOLTN       0x25
-#define OP_SCANGAV       0x26
-#define OP_MAXWIDH      0x27
-#define OP_WIDTHAD_H   0x28
-#define OP_WIDTHAD_L   0x29
-#define OP_SCANLEN_H    0x2a
-#define OP_SCANLEN_L    0x2b
-#define OP_INTERIMG      0x2c
-#define OP_AFEIC            0x2d
-#define OP_EXTPULSE      0x2e
-
-#define OP_MSG               0x30
-
-#define OP_SUP               0x31
-#define OP_SAVE             0x32
-
-#define OP_ERROR           0xe0
+/* debug */
+#define OP_SAVE         0x70
+#define OP_ERROR        0x7e
 
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
@@ -144,8 +147,9 @@ typedef enum {
     ASPOP_FILE_FORMAT,
     ASPOP_COLOR_MODE,
     ASPOP_COMPRES_RATE,
-    ASPOP_SCAN_MODE,
-    ASPOP_DATA_PATH,
+    ASPOP_SCAN_SINGLE,
+    ASPOP_SCAN_DOUBLE,
+    ASPOP_ACTION,
     ASPOP_RESOLUTION,
     ASPOP_SCAN_GRAVITY,
     ASPOP_MAX_WIDTH,
@@ -196,6 +200,22 @@ typedef enum {
     ASPOP_TYPE_VALUE,
 } aspOpType_e;
 
+typedef enum {
+    SINSCAN_NONE=0,
+    SINSCAN_WIFI_ONLY,
+    SINSCAN_SD_ONLY,
+    SINSCAN_WIFI_SD,
+    SINSCAN_WHIT_BLNC,
+    SINSCAN_USB,
+    SINSCAN_DUAL_STRM,
+    SINSCAN_DUAL_SD,
+} singleScan_e;
+
+typedef enum {
+    DOUSCAN_NONE=0,
+    DOUSCAN_WIFI_ONLY,
+    DOUSCAN_WHIT_BLNC,
+} doubleScan_e;
 
 struct aspInfoSplit_s{
     char *infoStr;
@@ -9210,7 +9230,7 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (p->opcode == OP_DAT) {
             modersp->m = modersp->m + 1;
             return 2;
-        } else if (p->opcode == OP_SUP) {
+        } else if (p->opcode == OP_SUPBACK) {
             modersp->d = modersp->m + 1;
             modersp->m = 57;
             return 2;
@@ -11012,10 +11032,10 @@ static int fs57(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
 
-    p->opcode = OP_SUP;
+    p->opcode = OP_SUPBACK;
     p->data = 0;
 
-    sprintf(mrs->log, "set opcode OP_SUP: 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    sprintf(mrs->log, "set opcode OP_SUPBACK: 0x%.2x 0x%.2x \n", p->opcode, p->data);
     print_f(&mrs->plog, "fs57", mrs->log);
     
     mrs_ipc_put(mrs, "c", 1, 1);
@@ -11037,7 +11057,7 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get opcode 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs58", mrs->log);
 
-        if (p->opcode == OP_SUP) {
+        if (p->opcode == OP_SUPBACK) {
             modersp->m = modersp->m + 1;
             return 2;
         } else {
@@ -11092,10 +11112,10 @@ static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
 
-    p->opcode = OP_SUP;
+    p->opcode = OP_SUPBACK;
     p->data = 0;
 
-    sprintf(mrs->log, "set opcode OP_SUP: 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    sprintf(mrs->log, "set opcode OP_SUPBACK: 0x%.2x 0x%.2x \n", p->opcode, p->data);
     print_f(&mrs->plog, "fs60", mrs->log);
     
     mrs_ipc_put(mrs, "c", 1, 1);
@@ -11133,10 +11153,10 @@ static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
 
-    p->opcode = OP_SUP;
+    p->opcode = OP_SUPBACK;
     p->data = 0;
 
-    sprintf(mrs->log, "set opcode OP_SUP: 0x%.2x 0x%.2x \n", p->opcode, p->data);
+    sprintf(mrs->log, "set opcode OP_SUPBACK: 0x%.2x 0x%.2x \n", p->opcode, p->data);
     print_f(&mrs->plog, "fs62", mrs->log);
     
     mrs_ipc_put(mrs, "c", 1, 1);
@@ -11158,7 +11178,7 @@ static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get opcode 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs63", mrs->log);
 
-        if (p->opcode == OP_SUP) {
+        if (p->opcode == OP_SUPBACK) {
             modersp->m = modersp->m + 1;            
             return 2;
         } else {
@@ -16020,7 +16040,7 @@ int main(int argc, char *argv[])
         case ASPOP_FILE_FORMAT: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_FFORMAT;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
@@ -16028,47 +16048,55 @@ int main(int argc, char *argv[])
         case ASPOP_COLOR_MODE:  
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_COLRMOD;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_4;
+            ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
         case ASPOP_COMPRES_RATE:
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_COMPRAT;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
-        case ASPOP_SCAN_MODE:   
+        case ASPOP_SCAN_SINGLE: 
             ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SCANMOD;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opCode = OP_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_2;
+            ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
-        case ASPOP_DATA_PATH:   
+        case ASPOP_SCAN_DOUBLE: 
             ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_DATPATH;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opCode = OP_DOUBLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_5;
+            ctb->opMask = ASPOP_MASK_3;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_ACTION: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_ACTION;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
         case ASPOP_RESOLUTION:
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_RESOLTN;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_4;
+            ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
         case ASPOP_SCAN_GRAVITY:
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_SCANGAV;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_2;
             ctb->opBitlen = 8;
@@ -16076,9 +16104,9 @@ int main(int argc, char *argv[])
         case ASPOP_MAX_WIDTH:   
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_MAXWIDH;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_3;
+            ctb->opMask = ASPOP_MASK_2;
             ctb->opBitlen = 8;
             break;
         case ASPOP_WIDTH_ADJ_H: 
@@ -16116,7 +16144,7 @@ int main(int argc, char *argv[])
         case ASPOP_INTER_IMG: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_INTERIMG;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
@@ -16124,17 +16152,17 @@ int main(int argc, char *argv[])
         case ASPOP_AFEIC_SEL: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_AFEIC;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_5;
+            ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
         case ASPOP_EXT_PULSE: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_EXTPULSE;
-            ctb->opType = ASPOP_TYPE_SINGLE;
+            ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_4;
+            ctb->opMask = ASPOP_MASK_3;
             ctb->opBitlen = 8;
             break;
         case ASPOP_SDFAT_RD: 
@@ -16267,7 +16295,7 @@ int main(int argc, char *argv[])
             break;
         case ASPOP_SUP_SAVE: 
             ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SUP;
+            ctb->opCode = OP_SUPBACK;
             ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_32;
