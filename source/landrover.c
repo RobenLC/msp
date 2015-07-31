@@ -73,9 +73,11 @@
 #define OP_RGADD_H      0x43
 #define OP_RGADD_L      0x44
 
+/*
 #define OP_DAT 0x08
 #define OP_SCM 0x09
 #define OP_DUL 0x0a
+*/
 
 /* debug */
 #define OP_SAVE         0x70
@@ -434,9 +436,9 @@ FILE *find_save(char *dst, char *tmple)
 inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
 {
     p->data = info & 0xff;
-    p->opcode = (info >> 8) & 0x7f;
+    p->opcode = (info >> 8) & 0xff;
     //p->seqnum = (info >> 12) & 0x7;
-    p->inout = (info >> 15) & 0x1;
+    //p->inout = (info >> 15) & 0x1;
 
     return info;
 }
@@ -445,9 +447,9 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
 {
     uint16_t info = 0;
     info |= p->data & 0xff;
-    info |= (p->opcode & 0x7f) << 8;
+    info |= (p->opcode & 0xff) << 8;
     //info |= (p->seqnum & 0x7) << 12;
-    info |= (p->inout & 0x1) << 15;
+    //info |= (p->inout & 0x1) << 15;
 
     return info;
 }
@@ -548,19 +550,31 @@ static int next_spy(struct psdata_s *data)
                 sprintf(str, "PSTSM - ansp: %d\n", tmpAns); 
                 print_f(mlogPool, "spy", str); 
                 //next = PSMAX;
-                switch (tmpAns) {
-                case OP_DAT: /* currently support */              
-                #if 1
-                    next = PSSET; /* jump to next stage */
-                    evt = BULLET;
-                #else
-                    //next = PSRLT; /* for OP_SUPBACK */
-                    //evt = AUTO_B;
-                #endif
+                switch (tmpAns & 0xff) {
+                case OP_SINGLE: /* currently support */              
+                    switch ((tmpAns >> 8) & 0xff) {
+                        case SINSCAN_DUAL_STRM:
+                            #if 1
+                            next = PSSET; /* jump to next stage */
+                            evt = BULLET;
+                            #else
+                            //next = PSRLT; /* for OP_SUPBACK */
+                            //evt = AUTO_B;
+                            #endif
+                            break;
+                        case SINSCAN_WIFI_ONLY:
+                            next = PSTSM;
+                            evt = AUTO_C;
+                            break;
+                    }
                     break;
-                case OP_DUL: /* TODO */    
-                    next = PSACT;
-                    evt = AUTO_D;
+                case OP_DOUBLE: 
+                    switch ((tmpAns >> 8) & 0xff) {
+                        case DOUSCAN_WIFI_ONLY:
+                            next = PSACT;
+                            evt = AUTO_D;
+                            break;
+                    }
                     break;
                 case OP_SDRD:                                       
                 case OP_SDWT:                                       
@@ -620,10 +634,6 @@ static int next_spy(struct psdata_s *data)
                 case OP_SUPBACK:
                     next = PSTSM; /* jump to next stage */
                     evt = AUTO_B;
-                    break;
-                case OP_SCM:
-                    next = PSTSM;
-                    evt = AUTO_C;
                     break;
                 default:
                     break;
@@ -1357,51 +1367,50 @@ static int stspy_05(struct psdata_s *data)
             sprintf(str, "05: asnp: 0x%x, get pkt: 0x%x 0x%x\n", data->ansp0, p->opcode, p->data); 
             print_f(mlogPool, "spy", str);  
 
-            if (data->ansp0 == p->opcode)
-            switch (data->ansp0) {
-            case OP_DAT: /* currently support */
-
-            case OP_SDRD:
-            case OP_SDWT:
-            case OP_STSEC_00:
-            case OP_STSEC_01:
-            case OP_STSEC_02:
-            case OP_STSEC_03:
-            case OP_STLEN_00:
-            case OP_STLEN_01:
-            case OP_STLEN_02:
-            case OP_STLEN_03:
-            case OP_FFORMAT:
-            case OP_COLRMOD:
-            case OP_COMPRAT:
-            case OP_RESOLTN:
-            case OP_SCANGAV:
-            case OP_MAXWIDH:
-            case OP_WIDTHAD_H:
-            case OP_WIDTHAD_L:
-            case OP_SCANLEN_H:
-            case OP_SCANLEN_L:
-            case OP_INTERIMG:
-            case OP_AFEIC:
-            case OP_EXTPULSE:
-            case OP_SDAT:
-            case OP_ACTION:
-            case OP_RGRD:
-            case OP_RGWT:
-            case OP_RGDAT:
-            case OP_RGADD_H:
-            case OP_RGADD_L:
-            case OP_SUPBACK:
-            case OP_SCM:
-            case OP_DUL: /* latter */
-            case OP_SAVE:
-                sprintf(str, "go to next \n"); 
-                print_f(mlogPool, "spy", str);  
-
-                data->result = emb_result(data->result, NEXT);
-                break;
-            default:
-                break;
+            if ((data->ansp0 & 0xff) == p->opcode) {
+                data->ansp0 |= (p->data << 8);
+                switch (data->ansp0 & 0xff) {
+                    case OP_SINGLE: /* currently support */
+                    case OP_SDRD:
+                    case OP_SDWT:
+                    case OP_STSEC_00:
+                    case OP_STSEC_01:
+                    case OP_STSEC_02:
+                    case OP_STSEC_03:
+                    case OP_STLEN_00:
+                    case OP_STLEN_01:
+                    case OP_STLEN_02:
+                    case OP_STLEN_03:
+                    case OP_FFORMAT:
+                    case OP_COLRMOD:
+                    case OP_COMPRAT:
+                    case OP_RESOLTN:
+                    case OP_SCANGAV:
+                    case OP_MAXWIDH:
+                    case OP_WIDTHAD_H:
+                    case OP_WIDTHAD_L:
+                    case OP_SCANLEN_H:
+                    case OP_SCANLEN_L:
+                    case OP_INTERIMG:
+                    case OP_AFEIC:
+                    case OP_EXTPULSE:
+                    case OP_SDAT:
+                    case OP_ACTION:
+                    case OP_RGRD:
+                    case OP_RGWT:
+                    case OP_RGDAT:
+                    case OP_RGADD_H:
+                    case OP_RGADD_L:
+                    case OP_SUPBACK:
+                    case OP_DOUBLE:
+                    case OP_SAVE:
+                        sprintf(str, "go to next \n"); 
+                        print_f(mlogPool, "spy", str);  
+                        data->result = emb_result(data->result, NEXT);
+                        break;
+                    default:
+                        break;
+                }
             }
             break;
         case NEXT:
@@ -1733,7 +1742,7 @@ static int stauto_01(struct psdata_s *data)
         case WAIT:
             g = &data->rs->pmch->get;
 
-            if (data->ansp0 == g->opcode) {
+            if ((data->ansp0 & 0xff) == g->opcode) {
                 sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                 print_f(mlogPool, "auto_01", str);  
                 data->result = emb_result(data->result, NEXT);
@@ -1780,8 +1789,8 @@ static int stauto_02(struct psdata_s *data)
             g = &data->rs->pmch->get;
             p = &data->rs->pmch->cur;
 
-            if (data->ansp0 == g->opcode) {
-                if (data->ansp0 == p->opcode) {
+            if ((data->ansp0 & 0xff) == g->opcode) {
+                if ((data->ansp0 & 0xff) == p->opcode) {
                     sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                     print_f(mlogPool, "auto_02", str);  
                     data->result = emb_result(data->result, NEXT);
@@ -1862,7 +1871,7 @@ static int stauto_03(struct psdata_s *data)
             case OP_STSEC_03:
                 s = &data->rs->pmch->sdst;
 
-                if (data->ansp0 == op) {
+                if ((data->ansp0 & 0xff) == op) {
                     ix = (op - OP_STSEC_00) & 0xf;
                     if (s->d[ix] == g->data) {
                         s->f |= 0x1 << ix;
@@ -1946,7 +1955,7 @@ static int stauto_04(struct psdata_s *data)
             case OP_STLEN_03:
                 m = &data->rs->pmch->sdln;
 
-                if (data->ansp0 == op) {
+                if ((data->ansp0 & 0xff) == op) {
                     ix = (op - OP_STLEN_00) & 0xf;
                     if (m->d[ix] == g->data) {
                         m->f |= 0x1 << ix;
@@ -2017,7 +2026,7 @@ static int stauto_05(struct psdata_s *data)
         case WAIT:
             g = &data->rs->pmch->get;
 
-            if (data->ansp0 == g->opcode) {
+            if ((data->ansp0 & 0xff) == g->opcode) {
                 sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                 print_f(mlogPool, "auto_05", str);  
                 data->result = emb_result(data->result, NEXT);
@@ -3562,8 +3571,8 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         //print_f(&mrs->plog, "fs10", mrs->log);
 
         switch (p->opcode) {
-        case OP_DAT: /* currently support */              
-        case OP_DUL: /* latter */                         
+        case OP_SINGLE: /* currently support */              
+        case OP_DOUBLE: 
         case OP_SDRD:                                       
         case OP_SDWT:                                       
         case OP_SDAT:                                     
@@ -3595,9 +3604,8 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_RGADD_H:
         case OP_RGADD_L:
         case OP_SUPBACK:
-        case OP_SCM:
         case OP_SAVE:
-            modersp->r = p->opcode;
+            modersp->r = p->opcode | (p->data << 8);
             return 1;
             break;                                       
         default:
@@ -3623,7 +3631,8 @@ static int fs11(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_DAT;
+    p->opcode = OP_SINGLE;
+    p->data = SINSCAN_DUAL_STRM;
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
 
@@ -3646,7 +3655,7 @@ static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp)
         //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
         //print_f(&mrs->plog, "fs12", mrs->log);
 
-        if (p->opcode == OP_DAT) {
+        if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_STRM)) {
             modersp->r = 1;
             return 1;
         } else {
@@ -4609,7 +4618,7 @@ static int fs41(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs41", mrs->log);
 
-        if (p->opcode == OP_DAT) {
+        if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_STRM)) {
             modersp->m = modersp->m + 1;
             return 2;
         } else {
@@ -4801,8 +4810,8 @@ static int fs48(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_SCM;
-    p->data = 0;
+    p->opcode = OP_SINGLE;
+    p->data = SINSCAN_WIFI_ONLY;
     
     mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
@@ -4824,7 +4833,7 @@ static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs49", mrs->log);
 
-        if (p->opcode == OP_SCM) {
+        if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_WIFI_ONLY)) {
             if (modersp->d) {
                 modersp->m = modersp->d;
                 modersp->d = 0;
@@ -4933,8 +4942,8 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_DUL;
-    p->data = 0;
+    p->opcode = OP_DOUBLE;
+    p->data = DOUSCAN_WIFI_ONLY;
     
     mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
@@ -4956,7 +4965,7 @@ static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs54", mrs->log);
 
-        if (p->opcode == OP_DUL) {
+        if ((p->opcode == OP_DOUBLE) && (p->data == DOUSCAN_WIFI_ONLY)) {
             modersp->r = 1;
             return 1;
         } else {

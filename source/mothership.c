@@ -41,6 +41,8 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_DOUBLE       0x5
 #define OP_ACTION       0x6
 #define OP_FIH          0x7
+#define OP_BAK
+
 /* SD read write operation */               
 #define OP_SDRD          0x20
 #define OP_SDWT          0x21
@@ -78,9 +80,11 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_RGADD_H      0x43
 #define OP_RGADD_L      0x44
 
+/*
 #define OP_DAT 0x08
 #define OP_SCM 0x09
 #define OP_DUL 0x0a
+*/
 
 /* debug */
 #define OP_SAVE         0x70
@@ -3017,9 +3021,9 @@ inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
     char str[128];
 
     p->data = info & 0xff;
-    p->opcode = (info >> 8) & 0x7f;
+    p->opcode = (info >> 8) & 0xff;
     //p->seqnum = (info >> 12) & 0x7;
-    p->inout = (info >> 15) & 0x1;
+    //p->inout = (info >> 15) & 0x1;
 
     //sprintf(str, "info: 0x%.4x \n", info); 
     //print_f(mlogPool, "abs_info", str); 
@@ -3032,9 +3036,9 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
     char str[128];
     uint16_t info = 0;
     info |= p->data & 0xff;
-    info |= (p->opcode & 0x7f) << 8;
+    info |= (p->opcode & 0xff) << 8;
     //info |= (p->seqnum & 0x7) << 12;
-    info |= (p->inout & 0x1) << 15;
+    //info |= (p->inout & 0x1) << 15;
 
     //sprintf(str, "info: 0x%.4x \n", info); 
     //print_f(mlogPool, "pkg_info", str); 
@@ -5958,8 +5962,8 @@ static int stsup_34(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             ch = 41; 
-            c->opcode = OP_SCM;
-            c->data = 0;
+            c->opcode =  OP_SINGLE;
+            c->data = SINSCAN_WIFI_ONLY;
             memset(p, 0, sizeof(struct info16Bit_s));
 
             rs_ipc_put(data->rs, &ch, 1);
@@ -7906,8 +7910,8 @@ static int cmdfunc_lh_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_DAT;
-    pkt->data = 0;
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_DUAL_STRM;
     n = cmdfunc_upd2host(mrs, 'd', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -7972,8 +7976,8 @@ static int cmdfunc_go_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_DAT;
-    pkt->data = 0;
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_DUAL_STRM;
     n = cmdfunc_upd2host(mrs, 'n', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -8248,8 +8252,8 @@ static int cmdfunc_single_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_SCM;
-    pkt->data = 0;
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_WIFI_ONLY;
     n = cmdfunc_upd2host(mrs, 's', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -8304,8 +8308,8 @@ static int cmdfunc_dnld_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_SCM;
-    pkt->data = 0;
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_WIFI_ONLY;
     n = cmdfunc_upd2host(mrs, 'h', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -8360,8 +8364,8 @@ static int cmdfunc_upld_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_SCM;
-    pkt->data = 0;
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_WIFI_ONLY;
     n = cmdfunc_upd2host(mrs, 'u', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -8416,8 +8420,8 @@ static int cmdfunc_save_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_SCM;
-    pkt->data = 0;
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_WIFI_ONLY;
     n = cmdfunc_upd2host(mrs, 'v', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -9154,7 +9158,8 @@ static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_DAT;
+    p->opcode = OP_SINGLE;
+    p->data = SINSCAN_DUAL_STRM;
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
 
@@ -9201,7 +9206,8 @@ static int fs14(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_DAT;
+    p->opcode = OP_SINGLE;
+    p->data = SINSCAN_DUAL_STRM;
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
 
@@ -9227,7 +9233,7 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
         print_f(&mrs->plog, "fs15", mrs->log);
 
-        if (p->opcode == OP_DAT) {
+        if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_STRM)) {
             modersp->m = modersp->m + 1;
             return 2;
         } else if (p->opcode == OP_SUPBACK) {
@@ -9724,7 +9730,8 @@ static int fs29(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_DUL;
+    p->opcode = OP_DOUBLE;
+    p->data = DOUSCAN_WIFI_ONLY;
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
 
@@ -9771,7 +9778,8 @@ static int fs31(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_DUL;
+    p->opcode = OP_DOUBLE;
+    p->data = DOUSCAN_WIFI_ONLY;
     p->inout = 0;
     p->seqnum = mrs->mchine.seqcnt;
 
@@ -9797,7 +9805,7 @@ static int fs32(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
         print_f(&mrs->plog, "fs32", mrs->log);
 
-        if (p->opcode == OP_DUL) {
+        if ((p->opcode == OP_DOUBLE) && (p->data == DOUSCAN_WIFI_ONLY)) {
             modersp->m = modersp->m + 1;
             return 2;
         } else {
