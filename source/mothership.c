@@ -41,7 +41,7 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_DOUBLE       0x5
 #define OP_ACTION       0x6
 #define OP_FIH          0x7
-#define OP_BAK
+#define OP_BACK         0x8
 
 /* SD read write operation */               
 #define OP_SDRD          0x20
@@ -88,7 +88,7 @@ static char spi0[] = "/dev/spidev32765.0";
 
 /* debug */
 #define OP_SAVE         0x70
-#define OP_ERROR        0x7e
+#define OP_ERROR        0xe0
 
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
@@ -4405,7 +4405,7 @@ static int stdob_10(struct psdata_s *data)
                 sprintf(rs->logs, "op10, REG_RD opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (pdt->opStatus != ASPOP_STA_WR) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op10, REG_RD status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -4469,7 +4469,7 @@ static int streg_11(struct psdata_s *data)
                 sprintf(rs->logs, "op11, OP_RGADD_H opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (pdt->opStatus != ASPOP_STA_WR) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op11, OP_RGADD_H status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -4532,7 +4532,7 @@ static int streg_12(struct psdata_s *data)
                 sprintf(rs->logs, "op12, OP_RGADD_L opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (pdt->opStatus != ASPOP_STA_WR) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op12, OP_RGADD_L status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -4595,7 +4595,7 @@ static int streg_13(struct psdata_s *data)
                 sprintf(rs->logs, "op13, OP_RGDAT opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (pdt->opStatus != ASPOP_STA_WR) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op13, OP_RGDAT status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -4657,7 +4657,7 @@ static int streg_14(struct psdata_s *data)
                 sprintf(rs->logs, "op14, REG_WT opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (pdt->opStatus != ASPOP_STA_WR) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op14, REG_WT status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -4721,7 +4721,7 @@ static int streg_15(struct psdata_s *data)
                 sprintf(rs->logs, "op15, OP_RGADD_H opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (pdt->opStatus != ASPOP_STA_WR) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op15, OP_RGADD_H status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -4784,7 +4784,7 @@ static int streg_16(struct psdata_s *data)
                 sprintf(rs->logs, "op16, OP_RGADD_L opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (pdt->opStatus != ASPOP_STA_WR) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op16, OP_RGADD_L status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -4847,7 +4847,7 @@ static int streg_17(struct psdata_s *data)
                 sprintf(rs->logs, "op17, OP_RGDAT opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (pdt->opStatus != ASPOP_STA_WR) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op17, OP_RGDAT status is wrong, %x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -15394,8 +15394,7 @@ static int p6(struct procRes_s *rs)
                         sprintf(rs->logs, "%d.[%s]\n", i, nexinfo->infoStr);
                         print_f(rs->plogs, "P6", rs->logs);
                     }
-                }
-                
+                }                
 
                 nexinfo = asp_getInfo(strinfo, 0);
                 if (nexinfo) {

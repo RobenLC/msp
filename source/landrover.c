@@ -16,7 +16,7 @@
 #include <arpa/inet.h>
 //main()
 
-#define ENABLE_SPI1        (0)
+#define ENABLE_SPI1        (1)
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
 #define SPI_MODE_0		(0|0)
@@ -36,6 +36,7 @@
 #define OP_DOUBLE       0x5
 #define OP_ACTION       0x6
 #define OP_FIH          0x7
+#define OP_BACK          0x8
 /* SD read write operation */               
 #define OP_SDRD          0x20
 #define OP_SDWT          0x21
@@ -81,7 +82,7 @@
 
 /* debug */
 #define OP_SAVE         0x70
-#define OP_ERROR        0x7e
+#define OP_ERROR        0xe0
 
 #define SEC_LEN 512
 #define SPI_TRUNK_SZ   (32768)
