@@ -34,18 +34,18 @@ static char *spi1 = 0;
 static char spi0[] = "/dev/spidev32765.0"; 
 
 /* flow operation */
-#define OP_PON          0x1                
-#define OP_QRY          0x2
-#define OP_RDY          0x3                
+#define OP_PON            0x1                
+#define OP_QRY            0x2
+#define OP_RDY            0x3                
 #define OP_SINGLE       0x4
-#define OP_DOUBLE       0x5
+#define OP_DOUBLE      0x5
 #define OP_ACTION       0x6
-#define OP_FIH          0x7
-#define OP_BACK         0x8
+#define OP_FIH             0x7
+#define OP_BACK           0x8
 
 /* SD read write operation */               
-#define OP_SDRD          0x20
-#define OP_SDWT          0x21
+#define OP_SDRD            0x20
+#define OP_SDWT            0x21
 #define OP_STSEC_00     0x22
 #define OP_STSEC_01     0x23
 #define OP_STSEC_02     0x24
@@ -54,31 +54,31 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_STLEN_01     0x27
 #define OP_STLEN_02     0x28
 #define OP_STLEN_03     0x29
-#define OP_SDAT         0x2a
-#define OP_FREESEC      0x2b
-#define OP_USEDSEC      0x2c
+#define OP_SDAT             0x2a
+#define OP_FREESEC       0x2b
+#define OP_USEDSEC       0x2c
 /* scanner parameters */
-#define OP_MSG          0x30       
-#define OP_FFORMAT      0x31
-#define OP_COLRMOD      0x32
-#define OP_COMPRAT      0x33
-#define OP_RESOLTN      0x34
-#define OP_SCANGAV      0x35
-#define OP_MAXWIDH      0x36
+#define OP_MSG                0x30       
+#define OP_FFORMAT        0x31
+#define OP_COLRMOD        0x32
+#define OP_COMPRAT        0x33
+#define OP_RESOLTN         0x34
+#define OP_SCANGAV        0x35
+#define OP_MAXWIDH        0x36
 #define OP_WIDTHAD_H    0x37
 #define OP_WIDTHAD_L    0x38
-#define OP_SCANLEN_H    0x39
-#define OP_SCANLEN_L    0x3a
-#define OP_INTERIMG     0x3b
-#define OP_AFEIC        0x3c
-#define OP_EXTPULSE     0x3d
-#define OP_SUPBACK      0x3e
-#define OP_LOG          0x3f
-#define OP_RGRD          0x40
-#define OP_RGWT          0x41
-#define OP_RGDAT        0x42
-#define OP_RGADD_H      0x43
-#define OP_RGADD_L      0x44
+#define OP_SCANLEN_H     0x39
+#define OP_SCANLEN_L     0x3a
+#define OP_INTERIMG       0x3b
+#define OP_AFEIC             0x3c
+#define OP_EXTPULSE       0x3d
+#define OP_SUPBACK        0x3e
+#define OP_LOG                0x3f
+#define OP_RGRD              0x40
+#define OP_RGWT              0x41
+#define OP_RGDAT            0x42
+#define OP_RGADD_H       0x43
+#define OP_RGADD_L        0x44
 
 /*
 #define OP_DAT 0x08
@@ -87,8 +87,8 @@ static char spi0[] = "/dev/spidev32765.0";
 */
 
 /* debug */
-#define OP_SAVE         0x70
-#define OP_ERROR        0xe0
+#define OP_SAVE              0x70
+#define OP_ERROR            0xe0
 
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
@@ -121,6 +121,7 @@ typedef enum {
     SUPI,
     SINJ,
     SAVK,
+    FRESECL,
     SMAX,
 }state_e;
 
@@ -181,7 +182,25 @@ typedef enum {
     ASPOP_REG_ADDRL,
     ASPOP_REG_DAT,
     ASPOP_SUP_SAVE,
-    ASPOP_CODE_MAX, /* 32 */
+    ASPOP_SDFREE_EN,
+    ASPOP_SDFREE_STR01,
+    ASPOP_SDFREE_STR02,
+    ASPOP_SDFREE_STR03,
+    ASPOP_SDFREE_STR04,
+    ASPOP_SDFREE_LEN01,
+    ASPOP_SDFREE_LEN02,
+    ASPOP_SDFREE_LEN03,
+    ASPOP_SDFREE_LEN04,
+    ASPOP_SDUSED_EN,
+    ASPOP_SDUSED_STR01,
+    ASPOP_SDUSED_STR02,
+    ASPOP_SDUSED_STR03,
+    ASPOP_SDUSED_STR04,
+    ASPOP_SDUSED_LEN01,
+    ASPOP_SDUSED_LEN02,
+    ASPOP_SDUSED_LEN03,
+    ASPOP_SDUSED_LEN04,
+    ASPOP_CODE_MAX, /* 52 */
 } aspOpCode_e;
 
 typedef enum {
@@ -5735,35 +5754,35 @@ static int stfat_30(struct psdata_s *data)
                 sprintf(rs->logs, "SD Read to APP status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 71; /* TODO: LOV->MSP->APP */
+                ch = 71; /* LOV->MSP->APP */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else if ((pFat->fatStatus & ASPFAT_STATUS_SDWT)) {
                 sprintf(rs->logs, "APP write data to SD status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 76; /* TODO: APP->MSP->LOV */
+                ch = 76; /* APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else if ((pFat->fatStatus & ASPFAT_STATUS_FATWT)) {
                 sprintf(rs->logs, "APP write FAT to SD status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 80; /* TODO: APP->MSP->LOV */
+                ch = 80; /* APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else if ((pFat->fatStatus & ASPFAT_STATUS_DFECHK)) {
                 sprintf(rs->logs, "APP read DFE from SD status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 81; /* TODO: APP->MSP->LOV */
+                ch = 81; /* APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else if ((pFat->fatStatus & ASPFAT_STATUS_DFEWT)) {
                 sprintf(rs->logs, "APP write DFE to SD status:0x%.8x \n", pFat->fatStatus); 
                 print_f(rs->plogs, "FAT", rs->logs);  
 
-                ch = 88; /* TODO: APP->MSP->LOV */
+                ch = 88; /* APP->MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else {
@@ -6287,7 +6306,7 @@ static int stsav_41(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsav_42(struct psdata_s *data)
+static int stfresec_42(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -6297,7 +6316,7 @@ static int stsav_42(struct psdata_s *data)
     rlt = abs_result(data->result); 
 
     sprintf(rs->logs, "op_42 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SAV", rs->logs);  
+    print_f(rs->plogs, "FSC", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -6305,7 +6324,7 @@ static int stsav_42(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_42: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SAV", rs->logs);  
+            print_f(rs->plogs, "FSC", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -6329,7 +6348,7 @@ static int stsav_42(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsav_43(struct psdata_s *data)
+static int stfresec_43(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -6339,7 +6358,7 @@ static int stsav_43(struct psdata_s *data)
     rlt = abs_result(data->result); 
 
     sprintf(rs->logs, "op_43 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SAV", rs->logs);  
+    print_f(rs->plogs, "FSC", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -6347,7 +6366,7 @@ static int stsav_43(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_43: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SAV", rs->logs);  
+            print_f(rs->plogs, "FSC", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -6371,7 +6390,7 @@ static int stsav_43(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsav_44(struct psdata_s *data)
+static int stfresec_44(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -6381,7 +6400,7 @@ static int stsav_44(struct psdata_s *data)
     rlt = abs_result(data->result); 
 
     sprintf(rs->logs, "op_44 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SAV", rs->logs);  
+    print_f(rs->plogs, "FSC", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -6389,7 +6408,7 @@ static int stsav_44(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_44: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SAV", rs->logs);  
+            print_f(rs->plogs, "FSC", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -6413,7 +6432,7 @@ static int stsav_44(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsav_45(struct psdata_s *data)
+static int stfresec_45(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -6423,7 +6442,7 @@ static int stsav_45(struct psdata_s *data)
     rlt = abs_result(data->result); 
 
     sprintf(rs->logs, "op_45 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SAV", rs->logs);  
+    print_f(rs->plogs, "FSC", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -6431,7 +6450,7 @@ static int stsav_45(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_45: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SAV", rs->logs);  
+            print_f(rs->plogs, "FSC", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -8866,6 +8885,16 @@ static int hd91(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd92(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd93(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd94(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd95(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd96(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd97(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd98(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd99(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd100(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd101(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd102(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd103(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd104(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -12946,10 +12975,20 @@ static int fs91(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs92(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs99(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs102(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs103(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs104(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 95
+#define PS_NUM 105
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -12969,11 +13008,13 @@ static int p0(struct mainRes_s *mrs)
                                  {55, fs55},{56, fs56},{57, fs57},{58, fs58},{59, fs59},
                                  {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64},
                                  {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69},
-                                 {65, fs70},{66, fs71},{67, fs72},{68, fs73},{69, fs74},
-                                 {65, fs75},{66, fs76},{67, fs77},{68, fs78},{69, fs79},
-                                 {65, fs80},{66, fs81},{67, fs82},{68, fs83},{69, fs84},
-                                 {65, fs85},{66, fs86},{67, fs87},{68, fs88},{69, fs89},
-                                 {65, fs90},{66, fs91},{67, fs92},{68, fs93},{69, fs94}};                                 
+                                 {70, fs70},{71, fs71},{72, fs72},{73, fs73},{74, fs74},
+                                 {75, fs75},{76, fs76},{77, fs77},{78, fs78},{79, fs79},
+                                 {80, fs80},{81, fs81},{82, fs82},{83, fs83},{84, fs84},
+                                 {85, fs85},{86, fs86},{87, fs87},{88, fs88},{89, fs89},
+                                 {90, fs90},{91, fs91},{92, fs92},{93, fs93},{94, fs94},
+                                 {95, fs95},{96, fs96},{97, fs97},{98, fs98},{99, fs99},
+                                 {100, fs100},{101, fs101},{102, fs103},{103, fs103},{104, fs104}};                                 
                                  
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -12989,12 +13030,13 @@ static int p0(struct mainRes_s *mrs)
                                  {55, hd55},{56, hd56},{57, hd57},{58, hd58},{59, hd59},
                                  {60, hd60},{61, hd61},{62, hd62},{63, hd63},{64, hd64},
                                  {65, hd65},{66, hd66},{67, hd67},{68, hd68},{69, hd69},
-                                 {60, hd70},{61, hd71},{62, hd72},{63, hd73},{64, hd74},
-                                 {65, hd75},{66, hd76},{67, hd77},{68, hd78},{69, hd79},
-                                 {60, hd80},{61, hd81},{62, hd82},{63, hd83},{64, hd84},
-                                 {65, hd85},{66, hd86},{67, hd87},{68, hd88},{69, hd89},
-                                 {60, hd90},{61, hd91},{62, hd92},{63, hd93},{64, hd94}};
-
+                                 {70, hd70},{71, hd71},{72, hd72},{73, hd73},{74, hd74},
+                                 {75, hd75},{76, hd76},{77, hd77},{78, hd78},{79, hd79},
+                                 {80, hd80},{81, hd81},{82, hd82},{83, hd83},{84, hd84},
+                                 {85, hd85},{86, hd86},{87, hd87},{88, hd88},{89, hd89},
+                                 {90, hd90},{91, hd91},{92, hd92},{93, hd93},{94, hd94},
+                                 {95, hd95},{96, hd96},{97, hd97},{98, hd98},{99, hd99},
+                                 {100, hd100},{101, hd101},{102, hd103},{103, hd103},{104, hd104}};                                 
     p0_init(mrs);
 
     modesw.m = -2;
@@ -13084,7 +13126,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stfat_26, stfat_27, stfat_28, stfat_29, stfat_30}, // FATH
                             {stsup_31, stsup_32, stsup_33, stsup_34, stsup_35}, // SUPI
                             {stsin_36, stdow_37, stupd_38, stupd_39, stupd_40}, // SINJ
-                            {stsav_41, stsav_42, stsav_43, stsav_44, stsav_45}}; // SAVK
+                            {stsav_41, stfresec_42, stfresec_43, stfresec_44, stfresec_45}}; // SAVK
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -16307,7 +16349,150 @@ int main(int argc, char *argv[])
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_32;
             ctb->opBitlen = 32;
+        case ASPOP_SDFREE_EN: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FREESEC;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
             break;
+        case ASPOP_SDFREE_STR01: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_00;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFREE_STR02: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_01;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFREE_STR03: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_02;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFREE_STR04: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_03;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFREE_LEN01: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_00;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFREE_LEN02: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_01;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFREE_LEN03: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_02;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDFREE_LEN04: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_03;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+        case ASPOP_SDUSED_EN: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_USEDSEC;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDUSED_STR01: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_00;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDUSED_STR02: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_01;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDUSED_STR03: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_02;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDUSED_STR04: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STSEC_03;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDUSED_LEN01: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_00;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDUSED_LEN02: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_01;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDUSED_LEN03: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_02;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_SDUSED_LEN04: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_03;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+
         default: break;
         }
     }
