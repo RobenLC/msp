@@ -121,7 +121,8 @@ typedef enum {
     SUPI,
     SINJ,
     SAVK,
-    FRESECL,
+    SDAL,
+    SDAM,
     SMAX,
 }state_e;
 
@@ -6306,31 +6307,53 @@ static int stsav_41(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stfresec_42(struct psdata_s *data)
-{ 
-    char str[128], ch = 0; 
+static int stsda_42(struct psdata_s *data)
+{
+    char ch = 0; 
     uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
-    
+
     rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
     rlt = abs_result(data->result); 
 
-    sprintf(rs->logs, "op_42 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "FSC", rs->logs);  
+    //sprintf(rs->logs, "op_42 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_42: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "FSC", rs->logs);  
+            pdt = &pct[ASPOP_SDFAT_RD];
+            if (pdt->opCode != OP_SDRD) {
+                sprintf(rs->logs, "op18, OP_SDRD opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op18, OP_SDRD status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_RD];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -6348,31 +6371,53 @@ static int stfresec_42(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stfresec_43(struct psdata_s *data)
+static int stsda_43(struct psdata_s *data)
 { 
-    char str[128], ch = 0; 
+    char ch = 0; 
     uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
-    
+
     rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
     rlt = abs_result(data->result); 
 
-    sprintf(rs->logs, "op_43 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "FSC", rs->logs);  
+    //sprintf(rs->logs, "op_43 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_43: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "FSC", rs->logs);  
+            pdt = &pct[ASPOP_SDFAT_WT];
+            if (pdt->opCode != OP_SDWT) {
+                sprintf(rs->logs, "op19, OP_SDWT opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op19, OP_SDWT status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_WT];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -6390,31 +6435,53 @@ static int stfresec_43(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stfresec_44(struct psdata_s *data)
+static int stsda_44(struct psdata_s *data)
 { 
-    char str[128], ch = 0; 
+    char ch = 0; 
     uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
-    
+
     rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
     rlt = abs_result(data->result); 
 
-    sprintf(rs->logs, "op_44 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "FSC", rs->logs);  
+    //sprintf(rs->logs, "op_44 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_44: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "FSC", rs->logs);  
+            pdt = &pct[ASPOP_SDFAT_STR01];
+            if (pdt->opCode != OP_STSEC_00) {
+                sprintf(rs->logs, "op20, OP_STSEC_0 opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op20, OP_STSEC_0 status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_STR01];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -6432,7 +6499,730 @@ static int stfresec_44(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stfresec_45(struct psdata_s *data)
+static int stsda_45(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_45 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_STR02];
+            if (pdt->opCode != OP_STSEC_01) {
+                sprintf(rs->logs, "op21, OP_STSEC_1 opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op21, OP_STSEC_1 status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_STR02];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_46(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_46 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_STR03];
+            if (pdt->opCode != OP_STSEC_02) {
+                sprintf(rs->logs, "op22, OP_STSEC_2 opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op22, OP_STSEC_2 status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_STR03];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_47(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_47 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_STR04];
+            if (pdt->opCode != OP_STSEC_03) {
+                sprintf(rs->logs, "op23, OP_STSEC_3 opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op23, OP_STSEC_3 status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_STR04];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_48(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_48 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_LEN01];
+            if (pdt->opCode != OP_STLEN_00) {
+                sprintf(rs->logs, "op24, OP_STLEN_0 opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op24, OP_STLEN_0 status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_LEN01];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_49(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_49 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_LEN02];
+            if (pdt->opCode != OP_STLEN_01) {
+                sprintf(rs->logs, "op25, OP_STLEN_1 opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op25, OP_STLEN_1 status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_LEN02];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_50(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_50 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_LEN03];
+            if (pdt->opCode != OP_STLEN_02) {
+                sprintf(rs->logs, "op26, OP_STLEN_2 opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op26, OP_STLEN_2 status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_LEN03];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_51(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_51 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_LEN04];
+            if (pdt->opCode != OP_STLEN_03) {
+                sprintf(rs->logs, "op27, OP_STLEN_3 opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op27, OP_STLEN_3 status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_LEN04];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_52(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    sprintf(rs->logs, "op_52 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_SDAT];
+            if (pdt->opCode != OP_SDAT) {
+                sprintf(rs->logs, "op28, OP_SDAT opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op28, OP_SDAT status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SDFAT_SDAT];
+                //pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_53(struct psdata_s *data)
+{ 
+    char str[128], ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct sdFAT_s *pFat=0;
+    struct info16Bit_s *p=0, *c=0;
+
+    pFat = data->rs->psFat;
+    
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    p = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
+
+    //sprintf(rs->logs, "op_53 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
+                ch = 45;             
+            } else {
+                if (pFat->fatStatus & ASPFAT_STATUS_SDRD) {
+                    ch = 72;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_SDWT) {
+                    ch = 77;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_FATWT) {
+                    ch = 82;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_DFECHK) {
+                    ch = 45;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_DFERD) {
+                    ch = 45;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_DFEWT) {
+                    ch = 89; /*TODO*/
+                } else if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
+                    (p->opinfo == pFat->fatBootsec->secPrfat)) {
+                    ch = 54; 
+                } else {
+                    ch = 45; 
+                }
+            }
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_29: result: %x, goto %d, fatStatus: %x\n", data->result, ch, pFat->fatStatus); 
+            print_f(rs->plogs, "FAT", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_54(struct psdata_s *data)
+{ 
+    int ret=0, offset=0, val=0;
+    struct sdFAT_s *pFat=0;
+    uint32_t secStr=0, secLen=0;
+    char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    uint32_t rlt;
+    rlt = abs_result(data->result); 
+    pFat = data->rs->psFat;
+
+    sprintf(rs->logs, "op_54 rlt:0x%x fat:0x%.8x\n", rlt, pFat->fatStatus); 
+    print_f(rs->plogs, "SDA", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+        
+            if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
+                secStr = 0;
+                secLen = 16;
+                c->opinfo = secStr;
+                p->opinfo = secLen;
+
+                sprintf(rs->logs, "BOOT_SEC secStr:%d, secLen:%d, fat status:0x%.8x \n", secStr, secLen, pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 50;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
+                secStr = pFat->fatBootsec->secWhfat;
+                secLen = pFat->fatBootsec->secPrfat;
+
+                c->opinfo = secStr;
+                p->opinfo = secLen;
+                
+                ch = 53;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if (!(pFat->fatStatus & ASPFAT_STATUS_ROOT_DIR)) {
+                secStr = pFat->fatBootsec->secWhroot;
+                secLen = pFat->fatBootsec->secPrClst;
+
+                c->opinfo = secStr;
+                p->opinfo = secLen;
+
+                if (secLen < 16) secLen = 16;
+
+                sprintf(rs->logs, "ROOT_DIR secStr:%d, secLen:%d, fat status:0x%.8x \n", secStr, secLen, pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+                
+                ch = 51;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if (!(pFat->fatStatus & ASPFAT_STATUS_FOLDER)) {
+                sprintf(rs->logs, "FOLDER fat status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 52;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_SDRD)) {
+                sprintf(rs->logs, "SD Read to APP status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 71; /* LOV->MSP->APP */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_SDWT)) {
+                sprintf(rs->logs, "APP write data to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 76; /* APP->MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_FATWT)) {
+                sprintf(rs->logs, "APP write FAT to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 80; /* APP->MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_DFECHK)) {
+                sprintf(rs->logs, "APP read DFE from SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 81; /* APP->MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_DFEWT)) {
+                sprintf(rs->logs, "APP write DFE to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 88; /* APP->MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else {
+                ch = 56; /* show the folder tree */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }
+            
+            //sprintf(str, "op_30: result: %x\n", data->result); 
+            //print_f(mlogPool, "FAT", str);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 3) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsda_55(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
@@ -6441,16 +7231,16 @@ static int stfresec_45(struct psdata_s *data)
     rs = data->rs;
     rlt = abs_result(data->result); 
 
-    sprintf(rs->logs, "op_45 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "FSC", rs->logs);  
+    sprintf(rs->logs, "op_55 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SDA", rs->logs);  
 
     switch (rlt) {
         case STINIT:
             ch = 0; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_45: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "FSC", rs->logs);  
+            sprintf(rs->logs, "op_55: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "SDA", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -8470,6 +9260,118 @@ end:
     return ret;
 }
 
+static int cmdfunc_free_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_free_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_WIFI_ONLY;
+    n = cmdfunc_upd2host(mrs, 'c', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_upld_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_used_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_used_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_WIFI_ONLY;
+    n = cmdfunc_upd2host(mrs, 'k', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_upld_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type)
 {
     int cnt=0, s=0;
@@ -8645,7 +9547,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 13
+#define CMD_SIZE 15
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -8654,7 +9556,7 @@ static int dbg(struct mainRes_s *mrs)
     struct cmd_s cmdtab[CMD_SIZE] = {{0, "poll", cmdfunc_01}, {1, "action", cmdfunc_act_opcode}, {2, "rgw", cmdfunc_regw_opcode}, {3, "op", cmdfunc_opcode}, 
                                 {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_go_opcode}, {6, "rgr", cmdfunc_regr_opcode}, {7, "launch", cmdfunc_lh_opcode},
                                 {8, "boot", cmdfunc_boot_opcode}, {9, "single", cmdfunc_single_opcode}, {10, "dnld", cmdfunc_dnld_opcode}, {11, "upld", cmdfunc_upld_opcode},
-                                {12, "save", cmdfunc_save_opcode}};
+                                {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}};
 
     p0_init(mrs);
 
@@ -13126,7 +14028,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stfat_26, stfat_27, stfat_28, stfat_29, stfat_30}, // FATH
                             {stsup_31, stsup_32, stsup_33, stsup_34, stsup_35}, // SUPI
                             {stsin_36, stdow_37, stupd_38, stupd_39, stupd_40}, // SINJ
-                            {stsav_41, stfresec_42, stfresec_43, stfresec_44, stfresec_45}}; // SAVK
+                            {stsav_41, stsda_42, stsda_43, stsda_44, stsda_45}, // SAVK
+                            {stsda_46, stsda_47, stsda_48, stsda_49, stsda_50}, // SDAL
+                            {stsda_51, stsda_52, stsda_53, stsda_54, stsda_55}}; // SDAM
 
     p1_init(rs);
     stdata = rs->pstdata;
