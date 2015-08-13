@@ -7182,32 +7182,14 @@ static int stsda_51(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             /* TODO */
-
-            if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
-                ch = 45;             
+            if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
+                data->result = emb_result(data->result, EVTMAX);
             } else {
-                if (pFat->fatStatus & ASPFAT_STATUS_SDRD) {
-                    ch = 72;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_SDWT) {
-                    ch = 77;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_FATWT) {
-                    ch = 82;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_DFECHK) {
-                    ch = 45;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_DFERD) {
-                    ch = 45;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_DFEWT) {
-                    ch = 89; /*TODO*/
-                } else if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
-                    (p->opinfo == pFat->fatBootsec->secPrfat)) {
-                    ch = 54; 
-                } else {
-                    ch = 45; 
-                }
+                ch = 0;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
             }
 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_51: result: %x, goto %d, fatStatus: %x\n", data->result, ch, pFat->fatStatus); 
             print_f(rs->plogs, "SDA", rs->logs);  
             break;
@@ -7832,32 +7814,14 @@ static int stsda_61(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             /* TODO */
-
-            if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
-                ch = 45;             
+            if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
+                data->result = emb_result(data->result, EVTMAX);
             } else {
-                if (pFat->fatStatus & ASPFAT_STATUS_SDRD) {
-                    ch = 72;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_SDWT) {
-                    ch = 77;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_FATWT) {
-                    ch = 82;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_DFECHK) {
-                    ch = 45;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_DFERD) {
-                    ch = 45;
-                } else if (pFat->fatStatus & ASPFAT_STATUS_DFEWT) {
-                    ch = 89; /*TODO*/
-                } else if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
-                    (p->opinfo == pFat->fatBootsec->secPrfat)) {
-                    ch = 54; 
-                } else {
-                    ch = 45; 
-                }
+                ch = 0;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
             }
-
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
+            
             sprintf(rs->logs, "op_51: result: %x, goto %d, fatStatus: %x\n", data->result, ch, pFat->fatStatus); 
             print_f(rs->plogs, "SDA", rs->logs);  
             break;
@@ -13960,7 +13924,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
             
-            /* TODO: fill the DEF */
+            /* fill the DEF */
             
             /* find the free space, slot unit is 32 bytes */
             fLen = aspFindFreeDEF(&pdef, pParBuf->dirParseBuff, pParBuf->dirBuffUsed, 32);
