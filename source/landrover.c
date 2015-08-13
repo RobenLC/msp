@@ -110,7 +110,8 @@ typedef enum {
     AUTO_B,  // 4
     AUTO_C,  // 5
     AUTO_D,  // 6
-    SMAX,   // 7
+    AUTO_E,  // 7
+    SMAX,   // 8
 }state_e;
 
 typedef enum {
@@ -621,6 +622,14 @@ static int next_spy(struct psdata_s *data)
                     next = PSSET;
                     evt = AUTO_B;
                     break;
+                case OP_FREESEC:
+                    next = PSTSM;
+                    evt = AUTO_D;
+                    break;
+                case OP_USEDSEC:
+                    next = PSSET;
+                    evt = AUTO_E;
+                    break;
                 case OP_RGRD:
                 case OP_RGWT:
                 case OP_RGADD_H:
@@ -1078,6 +1087,76 @@ static int next_auto_D(struct psdata_s *data)
     return emb_process(tmpRlt, next);
 }
 
+static int next_auto_E(struct psdata_s *data)
+{
+    int pro, rlt, next = -1;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+    evt = (data->result >> 8) & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "auto_A", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET: 
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            case PSACT: 
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            case PSWT: 
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                break;
+            default:
+                sprintf(str, "default\n"); 
+                print_f(mlogPool, "laser", str); 
+                next = PSSET;
+                break;
+        }
+    }
+
+    if (next < 0) {
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+
+        next = PSTSM; /* break */
+        evt = SPY;
+    }
+
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static int next_error(struct psdata_s *data)
 {
     int pro, rlt, next;
@@ -1180,6 +1259,13 @@ static int ps_next(struct psdata_s *data)
             nxtst = evt; /* end the test loop */
 
             break;
+        case AUTO_E:
+            ret = next_auto_E(data);
+            evt = (ret >> 24) & 0xff;
+            nxtst = evt; /* end the test loop */
+
+            break;
+
         default:
             ret = next_error(data);
             evt = (ret >> 24) & 0xff;
@@ -1396,6 +1482,8 @@ static int stspy_05(struct psdata_s *data)
                     case OP_AFEIC:
                     case OP_EXTPULSE:
                     case OP_SDAT:
+                    case OP_FREESEC:
+                    case OP_USEDSEC:
                     case OP_ACTION:
                     case OP_RGRD:
                     case OP_RGWT:
@@ -1846,8 +1934,17 @@ static int stauto_03(struct psdata_s *data)
                 s->d[ix] = g->data;
                 s->f &= ~(0x1 << ix);
 
-                p->opcode = g->opcode;
-                p->data = g->data;
+                sprintf(str, "!! flag: 0x%.2x data: 0x%.2x !!\n", s->f, s->d[ix]);  
+                print_f(mlogPool, "auto_03", str);  
+
+                if (s->f & (0x1 << ix)) {
+                    p->opcode = g->opcode;
+                    p->data = s->d[ix];
+                } else {
+                    s->d[ix] = g->data;
+                    p->opcode = g->opcode;
+                    p->data = g->data;
+                }
 
                 ch = 24; 
                 rs_ipc_put(data->rs, &ch, 1);
@@ -1874,11 +1971,14 @@ static int stauto_03(struct psdata_s *data)
 
                 if ((data->ansp0 & 0xff) == op) {
                     ix = (op - OP_STSEC_00) & 0xf;
-                    if (s->d[ix] == g->data) {
-                        s->f |= 0x1 << ix;
+                    if (s->f & (0x1 << ix)) {
+                        s->f &= ~(0x1 << ix);                    
                     } else {
-                        s->f &= ~(0x1 << ix);
+                        if (s->d[ix] == g->data) {
+                            s->f |= 0x1 << ix;
+                        }
                     }
+
                     sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                     print_f(mlogPool, "auto_03", str);  
                     data->result = emb_result(data->result, NEXT);
@@ -1930,8 +2030,16 @@ static int stauto_04(struct psdata_s *data)
                 m->d[ix] = g->data;
                 m->f &= ~(0x1 << ix);
 
-                p->opcode = g->opcode;
-                p->data = g->data;
+                sprintf(str, "!! flag: 0x%.2x data: 0x%.2x !!\n", s->f, s->d[ix]);  
+                print_f(mlogPool, "auto_04", str);  
+
+                if (m->f & (0x1 << ix)) {
+                    p->opcode = g->opcode;
+                    p->data = m->d[ix];
+                } else {
+                    p->opcode = g->opcode;
+                    p->data = g->data;
+                }
 
                 ch = 24; 
                 rs_ipc_put(data->rs, &ch, 1);
@@ -1958,11 +2066,15 @@ static int stauto_04(struct psdata_s *data)
 
                 if ((data->ansp0 & 0xff) == op) {
                     ix = (op - OP_STLEN_00) & 0xf;
-                    if (m->d[ix] == g->data) {
-                        m->f |= 0x1 << ix;
-                    } else {
+
+                    if (m->f & (0x1 << ix)) {
                         m->f &= ~(0x1 << ix);
+                    } else {
+                        if (m->d[ix] == g->data) {
+                            m->f |= 0x1 << ix;
+                        }
                     }
+                    
                     sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                     print_f(mlogPool, "auto_04", str);  
                     data->result = emb_result(data->result, NEXT);
@@ -1992,6 +2104,11 @@ static int stauto_05(struct psdata_s *data)
     struct SdAddrs_s *s, *m;
     FILE *fp;
 
+    s = &data->rs->pmch->sdst;
+    m = &data->rs->pmch->sdln;
+    g = &data->rs->pmch->get;
+    p = &data->rs->pmch->cur;
+
     rlt = abs_result(data->result);
     //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
     //print_f(mlogPool, "auto_05", str);  
@@ -1999,10 +2116,7 @@ static int stauto_05(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             //fp = data->rs->pmch->fdsk.vsd;
-            s = &data->rs->pmch->sdst;
-            m = &data->rs->pmch->sdln;
-            g = &data->rs->pmch->get;
-            p = &data->rs->pmch->cur;
+
             memset(p, 0, sizeof(struct info16Bit_s));
 
             if ((s->f == 0xf) && (m->f == 0xf)) {
@@ -2028,6 +2142,8 @@ static int stauto_05(struct psdata_s *data)
             g = &data->rs->pmch->get;
 
             if ((data->ansp0 & 0xff) == g->opcode) {
+                s->f = 0;
+                m->f = 0;
                 sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                 print_f(mlogPool, "auto_05", str);  
                 data->result = emb_result(data->result, NEXT);
@@ -2042,6 +2158,7 @@ static int stauto_05(struct psdata_s *data)
     }
     return ps_next(data);
 }
+
 static int stauto_06(struct psdata_s *data)
 {
     char str[128], ch = 0;
@@ -2662,7 +2779,127 @@ static int stauto_19(struct psdata_s *data)
     return ps_next(data);
 
 }
-static int stauto_20(struct psdata_s *data) {return 0;}
+
+static int stauto_20(struct psdata_s *data)
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+    struct SdAddrs_s *s, *m;
+    FILE *fp;
+
+    s = &data->rs->pmch->sdst;
+    m = &data->rs->pmch->sdln;
+    g = &data->rs->pmch->get;
+    p = &data->rs->pmch->cur;
+
+    rlt = abs_result(data->result);
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_20", str);  
+
+    switch (rlt) {
+        case STINIT:
+            //fp = data->rs->pmch->fdsk.vsd;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            p->opcode = g->opcode;
+            p->data = g->data;
+            p->info = g->data;
+
+            sprintf(str, "get start sector: %d length: %d , send OP_SDAT confirm !!!\n", s->n, m->n);  
+            print_f(mlogPool, "auto_20", str);  
+
+            ch = 24; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+
+            if ((data->ansp0 & 0xff) == g->opcode) {
+                s->f = 0;
+                m->f = 0;
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
+                print_f(mlogPool, "auto_20", str);  
+                data->result = emb_result(data->result, NEXT);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_21(struct psdata_s *data)
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+    struct SdAddrs_s *s, *m;
+    FILE *fp;
+
+    rlt = abs_result(data->result);
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_05", str);  
+
+    switch (rlt) {
+        case STINIT:
+            //fp = data->rs->pmch->fdsk.vsd;
+            s = &data->rs->pmch->sdst;
+            m = &data->rs->pmch->sdln;
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            if ((s->f == 0xf) && (m->f == 0xf)) {
+                p->opcode = g->opcode;
+                p->data = g->data;
+
+                sprintf(str, "get start sector: %d length: %d , secPrClst: %d/%d, data length: %d confirm !!!\n", s->n, m->n, p->info, g->data, g->info);  
+                print_f(mlogPool, "auto_21", str);  
+
+                m->n = g->info;
+                
+                ch = 24; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+
+            } else {
+                sprintf(str, "ERROR!!! get pkt: 0x%.2x 0x%.2x, go to next!!\n", g->opcode, g->data);  
+                print_f(mlogPool, "auto_05", str);  
+                data->result = emb_result(data->result, NEXT);
+            }
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+
+            if ((data->ansp0 & 0xff) == g->opcode) {
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
+                print_f(mlogPool, "auto_05", str);  
+                data->result = emb_result(data->result, NEXT);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_22(struct psdata_s *data) {return 0;}
+static int stauto_23(struct psdata_s *data) {return 0;}
+static int stauto_24(struct psdata_s *data) {return 0;}
+static int stauto_25(struct psdata_s *data) {return 0;}
 
 static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p)
 {
@@ -3577,6 +3814,8 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_SDRD:                                       
         case OP_SDWT:                                       
         case OP_SDAT:                                     
+        case OP_FREESEC:
+        case OP_USEDSEC:
         case OP_STSEC_00:                                  
         case OP_STSEC_01:                                  
         case OP_STSEC_02:                                  
@@ -4058,6 +4297,9 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     uch = mrs->mchine.sdst.d;
     startSec = mrs->mchine.sdst.n;
     secNum = mrs->mchine.sdln.n;
+    mrs->mchine.sdst.f = 0;
+    mrs->mchine.sdln.f = 0;
+
     maxLen = pf->rtMax;
 
     sprintf(mrs->log, "secStr: %d (%x,%x,%x,%x), secLen: %d\n", startSec, uch[0], uch[1], uch[2], uch[3], secNum);
@@ -5272,7 +5514,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stauto_01, stauto_02, stauto_03, stauto_04, stauto_05}, // AUTO_A
                             {stauto_06, stauto_07, stauto_08, stauto_09, stauto_10}, // AUTO_B
                             {stauto_11, stauto_12, stauto_13, stauto_14, stauto_15}, // AUTO_C
-                            {stauto_16, stauto_17, stauto_18, stauto_19, stauto_20}}; // AUTO_D
+                            {stauto_16, stauto_17, stauto_18, stauto_19, stauto_20}, // AUTO_D
+                            {stauto_21, stauto_22, stauto_23, stauto_24, stauto_25}}; // AUTO_E
     /* A.1 ~ A.4 for start sector 01 - 04*/
     /* A.5 = A.8 for sector len   01 - 04*/
     /* A.9 for sd sector transmitting using command mode */
@@ -6094,7 +6337,10 @@ static int p4(struct procRes_s *rs)
 #endif
             starts = rs->pmch->sdst.n * SEC_LEN;
             acusz = rs->pmch->sdln.n * SEC_LEN;
-            
+
+            rs->pmch->sdln.f = 0;
+            rs->pmch->sdst.f = 0;
+
             if (acusz > rs->pmch->fdsk.rtMax) {
                 sprintf(rs->logs, "OP_SDAT failed due to size > max, len:%d,mx:%d\n", acusz, rs->pmch->fdsk.rtMax);
                 print_f(rs->plogs, "P4", rs->logs);
@@ -6269,6 +6515,8 @@ static int p4(struct procRes_s *rs)
 
             tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
 
+            rs->pmch->get.info = totsz;
+            
             flsize = totsz;
             fltime = tdiff;
             sprintf(rs->logs, "time:%d us, totsz:%d bytes, thoutghput: %f MBits\n", tdiff, totsz, (flsize*8)/fltime);
