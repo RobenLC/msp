@@ -3117,7 +3117,7 @@ inline uint32_t emb_process(uint32_t result, uint32_t flag)
     return result;
 }
 
-static uint32_t next_SAVK(struct psdata_s *data)
+static uint32_t next_SDAO(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
@@ -3140,7 +3140,8 @@ static uint32_t next_SAVK(struct psdata_s *data)
             case PSSET:
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSACT;
+                evt = SDAM; 
                 break;
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
@@ -3178,6 +3179,260 @@ static uint32_t next_SAVK(struct psdata_s *data)
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
+
+static uint32_t next_SDAN(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSACT;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSRLT;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSTSM;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSSET;
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                evt = SDAO; 
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static uint32_t next_SDAM(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSACT;
+                evt = SAVK; 
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSRLT;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSTSM;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSSET;
+                evt = SDAN; 
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static uint32_t next_SDAL(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSACT;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSRLT;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSTSM;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSSET;
+                evt = SDAM; 
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static uint32_t next_SAVK(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSRLT;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSTSM;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSSET;
+                evt = SDAL; 
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static uint32_t next_SINJ(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
@@ -4011,6 +4266,26 @@ static int ps_next(struct psdata_s *data)
             break;
         case SAVK:
             ret = next_SAVK(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case SDAL:
+            ret = next_SDAL(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case SDAM:
+            ret = next_SDAM(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case SDAN:
+            ret = next_SDAN(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case SDAO:
+            ret = next_SDAO(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -14604,7 +14879,14 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'v') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, SAVK, PSSET);
+                } else if (cmd == 'c') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, SDAM, PSSET);
+                } else if (cmd == 'k') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, SDAO, PSSET);
                 }
+
 
 
 
