@@ -13429,7 +13429,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int val=0, i=0, ret=0;
     char *pr=0;
-    uint32_t secStr=0, secLen=0, clstByte=0, clstLen=0;
+    uint32_t secStr=0, secLen=0, clstByte=0, clstLen=0, freeClst=0, usedClst=0, totClst=0;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -13438,7 +13438,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct directnFile_s *curDir=0, *ch=0, *br=0;
     struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
-    struct adFATLinkList_s *pfre=0, *pnxf=0;
+    struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
     struct sdFATable_s   *pftb=0;
     
     c = &mrs->mchine.cur;
@@ -13494,6 +13494,40 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
                 print_f(&mrs->plog, "fs75", mrs->log);
                 modersp->r = 0xed;
                 return 1;
+            } else {
+
+                freeClst = 0;
+                if ((pfre != pnxf) && (pnxf)) {
+                    totClst = (psec->secTotal - psec->secWhroot) / psec->secPrClst;
+
+                    while (pfre != pnxf) {
+                        pclst = pfre;
+
+                        pfre = pfre->n;
+
+                        sprintf(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
+                        print_f(&mrs->plog, "fs75", mrs->log);
+
+                        aspFree(pclst);
+                        pclst = 0;
+                    }
+
+                    pflnt = pnxf;
+                    while (pflnt) {
+                        freeClst += pflnt->ftLen;
+                        sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
+                        print_f(&mrs->plog, "fs75", mrs->log);
+                        pflnt = pflnt->n;
+                    }
+
+                    sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+                    print_f(&mrs->plog, "fs75", mrs->log);     
+                    usedClst = totClst - freeClst;
+
+                    pftb->ftbMng.ftfreeClst = freeClst;
+                    pftb->ftbMng.ftusedClst = usedClst;
+                    pftb->ftbMng.f = pnxf;
+                }
             }
         
             /* debug */
@@ -13881,7 +13915,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     char clstPath[128] = "/mnt/mmc2/clstnew.bin";
     int val=0, i=0, ret=0, fLen=0, len=0;
     uint8_t *pdef=0;
-    uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
+    uint32_t secStr=0, secLen=0, fstsec=0, lstsec, freeClst=0, usedClst=0, totClst=0;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -14003,12 +14037,45 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if (!pftb->h) {
                     padd = 0;
 
+                    pnxf = 0;
                     ret = mspSD_allocFreeFATList(&padd, 1, pfre, &pnxf);
                     if (ret) {
                         sprintf(mrs->log, "free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
                         print_f(&mrs->plog, "fs81", mrs->log);
                         modersp->r = 0xed;
                         return 1;
+                    } else {
+                        if ((pfre != pnxf) && (pnxf)) {
+                            totClst = (psec->secTotal - psec->secWhroot) / psec->secPrClst;
+
+                            while (pfre != pnxf) {
+                                pclst = pfre;
+
+                                pfre = pfre->n;
+
+                                sprintf(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
+                                print_f(&mrs->plog, "fs81", mrs->log);
+
+                                aspFree(pclst);
+                                pclst = 0;
+                            }
+
+                            pflnt = pnxf;
+                            freeClst = 0;
+                            while (pflnt) {
+                                freeClst += pflnt->ftLen;
+                                sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
+                                print_f(&mrs->plog, "fs81", mrs->log);
+                                pflnt = pflnt->n;
+                            }
+                            sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+                            print_f(&mrs->plog, "fs81", mrs->log);     
+                            usedClst = totClst - freeClst;
+
+                            pftb->ftbMng.ftfreeClst = freeClst;
+                            pftb->ftbMng.ftusedClst = usedClst;
+                            pftb->ftbMng.f = pnxf;
+                        }
                     }
 
                     /* debug */
