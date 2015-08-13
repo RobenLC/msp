@@ -13494,8 +13494,8 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
                 print_f(&mrs->plog, "fs75", mrs->log);
                 modersp->r = 0xed;
                 return 1;
-            } else {
-
+            } 
+            else {
                 freeClst = 0;
                 if ((pfre != pnxf) && (pnxf)) {
                     totClst = (psec->secTotal - psec->secWhroot) / psec->secPrClst;
@@ -13511,25 +13511,25 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
                         aspFree(pclst);
                         pclst = 0;
                     }
-
-                    pflnt = pnxf;
-                    while (pflnt) {
-                        freeClst += pflnt->ftLen;
-                        sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
-                        print_f(&mrs->plog, "fs75", mrs->log);
-                        pflnt = pflnt->n;
-                    }
-
-                    sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
-                    print_f(&mrs->plog, "fs75", mrs->log);     
-                    usedClst = totClst - freeClst;
-
-                    pftb->ftbMng.ftfreeClst = freeClst;
-                    pftb->ftbMng.ftusedClst = usedClst;
-                    pftb->ftbMng.f = pnxf;
                 }
+
+                pflnt = pnxf;
+                while (pflnt) {
+                    freeClst += pflnt->ftLen;
+                    sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
+                    print_f(&mrs->plog, "fs75", mrs->log);
+                    pflnt = pflnt->n;
+                }
+
+                sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+                print_f(&mrs->plog, "fs75", mrs->log);     
+                usedClst = totClst - freeClst;
+
+                pftb->ftbMng.ftfreeClst = freeClst;
+                pftb->ftbMng.ftusedClst = usedClst;
+                pftb->ftbMng.f = pnxf;
             }
-        
+
             /* debug */
             sprintf(mrs->log, "show allocated FAT list: \n");
             print_f(&mrs->plog, "fs75", mrs->log);
@@ -14044,7 +14044,11 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                         print_f(&mrs->plog, "fs81", mrs->log);
                         modersp->r = 0xed;
                         return 1;
-                    } else {
+                    } 
+
+                    else {
+
+                        freeClst = 0;
                         if ((pfre != pnxf) && (pnxf)) {
                             totClst = (psec->secTotal - psec->secWhroot) / psec->secPrClst;
 
@@ -14059,23 +14063,24 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 aspFree(pclst);
                                 pclst = 0;
                             }
-
-                            pflnt = pnxf;
-                            freeClst = 0;
-                            while (pflnt) {
-                                freeClst += pflnt->ftLen;
-                                sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
-                                print_f(&mrs->plog, "fs81", mrs->log);
-                                pflnt = pflnt->n;
-                            }
-                            sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
-                            print_f(&mrs->plog, "fs81", mrs->log);     
-                            usedClst = totClst - freeClst;
-
-                            pftb->ftbMng.ftfreeClst = freeClst;
-                            pftb->ftbMng.ftusedClst = usedClst;
-                            pftb->ftbMng.f = pnxf;
                         }
+
+                        pflnt = pnxf;
+                        while (pflnt) {
+                            freeClst += pflnt->ftLen;
+                            sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
+                            print_f(&mrs->plog, "fs81", mrs->log);
+                            pflnt = pflnt->n;
+                        }
+
+                        sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+                        print_f(&mrs->plog, "fs81", mrs->log);     
+                        usedClst = totClst - freeClst;
+
+                        pftb->ftbMng.ftfreeClst = freeClst;
+                        pftb->ftbMng.ftusedClst = usedClst;
+                        pftb->ftbMng.f = pnxf;
+
                     }
 
                     /* debug */
