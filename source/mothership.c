@@ -110,21 +110,21 @@ typedef enum {
 
 typedef enum {
     SPY = 0,
-    BULLET,
-    LASER,
-    DOUBLEC,
-    DOUBLED,
-    REGE,
+    BULLET,      // 1
+    LASER,       //  2
+    DOUBLEC,   // 3
+    DOUBLED,   // 4
+    REGE,         // 5
     REGF,
     FATG,
     FATH,
-    SUPI,
-    SINJ,
-    SAVK,
-    SDAL,
-    SDAM,
-    SDAN,
-    SDAO,
+    SUPI,          // 9
+    SINJ,          // a
+    SAVK,         // b
+    SDAL,         // c
+    SDAM,        // d
+    SDAN,        // e
+    SDAO,        // f
     SMAX,
 }state_e;
 
@@ -2248,6 +2248,30 @@ static int mspSD_getFreeFATList(struct adFATLinkList_s **head, uint32_t idx, uin
     return 0;
 }
 
+static int mspSD_getLastFATList(struct adFATLinkList_s **head, struct adFATLinkList_s *f)
+{
+    int ret=0;
+    uint32_t str=0, len=0, acu=0;
+    struct adFATLinkList_s *c=0, *t=0;
+    struct adFATLinkList_s *ls=0, *nt=0;
+    
+    if (!f) return -1;
+    ret = mspSD_createFATLinkList(&ls);
+    if (ret) return ret;
+
+    *head = ls;
+    c = f;
+
+    while (c->n) {
+        c = c->n;
+    }
+
+    ls->ftLen = c->ftLen;
+    ls->ftStart = c->ftStart;
+
+    return 0;
+}
+
 static int mspSD_allocFreeFATList(struct adFATLinkList_s **head, uint32_t length, struct adFATLinkList_s *f, struct adFATLinkList_s **n)
 {
     int ret=0;
@@ -3223,13 +3247,13 @@ static uint32_t next_SDAN(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSSET;
+                next = PSACT;
+                evt = SDAO; 
                 break;
             default:
                 //sprintf(str, "default\n"); 
                 //print_f(mlogPool, "bullet", str); 
                 next = PSSET;
-                evt = SDAO; 
                 break;
         }
     }
@@ -3350,8 +3374,7 @@ static uint32_t next_SDAL(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSSET;
-                evt = SDAM; 
+                next = PSMAX; 
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -7185,7 +7208,7 @@ static int stsda_51(struct psdata_s *data)
             if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
                 data->result = emb_result(data->result, EVTMAX);
             } else {
-                ch = 0;
+                ch = 91;
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             }
@@ -7817,12 +7840,12 @@ static int stsda_61(struct psdata_s *data)
             if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
                 data->result = emb_result(data->result, EVTMAX);
             } else {
-                ch = 0;
+                ch = 92;
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             }
             
-            sprintf(rs->logs, "op_51: result: %x, goto %d, fatStatus: %x\n", data->result, ch, pFat->fatStatus); 
+            sprintf(rs->logs, "op_61: result: %x, goto %d, fatStatus: %x\n", data->result, ch, pFat->fatStatus); 
             print_f(rs->plogs, "SDA", rs->logs);  
             break;
         case WAIT:
@@ -7861,7 +7884,7 @@ static int stsda_62(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
+            ch = 93; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_62: result: %x, goto %d\n", data->result, ch); 
@@ -7871,7 +7894,7 @@ static int stsda_62(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -14696,9 +14719,218 @@ static int fs90(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-static int fs91(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
-static int fs92(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
-static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs91(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int val=0, i=0, ret=0;
+    char *pr=0;
+    uint32_t secStr=0, secLen=0, clstByte=0, clstLen=0, freeClst=0, usedClst=0, totClst=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct directnFile_s *curDir=0, *ch=0, *br=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
+    struct sdFATable_s   *pftb=0;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
+    clstByte = psec->secSize * psec->secPrClst;
+    if (!clstByte) {
+        sprintf(mrs->log, "ERROR!! bytes number of cluster is zero \n");
+        print_f(&mrs->plog, "fs91", mrs->log);
+
+        modersp->r = 2;
+        return 1;
+    }
+
+    pfre = pftb->ftbMng.f;
+    if (!pfre) {
+        sprintf(mrs->log, "Error!! free space link list is empty \n");
+        print_f(&mrs->plog, "fs91", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    ret = mspSD_getLastFATList(&pflsh, pfre);
+    if (ret) {
+        sprintf(mrs->log, "Error!! get last FAT linklist failed ret: %d\n", ret);
+        print_f(&mrs->plog, "fs91", mrs->log);
+        modersp->r = 2;
+        return 1;
+    }
+
+    sprintf(mrs->log, "Get last FAT linklist start: %d, length: %d\n", pflsh->ftStart, pflsh->ftLen);
+    print_f(&mrs->plog, "fs91", mrs->log);
+
+    pflnt = pflsh;
+
+    secStr = (pflnt->ftStart - 2) * (uint32_t)psec->secPrClst + (uint32_t)psec->secWhroot;
+    secLen = pflnt->ftLen * (uint32_t)psec->secPrClst;
+        
+    sprintf(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
+    print_f(&mrs->plog, "fs91", mrs->log);
+
+    cfgTableSet(pct, ASPOP_SDFREE_FREESEC, psec->secPrClst);
+
+    val = cfgValueOffset(secStr, 0);
+    cfgTableSet(pct, ASPOP_SDFREE_STR01, val);
+    val = cfgValueOffset(secStr, 8);
+    cfgTableSet(pct, ASPOP_SDFREE_STR02, val);
+    val = cfgValueOffset(secStr, 16);
+    cfgTableSet(pct, ASPOP_SDFREE_STR03, val);
+    val = cfgValueOffset(secStr, 24);
+    cfgTableSet(pct, ASPOP_SDFREE_STR04, val);
+    val = cfgValueOffset(secLen, 0);
+    cfgTableSet(pct, ASPOP_SDFREE_LEN01, val);
+    val = cfgValueOffset(secLen, 8);
+    cfgTableSet(pct, ASPOP_SDFREE_LEN02, val);
+    val = cfgValueOffset(secLen, 16);
+    cfgTableSet(pct, ASPOP_SDFREE_LEN03, val);
+    val = cfgValueOffset(secLen, 24);
+    cfgTableSet(pct, ASPOP_SDFREE_LEN04, val);
+
+    modersp->r = 1;
+    return 1;
+}
+
+static int fs92(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    uint32_t secStr=0, secLen=0, val=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+
+    pfat = &mrs->aspFat;
+    pct = mrs->configTable;
+    psec = pfat->fatBootsec;
+
+    secStr = 0;
+    secLen = 0;
+        
+    sprintf(mrs->log, "set secStart:%d, secLen:%d secPrClst: %d \n", secStr, secLen, psec->secPrClst);
+    print_f(&mrs->plog, "fs92", mrs->log);
+
+    cfgTableSet(pct, ASPOP_SDUSED_USEDSEC, psec->secPrClst);
+
+    val = cfgValueOffset(secStr, 0);
+    cfgTableSet(pct, ASPOP_SDUSED_STR01, val);
+    val = cfgValueOffset(secStr, 8);
+    cfgTableSet(pct, ASPOP_SDUSED_STR02, val);
+    val = cfgValueOffset(secStr, 16);
+    cfgTableSet(pct, ASPOP_SDUSED_STR03, val);
+    val = cfgValueOffset(secStr, 24);
+    cfgTableSet(pct, ASPOP_SDUSED_STR04, val);
+    val = cfgValueOffset(secLen, 0);
+    cfgTableSet(pct, ASPOP_SDUSED_LEN01, val);
+    val = cfgValueOffset(secLen, 8);
+    cfgTableSet(pct, ASPOP_SDUSED_LEN02, val);
+    val = cfgValueOffset(secLen, 16);
+    cfgTableSet(pct, ASPOP_SDUSED_LEN03, val);
+    val = cfgValueOffset(secLen, 24);
+    cfgTableSet(pct, ASPOP_SDUSED_LEN04, val);
+
+    modersp->r = 1;
+
+    return 1;
+}
+
+static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int ret=0;
+    uint32_t secStr=0, secLen=0, clstLen=0, clstStr=0;;
+    uint32_t freeClst=0, usedClst=0, totClst=0, val=0, b32=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
+    struct sdFATable_s   *pftb=0;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
+
+    pfre = pftb->ftbMng.f;
+    if (!pfre) {
+        sprintf(mrs->log, "Error!! free space link list is empty \n");
+        print_f(&mrs->plog, "fs93", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    secStr = 0;
+    secLen = 0;
+            
+    cfgTableGet(pct, ASPOP_SDUSED_USEDSEC, &val);
+    if (val != psec->secPrClst) {
+        sprintf(mrs->log, "ERROR!!! get secPrClst: %d (should be:%d) \n", val, psec->secPrClst);
+        print_f(&mrs->plog, "fs93", mrs->log);   
+    }
+
+    ret = 0;
+
+    b32 = 0;
+    ret += cfgTableGet(pct, ASPOP_SDUSED_STR01, &val);
+    b32 |= val ;
+
+    ret += cfgTableGet(pct, ASPOP_SDUSED_STR02, &val);
+    b32 |= val << 8;
+    
+    ret += cfgTableGet(pct, ASPOP_SDUSED_STR03, &val);
+    b32 |= val << 16;
+    
+    ret += cfgTableGet(pct, ASPOP_SDUSED_STR04, &val);
+    b32 |= val << 24;
+    secStr = b32;
+
+    b32 = 0;
+    ret += cfgTableGet(pct, ASPOP_SDUSED_LEN01, &val);
+    b32 |= val;
+    
+    ret += cfgTableGet(pct, ASPOP_SDUSED_LEN02, &val);
+    b32 |= val << 8;
+    
+    ret += cfgTableGet(pct, ASPOP_SDUSED_LEN03, &val);
+    b32 |= val << 16;
+    
+    ret += cfgTableGet(pct, ASPOP_SDUSED_LEN04, &val);
+    b32 |= val << 24;
+    secLen = b32;
+
+    pflnt = pfre;
+
+    while (pflnt->n) {
+        pflnt = pflnt->n;
+    }
+
+    clstStr = ((secStr - (uint32_t)psec->secWhroot) / (uint32_t)psec->secPrClst) + 2;
+
+    if ((secLen % (uint32_t)psec->secPrClst) == 0) {
+        clstLen = secLen / (uint32_t)psec->secPrClst;
+    } else {
+        clstLen = (secLen / (uint32_t)psec->secPrClst) + 1;
+    }
+
+    sprintf(mrs->log, "Get secStart:%d, secLen:%d, clstStr: %d, clstLen: %d \n", secStr, secLen, clstStr, clstLen);
+    print_f(&mrs->plog, "fs93", mrs->log);
+
+    if ((pflnt->ftStart != clstStr) || (clstLen > pflnt->ftLen)) {
+        sprintf(mrs->log, "ERROR!!! get clstStart: %d(%d) clstLen: %d(%d) \n", clstStr, pflnt->ftStart, clstLen, pflnt->ftLen);
+        print_f(&mrs->plog, "fs93", mrs->log);   
+        modersp->r = 2;
+    } else {
+        pflnt->ftLen -= clstLen;
+        pflnt->ftStart += clstLen;
+        modersp->r = 1;
+    }
+
+    return 1;
+}
+
 static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
@@ -18157,6 +18389,7 @@ int main(int argc, char *argv[])
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
+            break;
         case ASPOP_SDUSED_USEDSEC: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_USEDSEC;
