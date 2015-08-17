@@ -1137,7 +1137,7 @@ static int next_auto_E(struct psdata_s *data)
             case PSWT: 
                 //sprintf(str, "PSWT\n"); 
                 //print_f(mlogPool, "auto_D", str); 
-                switch ((tmpAns >> 8) && 0xff) {
+                switch ((tmpAns >> 8) & 0xff) {
                     case 0x01:
                         next = PSTSM; 
                         evt = AUTO_D;
@@ -2849,7 +2849,7 @@ static int stauto_20(struct psdata_s *data)
             } else {
                 data->result = emb_result(data->result, BREAK);
 
-                sprintf(str, "get start sector: %d length: %d , send OP_SDAT confirm !!!\n", s->sda, m->sda);  
+                sprintf(str, "get start sector: %d length: %d DONE !!!\n", s->sda, m->sda);  
                 print_f(mlogPool, "auto_20", str);  
             }
                 
@@ -2903,29 +2903,33 @@ static int stauto_21(struct psdata_s *data)
                 print_f(mlogPool, "auto_21", str);  
                 data->result = emb_result(data->result, BREAK);
             
-            } else if ((s->sda) && (m->sda)) {
-                p->opcode = g->opcode;
-                p->data = g->data;
-
-                s->n = s->sda;
-                m->n = 20480;
-
-                s->f = 0xf;
-                m->f = 0xf;
-                m->f |= 0x200;
-                
-                sprintf(str, "get start sector: %d, total length: %d , secPrClst: %d, data length: %d confirm !!!\n", s->n, m->sda, g->data, m->n);  
-                print_f(mlogPool, "auto_21", str);  
-                
-                ch = 24; 
-                rs_ipc_put(data->rs, &ch, 1);
-                data->result = emb_result(data->result, WAIT);
-
             } else {
+                if ((s->sda) && (m->sda)) {
+                    p->opcode = g->opcode;
+                    p->data = g->data;
 
-                sprintf(str, "ERROR!!! get start sector: %d, total length: %d , flag: 0x%x, 0x%x !!!\n", s->sda, m->sda, s->f, m->f);  
-                print_f(mlogPool, "auto_21", str);  
-                data->result = emb_result(data->result, BREAK);
+                    s->n = s->sda;
+                    m->n = 20480;
+
+                    s->f = 0xf;
+                    m->f = 0xf;
+                    m->f |= 0x200;
+
+                    sprintf(str, "get start sector: %d, total length: %d , secPrClst: %d, data length: %d confirm !!!\n", s->n, m->sda, g->data, m->n);  
+                    print_f(mlogPool, "auto_21", str);  
+
+                    ch = 24; 
+                    rs_ipc_put(data->rs, &ch, 1);
+                    data->result = emb_result(data->result, WAIT);
+
+                } else {
+                    s->f = 0;
+                    m->f = 0;
+
+                    sprintf(str, "ERROR!!! get start sector: %d, total length: %d , flag: 0x%x, 0x%x !!!\n", s->sda, m->sda, s->f, m->f);  
+                    print_f(mlogPool, "auto_21", str);  
+                    data->result = emb_result(data->result, BREAK);
+                }
             }
 
             memset(g, 0, sizeof(struct info16Bit_s));
