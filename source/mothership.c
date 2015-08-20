@@ -17105,9 +17105,10 @@ static int p6(struct procRes_s *rs)
     print_f(rs->plogs, "P6", rs->logs);
 
     p6_init(rs);
-
+/*
     while (!rs->psFat->fatRootdir);    
     fscur = rs->psFat->fatRootdir;
+*/
 
     recvbuf = malloc(1024);
     if (!recvbuf) {
@@ -17209,6 +17210,128 @@ static int p6(struct procRes_s *rs)
         sendbuf[2] = 0xfd;
         sendbuf[3] = 0x01; /*??*/
         sendbuf[4] = 0xfc;
+
+
+        if (opcode == 0x14) { /* upload time */
+            sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ret = asp_strsplit(&strinfo, folder, n);
+            n = 0;
+            if (ret > 0) {
+                sprintf(rs->logs, "split str found, ret:%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                for (i = 0; i < ret; i++) {
+                    nexinfo = asp_getInfo(strinfo, i);
+                    if (nexinfo) {
+                        sprintf(rs->logs, "%d.[%s]\n", i, nexinfo->infoStr);
+                        print_f(rs->plogs, "P6", rs->logs);
+                    }
+                }                
+
+                nexinfo = asp_getInfo(strinfo, 0);
+                if (nexinfo) {
+                    sprintf(rs->logs, "%d.%s\n", 0, nexinfo->infoStr);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+        
+                nexinfo = asp_getInfo(strinfo, 6);
+                if (nexinfo) {
+                    sprintf(rs->logs, "%d.%s\n", 6, nexinfo->infoStr);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    if (strcmp("ASP", nexinfo->infoStr) != 0) {
+                        sendbuf[3] = 'F';
+                    }
+                    else {
+                        sendbuf[3] = 'D';
+                    }
+                }
+
+                for (i = 0 ; i < 3; i++) {
+                    nexinfo = asp_getInfo(strinfo, i);
+                    if (nexinfo) {
+                        adata[i] = atoi(nexinfo->infoStr);
+                        sprintf(rs->logs, "%d.%s = %d\n", 2+i, nexinfo->infoStr, adata[i]);
+                        print_f(rs->plogs, "P6", rs->logs);
+                    } else {
+                        break;
+                    } 
+                }
+
+                for (i = 0 ; i < 3; i++) {
+                    nexinfo = asp_getInfo(strinfo, i+3);
+                    if (nexinfo) {
+                        atime[i] = atoi(nexinfo->infoStr);
+                        sprintf(rs->logs, "%d.%s = %d\n", 5+i, nexinfo->infoStr, atime[i]);
+                        print_f(rs->plogs, "P6", rs->logs);
+                    } else {
+                        break;
+                    } 
+                }
+
+                memset(curTime, 0, 16);
+                sprintf(curTime, "%.4d%.2d%.2d%.2d%.2d", adata[0], adata[1], adata[2], atime[0], atime[1]);
+
+                sprintf(syscmd, "date -s %s", curTime);
+                ret = system(syscmd);
+                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                sprintf(syscmd, "hwclock -w");
+                ret = system(syscmd);
+                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                sprintf(syscmd, "date");
+                ret = system(syscmd);
+                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                sprintf(rs->logs, "system time update: %s \n", curTime);
+                print_f(rs->plogs, "P6", rs->logs);
+            
+            }
+            else {
+                sendbuf[3] = 'F';
+                sprintf(rs->logs, "split str not found, ret:%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            /* free memory */
+            nexinfo = strinfo;
+            while(nexinfo) {
+                nexinfo = asp_freeInfo(nexinfo);
+            }
+            goto socketEnd;
+        }
+
+        if  (!rs->psFat->fatRootdir) {
+            sendbuf[3] = 'E';
+            sendbuf[5+1] = '\n';
+            sendbuf[5+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);    
+
+            sprintf(rs->logs, "error!! get opcode = 0x%x\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+            goto socketEnd;
+        }
+
+
+        if (!fscur) {
+            fscur = rs->psFat->fatRootdir;
+        }
+
         if (opcode == 0x10) { /* get current path */
         
             //ret = mspFS_folderJump(&nxtf, fscur, folder);
@@ -17611,96 +17734,6 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
                 
             }
-        } 
-        else if (opcode == 0x14) { /* upload time */
-            sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
-            print_f(rs->plogs, "P6", rs->logs);
-
-            ret = asp_strsplit(&strinfo, folder, n);
-            n = 0;
-            if (ret > 0) {
-                sprintf(rs->logs, "split str found, ret:%d\n", ret);
-                print_f(rs->plogs, "P6", rs->logs);
-                /*
-                nexinfo = strinfo;
-                i = 0;
-                while (nexinfo) {
-                    sprintf(rs->logs, "%d.[%s],len:%d \n", i, nexinfo->infoStr, nexinfo->infoLen);
-                    print_f(rs->plogs, "P6", rs->logs);
-                    nexinfo = nexinfo->n;
-                    i++;
-                }
-                */
-                for (i = 0; i < ret; i++) {
-                    nexinfo = asp_getInfo(strinfo, i);
-                    if (nexinfo) {
-                        sprintf(rs->logs, "%d.[%s]\n", i, nexinfo->infoStr);
-                        print_f(rs->plogs, "P6", rs->logs);
-                    }
-                }                
-
-                nexinfo = asp_getInfo(strinfo, 0);
-                if (nexinfo) {
-                    sprintf(rs->logs, "%d.%s\n", 0, nexinfo->infoStr);
-                    print_f(rs->plogs, "P6", rs->logs);
-                }
-            
-                nexinfo = asp_getInfo(strinfo, 6);
-                if (nexinfo) {
-                    sprintf(rs->logs, "%d.%s\n", 6, nexinfo->infoStr);
-                    print_f(rs->plogs, "P6", rs->logs);
-
-                    if (strcmp("ASP", nexinfo->infoStr) != 0) {
-                        sendbuf[3] = 'F';
-                    }
-                    else {
-                        sendbuf[3] = 'D';
-                    }
-                }
-                for (i = 0 ; i < 3; i++) {
-                    nexinfo = asp_getInfo(strinfo, i);
-                    if (nexinfo) {
-                        adata[i] = atoi(nexinfo->infoStr);
-                        sprintf(rs->logs, "%d.%s = %d\n", 2+i, nexinfo->infoStr, adata[i]);
-                        print_f(rs->plogs, "P6", rs->logs);
-                    } else {
-                        break;
-                    } 
-                }
-
-                for (i = 0 ; i < 3; i++) {
-                    nexinfo = asp_getInfo(strinfo, i+3);
-                    if (nexinfo) {
-                        atime[i] = atoi(nexinfo->infoStr);
-                        sprintf(rs->logs, "%d.%s = %d\n", 5+i, nexinfo->infoStr, atime[i]);
-                        print_f(rs->plogs, "P6", rs->logs);
-                    } else {
-                        break;
-                    } 
-                }
-
-                memset(curTime, 0, 16);
-                sprintf(curTime, "%.4d%.2d%.2d%.2d%.2d", adata[0], adata[1], adata[2], atime[0], atime[1]);
-
-                sprintf(syscmd, "date -s %s", curTime);
-                ret = system(syscmd);
-                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
-                print_f(rs->plogs, "P6", rs->logs);
-
-                sprintf(syscmd, "hwclock -w");
-                ret = system(syscmd);
-                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
-                print_f(rs->plogs, "P6", rs->logs);
-
-                sprintf(syscmd, "date");
-                ret = system(syscmd);
-                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
-                print_f(rs->plogs, "P6", rs->logs);
-
-                sprintf(rs->logs, "system time update: %s \n", curTime);
-                print_f(rs->plogs, "P6", rs->logs);
-                
-            }
             else {
                 sendbuf[3] = 'F';
                 sprintf(rs->logs, "split str not found, ret:%d\n", ret);
@@ -17719,9 +17752,15 @@ static int p6(struct procRes_s *rs)
             while(nexinfo) {
                 nexinfo = asp_freeInfo(nexinfo);
             }
-
-        }
+        } 
         else {
+            sendbuf[3] = 'E';
+            sendbuf[5+1] = '\n';
+            sendbuf[5+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);    
+
             sprintf(rs->logs, "error!! get opcode = 0x%x\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
         }
