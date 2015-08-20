@@ -17077,7 +17077,9 @@ static int p6(struct procRes_s *rs)
     char opc=0;
     char opcode=0, param=0, flag = 0;
     uint32_t clstSize=0;
-    uint8_t adata[3], atime[3];
+    uint32_t adata[3], atime[3];
+    char curTime[16];
+    char syscmd[256] = "ls -al";
 
     struct directnFile_s *fscur = 0, *nxtf = 0;
     struct directnFile_s *brt, *pa;
@@ -17104,8 +17106,7 @@ static int p6(struct procRes_s *rs)
 
     p6_init(rs);
 
-    while (!rs->psFat->fatRootdir);
-    
+    while (!rs->psFat->fatRootdir);    
     fscur = rs->psFat->fatRootdir;
 
     recvbuf = malloc(1024);
@@ -17509,11 +17510,11 @@ static int p6(struct procRes_s *rs)
                             } 
                         }
                         
-                        upld->dfcredate = (((adata[0] - 1980) << 16) | (adata[1] << 8) | adata[2]);
-                        upld->dfcretime = ((atime[0] << 16) | (atime[1] << 8) | atime[2]);;
-                        upld->dflstacdate = (((adata[0] - 1980) << 16) | (adata[1] << 8) | adata[2]);
-                        upld->dfrecodate = (((adata[0] - 1980) << 16) | (adata[1] << 8) | adata[2]);
-                        upld->dfrecotime = ((atime[0]  << 16) | (atime[1] << 8) | atime[2]);;
+                        upld->dfcredate = ((((adata[0] - 1980) & 0xff) << 16) | ((adata[1] & 0xff) << 8) | (adata[2] & 0xff));
+                        upld->dfcretime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
+                        upld->dflstacdate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
+                        upld->dfrecodate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
+                        upld->dfrecotime = (((atime[0]  << 16)&0xff) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
 
                         upld->dflength = num; /* file length */
                         
@@ -17607,6 +17608,96 @@ static int p6(struct procRes_s *rs)
                 memcpy(&sendbuf[5], strFullPath, n);
                 
                 sprintf(rs->logs, "new file need %d clst, available %d clst\n", cnt, pftb->ftbMng.ftfreeClst);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+            }
+        } 
+        else if (opcode == 0x14) { /* upload time */
+            sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ret = asp_strsplit(&strinfo, folder, n);
+            n = 0;
+            if (ret > 0) {
+                sprintf(rs->logs, "split str found, ret:%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                /*
+                nexinfo = strinfo;
+                i = 0;
+                while (nexinfo) {
+                    sprintf(rs->logs, "%d.[%s],len:%d \n", i, nexinfo->infoStr, nexinfo->infoLen);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    nexinfo = nexinfo->n;
+                    i++;
+                }
+                */
+                for (i = 0; i < ret; i++) {
+                    nexinfo = asp_getInfo(strinfo, i);
+                    if (nexinfo) {
+                        sprintf(rs->logs, "%d.[%s]\n", i, nexinfo->infoStr);
+                        print_f(rs->plogs, "P6", rs->logs);
+                    }
+                }                
+
+                nexinfo = asp_getInfo(strinfo, 0);
+                if (nexinfo) {
+                    sprintf(rs->logs, "%d.%s\n", 0, nexinfo->infoStr);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+            
+                nexinfo = asp_getInfo(strinfo, 6);
+                if (nexinfo) {
+                    sprintf(rs->logs, "%d.%s\n", 6, nexinfo->infoStr);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    if (strcmp("ASP", nexinfo->infoStr) != 0) {
+                        sendbuf[3] = 'F';
+                    }
+                    else {
+                        sendbuf[3] = 'D';
+                    }
+                }
+                for (i = 0 ; i < 3; i++) {
+                    nexinfo = asp_getInfo(strinfo, i);
+                    if (nexinfo) {
+                        adata[i] = atoi(nexinfo->infoStr);
+                        sprintf(rs->logs, "%d.%s = %d\n", 2+i, nexinfo->infoStr, adata[i]);
+                        print_f(rs->plogs, "P6", rs->logs);
+                    } else {
+                        break;
+                    } 
+                }
+
+                for (i = 0 ; i < 3; i++) {
+                    nexinfo = asp_getInfo(strinfo, i+3);
+                    if (nexinfo) {
+                        atime[i] = atoi(nexinfo->infoStr);
+                        sprintf(rs->logs, "%d.%s = %d\n", 5+i, nexinfo->infoStr, atime[i]);
+                        print_f(rs->plogs, "P6", rs->logs);
+                    } else {
+                        break;
+                    } 
+                }
+
+                memset(curTime, 0, 16);
+                sprintf(curTime, "%.4d%.2d%.2d%.2d%.2d", adata[0], adata[1], adata[2], atime[0], atime[1]);
+
+                sprintf(syscmd, "date -s %s", curTime);
+                ret = system(syscmd);
+                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                sprintf(syscmd, "hwclock -w");
+                ret = system(syscmd);
+                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                sprintf(syscmd, "date");
+                ret = system(syscmd);
+                sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                sprintf(rs->logs, "system time update: %s \n", curTime);
                 print_f(rs->plogs, "P6", rs->logs);
                 
             }
@@ -18318,6 +18409,7 @@ int main(int argc, char *argv[])
             ctb->opValue = 0xff;
             ctb->opMask = ASPOP_MASK_32;
             ctb->opBitlen = 32;
+            break;
         case ASPOP_SDFREE_FREESEC: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_FREESEC;
