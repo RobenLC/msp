@@ -14982,6 +14982,7 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "ERROR!!! get clstStart: %d(%d) clstLen: %d(%d) \n", clstStr, pflnt->ftStart, clstLen, pflnt->ftLen);
         print_f(&mrs->plog, "fs93", mrs->log);   
         modersp->r = 2;
+        return 1;
     } else {
         pflnt->ftLen -= clstLen;
         pflnt->ftStart += clstLen;
@@ -15000,7 +15001,7 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
     upld->dftype = ASPFS_TYPE_FILE;
     upld->dfstats = ASPFS_STATUS_DIS;
     upld->dfattrib = ASPFS_ATTR_ARCHIVE;
-    upld->dfclstnum = 0; /* start cluster */
+    upld->dfclstnum = clstStr; /* start cluster */
 
     time(&timep);
     p=localtime(&timep); /*取得當地時間*/ 
@@ -15025,6 +15026,7 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     upld->dflength = secLen * 512; /* file length */                                                
 
+    /* assign a name with sequence number */
     for (cnt=0; cnt < 10000; cnt++) {
         sprintf(srhName, fnameSave, cnt);
         sprintf(mrs->log, "search name: [%s]\n", srhName);
@@ -15042,6 +15044,16 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     sprintf(mrs->log, "SFN[%s] LFS[%s] len:%d\n", upld->dfSFN, upld->dfLFN, upld->dflen);
     print_f(&mrs->plog, "fs93", mrs->log);
+
+    ret = mspSD_createFATLinkList(&pclst);
+    if (ret) {
+        modersp->r = 0xed;
+        return 1;
+    }
+    pclst->ftStart = clstStr;
+    pclst->ftLen = clstLen;
+    pftb->h = pclst;
+    pftb->c = pftb->h;
 
     aspFS_insertFATChild(fscur, upld);
     pfat->fatFileUpld = upld;
