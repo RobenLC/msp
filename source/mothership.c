@@ -417,6 +417,7 @@ struct sdFAT_s{
     struct directnFile_s   *fatRootdir;
     struct directnFile_s    *fatFileDnld;
     struct directnFile_s    *fatFileUpld;
+    struct directnFile_s    *fatCurDir;
     struct sdDirPool_s    *fatDirPool;
     struct supdataBack_s *fatSupdata;
     struct supdataBack_s *fatSupcur;
@@ -2746,6 +2747,48 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
     }
 
     aspFree(rmp);
+    return ret;
+}
+
+static int mspFS_SearchInFolder(struct directnFile_s **dir, struct directnFile_s *folder, char *fname)
+{
+    char mlog[256];
+    int ret = 0;
+    struct directnFile_s *brt=0;
+
+    if (!fname) return -1;
+    if (!folder) return -2;
+
+    *dir = 0;
+
+    ret = strlen(fname);
+    sprintf(mlog, "fname[%s] folder[%s] len:%d\n", fname, (folder->dflen==0)?folder->dfSFN:folder->dfLFN, ret);
+    print_f(mlogPool, "FSRH3", mlog);
+
+    ret = -1;
+    brt = folder->ch;
+    while (brt) {
+        if ((brt->dfstats == ASPFS_STATUS_EN) && 
+            (brt->dftype == ASPFS_TYPE_FILE)) {
+            if ((strcmp(brt->dfLFN, fname) == 0) || 
+                (strcmp(brt->dfSFN, fname) == 0)) {
+                *dir = brt;
+                ret = 0;
+                break;
+            }
+        }
+        
+        brt = brt->br;        
+    }
+
+    if (ret) {
+        sprintf(mlog, "not found !!\n");
+        print_f(mlogPool, "FSRH3", mlog);
+    } else {
+        sprintf(mlog, "found!! brt[%s] \n", brt->dfSFN);
+        print_f(mlogPool, "FSRH3", mlog);
+    }
+
     return ret;
 }
 
@@ -14839,7 +14882,9 @@ static int fs92(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    int ret=0;
+    char fnameSave[16] = "ASPn%.4d.jpg";
+    char srhName[16];
+    int ret=0, cnt=0;
     uint32_t secStr=0, secLen=0, clstLen=0, clstStr=0;;
     uint32_t freeClst=0, usedClst=0, totClst=0, val=0, b32=0;
     struct aspConfig_s *pct=0;
@@ -14848,7 +14893,13 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
     struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
     struct sdFATable_s   *pftb=0;
-    
+    struct directnFile_s *upld=0, *fscur=0, *fssrh=0;
+
+    uint32_t adata[3], atime[3];
+    char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
+    struct tm *p=0;
+    time_t timep;
+                
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
     psec = pfat->fatBootsec;
@@ -14861,6 +14912,15 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 0xed;
         return 1;
     }
+
+    if (!pfat->fatCurDir) {
+        sprintf(mrs->log, "Error!! current folder is null \n");
+        print_f(&mrs->plog, "fs93", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    fscur = pfat->fatCurDir;
 
     secStr = 0;
     secLen = 0;
@@ -14927,6 +14987,69 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt->ftStart += clstLen;
         modersp->r = 1;
     }
+
+    ret = mspFS_allocDir(pfat, &upld);
+    if (ret) {
+         sprintf(mrs->log, "Error!! get new file entry failed ret: %d \n", ret);
+        print_f(&mrs->plog, "fs93", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    memset(upld, 0, sizeof(struct directnFile_s));
+    upld->dftype = ASPFS_TYPE_FILE;
+    upld->dfstats = ASPFS_STATUS_DIS;
+    upld->dfattrib = ASPFS_ATTR_ARCHIVE;
+    upld->dfclstnum = 0; /* start cluster */
+
+    time(&timep);
+    p=localtime(&timep); /*取得當地時間*/ 
+    sprintf(mrs->log, "%.4d%.2d%.2d \n", (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday); 
+    print_f(&mrs->plog, "fs93", mrs->log);
+    sprintf(mrs->log, "%s,%.2d:%.2d:%.2d\n", wday[p->tm_wday],p->tm_hour, p->tm_min, p->tm_sec); 
+    print_f(&mrs->plog, "fs93", mrs->log);
+
+    adata[0] = p->tm_year;
+    adata[1] = p->tm_mon + 1;
+    adata[2] = p->tm_mday;
+    
+    atime[0] = p->tm_hour;
+    atime[1] = p->tm_min;
+    atime[2] = p->tm_sec;
+    
+    upld->dfcredate = ((((adata[0] - 1980) & 0xff) << 16) | ((adata[1] & 0xff) << 8) | (adata[2] & 0xff));
+    upld->dfcretime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
+    upld->dflstacdate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
+    upld->dfrecodate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
+    upld->dfrecotime = (((atime[0]  << 16)&0xff) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
+
+    upld->dflength = secLen * 512; /* file length */                                                
+
+    for (cnt=0; cnt < 10000; cnt++) {
+        sprintf(srhName, fnameSave, cnt);
+        sprintf(mrs->log, "search name: [%s]\n", srhName);
+        print_f(&mrs->plog, "fs93", mrs->log);
+
+        ret = mspFS_SearchInFolder(&fssrh, fscur, srhName);
+        if (!ret) break;
+    }
+
+    strncpy(upld->dfSFN, srhName, 10);
+    upld->dfSFN[11] = '\0';
+
+    upld->dflen = 0;
+    upld->dfLFN[0] = '\0';
+
+    sprintf(mrs->log, "SFN[%s] LFS[%s] len:%d\n", upld->dfSFN, upld->dfLFN, upld->dflen);
+    print_f(&mrs->plog, "fs93", mrs->log);
+
+    aspFS_insertFATChild(fscur, upld);
+    pfat->fatFileUpld = upld;
+    debugPrintDir(upld);
+
+    pfat->fatStatus |= ASPFAT_STATUS_FATWT;
+    pfat->fatStatus |= ASPFAT_STATUS_DFECHK;
+    pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
 
     return 1;
 }
@@ -17212,7 +17335,7 @@ static int p6(struct procRes_s *rs)
         sendbuf[4] = 0xfc;
 
 
-        if (opcode == 0x14) { /* upload time */
+        if (opcode == 0x14) { /* update UTC time */
             sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
@@ -17291,6 +17414,20 @@ static int p6(struct procRes_s *rs)
 
                 sprintf(rs->logs, "system time update: %s \n", curTime);
                 print_f(rs->plogs, "P6", rs->logs);
+                
+                char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
+                struct tm *p; 
+                time_t timep;
+
+                time(&timep);
+                sprintf(rs->logs, "get current %s in C \n", ctime(&timep));
+                print_f(rs->plogs, "P6", rs->logs);
+ 
+                p=localtime(&timep); /*取得當地時間*/ 
+                sprintf(rs->logs, "%.4d%.2d%.2d \n", (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday); 
+                print_f(rs->plogs, "P6", rs->logs);
+                sprintf(rs->logs, "%s,%.2d:%.2d:%.2d\n", wday[p->tm_wday],p->tm_hour, p->tm_min, p->tm_sec); 
+                print_f(rs->plogs, "P6", rs->logs);
             
             }
             else {
@@ -17330,6 +17467,7 @@ static int p6(struct procRes_s *rs)
 
         if (!fscur) {
             fscur = rs->psFat->fatRootdir;
+            pfat->fatCurDir = fscur;
         }
 
         if (opcode == 0x10) { /* get current path */
@@ -17502,6 +17640,8 @@ static int p6(struct procRes_s *rs)
             if (cnt == 0) {
                 fscur = rs->psFat->fatRootdir;
             }
+
+            pfat->fatCurDir = fscur;
 
         }
         else if (opcode == 0x13) { /* upload file */
