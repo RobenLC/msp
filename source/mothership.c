@@ -828,10 +828,10 @@ struct directnFile_s{
     printf("  [%s] long file name, len:%d\n", pf->dfLFN, pf->dflen);
     printf("  [%s] short file name \n", pf->dfSFN);
     printf("  [%x] attribute \n", pf->dfattrib);
-    printf("  [%.2d:%.2d:%.2d] H:M:S created time \n", (pf->dfcretime >> 16) & 0xff, (pf->dfcretime >> 8) & 0xff, ((pf->dfcretime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] H:M:S created time \n", (pf->dfcretime >> 16) & 0xff, (pf->dfcretime >> 8) & 0xff, (pf->dfcretime >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D created date \n", ((pf->dfcredate >> 16) & 0xff) + 1980, (pf->dfcredate >> 8) & 0xff, (pf->dfcredate >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D access date \n", ((pf->dflstacdate >> 16) & 0xff) + 1980, (pf->dflstacdate >> 8) & 0xff, (pf->dflstacdate >> 0) & 0xff);
-    printf("  [%.2d:%.2d:%.2d] H:M:S recorded time \n", (pf->dfrecotime >> 16) & 0xff, (pf->dfrecotime >> 8) & 0xff, ((pf->dfrecotime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] H:M:S recorded time \n", (pf->dfrecotime >> 16) & 0xff, (pf->dfrecotime >> 8) & 0xff, (pf->dfrecotime >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D recorded date \n", ((pf->dfrecodate >> 16) & 0xff) + 1980, (pf->dfrecodate >> 8) & 0xff, (pf->dfrecodate >> 0) & 0xff);
     printf("  [%d] cluster number \n", pf->dfclstnum);
     printf("  [%d] file length \n", pf->dflength);
@@ -1056,10 +1056,10 @@ static int aspCompirseSFN(uint8_t *pc, struct directnFile_s *pf, uint8_t *sfn)
     printf("  [%s] short file name \n", pf->dfSFN);
     printf("  [%s] short file name - 2\n", sfn);
     printf("  [%x] attribute \n", pf->dfattrib);
-    printf("  [%.2d:%.2d:%.2d] H:M:S created time \n", (pf->dfcretime >> 16) & 0xff, (pf->dfcretime >> 8) & 0xff, ((pf->dfcretime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] H:M:S created time \n", (pf->dfcretime >> 16) & 0xff, (pf->dfcretime >> 8) & 0xff, (pf->dfcretime >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D created date \n", ((pf->dfcredate >> 16) & 0xff) + 1980, (pf->dfcredate >> 8) & 0xff, (pf->dfcredate >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D access date \n", ((pf->dflstacdate >> 16) & 0xff) + 1980, (pf->dflstacdate >> 8) & 0xff, (pf->dflstacdate >> 0) & 0xff);
-    printf("  [%.2d:%.2d:%.2d] H:M:S recorded time \n", (pf->dfrecotime >> 16) & 0xff, (pf->dfrecotime >> 8) & 0xff, ((pf->dfrecotime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] H:M:S recorded time \n", (pf->dfrecotime >> 16) & 0xff, (pf->dfrecotime >> 8) & 0xff, (pf->dfrecotime >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D recorded date \n", ((pf->dfrecodate >> 16) & 0xff) + 1980, (pf->dfrecodate >> 8) & 0xff, (pf->dfrecodate >> 0) & 0xff);
     printf("  [%d] cluster number \n", pf->dfclstnum);
     printf("  [%d] file length \n", pf->dflength);
@@ -1448,7 +1448,7 @@ static uint32_t aspFSdateCps(uint32_t val)
 static uint32_t aspFStimeAsb(uint32_t fst)
 {
     uint32_t val=0, s=0, m=0, h=0;
-    s = fst & 0x1f; // 0 -4, 5bits
+    s = (fst & 0x1f) << 1; // 0 -4, 5bits
     m = (fst >> 5) & 0x3f; // 5 - 10, 6bits
     h = (fst >> 11) & 0x1f; // 11 - 15, 5bits
     val |= (h << 16) | (m << 8) | s;
@@ -1458,7 +1458,7 @@ static uint32_t aspFStimeAsb(uint32_t fst)
 static uint32_t aspFStimeCps(uint32_t val)
 {
     uint32_t fst=0, s=0, m=0, h=0;
-    s = val & 0x1f; // 0 -4, 5bits
+    s = (val >> 1) & 0x1f; // 0 -4, 5bits
     m = (val >> 8) & 0x3f; // 5 - 10, 6bits
     h = (val >> 16) & 0x1f; // 11 - 15, 5bits
 
@@ -2627,6 +2627,28 @@ static int mspFS_list(struct directnFile_s *root, int depth)
     return 0;
 }
 
+static int mspFS_folderList(struct directnFile_s *root, int depth)
+{
+    char mlog[256];
+    struct directnFile_s *fs = 0;
+    if (!root) return (-1);
+
+    fs = root->ch;
+    while (fs) {
+        if (fs->dflen) {
+            sprintf(mlog, "%*s%s[%d]\n", depth, "", fs->dfLFN, fs->dftype);
+            print_f(mlogPool, "FS", mlog);
+        } else {
+            sprintf(mlog, "%*s%s[%d]\n", depth, "", fs->dfSFN, fs->dftype);
+            print_f(mlogPool, "FS", mlog);
+        }
+
+        fs = fs->br;
+    }
+
+    return 0;
+}
+
 static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, char *path, int type)
 {
     char mlog[256];
@@ -2782,7 +2804,7 @@ static int mspFS_SearchInFolder(struct directnFile_s **dir, struct directnFile_s
     }
 
     if (ret) {
-        sprintf(mlog, "not found !!\n");
+        sprintf(mlog, "[%s] not found !!\n", fname);
         print_f(mlogPool, "FSRH3", mlog);
     } else {
         sprintf(mlog, "found!! brt[%s] \n", brt->dfSFN);
@@ -3213,7 +3235,8 @@ static uint32_t next_SDAO(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSTSM;
+                evt = FATH; 
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -12777,6 +12800,17 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
         mspFS_listDetail(curDir, 4);
         //mspFS_list(curDir, 4);
         pfat->fatStatus |= ASPFAT_STATUS_BOOT;
+        
+        pfat->fatCurDir = pfat->fatRootdir;
+    } else {
+        if(pfat->fatCurDir) {
+            curDir = pfat->fatCurDir;
+            mspFS_folderList(curDir, 4);            
+        } else {
+            pfat->fatCurDir = pfat->fatRootdir;
+            curDir = pfat->fatCurDir;
+            mspFS_folderList(curDir, 4);            
+        }
     }
 
     modersp->r = 0xed;    
@@ -14882,7 +14916,7 @@ static int fs92(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    char fnameSave[16] = "ASPn%.4d.jpg";
+    char fnameSave[16] = "ASPA%.4d.jpg";
     char srhName[16];
     int ret=0, cnt=0;
     uint32_t secStr=0, secLen=0, clstLen=0, clstStr=0;;
@@ -15000,6 +15034,7 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
     memset(upld, 0, sizeof(struct directnFile_s));
     upld->dftype = ASPFS_TYPE_FILE;
     upld->dfstats = ASPFS_STATUS_DIS;
+    //upld->dfstats = ASPFS_STATUS_EN;
     upld->dfattrib = ASPFS_ATTR_ARCHIVE;
     upld->dfclstnum = clstStr; /* start cluster */
 
@@ -15010,7 +15045,7 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "%s,%.2d:%.2d:%.2d\n", wday[p->tm_wday],p->tm_hour, p->tm_min, p->tm_sec); 
     print_f(&mrs->plog, "fs93", mrs->log);
 
-    adata[0] = p->tm_year;
+    adata[0] = p->tm_year+1900;
     adata[1] = p->tm_mon + 1;
     adata[2] = p->tm_mday;
     
@@ -15033,11 +15068,11 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs93", mrs->log);
 
         ret = mspFS_SearchInFolder(&fssrh, fscur, srhName);
-        if (!ret) break;
+        if (ret) break;
     }
 
-    strncpy(upld->dfSFN, srhName, 10);
-    upld->dfSFN[11] = '\0';
+    strncpy(upld->dfSFN, srhName, 12);
+    upld->dfSFN[13] = '\0';
 
     upld->dflen = 0;
     upld->dfLFN[0] = '\0';
@@ -15058,11 +15093,13 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
     aspFS_insertFATChild(fscur, upld);
     pfat->fatFileUpld = upld;
     debugPrintDir(upld);
+    mspFS_folderList(upld->pa, 4);
 
     pfat->fatStatus |= ASPFAT_STATUS_FATWT;
     pfat->fatStatus |= ASPFAT_STATUS_DFECHK;
     pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
 
+    modersp->r = 1;
     return 1;
 }
 
