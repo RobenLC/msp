@@ -11704,7 +11704,7 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
         msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs36", mrs->log);
-        usleep(150000);
+        usleep(60000);
             
         modersp->d = modersp->m + 1;
         modersp->m = 1;
@@ -11976,7 +11976,7 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs47", mrs->log);
 
-        usleep(150000);
+        usleep(60000);
 
         return 2;
     }
@@ -12772,7 +12772,7 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                 sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
                 print_f(&mrs->plog, "fs55", mrs->log);
 #endif
-                usleep(150000);
+                usleep(60000);
 
                 modersp->m = 48;
                 return 2;
@@ -13141,7 +13141,7 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs66", mrs->log);
 #endif
-            usleep(150000);
+            usleep(60000);
 
             modersp->r = 1;            
             return 1;
@@ -13239,7 +13239,7 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs69", mrs->log);
-            usleep(150000);
+            usleep(60000);
 
             modersp->r = 1;            
             return 1;
@@ -13513,7 +13513,7 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs74", mrs->log);
-            usleep(150000);
+            usleep(60000);
 
             modersp->m = 48;            
             return 2;
@@ -13872,7 +13872,7 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs79", mrs->log);
-            usleep(150000);
+            usleep(60000);
 
             modersp->m = 48;            
             return 2;
@@ -14398,7 +14398,7 @@ static int fs83(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs83", mrs->log);
-            usleep(150000);
+            usleep(60000);
 
             modersp->m = 48;            
             return 2;
@@ -14784,7 +14784,7 @@ static int fs90(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs90", mrs->log);
-            usleep(150000);
+            usleep(60000);
 
             modersp->m = 48;            
             return 2;

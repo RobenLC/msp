@@ -4370,7 +4370,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    usleep(100000);
+    usleep(60000);
 
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -4394,7 +4394,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Get RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    usleep(100000);
+    //usleep(60000);
 
     bitset = 0;
     ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
@@ -4720,21 +4720,21 @@ static int fs29(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset;
-    usleep(100000);
+    //usleep(60000);
 
     bitset = 0;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
-    usleep(100000);
+    usleep(60000);
 
     bitset = 0;
     ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
     sprintf(mrs->log, "Get spi%d RDY pin: %d \n", 0, bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
-    usleep(100000);
+    //usleep(60000);
 
     bitset = 0;
     ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
@@ -5830,7 +5830,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         }
 
         //rs_ipc_put(rs, &ch, 1);
-        //usleep(100000);
+        //usleep(60000);
     }
 
     p1_end(rs);
@@ -6176,7 +6176,7 @@ static int p2(struct procRes_s *rs)
                     len = 0;
                     len = ring_buf_get(rs->pdataTx, &addr);
                     while (len <= 0) {
-                        usleep(100000);
+                        usleep(150000);
                         len = ring_buf_get(rs->pdataTx, &addr);
                     }
 
