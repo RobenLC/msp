@@ -213,6 +213,7 @@ struct info16Bit_s{
 
 struct SdAddrs_s{
     uint32_t f;
+    uint32_t sdc;
     union {
         uint32_t n;
         uint8_t d[4];
@@ -2908,17 +2909,10 @@ static int stauto_21(struct psdata_s *data)
                     p->opcode = g->opcode;
                     p->data = g->data;
 
-                    s->n = s->sda;
-                    m->n = 20480;
-
-                    s->f = 0xf;
-                    m->f = 0xf;
-                    m->f |= 0x200;
-
                     sprintf(str, "get start sector: %d, total length: %d , secPrClst: %d, data length: %d confirm !!!\n", s->n, m->sda, g->data, m->n);  
                     print_f(mlogPool, "auto_21", str);  
 
-                    ch = 24; 
+                    ch = 59; 
                     rs_ipc_put(data->rs, &ch, 1);
                     data->result = emb_result(data->result, WAIT);
 
@@ -5648,7 +5642,8 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 2;
         return 1;
     } else {
-    
+        msync(fd->sdt, fd->rtMax, MS_SYNC);
+
         ret = fwrite(fd->sdt, 1, fd->rtMax, fp);
 
         sprintf(mrs->log, "write file size: %d/%d \n", ret, fd->rtMax);
@@ -5665,7 +5660,94 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
     modersp->m = 24;
     return 2;
 }
-static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp) {return 0;}
+static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+#define SAMPLE_MAX 16
+    int ret = -1, idx = 0, fileLen = 0;
+    struct info16Bit_s *p, *c;
+    char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
+    char sampledst[128];
+    struct DiskFile_s *fd;
+    uint32_t strSec, secLen, strflag, lenflag;
+    struct SdAddrs_s *psstr, *pslen;
+    FILE *fp = 0;
+    char *saveDst=0;
+
+    
+    psstr = &mrs->mchine.sdst;
+    pslen = &mrs->mchine.sdln;
+
+    fd = &mrs->mchine.fdsk;
+    p = &mrs->mchine.get;
+    c = &mrs->mchine.cur;
+
+    idx = psstr->sdc % SAMPLE_MAX;
+    psstr->sdc++;
+
+    sprintf(sampledst, samplefile, idx);
+    fp = fopen(sampledst, "r");
+    if (!fp) {
+        sprintf(mrs->log, "ERROR!!!file read [%s] failed \n", sampledst);
+        print_f(&mrs->plog, "fs59", mrs->log);
+        modersp->r = 2;
+        return 1;        
+    } else {
+        sprintf(mrs->log, "file read [%s] ok \n", sampledst);
+        print_f(&mrs->plog, "fs59", mrs->log);
+    }
+    
+    ret = fseek(fp, 0, SEEK_END);
+    if (ret) {
+        sprintf(mrs->log, " file seek failed!! ret:%d \n", ret);
+        print_f(&mrs->plog, "fs59", mrs->log);
+        modersp->r = 2;
+        return 1;        
+    } 
+
+    fileLen = ftell(fp);
+    sprintf(mrs->log, " file [%s] size: %d \n", sampledst, fileLen);
+    print_f(&mrs->plog, "fs59", mrs->log);
+
+    ret = fseek(fp, 0, SEEK_SET);
+    if (ret) {
+        sprintf(mrs->log, " file seek failed!! ret:%d \n", ret);
+        print_f(&mrs->plog, "fs59", mrs->log);
+        modersp->r = 2;
+        return 1;        
+    }
+
+    strSec = psstr->sda;
+    secLen = fileLen/SEC_LEN  + (((fileLen%SEC_LEN) == 0) ?0:1); // should be length of file
+
+    sprintf(mrs->log, "start to write [%s] to SD strSec: %d, secLen: %d, size: %d  \n", sampledst, strSec, secLen, fileLen);
+    print_f(&mrs->plog, "fs59", mrs->log);
+
+    if (!fd->sdt) {
+        sprintf(mrs->log, "ERROR!!! memory is not existed");  
+        print_f(&mrs->plog, "fs59", mrs->log);
+        modersp->r = 2;
+        return 1;
+    } 
+    
+    msync(fd->sdt, fd->rtMax, MS_SYNC);
+
+    saveDst = fd->sdt + (strSec * SEC_LEN);
+    ret = fread(saveDst, 1, fileLen, fp);
+    if (ret != fileLen) {
+        sprintf(mrs->log, "WARNING!!! read file size:%d/%d", ret, fileLen);  
+        print_f(&mrs->plog, "fs59", mrs->log);
+    }
+
+    psstr->n = strSec;
+    pslen->n = secLen;
+
+    psstr->f = 0xf;
+    pslen->f = 0xf;
+    pslen->f |= 0x200;
+
+    modersp->m = 24;
+    return 0;
+}
 
 static int p0(struct mainRes_s *mrs)
 {
