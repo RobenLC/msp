@@ -9546,7 +9546,7 @@ static int cmdfunc_lh_opcode(int argc, char *argv[])
     sprintf(mrs->log, "cmdfunc_lh_opcode argc:%d\n", argc); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
-    pkt = &mrs->mchine.tmp;
+    pkt = &mrs->mchine.cur;
     pwt = &mrs->wtg;
     if (!pkt) {ret = -2; goto end;}
     if (!pwt) {ret = -3; goto end;}
@@ -10924,16 +10924,6 @@ static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
 
-    mrs->mchine.seqcnt += 1;
-    if (mrs->mchine.seqcnt >= 0x8) {
-        mrs->mchine.seqcnt = 0;
-    }
-
-    p->opcode = OP_SINGLE;
-    p->data = SINSCAN_DUAL_STRM;
-    p->inout = 0;
-    p->seqnum = mrs->mchine.seqcnt;
-
     sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs12", mrs->log);
     
@@ -10972,16 +10962,6 @@ static int fs14(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
 
-    mrs->mchine.seqcnt += 1;
-    if (mrs->mchine.seqcnt >= 0x8) {
-        mrs->mchine.seqcnt = 0;
-    }
-
-    p->opcode = OP_SINGLE;
-    p->data = SINSCAN_DUAL_STRM;
-    p->inout = 0;
-    p->seqnum = mrs->mchine.seqcnt;
-
     sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs14", mrs->log);
     
@@ -11006,6 +10986,10 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_STRM)) {
             modersp->m = modersp->m + 1;
+            return 2;
+        } else if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_SD)) {
+            modersp->d = modersp->m + 1;
+            modersp->m = 59;
             return 2;
         } else if (p->opcode == OP_SUPBACK) {
             modersp->d = modersp->m + 1;
