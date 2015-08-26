@@ -9546,7 +9546,7 @@ static int cmdfunc_lh_opcode(int argc, char *argv[])
     sprintf(mrs->log, "cmdfunc_lh_opcode argc:%d\n", argc); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
-    pkt = &mrs->mchine.cur;
+    pkt = &mrs->mchine.tmp;
     pwt = &mrs->wtg;
     if (!pkt) {ret = -2; goto end;}
     if (!pwt) {ret = -3; goto end;}
@@ -10922,8 +10922,13 @@ static int fs11(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct info16Bit_s *p;
+    struct info16Bit_s *t;
     p = &mrs->mchine.cur;
+    t = &mrs->mchine.tmp;
 
+    p->opcode = t->opcode;
+    p->data = t->data;
+    
     sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs12", mrs->log);
     
@@ -10960,7 +10965,12 @@ static int fs13(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs14(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct info16Bit_s *p;
+    struct info16Bit_s *t;
     p = &mrs->mchine.cur;
+    t = &mrs->mchine.tmp;
+
+    p->opcode = t->opcode;
+    p->data = t->data;
 
     sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     print_f(&mrs->plog, "fs14", mrs->log);
