@@ -243,6 +243,12 @@ typedef enum {
     DOUSCAN_WHIT_BLNC,
 } doubleScan_e;
 
+typedef enum {
+    SUPBACK_NONE=0,
+    SUPBACK_RAW,
+    SUPBACK_SD,
+} supBack_e;
+
 struct aspInfoSplit_s{
     char *infoStr;
     int     infoLen;
@@ -4196,13 +4202,15 @@ static int next_laser(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "laser", str); 
-                //next = PSWT;
                 if (tmpAns == 1) {
                     next = PSMAX;
-                } else {
+                } else if (tmpAns == 2) {
                     next = PSSET;
                     evt = SUPI; 
+                } else if (tmpAns == 3) {
+                    //[TODO]
                 }
+
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -8470,13 +8478,13 @@ static int stlaser_01(struct psdata_s *data)
 { 
     char str[128], ch = 0;
     uint32_t rlt;
+
     rlt = abs_result(data->result); 
     //sprintf(str, "op_01: rlt: %x result: %x ans:%d\n", rlt, data->result, data->ansp0);  
     //print_f(mlogPool, "laser", str);  
 
     switch (rlt) {
         case STINIT:
-            usleep(300000);
             ch = 21; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
@@ -8522,12 +8530,17 @@ static int stlaser_02(struct psdata_s *data)
                 ret = cfgTableGet(pct, ASPOP_SUP_SAVE, &val);
                 if (ret) {
                     sprintf(str, "ASPOP_SUP_SAVE not available, ret:%d\n", ret);  
-                    print_f(mlogPool, "laser", str);  
+                    print_f(mlogPool, "laser02", str);  
                 } else {
                     sprintf(str, "ASPOP_SUP_SAVE : 0x%.8x \n", val);  
-                    print_f(mlogPool, "laser", str);  
-                    if (val) {
+                    print_f(mlogPool, "laser02", str);  
+                    if (val == SUPBACK_RAW) {
                         data->ansp0 = 2;
+                    } else if (val ==SUPBACK_SD) {
+                        data->ansp0 = 3;
+                    } else {
+                        sprintf(str, "WARNING!!! unexpected OP_SUPBACK value: 0x%x \n", val);  
+                        print_f(mlogPool, "laser02", str);  
                     }
                 }
 
@@ -11232,6 +11245,8 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
+    usleep(100000);
+            
     bitset = 0;
     msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
@@ -12875,7 +12890,7 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
+    //cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
     pfat->fatSupdata = s;
     pfat->fatSupcur = pfat->fatSupdata;
 
@@ -18625,12 +18640,12 @@ int main(int argc, char *argv[])
             ctb->opBitlen = 8;
             break;
         case ASPOP_SUP_SAVE: 
-            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opStatus = ASPOP_STA_UPD; // for debug, should be ASPOP_STA_NONE
             ctb->opCode = OP_SUPBACK;
             ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
+            ctb->opValue = SUPBACK_SD; // for debug, should be 0xff
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
             break;
         case ASPOP_SDFREE_FREESEC: 
             ctb->opStatus = ASPOP_STA_NONE;
