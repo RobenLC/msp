@@ -13708,9 +13708,9 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
         pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
         modersp->r = 1;
     } else {
-        sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!! pending!! \n", ret);
+        sprintf(mrs->log, "ERROR!!! header of FAT link list is not empty!! \n");
         print_f(&mrs->plog, "fs75", mrs->log);
-        modersp->r = 2;
+        modersp->r = 0xed;
     }
 
     return 1;
@@ -15399,7 +15399,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "ERROR!! bytes number of cluster is zero \n");
         print_f(&mrs->plog, "fs98", mrs->log);
 
-        modersp->r = 3;
+        modersp->r = 0xed;
         return 1;
     }
 
