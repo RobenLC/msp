@@ -290,7 +290,8 @@ typedef enum {
 
 struct supdataBack_s{
     struct supdataBack_s   *n;
-    int supdataUsed;
+    int supdataTot;
+    int supdataUse;
     char supdataBuff[SPI_TRUNK_SZ];
 };
 
@@ -843,6 +844,64 @@ struct directnFile_s{
     printf("  [%d] cluster number \n", pf->dfclstnum);
     printf("  [%d] file length \n", pf->dflength);
     printf("==========================================\n");
+}
+
+static int aspCalcSupLen(struct supdataBack_s *sup)
+{
+    int len=0;
+    struct supdataBack_s *scr;
+    if (!sup) return -1;
+    
+    scr = sup;
+    while(scr) {
+        len += scr->supdataTot;
+        scr = scr->n;
+    }
+    return len;
+}
+
+static int aspPopSupOut(char *dst, struct supdataBack_s *str, int size, struct supdataBack_s **nxt)
+{
+    int ret = 0, acusz = 0;
+    char *src1 = 0, *src2 = 0;
+    int tot=0, usd=0, rst=0;
+    struct supdataBack_s *scr=0, *snx=0;
+    
+    if (!str) return -1;
+    if (!nxt) return -2;
+    if (!dst) return -3;
+
+    scr = str;
+    snx = str->n;
+
+    tot = scr->supdataTot;
+    usd = scr->supdataUse;
+    rst = tot - usd;
+
+    if (rst < 0) return -4;
+    if (rst == 0) return 0;
+
+    if (size == rst) {
+        memcpy(dst, src1+usd, size);
+        acusz += size;
+        *nxt = snx;
+    } else if (size > rst) {
+        memcpy(dst, src1+usd, rst);
+        acusz += rst;
+        ret = aspPopSupOut(dst+rst, snx, size - rst, nxt);
+        if (ret > 0) {
+            acusz += ret;
+        } else {
+            *nxt = snx;
+        }
+    } else {
+        memcpy(dst, src1+usd, size);    
+        acusz += size;
+        *nxt = scr;
+        scr->supdataUse += size;
+    }
+
+    return acusz;
 }
 
 static uint32_t aspRawCompose(char * raw, int size)
@@ -11136,7 +11195,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if (len >= 0) {
                     dst = sc->supdataBuff;
                     memcpy(dst, addr, len);
-                    sc->supdataUsed = len;
+                    sc->supdataTot = len;
 
                     s = malloc(sizeof(struct supdataBack_s));
                     memset(s, 0, sizeof(struct supdataBack_s));
@@ -11175,7 +11234,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if (len >= 0) {
                     dst = sc->supdataBuff;
                     memcpy(dst, addr, len);
-                    sc->supdataUsed = len;
+                    sc->supdataTot = len;
 
                     s = malloc(sizeof(struct supdataBack_s));
                     memset(s, 0, sizeof(struct supdataBack_s));
@@ -11209,7 +11268,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                 dst = sc->supdataBuff;
                 memcpy(dst, addr, len);
-                sc->supdataUsed = len;
+                sc->supdataTot = len;
                 
                 s = malloc(sizeof(struct supdataBack_s));
                 memset(s, 0, sizeof(struct supdataBack_s));
@@ -11223,7 +11282,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             s = pfat->fatSupdata;
             while (s) {
-                if (s->supdataUsed == 0) {
+                if (s->supdataTot == 0) {
                     break;
                 }
                 sc = s;
@@ -13107,8 +13166,8 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
         //sprintf(mrs->log, "cnt:%d\n", modersp->c);
         //print_f(&mrs->plog, "fs65", mrs->log);
         
-        if (sh->supdataUsed < len) {
-            len = sh->supdataUsed;
+        if (sh->supdataTot < len) {
+            len = sh->supdataTot;
         }
 
         if (len > 0) {
@@ -15370,7 +15429,224 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp) 
+static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    char fnameSave[16] = "ASPA%.4d.jpg";
+    char srhName[16];
+    int ret=0, cnt=0;
+    uint32_t secStr=0, secLen=0, clstByte, clstLen=0, clstStr=0;;
+    uint32_t freeClst=0, usedClst=0, totClst=0, val=0, datLen=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct adFATLinkList_s *pflsh=0, *pflnt=0;
+    struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
+    struct sdFATable_s   *pftb=0;
+    struct directnFile_s *upld=0, *fscur=0, *fssrh=0;
+    struct supdataBack_s *s=0, *sc=0;
+    
+    uint32_t adata[3], atime[3];
+    char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
+    struct tm *p=0;
+    time_t timep;
+                
+    pfat = &mrs->aspFat;
+    psec = pfat->fatBootsec;
+    pftb = pfat->fatTable;
+    clstByte = psec->secSize * psec->secPrClst;
+    if (!clstByte) {
+        sprintf(mrs->log, "ERROR!! bytes number of cluster is zero \n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    pfre = pftb->ftbMng.f;
+    if (!pfre) {
+        sprintf(mrs->log, "Error!! free space link list is empty \n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    if (!pfat->fatCurDir) {
+        sprintf(mrs->log, "Error!! current folder is null \n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+    fscur = pfat->fatCurDir;
+    
+    if (!pfat->fatSupdata) {
+        sprintf(mrs->log, "ERROR!!! buffered link list is NULL \n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+    s = pfat->fatSupdata;
+    
+    if (!pfat->fatSupcur) {
+        sprintf(mrs->log, "ERROR!!! current buffered link list is NULL \n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+    sc = pfat->fatSupcur;
+
+    if (s != sc) {
+        sprintf(mrs->log, "ERROR!!! current buffered link list is not equal to his head \n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    ret = mspFS_allocDir(pfat, &upld);
+    if (ret) {
+         sprintf(mrs->log, "Error!! get new file entry failed ret: %d \n", ret);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    memset(upld, 0, sizeof(struct directnFile_s));
+    upld->dftype = ASPFS_TYPE_FILE;
+    upld->dfstats = ASPFS_STATUS_DIS;
+    //upld->dfstats = ASPFS_STATUS_EN;
+    upld->dfattrib = ASPFS_ATTR_ARCHIVE;
+
+    time(&timep);
+    p=localtime(&timep); /*取得當地時間*/ 
+    sprintf(mrs->log, "%.4d%.2d%.2d \n", (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday); 
+    print_f(&mrs->plog, "fs98", mrs->log);
+    sprintf(mrs->log, "%s,%.2d:%.2d:%.2d\n", wday[p->tm_wday],p->tm_hour, p->tm_min, p->tm_sec); 
+    print_f(&mrs->plog, "fs98", mrs->log);
+
+    adata[0] = p->tm_year+1900;
+    adata[1] = p->tm_mon + 1;
+    adata[2] = p->tm_mday;
+    
+    atime[0] = p->tm_hour;
+    atime[1] = p->tm_min;
+    atime[2] = p->tm_sec;
+    
+    upld->dfcredate = ((((adata[0] - 1980) & 0xff) << 16) | ((adata[1] & 0xff) << 8) | (adata[2] & 0xff));
+    upld->dfcretime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
+    upld->dflstacdate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
+    upld->dfrecodate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
+    upld->dfrecotime = (((atime[0]  << 16)&0xff) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));                                      
+
+    /* assign a name with sequence number */
+    for (cnt=0; cnt < 10000; cnt++) {
+        sprintf(srhName, fnameSave, cnt);
+        sprintf(mrs->log, "search name: [%s]\n", srhName);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+        ret = mspFS_SearchInFolder(&fssrh, fscur, srhName);
+        if (ret) break;
+    }
+
+    strncpy(upld->dfSFN, srhName, 12);
+    upld->dfSFN[13] = '\0';
+
+    upld->dflen = 0;
+    upld->dfLFN[0] = '\0';
+
+    sprintf(mrs->log, "SFN[%s] LFS[%s] len:%d\n", upld->dfSFN, upld->dfLFN, upld->dflen);
+    print_f(&mrs->plog, "fs98", mrs->log);
+
+    /* calculate sector start and sector length of file */            
+    datLen = aspCalcSupLen(sc);
+    if (datLen % clstByte) {
+        clstLen = (datLen / clstByte) + 1;
+    } else {
+        clstLen = (datLen / clstByte);        
+    }
+    
+    if (clstLen) {
+        ret = mspSD_allocFreeFATList(&pflsh, clstLen, pfre, &pnxf);
+        if (ret) {
+            sprintf(mrs->log, "free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, upld->dfSFN);
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        } 
+        else {
+            freeClst = 0;
+            if ((pfre != pnxf) && (pnxf)) {
+                totClst = (psec->secTotal - psec->secWhroot) / psec->secPrClst;
+
+                while (pfre != pnxf) {
+                    pclst = pfre;
+
+                    pfre = pfre->n;
+
+                    sprintf(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
+                    print_f(&mrs->plog, "fs98", mrs->log);
+
+                    aspFree(pclst);
+                    pclst = 0;
+                }
+            }
+
+            pflnt = pnxf;
+            while (pflnt) {
+                freeClst += pflnt->ftLen;
+                sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
+                print_f(&mrs->plog, "fs98", mrs->log);
+                pflnt = pflnt->n;
+            }
+
+            sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+            print_f(&mrs->plog, "fs98", mrs->log);     
+            usedClst = totClst - freeClst;
+
+            pftb->ftbMng.ftfreeClst = freeClst;
+            pftb->ftbMng.ftusedClst = usedClst;
+            pftb->ftbMng.f = pnxf;
+        }
+
+        /* debug */
+        sprintf(mrs->log, "show allocated FAT list: \n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+        val = 0;
+        pflnt = pflsh;
+        while (pflnt) {
+            val += pflnt->ftLen;
+            sprintf(mrs->log, "    str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
+            print_f(&mrs->plog, "fs98", mrs->log);
+            pflnt = pflnt->n;
+        }
+        sprintf(mrs->log, "total allocated cluster is %d!! \n", val);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+    
+        pftb->h = pflsh;
+        pftb->c = pftb->h;
+
+        pfat->fatStatus |= ASPFAT_STATUS_SDWBK;
+        pfat->fatStatus |= ASPFAT_STATUS_FATWT;
+    }else {
+        pftb->h = 0;
+        pftb->c = 0;
+    }
+
+    upld->dfclstnum = pflsh->ftStart; /* start cluster */
+    upld->dflength = datLen;
+
+    aspFS_insertFATChild(fscur, upld);
+    pfat->fatFileUpld = upld;
+    debugPrintDir(upld);
+    mspFS_folderList(upld->pa, 4);
+
+    pfat->fatStatus |= ASPFAT_STATUS_DFECHK;
+    pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
+
+    modersp->r = 1;
+    return 1;
+}
+
+static int fs99(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
     int val=0, i=0, ret=0;
     char *pr=0;
@@ -15505,15 +15781,14 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
         modersp->r = 1;
     } else {
-        sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!! pending!! \n", ret);
+        sprintf(mrs->log, "ERROR!!! header of FAT link list is not empty !!\n", ret);
         print_f(&mrs->plog, "fs98", mrs->log);
-        modersp->r = 2;
+        modersp->r = 0xed;
     }
 
     return 1;
 }
 
-static int fs99(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs102(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
