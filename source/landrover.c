@@ -1963,7 +1963,7 @@ static int stauto_03(struct psdata_s *data)
             case OP_STSEC_01:
             case OP_STSEC_02:
             case OP_STSEC_03:
-                ix = (op - OP_STSEC_00) & 0xf;
+                ix = (OP_STSEC_03 - op) & 0xf;
                 s->d[ix] = g->data;
                 s->f &= ~(0x1 << ix);
 
@@ -2000,7 +2000,7 @@ static int stauto_03(struct psdata_s *data)
                 s = &data->rs->pmch->sdst;
 
                 if ((data->ansp0 & 0xff) == op) {
-                    ix = (op - OP_STSEC_00) & 0xf;
+                    ix = (OP_STSEC_03 - op) & 0xf;
 
                     if (s->d[ix] == g->data) {
                         s->f |= 0x1 << ix;
@@ -2053,7 +2053,7 @@ static int stauto_04(struct psdata_s *data)
             case OP_STLEN_01:
             case OP_STLEN_02:
             case OP_STLEN_03:
-                ix = (op - OP_STLEN_00) & 0xf;
+                ix = (OP_STLEN_03 - op) & 0xf;
                 m->d[ix] = g->data;
                 m->f &= ~(0x1 << ix);
 
@@ -2092,7 +2092,7 @@ static int stauto_04(struct psdata_s *data)
                 m = &data->rs->pmch->sdln;
 
                 if ((data->ansp0 & 0xff) == op) {
-                    ix = (op - OP_STLEN_00) & 0xf;
+                    ix = (OP_STLEN_03 - op) & 0xf;
 
                     if (m->d[ix] == g->data) {
                         m->f |= 0x1 << ix;
@@ -2973,7 +2973,7 @@ static int stauto_22(struct psdata_s *data)
             case OP_STSEC_01:
             case OP_STSEC_02:
             case OP_STSEC_03:
-                ix = (op - OP_STSEC_00) & 0xf;
+                ix = (OP_STSEC_03 - op) & 0xf;
                 //s->d[ix] = g->data;
                 //s->f &= ~(0x1 << ix);
 
@@ -3016,7 +3016,7 @@ static int stauto_22(struct psdata_s *data)
                 s = &data->rs->pmch->sdst;
 
                 if ((data->ansp0 & 0xff) == op) {
-                    ix = (op - OP_STSEC_00) & 0xf;
+                    ix = (OP_STSEC_03 - op) & 0xf;
                     
                     if (s->f & (0x1 << ix)) {
                         s->f &= ~(0x1 << ix);                    
@@ -3069,7 +3069,7 @@ static int stauto_23(struct psdata_s *data)
             case OP_STLEN_01:
             case OP_STLEN_02:
             case OP_STLEN_03:
-                ix = (op - OP_STLEN_00) & 0xf;
+                ix = (OP_STLEN_03 - op) & 0xf;
                 //m->d[ix] = g->data;
                 //m->f &= ~(0x1 << ix);
 
@@ -3112,7 +3112,7 @@ static int stauto_23(struct psdata_s *data)
                 m = &data->rs->pmch->sdln;
 
                 if ((data->ansp0 & 0xff) == op) {
-                    ix = (op - OP_STLEN_00) & 0xf;
+                    ix = (OP_STLEN_03 - op) & 0xf;
 
                     if (m->f & (0x1 << ix)) {
                         m->f &= ~(0x1 << ix);
