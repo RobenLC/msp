@@ -12264,21 +12264,21 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 5);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -12417,21 +12417,21 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -12624,21 +12624,21 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -12753,21 +12753,21 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -13499,21 +13499,21 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -13849,21 +13849,21 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -14085,21 +14085,21 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -14416,21 +14416,21 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -14750,21 +14750,21 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -14798,21 +14798,21 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
 
-            val = cfgValueOffset(secStr, 0);
-            cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-            val = cfgValueOffset(secStr, 8);
-            cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-            val = cfgValueOffset(secStr, 16);
-            cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
             val = cfgValueOffset(secStr, 24);
+            cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+            val = cfgValueOffset(secStr, 16);
+            cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+            val = cfgValueOffset(secStr, 8);
+            cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+            val = cfgValueOffset(secStr, 0);
             cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-            val = cfgValueOffset(secLen, 0);
-            cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-            val = cfgValueOffset(secLen, 8);
-            cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-            val = cfgValueOffset(secLen, 16);
-            cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
             val = cfgValueOffset(secLen, 24);
+            cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+            val = cfgValueOffset(secLen, 16);
+            cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+            val = cfgValueOffset(secLen, 8);
+            cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+            val = cfgValueOffset(secLen, 0);
             cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
             cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
@@ -15285,21 +15285,21 @@ static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
 
-        val = cfgValueOffset(secStr, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
-        val = cfgValueOffset(secStr, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
-        val = cfgValueOffset(secLen, 0);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
-        val = cfgValueOffset(secLen, 8);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
-        val = cfgValueOffset(secLen, 16);
-        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
         val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
         cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
 
         cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
