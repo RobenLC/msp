@@ -19,7 +19,8 @@
 #include <sys/stat.h>  
 
 //main()
-#define SPI1_ENABLE (1) 
+#define SPI1_ENABLE (0) 
+#define PULL_LOW_AFTER_DATA (1)
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
 #define SPI_MODE_0      (0|0)
@@ -247,7 +248,17 @@ typedef enum {
     SUPBACK_NONE=0,
     SUPBACK_RAW,
     SUPBACK_SD,
+    SUPBACK_FAT,
 } supBack_e;
+
+typedef enum {
+    ACTION_NONE=0,
+    ACTION_OPTION_01,
+    ACTION_OPTION_02,
+    ACTION_OPTION_03,
+    ACTION_OPTION_04,
+    ACTION_OPTION_05,
+} actOption_e;
 
 struct aspInfoSplit_s{
     char *infoStr;
@@ -9194,12 +9205,10 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
 
 static int msp_spi_conf(int dev, int flag, void *bitset)
 {
-    char str[128];
     int ret;
     
     if (!dev) {
-        sprintf(str, "spi device id == 0\n");
-        print_f(mlogPool, "spi-config", str);
+        printf("spi-config, spi device id == 0\n");
         return -1;
     }
     ret = ioctl(dev, flag, bitset);
@@ -9223,8 +9232,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
 
     ret = msp_spi_conf(fd, SPI_IOC_MESSAGE(1), tr);
     if (ret < 0) {
-        //sprintf(mlog, "can't send spi message\n");
-        //print_f(mlogPool, "SPI", mlog);
+        printf("spi error code: %d \n", ret);
     }
     //sprintf(mlog, "tx/rx len: %d\n", ret);
     
@@ -9768,7 +9776,282 @@ static int cmdfunc_act_opcode(int argc, char *argv[])
     n = 0; rsp = 0;
     /* set data for update to scanner */
     pkt->opcode = OP_ACTION;
-    pkt->data = 0;
+    pkt->data = ACTION_OPTION_01;
+    n = cmdfunc_upd2host(mrs, 't', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_act_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_op1_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_go_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_ACTION;
+    pkt->data = ACTION_OPTION_01;
+    n = cmdfunc_upd2host(mrs, 't', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_act_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_op2_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_go_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_ACTION;
+    pkt->data = ACTION_OPTION_02;
+    n = cmdfunc_upd2host(mrs, 't', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_act_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_op3_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_go_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_ACTION;
+    pkt->data = ACTION_OPTION_03;
+    n = cmdfunc_upd2host(mrs, 't', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_act_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_op4_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_go_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_ACTION;
+    pkt->data = ACTION_OPTION_04;
+    n = cmdfunc_upd2host(mrs, 't', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_act_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_op5_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_go_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_ACTION;
+    pkt->data = ACTION_OPTION_05;
     n = cmdfunc_upd2host(mrs, 't', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -10474,7 +10757,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 15
+#define CMD_SIZE 20
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -10483,7 +10766,8 @@ static int dbg(struct mainRes_s *mrs)
     struct cmd_s cmdtab[CMD_SIZE] = {{0, "poll", cmdfunc_01}, {1, "action", cmdfunc_act_opcode}, {2, "rgw", cmdfunc_regw_opcode}, {3, "op", cmdfunc_opcode}, 
                                 {4, "wt", cmdfunc_wt_opcode}, {5, "go", cmdfunc_go_opcode}, {6, "rgr", cmdfunc_regr_opcode}, {7, "launch", cmdfunc_lh_opcode},
                                 {8, "boot", cmdfunc_boot_opcode}, {9, "single", cmdfunc_single_opcode}, {10, "dnld", cmdfunc_dnld_opcode}, {11, "upld", cmdfunc_upld_opcode},
-                                {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}};
+                                {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}, {15, "op1", cmdfunc_op1_opcode}
+                                , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}};
 
     p0_init(mrs);
 
@@ -11806,12 +12090,13 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     if ((len > 0) && (ch == 'N')) {
         ring_buf_init(&mrs->cmdRx);
         ring_buf_init(&mrs->cmdTx);
-
+#if PULL_LOW_AFTER_DATA
         bitset = 0;
         msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs36", mrs->log);
-        usleep(60000);
+#endif
+        usleep(120000);
             
         modersp->d = modersp->m + 1;
         modersp->m = 1;
@@ -12077,13 +12362,13 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
          sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
          print_f(&mrs->plog, "fs47", mrs->log);
 #endif
-
+#if PULL_LOW_AFTER_DATA
         bitset = 0;
         msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs47", mrs->log);
-
-        usleep(60000);
+#endif
+        usleep(120000);
 
         return 2;
     }
@@ -12816,8 +13101,8 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p=0, *c=0;
     struct sdFATable_s   *pftb=0;
 
-    sprintf(mrs->log, "read FAT  \n");
-    print_f(&mrs->plog, "fs55", mrs->log);
+    //sprintf(mrs->log, "read FAT  \n");
+    //print_f(&mrs->plog, "fs55", mrs->log);
 
     c = &mrs->mchine.cur;
     p = &mrs->mchine.tmp;
@@ -12867,19 +13152,19 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
             if (ch == 'd') {
                 sprintf(mrs->log, "spi0 %d end\n", modersp->v);
                 print_f(&mrs->plog, "fs55", mrs->log);
-                
+#if PULL_LOW_AFTER_DATA
                 bitset = 0;
                 msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                 sprintf(mrs->log, "set RDY pin %d\n",bitset);
                 print_f(&mrs->plog, "fs55", mrs->log);
-
+#endif
 #if SPI_KTHREAD_USE
                 bitset = 0;
                 ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
                 sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
                 print_f(&mrs->plog, "fs55", mrs->log);
 #endif
-                usleep(60000);
+                usleep(120000);
 
                 modersp->m = 48;
                 return 2;
@@ -13236,19 +13521,20 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs66", mrs->log);
 
         if (ch == 'K') {
-        
+
+#if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs66", mrs->log);
-
+#endif
 #if SPI_KTHREAD_USE
             bitset = 0;
             ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs66", mrs->log);
 #endif
-            usleep(60000);
+            usleep(120000);
 
             modersp->r = 1;            
             return 1;
@@ -13341,12 +13627,13 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs69", mrs->log);
 #endif
-
+#if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs69", mrs->log);
-            usleep(60000);
+#endif
+            usleep(120000);
 
             modersp->r = 1;            
             return 1;
@@ -13615,12 +13902,13 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs74", mrs->log);
 #endif
-
+#if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs74", mrs->log);
-            usleep(60000);
+#endif
+            usleep(120000);
 
             modersp->m = 48;            
             return 2;
@@ -13975,12 +14263,13 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs79", mrs->log);
 #endif
-
+#if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs79", mrs->log);
-            usleep(60000);
+#endif
+            usleep(120000);
 
             modersp->m = 48;            
             return 2;
@@ -14501,12 +14790,13 @@ static int fs83(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs83", mrs->log);
 #endif
-
+#if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs83", mrs->log);
-            usleep(60000);
+#endif
+            usleep(120000);
 
             modersp->m = 48;            
             return 2;
@@ -14887,12 +15177,13 @@ static int fs90(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs90", mrs->log);
 #endif
-
+#if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs90", mrs->log);
-            usleep(60000);
+#endif
+            usleep(120000);
 
             modersp->m = 48;            
             return 2;
@@ -15411,12 +15702,13 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs97", mrs->log);
 #endif
-
+#if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs97", mrs->log);
-            usleep(60000);
+#endif
+            usleep(120000);
 
             modersp->m = 48;            
             return 2;
@@ -15561,6 +15853,9 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     } else {
         clstLen = (datLen / clstByte);        
     }
+
+    sprintf(mrs->log, "Calculate sup back data len: %d\n", datLen);
+    print_f(&mrs->plog, "fs98", mrs->log);
     
     if (clstLen) {
         ret = mspSD_allocFreeFATList(&pflsh, clstLen, pfre, &pnxf);
@@ -15619,7 +15914,6 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
         sprintf(mrs->log, "total allocated cluster is %d!! \n", val);
         print_f(&mrs->plog, "fs98", mrs->log);
-
     
         pftb->h = pflsh;
         pftb->c = pftb->h;
@@ -15646,149 +15940,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
-static int fs99(struct mainRes_s *mrs, struct modersp_s *modersp) 
-{
-    int val=0, i=0, ret=0;
-    char *pr=0;
-    uint32_t secStr=0, secLen=0, clstByte=0, clstLen=0, freeClst=0, usedClst=0, totClst=0;
-    struct aspConfig_s *pct=0;
-    struct sdbootsec_s   *psec=0;
-    struct sdFAT_s *pfat=0;
-    struct sdParseBuff_s *pParBuf=0;
-    struct info16Bit_s *p=0, *c=0;
-    struct directnFile_s *curDir=0, *ch=0, *br=0;
-    struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
-    struct adFATLinkList_s *pflsh=0, *pflnt=0;
-    struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
-    struct sdFATable_s   *pftb=0;
-    
-    c = &mrs->mchine.cur;
-    p = &mrs->mchine.tmp;
-    
-    pct = mrs->configTable;
-    pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
-    psec = pfat->fatBootsec;
-    pftb = pfat->fatTable;
-    clstByte = psec->secSize * psec->secPrClst;
-    if (!clstByte) {
-        sprintf(mrs->log, "ERROR!! bytes number of cluster is zero \n");
-        print_f(&mrs->plog, "fs98", mrs->log);
-
-        modersp->r = 0xed;
-        return 1;
-    }
-
-    pfre = pftb->ftbMng.f;
-    if (!pfre) {
-        sprintf(mrs->log, "Error!! free space link list is empty \n");
-        print_f(&mrs->plog, "fs98", mrs->log);
-        modersp->r = 0xed;
-        return 1;
-    }
-    
-    if (!pfat->fatFileUpld) {
-        modersp->r = 0xed;
-        return 1;
-    }    
-
-    sprintf(mrs->log, "upload file: %s \n", pfat->fatFileUpld->dfSFN);
-    print_f(&mrs->plog, "fs98", mrs->log);
-   
-    curDir = pfat->fatFileUpld;
-    if (!pftb->h) {
-        pflsh = 0;
-
-        if (curDir->dflength % clstByte) {
-            clstLen = (curDir->dflength / clstByte) + 1;
-        } else {
-            clstLen = (curDir->dflength / clstByte);        
-        }
-
-        sprintf(mrs->log, "needed cluster length: %d \n", clstLen);
-        print_f(&mrs->plog, "fs98", mrs->log);
-        
-        if (clstLen) {
-            ret = mspSD_allocFreeFATList(&pflsh, clstLen, pfre, &pnxf);
-            if (ret) {
-                sprintf(mrs->log, "free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
-                print_f(&mrs->plog, "fs98", mrs->log);
-                modersp->r = 0xed;
-                return 1;
-            } 
-            else {
-                freeClst = 0;
-                if ((pfre != pnxf) && (pnxf)) {
-                    totClst = (psec->secTotal - psec->secWhroot) / psec->secPrClst;
-
-                    while (pfre != pnxf) {
-                        pclst = pfre;
-
-                        pfre = pfre->n;
-
-                        sprintf(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
-                        print_f(&mrs->plog, "fs98", mrs->log);
-
-                        aspFree(pclst);
-                        pclst = 0;
-                    }
-                }
-
-                pflnt = pnxf;
-                while (pflnt) {
-                    freeClst += pflnt->ftLen;
-                    sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
-                    print_f(&mrs->plog, "fs98", mrs->log);
-                    pflnt = pflnt->n;
-                }
-
-                sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
-                print_f(&mrs->plog, "fs98", mrs->log);     
-                usedClst = totClst - freeClst;
-
-                pftb->ftbMng.ftfreeClst = freeClst;
-                pftb->ftbMng.ftusedClst = usedClst;
-                pftb->ftbMng.f = pnxf;
-            }
-
-            /* debug */
-            sprintf(mrs->log, "show allocated FAT list: \n");
-            print_f(&mrs->plog, "fs98", mrs->log);
-
-            val = 0;
-            pflnt = pflsh;
-            while (pflnt) {
-                val += pflnt->ftLen;
-                sprintf(mrs->log, "    str:%d len:%d - %d\n", pflnt->ftStart, pflnt->ftLen, val);
-                print_f(&mrs->plog, "fs98", mrs->log);
-                pflnt = pflnt->n;
-            }
-            sprintf(mrs->log, "total allocated cluster is %d!! \n", val);
-            print_f(&mrs->plog, "fs98", mrs->log);
-
-        
-            pftb->h = pflsh;
-            pftb->c = pftb->h;
-
-            pfat->fatStatus |= ASPFAT_STATUS_SDWBK;
-            pfat->fatStatus |= ASPFAT_STATUS_FATWT;
-        }else {
-            pftb->h = 0;
-            pftb->c = 0;
-        }
-
-        pfat->fatStatus |= ASPFAT_STATUS_DFECHK;
-        pfat->fatStatus |= ASPFAT_STATUS_DFEWT;
-        modersp->r = 1;
-    } else {
-        sprintf(mrs->log, "ERROR!!! header of FAT link list is not empty !!\n", ret);
-        print_f(&mrs->plog, "fs98", mrs->log);
-        modersp->r = 0xed;
-    }
-
-    return 1;
-}
-
+static int fs99(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs102(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
