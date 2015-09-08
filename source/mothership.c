@@ -1686,12 +1686,12 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         goto fsparseEnd;
     } else if ((ld & 0xf0) == 0x40) {
         nd = raw[32];
-        if (nd != ((ld & 0xf) - 1)) {
+        if (nd != ((ld & 0xf) - 1) || (nd == 0)) {
             //memset(fs, 0x00, sizeof(struct directnFile_s));
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
         }
-        //printf("LONG file name parsing...\n");
+        //printf("\n LONG file name parsing...[0x%.2x] \n", ld);
     
         ret = 0;
         if (raw[11] != 0x0f) {
@@ -14409,7 +14409,8 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
     FILE *f=0;
-    char clstPath[128] = "/mnt/mmc2/clstnew.bin";
+    char strPath[128] = "/mnt/mmc2/clst%s";
+    char clstPath[128] = "";
     int val=0, i=0, ret=0, fLen=0, len=0;
     uint8_t *pdef=0;
     uint32_t secStr=0, secLen=0, fstsec=0, lstsec, freeClst=0, usedClst=0, totClst=0;
@@ -14434,7 +14435,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
     
-    sprintf(mrs->log, "DFE read from SD (0x%x)\n", pfat->fatFileUpld);
+    sprintf(mrs->log, "DFE read from SD (%s)\n", pfat->fatFileUpld->dfSFN);
     print_f(&mrs->plog, "fs81", mrs->log);
 
     curDir = pfat->fatFileUpld;
@@ -14477,14 +14478,17 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 print_f(&mrs->plog, "fs81", mrs->log);
             }
 
+            sprintf(clstPath, strPath, curDir->dfSFN);
+
             f = fopen(clstPath, "w+");
             if (f) {
                 msync(pdef, len, MS_SYNC);
                 fwrite(pdef, 1, len, f);
                 fflush(f);
                 fclose(f);
-                sprintf(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
+                sprintf(mrs->log, "DFE save to [%s] size:%d\n", clstPath, len);
                 print_f(&mrs->plog, "fs81", mrs->log);
+                shmem_dump(pdef, len);
             } else {
                 sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
                 print_f(&mrs->plog, "fs81", mrs->log);
@@ -14528,7 +14532,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                     return 1;
                 }
 
-                sprintf(mrs->log, "folder allocate new cluster for file: %s \n", curDir->dfSFN);
+                sprintf(mrs->log, "folder allocate new cluster for file: [%s] \n", curDir->dfSFN);
                 print_f(&mrs->plog, "fs81", mrs->log);
 
                 if (!pftb->h) {
@@ -14537,7 +14541,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                     pnxf = 0;
                     ret = mspSD_allocFreeFATList(&padd, 1, pfre, &pnxf);
                     if (ret) {
-                        sprintf(mrs->log, "free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
+                        sprintf(mrs->log, "ERROR!!! free FAT table parsing for file upload FAIL!!ret:%d (%s)\n", ret, curDir->dfSFN);
                         print_f(&mrs->plog, "fs81", mrs->log);
                         modersp->r = 0xed;
                         return 1;
@@ -14554,7 +14558,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                 pfre = pfre->n;
 
-                                sprintf(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
+                                sprintf(mrs->log, "free used FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
                                 print_f(&mrs->plog, "fs81", mrs->log);
 
                                 aspFree(pclst);
@@ -14611,7 +14615,8 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             /* for cluster DEF update */
             pftb->h = pclst;
             pftb->c = pftb->h;
-                    
+
+            memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffMax);            
             pParBuf->dirBuffUsed = 0;
             pfat->fatStatus &= ~ASPFAT_STATUS_DFECHK;   
             aspFree(pfdirt);         
@@ -14651,7 +14656,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             ret = mspSD_parseFAT2LinkList(&pflsh, pa->dfclstnum, pftb->ftbFat1, (psec->secTotal - psec->secWhroot) / psec->secPrClst);
             if (ret) {
-                sprintf(mrs->log, "FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, pa->dfSFN);
+                sprintf(mrs->log, "ERROR!!! FAT table parsing for root dictionary FAIL!!ret:%d (%s)\n", ret, pa->dfSFN);
                 print_f(&mrs->plog, "fs81", mrs->log);
                 modersp->r = 0xed;
                 return 1;
@@ -14671,7 +14676,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             pftb->c = pftb->h;
         }else {
             pflnt = pftb->h;
-            sprintf(mrs->log, "FAT link list head should be zero, str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
+            sprintf(mrs->log, "ERROR!!! FAT link list head should be zero, str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
             print_f(&mrs->plog, "fs81", mrs->log);
 
             modersp->r = 0xed;
@@ -14893,7 +14898,8 @@ static int fs87(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     FILE *f=0;
-    char clstPath[128] = "/mnt/mmc2/clstnew.bin";
+    char strPath[128] = "/mnt/mmc2/clst%s";
+    char clstPath[128] = "";
     
     uint8_t *pdef=0;
     int val=0, i=0, ret=0, fLen=0, len=0;
@@ -14935,7 +14941,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt = pftb->c;
         
         msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
-        //shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
+        shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
         /* find the free space, slot unit is 32 bytes */
         fLen = aspFindFreeDEF(&pdef, pParBuf->dirParseBuff, pParBuf->dirBuffUsed, 32);
 
@@ -14948,7 +14954,9 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r = 0xed;
             return 1;
         }
-        
+
+        sprintf(clstPath, strPath, curDir->dfSFN);
+
         f = fopen(clstPath, "r");
 
         ret = fseek(f, 0, SEEK_END);
@@ -14984,7 +14992,8 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         sprintf(mrs->log, "FAT file read size: %d/%d free:%d\n", ret, len, fLen);
         print_f(&mrs->plog, "fs88", mrs->log);
-
+        shmem_dump(pr, len);
+        
         //addr = pParBuf->dirParseBuff + (pParBuf->dirBuffUsed - fLen);
 
         if (len > fLen) {
@@ -15018,6 +15027,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
         } else {
             f = fopen(clstPath, "w+");
             if (f) {
+                fflush(f);
                 fclose(f);
                 sprintf(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
                 print_f(&mrs->plog, "fs81", mrs->log);
@@ -15315,7 +15325,7 @@ static int fs92(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    char fnameSave[16] = "ASPA%.4d.jpg";
+    char fnameSave[16] = "asp%.5d.jpg";
     char srhName[16];
     int ret=0, cnt=0;
     uint32_t secStr=0, secLen=0, clstLen=0, clstStr=0;;
@@ -15420,6 +15430,22 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt->ftLen -= clstLen;
         pflnt->ftStart += clstLen;
         modersp->r = 1;
+
+        pflnt = pfre;
+        while (pflnt) {
+            freeClst += pflnt->ftLen;
+            sprintf(mrs->log, "cal start: %d len:%d \n", pflnt->ftStart, pflnt->ftLen);
+            print_f(&mrs->plog, "fs93", mrs->log);
+            pflnt = pflnt->n;
+        }
+
+        sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+        print_f(&mrs->plog, "fs98", mrs->log);     
+        usedClst = totClst - freeClst;
+
+        pftb->ftbMng.ftfreeClst = freeClst;
+        pftb->ftbMng.ftusedClst = usedClst;
+        pftb->ftbMng.f = pfre;
     }
 
     ret = mspFS_allocDir(pfat, &upld);
@@ -15723,7 +15749,7 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    char fnameSave[16] = "ASPA%.4d.jpg";
+    char fnameSave[16] = "asp%.5d.jpg";
     char srhName[16];
     int ret=0, cnt=0;
     uint32_t secStr=0, secLen=0, clstByte, clstLen=0, clstStr=0;;
@@ -16948,7 +16974,7 @@ static int p2(struct procRes_s *rs)
 
                 addr = pabuf->dirParseBuff;
                 msync(addr, psec->secPrClst*512, MS_SYNC);
-                //shmem_dump(addr, psec->secPrClst*512);
+                shmem_dump(addr, psec->secPrClst*512);
                 
                 len = 0;
                 pi = 0;  
