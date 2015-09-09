@@ -58,6 +58,8 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_SDAT             0x2a
 #define OP_FREESEC       0x2b
 #define OP_USEDSEC       0x2c
+#define OP_SDINIT          0x2d
+#define OP_SDSTATS       0x2e
 /* scanner parameters */
 #define OP_MSG                0x30       
 #define OP_FFORMAT        0x31
@@ -259,6 +261,11 @@ typedef enum {
     ACTION_OPTION_04,
     ACTION_OPTION_05,
 } actOption_e;
+
+typedef enum {
+    SDSTATS_ERROR=0,
+    SDSTATS_OK,
+} SDStatus_e;
 
 struct aspInfoSplit_s{
     char *infoStr;
@@ -3324,12 +3331,13 @@ static uint32_t next_SDAO(struct psdata_s *data)
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSTSM;
                 break;
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSMAX;
+                next = PSTSM;
+                evt = FATH; 
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -8110,31 +8118,41 @@ static int stwbk_63(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsda_64(struct psdata_s *data)
+static int stsdinit_64(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
+    struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
-    
+
+
     rs = data->rs;
     rlt = abs_result(data->result); 
+    
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
 
     sprintf(rs->logs, "op_64 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SDA", rs->logs);  
+    print_f(rs->plogs, "SDINIT", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
+            c->opcode = OP_SDINIT;
+            c->data = 0;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            ch = 41; 
+
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_64: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SDA", rs->logs);  
+            print_f(rs->plogs, "SDINIT", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -8152,31 +8170,45 @@ static int stsda_64(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsda_65(struct psdata_s *data)
+static int stsdinit_65(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
+    struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
-    
+
+
     rs = data->rs;
     rlt = abs_result(data->result); 
+    
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
 
     sprintf(rs->logs, "op_65 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SDA", rs->logs);  
+    print_f(rs->plogs, "SDINIT", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
+            c->opcode = OP_SDSTATS;
+            c->data = 0;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            ch = 41; 
+
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_65: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SDA", rs->logs);  
+            print_f(rs->plogs, "SDINIT", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                if (p->data == SDSTATS_OK) {
+                    data->result = emb_result(data->result, NEXT);
+                } else {
+                    data->result = emb_result(data->result, EVTMAX);
+                }
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -8192,6 +8224,7 @@ static int stsda_65(struct psdata_s *data)
     }
 
     return ps_next(data);
+
 }
 
 static int stspy_01(struct psdata_s *data)
@@ -15960,7 +15993,11 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
-static int fs99(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+static int fs99(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    return 1;
+}
+
 static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs102(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
@@ -16111,7 +16148,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stsda_46, stsda_47, stsda_48, stsda_49, stsda_50}, // SDAL
                             {stsda_51, stsda_52, stsda_53, stsda_54, stsda_55}, // SDAM
                             {stsda_56, stsda_57, stsda_58, stsda_59, stsda_60}, // SDAN
-                            {stsda_61, stsda_62, stwbk_63, stsda_64, stsda_65}}; // SDAO
+                            {stsda_61, stsda_62, stwbk_63, stsdinit_64, stsdinit_65}}; // SDAO
                             
 
     p1_init(rs);
@@ -16158,7 +16195,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                     stdata->result = emb_stanPro(0, STINIT, DOUBLED, PSTSM);
                 } else if (cmd == 'b') {
                     cmdt = cmd;
-                    stdata->result = emb_stanPro(0, STINIT, FATH, PSTSM);
+                    stdata->result = emb_stanPro(0, STINIT, SDAO, PSRLT);
                 } else if (cmd == 's') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, SUPI, PSWT);
@@ -17883,14 +17920,16 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     int px, pi, size, opsz, acusz, len, acu;
     int ret, n, num, hd, be, ed, ln, fg;
     char ch, *recvbuf, *addr, *sendbuf;
-    char msg[256], opcode=0, param=0, flag = 0;
+    char opcode=0, param=0, flag = 0;
+    char msg[256] = "boot";
     sprintf(rs->logs, "p5\n");
     print_f(rs->plogs, "P5", rs->logs);
 
     p5_init(rs);
     // wait for ch from p0
     // in charge of socket recv
-
+    usleep(10000);
+    
     sendbuf = malloc(2048);
     if (!sendbuf) {
         sprintf(rs->logs, "p5 sendbuf alloc failed! \n");
@@ -17931,7 +17970,13 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sprintf(rs->logs, "p5 get listen ret: %d", ret);
         error_handle(rs->logs, 3320);
     }
-    
+
+    usleep(10000);
+/*
+    sprintf(rs->logs, "send the very first command [%s] \n", msg);
+    print_f(rs->plogs, "P5", rs->logs);
+    rs_ipc_put(rcmd, msg, 4);
+*/
     while (1) {
         //printf("#");
         //sprintf(rs->logs, "#\n");

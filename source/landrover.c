@@ -51,6 +51,8 @@
 #define OP_SDAT         0x2a
 #define OP_FREESEC      0x2b
 #define OP_USEDSEC      0x2c
+#define OP_SDINIT          0x2d
+#define OP_SDSTATS       0x2e
 /* scanner parameters */
 #define OP_MSG          0x30       
 #define OP_FFORMAT      0x31
@@ -265,6 +267,7 @@ struct mainRes_s{
     // command mode share memory
     struct shmem_s cmdRx; /* cmdRx for spi0 */
     struct shmem_s cmdTx;
+    int sd_init;
     // file save
     FILE *fptn;
     FILE *fs;
@@ -300,6 +303,7 @@ struct procRes_s{
     struct shmem_s *pcmdTx;
     struct machineCtrl_s *pmch;
 
+    int *psd_init;
     // data mode share memory
     int cdsz_s;
     int mdsz_s;
@@ -641,6 +645,14 @@ static int next_spy(struct psdata_s *data)
                     break;
                 case OP_USEDSEC:
                     next = PSSET;
+                    evt = AUTO_E;
+                    break;
+                case OP_SDINIT:
+                    next = PSRLT;
+                    evt = AUTO_E;
+                    break;
+                case OP_SDSTATS:
+                    next = PSTSM;
                     evt = AUTO_E;
                     break;
                 case OP_RGRD:
@@ -1162,6 +1174,8 @@ static int next_auto_E(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
                 break;
             default:
                 sprintf(str, "default\n"); 
@@ -1517,6 +1531,8 @@ static int stspy_05(struct psdata_s *data)
                     case OP_SDAT:
                     case OP_FREESEC:
                     case OP_USEDSEC:
+                    case OP_SDINIT:
+                    case OP_SDSTATS:
                     case OP_ACTION:
                     case OP_RGRD:
                     case OP_RGWT:
@@ -3145,8 +3161,114 @@ static int stauto_23(struct psdata_s *data)
 
 }
 
-static int stauto_24(struct psdata_s *data) {return 0;}
-static int stauto_25(struct psdata_s *data) {return 0;}
+static int stauto_24(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+    int *pSdInit = 0;
+
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_24", str);  
+
+    switch (rlt) {
+        case STINIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            memset(p, 0, sizeof(struct info16Bit_s));
+            p->opcode = OP_SDINIT;
+            p->data = 0x01;
+
+            ch = 24; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            
+            if (g->opcode == p->opcode) {
+                sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
+                print_f(mlogPool, "auto_24", str);  
+
+                sleep(2);
+                pSdInit = data->rs->psd_init;
+                *pSdInit = 1;
+                sprintf(str, "Set SD status: 0x%.2x \n", *pSdInit);  
+                print_f(mlogPool, "auto_24", str);  
+
+                data->result = emb_result(data->result, NEXT);
+            }	
+            
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+
+
+}
+
+static int stauto_25(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+    int *pSdInit = 0, SDinit = 0;
+    
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_25", str);  
+
+    switch (rlt) {
+        case STINIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            pSdInit = data->rs->psd_init;
+            SDinit = *pSdInit;
+            msync(pSdInit, sizeof(int), MS_SYNC);
+            
+            p->opcode = OP_SDSTATS;
+            p->data = SDinit & 0xff;
+
+            sprintf(str, "SD status: 0x%.2x \n", p->data);  
+            print_f(mlogPool, "auto_25", str);  
+
+            ch = 24; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            
+            if (g->opcode == p->opcode) {
+                sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
+                print_f(mlogPool, "auto_25", str);  
+                data->result = emb_result(data->result, NEXT);
+            }	
+            
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
 
 static int shmem_rlt_get(struct mainRes_s *mrs, int seq, int p)
 {
@@ -4063,6 +4185,8 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_SDAT:                                     
         case OP_FREESEC:
         case OP_USEDSEC:
+        case OP_SDINIT:
+        case OP_SDSTATS:
         case OP_STSEC_00:                                  
         case OP_STSEC_01:                                  
         case OP_STSEC_02:                                  
@@ -4886,7 +5010,8 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/dev/mmcblk0";
     //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
     //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
-    char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
+    char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -5609,7 +5734,8 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/dev/mmcblk0";
     //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
     //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
-    char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
+    char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -7065,7 +7191,8 @@ int main(int argc, char *argv[])
 //char diskname[128] = "/dev/mmcblk0";
 //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
 //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
-char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
+//char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
+char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 
@@ -7547,6 +7674,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 
     rs->pmch = &mrs->mchine;
     rs->pregtb = mrs->regTable;
+    rs->psd_init = &mrs->sd_init;
     return 0;
 }
 
