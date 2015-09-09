@@ -14409,8 +14409,7 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
     FILE *f=0;
-    char strPath[128] = "/mnt/mmc2/clst%s";
-    char clstPath[128] = "";
+    char clstPath[128] = "/mnt/mmc2/clstNew.bin";
     int val=0, i=0, ret=0, fLen=0, len=0;
     uint8_t *pdef=0;
     uint32_t secStr=0, secLen=0, fstsec=0, lstsec, freeClst=0, usedClst=0, totClst=0;
@@ -14477,8 +14476,6 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 sprintf(mrs->log, "ERROR!!! compirse DEF failed, ret len:%d(free:%d)\n", len, fLen);
                 print_f(&mrs->plog, "fs81", mrs->log);
             }
-
-            sprintf(clstPath, strPath, curDir->dfSFN);
 
             f = fopen(clstPath, "w+");
             if (f) {
@@ -14898,8 +14895,7 @@ static int fs87(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     FILE *f=0;
-    char strPath[128] = "/mnt/mmc2/clst%s";
-    char clstPath[128] = "";
+    char clstPath[128] = "/mnt/mmc2/clstNew.bin";
     
     uint8_t *pdef=0;
     int val=0, i=0, ret=0, fLen=0, len=0;
@@ -14941,7 +14937,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt = pftb->c;
         
         msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
-        shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
+        //shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
         /* find the free space, slot unit is 32 bytes */
         fLen = aspFindFreeDEF(&pdef, pParBuf->dirParseBuff, pParBuf->dirBuffUsed, 32);
 
@@ -14954,8 +14950,6 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r = 0xed;
             return 1;
         }
-
-        sprintf(clstPath, strPath, curDir->dfSFN);
 
         f = fopen(clstPath, "r");
 
@@ -16974,7 +16968,7 @@ static int p2(struct procRes_s *rs)
 
                 addr = pabuf->dirParseBuff;
                 msync(addr, psec->secPrClst*512, MS_SYNC);
-                shmem_dump(addr, psec->secPrClst*512);
+                //shmem_dump(addr, psec->secPrClst*512);
                 
                 len = 0;
                 pi = 0;  
