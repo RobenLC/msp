@@ -16156,7 +16156,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     // wait for ch from p0
     // state machine control
     stdata->rs = rs;
-    pi = 0;    stdata->result = 0;    cmd = '\0';   cmdt = 'w';
+    pi = 0;    stdata->result = 0;    cmd = '\0';   cmdt = '\0';
     while (1) {
         //sprintf(rs->logs, "+\n");
         //print_f(rs->plogs, "P1", rs->logs);
@@ -17928,7 +17928,6 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     p5_init(rs);
     // wait for ch from p0
     // in charge of socket recv
-    usleep(10000);
     
     sendbuf = malloc(2048);
     if (!sendbuf) {
@@ -17971,12 +17970,10 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         error_handle(rs->logs, 3320);
     }
 
-    usleep(10000);
-/*
     sprintf(rs->logs, "send the very first command [%s] \n", msg);
     print_f(rs->plogs, "P5", rs->logs);
     rs_ipc_put(rcmd, msg, 4);
-*/
+
     while (1) {
         //printf("#");
         //sprintf(rs->logs, "#\n");
@@ -19818,6 +19815,16 @@ int main(int argc, char *argv[])
     ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(pmrs->log, "Set RDY low at beginning\n");
     print_f(&pmrs->plog, "SPI", pmrs->log);
+
+    bitset = 1;
+    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(pmrs->log, "Set spi 0 slave ready: %d\n", bitset);
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+    bitset = 1;
+    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(pmrs->log, "Set spi 1 slave ready: %d\n", bitset);
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+    
 
     bitset = 0;     
     msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
