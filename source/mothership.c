@@ -11416,6 +11416,9 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                 switch (val) {
                     case SUPBACK_RAW:
+                        break;
+                    case SUPBACK_FAT:
+                        break;
                     case SUPBACK_SD:
                         modersp->d = modersp->m + 1;
                         modersp->m = 59;
@@ -17974,6 +17977,10 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     print_f(rs->plogs, "P5", rs->logs);
     rs_ipc_put(rcmd, msg, 4);
 
+    n = rs_ipc_get(rcmd, sendbuf, 2048);
+    sprintf(rs->logs, "get boot result: [%s], ret: %d\n", sendbuf, n);
+    print_f(rs->plogs, "P5", rs->logs);
+    
     while (1) {
         //printf("#");
         //sprintf(rs->logs, "#\n");
