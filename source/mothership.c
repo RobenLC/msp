@@ -89,8 +89,26 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_DUL 0x0a
 */
 
+#define OP_FUNCTEST_00              0x70
+#define OP_FUNCTEST_01              0x71
+#define OP_FUNCTEST_02              0x72
+#define OP_FUNCTEST_03              0x73
+#define OP_FUNCTEST_04              0x74
+#define OP_FUNCTEST_05              0x75
+#define OP_FUNCTEST_06              0x76
+#define OP_FUNCTEST_07              0x77
+#define OP_FUNCTEST_08              0x78
+#define OP_FUNCTEST_09              0x79
+#define OP_FUNCTEST_10              0x7A
+#define OP_FUNCTEST_11              0x7B
+#define OP_FUNCTEST_12              0x7C
+#define OP_FUNCTEST_13              0x7D
+#define OP_FUNCTEST_14              0x7E
+#define OP_FUNCTEST_15              0x7F
+
 /* debug */
-#define OP_SAVE              0x70
+
+#define OP_SAVE              0x80
 #define OP_ERROR            0xe0
 
 #define SPI_MAX_TXSZ  (1024 * 1024)
@@ -206,6 +224,22 @@ typedef enum {
     ASPOP_SDUSED_LEN02,
     ASPOP_SDUSED_LEN03,
     ASPOP_SDUSED_LEN04,
+    ASPOP_FUNTEST_00,
+    ASPOP_FUNTEST_01,
+    ASPOP_FUNTEST_02,
+    ASPOP_FUNTEST_03,
+    ASPOP_FUNTEST_04,
+    ASPOP_FUNTEST_05,
+    ASPOP_FUNTEST_06,
+    ASPOP_FUNTEST_07,
+    ASPOP_FUNTEST_08,
+    ASPOP_FUNTEST_09,
+    ASPOP_FUNTEST_10,
+    ASPOP_FUNTEST_11,
+    ASPOP_FUNTEST_12,
+    ASPOP_FUNTEST_13,
+    ASPOP_FUNTEST_14,
+    ASPOP_FUNTEST_15,
     ASPOP_CODE_MAX, /* 52 */
 } aspOpCode_e;
 
@@ -248,8 +282,8 @@ typedef enum {
 
 typedef enum {
     SUPBACK_NONE=0,
-    SUPBACK_RAW,
     SUPBACK_SD,
+    SUPBACK_RAW,
     SUPBACK_FAT,
 } supBack_e;
 
@@ -19683,7 +19717,134 @@ int main(int argc, char *argv[])
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
-
+        case ASPOP_FUNTEST_00: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_00;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_01: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_01;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_02: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_02;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_03: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_03;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_04: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_04;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_05: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_05;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_06: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_06;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_07: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_07;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_08: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_08;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_09: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_09;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_10: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_10;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_11: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_11;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_12: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_12;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_13: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_13;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_14: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_14;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_FUNTEST_15: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_FUNCTEST_15;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
         default: break;
         }
     }

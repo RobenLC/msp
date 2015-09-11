@@ -81,9 +81,25 @@
 #define OP_SCM 0x09
 #define OP_DUL 0x0a
 */
+#define OP_FUNCTEST_00              0x70
+#define OP_FUNCTEST_01              0x71
+#define OP_FUNCTEST_02              0x72
+#define OP_FUNCTEST_03              0x73
+#define OP_FUNCTEST_04              0x74
+#define OP_FUNCTEST_05              0x75
+#define OP_FUNCTEST_06              0x76
+#define OP_FUNCTEST_07              0x77
+#define OP_FUNCTEST_08              0x78
+#define OP_FUNCTEST_09              0x79
+#define OP_FUNCTEST_10              0x7A
+#define OP_FUNCTEST_11              0x7B
+#define OP_FUNCTEST_12              0x7C
+#define OP_FUNCTEST_13              0x7D
+#define OP_FUNCTEST_14              0x7E
+#define OP_FUNCTEST_15              0x7F
 
 /* debug */
-#define OP_SAVE         0x70
+#define OP_SAVE         0x80
 #define OP_ERROR        0xe0
 
 #define SEC_LEN 512
@@ -628,6 +644,23 @@ static int next_spy(struct psdata_s *data)
                 case OP_AFEIC:
                 case OP_EXTPULSE:
                 case OP_ACTION:
+                case OP_SUPBACK:
+                case OP_FUNCTEST_00:
+                case OP_FUNCTEST_01:
+                case OP_FUNCTEST_02:
+                case OP_FUNCTEST_03:
+                case OP_FUNCTEST_04:
+                case OP_FUNCTEST_05:
+                case OP_FUNCTEST_06:
+                case OP_FUNCTEST_07:
+                case OP_FUNCTEST_08:
+                case OP_FUNCTEST_09:
+                case OP_FUNCTEST_10:
+                case OP_FUNCTEST_11:
+                case OP_FUNCTEST_12:
+                case OP_FUNCTEST_13:
+                case OP_FUNCTEST_14:
+                case OP_FUNCTEST_15:
                     next = PSSET; /* get and repeat value */
                     evt = AUTO_A;
                     break;
@@ -666,9 +699,11 @@ static int next_spy(struct psdata_s *data)
                     next = PSWT;
                     evt = AUTO_B;
                     break;
+/*
                 case OP_SUPBACK:
-                    next = PSTSM; /* jump to next stage */
+                    next = PSTSM;
                     evt = AUTO_B;
+*/
                     break;
                 default:
                     break;
@@ -1542,6 +1577,23 @@ static int stspy_05(struct psdata_s *data)
                     case OP_SUPBACK:
                     case OP_DOUBLE:
                     case OP_SAVE:
+                    case OP_FUNCTEST_00:
+                    case OP_FUNCTEST_01:
+                    case OP_FUNCTEST_02:
+                    case OP_FUNCTEST_03:
+                    case OP_FUNCTEST_04:
+                    case OP_FUNCTEST_05:
+                    case OP_FUNCTEST_06:
+                    case OP_FUNCTEST_07:
+                    case OP_FUNCTEST_08:
+                    case OP_FUNCTEST_09:
+                    case OP_FUNCTEST_10:
+                    case OP_FUNCTEST_11:
+                    case OP_FUNCTEST_12:
+                    case OP_FUNCTEST_13:
+                    case OP_FUNCTEST_14:
+                    case OP_FUNCTEST_15:
+
                         sprintf(str, "go to next \n"); 
                         print_f(mlogPool, "spy", str);  
                         data->result = emb_result(data->result, NEXT);
@@ -4216,6 +4268,23 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_RGADD_L:
         case OP_SUPBACK:
         case OP_SAVE:
+        case OP_FUNCTEST_00:
+        case OP_FUNCTEST_01:
+        case OP_FUNCTEST_02:
+        case OP_FUNCTEST_03:
+        case OP_FUNCTEST_04:
+        case OP_FUNCTEST_05:
+        case OP_FUNCTEST_06:
+        case OP_FUNCTEST_07:
+        case OP_FUNCTEST_08:
+        case OP_FUNCTEST_09:
+        case OP_FUNCTEST_10:
+        case OP_FUNCTEST_11:
+        case OP_FUNCTEST_12:
+        case OP_FUNCTEST_13:
+        case OP_FUNCTEST_14:
+        case OP_FUNCTEST_15:
+
             modersp->r = p->opcode | (p->data << 8);
             return 1;
             break;                                       
