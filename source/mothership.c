@@ -4316,7 +4316,8 @@ static int next_laser(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "laser", str); 
-                if (tmpAns == 1) {
+                if (tmpAns == 4) {
+                    /* TODO */
                     next = PSMAX;
                 } else if (tmpAns == 2) {
                     next = PSSET;
@@ -4324,6 +4325,8 @@ static int next_laser(struct psdata_s *data)
                 } else if (tmpAns == 3) {
                     next = PSWT;
                     evt = SDAO; 
+                } else {
+                    next = PSMAX;                    
                 }
 
                 break;
@@ -8686,13 +8689,22 @@ static int stlaser_02(struct psdata_s *data)
                     if (!data->rs->psFat->fatSupcur) {
                         sprintf(str, "WARNING!!! buffered link list is not allocated!!\n");  
                         print_f(mlogPool, "laser02", str);  
-                    } else if (val == SUPBACK_RAW) {
-                        data->ansp0 = 2;
-                    } else if (val ==SUPBACK_SD) {
-                        data->ansp0 = 3;
                     } else {
-                        sprintf(str, "WARNING!!! unexpected OP_SUPBACK value: 0x%x \n", val);  
-                        print_f(mlogPool, "laser02", str);  
+                        switch (val) {
+                            case SUPBACK_RAW:
+                                data->ansp0 = 2;
+                                break;
+                            case SUPBACK_SD:
+                                data->ansp0 = 3;
+                                break;
+                            case SUPBACK_FAT:
+                                data->ansp0 = 4;
+                                break;
+                            default:
+                                sprintf(str, "WARNING!!! unexpected OP_SUPBACK value: 0x%x \n", val);  
+                                print_f(mlogPool, "laser02", str);  
+                                break;
+                        }
                     }
                 }
 
@@ -11437,7 +11449,7 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
         if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_STRM)) {
             modersp->m = modersp->m + 1;
             return 2;
-        } else if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_SD)) {
+        } else if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_SD)) { /* for SD write-back function test  */
             modersp->m = modersp->m + 1;
         
             ret = cfgTableGet(pct, ASPOP_SUP_SAVE, &val);
