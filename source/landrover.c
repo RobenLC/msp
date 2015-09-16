@@ -584,7 +584,7 @@ static int next_spy(struct psdata_s *data)
                 case OP_SINGLE: /* currently support */              
                     switch ((tmpAns >> 8) & 0xff) {
                         case SINSCAN_DUAL_STRM:
-                        //case SINSCAN_DUAL_SD:
+                        case SINSCAN_DUAL_SD:
                             #if 1
                             next = PSSET; 
                             evt = BULLET;
