@@ -3418,6 +3418,9 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
                 } else if (tmpAns == 2) {
                     next = PSWT;
                     evt = WTBAKP;
+                } else if (tmpAns == 3) {
+                    next = PSSET;
+                    evt = BULLET;
                 } else {
                     next = PSMAX;
                 }
@@ -3429,6 +3432,9 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
                     next = PSSET;
                     evt = SDAO;
                 } else if (tmpAns == 2) {
+                    next = PSSET;
+                    evt = SDAO;
+                } else if (tmpAns == 3) {
                     next = PSSET;
                     evt = SDAO;
                 } else {
@@ -8468,10 +8474,6 @@ static int stwtbak_66(struct psdata_s *data)
                 data->result = emb_result(data->result, EVTMAX);
             } else {
                 if (pdt->opValue == SINSCAN_WIFI_SD) {
-                    c->opcode = pdt->opCode;
-                    c->data = pdt->opValue;
-                    memset(p, 0, sizeof(struct info16Bit_s));
-
                     data->ansp0 = 1;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_66: SINSCAN_WIFI_SD go to next!!\n"); 
@@ -8480,6 +8482,11 @@ static int stwtbak_66(struct psdata_s *data)
                     data->ansp0 = 2;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_66: SINSCAN_SD_ONLY go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SINSCAN_DUAL_SD) {
+                    data->ansp0 = 3;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_66: SINSCAN_DUAL_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else {
                     sprintf(rs->logs, "WARNING!!! op66, opValue is unexpected val:%x\n", pdt->opValue);
@@ -8550,6 +8557,11 @@ static int stwtbak_67(struct psdata_s *data)
                     data->ansp0 = 2;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_67: SINSCAN_SD_ONLY go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SINSCAN_DUAL_SD) {
+                    data->ansp0 = 3;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_67: SINSCAN_DUAL_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else {
                     sprintf(rs->logs, "WARNING!!! op67, opValue is unexpected val:%x\n", pdt->opValue);
@@ -9216,15 +9228,66 @@ static int stbullet_02(struct psdata_s *data)
 { 
     uint32_t rlt;
     char str[128], ch = 0; 
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *t=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    t = &rs->pmch->tmp;
+    pct = data->rs->pcfgTable;
     rlt = abs_result(data->result); 
     //sprintf(str, "op_02: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0); 
     //print_f(mlogPool, "bullet", str);  
 
     switch (rlt) {
         case STINIT:
-            ch = 12; 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
+            pdt = &pct[ASPOP_SCAN_SINGLE];
+            if (pdt->opCode != OP_SINGLE) {
+                sprintf(rs->logs, "op02, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "SIG", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+                sprintf(rs->logs, "op02, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
+                print_f(rs->plogs, "SIG", rs->logs);  
+
+                        ch = 12; 
+                        t->opcode =  OP_SINGLE;;
+                        t->data = SINSCAN_DUAL_STRM;
+                        memset(p, 0, sizeof(struct info16Bit_s));
+
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT);
+                        sprintf(rs->logs, "op_02: result: %x, goto %d\n", data->result, ch); 
+                        print_f(rs->plogs, "SIG", rs->logs);  
+
+                //data->result = emb_result(data->result, EVTMAX);
+            } else {
+                switch(pdt->opValue) {
+                    //case SINSCAN_WIFI_ONLY:
+                    //case SINSCAN_SD_ONLY:
+                    //case SINSCAN_WIFI_SD:
+                    //case SINSCAN_WHIT_BLNC:
+                    //case SINSCAN_USB:
+                    case SINSCAN_DUAL_STRM:
+                    case SINSCAN_DUAL_SD:
+                        ch = 12; 
+                        t->opcode =  pdt->opCode;
+                        t->data = pdt->opValue;
+                        memset(p, 0, sizeof(struct info16Bit_s));
+
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT);
+                        sprintf(rs->logs, "op_02: result: %x, goto %d\n", data->result, ch); 
+                        print_f(rs->plogs, "SIG", rs->logs);  
+                        break;
+                    default:
+                        sprintf(rs->logs, "WARNING!!! op02, opValue is unexpected val:%x\n", pdt->opValue);
+                        print_f(rs->plogs, "SIG", rs->logs);  
+                        data->result = emb_result(data->result, EVTMAX);
+                        break;
+                }
+            }        
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -12297,10 +12360,13 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
         print_f(&mrs->plog, "fs15", mrs->log);
 
-        if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_STRM)) {
+        if ((p->opcode == OP_SINGLE) && ((p->data == SINSCAN_DUAL_STRM) 
+            ||(p->data == SINSCAN_DUAL_SD))) {
             modersp->m = modersp->m + 1;
             return 2;
-        } else if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_SD)) { /* for SD write-back function test  */
+        }
+        #if 0 /* not a good flow */
+        else if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_SD)) {
             modersp->m = modersp->m + 1;
         
             ret = cfgTableGet(pct, ASPOP_SUP_SAVE, &val);
@@ -12328,7 +12394,8 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
             }
 
             return 2;
-        }
+        } 
+        #endif
         else if (p->opcode == OP_SUPBACK) { // flow changed, will be removed in future
             modersp->d = modersp->m + 1;
             modersp->m = 57;

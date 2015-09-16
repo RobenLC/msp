@@ -605,8 +605,12 @@ static int next_spy(struct psdata_s *data)
                             next = PSTSM;
                             evt = AUTO_C;
                             break;
-                        //case SINSCAN_WIFI_SD:
-                            //break;
+                        case SINSCAN_WIFI_SD:
+                            t->opcode = OP_SINGLE;
+                            t->data = SINSCAN_WIFI_SD;
+                            next = PSTSM;
+                            evt = AUTO_C;
+                            break;
                          default:
                             break;
                     }
@@ -4324,21 +4328,20 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs11(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    struct info16Bit_s *p;
+    struct info16Bit_s *p, *t;
     //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     //print_f(&mrs->plog, "fs11", mrs->log);
 
     p = &mrs->mchine.cur;
-
+    t = &mrs->mchine.tmp;
+    
     mrs->mchine.seqcnt += 1;
     if (mrs->mchine.seqcnt >= 0x8) {
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_SINGLE;
-    p->data = SINSCAN_DUAL_STRM;
-    p->inout = 0;
-    p->seqnum = mrs->mchine.seqcnt;
+    p->opcode = t->opcode;
+    p->data = t->data;
 
     mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
@@ -4349,17 +4352,18 @@ static int fs12(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     int len=0;
     char ch=0;
-    struct info16Bit_s *p;
+    struct info16Bit_s *p, *c;
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'C')) {
         msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
 
         p = &mrs->mchine.get;
+        c = &mrs->mchine.cur;
         //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
         //print_f(&mrs->plog, "fs12", mrs->log);
 
-        if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_DUAL_STRM)) {
+        if ((p->opcode == c->opcode) && (p->data == c->data)) {
             modersp->r = 1;
             return 1;
         } else {
