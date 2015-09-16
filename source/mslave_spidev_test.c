@@ -630,10 +630,10 @@ struct directnFile_s{
     printf("  [%s] long file name, len:%d\n", pf->dfLFN, pf->dflen);
     printf("  [%s] short file name \n", pf->dfSFN);
     printf("  [%x] attribute \n", pf->dfattrib);
-    printf("  [%.2d:%.2d:%.2d] H:M:S created time \n", (pf->dfcretime >> 16) & 0xff, (pf->dfcretime >> 8) & 0xff, ((pf->dfcretime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] H:M:S created time \n", (pf->dfcretime >> 16) & 0xff, (pf->dfcretime >> 8) & 0xff, (pf->dfcretime >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D created date \n", ((pf->dfcredate >> 16) & 0xff) + 1980, (pf->dfcredate >> 8) & 0xff, (pf->dfcredate >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D access date \n", ((pf->dflstacdate >> 16) & 0xff) + 1980, (pf->dflstacdate >> 8) & 0xff, (pf->dflstacdate >> 0) & 0xff);
-    printf("  [%.2d:%.2d:%.2d] H:M:S recorded time \n", (pf->dfrecotime >> 16) & 0xff, (pf->dfrecotime >> 8) & 0xff, ((pf->dfrecotime >> 0) & 0xff) * 2);
+    printf("  [%.2d:%.2d:%.2d] H:M:S recorded time \n", (pf->dfrecotime >> 16) & 0xff, (pf->dfrecotime >> 8) & 0xff, (pf->dfrecotime >> 0) & 0xff);
     printf("  [%.2d:%.2d:%.2d] Y:M:D recorded date \n", ((pf->dfrecodate >> 16) & 0xff) + 1980, (pf->dfrecodate >> 8) & 0xff, (pf->dfrecodate >> 0) & 0xff);
     printf("  [%d] cluster number \n", pf->dfclstnum);
     printf("  [%d] file length \n", pf->dflength);
@@ -934,7 +934,7 @@ static int aspFS_createFATRoot(struct sdFAT_s *pfat)
     c->ch = 0;
     c->dftype = ASPFS_TYPE_DIR;
     c->dfattrib = 0;
-    c->dfstats = 0;
+    c->dfstats = ASPFS_STATUS_EN;
     c->dflen = 2;
     strcpy(c->dfLFN, "..");
 
