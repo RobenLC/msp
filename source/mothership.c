@@ -6615,7 +6615,9 @@ static int stsup_34(struct psdata_s *data)
     uint32_t rlt;
     struct procRes_s *rs;
     struct info16Bit_s *p=0, *c=0;
-    
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
@@ -6627,15 +6629,41 @@ static int stsup_34(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = 41; 
-            c->opcode =  OP_SINGLE;
-            c->data = SINSCAN_WIFI_ONLY;
-            memset(p, 0, sizeof(struct info16Bit_s));
+            pdt = &pct[ASPOP_SCAN_SINGLE];
+            if (pdt->opCode != OP_SINGLE) {
+                sprintf(rs->logs, "op34, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "SIG", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+                sprintf(rs->logs, "op34, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
+                print_f(rs->plogs, "SIG", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                switch(pdt->opValue) {
+                    case SINSCAN_WIFI_ONLY:
+                    case SINSCAN_SD_ONLY:
+                    case SINSCAN_WIFI_SD:
+                    //case SINSCAN_WHIT_BLNC:
+                    //case SINSCAN_USB:
+                    //case SINSCAN_DUAL_STRM: /*not going here*/
+                    //case SINSCAN_DUAL_SD:
+                        ch = 41; 
+                        c->opcode =  pdt->opCode;
+                        c->data = pdt->opValue;
+                        memset(p, 0, sizeof(struct info16Bit_s));
 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_34: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SIG", rs->logs);  
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT);
+                        sprintf(rs->logs, "op_34: result: %x, goto %d\n", data->result, ch); 
+                        print_f(rs->plogs, "SIG", rs->logs);  
+                        break;
+                    default:
+                        sprintf(rs->logs, "WARNING!!! op34, opValue is unexpected val:%x\n", pdt->opValue);
+                        print_f(rs->plogs, "SIG", rs->logs);  
+                        data->result = emb_result(data->result, EVTMAX);
+                        break;
+                }
+            }        
             break;
         case WAIT:
             if (data->ansp0 == 1) {
