@@ -255,6 +255,7 @@ struct RegisterRW_s{
 
 struct machineCtrl_s{
     uint32_t seqcnt;
+    struct info16Bit_s tmp;
     struct info16Bit_s cur;
     struct info16Bit_s get;
     struct SdAddrs_s sdst;
@@ -532,6 +533,9 @@ static int next_spy(struct psdata_s *data)
     int pro, rlt, next = -1;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    struct info16Bit_s *t;
+    t = &data->rs->pmch->tmp;
+
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
     evt = (data->result >> 8) & 0xff;
@@ -574,12 +578,15 @@ static int next_spy(struct psdata_s *data)
                 sprintf(str, "PSTSM - ansp: %d\n", tmpAns); 
                 print_f(mlogPool, "spy", str); 
                 //next = PSMAX;
+                t->opcode = tmpAns & 0xff;
+                t->data = (tmpAns >> 8) & 0xff;
                 switch (tmpAns & 0xff) {
                 case OP_SINGLE: /* currently support */              
                     switch ((tmpAns >> 8) & 0xff) {
                         case SINSCAN_DUAL_STRM:
+                        //case SINSCAN_DUAL_SD:
                             #if 1
-                            next = PSSET; /* jump to next stage */
+                            next = PSSET; 
                             evt = BULLET;
                             #else
                             //next = PSRLT; /* for OP_SUPBACK */
@@ -587,8 +594,20 @@ static int next_spy(struct psdata_s *data)
                             #endif
                             break;
                         case SINSCAN_WIFI_ONLY:
+                            t->opcode = OP_SINGLE;
+                            t->data = SINSCAN_WIFI_ONLY;
                             next = PSTSM;
                             evt = AUTO_C;
+                            break;
+                        case SINSCAN_SD_ONLY:
+                            t->opcode = OP_SINGLE;
+                            t->data = SINSCAN_SD_ONLY;
+                            next = PSTSM;
+                            evt = AUTO_C;
+                            break;
+                        //case SINSCAN_WIFI_SD:
+                            //break;
+                         default:
                             break;
                     }
                     break;
@@ -597,6 +616,8 @@ static int next_spy(struct psdata_s *data)
                         case DOUSCAN_WIFI_ONLY:
                             next = PSACT;
                             evt = AUTO_D;
+                            break;
+                        default:
                             break;
                     }
                     break;
@@ -2705,7 +2726,9 @@ static int stauto_15(struct psdata_s *data)
 {
     char str[128], ch = 0;
     uint32_t rlt;
-    
+    struct info16Bit_s *t;
+    t = &data->rs->pmch->tmp;
+
     rlt = abs_result(data->result);	
     //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
     //print_f(mlogPool, "auto_15", str);  
@@ -3217,7 +3240,7 @@ static int stauto_24(struct psdata_s *data)
 {
     char str[128], ch = 0;
     uint32_t rlt;
-    struct info16Bit_s *p, *g;
+    struct info16Bit_s *p, *g, *t;
     int *pSdInit = 0;
 
     rlt = abs_result(data->result);	
@@ -3228,9 +3251,10 @@ static int stauto_24(struct psdata_s *data)
         case STINIT:
             g = &data->rs->pmch->get;
             p = &data->rs->pmch->cur;
+            t = &data->rs->pmch->tmp;
             memset(p, 0, sizeof(struct info16Bit_s));
-            p->opcode = OP_SDINIT;
-            p->data = 0x01;
+            p->opcode = t->opcode;
+            p->data = t->data;
 
             ch = 24; 
             rs_ipc_put(data->rs, &ch, 1);
@@ -5483,9 +5507,10 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs48(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    struct info16Bit_s *p;
+    struct info16Bit_s *p, *t;
     p = &mrs->mchine.cur;
-
+    t = &mrs->mchine.tmp;
+    
     sprintf(mrs->log, "set 0x%.2x 0x%.2x \n", p->opcode, p->data);
     print_f(&mrs->plog, "fs48", mrs->log);
 
@@ -5494,8 +5519,8 @@ static int fs48(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_SINGLE;
-    p->data = SINSCAN_WIFI_ONLY;
+    p->opcode = t->opcode;
+    p->data = t->data;
     
     mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
@@ -5506,18 +5531,19 @@ static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     int len=0;
     char ch=0;
-    struct info16Bit_s *p;
+    struct info16Bit_s *p, *t;
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'C')) {
         msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
 
         p = &mrs->mchine.get;
+        t = &mrs->mchine.tmp;
 
         sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs49", mrs->log);
 
-        if ((p->opcode == OP_SINGLE) && (p->data == SINSCAN_WIFI_ONLY)) {
+        if ((p->opcode == t->opcode) && (p->data == t->data)) {
             if (modersp->d) {
                 modersp->m = modersp->d;
                 modersp->d = 0;
