@@ -908,7 +908,7 @@ static int aspCalcSupLen(struct supdataBack_s *sup)
     
     scr = sup;
     while(scr) {
-        len += scr->supdataTot;
+        len += scr->supdataTot - scr->supdataUse;
         scr = scr->n;
     }
     return len;
@@ -928,6 +928,7 @@ static int aspPopSupOut(char *dst, struct supdataBack_s *str, int size, struct s
     scr = str;
     snx = str->n;
 
+    src1 = scr->supdataBuff;
     tot = scr->supdataTot;
     usd = scr->supdataUse;
     rst = tot - usd;
@@ -939,6 +940,7 @@ static int aspPopSupOut(char *dst, struct supdataBack_s *str, int size, struct s
         memcpy(dst, src1+usd, size);
         acusz += size;
         *nxt = snx;
+        scr->supdataUse += size;
     } else if (size > rst) {
         memcpy(dst, src1+usd, rst);
         acusz += rst;
@@ -948,6 +950,7 @@ static int aspPopSupOut(char *dst, struct supdataBack_s *str, int size, struct s
         } else {
             *nxt = snx;
         }
+        scr->supdataUse += rst;
     } else {
         memcpy(dst, src1+usd, size);    
         acusz += size;
@@ -3350,7 +3353,7 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "bullet", str); 
                 if (tmpAns == 1) {
-                    next = PSMAX;
+                    next = PSWT;
                 } else if (tmpAns == 2) {
                     next = PSMAX;
                 } else if (tmpAns == 3) {
@@ -3364,7 +3367,8 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "bullet", str); 
                 if (tmpAns == 1) {
-                    next = PSMAX;
+                    next = PSWT;
+                    evt = SDAO;
                 } else if (tmpAns == 2) {
                     next = PSMAX;
                 } else if (tmpAns == 3) {
@@ -3377,12 +3381,32 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                if (tmpAns == SINSCAN_WIFI_SD) {
+                    next = PSWT;
+                    evt = SUPI;
+                } else if (tmpAns == SINSCAN_SD_ONLY) {
+                    next = PSWT;
+                    evt = WTBAKP;
+                } else if (tmpAns == SINSCAN_DUAL_SD) {
+                    next = PSSET;
+                    evt = BULLET;
+                } else {
+                    next = PSMAX;
+                }
                 break;
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                if (tmpAns == 1) {
+                    next = PSACT;
+                } else if (tmpAns == 2) {
+                    next = PSACT;
+                } else if (tmpAns == 3) {
+                    next = PSACT;
+                } else {
+                    next = PSMAX;
+                }
+
                 break;
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
@@ -8903,8 +8927,9 @@ static int stwtbak_73(struct psdata_s *data)
     uint32_t rlt;
     struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
 
-
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
@@ -8916,19 +8941,52 @@ static int stwtbak_73(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            c->opcode = OP_SINGLE;
-            c->data = SINSCAN_SD_ONLY;
-            memset(p, 0, sizeof(struct info16Bit_s));
+            pdt = &pct[ASPOP_SCAN_SINGLE];
+            if (pdt->opCode != OP_SINGLE) {
+                sprintf(rs->logs, "op_73, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "WTBAK", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (!(pdt->opStatus & ASPOP_STA_WR)) {
+                sprintf(rs->logs, "op_73, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
+                print_f(rs->plogs, "WTBAK", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                if (pdt->opValue == SINSCAN_WIFI_SD) {
 
-            ch = 41; 
+                    ch = 59; 
+                    rs_ipc_put(data->rs, &ch, 1);
+                    data->result = emb_result(data->result, WAIT);
 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_73: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "WTBAK", rs->logs);  
+                    sprintf(rs->logs, "op_73: SINSCAN_WIFI_SD go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SINSCAN_SD_ONLY) {
+                
+                    ch = 59; 
+                    rs_ipc_put(data->rs, &ch, 1);
+                    data->result = emb_result(data->result, WAIT);
+
+                    sprintf(rs->logs, "op_73: SINSCAN_SD_ONLY go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SINSCAN_DUAL_SD) {
+
+                    ch = 59; 
+                    rs_ipc_put(data->rs, &ch, 1);
+                    data->result = emb_result(data->result, WAIT);
+
+                    sprintf(rs->logs, "op_73: SINSCAN_DUAL_SD go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else {
+                    sprintf(rs->logs, "WARNING!!! op_73, opValue is unexpected val:%x\n", pdt->opValue);
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                    data->result = emb_result(data->result, EVTMAX);
+                }
+            }
+        
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SCAN_SINGLE];
+                data->ansp0 = pdt->opValue;
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -8955,8 +9013,9 @@ static int stwtbak_74(struct psdata_s *data)
     uint32_t rlt;
     struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
 
-
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
@@ -8968,16 +9027,38 @@ static int stwtbak_74(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            c->opcode = OP_SINGLE;
-            c->data = SINSCAN_SD_ONLY;
-            memset(p, 0, sizeof(struct info16Bit_s));
-
-            ch = 41; 
-
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_74: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "WTBAK", rs->logs);  
+            pdt = &pct[ASPOP_SCAN_SINGLE];
+            if (pdt->opCode != OP_SINGLE) {
+                sprintf(rs->logs, "op_74, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "WTBAK", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (!(pdt->opStatus & ASPOP_STA_WR)) {
+                sprintf(rs->logs, "op_74, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
+                print_f(rs->plogs, "WTBAK", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                if (pdt->opValue == SINSCAN_WIFI_SD) {
+                    data->ansp0 = 1;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_74: SINSCAN_WIFI_SD go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SINSCAN_SD_ONLY) {
+                    data->ansp0 = 2;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_74: SINSCAN_SD_ONLY go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SINSCAN_DUAL_SD) {
+                    data->ansp0 = 3;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_74: SINSCAN_DUAL_SD go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else {
+                    sprintf(rs->logs, "WARNING!!! op_74, opValue is unexpected val:%x\n", pdt->opValue);
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                    data->result = emb_result(data->result, EVTMAX);
+                }
+            }
+        
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -14459,14 +14540,15 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     pfat->fatSupdata = s;
     pfat->fatSupcur = pfat->fatSupdata;
 
-end:
+    sprintf(mrs->log, "fatSupdata = 0x%.8x, fatSupcur = 0x%.8x!!!  \n", pfat->fatSupdata, pfat->fatSupcur);
+    print_f(&mrs->plog, "fs59", mrs->log);
 
     if (modersp->d) {
         modersp->m = modersp->d;
         modersp->d = 0;
         return 2;
     } else {
-        modersp->r = 2;
+        modersp->r = 1;
         return 1;
     }
 }
@@ -16816,8 +16898,6 @@ static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
     int bitset, ret;
-    sprintf(mrs->log, "data flow upload to SD\n");
-    print_f(&mrs->plog, "fs77", mrs->log);
 
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs95", mrs->log);
@@ -16830,53 +16910,84 @@ static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp)
 #endif
 
     ring_buf_init(&mrs->cmdTx);
-
-    mrs_ipc_put(mrs, "u", 1, 3);
-    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
-    mrs_ipc_put(mrs, "u", 1, 8);
-            
+    modersp->v = 0;
+ 
     modersp->m = modersp->m + 1;
     return 2;
 }
 
 static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
-    int ret, bitset;
-    char ch;
+    char *addr=0;
+    int ret, totsz=0, len=0, secLen, max=0;
+    struct sdFAT_s *pfat=0;
+    struct supdataBack_s *s=0, *sc=0, *sh=0;
+    struct sdbootsec_s   *psec=0;
+    struct info16Bit_s *p=0, *c=0;
 
-    //sprintf(mrs->log, "%d\n", modersp->v);
-    //print_f(&mrs->plog, "fs78", mrs->log);
+    pfat = &mrs->aspFat;
+    sh = pfat->fatSupdata;
+    sc = pfat->fatSupcur;
+    psec = pfat->fatBootsec;
 
-    ret = mrs_ipc_get(mrs, &ch, 1, 3);
-    while (ret > 0) {
-        if (ch == 'u') {
-            modersp->v += 1;
-            mrs_ipc_put(mrs, "u", 1, 1);
-        } else if (ch == 'h'){
-            mrs_ipc_put(mrs, "u", 1, 8);
-        }
-
-        if (ch == 'U') {
-            sprintf(mrs->log, "0 %d end\n", modersp->v);
-            print_f(&mrs->plog, "fs96", mrs->log);
-
-            mrs_ipc_put(mrs, "U", 1, 1);
-
-            mrs_ipc_put(mrs, "U", 1, 8);
-            
-            modersp->r |= 0x1;
-        }
-        ret = mrs_ipc_get(mrs, &ch, 1, 3);
-    }
-
-    if (modersp->r & 0x1) {
-        sprintf(mrs->log, "%d end\n", modersp->v);
+    if (!sh) {
+        sprintf(mrs->log, "ERROR!!! sup back head buff is empty! \n");
         print_f(&mrs->plog, "fs96", mrs->log);
-        modersp->m = modersp->m + 1;
-        return 2;
+        modersp->r = 0xed;
+        return 1;
     }
 
-    return 0; 
+    if (!sc) {
+        sprintf(mrs->log, "WARNING!!! sup back current buff is empty! \n");
+        print_f(&mrs->plog, "fs96", mrs->log);
+        pfat->fatSupcur = sh;
+        sc = sh;
+    }
+
+    p = &mrs->mchine.tmp;
+       
+    /* calculate the total size */
+    secLen = p->opinfo;
+    totsz = secLen * psec->secSize;
+
+    max = aspCalcSupLen(sc);
+    if (totsz > max) {
+        sprintf(mrs->log, "WARNING!!! totsz is larger than max rest size of sup buff, %d/%d \n", totsz, max);
+        print_f(&mrs->plog, "fs96", mrs->log);
+        totsz = max;
+    }
+
+    while (totsz >= 0) {
+        /* pup and push data here */
+        len = ring_buf_get(&mrs->cmdTx, &addr);
+        while (len <= 0) {
+            sleep(3);
+            len = ring_buf_get(&mrs->cmdTx, &addr);
+        }
+        
+        ret = aspPopSupOut(addr, sc, len, &s);
+        sprintf(mrs->log, "list buff pop resutl, ret: %d/%d\n", ret, totsz);
+        print_f(&mrs->plog, "fs96", mrs->log);
+
+        ring_buf_prod(&mrs->cmdTx);
+        
+        mrs_ipc_put(mrs, "u", 1, 1);
+
+        sc = s;
+        totsz -= len;
+    }
+
+    ring_buf_set_last(&mrs->cmdTx, len);
+    mrs_ipc_put(mrs, "u", 1, 1);
+    
+    mrs_ipc_put(mrs, "U", 1, 1);
+
+    pfat->fatSupcur = sc;
+    sprintf(mrs->log, "END buff pop, resutl %d/%d\n", ret, totsz);
+    print_f(&mrs->plog, "fs96", mrs->log);
+
+    modersp->m = modersp->m + 1;
+    return 2; 
 }
 
 static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp) 
@@ -16885,15 +16996,18 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    //sprintf(mrs->log, "wait spi0 tx end\n");
-    //print_f(&mrs->plog, "fs79", mrs->log);
+    sprintf(mrs->log, "wait spi0 tx end\n");
+    print_f(&mrs->plog, "fs97", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 1);
     if (len > 0) {
 
         sprintf(mrs->log, "ch: %c - end\n", ch);
         print_f(&mrs->plog, "fs97", mrs->log);
-
+        if (ch == 'u') {
+            modersp->v += 1;
+        }
+        
         if (ch == 'U') {
 
             ring_buf_init(&mrs->cmdTx);
@@ -16936,7 +17050,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
     struct sdFATable_s   *pftb=0;
     struct directnFile_s *upld=0, *fscur=0, *fssrh=0;
-    struct supdataBack_s *s=0, *sc=0;
+    struct supdataBack_s *s=0, *sc=0, *sh=0;
     
     uint32_t adata[3], atime[3];
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
@@ -16970,28 +17084,22 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
     fscur = pfat->fatCurDir;
-    
-    if (!pfat->fatSupdata) {
+
+    sh = pfat->fatSupdata;
+    if (!sh) {
         sprintf(mrs->log, "ERROR!!! buffered link list is NULL \n");
         print_f(&mrs->plog, "fs98", mrs->log);
         modersp->r = 0xed;
         return 1;
     }
-    s = pfat->fatSupdata;
-    
-    if (!pfat->fatSupcur) {
-        sprintf(mrs->log, "ERROR!!! current buffered link list is NULL \n");
-        print_f(&mrs->plog, "fs98", mrs->log);
-        modersp->r = 0xed;
-        return 1;
-    }
-    sc = pfat->fatSupcur;
 
-    if (s != sc) {
-        sprintf(mrs->log, "ERROR!!! current buffered link list is not equal to his head \n");
+    sc = pfat->fatSupcur;
+    if (!sc) {
+        sprintf(mrs->log, "WARNING!!! current buffered link list is NULL \n");
         print_f(&mrs->plog, "fs98", mrs->log);
-        modersp->r = 0xed;
-        return 1;
+
+        pfat->fatSupcur = sh;
+        sc = sh;
     }
 
     ret = mspFS_allocDir(pfat, &upld);
