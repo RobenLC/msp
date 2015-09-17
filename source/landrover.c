@@ -585,6 +585,8 @@ static int next_spy(struct psdata_s *data)
                     switch ((tmpAns >> 8) & 0xff) {
                         case SINSCAN_DUAL_STRM:
                         case SINSCAN_DUAL_SD:
+                            t->opcode = OP_SINGLE;
+                            t->data = (tmpAns >> 8) & 0xff;
                             #if 1
                             next = PSSET; 
                             evt = BULLET;
@@ -3257,8 +3259,8 @@ static int stauto_24(struct psdata_s *data)
             p = &data->rs->pmch->cur;
             t = &data->rs->pmch->tmp;
             memset(p, 0, sizeof(struct info16Bit_s));
-            p->opcode = t->opcode;
-            p->data = t->data;
+            p->opcode = g->opcode;
+            p->data = g->data;
 
             ch = 24; 
             rs_ipc_put(data->rs, &ch, 1);
@@ -5535,19 +5537,19 @@ static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     int len=0;
     char ch=0;
-    struct info16Bit_s *p, *t;
+    struct info16Bit_s *p, *c;
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'C')) {
         msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
 
         p = &mrs->mchine.get;
-        t = &mrs->mchine.tmp;
+        c = &mrs->mchine.cur;
 
         sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs49", mrs->log);
 
-        if ((p->opcode == t->opcode) && (p->data == t->data)) {
+        if ((p->opcode == c->opcode) && (p->data == c->data)) {
             if (modersp->d) {
                 modersp->m = modersp->d;
                 modersp->d = 0;

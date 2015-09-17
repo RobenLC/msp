@@ -3349,12 +3349,30 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
             case PSSET:
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                if (tmpAns == 1) {
+                    next = PSMAX;
+                } else if (tmpAns == 2) {
+                    next = PSMAX;
+                } else if (tmpAns == 3) {
+                    next = PSSET;
+                    evt = SDAM;
+                } else {
+                    next = PSMAX;
+                }
                 break;
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                if (tmpAns == 1) {
+                    next = PSMAX;
+                } else if (tmpAns == 2) {
+                    next = PSMAX;
+                } else if (tmpAns == 3) {
+                    next = PSACT;
+                    evt = WTBAKP;
+                } else {
+                    next = PSMAX;
+                }
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -3455,7 +3473,7 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
                 next = PSACT;
-                evt = WTBAKP; 
+                evt = WTBAKQ; 
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -3817,7 +3835,7 @@ static uint32_t next_SINJ(struct psdata_s *data)
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "bullet", str); 
                 next = PSACT; 
-                evt = WTBAKP;
+                evt = WTBAKQ;
                 break;
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
@@ -4468,8 +4486,8 @@ static int next_laser(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "laser", str); 
-                next = PSMAX; 
-                //evt = WTBAKP;
+                next = PSACT; 
+                evt = WTBAKQ;
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -6640,7 +6658,7 @@ static int stsup_34(struct psdata_s *data)
                 sprintf(rs->logs, "op34, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "SIG", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_WR)) {
                 sprintf(rs->logs, "op34, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "SIG", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -8468,7 +8486,7 @@ static int stwtbak_66(struct psdata_s *data)
                 sprintf(rs->logs, "op66, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_WR)) {
                 sprintf(rs->logs, "op66, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -8543,7 +8561,7 @@ static int stwtbak_67(struct psdata_s *data)
                 sprintf(rs->logs, "op67, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_WR)) {
                 sprintf(rs->logs, "op67, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -8737,8 +8755,9 @@ static int stwtbak_71(struct psdata_s *data)
     uint32_t rlt;
     struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
 
-
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
@@ -8750,16 +8769,37 @@ static int stwtbak_71(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            c->opcode = OP_SINGLE;
-            c->data = SINSCAN_SD_ONLY;
-            memset(p, 0, sizeof(struct info16Bit_s));
-
-            ch = 41; 
-
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_71: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "WTBAK", rs->logs);  
+            pdt = &pct[ASPOP_SUP_SAVE];
+            if (pdt->opCode != OP_SUPBACK) {
+                sprintf(rs->logs, "op_71, ASPOP_SUP_SAVE opcode is wrong val:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "WTBAK", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+                sprintf(rs->logs, "op_71, ASPOP_SUP_SAVE status is wrong val:%x\n", pdt->opStatus); 
+                print_f(rs->plogs, "WTBAK", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                if (pdt->opValue == SUPBACK_SD) {
+                    data->ansp0 = 1;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_71: SINSCAN_WIFI_SD go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SUPBACK_RAW) {
+                    data->ansp0 = 2;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_71: SINSCAN_SD_ONLY go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SUPBACK_FAT) {
+                    data->ansp0 = 3;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_71: SINSCAN_DUAL_SD go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else {
+                    sprintf(rs->logs, "WARNING!!! op_71, opValue is unexpected val:%x\n", pdt->opValue);
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                    data->result = emb_result(data->result, EVTMAX);
+                }
+            }
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -8789,8 +8829,9 @@ static int stwtbak_72(struct psdata_s *data)
     uint32_t rlt;
     struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
 
-
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
@@ -8802,16 +8843,37 @@ static int stwtbak_72(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            c->opcode = OP_SINGLE;
-            c->data = SINSCAN_SD_ONLY;
-            memset(p, 0, sizeof(struct info16Bit_s));
-
-            ch = 41; 
-
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_72: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "WTBAK", rs->logs);  
+            pdt = &pct[ASPOP_SUP_SAVE];
+            if (pdt->opCode != OP_SUPBACK) {
+                sprintf(rs->logs, "op_72, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "WTBAK", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+                sprintf(rs->logs, "op_72, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
+                print_f(rs->plogs, "WTBAK", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                if (pdt->opValue == SUPBACK_SD) {
+                    data->ansp0 = 1;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_72: SINSCAN_WIFI_SD go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SUPBACK_RAW) {
+                    data->ansp0 = 2;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_72: SINSCAN_SD_ONLY go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else if (pdt->opValue == SUPBACK_FAT) {
+                    data->ansp0 = 3;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_72: SINSCAN_DUAL_SD go to next!!\n"); 
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                } else {
+                    sprintf(rs->logs, "WARNING!!! op_72, opValue is unexpected val:%x\n", pdt->opValue);
+                    print_f(rs->plogs, "WTBAK", rs->logs);  
+                    data->result = emb_result(data->result, EVTMAX);
+                }
+            }
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -9247,7 +9309,7 @@ static int stbullet_02(struct psdata_s *data)
                 sprintf(rs->logs, "op02, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "SIG", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_WR)) {
                 sprintf(rs->logs, "op02, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "SIG", rs->logs);  
 
@@ -11072,6 +11134,121 @@ end:
     return ret;
 }
 
+static int cmdfunc_tgr_opcode(int argc, char *argv[])
+{
+    int val=0;
+    int n=0, ix=0, ret=0;
+    char ch=0, opcode[5], param=0;
+    uint32_t tg=0, cd=0;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_tgr_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    /* get opcode and parameter */
+    ch = 'o';
+    mrs_ipc_put(mrs, &ch, 1, 5);
+
+    n = -1;
+    while (n == -1) {
+        n = mrs_ipc_get(mrs, opcode, 5, 5);
+        //sprintf(mrs->log, "n:%d\n", n); 
+        //print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    /* debug print */ 
+    /*
+    for (ix = 0; ix < n; ix++) {
+        sprintf(mrs->log, "%d.%.2x\n", ix, opcode[ix]); 
+        print_f(&mrs->plog, "DBG", mrs->log);
+    }
+    */
+
+    if (n != 5) {ret = -2; goto end;}
+    if ((opcode[0] != 0xaa) && (opcode[0] != 0xad)) {ret = -3; goto end;}
+    if (opcode[4] != 0xa5) {ret = -4; goto end;}
+    if (opcode[2] != '/') {ret = -5; goto end;}
+
+    tg = opcode[1];
+    struct aspConfig_s* ctb = 0;
+    for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+        ctb = &mrs->configTable[ix];
+        if (tg == ctb->opCode) {
+            break;
+        }
+        ctb = 0;
+    }
+
+    if (!ctb) {
+        sprintf(mrs->log, "cmdfunc_tgr_opcode - 3\n"); 
+        print_f(&mrs->plog, "DBG", mrs->log);
+        ret = -7;
+        goto end;
+    }
+
+    if (opcode[0] == 0xaa) {
+        cd = opcode[3];
+
+        if (cd == ctb->opValue) {
+            ctb->opStatus |= ASPOP_STA_WR;
+            param = ctb->opValue;
+            goto end;
+        }
+
+        ret = cmdfunc_opchk_single(cd, ctb->opMask, ctb->opBitlen, ctb->opType);
+        if (ret < 0) {
+            ret = (ret * 10) -6;
+        } else {            
+            ctb->opValue = cd;
+            ctb->opStatus |= ASPOP_STA_WR;
+        }
+        
+        sprintf(mrs->log, "WT opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d\n", ctb->opCode, ctb->opValue, cd, ret); 
+        print_f(&mrs->plog, "DBG", mrs->log);
+    } else {
+        sprintf(mrs->log, "RD opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d\n", ctb->opCode, ctb->opValue, cd, ret); 
+        print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    param = ctb->opValue;
+
+end:
+
+    if (ret < 0) {
+        ch = 'x';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+        ch = 0xf0;
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        if (!ctb) {
+            sprintf(mrs->log, "failed: input 0x%x/0x%x, ret:%d", opcode[1], opcode[3], ret); 
+        } else {
+            sprintf(mrs->log, "failed: input 0x%x/0x%x, mask:0x%x, bitlen:%d, ret:%d", opcode[1], opcode[3], ctb->opMask, ctb->opBitlen, ret); 
+        }
+
+    } else {
+        if (ret == 0) {
+            ch = 'p';
+            mrs_ipc_put(mrs, &ch, 1, 5);
+
+            sprintf(mrs->log, "same: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);   
+        } else {
+            ch = 'p';
+            mrs_ipc_put(mrs, &ch, 1, 5);
+
+            sprintf(mrs->log, "succeed: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);    
+        } 
+        mrs_ipc_put(mrs, &param, 1, 5);     
+    }
+    n = strlen(mrs->log);
+    mrs_ipc_put(mrs, mrs->log, n, 5);
+    
+    sprintf(mrs->log, "opcode op end, log n =%d, ret=%d\n", n, ret); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+    return 0;
+}
+
 static int cmdfunc_regw_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
@@ -11749,7 +11926,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 23
+#define CMD_SIZE 24
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -11760,7 +11937,7 @@ static int dbg(struct mainRes_s *mrs)
                                 {8, "boot", cmdfunc_boot_opcode}, {9, "single", cmdfunc_single_opcode}, {10, "dnld", cmdfunc_dnld_opcode}, {11, "upld", cmdfunc_upld_opcode},
                                 {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}, {15, "op1", cmdfunc_op1_opcode}
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
-                                , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}};
+                                , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}};
 
     p0_init(mrs);
 
@@ -17180,7 +17357,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stsda_56, stsda_57, stsda_58, stsda_59, stsda_60}, // SDAN
                             {stsda_61, stsda_62, stwbk_63, stsdinit_64, stsdinit_65}, // SDAO
                             {stwtbak_66, stwtbak_67, stwtbak_68, stwtbak_69, stwtbak_70}, // WTBAKP
-                            {stwtbak_71, stwtbak_72, stwtbak_73, stwtbak_74, stwtbak_75}}; // WTBAKQ                            
+                            {stwtbak_71, stwtbak_72, stwtbak_73, stwtbak_74, stwtbak_75}}; // WTBAKQ
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -17247,13 +17424,13 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                     stdata->result = emb_stanPro(0, STINIT, SDAO, PSSET);
                 } else if (cmd == 'g') {
                     cmdt = cmd;
-                    stdata->result = emb_stanPro(0, STINIT, SDAM, PSSET);
+                    stdata->result = emb_stanPro(0, STINIT, WTBAKQ, PSSET);
                 } else if (cmd == 'i') {
                     cmdt = cmd;
-                    stdata->result = emb_stanPro(0, STINIT, SDAM, PSSET);
+                    stdata->result = emb_stanPro(0, STINIT, WTBAKQ, PSSET);
                 } else if (cmd == 'j') {
                     cmdt = cmd;
-                    stdata->result = emb_stanPro(0, STINIT, SDAM, PSSET);
+                    stdata->result = emb_stanPro(0, STINIT, WTBAKQ, PSSET);
                 }
 
 
@@ -19133,10 +19310,16 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             print_f(rs->plogs, "P5", rs->logs);
             rs_ipc_put(rcmd, msg, n);
         }else {
-            msg[0] = 'o';
-            msg[1] = 'p';
-            rs_ipc_put(rcmd, msg, 2);
-
+            if (opcode == OP_SINGLE) {
+                msg[0] = 't';
+                msg[1] = 'g';
+                msg[2] = 'r';
+                rs_ipc_put(rcmd, msg, 3);
+            } else {
+                msg[0] = 'o';
+                msg[1] = 'p';
+                rs_ipc_put(rcmd, msg, 2);
+            }
 
             ch = 0; n = 0;
             n = rs_ipc_get(rcmd, &ch, 1);
