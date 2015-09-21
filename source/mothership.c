@@ -299,8 +299,8 @@ typedef enum {
 } actOption_e;
 
 typedef enum {
-    SDSTATS_ERROR=0,
-    SDSTATS_OK,
+    SDSTATS_OK=0,
+    SDSTATS_ERROR,
 } SDStatus_e;
 
 struct aspInfoSplit_s{
@@ -17511,7 +17511,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                     stdata->result = emb_stanPro(0, STINIT, DOUBLED, PSTSM);
                 } else if (cmd == 'b') {
                     cmdt = cmd;
+                    #if 1 /* 1: boot with OP_SDINIT and OP_SDSTATUS, 0: nope */
                     stdata->result = emb_stanPro(0, STINIT, SDAO, PSRLT);
+                    #else
+                    stdata->result = emb_stanPro(0, STINIT, FATH, PSTSM);
+                    #endif
                 } else if (cmd == 's') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, SUPI, PSWT);
@@ -19336,7 +19340,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sprintf(rs->logs, "p5 get listen ret: %d", ret);
         error_handle(rs->logs, 3320);
     }
-
+    
+#if 1 /* disable auto boot for testing */
     sprintf(rs->logs, "send the very first command [%s] \n", msg);
     print_f(rs->plogs, "P5", rs->logs);
     rs_ipc_put(rcmd, msg, 4);
@@ -19344,7 +19349,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     n = rs_ipc_get(rcmd, sendbuf, 2048);
     sprintf(rs->logs, "get boot result: [%s], ret: %d\n", sendbuf, n);
     print_f(rs->plogs, "P5", rs->logs);
-    
+#endif
+
     while (1) {
         //printf("#");
         //sprintf(rs->logs, "#\n");
