@@ -299,8 +299,8 @@ typedef enum {
 } actOption_e;
 
 typedef enum {
-    SDSTATS_OK=0,
-    SDSTATS_ERROR,
+    SDSTATS_ERROR=0,
+    SDSTATS_OK,
 } SDStatus_e;
 
 struct aspInfoSplit_s{
@@ -1686,7 +1686,6 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             }
             aspFSrmspace(pstN, 3);
         }
-        
         
         fs->dfattrib = raw[11];
         tmp32 = raw[14] | (raw[15] << 8);
@@ -3858,7 +3857,7 @@ static uint32_t next_SINJ(struct psdata_s *data)
             case PSSET:
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSACT; 
+                next = PSRLT; 
                 evt = WTBAKQ;
                 break;
             case PSACT:
@@ -6689,7 +6688,7 @@ static int stsup_34(struct psdata_s *data)
             } else {
                 switch(pdt->opValue) {
                     case SINSCAN_WIFI_ONLY:
-                    case SINSCAN_SD_ONLY:
+                    //case SINSCAN_SD_ONLY:
                     case SINSCAN_WIFI_SD:
                     //case SINSCAN_WHIT_BLNC:
                     //case SINSCAN_USB:
@@ -6715,7 +6714,11 @@ static int stsup_34(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                if (p->data == c->data) {
+                    data->result = emb_result(data->result, NEXT);
+                } else {
+                    data->result = emb_result(data->result, EVTMAX);
+                }
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -10164,6 +10167,46 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
 
         if ((pp->r->folw.run == pp->r->lead.run) &&
             (pp->r->folw.seq == pp->r->lead.seq)) {
+            return pp->lastsz;
+        }
+    }
+
+    msync(pp, sizeof(struct shmem_s), MS_SYNC);
+
+    return pp->chksz;
+}
+
+static int ring_buf_cons_psudo(struct shmem_s *pp, char **addr)
+{
+    char str[128];
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+
+    folwn = pp->r->psudo.run * pp->slotn + pp->r->psudo.seq;
+    leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
+    dist = leadn - folwn;
+
+    sprintf(str, "psudo cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
+    print_f(mlogPool, "ring", str);
+
+    if (dist < 1)  return -1;
+
+    if ((pp->r->psudo.seq + 1) < pp->slotn) {
+        *addr = pp->pp[pp->r->psudo.seq + 1];
+        pp->r->psudo.seq += 1;
+    } else {
+        *addr = pp->pp[0];
+        pp->r->psudo.seq = 0;
+        pp->r->psudo.run += 1;
+    }
+
+    if ((pp->lastflg) && (dist == 1)) {
+        sprintf(str, "psudo last, f: %d %d/l: %d %d\n", pp->r->psudo.run, pp->r->psudo.seq, pp->r->lead.run, pp->r->lead.seq);
+        print_f(mlogPool, "ring", str);
+
+        if ((pp->r->psudo.run == pp->r->lead.run) &&
+            (pp->r->psudo.seq == pp->r->lead.seq)) {
             return pp->lastsz;
         }
     }
@@ -14827,21 +14870,46 @@ static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
     mrs_ipc_put(mrs, "n", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
+    modersp->v = 0;
     modersp->m = modersp->m + 1;
     return 2;
 }
 static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
-    int ret, bitset;
-    char ch;
+    int ret, bitset, len;
+    char ch, *addr=0, *dst=0;
+    struct sdFAT_s *pfat=0;
+    struct supdataBack_s *s=0, *sc=0;
 
     //sprintf(mrs->log, "%d\n", modersp->v);
     //print_f(&mrs->plog, "fs68", mrs->log);
+    pfat = &mrs->aspFat;
+    sc = pfat->fatSupcur;
 
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     while (ret > 0) {
         if (ch == 'p') {
             modersp->v += 1;
+            
+            if (sc) {
+                len = ring_buf_cons_psudo(&mrs->cmdRx, &addr);
+                sprintf(mrs->log, "1. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                print_f(&mrs->plog, "fs68", mrs->log);
+
+                if (len >= 0) {
+                    dst = sc->supdataBuff;
+                    memcpy(dst, addr, len);
+                    sc->supdataTot = len;
+
+                    s = malloc(sizeof(struct supdataBack_s));
+                    memset(s, 0, sizeof(struct supdataBack_s));
+                    sc->n = s;
+                    sc = sc->n;
+
+                    pfat->fatSupcur = sc;
+                }
+            }
+            
             mrs_ipc_put(mrs, "n", 1, 3);
         }
 
@@ -14857,6 +14925,47 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     if (modersp->r & 0x1) {
+        if (sc) {
+            len = ring_buf_cons_psudo(&mrs->cmdRx, &addr);
+            while (len >= 0) {
+                sprintf(mrs->log, "2. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                print_f(&mrs->plog, "fs68", mrs->log);
+
+                dst = sc->supdataBuff;
+                memcpy(dst, addr, len);
+                sc->supdataTot = len;
+                
+                s = malloc(sizeof(struct supdataBack_s));
+                memset(s, 0, sizeof(struct supdataBack_s));
+                sc->n = s;
+                sc = sc->n;
+
+                pfat->fatSupcur = sc;
+                modersp->v += 1;  
+                len = ring_buf_cons_psudo(&mrs->cmdRx, &addr);
+            }
+
+            s = pfat->fatSupdata;
+            while (s) {
+                if (s->supdataTot == 0) {
+                    break;
+                }
+                sc = s;
+                s = s->n;
+            }
+
+            if (s) {
+                sc->n = 0;
+            }
+
+            while (s) {
+                sc = s;
+                s = s->n;
+                aspFree(sc);
+            }
+            pfat->fatSupcur = 0;
+        }
+
         mrs_ipc_put(mrs, "N", 1, 3);
         sprintf(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs68", mrs->log);
