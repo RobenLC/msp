@@ -126,6 +126,8 @@ typedef enum {
     WAIT,
     NEXT,
     BREAK,
+    BKWRD,
+    FWORD,
     EVTMAX,
 }event_e;
 
@@ -486,6 +488,7 @@ struct sdFAT_s{
 };
 
 struct psdata_s {
+    uint32_t bkofw;
     uint32_t result;
     uint32_t ansp0;
     struct procRes_s *rs;
@@ -3279,6 +3282,20 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
     return info;
 }
 
+inline uint32_t emb_bk(uint32_t bkf, uint8_t evt, uint8_t ste) 
+{
+    bkf &= ~0xffff0000;
+    bkf |= ((evt << 8) | ste) << 16;
+    return bkf;
+}
+
+inline uint32_t emb_fw(uint32_t bkf, uint8_t evt, uint8_t ste) 
+{
+    bkf &= ~0x0000ffff;
+    bkf |= (evt << 8) | ste;
+    return bkf;
+}
+
 inline uint32_t abs_result(uint32_t result)
 {
     result = result >> 16;
@@ -3333,6 +3350,8 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3397,11 +3416,11 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
                 //sprintf(str, "PSRLT\n"); 
                 //print_f(mlogPool, "bullet", str); 
                 if (tmpAns == 1) {
-                    next = PSACT;
+                    next = PSMAX;
                 } else if (tmpAns == 2) {
-                    next = PSACT;
+                    next = PSMAX;
                 } else if (tmpAns == 3) {
-                    next = PSACT;
+                    next = PSMAX;
                 } else {
                     next = PSMAX;
                 }
@@ -3423,6 +3442,24 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3435,6 +3472,8 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3505,6 +3544,24 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3517,6 +3574,8 @@ static uint32_t next_SDAO(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3571,6 +3630,24 @@ static uint32_t next_SDAO(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3583,6 +3660,8 @@ static uint32_t next_SDAN(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3634,6 +3713,24 @@ static uint32_t next_SDAN(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3646,6 +3743,8 @@ static uint32_t next_SDAM(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3698,6 +3797,24 @@ static uint32_t next_SDAM(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3710,6 +3827,8 @@ static uint32_t next_SDAL(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3748,8 +3867,7 @@ static uint32_t next_SDAL(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSSET; 
-                evt = WTBAKP;
+                next = PSMAX;
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -3761,6 +3879,24 @@ static uint32_t next_SDAL(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3773,6 +3909,8 @@ static uint32_t next_SAVK(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3824,6 +3962,24 @@ static uint32_t next_SAVK(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3836,6 +3992,8 @@ static uint32_t next_SINJ(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3854,8 +4012,7 @@ static uint32_t next_SINJ(struct psdata_s *data)
             case PSSET:
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSACT; 
-                evt = WTBAKQ;
+                next = PSMAX; 
                 break;
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
@@ -3890,6 +4047,24 @@ static uint32_t next_SINJ(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3902,6 +4077,8 @@ static uint32_t next_SUPI(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -3953,6 +4130,24 @@ static uint32_t next_SUPI(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -3965,6 +4160,8 @@ static uint32_t next_FAT32H(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4026,6 +4223,24 @@ static uint32_t next_FAT32H(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4038,6 +4253,8 @@ static uint32_t next_FAT32G(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4076,7 +4293,7 @@ static uint32_t next_FAT32G(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                evt = 0x1; /* jump to next stage */
+                evt = FATH; /* jump to next stage */
                 next = PSSET;
                 break;
             default:
@@ -4089,6 +4306,24 @@ static uint32_t next_FAT32G(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4101,6 +4336,8 @@ static uint32_t next_registerE(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4139,7 +4376,7 @@ static uint32_t next_registerE(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                evt = 0x1; /* jump to next stage */
+                evt = REGF; /* jump to next stage */
                 next = PSSET;
                 break;
             default:
@@ -4152,6 +4389,24 @@ static uint32_t next_registerE(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4164,6 +4419,8 @@ static uint32_t next_registerF(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4202,7 +4459,7 @@ static uint32_t next_registerF(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                evt = 0x1; /* jump to next stage */
+                evt = FATG; /* jump to next stage */
                 next = PSSET;
                 break;
             default:
@@ -4215,6 +4472,24 @@ static uint32_t next_registerF(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4227,6 +4502,8 @@ static uint32_t next_doubleC(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4266,7 +4543,7 @@ static uint32_t next_doubleC(struct psdata_s *data)
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str); 
                 next = PSSET;
-                evt = 0x1; /* jump to next stage */
+                evt = DOUBLED; /* jump to next stage */
                 //next = PSMAX;
                 break;
             default:
@@ -4279,6 +4556,24 @@ static uint32_t next_doubleC(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4291,6 +4586,8 @@ static uint32_t next_doubleD(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4329,7 +4626,7 @@ static uint32_t next_doubleD(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                evt = 0x1; /* jump to next stage */
+                evt = REGE; /* jump to next stage */
                 next = PSSET;
                 break;
             default:
@@ -4342,6 +4639,24 @@ static uint32_t next_doubleD(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4354,6 +4669,8 @@ static int next_spy(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4396,7 +4713,7 @@ static int next_spy(struct psdata_s *data)
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "spy", str); 
                 next = PSSET; /* jump to next stage */
-                evt = 0x1;
+                evt = BULLET; /* jump to next stage */
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -4408,6 +4725,24 @@ static int next_spy(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4420,6 +4755,8 @@ static uint32_t next_bullet(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4459,7 +4796,7 @@ static uint32_t next_bullet(struct psdata_s *data)
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str); 
                 next = PSSET;
-                evt = 0x1; /* jump to next stage */
+                evt = LASER; /* jump to next stage */
                 //next = PSMAX;
                 break;
             default:
@@ -4472,6 +4809,24 @@ static uint32_t next_bullet(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4484,6 +4839,8 @@ static int next_laser(struct psdata_s *data)
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
     char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
     rlt = (data->result >> 16) & 0xff;
     pro = data->result & 0xff;
 
@@ -4506,8 +4863,7 @@ static int next_laser(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "laser", str); 
-                next = PSACT; 
-                evt = WTBAKQ;
+                next = PSMAX; 
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -4535,6 +4891,24 @@ static int next_laser(struct psdata_s *data)
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
         next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
     } else {
         next = PSMAX;
     }
@@ -4605,12 +4979,12 @@ static int ps_next(struct psdata_s *data)
         case SPY:
             ret = next_spy(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = BULLET; /* state change */
+            if (evt) nxtst = evt; /* long jump */
             break;
         case BULLET:
             ret = next_bullet(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = LASER; /* state change */
+            if (evt) nxtst = evt; /* long jump */
             break;
         case LASER:
             ret = next_laser(data);
@@ -4621,27 +4995,27 @@ static int ps_next(struct psdata_s *data)
         case DOUBLEC:
             ret = next_doubleC(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = DOUBLED; /* end the test loop */
+            if (evt) nxtst = evt; /* long jump */
             break;
         case DOUBLED:
             ret = next_doubleD(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = REGE; /* end the test loop */
+            if (evt) nxtst = evt; /* long jump */
             break;
         case REGE:
             ret = next_registerE(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = REGF; /* end the test loop */
+            if (evt) nxtst = evt; /* long jump */
             break;
         case REGF:
             ret = next_registerF(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = FATG; /* end the test loop */
+            if (evt) nxtst = evt; /* long jump */
             break;
         case FATG:
             ret = next_FAT32G(data);
             evt = (ret >> 24) & 0xff;
-            if (evt == 0x1) nxtst = FATH; /* end the test loop */
+            if (evt) nxtst = evt; /* long jump */
             break;
         case FATH:
             ret = next_FAT32H(data);
@@ -6492,6 +6866,8 @@ static int stfat_30(struct psdata_s *data)
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 3) {
                 data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 4) {
+                data->result = emb_result(data->result, FWORD);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             } else {
@@ -6799,7 +7175,7 @@ static int stsin_36(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, FWORD);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -7585,7 +7961,7 @@ static int stsda_50(struct psdata_s *data)
                 pdt = &pct[ASPOP_SDFREE_LEN04];
                 pdt->opStatus = ASPOP_STA_UPD;
                 pdt->opValue = p->data;
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, FWORD);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -8518,6 +8894,7 @@ static int stwtbak_66(struct psdata_s *data)
                 if (pdt->opValue == SINSCAN_WIFI_SD) {
                     data->ansp0 = 1;
                     data->result = emb_result(data->result, NEXT);
+                    data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSACT);
                     sprintf(rs->logs, "op_66: SINSCAN_WIFI_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SINSCAN_SD_ONLY) {
@@ -8528,6 +8905,7 @@ static int stwtbak_66(struct psdata_s *data)
                 } else if (pdt->opValue == SINSCAN_DUAL_SD) {
                     data->ansp0 = 3;
                     data->result = emb_result(data->result, NEXT);
+                    data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSACT);
                     sprintf(rs->logs, "op_66: SINSCAN_DUAL_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else {
@@ -8813,6 +9191,7 @@ static int stwtbak_71(struct psdata_s *data)
                 if (pdt->opValue == SUPBACK_SD) {
                     data->ansp0 = 1;
                     data->result = emb_result(data->result, NEXT);
+                    data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSWT);
                     sprintf(rs->logs, "op_71: SINSCAN_WIFI_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SUPBACK_RAW) {
@@ -8823,6 +9202,7 @@ static int stwtbak_71(struct psdata_s *data)
                 } else if (pdt->opValue == SUPBACK_FAT) {
                     data->ansp0 = 3;
                     data->result = emb_result(data->result, NEXT);
+                    data->bkofw = emb_fw(data->bkofw, WTBAKP, PSSET);
                     sprintf(rs->logs, "op_71: SINSCAN_DUAL_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else {
@@ -8887,6 +9267,7 @@ static int stwtbak_72(struct psdata_s *data)
                 if (pdt->opValue == SUPBACK_SD) {
                     data->ansp0 = 1;
                     data->result = emb_result(data->result, NEXT);
+                    data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSRLT);
                     sprintf(rs->logs, "op_72: SINSCAN_WIFI_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SUPBACK_RAW) {
@@ -8897,6 +9278,7 @@ static int stwtbak_72(struct psdata_s *data)
                 } else if (pdt->opValue == SUPBACK_FAT) {
                     data->ansp0 = 3;
                     data->result = emb_result(data->result, NEXT);
+                    data->bkofw = emb_fw(data->bkofw, WTBAKP, PSACT);
                     sprintf(rs->logs, "op_72: SINSCAN_DUAL_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else {
@@ -8995,6 +9377,7 @@ static int stwtbak_73(struct psdata_s *data)
                 pdt = &pct[ASPOP_SCAN_SINGLE];
                 data->ansp0 = pdt->opValue;
                 data->result = emb_result(data->result, NEXT);
+                data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSACT);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -9045,16 +9428,19 @@ static int stwtbak_74(struct psdata_s *data)
                 data->result = emb_result(data->result, EVTMAX);
             } else {
                 if (pdt->opValue == SINSCAN_WIFI_SD) {
+                    pdt->opStatus = ASPOP_STA_UPD;
                     data->ansp0 = 1;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_74: SINSCAN_WIFI_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SINSCAN_SD_ONLY) {
+                    pdt->opStatus = ASPOP_STA_UPD;
                     data->ansp0 = 2;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_74: SINSCAN_SD_ONLY go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SINSCAN_DUAL_SD) {
+                    pdt->opStatus = ASPOP_STA_UPD;
                     data->ansp0 = 3;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_74: SINSCAN_DUAL_SD go to next!!\n"); 
@@ -9606,7 +9992,7 @@ static int stlaser_02(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, FWORD);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -14515,7 +14901,7 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
     }
 
-    modersp->r = 0xed;    
+    modersp->r = 4;    
     return 1;
 }
 
