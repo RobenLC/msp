@@ -3371,8 +3371,8 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
                 } else if (tmpAns == 2) {
                     next = PSMAX;
                 } else if (tmpAns == 3) {
-                    next = PSACT;
-                    evt = WTBAKP;
+                    next = PSSET;
+                    evt = SDAO;
                 } else {
                     next = PSMAX;
                 }
@@ -3470,14 +3470,11 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "bullet", str); 
                 if (tmpAns == 1) {
-                    next = PSSET;
-                    evt = SDAO;
+                    next = PSMAX;
                 } else if (tmpAns == 2) {
-                    next = PSSET;
-                    evt = SDAO;
+                    next = PSMAX;
                 } else if (tmpAns == 3) {
-                    next = PSSET;
-                    evt = SDAO;
+                    next = PSMAX;;
                 } else {
                     next = PSMAX;
                 }
@@ -3495,7 +3492,7 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSRLT;
+                next = PSACT;
                 evt = WTBAKQ; 
                 break;
             default:
@@ -3857,7 +3854,7 @@ static uint32_t next_SINJ(struct psdata_s *data)
             case PSSET:
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSRLT; 
+                next = PSACT; 
                 evt = WTBAKQ;
                 break;
             case PSACT:
@@ -8594,16 +8591,19 @@ static int stwtbak_67(struct psdata_s *data)
                 data->result = emb_result(data->result, EVTMAX);
             } else {
                 if (pdt->opValue == SINSCAN_WIFI_SD) {
+                    pdt->opStatus = ASPOP_STA_UPD;
                     data->ansp0 = 1;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_67: SINSCAN_WIFI_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SINSCAN_SD_ONLY) {
+                    pdt->opStatus = ASPOP_STA_UPD;
                     data->ansp0 = 2;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_67: SINSCAN_SD_ONLY go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SINSCAN_DUAL_SD) {
+                    pdt->opStatus = ASPOP_STA_UPD;
                     data->ansp0 = 3;
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_67: SINSCAN_DUAL_SD go to next!!\n"); 
