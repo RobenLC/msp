@@ -4587,7 +4587,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    usleep(60000);
+    usleep(120000);
 
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -5704,6 +5704,11 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs55", mrs->log);
 
+    bitset = 1;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
+    print_f(&mrs->plog, "fs55", mrs->log);
+
     int bits = 8;
     ret = ioctl(mrs->sfm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
     if (ret == -1) {
@@ -5719,6 +5724,11 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
     bitset = 0;
     ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
+    print_f(&mrs->plog, "fs55", mrs->log);
+    
+    bitset = 1;
+    ioctl(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs55", mrs->log);
 
     bits = 8;
@@ -6580,6 +6590,7 @@ static int p2(struct procRes_s *rs)
                 }
 
                 while (1) {
+#if 1
                     ret = fseek(fp, totsz, SEEK_SET);
                     if (ret) {
                         sprintf(rs->logs, " file seek failed!! ret:%d - 1\n", ret);
@@ -6603,7 +6614,9 @@ static int p2(struct procRes_s *rs)
                     sprintf(rs->logs, " %d - %d,%d - 1\n", pi, totsz, fsize);
                     print_f(rs->plogs, "P2d", rs->logs);
                     rs_ipc_put(rs, "s", 1);
-                    
+                    msync(addr, len, MS_SYNC);
+#endif
+#if 1
                     ret = fseek(fp, totsz, SEEK_SET);
                     if (ret) {
                         sprintf(rs->logs, " file seek failed!! ret:%d - 2\n", ret);
@@ -6627,7 +6640,8 @@ static int p2(struct procRes_s *rs)
                     sprintf(rs->logs, " %d - %d,%d - 2\n", pi, totsz, fsize);
                     print_f(rs->plogs, "P2d", rs->logs);
                     rs_ipc_put(rs, "d", 1);
-
+                    msync(addr, len, MS_SYNC);
+#endif
                     totsz += fsize;
                     max -= len;
                     
