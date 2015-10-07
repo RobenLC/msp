@@ -18849,7 +18849,13 @@ static int p2(struct procRes_s *rs)
                     }
 
                     len = ring_buf_cons(rs->pcmdTx, &addr);
-
+                    
+                    /* debug */
+                    if (pi == 0) {
+                        sprintf(rs->logs, "dump the first 128 byte of SD data: \n");
+                        print_f(rs->plogs, "P2", rs->logs);  
+                        shmem_dump(addr, 128);
+                    }
                     sprintf(rs->logs, "u t %d\n", len);
                     print_f(rs->plogs, "P2", rs->logs);          
 
