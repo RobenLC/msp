@@ -2260,7 +2260,7 @@ static int stauto_05(struct psdata_s *data)
         case WAIT:
             g = &data->rs->pmch->get;
 
-            if ((data->ansp0 & 0xff) == g->opcode) {
+            if ((g->opcode) && ((data->ansp0 & 0xff) == g->opcode)) {
                 s->f = 0;
                 m->f = 0;
                 sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
@@ -4226,20 +4226,16 @@ static int fs09(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     struct info16Bit_s *p;
 
-    //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-    //print_f(&mrs->plog, "fs09", mrs->log);
 
     p = &mrs->mchine.cur;
 
-    mrs->mchine.seqcnt += 1;
-    if (mrs->mchine.seqcnt >= 0x8) {
-        mrs->mchine.seqcnt = 0;
-    }
 
     p->opcode = OP_QRY;
-    p->inout = 0;
-    p->seqnum = mrs->mchine.seqcnt;
+    p->data = 0;
 	
+    sprintf(mrs->log, "put op:0x%.2x data:0x%.2x \n", p->opcode, p->data);
+    print_f(&mrs->plog, "fs09", mrs->log);
+
     mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
     return 0; 
@@ -4254,10 +4250,9 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'C')) {
         msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
-
         p = &mrs->mchine.get;
-        //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-        //print_f(&mrs->plog, "fs10", mrs->log);
+        sprintf(mrs->log, "get op:0x%.2x data:0x%.2x \n", p->opcode, p->data);
+        print_f(&mrs->plog, "fs10", mrs->log);
 
         switch (p->opcode) {
         case OP_SINGLE: /* currently support */              
@@ -4695,15 +4690,10 @@ static int fs24(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct info16Bit_s *p;
 
     p = &mrs->mchine.cur;
-    //sprintf(mrs->log, "put  0x%.2x 0x%.2x \n",p->opcode, p->data);
-    //print_f(&mrs->plog, "fs24", mrs->log);
+    sprintf(mrs->log, "put  0x%.2x 0x%.2x \n",p->opcode, p->data);
+    print_f(&mrs->plog, "fs24", mrs->log);
 
-    //msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
-
-    mrs->mchine.seqcnt += 1;
-    if (mrs->mchine.seqcnt >= 0x8) {
-        mrs->mchine.seqcnt = 0;
-    }
+    msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
 	
     mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
@@ -6821,19 +6811,19 @@ static int p4(struct procRes_s *rs)
             len = 0;
 
             msync(rs->pmch, sizeof(struct machineCtrl_s), MS_SYNC);            
-            tx16[0] = pkg_info(&rs->pmch->cur);
+            *tx16 = pkg_info(&rs->pmch->cur);
             len = mtx_data_16(rs->spifd, rx16, tx16, 1, 2, 1024);
             if (len > 0) {
                 in16 = rx16[0];
 
-                sprintf(rs->logs, "16Bits send: 0x%.4x, get: 0x%.4x\n", tx16[0], in16);
-                print_f(rs->plogs, "P4", rs->logs);
+                //sprintf(rs->logs, "16Bits send: 0x%.4x, get: 0x%.4x\n", tx16[0], in16);
+                //print_f(rs->plogs, "P4", rs->logs);
 
                 abs_info(&rs->pmch->get, in16);
                 rs_ipc_put(rs, "C", 1);
             }
-            //sprintf(rs->logs, "16Bits send: 0x%.4x, get: 0x%.4x\n", tx16[0], in16);
-            //print_f(rs->plogs, "P4", rs->logs);
+            sprintf(rs->logs, "16Bits send: 0x%.4x, get: 0x%.4x, len: %d\n", *tx16, in16, len);
+            print_f(rs->plogs, "P4", rs->logs);
         } else if (cmode == 3) {
             int size=0, opsz;
             char *addr;
@@ -7199,7 +7189,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             }
 
             len = 0;
-            len = mtx_data_16(rs->spifd, rx16, tx16, 1, 2, 64);
+            len = mtx_data_16(rs->spifd, rx16, tx16, 1, 1, 64);
             if (len > 0) rs_ipc_put(rs, "C", 1);
             sprintf(rs->logs, "16Bits get: %.8x\n", *rx16);
             print_f(rs->plogs, "P5", rs->logs);
