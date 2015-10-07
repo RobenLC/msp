@@ -114,7 +114,7 @@ static char spi0[] = "/dev/spidev32765.0";
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
 
-#define SPI_KTHREAD_USE    (0) /* can't work, has bug */
+#define SPI_KTHREAD_USE    (0) 
 #define DIR_POOL_SIZE (20480)
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -4542,7 +4542,7 @@ static uint32_t next_doubleC(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSSET;
+                next = PSACT;
                 evt = DOUBLED; /* jump to next stage */
                 //next = PSMAX;
                 break;
@@ -10537,8 +10537,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
 
-    sprintf(str, "cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
+    //print_f(mlogPool, "ring", str);
 
     if (dist < 1)  return -1;
 
@@ -13715,56 +13715,168 @@ static int fs34(struct mainRes_s *mrs, struct modersp_s *modersp)
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
     modersp->m = modersp->m + 1;
+    modersp->v = 0;
+    modersp->c = 0;
     return 2;
 }
 
 static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    int ret, bitset;
+#define QSIZE 5
+#define QDELAY 0
+    int ret, bitset, tmc;
     char ch;
 
     //sprintf(mrs->log, "%d\n", modersp->v);
     //print_f(&mrs->plog, "fs35", mrs->log);
 
-    ret = mrs_ipc_get(mrs, &ch, 1, 1);
-    while (ret > 0) {
-        if (ch == 'p') {
-            modersp->v += 1;
-            mrs_ipc_put(mrs, "n", 1, 3);
-        }
+    if (modersp->r & 0x4) {
 
-        if (ch == 'd') {
-            sprintf(mrs->log, "0 %d end\n", modersp->v);
-            print_f(&mrs->plog, "fs35", mrs->log);
-
-            mrs_ipc_put(mrs, "n", 1, 3);
-            modersp->r |= 0x1;
-            //mrs_ipc_put(mrs, "e", 1, 3);
+        if (modersp->r & 0x1) {
+            modersp->r &= ~(0x04);
+        } 
+        else if (modersp->c) {
+            ret = mrs_ipc_get(mrs, &ch, 1, 3);
+            while (ret > 0) {
+                if (ch == 'n') {
+                    modersp->c -= 1;
+                    sprintf(mrs->log, "WiFi _0_ rest - %d\n", modersp->c);
+                    print_f(&mrs->plog, "fs35", mrs->log);
+                }
+                if (modersp->c == 0) {
+                    break;
+                }
+                ret = mrs_ipc_get(mrs, &ch, 1, 3);
+            }
+            if (modersp->c == 0) {
+                if (modersp->v < 0) {
+                    modersp->r |= 0x1;
+                }
+                modersp->v = 0;
+                modersp->r &= ~(0x04);
+            }
         }
-        ret = mrs_ipc_get(mrs, &ch, 1, 1);
+        else {
+            ret = mrs_ipc_get(mrs, &ch, 1, 1);
+            while (ret > 0) {
+                if (ch == 'p') {
+                    modersp->v += 1;
+                    if (modersp->v > QSIZE) break;
+                }
+                if (ch == 'd') {
+                    sprintf(mrs->log, "spi __0__ END!!!\n");
+                    print_f(&mrs->plog, "fs35", mrs->log);
+                    modersp->v += 1;
+                    modersp->v = 0 - modersp->v;
+                    //mrs_ipc_put(mrs, "n", 1, 3);
+                    //modersp->r |= 0x1;
+                    //mrs_ipc_put(mrs, "e", 1, 3);
+#if PULL_LOW_AFTER_DATA
+                    bitset = 0;
+                    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                    sprintf(mrs->log, "set spi0 RDY pin %d\n",bitset);
+                    print_f(&mrs->plog, "fs35", mrs->log);
+                    usleep(200000);
+#endif
+                }
+                ret = mrs_ipc_get(mrs, &ch, 1, 1);
+            }
+
+            if (modersp->v < 0) {
+                modersp->c = 0 - modersp->v;
+            } else if (modersp->v > QSIZE) {
+                modersp->c = modersp->v;
+            }
+
+            if (modersp->c) {
+                tmc = modersp->c;
+                while (tmc) {
+                    mrs_ipc_put(mrs, "n", 1, 3);
+                    #if QDELAY
+                    usleep(QDELAY);
+                    #endif
+                    tmc --;
+                }
+            }
+        }
     }
 
-    ret = mrs_ipc_get(mrs, &ch, 1, 2);
-    while (ret > 0) {
-        if (ch == 'p') {
-            modersp->c += 1;
-            mrs_ipc_put(mrs, "n", 1, 8);
-        }
+    if (!(modersp->r & 0x4)) {
 
-        if (ch == 'd') {
-            sprintf(mrs->log, "1 %d end\n", modersp->v);
-            print_f(&mrs->plog, "fs35", mrs->log);
- 
-            mrs_ipc_put(mrs, "n", 1, 8);
-            modersp->r |= 0x2;
-            //mrs_ipc_put(mrs, "e", 1, 3);
+        if (modersp->r & 0x2) {
+            modersp->r |= 0x04;
+        } 
+        else if (modersp->c) {
+            ret = mrs_ipc_get(mrs, &ch, 1, 8);
+            while (ret > 0) {
+                if (ch == 'n') {
+                    modersp->c -= 1;
+                    sprintf(mrs->log, "WiFi _1_ rest - %d\n", modersp->c);
+                    print_f(&mrs->plog, "fs35", mrs->log);
+                }
+                if (modersp->c == 0) {
+                    break;
+                }
+                ret = mrs_ipc_get(mrs, &ch, 1, 8);
+            }
+            if (modersp->c == 0) {
+                if (modersp->v < 0) {
+                    modersp->r |= 0x2;
+                }
+                modersp->v = 0;
+                modersp->r |= 0x04;
+            }
         }
-        ret = mrs_ipc_get(mrs, &ch, 1, 2);
+        else {
+            ret = mrs_ipc_get(mrs, &ch, 1, 2);
+            while (ret > 0) {
+                if (ch == 'p') {
+                    modersp->v += 1;
+                    if (modersp->v > QSIZE) break;
+                }
+                if (ch == 'd') {
+                    sprintf(mrs->log, "spi __1__ END!!!\n");
+                    print_f(&mrs->plog, "fs35", mrs->log);
+                    modersp->v += 1;
+                    modersp->v = 0 - modersp->v;
+                    //mrs_ipc_put(mrs, "n", 1, 8);
+                    //modersp->r |= 0x1;
+                    //mrs_ipc_put(mrs, "e", 1, 8);
+#if PULL_LOW_AFTER_DATA
+                    bitset = 0;
+                    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                    sprintf(mrs->log, "set spi1 RDY pin %d\n",bitset);
+                    print_f(&mrs->plog, "fs35", mrs->log);
+                    usleep(200000);
+#endif
+                }
+                ret = mrs_ipc_get(mrs, &ch, 1, 2);
+            }
+
+            if (modersp->v < 0) {
+                modersp->c = 0 - modersp->v;
+            } else if (modersp->v > QSIZE) {
+                modersp->c = modersp->v;
+            }  
+
+            if (modersp->c) {
+                tmc = modersp->c;
+                while (tmc) {
+                    mrs_ipc_put(mrs, "n", 1, 8);
+                    #if QDELAY
+                    usleep(QDELAY);
+                    #endif
+                    tmc --;
+                }
+            }
+
+        }
     }
 
-    if (modersp->r == 0x3) {
+    if (modersp->r & 0x3) {
         mrs_ipc_put(mrs, "N", 1, 3);
         mrs_ipc_put(mrs, "N", 1, 8);
+
         sprintf(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs35", mrs->log);
         modersp->m = modersp->m + 1;
@@ -13783,19 +13895,8 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     //print_f(&mrs->plog, "fs36", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
-    if ((len > 0) && (ch == 'N')) {
-        ring_buf_init(&mrs->cmdRx);
-        ring_buf_init(&mrs->cmdTx);
-#if PULL_LOW_AFTER_DATA
-        bitset = 0;
-        msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        sprintf(mrs->log, "set RDY pin %d\n",bitset);
-        print_f(&mrs->plog, "fs36", mrs->log);
-#endif
-        usleep(120000);
-            
-        modersp->d = modersp->m + 1;
-        modersp->m = 1;
+    if ((len > 0) && (ch == 'N')) {            
+        modersp->m = modersp->m + 1;
         return 2;
     }
 
@@ -13805,46 +13906,51 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     int bitset, ret;
+    int len=0;
+    char ch=0;
 
-    bitset = 0;
-    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-    sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",0, bitset, modersp->d);
-    print_f(&mrs->plog, "fs37", mrs->log);
+    len = mrs_ipc_get(mrs, &ch, 1, 8);
+    if ((len > 0) && (ch == 'N')) {
+        ring_buf_init(&mrs->cmdRx);
+        ring_buf_init(&mrs->cmdTx);
+        
+        bitset = 0;
+        msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
+        print_f(&mrs->plog, "fs37", mrs->log);
 
-    bitset = 0;
-    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-    sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
-    print_f(&mrs->plog, "fs37", mrs->log);
+        bitset = 0;
+        msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
+        sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
+        print_f(&mrs->plog, "fs37", mrs->log);
 
-    bitset = 0;
-    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
-    sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
-    print_f(&mrs->plog, "fs37", mrs->log);
+        bitset = 1;
+        msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
+        print_f(&mrs->plog, "fs37", mrs->log);
 
-    bitset = 1;
-    msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-    sprintf(mrs->log, "Set spi 0 slave ready: %d\n", bitset);
-    print_f(&mrs->plog, "fs37", mrs->log);
-
-    bitset = 1;
-    msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-    sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
-    print_f(&mrs->plog, "fs37", mrs->log);
+        bitset = 1;
+        msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+        sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
+        print_f(&mrs->plog, "fs37", mrs->log);
 
 #if SPI_KTHREAD_USE
-    bitset = 0;
-    ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
-    sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
-    print_f(&mrs->plog, "fs37", mrs->log);
-
-    bitset = 0;
-    ret = msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
-    sprintf(mrs->log, "Stop spi1 spidev thread, ret: 0x%x\n", ret);
-    print_f(&mrs->plog, "fs37", mrs->log);
+        bitset = 0;
+        ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+        sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+        print_f(&mrs->plog, "fs37", mrs->log);
+        
+        bitset = 0;
+        ret = msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+        sprintf(mrs->log, "Stop spi1 spidev thread, ret: 0x%x\n", ret);
+        print_f(&mrs->plog, "fs37", mrs->log);
 #endif
 
-    modersp->r = 1;
-    return 1;
+        modersp->r = 1;
+        return 1;
+    }
+
+    return 0;
 }
 static int fs38(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -15356,6 +15462,7 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
             pfat->fatSupcur = 0;
         }
 
+        modersp->c = 0;
         mrs_ipc_put(mrs, "N", 1, 3);
         sprintf(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs68", mrs->log);
@@ -15375,12 +15482,15 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
     //print_f(&mrs->plog, "fs66", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
-    if (len > 0) {
+    while (len > 0) {
 
-        sprintf(mrs->log, "ch: %c - end\n", ch);
-        print_f(&mrs->plog, "fs69", mrs->log);
-
+        //sprintf(mrs->log, "ch: %c - end\n", ch);
+        //print_f(&mrs->plog, "fs69", mrs->log);
+        modersp->c ++;
+        
         if (ch == 'N') {
+            sprintf(mrs->log, "ch: %c - end, count: %d\n", ch, modersp->c);
+            print_f(&mrs->plog, "fs69", mrs->log);
 
             ring_buf_init(&mrs->cmdRx);
 
@@ -15390,6 +15500,7 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs69", mrs->log);
 #endif
+
 #if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -15400,10 +15511,8 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             modersp->r = 1;            
             return 1;
-        } else  {
-            modersp->r = 2;
-            return 1;
         }
+        len = mrs_ipc_get(mrs, &ch, 1, 3);
     }
     return 0; 
 }
@@ -15642,7 +15751,7 @@ static int fs73(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
-    int len=0, bitset=0, ret=0;
+    int len=0, bitset=0, ret=0, count=0;
     char ch=0;
     struct info16Bit_s *p;
 
@@ -15650,12 +15759,12 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs74", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
-    if (len > 0) {
+    while (len > 0) {
 
-        sprintf(mrs->log, "ch: %c - end\n", ch);
-        print_f(&mrs->plog, "fs74", mrs->log);
-
+        count++;
         if (ch == 'N') {
+            sprintf(mrs->log, "ch: %c - end, count: %d\n", ch, count);
+            print_f(&mrs->plog, "fs74", mrs->log);
 
             ring_buf_init(&mrs->cmdRx);
 
@@ -15675,10 +15784,10 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             modersp->m = 48;            
             return 2;
-        } else  {
-            modersp->r = 2;
-            return 1;
         }
+
+        len = mrs_ipc_get(mrs, &ch, 1, 3);
+        
     }
     return 0; 
 }
@@ -18084,7 +18193,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                     stdata->result = emb_stanPro(0, STINIT, DOUBLED, PSTSM);
                 } else if (cmd == 'b') {
                     cmdt = cmd;
-                    #if 1 /* 1: boot with OP_SDINIT and OP_SDSTATUS, 0: nope */
+                    #if 0 /* 1: boot with OP_SDINIT and OP_SDSTATUS, 0: nope */
                     stdata->result = emb_stanPro(0, STINIT, SDAO, PSRLT);
                     #else
                     stdata->result = emb_stanPro(0, STINIT, FATH, PSTSM);
@@ -18525,7 +18634,7 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE                    
                             opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                             if (opsz == 0) {
-                                usleep(1000);
+                                usleep(100000);
                                 sprintf(rs->logs, "kth opsz:%d\n", opsz);
                                 print_f(rs->plogs, "P2", rs->logs);  
                                 continue;
@@ -18534,15 +18643,15 @@ static int p2(struct procRes_s *rs)
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
                             //usleep(10000);
-                            sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                            sprintf(rs->logs, "r %d - %d\n", opsz, pi);
                             print_f(rs->plogs, "P2", rs->logs);
                         }
 
                         //msync(addr, len, MS_SYNC);
                         ring_buf_prod(rs->pcmdRx);    
                         if (opsz < 0) {
-                            sprintf(rs->logs, "opsz:%d break!\n", opsz);
-                            print_f(rs->plogs, "P2", rs->logs);    
+                            //sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                            //print_f(rs->plogs, "P2", rs->logs);    
                             break;
                         }
                         rs_ipc_put(rs, "p", 1);
@@ -19250,16 +19359,16 @@ static int p3(struct procRes_s *rs)
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
-                        usleep(1000);
+                        usleep(100000);
                         opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
-                        print_f(rs->plogs, "P2", rs->logs);  
+                        print_f(rs->plogs, "P3", rs->logs);  
                     }
 
 #else // #if SPI_KTHREAD_USE
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
-                            sprintf(rs->logs, "r %d\n", opsz);
+                            sprintf(rs->logs, "r %d - %d\n", opsz, pi);
                             print_f(rs->plogs, "P3", rs->logs);
                         }
 
@@ -19642,6 +19751,8 @@ static int p4(struct procRes_s *rs)
                             sprintf(rs->logs, "len:%d \n", len);
                             print_f(rs->plogs, "P4", rs->logs);         
                         }
+                        
+                        rs_ipc_put(rs, "n", 1);
                     } else {
                         sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, opsz, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
@@ -19928,7 +20039,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         error_handle(rs->logs, 3320);
     }
     
-#if 1 /* disable auto boot for testing */
+#if 0 /* disable auto boot for testing */
     sprintf(rs->logs, "send the very first command [%s] \n", msg);
     print_f(rs->plogs, "P5", rs->logs);
     rs_ipc_put(rcmd, msg, 4);
@@ -20011,7 +20122,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             print_f(rs->plogs, "P5", rs->logs);
             rs_ipc_put(rcmd, msg, n);
         }else {
-            if (opcode == OP_SINGLE) {
+            if ((opcode == OP_SINGLE) || (opcode == OP_DOUBLE)) {
                 msg[0] = 't';
                 msg[1] = 'g';
                 msg[2] = 'r';
@@ -20931,9 +21042,10 @@ static int p7(struct procRes_s *rs)
                             #else
                             num = len;
                             #endif
-                            sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_n->connfd, num, tx);
+                            sprintf(rs->logs, "tx %d - %d \n", num, tx);
                             print_f(rs->plogs, "P7", rs->logs);         
                         }
+                        rs_ipc_put(rs, "n", 1);
                     } else {
                         sprintf(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_n->connfd, num, tx);
                         print_f(rs->plogs, "P7", rs->logs);         
@@ -20945,13 +21057,12 @@ static int p7(struct procRes_s *rs)
                         rs_ipc_get(rs, &ch, 1);
                     }
                 }
-
-          while (ch != 'N') {
-                        sprintf(rs->logs, "%c clr\n", ch);
-                        print_f(rs->plogs, "P7", rs->logs);         
-                        ch = 0;
-                        rs_ipc_get(rs, &ch, 1);
-          }
+                while (ch != 'N') {
+                    sprintf(rs->logs, "%c clr\n", ch);
+                    print_f(rs->plogs, "P7", rs->logs);         
+                    ch = 0;
+                    rs_ipc_get(rs, &ch, 1);
+                }
 
                 rs_ipc_put(rs, "N", 1);
                 sprintf(rs->logs, "%c socket tx %d - end\n", ch, tx);
