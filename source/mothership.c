@@ -7231,7 +7231,7 @@ static int stsup_35(struct psdata_s *data)
     char str[128], ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    
+
     rs = data->rs;
     rlt = abs_result(data->result); 
 
@@ -7273,7 +7273,9 @@ static int stsin_36(struct psdata_s *data)
     char str[128], ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
 
@@ -7290,7 +7292,13 @@ static int stsin_36(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, FWORD);
+                pdt = &pct[ASPOP_EG_DECT];
+                if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
+                    data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSTSM);
+                    data->result = emb_result(data->result, FWORD);
+                } else {
+                    data->result = emb_result(data->result, NEXT);
+                }
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
