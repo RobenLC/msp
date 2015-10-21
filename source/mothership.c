@@ -60,6 +60,7 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_USEDSEC       0x2c
 #define OP_SDINIT          0x2d
 #define OP_SDSTATS       0x2e
+#define OP_EG_DECT       0x2f
 /* scanner parameters */
 #define OP_MSG                0x30       
 #define OP_FFORMAT        0x31
@@ -258,6 +259,7 @@ typedef enum {
     ASPOP_CROP_COOR_XL,
     ASPOP_CROP_COOR_YH,
     ASPOP_CROP_COOR_YL,
+    ASPOP_EG_DECT,
     ASPOP_CODE_MAX, /* 56 */
 } aspOpCode_e;
 
@@ -3296,10 +3298,22 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
     return info;
 }
 
+inline uint32_t clr_bk(uint32_t bkf) 
+{
+    bkf &= ~0xffff0000;
+    return bkf;
+}
+
 inline uint32_t emb_bk(uint32_t bkf, uint8_t evt, uint8_t ste) 
 {
     bkf &= ~0xffff0000;
     bkf |= ((evt << 8) | ste) << 16;
+    return bkf;
+}
+
+inline uint32_t clr_fw(uint32_t bkf) 
+{
+    bkf &= ~0x0000ffff;
     return bkf;
 }
 
@@ -3421,7 +3435,7 @@ static uint32_t next_CROPR(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3430,7 +3444,7 @@ static uint32_t next_CROPR(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3543,7 +3557,7 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3552,7 +3566,7 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3645,7 +3659,7 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3654,7 +3668,7 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3731,7 +3745,7 @@ static uint32_t next_SDAO(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3740,7 +3754,7 @@ static uint32_t next_SDAO(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3814,7 +3828,7 @@ static uint32_t next_SDAN(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3823,7 +3837,7 @@ static uint32_t next_SDAN(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3898,7 +3912,7 @@ static uint32_t next_SDAM(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3907,7 +3921,7 @@ static uint32_t next_SDAM(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3980,7 +3994,7 @@ static uint32_t next_SDAL(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -3989,7 +4003,7 @@ static uint32_t next_SDAL(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4063,7 +4077,7 @@ static uint32_t next_SAVK(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4072,7 +4086,7 @@ static uint32_t next_SAVK(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4148,7 +4162,7 @@ static uint32_t next_SINJ(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4157,7 +4171,7 @@ static uint32_t next_SINJ(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4231,7 +4245,7 @@ static uint32_t next_SUPI(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4240,7 +4254,7 @@ static uint32_t next_SUPI(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4324,7 +4338,7 @@ static uint32_t next_FAT32H(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4333,7 +4347,7 @@ static uint32_t next_FAT32H(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4407,7 +4421,7 @@ static uint32_t next_FAT32G(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4416,7 +4430,7 @@ static uint32_t next_FAT32G(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4490,7 +4504,7 @@ static uint32_t next_registerE(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4499,7 +4513,7 @@ static uint32_t next_registerE(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4573,7 +4587,7 @@ static uint32_t next_registerF(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4582,7 +4596,7 @@ static uint32_t next_registerF(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4657,7 +4671,7 @@ static uint32_t next_doubleC(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4666,7 +4680,7 @@ static uint32_t next_doubleC(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4740,7 +4754,7 @@ static uint32_t next_doubleD(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4749,7 +4763,7 @@ static uint32_t next_doubleD(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4826,7 +4840,7 @@ static int next_spy(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4835,7 +4849,7 @@ static int next_spy(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4910,7 +4924,7 @@ static uint32_t next_bullet(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4919,7 +4933,7 @@ static uint32_t next_bullet(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -4992,7 +5006,7 @@ static int next_laser(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = (bkf >> 16) & 0xff;
             evt = (bkf >> 24) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_bk(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -5001,7 +5015,7 @@ static int next_laser(struct psdata_s *data)
             tmpRlt = emb_result(tmpRlt, STINIT);
             next = bkf & 0xff;
             evt = (bkf >> 8) & 0xff;
-            data->bkofw = 0;
+            data->bkofw = clr_fw(data->bkofw);
         } else {
             next = PSMAX;
         }
@@ -22507,6 +22521,14 @@ int main(int argc, char *argv[])
             ctb->opCode = OP_STLEN_03;
             ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_EG_DECT: 
+            ctb->opStatus = ASPOP_STA_UPD; /* default enable to test CROP */
+            ctb->opCode = OP_EG_DECT;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0x1;
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
