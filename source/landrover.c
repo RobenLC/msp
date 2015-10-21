@@ -53,6 +53,7 @@
 #define OP_USEDSEC      0x2c
 #define OP_SDINIT          0x2d
 #define OP_SDSTATS       0x2e
+#define OP_EG_DECT       0x2f
 /* scanner parameters */
 #define OP_MSG          0x30       
 #define OP_FFORMAT      0x31

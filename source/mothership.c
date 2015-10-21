@@ -5491,6 +5491,9 @@ static int stdob_08(struct psdata_s *data)
     char str[128], ch = 0; 
     uint32_t rlt;
     rlt = abs_result(data->result); 
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    pct = data->rs->pcfgTable;
 
     //sprintf(str, "op_01 - rlt:0x%x \n", rlt); 
     //print_f(mlogPool, "spy", str); 
@@ -5505,7 +5508,13 @@ static int stdob_08(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                pdt = &pct[ASPOP_EG_DECT];
+                if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
+                    data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
+                    data->result = emb_result(data->result, BKWRD);
+                } else {
+                    data->result = emb_result(data->result, NEXT);
+                }
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -7294,10 +7303,10 @@ static int stsin_36(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
-                    data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSTSM);
-                    data->result = emb_result(data->result, FWORD);
+                    data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
+                    data->result = emb_result(data->result, BKWRD);
                 } else {
-                    data->result = emb_result(data->result, NEXT);
+                    data->result = emb_result(data->result, FWORD);
                 }
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -9734,7 +9743,8 @@ static int stcrop_76(struct psdata_s *data)
 
                 sprintf(rs->logs, "op_76, update CROP coordinates DONE!!\n"); 
                 print_f(rs->plogs, "CROP", rs->logs);  
-                data->result = emb_result(data->result, EVTMAX);
+                data->result = emb_result(data->result, FWORD);
+                //data->result = emb_result(data->result, EVTMAX);
             } else {
                 c->opcode = pdt->opCode;
                 c->data = pdt->opValue;
@@ -9764,7 +9774,8 @@ static int stcrop_76(struct psdata_s *data)
                     pdt->opStatus = ASPOP_STA_WR;
                     data->result = emb_result(data->result, NEXT);
                 } else {
-                    data->result = emb_result(data->result, EVTMAX);                
+                    data->result = emb_result(data->result, FWORD);
+                    //data->result = emb_result(data->result, EVTMAX);                
                     sprintf(rs->logs, "op_76, can't find target table \n"); 
                     print_f(rs->plogs, "CROP", rs->logs);  
                 }
@@ -10496,7 +10507,8 @@ static int stlaser_02(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt, val=0;
     struct aspConfig_s *pct=0, *pdt=0;
-    
+
+    pct = data->rs->pcfgTable;
     rlt = abs_result(data->result); 
     //sprintf(str, "op_02: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0);  
     //print_f(mlogPool, "laser", str);  
@@ -10509,7 +10521,13 @@ static int stlaser_02(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, FWORD);
+                pdt = &pct[ASPOP_EG_DECT];
+                if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
+                    data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
+                    data->result = emb_result(data->result, BKWRD);
+                } else {
+                    data->result = emb_result(data->result, FWORD);
+                }
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -20139,8 +20157,8 @@ static int p4(struct procRes_s *rs)
 #endif
                             totsz += len;
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-                            //sprintf(rs->logs, "t %d -%d \n", opsz, pi);
-                            //print_f(rs->plogs, "P4", rs->logs);         
+                            sprintf(rs->logs, "t %d -%d \n", opsz, pi);
+                            print_f(rs->plogs, "P4", rs->logs);         
 #if MSP_P4_SAVE_DAT
                             fwrite(addr, 1, len, rs->fdat_s[0]);
                             fflush(rs->fdat_s[0]);
