@@ -77,18 +77,23 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_EXTPULSE       0x3d
 #define OP_SUPBACK        0x3e
 #define OP_LOG                0x3f
+
 #define OP_RGRD              0x40
 #define OP_RGWT              0x41
 #define OP_RGDAT            0x42
 #define OP_RGADD_H       0x43
 #define OP_RGADD_L        0x44
 
+#define OP_CROP_LU        0x45
+#define OP_CROP_LD        0x46
+#define OP_CROP_RD        0x47
+#define OP_CROP_RU        0x48
+
 /*
 #define OP_DAT 0x08
 #define OP_SCM 0x09
 #define OP_DUL 0x0a
 */
-
 #define OP_FUNCTEST_00              0x70
 #define OP_FUNCTEST_01              0x71
 #define OP_FUNCTEST_02              0x72
@@ -150,6 +155,7 @@ typedef enum {
     SDAO,        // f
     WTBAKP,     // 10
     WTBAKQ,     // 11
+    CROPR,     // 11
     SMAX,
 }state_e;
 
@@ -244,7 +250,15 @@ typedef enum {
     ASPOP_FUNTEST_13,
     ASPOP_FUNTEST_14,
     ASPOP_FUNTEST_15,
-    ASPOP_CODE_MAX, /* 52 */
+    ASPOP_CROP_LU,
+    ASPOP_CROP_LD,
+    ASPOP_CROP_RD,
+    ASPOP_CROP_RU,
+    ASPOP_CROP_COOR_XH,
+    ASPOP_CROP_COOR_XL,
+    ASPOP_CROP_COOR_YH,
+    ASPOP_CROP_COOR_YL,
+    ASPOP_CODE_MAX, /* 56 */
 } aspOpCode_e;
 
 typedef enum {
@@ -3345,6 +3359,88 @@ inline uint32_t emb_process(uint32_t result, uint32_t flag)
     return result;
 }
 
+static uint32_t next_CROPR(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSACT;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSRLT;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSTSM;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSSET;
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = 0;
+        } else {
+            next = PSMAX;
+        }
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static uint32_t next_WTBAKQ(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
@@ -3429,8 +3525,8 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSMAX;
-                evt = WTBAKQ; 
+                next = PSSET;
+                evt = CROPR; 
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -5064,6 +5160,11 @@ static int ps_next(struct psdata_s *data)
             break;
         case WTBAKQ:
             ret = next_WTBAKQ(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case CROPR:
+            ret = next_CROPR(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -9475,14 +9576,15 @@ static int stwtbak_74(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stwtbak_75(struct psdata_s *data)
+static int stcrop_75(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
     struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
 
-
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
@@ -9490,23 +9592,416 @@ static int stwtbak_75(struct psdata_s *data)
     c = &rs->pmch->cur;
 
     sprintf(rs->logs, "op_75 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "WTBAK", rs->logs);  
+    print_f(rs->plogs, "CROP", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            c->opcode = OP_SINGLE;
-            c->data = SINSCAN_SD_ONLY;
-            memset(p, 0, sizeof(struct info16Bit_s));
+            
+            pct[ASPOP_CROP_LU].opValue = 0;
+            pct[ASPOP_CROP_LU].opStatus = ASPOP_STA_APP;
 
-            ch = 41; 
+            pct[ASPOP_CROP_LD].opValue = 0;
+            pct[ASPOP_CROP_LD].opStatus = ASPOP_STA_APP;
 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_75: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "WTBAK", rs->logs);  
+            pct[ASPOP_CROP_RD].opValue = 0;
+            pct[ASPOP_CROP_RD].opStatus = ASPOP_STA_APP;
+
+            pct[ASPOP_CROP_RU].opValue = 0;
+            pct[ASPOP_CROP_RU].opStatus = ASPOP_STA_APP;
+
+            sprintf(rs->logs, "op_75, reset CROP value"); 
+            print_f(rs->plogs, "CROP", rs->logs);  
+            data->result = emb_result(data->result, NEXT);
+        
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stcrop_76(struct psdata_s *data)
+{ 
+    uint8_t uch=0;
+    int xyAr[4];
+    int id=0, err=0;
+    char ch = 0; 
+    uint32_t rlt;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    pct = data->rs->pcfgTable;
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    sprintf(rs->logs, "op_76 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "CROP", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = 0;
+            for (id=0; id < 4; id++) {
+                if ((!pdt) && (pct[ASPOP_CROP_LU + id].opStatus == ASPOP_STA_WR)) {
+                    pdt = &pct[ASPOP_CROP_LU + id];
+                }
+
+                xyAr[id] = -1;
+            }
+            if (pdt) {
+                for (id=0; id < 4; id++) {            
+                    if (pct[ASPOP_CROP_COOR_XH + id].opStatus == ASPOP_STA_UPD) {
+                        xyAr[id] = pct[ASPOP_CROP_COOR_XH + id].opValue;
+                    }
+                }
+
+                pdt->opValue = 0;
+                err = 0;
+                for (id=0; id < 4; id++) {
+                    if (xyAr[id] < 0) {
+                        sprintf(rs->logs, "ERROR!! wrong xy value - %d\n", xyAr[id]); 
+                        print_f(rs->plogs, "CROP", rs->logs);  
+                        err++;
+                    } else {
+                        uch = xyAr[id] & 0xff;
+                        pdt->opValue |= uch << (8 * id);
+                    }
+                }
+
+                if (!err) {
+                    pdt->opStatus = ASPOP_STA_UPD;
+                    sprintf(rs->logs, "DONE!! crop value - 0x%.8x\n", pdt->opValue); 
+                    print_f(rs->plogs, "CROP", rs->logs);  
+                } else {
+                    pdt->opStatus = ASPOP_STA_APP;
+                }
+            }
+            
+            pdt = 0;
+            for (id=0; id < 4; id++) {
+                if ((!pdt) && (pct[ASPOP_CROP_LU + id].opStatus == ASPOP_STA_APP)) {
+                    pdt = &pct[ASPOP_CROP_LU + id];
+                }
+            }
+
+            if (!pdt) {
+                for (id=0; id < 4; id++) {
+                    pdt = &pct[ASPOP_CROP_LU + id];
+                    sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", id, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
+                    print_f(rs->plogs, "CROP", rs->logs);  
+                }
+
+                sprintf(rs->logs, "op_76, update CROP coordinates DONE!!\n"); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+                sprintf(rs->logs, "op_76, send 0x%.2x, 0x%.2x\n", c->opcode, c->data); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+            }
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = 0;
+                for (id=0; id < 4; id++) {
+                    if ((!pdt) && (pct[ASPOP_CROP_LU + id].opStatus == ASPOP_STA_APP)) {
+                        pdt = &pct[ASPOP_CROP_LU + id];
+                    }
+                    pct[ASPOP_CROP_COOR_XH + id].opStatus = ASPOP_STA_WR;
+                    pct[ASPOP_CROP_COOR_XH + id].opValue = 0;
+                }
+
+                //pdt->opValue = p->data;
+                if (pdt) {
+                    pdt->opStatus = ASPOP_STA_WR;
+                    data->result = emb_result(data->result, NEXT);
+                } else {
+                    data->result = emb_result(data->result, EVTMAX);                
+                    sprintf(rs->logs, "op_76, can't find target table \n"); 
+                    print_f(rs->plogs, "CROP", rs->logs);  
+                }
+
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stcrop_77(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    sprintf(rs->logs, "op_77 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "CROP", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_CROP_COOR_XH];
+            if (pdt->opCode != OP_STLEN_00) {
+                sprintf(rs->logs, "op77, ASPOP_CROP_COOR_XH opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op77, ASPOP_CROP_COOR_XH status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_CROP_COOR_XH];
+                pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stcrop_78(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_78 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "CROP", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_CROP_COOR_XL];
+            if (pdt->opCode != OP_STLEN_01) {
+                sprintf(rs->logs, "op78, ASPOP_CROP_COOR_XL opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op78, ASPOP_CROP_COOR_XL status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_CROP_COOR_XL];
+                pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stcrop_79(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_79 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "CROP", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_CROP_COOR_YH];
+            if (pdt->opCode != OP_STLEN_02) {
+                sprintf(rs->logs, "op79, ASPOP_CROP_COOR_YH opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op79, ASPOP_CROP_COOR_YH status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_CROP_COOR_YH];
+                pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stcrop_80(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
+    pct = data->rs->pcfgTable;
+    rlt = abs_result(data->result); 
+
+    //sprintf(rs->logs, "op_80 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "CROP", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_CROP_COOR_YL];
+            if (pdt->opCode != OP_STLEN_03) {
+                sprintf(rs->logs, "op80, ASPOP_CROP_COOR_YL opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op80, ASPOP_CROP_COOR_YL status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "CROP", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                c->opcode = pdt->opCode;
+                c->data = pdt->opValue;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_CROP_COOR_YL];
+                pdt->opStatus = ASPOP_STA_UPD;
+                pdt->opValue = p->data;
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -11763,6 +12258,61 @@ end:
     return 0;
 }
 
+static int cmdfunc_crop_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_crop_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_DUAL_SD;
+    n = cmdfunc_upd2host(mrs, 'm', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_dulsd_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_regw_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
@@ -12440,7 +12990,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 24
+#define CMD_SIZE 25
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -12451,7 +13001,8 @@ static int dbg(struct mainRes_s *mrs)
                                 {8, "boot", cmdfunc_boot_opcode}, {9, "single", cmdfunc_single_opcode}, {10, "dnld", cmdfunc_dnld_opcode}, {11, "upld", cmdfunc_upld_opcode},
                                 {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}, {15, "op1", cmdfunc_op1_opcode}
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
-                                , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}};
+                                , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
+                                , {24, "crop", cmdfunc_crop_opcode}};
 
     p0_init(mrs);
 
@@ -13301,9 +13852,8 @@ static int fs19(struct mainRes_s *mrs, struct modersp_s *modersp)
         mrs->dataRx.r->folw.seq = 1;
         mrs->dataRx.r->psudo.seq = 1;
 
-        modersp->d = 0;
-        modersp->m = 1;
-        return 2;
+        modersp->r = 1;;
+        return 1;
     }
 
     return 0;
@@ -18147,7 +18697,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stsda_56, stsda_57, stsda_58, stsda_59, stsda_60}, // SDAN
                             {stsda_61, stsda_62, stwbk_63, stsdinit_64, stsdinit_65}, // SDAO
                             {stwtbak_66, stwtbak_67, stwtbak_68, stwtbak_69, stwtbak_70}, // WTBAKP
-                            {stwtbak_71, stwtbak_72, stwtbak_73, stwtbak_74, stwtbak_75}}; // WTBAKQ
+                            {stwtbak_71, stwtbak_72, stwtbak_73, stwtbak_74, stcrop_75}, // WTBAKQ
+                            {stcrop_76, stcrop_77, stcrop_78, stcrop_79, stcrop_80}}; // CROPR
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -18225,7 +18776,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'j') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, WTBAKQ, PSSET);
+                } else if (cmd == 'm') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, WTBAKQ, PSTSM);
                 }
+
 
 
                 if (cmdt != '\0') {
@@ -21891,6 +22446,70 @@ int main(int argc, char *argv[])
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
+        case ASPOP_CROP_LU: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_CROP_LU;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xffffffff;
+            ctb->opMask = ASPOP_MASK_32;
+            ctb->opBitlen = 32;
+            break;
+        case ASPOP_CROP_LD: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_CROP_LD;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xffffffff;
+            ctb->opMask = ASPOP_MASK_32;
+            ctb->opBitlen = 32;
+            break;
+        case ASPOP_CROP_RD: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_CROP_RD;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xffffffff;
+            ctb->opMask = ASPOP_MASK_32;
+            ctb->opBitlen = 32;
+            break;
+        case ASPOP_CROP_RU: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_CROP_RU;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xffffffff;
+            ctb->opMask = ASPOP_MASK_32;
+            ctb->opBitlen = 32;
+            break;
+        case ASPOP_CROP_COOR_XH: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_00;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_CROP_COOR_XL: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_01;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_CROP_COOR_YH: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_02;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_CROP_COOR_YL: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_STLEN_03;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
         default: break;
         }
     }
@@ -22024,12 +22643,6 @@ int main(int argc, char *argv[])
     pmrs->smode = 0;
     pmrs->smode |= SPI_MODE_1;
 
-    /* set RDY pin to low before spi setup ready */
-    bitset = 0;
-    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-    sprintf(pmrs->log, "Set RDY low at beginning\n");
-    print_f(&pmrs->plog, "SPI", pmrs->log);
-
     bitset = 1;
     msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(pmrs->log, "Set spi 0 slave ready: %d\n", bitset);
@@ -22044,6 +22657,12 @@ int main(int argc, char *argv[])
     msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
     bitset = 1;    
     msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+    /* set RDY pin to low before spi setup ready */
+    bitset = 0;
+    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(pmrs->log, "Set RDY low at beginning\n");
+    print_f(&pmrs->plog, "SPI", pmrs->log);
 
     /*
      * spi mode 
