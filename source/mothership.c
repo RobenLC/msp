@@ -20959,6 +20959,32 @@ static int p6(struct procRes_s *rs)
         sendbuf[3] = 0x01; /*??*/
         sendbuf[4] = 0xfc;
 
+        if (opcode == 0x15) { /* send CROP info */
+            sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            for (i = 0; i < 4; i++) {
+                pdt = &pct[ASPOP_CROP_LU + i];
+                sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", i, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
+                print_f(rs->plogs, "P6", rs->logs);  
+
+                sendbuf[3] = 'C';
+
+                sprintf(rs->logs, "%d,%d", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                n = strlen(rs->logs);
+                if (n > 256) n = 256;
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+            
+            goto socketEnd;
+        }
 
         if (opcode == 0x14) { /* update UTC time */
             sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);

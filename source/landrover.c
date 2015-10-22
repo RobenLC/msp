@@ -6334,6 +6334,8 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
+#define CROP_SCALE 900
+
 static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
     int id=0;
@@ -6343,8 +6345,8 @@ static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 100;
-    y = 100;
+    x = 1 * CROP_SCALE;
+    y = 1 * CROP_SCALE;
 
     tmp32 = (x << 16) | y;
 
@@ -6374,8 +6376,8 @@ static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 100;
-    y = 200;
+    x = 1 * CROP_SCALE;
+    y = 2 * CROP_SCALE;
     
     tmp32 = (x << 16) | y;
 
@@ -6405,8 +6407,8 @@ static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 200;
-    y = 200;
+    x = 2 * CROP_SCALE;
+    y = 2 * CROP_SCALE;
 
     tmp32 = (x << 16) | y;
 
@@ -6436,8 +6438,8 @@ static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 200;
-    y = 100;
+    x = 2 * CROP_SCALE;
+    y = 1 * CROP_SCALE;
 
     tmp32 = (x << 16) | y;
 
