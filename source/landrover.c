@@ -77,10 +77,12 @@
 #define OP_RGADD_H      0x43
 #define OP_RGADD_L      0x44
 
-#define OP_CROP_LU        0x45
-#define OP_CROP_LD        0x46
-#define OP_CROP_RD        0x47
-#define OP_CROP_RU        0x48
+#define OP_CROP_01        0x45
+#define OP_CROP_02        0x46
+#define OP_CROP_03        0x47
+#define OP_CROP_04        0x48
+#define OP_CROP_05        0x49
+#define OP_CROP_06        0x4a
 
 /*
 #define OP_DAT 0x08
@@ -136,6 +138,7 @@ typedef enum {
     AUTO_D,  // 6
     AUTO_E,  // 7
     AUTO_F,  // 8
+    AUTO_G,  // 9
     SMAX,   // 9
 }state_e;
 
@@ -733,21 +736,29 @@ static int next_spy(struct psdata_s *data)
                     next = PSWT;
                     evt = AUTO_B;
                     break;
-                case OP_CROP_LU:
+                case OP_CROP_01:
                     next = PSSET;
                     evt = AUTO_F;
                     break;
-                case OP_CROP_LD:
+                case OP_CROP_02:
                     next = PSACT;
                     evt = AUTO_F;
                     break;
-                case OP_CROP_RD:
+                case OP_CROP_03:
                     next = PSWT;
                     evt = AUTO_F;
                     break;
-                case OP_CROP_RU:
+                case OP_CROP_04:
                     next = PSRLT;
                     evt = AUTO_F;
+                    break;
+                case OP_CROP_05:
+                    next = PSTSM;
+                    evt = AUTO_F;
+                    break;
+                case OP_CROP_06:
+                    next = PSSET;
+                    evt = AUTO_G;
                     break;
 /*
                 case OP_SUPBACK:
@@ -1355,6 +1366,78 @@ static int next_auto_F(struct psdata_s *data)
     return emb_process(tmpRlt, next);
 }
 
+static int next_auto_G(struct psdata_s *data)
+{
+    int pro, rlt, next = -1;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+    evt = (data->result >> 8) & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "auto_A", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET: 
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            case PSACT: 
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            case PSWT: 
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "auto_D", str); 
+                next = PSTSM; 
+                evt = SPY;
+                break;
+            default:
+                sprintf(str, "default\n"); 
+                print_f(mlogPool, "laser", str); 
+                next = PSSET;
+                break;
+        }
+    }
+
+    if (next < 0) {
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+
+        next = PSTSM; /* break */
+        evt = SPY;
+    }
+
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static int next_error(struct psdata_s *data)
 {
     int pro, rlt, next;
@@ -1465,6 +1548,12 @@ static int ps_next(struct psdata_s *data)
             break;
         case AUTO_F:
             ret = next_auto_F(data);
+            evt = (ret >> 24) & 0xff;
+            nxtst = evt; /* end the test loop */
+
+            break;
+        case AUTO_G:
+            ret = next_auto_G(data);
             evt = (ret >> 24) & 0xff;
             nxtst = evt; /* end the test loop */
 
@@ -1702,11 +1791,13 @@ static int stspy_05(struct psdata_s *data)
                     case OP_RGADD_H:
                     case OP_RGADD_L:
 
-                    case OP_CROP_LU:
-                    case OP_CROP_RU:
-                    case OP_CROP_LD:
-                    case OP_CROP_RD:
-
+                    case OP_CROP_01:
+                    case OP_CROP_02:
+                    case OP_CROP_03:
+                    case OP_CROP_04:
+                    case OP_CROP_05:
+                    case OP_CROP_06:
+                    
                     case OP_SUPBACK:
                     case OP_DOUBLE:
                     case OP_SAVE:
@@ -3475,7 +3566,7 @@ static int stauto_26(struct psdata_s *data)
             p = &data->rs->pmch->cur;
             //memset(p, 0, sizeof(struct info16Bit_s));
 
-            p->opcode = OP_CROP_LU;
+            p->opcode = OP_CROP_01;
             p->data = 0xff;
             
             ch = 60; 
@@ -3523,7 +3614,7 @@ static int stauto_27(struct psdata_s *data)
             p = &data->rs->pmch->cur;
             //memset(p, 0, sizeof(struct info16Bit_s));
 
-            p->opcode = OP_CROP_LD;
+            p->opcode = OP_CROP_02;
             p->data = 0xff;
 
             ch = 61; 
@@ -3571,7 +3662,7 @@ static int stauto_28(struct psdata_s *data)
             p = &data->rs->pmch->cur;
             //memset(p, 0, sizeof(struct info16Bit_s));
 
-            p->opcode = OP_CROP_RD;
+            p->opcode = OP_CROP_03;
             p->data = 0xff;
 
             ch = 62; 
@@ -3619,7 +3710,7 @@ static int stauto_29(struct psdata_s *data)
             p = &data->rs->pmch->cur;
             //memset(p, 0, sizeof(struct info16Bit_s));
 
-            p->opcode = OP_CROP_RU;
+            p->opcode = OP_CROP_04;
             p->data = 0xff;
 
             ch = 63; 
@@ -3655,11 +3746,107 @@ static int stauto_30(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     struct info16Bit_s *p, *g;
+    struct SdAddrs_s *s, *m;
+
+    rlt = abs_result(data->result);
+    
+    switch (rlt) {
+        case STINIT:
+            s = &data->rs->pmch->sdst;
+            m = &data->rs->pmch->sdln;
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            //memset(p, 0, sizeof(struct info16Bit_s));
+
+            p->opcode = OP_CROP_05;
+            p->data = 0xff;
+
+            ch = 64; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(str, "go %d\n", ch);  
+            print_f(mlogPool, "auto_30", str);  
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+
+            if ((data->ansp0 & 0xff) == g->opcode) {
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
+                print_f(mlogPool, "auto_30", str);  
+                data->result = emb_result(data->result, NEXT);
+            }
+            
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_31(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+    struct SdAddrs_s *s, *m;
+
+    rlt = abs_result(data->result);
+    
+    switch (rlt) {
+        case STINIT:
+            s = &data->rs->pmch->sdst;
+            m = &data->rs->pmch->sdln;
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            //memset(p, 0, sizeof(struct info16Bit_s));
+
+            p->opcode = OP_CROP_06;
+            p->data = 0xff;
+
+            ch = 65; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(str, "go %d\n", ch);  
+            print_f(mlogPool, "auto_31", str);  
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+
+            if ((data->ansp0 & 0xff) == g->opcode) {
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
+                print_f(mlogPool, "auto_31", str);  
+                data->result = emb_result(data->result, NEXT);
+            }
+            
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_32(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
     int *pSdInit = 0, SDinit = 0;
     
     rlt = abs_result(data->result);	
     sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_30", str);  
+    print_f(mlogPool, "auto_32", str);  
 
     switch (rlt) {
         case STINIT:
@@ -3671,11 +3858,8 @@ static int stauto_30(struct psdata_s *data)
             SDinit = *pSdInit;
             msync(pSdInit, sizeof(int), MS_SYNC);
             
-            p->opcode = OP_SDSTATS;
-            p->data = SDinit & 0xff;
-
-            sprintf(str, "SD status: 0x%.2x \n", p->data);  
-            print_f(mlogPool, "auto_30", str);  
+            p->opcode = 0;
+            p->data = 0;
 
             ch = 24; 
             rs_ipc_put(data->rs, &ch, 1);
@@ -3689,7 +3873,160 @@ static int stauto_30(struct psdata_s *data)
             
             if (g->opcode == p->opcode) {
                 sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
-                print_f(mlogPool, "auto_30", str);  
+                print_f(mlogPool, "auto_32", str);  
+                data->result = emb_result(data->result, NEXT);
+            }	
+            
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_33(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+    int *pSdInit = 0, SDinit = 0;
+    
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_33", str);  
+
+    switch (rlt) {
+        case STINIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            pSdInit = data->rs->psd_init;
+            SDinit = *pSdInit;
+            msync(pSdInit, sizeof(int), MS_SYNC);
+            
+            p->opcode = 0;
+            p->data = 0;
+
+            ch = 24; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            
+            if (g->opcode == p->opcode) {
+                sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
+                print_f(mlogPool, "auto_33", str);  
+                data->result = emb_result(data->result, NEXT);
+            }	
+            
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_34(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+    int *pSdInit = 0, SDinit = 0;
+    
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_34", str);  
+
+    switch (rlt) {
+        case STINIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            pSdInit = data->rs->psd_init;
+            SDinit = *pSdInit;
+            msync(pSdInit, sizeof(int), MS_SYNC);
+            
+            p->opcode = 0;
+            p->data = 0;
+
+            ch = 24; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            
+            if (g->opcode == p->opcode) {
+                sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
+                print_f(mlogPool, "auto_34", str);  
+                data->result = emb_result(data->result, NEXT);
+            }	
+            
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            break;
+        default:
+            break;
+    }
+    return ps_next(data);
+}
+
+static int stauto_35(struct psdata_s *data) 
+{
+    char str[128], ch = 0;
+    uint32_t rlt;
+    struct info16Bit_s *p, *g;
+    int *pSdInit = 0, SDinit = 0;
+    
+    rlt = abs_result(data->result);	
+    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    print_f(mlogPool, "auto_35", str);  
+
+    switch (rlt) {
+        case STINIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            pSdInit = data->rs->psd_init;
+            SDinit = *pSdInit;
+            msync(pSdInit, sizeof(int), MS_SYNC);
+            
+            p->opcode = 0;
+            p->data = 0;
+
+            ch = 24; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+
+            memset(g, 0, sizeof(struct info16Bit_s));
+            break;
+        case WAIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+            
+            if (g->opcode == p->opcode) {
+                sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
+                print_f(mlogPool, "auto_35", str);  
                 data->result = emb_result(data->result, NEXT);
             }	
             
@@ -4644,11 +4981,13 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_RGADD_H:
         case OP_RGADD_L:
 
-        case OP_CROP_LU:
-        case OP_CROP_RU:
-        case OP_CROP_LD:
-        case OP_CROP_RD:
-        
+        case OP_CROP_01:
+        case OP_CROP_02:
+        case OP_CROP_03:
+        case OP_CROP_04:
+        case OP_CROP_05:
+        case OP_CROP_06:
+
         case OP_SUPBACK:
         case OP_SAVE:
         case OP_FUNCTEST_00:
@@ -6334,10 +6673,17 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define CROP_SCALE 900
+#define CROP_COOD_01 {20, 80}
+#define CROP_COOD_02 {75, 135}
+#define CROP_COOD_03 {85, 135}
+#define CROP_COOD_04 {140, 80}
+#define CROP_COOD_05 {85, 25}
+#define CROP_COOD_06 {75, 25}
 
+#define CROP_SCALE 10
 static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
+    int axy[2] = CROP_COOD_01;
     int id=0;
     uint32_t tmp32=0;
     uint16_t  x=0, y=0;
@@ -6345,8 +6691,8 @@ static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 1 * CROP_SCALE;
-    y = 1 * CROP_SCALE;
+    x = axy[0] * CROP_SCALE;
+    y = axy[1] * CROP_SCALE;;
 
     tmp32 = (x << 16) | y;
 
@@ -6368,6 +6714,7 @@ static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
+    int axy[2] = CROP_COOD_02;
     int id=0;
     uint32_t tmp32=0;
 
@@ -6376,8 +6723,8 @@ static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 1 * CROP_SCALE;
-    y = 2 * CROP_SCALE;
+    x = axy[0] * CROP_SCALE;
+    y = axy[1] * CROP_SCALE;;
     
     tmp32 = (x << 16) | y;
 
@@ -6399,6 +6746,7 @@ static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
+    int axy[2] = CROP_COOD_03;
     int id=0;
     uint32_t tmp32=0;
 
@@ -6407,8 +6755,8 @@ static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 2 * CROP_SCALE;
-    y = 2 * CROP_SCALE;
+    x = axy[0] * CROP_SCALE;
+    y = axy[1] * CROP_SCALE;;
 
     tmp32 = (x << 16) | y;
 
@@ -6430,6 +6778,7 @@ static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
+    int axy[2] = CROP_COOD_04;
     int id=0;
     uint32_t tmp32=0;
 
@@ -6438,8 +6787,8 @@ static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 2 * CROP_SCALE;
-    y = 1 * CROP_SCALE;
+    x = axy[0] * CROP_SCALE;
+    y = axy[1] * CROP_SCALE;;
 
     tmp32 = (x << 16) | y;
 
@@ -6461,6 +6810,7 @@ static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
+    int axy[2] = CROP_COOD_05;
     int id=0;
     uint32_t tmp32=0;
 
@@ -6469,32 +6819,86 @@ static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    x = 0;
-    y = 0;
+    x = axy[0] * CROP_SCALE;
+    y = axy[1] * CROP_SCALE;;
 
     tmp32 = (x << 16) | y;
-    
+
     pslen->n = 0;
     for (id = 0; id < 4; id++) {
         pslen->d[id] = (tmp32 >> (8 * (3 - id))) & 0xff;
     }
 
-    sprintf(mrs->log, "x, y = (%d, %d)\n", x, y);  
+    sprintf(mrs->log, "x, y = (%d, %d)[0x%.8x]\n", x, y, pslen->n);
     print_f(&mrs->plog, "fs64", mrs->log);
-
-    pslen->n = (x << 16) | y;
 
     pslen->f = 0xf;
     pslen->f |= 0x200;
     
-    //modersp->m = 24;
+    modersp->m = 24;
+    //modersp->r = 1;
+    return 0;
+}
+
+static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    int axy[2] = CROP_COOD_06;
+    int id=0;
+    uint32_t tmp32=0;
+
+    uint16_t  x=0, y=0;
+    struct SdAddrs_s *psstr, *pslen;
+    
+    pslen = &mrs->mchine.sdln;
+
+    x = axy[0] * CROP_SCALE;
+    y = axy[1] * CROP_SCALE;;
+
+    tmp32 = (x << 16) | y;
+
+    pslen->n = 0;
+    for (id = 0; id < 4; id++) {
+        pslen->d[id] = (tmp32 >> (8 * (3 - id))) & 0xff;
+    }
+
+    sprintf(mrs->log, "x, y = (%d, %d)[0x%.8x]\n", x, y, pslen->n);
+    print_f(&mrs->plog, "fs65", mrs->log);
+
+    pslen->f = 0xf;
+    pslen->f |= 0x200;
+    
+    modersp->m = 24;
+    //modersp->r = 1;
+    return 0;
+}
+
+static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    modersp->r = 1;
+    return 1;
+}
+
+static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    modersp->r = 1;
+    return 1;
+}
+
+static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    modersp->r = 1;
+    return 1;
+}
+
+static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
     modersp->r = 1;
     return 1;
 }
 
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 65
+#define PS_NUM 70
     int len, tmp, ret;
     char str[128], ch;
 
@@ -6511,7 +6915,8 @@ static int p0(struct mainRes_s *mrs)
                                  {45, fs45},{46, fs46},{47, fs47},{48, fs48},{49, fs49},
                                  {50, fs50},{51, fs51},{52, fs52},{53, fs53},{54, fs54},
                                  {55, fs55},{56, fs56},{57, fs57},{58, fs58},{59, fs59},
-                                 {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64}};
+                                 {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64},
+                                 {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69}};
 
     p0_init(mrs);
 
@@ -6595,7 +7000,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stauto_11, stauto_12, stauto_13, stauto_14, stauto_15}, // AUTO_C
                             {stauto_16, stauto_17, stauto_18, stauto_19, stauto_20}, // AUTO_D
                             {stauto_21, stauto_22, stauto_23, stauto_24, stauto_25}, // AUTO_E
-                            {stauto_26, stauto_27, stauto_28, stauto_29, stauto_30}}; // AUTO_F
+                            {stauto_26, stauto_27, stauto_28, stauto_29, stauto_30}, // AUTO_F
+                            {stauto_31, stauto_32, stauto_33, stauto_34, stauto_35}}; // AUTO_G
     /* A.1 ~ A.4 for start sector 01 - 04*/
     /* A.5 = A.8 for sector len   01 - 04*/
     /* A.9 for sd sector transmitting using command mode */
