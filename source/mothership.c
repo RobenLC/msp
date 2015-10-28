@@ -159,6 +159,7 @@ typedef enum {
     WTBAKP,     // 10
     WTBAKQ,     // 11
     CROPR,     // 11
+    VECTORS, // 12
     SMAX,
 }state_e;
 
@@ -3377,6 +3378,88 @@ inline uint32_t emb_process(uint32_t result, uint32_t flag)
     return result;
 }
 
+static uint32_t next_VECTORS(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSMAX;
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = clr_bk(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = clr_fw(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static uint32_t next_CROPR(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
@@ -5183,6 +5266,11 @@ static int ps_next(struct psdata_s *data)
             break;
         case CROPR:
             ret = next_CROPR(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case VECTORS:
+            ret = next_VECTORS(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -10068,6 +10156,226 @@ static int stcrop_80(struct psdata_s *data)
     return ps_next(data);
 }
 
+static int stvector_81(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_81 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "VECTOR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 101; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_81: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "VECTOR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stvector_82(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_82 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "VECTOR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 41; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_82: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "VECTOR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stvector_83(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_83 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "VECTOR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 41; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_83: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "VECTOR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stvector_84(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_84 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "VECTOR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 41; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_84: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "VECTOR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stvector_85(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_85 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "VECTOR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 41; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_85: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "VECTOR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
 static int stspy_01(struct psdata_s *data)
 { 
     // keep polling, kind of idle mode
@@ -12311,6 +12619,61 @@ end:
     return 0;
 }
 
+static int cmdfunc_vector_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_vector_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_DUAL_SD;
+    n = cmdfunc_upd2host(mrs, 'o', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_vector_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_crop_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
@@ -13043,7 +13406,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 25
+#define CMD_SIZE 26
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -13055,7 +13418,7 @@ static int dbg(struct mainRes_s *mrs)
                                 {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}, {15, "op1", cmdfunc_op1_opcode}
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
-                                , {24, "crop", cmdfunc_crop_opcode}};
+                                , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}};
 
     p0_init(mrs);
 
@@ -18599,7 +18962,238 @@ static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
+#define CROP_SCALE 10
+
+#define CROP_COOD_01 {20  * CROP_SCALE, 80  * CROP_SCALE}
+#define CROP_COOD_02 {75  * CROP_SCALE, 135 * CROP_SCALE}
+#define CROP_COOD_03 {85  * CROP_SCALE, 135 * CROP_SCALE}
+#define CROP_COOD_04 {140 * CROP_SCALE, 80  * CROP_SCALE}
+#define CROP_COOD_05 {85   * CROP_SCALE, 25  * CROP_SCALE}
+#define CROP_COOD_06 {75   * CROP_SCALE, 25  * CROP_SCALE}
+
+static int getVector(double *vec, double *p1, double *p2)
+{
+    double a1, b, a2;
+    double x1, y1, x2, y2;
+
+    if (!vec) return -1;
+    if (!p1) return -2;
+    if (!p2) return -3;
+
+    x1 = p1[0];
+    y1 = p1[1];
+
+    x2 = p2[0];
+    y2 = p2[1];
+
+    printf("getVector() input - p1 = (%lf, %lf), p2 = (%lf, %lf)\n", x1, y1, x2, y2);
+    
+    b = ((x2 * y1) - (x1 * y2)) / (x2 - x1);
+
+    a1 = ((x1 * y2) - (x1 * y1)) / ((x1 * x2) - (x1 * x1));
+    a2 = ((x2 * y2) - (x2 * y1)) / ((x2 * x2) - (x2 * x1));
+
+    printf("getVector() output - a = %lf/%lf, b = %lf\n", a1, a2, b);
+
+    vec[0] = a1;
+    vec[1] = b;
+
+    return 0;
+
+}
+
+static int getCross(double *v1, double *v2, double *pt)
+{
+    double a1, a2, b1, b2;
+    double x, y;
+
+    if (!v1) return -1;
+    if (!v2) return -2;
+    if (!pt) return -3;
+
+    a1 = v1[0];
+    b1 = v1[1];
+
+    a2 = v2[0];
+    b2 = v2[1];
+
+    y = ((a1 * b2) - (a2 * b1)) / (a1 - a2);
+    x = (b2 - b1) / (a1 - a2);
+
+    printf("getCross() output - pt = (%lf, %lf)\n", x, y);
+
+    pt[0] = x;
+    pt[1] = y;
+    
+    return 0;
+}
+
+static int calcuDistance(double *dist, double *p1, double *p2) 
+{
+    double x1, y1, x2, y2;
+    double dx, dy, ds;
+
+    if (!dist) return -1;
+    if (!p1) return -2;
+    if (!p2) return -3;
+
+    x1 = p1[0];
+    y1 = p1[1];
+
+    x2 = p2[0];
+    y2 = p2[1];
+
+    dx = x1 - x2;
+    dy = y1 - y2;
+
+    ds = dx * dx + dy * dy;
+    
+    printf("calcuDistance() output - ds = %lf \n", ds);    
+
+    *dist = ds;
+    return 0;
+}
+
+static int findReplace(double *pt, double *pp, int id1, int id2)
+{
+
+    return 0;
+}
+
+static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int ret=0, id=0, id1=0, id2=0;
+    double c01[2] = CROP_COOD_01;
+    double c02[2] = CROP_COOD_02;
+    double c03[2] = CROP_COOD_03;
+    double c04[2] = CROP_COOD_04;
+    double c05[2] = CROP_COOD_05;
+    double c06[2] = CROP_COOD_06;
+
+    double vect01[2] = {0, 0};
+    double vect02[2] = {0, 0};
+    double vect03[2] = {0, 0};
+    double vect04[2] = {0, 0};
+    double vect05[2] = {0, 0};
+    double vect06[2] = {0, 0};
+
+    double cross[6][2];
+    
+    double cros01[2] = {0, 0};
+    double cros02[2] = {0, 0};
+    double cros03[2] = {0, 0};
+    double cros04[2] = {0, 0};
+    double cros05[2] = {0, 0};
+    double cros06[2] = {0, 0};
+
+    double ds, dt1, dt2, dmin[6][2];
+    int idm[6][2];
+    
+    sprintf(mrs->log, "calculate ...\n");
+    print_f(&mrs->plog, "fs101", mrs->log);
+
+    ret = getVector(vect01, c01, c02);
+    ret = getVector(vect02, c02, c03);
+    ret = getVector(vect03, c03, c04);
+    ret = getVector(vect04, c04, c05);
+    ret = getVector(vect05, c05, c06);
+    ret = getVector(vect06, c06, c01);
+
+    ret = getCross(vect01, vect03, cross[0]);
+    ret = getCross(vect02, vect04, cross[1]);
+    ret = getCross(vect03, vect05, cross[2]);
+    ret = getCross(vect04, vect06, cross[3]);
+    ret = getCross(vect05, vect01, cross[4]);
+    ret = getCross(vect06, vect02, cross[5]);
+
+    for (id = 0; id < 6; id++) {
+        id1 = -1;
+        id2 = -1;
+        ret = calcuDistance(&ds, cross[id], c01);
+        id1 = 1;
+        dt1 = ds;
+        ret = calcuDistance(&ds, cross[id], c02);
+        id2 = 2;
+        dt2 = ds;
+        ret = calcuDistance(&ds, cross[id], c03);
+        if ((dt1 > ds) || (dt2 > ds)) {
+            if (dt1 > dt2) {
+                dt1 = ds;     
+                id1 = 3;
+            } else {
+                dt2 = ds;
+                id2 = 3;
+            }
+        }
+        ret = calcuDistance(&ds, cross[id], c04);
+        if ((dt1 > ds) || (dt2 > ds)) {
+            if (dt1 > dt2) {
+                dt1 = ds;     
+                id1 = 4;
+            } else {
+                dt2 = ds;
+                id2 = 4;
+            }
+        }
+        ret = calcuDistance(&ds, cross[id], c05);
+        if ((dt1 > ds) || (dt2 > ds)) {
+            if (dt1 > dt2) {
+                dt1 = ds;     
+                id1 = 5;
+            } else {
+                dt2 = ds;
+                id2 = 5;
+            }
+        }
+        ret = calcuDistance(&ds, cross[id], c06);
+        if ((dt1 > ds) || (dt2 > ds)) {
+            if (dt1 > dt2) {
+                dt1 = ds;     
+                id1 = 6;
+            } else {
+                dt2 = ds;
+                id2 = 6;
+            }
+        }
+        dmin[id][0] = dt1;
+        dmin[id][1] = dt2;
+        idm[id][0] = id1;
+        idm[id][1] = id2;
+    }
+
+    dt1 = -1;
+    dt2 = -1;
+    
+    for (id = 0; id < 6; id++) {
+        if ((dt1 < 0) || (dt2 < 0)) {
+            if (dt1 < 0) {
+                dt1 = dmin[id][0] + dmin[id][1];
+                id1 = id;
+            } else {
+                dt2 = dmin[id][0] + dmin[id][1];
+                id2 = id;
+            }
+        } else {
+            ds = dmin[id][0] + dmin[id][1];
+            if ((dt1 > ds) || (dt2 > ds)) {
+                if (dt1 > dt2) {
+                    dt1 = ds;
+                    id1 = id;
+                } else {
+                    dt2 = ds;
+                    id2 = id;
+                }
+            }
+        }
+        printf("pt: (%lf, %lf) dmin: (%lf)(%lf)/(%d)(%d)\n", cross[id][0], cross[id][1], dmin[id][0], dmin[id][1], idm[id][0], idm[id][1]);
+    }
+
+    printf("replace (%d, %d) with %d, and (%d, %d) with %d, distance: (%lf, %lf)(%lf, %lf)\n", idm[id1][0], idm[id1][1], id1, idm[id2][0], idm[id2][1], id2, dmin[id1][0], dmin[id1][1], dmin[id2][0], dmin[id2][1]);
+    
+    modersp->r = 1; 
+    return 1;
+}
+
 static int fs102(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs103(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
 static int fs104(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
@@ -18751,7 +19345,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stsda_61, stsda_62, stwbk_63, stsdinit_64, stsdinit_65}, // SDAO
                             {stwtbak_66, stwtbak_67, stwtbak_68, stwtbak_69, stwtbak_70}, // WTBAKP
                             {stwtbak_71, stwtbak_72, stwtbak_73, stwtbak_74, stcrop_75}, // WTBAKQ
-                            {stcrop_76, stcrop_77, stcrop_78, stcrop_79, stcrop_80}}; // CROPR
+                            {stcrop_76, stcrop_77, stcrop_78, stcrop_79, stcrop_80}, // CROPR
+                            {stvector_81, stvector_82, stvector_83, stvector_84, stvector_85}}; // VECTORS
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -18832,6 +19427,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'm') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, WTBAKQ, PSTSM);
+                } else if (cmd == 'o') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, VECTORS, PSSET);
                 }
 
 

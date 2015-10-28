@@ -6673,14 +6673,14 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define CROP_COOD_01 {20, 80}
-#define CROP_COOD_02 {75, 135}
-#define CROP_COOD_03 {85, 135}
-#define CROP_COOD_04 {140, 80}
-#define CROP_COOD_05 {85, 25}
-#define CROP_COOD_06 {75, 25}
+#define CROP_COOD_01 {818, 557}
+#define CROP_COOD_02 {980, 1557}
+#define CROP_COOD_03 {1168, 1557}
+#define CROP_COOD_04 {1586, 1484}
+#define CROP_COOD_05 {1415, 487}
+#define CROP_COOD_06 {1253, 487}
 
-#define CROP_SCALE 10
+#define CROP_SCALE 1
 static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
     int axy[2] = CROP_COOD_01;
