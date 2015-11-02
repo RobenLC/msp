@@ -84,6 +84,8 @@
 #define OP_CROP_05        0x49
 #define OP_CROP_06        0x4a
 
+#define OP_IMG_LEN        0x4b
+
 /*
 #define OP_DAT 0x08
 #define OP_SCM 0x09
@@ -758,6 +760,10 @@ static int next_spy(struct psdata_s *data)
                     break;
                 case OP_CROP_06:
                     next = PSSET;
+                    evt = AUTO_G;
+                    break;
+                case OP_IMG_LEN:
+                    next = PSACT;
                     evt = AUTO_G;
                     break;
 /*
@@ -1797,7 +1803,8 @@ static int stspy_05(struct psdata_s *data)
                     case OP_CROP_04:
                     case OP_CROP_05:
                     case OP_CROP_06:
-                    
+                    case OP_IMG_LEN:
+
                     case OP_SUPBACK:
                     case OP_DOUBLE:
                     case OP_SAVE:
@@ -3842,40 +3849,37 @@ static int stauto_32(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     struct info16Bit_s *p, *g;
-    int *pSdInit = 0, SDinit = 0;
-    
-    rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_32", str);  
+    struct SdAddrs_s *s, *m;
 
+    rlt = abs_result(data->result);
+    
     switch (rlt) {
         case STINIT:
+            s = &data->rs->pmch->sdst;
+            m = &data->rs->pmch->sdln;
             g = &data->rs->pmch->get;
             p = &data->rs->pmch->cur;
-            memset(p, 0, sizeof(struct info16Bit_s));
+            //memset(p, 0, sizeof(struct info16Bit_s));
 
-            pSdInit = data->rs->psd_init;
-            SDinit = *pSdInit;
-            msync(pSdInit, sizeof(int), MS_SYNC);
-            
-            p->opcode = 0;
-            p->data = 0;
+            p->opcode = OP_IMG_LEN;
+            p->data = 0xff;
 
-            ch = 24; 
+            ch = 66; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
+            sprintf(str, "go %d\n", ch);  
+            print_f(mlogPool, "auto_32", str);  
 
             memset(g, 0, sizeof(struct info16Bit_s));
             break;
         case WAIT:
             g = &data->rs->pmch->get;
-            p = &data->rs->pmch->cur;
-            
-            if (g->opcode == p->opcode) {
-                sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
+
+            if ((data->ansp0 & 0xff) == g->opcode) {
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                 print_f(mlogPool, "auto_32", str);  
                 data->result = emb_result(data->result, NEXT);
-            }	
+            }
             
             break;
         case NEXT:
@@ -4987,6 +4991,7 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_CROP_04:
         case OP_CROP_05:
         case OP_CROP_06:
+        case OP_IMG_LEN:
 
         case OP_SUPBACK:
         case OP_SAVE:
@@ -6874,8 +6879,29 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
-    modersp->r = 1;
-    return 1;
+    int id=0;
+    uint32_t tmp32=0;
+
+    struct SdAddrs_s *psstr, *pslen;
+    
+    pslen = &mrs->mchine.sdln;
+
+    tmp32 = 16848152; //0x01011518
+
+    pslen->n = 0;
+    for (id = 0; id < 4; id++) {
+        pslen->d[id] = (tmp32 >> (8 * (3 - id))) & 0xff;
+    }
+
+    sprintf(mrs->log, "scan length = (%d)[0x%.8x]\n", tmp32, pslen->n);
+    print_f(&mrs->plog, "fs66", mrs->log);
+
+    pslen->f = 0xf;
+    pslen->f |= 0x200;
+    
+    modersp->m = 24;
+    //modersp->r = 1;
+    return 0;
 }
 
 static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)  

@@ -92,6 +92,7 @@ static char spi0[] = "/dev/spidev32765.0";
 #define OP_CROP_05        0x49
 #define OP_CROP_06        0x4a
 
+#define OP_IMG_LEN        0x4b
 /*
 #define OP_DAT 0x08
 #define OP_SCM 0x09
@@ -260,6 +261,7 @@ typedef enum {
     ASPOP_CROP_04,
     ASPOP_CROP_05,
     ASPOP_CROP_06,
+    ASPOP_IMG_LEN,
     ASPOP_CROP_COOR_XH,
     ASPOP_CROP_COOR_XL,
     ASPOP_CROP_COOR_YH,
@@ -9738,6 +9740,9 @@ static int stcrop_75(struct psdata_s *data)
             pct[ASPOP_CROP_06].opValue = 0;
             pct[ASPOP_CROP_06].opStatus = ASPOP_STA_APP;
 
+            pct[ASPOP_IMG_LEN].opValue = 0;
+            pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+
             sprintf(rs->logs, "op_75, reset CROP value"); 
             print_f(rs->plogs, "CROP", rs->logs);  
             data->result = emb_result(data->result, NEXT);
@@ -9789,7 +9794,7 @@ static int stcrop_76(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = 0;
-            for (id=0; id < 6; id++) {
+            for (id=0; id < 7; id++) {
                 if ((!pdt) && (pct[ASPOP_CROP_01 + id].opStatus == ASPOP_STA_WR)) {
                     pdt = &pct[ASPOP_CROP_01 + id];
                 }
@@ -9826,17 +9831,23 @@ static int stcrop_76(struct psdata_s *data)
             }
             
             pdt = 0;
-            for (id=0; id < 6; id++) {
+            for (id=0; id < 7; id++) {
                 if ((!pdt) && (pct[ASPOP_CROP_01 + id].opStatus == ASPOP_STA_APP)) {
                     pdt = &pct[ASPOP_CROP_01 + id];
                 }
             }
 
             if (!pdt) {
-                for (id=0; id < 6; id++) {
-                    pdt = &pct[ASPOP_CROP_01 + id];
-                    sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", id, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
-                    print_f(rs->plogs, "CROP", rs->logs);  
+                for (id=0; id < 7; id++) {
+                    if (id == 6) {
+                        pdt = &pct[ASPOP_CROP_01 + id];
+                        sprintf(rs->logs, "%d. %x (%d) [0x%.8x]\n", id, pdt->opStatus, pdt->opValue, pdt->opValue); 
+                        print_f(rs->plogs, "CROP", rs->logs);  
+                    } else {
+                        pdt = &pct[ASPOP_CROP_01 + id];
+                        sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", id, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
+                        print_f(rs->plogs, "CROP", rs->logs);  
+                    }
                 }
 
                 sprintf(rs->logs, "op_76, update CROP coordinates DONE!!\n"); 
@@ -9859,7 +9870,7 @@ static int stcrop_76(struct psdata_s *data)
         case WAIT:
             if (data->ansp0 == 1) {
                 pdt = 0;
-                for (id=0; id < 6; id++) {
+                for (id=0; id < 7; id++) {
                     if ((!pdt) && (pct[ASPOP_CROP_01 + id].opStatus == ASPOP_STA_APP)) {
                         pdt = &pct[ASPOP_CROP_01 + id];
                     }
@@ -21577,7 +21588,7 @@ static int p6(struct procRes_s *rs)
             cnt = 0;
             while (1) {
                 num = 0;
-                for (i = 0; i < 6; i++) {
+                for (i = 0; i < 7; i++) {
                     pdt = &pct[ASPOP_CROP_01 + i];
                     if (pdt->opStatus == ASPOP_STA_UPD) {
                         num++;
@@ -21598,7 +21609,7 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
-            for (i = 0; i < 6; i++) {
+            for (i = 0; i < 7; i++) {
                 pdt = &pct[ASPOP_CROP_01 + i];
 
                 if (pdt->opStatus != ASPOP_STA_UPD) {
@@ -23196,6 +23207,14 @@ int main(int argc, char *argv[])
         case ASPOP_CROP_06: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_CROP_06;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xffffffff;
+            ctb->opMask = ASPOP_MASK_32;
+            ctb->opBitlen = 32;
+            break;
+        case ASPOP_IMG_LEN: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_IMG_LEN;
             ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xffffffff;
             ctb->opMask = ASPOP_MASK_32;
