@@ -1049,6 +1049,25 @@ static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval)
     return 0;
 }
 
+static int cfgTableGetChk(struct aspConfig_s *table, int idx, uint32_t *rval, uint32_t stat)
+{
+    struct aspConfig_s *p=0;
+    int ret=0;
+
+    if (!rval) return -1;
+    if (!table) return -1;
+    if (idx >= ASPOP_CODE_MAX) return -1;
+
+    p = &table[idx];
+    if (!p) return -2;
+
+    if (p->opStatus != stat) return -3;
+
+    *rval = p->opValue;
+
+    return 0;
+}
+
 static int asp_idxofch(char *str, char ch, int start, int max) 
 {
     int i=0, ret=-1;
@@ -18501,15 +18520,63 @@ static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 2;
 }
 
+static int changeJpgLen(uint8_t *data, uint32_t tlen, int max)
+{
+    int ret = -1, ix = 0, staf = 0;
+    uint8_t marker[2] = {0, 0};
+    uint32_t imgLen[2] = {0, 0};
+    uint8_t ch = 0;
+    uint32_t len = 0;
+
+    if (!data) return -2;
+    if (!max) return -3;
+    
+    msync(data, max, MS_SYNC);
+    
+    for (ix=0; ix < max; ix++) {
+        ch = data[ix];
+    
+        if (ch == 0xff) {
+            marker[0] = ch;
+            staf = 1;
+        } 
+        else if (staf == 1) {
+            if (((ch >> 4) == 0xc) && ((ch & 0xf) != 4)) {
+                marker[1] = ch;
+                
+                imgLen[1] = data[ix + 4];
+                imgLen[0] = data[ix + 5];
+                                
+                len = (imgLen[1] << 8) + imgLen[0];   
+
+                printf("[changeImgLen] Length = %d -> %d\n", len, tlen);
+                
+                data[ix + 4] = tlen >> 8;
+                data[ix + 5] = tlen & 0xff;;
+
+                ret = 0;
+                break;
+            }
+            staf = 0;
+        }
+        
+    }
+
+    return ret;
+}
+
 static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
     char *addr=0;
-    int ret, totsz=0, len=0, secLen, max=0;
+    uint32_t val=0;
+    int ret, totsz=0, len=0, secLen, max=0, mdo=0;
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *s=0, *sc=0, *sh=0;
     struct sdbootsec_s   *psec=0;
     struct info16Bit_s *p=0, *c=0;
-
+    struct aspConfig_s *pct=0;
+    
+    pct = mrs->configTable;
     pfat = &mrs->aspFat;
     sh = pfat->fatSupdata;
     sc = pfat->fatSupcur;
@@ -18542,6 +18609,14 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         totsz = max;
     }
 
+    ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_UPD);    
+    if (ret) {
+        val = 0;
+    }
+
+    pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+
+    mdo = 1;
     while (totsz >= 0) {
         /* pup and push data here */
         len = ring_buf_get(&mrs->cmdTx, &addr);
@@ -18553,6 +18628,10 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         ret = aspPopSupOut(addr, sc, len, &s);
         sprintf(mrs->log, "list buff pop resutl, ret: %d/%d\n", ret, totsz);
         print_f(&mrs->plog, "fs96", mrs->log);
+
+        if ((mdo) && (val)) {
+            mdo = changeJpgLen(addr, val, len);
+        }
 
         ring_buf_prod(&mrs->cmdTx);
         
@@ -21616,7 +21695,10 @@ static int p6(struct procRes_s *rs)
                     continue;
                 }
 
-                pdt->opStatus = ASPOP_STA_APP;
+                if (i != 6) {
+                    pdt->opStatus = ASPOP_STA_APP;
+                }
+
                 sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", i, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
                 print_f(rs->plogs, "P6", rs->logs);  
 

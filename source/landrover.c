@@ -6886,7 +6886,7 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    tmp32 = 16848152; //0x01011518
+    tmp32 = 16844712; //0x010107a8
 
     pslen->n = 0;
     for (id = 0; id < 4; id++) {
