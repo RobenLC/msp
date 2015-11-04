@@ -311,6 +311,7 @@ struct mainRes_s{
     struct socket_s socket_t;
     struct logPool_s plog;
     char filein[128];
+    uint32_t scan_length;
 };
 
 typedef int (*fselec)(struct mainRes_s *mrs, struct modersp_s *modersp);
@@ -352,6 +353,7 @@ struct procRes_s{
     struct socket_s *psocket_r;
     struct socket_s *psocket_t;
     struct logPool_s *plogs;
+    uint32_t *pscnlen;
 };
 
 //memory alloc. put in/put out
@@ -677,8 +679,6 @@ static int next_spy(struct psdata_s *data)
                 case OP_MAXWIDH:                                  
                 case OP_WIDTHAD_H:                                
                 case OP_WIDTHAD_L:                                
-                case OP_SCANLEN_H:                                
-                case OP_SCANLEN_L:
                 case OP_INTERIMG:
                 case OP_AFEIC:
                 case OP_EXTPULSE:
@@ -702,6 +702,14 @@ static int next_spy(struct psdata_s *data)
                 case OP_FUNCTEST_15:
                     next = PSSET; /* get and repeat value */
                     evt = AUTO_A;
+                    break;
+                case OP_SCANLEN_H:                                
+                    next = PSWT; 
+                    evt = AUTO_G;
+                    break;
+                case OP_SCANLEN_L:
+                    next = PSRLT; 
+                    evt = AUTO_G;
                     break;
                 case OP_SAVE:
                     next = PSRLT; 
@@ -3895,26 +3903,29 @@ static int stauto_32(struct psdata_s *data)
 static int stauto_33(struct psdata_s *data) 
 {
     char str[128], ch = 0;
-    uint32_t rlt;
+    uint32_t rlt, *pslen=0, val=0;
     struct info16Bit_s *p, *g;
-    int *pSdInit = 0, SDinit = 0;
-    
+    struct procRes_s *rs;
+
+    rs = data->rs;
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_33", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_33", str);  
 
     switch (rlt) {
         case STINIT:
             g = &data->rs->pmch->get;
             p = &data->rs->pmch->cur;
             memset(p, 0, sizeof(struct info16Bit_s));
+            p->opcode = g->opcode;
+            p->data = g->data;
+            pslen = rs->pscnlen;
 
-            pSdInit = data->rs->psd_init;
-            SDinit = *pSdInit;
-            msync(pSdInit, sizeof(int), MS_SYNC);
-            
-            p->opcode = 0;
-            p->data = 0;
+            val = *pslen;
+            val &= ~0xffffff00;
+            val |= g->data << 8;
+
+            *pslen = val;
 
             ch = 24; 
             rs_ipc_put(data->rs, &ch, 1);
@@ -3924,14 +3935,12 @@ static int stauto_33(struct psdata_s *data)
             break;
         case WAIT:
             g = &data->rs->pmch->get;
-            p = &data->rs->pmch->cur;
-            
-            if (g->opcode == p->opcode) {
-                sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
+
+            if ((data->ansp0 & 0xff) == g->opcode) {
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                 print_f(mlogPool, "auto_33", str);  
                 data->result = emb_result(data->result, NEXT);
-            }	
-            
+            }			
             break;
         case NEXT:
             break;
@@ -3946,26 +3955,29 @@ static int stauto_33(struct psdata_s *data)
 static int stauto_34(struct psdata_s *data) 
 {
     char str[128], ch = 0;
-    uint32_t rlt;
+    uint32_t rlt, *pslen=0, val=0;
     struct info16Bit_s *p, *g;
-    int *pSdInit = 0, SDinit = 0;
-    
+    struct procRes_s *rs;
+
+    rs = data->rs;
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_34", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_34", str);  
 
     switch (rlt) {
         case STINIT:
             g = &data->rs->pmch->get;
             p = &data->rs->pmch->cur;
             memset(p, 0, sizeof(struct info16Bit_s));
+            p->opcode = g->opcode;
+            p->data = g->data;
+            pslen = rs->pscnlen;
 
-            pSdInit = data->rs->psd_init;
-            SDinit = *pSdInit;
-            msync(pSdInit, sizeof(int), MS_SYNC);
-            
-            p->opcode = 0;
-            p->data = 0;
+            val = *pslen;
+            val &= ~0xffff00ff;
+            val |= g->data;
+
+            *pslen = val;
 
             ch = 24; 
             rs_ipc_put(data->rs, &ch, 1);
@@ -3975,14 +3987,12 @@ static int stauto_34(struct psdata_s *data)
             break;
         case WAIT:
             g = &data->rs->pmch->get;
-            p = &data->rs->pmch->cur;
-            
-            if (g->opcode == p->opcode) {
-                sprintf(str, "ansp:0x%.2x, recv: 0x%.2x 0x%.2x, send: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data, p->opcode, p->data);  
+
+            if ((data->ansp0 & 0xff) == g->opcode) {
+                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
                 print_f(mlogPool, "auto_34", str);  
                 data->result = emb_result(data->result, NEXT);
-            }	
-            
+            }			
             break;
         case NEXT:
             break;
@@ -6886,7 +6896,8 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pslen = &mrs->mchine.sdln;
 
-    tmp32 = 16844712; //0x010107a8
+    //tmp32 = 16843832; //0x010107a8 //0x01010438
+    tmp32 = mrs->scan_length;
 
     pslen->n = 0;
     for (id = 0; id < 4; id++) {
@@ -8731,6 +8742,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pmch = &mrs->mchine;
     rs->pregtb = mrs->regTable;
     rs->psd_init = &mrs->sd_init;
+
+    rs->pscnlen = &mrs->scan_length;
     return 0;
 }
 

@@ -3429,7 +3429,8 @@ static uint32_t next_VECTORS(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSSET;
+                evt = CROPR; 
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -9365,7 +9366,9 @@ static int stwtbak_70(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
 
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
@@ -9383,7 +9386,13 @@ static int stwtbak_70(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                pdt = &pct[ASPOP_EG_DECT];
+                if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
+                    data->bkofw = emb_bk(data->bkofw, VECTORS, PSACT);
+                    data->result = emb_result(data->result, BKWRD);
+                } else {
+                    data->result = emb_result(data->result, NEXT);
+                }
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -10234,23 +10243,29 @@ static int stvector_82(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
+    struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
 
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
     sprintf(rs->logs, "op_82 rlt:0x%x \n", rlt); 
     print_f(rs->plogs, "VECTOR", rs->logs);  
 
     switch (rlt) {
         case STINIT:
+            pct[ASPOP_IMG_LEN].opValue = 0;
+            pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
 
-            ch = 41; 
-
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_82: result: %x, goto %d\n", data->result, ch); 
+            sprintf(rs->logs, "op_82, reset value"); 
             print_f(rs->plogs, "VECTOR", rs->logs);  
+            data->result = emb_result(data->result, NEXT);
+        
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -21703,9 +21718,15 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);  
 
                 sendbuf[3] = 'C';
-
-                sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
-                n = strlen(rs->logs);
+                
+                if (i != 6) {
+                    sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                    n = strlen(rs->logs);
+                } else {
+                    sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+                    n = strlen(rs->logs);
+                }
+                
                 if (n > 256) n = 256;
                 memcpy(&sendbuf[5], rs->logs, n);
 
