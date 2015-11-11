@@ -826,7 +826,7 @@ static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 void aspFree(void *p)
 {
     printf("  free 0x%.8x \n", p);
-    //free(p);
+    free(p);
 }
 void debugPrintBootSec(struct sdbootsec_s *psec)
 {
@@ -9845,7 +9845,7 @@ static int stcrop_76(struct psdata_s *data)
                         err++;
                     } else {
                         uch = xyAr[id] & 0xff;
-                        pdt->opValue |= uch << (8 * id);
+                        pdt->opValue |= uch << (8 * id); // low byte first or high byte first
                     }
                 }
 
@@ -22599,7 +22599,7 @@ int main(int argc, char *argv[])
     pmrs = (struct mainRes_s *)mmap(NULL, sizeof(struct mainRes_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
     memset(pmrs, 0, sizeof(struct mainRes_s));
 
-    pmrs->plog.max = 6*1024*1024;
+    pmrs->plog.max = 6*1024*1024; // 6MB
     pmrs->plog.pool = mmap(NULL, pmrs->plog.max, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     if (!pmrs->plog.pool) {printf("get log pool share memory failed\n"); return 0;}
     mlogPool = &pmrs->plog;
@@ -22629,7 +22629,7 @@ int main(int argc, char *argv[])
 // initial share parameter
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
     if (!pmrs->dataRx.pp) goto end;
     pmrs->dataRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     pmrs->dataRx.totsz = 128*SPI_TRUNK_SZ;
@@ -22648,7 +22648,7 @@ int main(int argc, char *argv[])
 
     /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
     if (!pmrs->dataTx.pp) goto end;
     pmrs->dataTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     pmrs->dataTx.totsz = 128*SPI_TRUNK_SZ;
@@ -22667,7 +22667,7 @@ int main(int argc, char *argv[])
 
     /* cmd mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
     if (!pmrs->cmdRx.pp) goto end;
     pmrs->cmdRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     pmrs->cmdRx.totsz = 128*SPI_TRUNK_SZ;;
@@ -22686,10 +22686,10 @@ int main(int argc, char *argv[])
     
     /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 512*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
+    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
     if (!pmrs->cmdTx.pp) goto end;
     pmrs->cmdTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdTx.totsz = 512*SPI_TRUNK_SZ;
+    pmrs->cmdTx.totsz = 128*SPI_TRUNK_SZ;
     pmrs->cmdTx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdTx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
@@ -23434,7 +23434,7 @@ int main(int argc, char *argv[])
     pool->dirMax = DIR_POOL_SIZE;
     pool->dirUsed = 0;
     
-    pool->parBuf.dirParseBuff = mmap(NULL, 8*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pool->parBuf.dirParseBuff = mmap(NULL, 8*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0); // 8MB
     if (!pool->parBuf.dirParseBuff) {
         sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer FAIL!!!\n"); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
@@ -23736,7 +23736,8 @@ static char **memory_init(int *sz, int tsize, int csize)
     if (!(tsize / csize)) return (0);
         
     asz = tsize / csize;
-    pma = (char **) malloc(sizeof(char *) * asz);
+    //pma = (char **) malloc(sizeof(char *) * asz);
+    pma = (char **) mmap(NULL, (sizeof(char *) * asz), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     
     //sprintf(mlog, "asz:%d pma:0x%.8x\n", asz, pma);
     //print_f(mlogPool, "memory_init", mlog);
