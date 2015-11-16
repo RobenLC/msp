@@ -33,7 +33,9 @@ static char spi1[] = "/dev/spidev32766.0";
 static char *spi1 = 0;
 #endif //#if SPI1_ENABLE
 static char spi0[] = "/dev/spidev32765.0"; 
-
+static int *totMalloc=0;
+static int *totSalloc=0;
+    
 /* flow operation */
 #define OP_PON            0x1                
 #define OP_QRY            0x2
@@ -826,8 +828,37 @@ static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 void aspFree(void *p)
 {
     printf("  free 0x%.8x \n", p);
-    free(p);
+    //free(p);
 }
+
+void* aspMalloc(int mlen)
+{
+    int tot=0;
+    char *p=0;
+    
+    tot = *totMalloc;
+    tot += mlen;
+    printf("!!!!!!!!!!!!!!!!!!!  malloc size: %d / %d\n", mlen, tot);
+    *totMalloc = tot;
+    
+    p = malloc(mlen);
+    return p;
+}
+
+void* aspSalloc(int slen)
+{
+    int tot=0;
+    char *p=0;
+    
+    tot = *totSalloc;
+    tot += slen;
+    printf("*******************  salloc size: %d / %d\n", slen, tot);
+    *totSalloc = tot;
+    
+    p = mmap(NULL, slen, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    return p;
+}
+
 void debugPrintBootSec(struct sdbootsec_s *psec)
 {
             /* 0  Jump command */
@@ -1107,11 +1138,11 @@ static int asp_strsplit(struct aspInfoSplit_s **info, char *str, int max)
         ret = asp_idxofch(str, ',', cur, max);
         if (ret >= 0) {
             nex = ret;
-            p = malloc(sizeof(struct aspInfoSplit_s));
+            p = aspMalloc(sizeof(struct aspInfoSplit_s));
             memset(p, 0, sizeof(struct aspInfoSplit_s));            
             cnt++;
         } else {
-            p = malloc(sizeof(struct aspInfoSplit_s));
+            p = aspMalloc(sizeof(struct aspInfoSplit_s));
             memset(p, 0, sizeof(struct aspInfoSplit_s));            
             cnt++;
             nex = max;
@@ -1125,7 +1156,7 @@ static int asp_strsplit(struct aspInfoSplit_s **info, char *str, int max)
             continue;
         }
         
-        p->infoStr = malloc(len+1);
+        p->infoStr = aspMalloc(len+1);
         p->infoLen = len;
         memcpy(p->infoStr, str+cur,  len);
 
@@ -2211,7 +2242,7 @@ static int mspSD_createFATLinkList(struct adFATLinkList_s **list)
 {
     struct adFATLinkList_s *newList=0;
 
-    newList = (struct adFATLinkList_s *)malloc(sizeof(struct adFATLinkList_s));
+    newList = (struct adFATLinkList_s *)aspMalloc(sizeof(struct adFATLinkList_s));
     if (!newList) return -1;
 
     memset(newList, 0, sizeof(struct adFATLinkList_s));
@@ -2543,7 +2574,7 @@ static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, 
     print_f(mlogPool, "FS", mlog);
 
     mspFS_allocDir(psFat, &r);
-    //r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    //r = (struct directnFile_s *) aspMalloc(sizeof(struct directnFile_s));
     if (!r) {
         return (-2);
     }else {
@@ -2552,7 +2583,7 @@ static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, 
     }
 
     mspFS_allocDir(psFat, &c);
-    //c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    //c = (struct directnFile_s *) aspMalloc(sizeof(struct directnFile_s));
     if (!c) {
         return (-3);
     }else {
@@ -2653,11 +2684,11 @@ static int mspFS_insertChildDir(struct sdFAT_s *psFat, struct directnFile_s *par
     struct directnFile_s *brt = 0;
 
     mspFS_allocDir(psFat, &r);
-    //r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    //r = (struct directnFile_s *) aspMalloc(sizeof(struct directnFile_s));
     if (!r) return (-2);
 
     mspFS_allocDir(psFat, &c);
-    //c = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    //c = (struct directnFile_s *) aspMalloc(sizeof(struct directnFile_s));
     if (!c) {
         return (-3);
     }else {
@@ -2711,7 +2742,7 @@ static int mspFS_insertChildFile(struct sdFAT_s *psFat, struct directnFile_s *pa
     struct directnFile_s *brt = 0;
 
     mspFS_allocDir(psFat, &r);
-    //r = (struct directnFile_s *) malloc(sizeof(struct directnFile_s));
+    //r = (struct directnFile_s *) aspMalloc(sizeof(struct directnFile_s));
     if (!r) return (-2);
 
     r->pa = parent;
@@ -3098,7 +3129,7 @@ static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *
     sprintf(mlog, "path[%s] root[%s] len:%d\n", path, root->dfSFN, ret);
     print_f(mlogPool, "DSRH", mlog);
 
-    //rmp = malloc(256*256);
+    //rmp = aspMalloc(256*256);
     memset(rmp, 0, 32*128);
     
     ch = path;
@@ -13467,7 +13498,7 @@ static int dbg(struct mainRes_s *mrs)
 
     p0_init(mrs);
 
-    plog = malloc(2048);
+    plog = aspMalloc(2048);
     if (!plog) {
         sprintf(mrs->log, "DBG plog alloc failed! \n");
         print_f(&mrs->plog, "DBG", mrs->log);
@@ -14184,7 +14215,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                     memcpy(dst, addr, len);
                     sc->supdataTot = len;
 
-                    s = malloc(sizeof(struct supdataBack_s));
+                    s = aspMalloc(sizeof(struct supdataBack_s));
                     memset(s, 0, sizeof(struct supdataBack_s));
                     sc->n = s;
                     sc = sc->n;
@@ -14223,7 +14254,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                     memcpy(dst, addr, len);
                     sc->supdataTot = len;
 
-                    s = malloc(sizeof(struct supdataBack_s));
+                    s = aspMalloc(sizeof(struct supdataBack_s));
                     memset(s, 0, sizeof(struct supdataBack_s));
                     sc->n = s;
                     sc = sc->n;
@@ -14257,7 +14288,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                 memcpy(dst, addr, len);
                 sc->supdataTot = len;
                 
-                s = malloc(sizeof(struct supdataBack_s));
+                s = aspMalloc(sizeof(struct supdataBack_s));
                 memset(s, 0, sizeof(struct supdataBack_s));
                 sc->n = s;
                 sc = sc->n;
@@ -15451,7 +15482,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if ((strcmp(br->dfSFN, "..") != 0) && (strcmp(br->dfSFN, ".") != 0)) {
                     sprintf(mrs->log, "ADD folder [%s] to parsing queue\n", br->dfSFN);
                     print_f(&mrs->plog, "fs51", mrs->log);
-                    pfdirt = malloc(sizeof(struct folderQueue_s));
+                    pfdirt = aspMalloc(sizeof(struct folderQueue_s));
                     pfdirt->fdObj = br;
                     pfdirt->fdnxt = 0;
                     
@@ -15602,7 +15633,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
                         sprintf(mrs->log, "ADD folder [%s]\n", br->dfSFN);
                         print_f(&mrs->plog, "fs52", mrs->log);
 
-                        pfdirt = malloc(sizeof(struct folderQueue_s));
+                        pfdirt = aspMalloc(sizeof(struct folderQueue_s));
                         pfdirt->fdObj = br;
                         pfdirt->fdnxt = 0;
                     
@@ -15929,10 +15960,10 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
             if (!pftb->ftbFat1) {
                 secLen = p->opinfo;
                 val = secLen * 512;
-                //pftb->ftbFat1 = malloc(val);
-                pftb->ftbFat1 = mmap(NULL, val, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+                //pftb->ftbFat1 = aspMalloc(val);
+                pftb->ftbFat1 = aspSalloc(val);
                 if (!pftb->ftbFat1) {
-                    sprintf(mrs->log, "malloc for FAT table FAIL!! \n");
+                    sprintf(mrs->log, "aspMalloc for FAT table FAIL!! \n");
                     print_f(&mrs->plog, "fs55", mrs->log);
 
                     modersp->r = 2;
@@ -16077,7 +16108,7 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "initial the fatSupdata !!!  \n");
     print_f(&mrs->plog, "fs59", mrs->log);
 
-    s = malloc(sizeof(struct supdataBack_s));
+    s = aspMalloc(sizeof(struct supdataBack_s));
     if (!s) {
         sprintf(mrs->log, "FAIL to initial the fatSupdata !!! \n");
         print_f(&mrs->plog, "fs59", mrs->log);
@@ -16408,7 +16439,7 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
                     memcpy(dst, addr, len);
                     sc->supdataTot = len;
 
-                    s = malloc(sizeof(struct supdataBack_s));
+                    s = aspMalloc(sizeof(struct supdataBack_s));
                     memset(s, 0, sizeof(struct supdataBack_s));
                     sc->n = s;
                     sc = sc->n;
@@ -16442,7 +16473,7 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
                 memcpy(dst, addr, len);
                 sc->supdataTot = len;
                 
-                s = malloc(sizeof(struct supdataBack_s));
+                s = aspMalloc(sizeof(struct supdataBack_s));
                 memset(s, 0, sizeof(struct supdataBack_s));
                 sc->n = s;
                 sc = sc->n;
@@ -17527,7 +17558,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
 
         pa = curDir->pa;
-        pfdirt = malloc(sizeof(struct folderQueue_s));
+        pfdirt = aspMalloc(sizeof(struct folderQueue_s));
         pfdirt->fdObj = pa;
         pfdirt->fdnxt = 0;
 
@@ -17856,7 +17887,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 1;
         }
 
-        pr = malloc(len);
+        pr = aspMalloc(len);
         if (!pr) {
             sprintf(mrs->log, " malloc failed ret: %d \n", pr);
             print_f(&mrs->plog, "fs88", mrs->log);
@@ -18976,7 +19007,7 @@ static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp)
                     memcpy(dst, addr, len);
                     sc->supdataTot = len;
 
-                    s = malloc(sizeof(struct supdataBack_s));
+                    s = aspMalloc(sizeof(struct supdataBack_s));
                     memset(s, 0, sizeof(struct supdataBack_s));
                     sc->n = s;
                     sc = sc->n;
@@ -19011,7 +19042,7 @@ static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp)
                 memcpy(dst, addr, len);
                 sc->supdataTot = len;
                 
-                s = malloc(sizeof(struct supdataBack_s));
+                s = aspMalloc(sizeof(struct supdataBack_s));
                 memset(s, 0, sizeof(struct supdataBack_s));
                 sc->n = s;
                 sc = sc->n;
@@ -19686,7 +19717,7 @@ static int p2(struct procRes_s *rs)
     char filename[128] = "/mnt/mmc2/tx/input_x3.bin";
     FILE *fin = NULL;
 #endif
-    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer));
+    struct spi_ioc_transfer *tr = aspMalloc(sizeof(struct spi_ioc_transfer));
     struct timespec tnow;
     struct sdParseBuff_s *pabuf=0;
     int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait, tlen=0, maxsz=0;
@@ -19716,7 +19747,7 @@ static int p2(struct procRes_s *rs)
     // 'd': data mode, store the incomming infom into share memory
     // send 'd' to notice the p0 that we have incomming data chunk
 
-    rx_buff = malloc(SPI_TRUNK_SZ);
+    rx_buff = aspMalloc(SPI_TRUNK_SZ);
     ch = '2';
 
     while (1) {
@@ -20235,7 +20266,7 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);
                 }
 
-                addr = malloc(maxsz);
+                addr = aspMalloc(maxsz);
 
                 ret = fread(addr, 1, maxsz, fp);
 
@@ -20457,7 +20488,7 @@ static int p3(struct procRes_s *rs)
     FILE *fin = NULL;
 #endif
 
-    struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer));
+    struct spi_ioc_transfer *tr = aspMalloc(sizeof(struct spi_ioc_transfer));
     struct timespec tnow;
     int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait;
     uint16_t send16, recv16;
@@ -20738,7 +20769,7 @@ static int p4(struct procRes_s *rs)
 
     char *recvbuf, *tmp;
 
-    recvbuf = malloc(1024);
+    recvbuf = aspMalloc(1024);
     if (!recvbuf) {
         sprintf(rs->logs, "p4 recvbuf alloc failed! \n");
         print_f(rs->plogs, "P4", rs->logs);
@@ -21315,14 +21346,14 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     // wait for ch from p0
     // in charge of socket recv
     
-    sendbuf = malloc(2048);
+    sendbuf = aspMalloc(2048);
     if (!sendbuf) {
         sprintf(rs->logs, "p5 sendbuf alloc failed! \n");
         print_f(rs->plogs, "P5", rs->logs);
         return (-1);
     }
 
-    recvbuf = malloc(1024);
+    recvbuf = aspMalloc(1024);
     if (!recvbuf) {
         sprintf(rs->logs, "p5 recvbuf alloc failed! \n");
         print_f(rs->plogs, "P5", rs->logs);
@@ -21574,7 +21605,7 @@ static int p6(struct procRes_s *rs)
     fscur = rs->psFat->fatRootdir;
 */
 
-    recvbuf = malloc(1024);
+    recvbuf = aspMalloc(1024);
     if (!recvbuf) {
         sprintf(rs->logs, "recvbuf alloc failed! \n");
         print_f(rs->plogs, "P6", rs->logs);
@@ -21584,7 +21615,7 @@ static int p6(struct procRes_s *rs)
         print_f(rs->plogs, "P6", rs->logs);
     }
 
-    sendbuf = malloc(1024);
+    sendbuf = aspMalloc(1024);
     if (!sendbuf) {
         sprintf(rs->logs, "sendbuf alloc failed! \n");
         print_f(rs->plogs, "P6", rs->logs);
@@ -21693,7 +21724,7 @@ static int p6(struct procRes_s *rs)
                     break;
                 }
 
-                sprintf(rs->logs, "wait crop\n", opcode);
+                sprintf(rs->logs, "wait crop (%d)\n", num);
                 print_f(rs->plogs, "P6", rs->logs);
                 
                 if (cnt > 100) {
@@ -22583,6 +22614,10 @@ static int p7(struct procRes_s *rs)
     return 0;
 }
 
+#define DATA_RX_SIZE 64
+#define DATA_TX_SIZE 64
+#define CMD_RX_SIZE 64
+#define CMD_TX_SIZE 64
 int main(int argc, char *argv[])
 {
 //static char spi1[] = "/dev/spidev32766.0"; 
@@ -22596,11 +22631,16 @@ int main(int argc, char *argv[])
     int arg[8];
     uint32_t bitset;
 
-    pmrs = (struct mainRes_s *)mmap(NULL, sizeof(struct mainRes_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
+    totMalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    memset(totMalloc, 0, sizeof(int));
+    totSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    memset(totSalloc, 0, sizeof(int));
+
+    pmrs = (struct mainRes_s *)aspSalloc(sizeof(struct mainRes_s));
     memset(pmrs, 0, sizeof(struct mainRes_s));
 
-    pmrs->plog.max = 6*1024*1024; // 6MB
-    pmrs->plog.pool = mmap(NULL, pmrs->plog.max, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pmrs->plog.max = 1024;
+    pmrs->plog.pool = aspSalloc(pmrs->plog.max);
     if (!pmrs->plog.pool) {printf("get log pool share memory failed\n"); return 0;}
     mlogPool = &pmrs->plog;
     pmrs->plog.len = 0;
@@ -22629,10 +22669,10 @@ int main(int argc, char *argv[])
 // initial share parameter
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
+    pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, DATA_RX_SIZE*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
     if (!pmrs->dataRx.pp) goto end;
-    pmrs->dataRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataRx.totsz = 128*SPI_TRUNK_SZ;
+    pmrs->dataRx.r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+    pmrs->dataRx.totsz = DATA_RX_SIZE*SPI_TRUNK_SZ;
     pmrs->dataRx.chksz = SPI_TRUNK_SZ;
     pmrs->dataRx.svdist = 8;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataRx.totsz, pmrs->dataRx.pp);
@@ -22648,10 +22688,10 @@ int main(int argc, char *argv[])
 
     /* data mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
+    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, DATA_TX_SIZE*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
     if (!pmrs->dataTx.pp) goto end;
-    pmrs->dataTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->dataTx.totsz = 128*SPI_TRUNK_SZ;
+    pmrs->dataTx.r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+    pmrs->dataTx.totsz = DATA_TX_SIZE*SPI_TRUNK_SZ;
     pmrs->dataTx.chksz = SPI_TRUNK_SZ;
     pmrs->dataTx.svdist = 12;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataTx.totsz, pmrs->dataTx.pp);
@@ -22667,10 +22707,10 @@ int main(int argc, char *argv[])
 
     /* cmd mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
+    pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, CMD_RX_SIZE*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
     if (!pmrs->cmdRx.pp) goto end;
-    pmrs->cmdRx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdRx.totsz = 128*SPI_TRUNK_SZ;;
+    pmrs->cmdRx.r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+    pmrs->cmdRx.totsz = CMD_RX_SIZE*SPI_TRUNK_SZ;;
     pmrs->cmdRx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdRx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdRx.totsz, pmrs->cmdRx.pp);
@@ -22686,10 +22726,10 @@ int main(int argc, char *argv[])
     
     /* cmd mode tx to spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, 128*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
+    pmrs->cmdTx.pp = memory_init(&pmrs->cmdTx.slotn, CMD_TX_SIZE*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
     if (!pmrs->cmdTx.pp) goto end;
-    pmrs->cmdTx.r = (struct ring_p *)mmap(NULL, sizeof(struct ring_p), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    pmrs->cmdTx.totsz = 128*SPI_TRUNK_SZ;
+    pmrs->cmdTx.r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+    pmrs->cmdTx.totsz = CMD_TX_SIZE*SPI_TRUNK_SZ;
     pmrs->cmdTx.chksz = SPI_TRUNK_SZ;
     pmrs->cmdTx.svdist = 16;
     //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->cmdTx.totsz, pmrs->cmdTx.pp);
@@ -22703,7 +22743,7 @@ int main(int argc, char *argv[])
     sprintf(pmrs->log, "tdiff:%d \n", tdiff);
     print_f(&pmrs->plog, "time_diff", pmrs->log);
 
-    pmrs->wtg.wtRlt =  mmap(NULL, 16, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pmrs->wtg.wtRlt =  aspSalloc(16);
     if (pmrs->wtg.wtRlt) {
         sprintf(pmrs->log, "wtg result buff:0x%.8x - DONE\n", pmrs->wtg.wtRlt);
         print_f(&pmrs->plog, "WTG", pmrs->log);
@@ -23379,7 +23419,7 @@ int main(int argc, char *argv[])
     }
 
     /* FAT */
-    pmrs->aspFat.fatBootsec = (struct sdbootsec_s *)mmap(NULL, sizeof(struct sdbootsec_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pmrs->aspFat.fatBootsec = (struct sdbootsec_s *)aspSalloc(sizeof(struct sdbootsec_s));
     if (!pmrs->aspFat.fatBootsec) {
         sprintf(pmrs->log, "alloc share memory for FAT boot sector FAIL!!!\n", pmrs->aspFat.fatBootsec); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
@@ -23389,7 +23429,7 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
     
-    pmrs->aspFat.fatFSinfo = (struct sdFSinfo_s *)mmap(NULL, sizeof(struct sdFSinfo_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pmrs->aspFat.fatFSinfo = (struct sdFSinfo_s *)aspSalloc(sizeof(struct sdFSinfo_s));
     if (!pmrs->aspFat.fatFSinfo) {
         sprintf(pmrs->log, "alloc share memory for FAT file system info FAIL!!!\n", pmrs->aspFat.fatFSinfo); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
@@ -23399,7 +23439,7 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
 
-    pmrs->aspFat.fatTable = (struct sdFATable_s *)mmap(NULL, sizeof(struct sdFATable_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pmrs->aspFat.fatTable = (struct sdFATable_s *)aspSalloc(sizeof(struct sdFATable_s));
     if (!pmrs->aspFat.fatTable) {
         sprintf(pmrs->log, "alloc share memory for FAT table FAIL!!!\n", pmrs->aspFat.fatTable); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
@@ -23409,7 +23449,7 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
 
-    pmrs->aspFat.fatDirPool = (struct sdDirPool_s *)mmap(NULL, sizeof(struct sdDirPool_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pmrs->aspFat.fatDirPool = (struct sdDirPool_s *)aspSalloc(sizeof(struct sdDirPool_s));
     if (!pmrs->aspFat.fatDirPool) {
         sprintf(pmrs->log, "alloc share memory for FAT dir pool FAIL!!!\n", pmrs->aspFat.fatDirPool); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
@@ -23421,7 +23461,7 @@ int main(int argc, char *argv[])
 
     struct sdDirPool_s    *pool;
     pool = pmrs->aspFat.fatDirPool;
-    pool->dirPool = (struct directnFile_s *)mmap(NULL, sizeof(struct directnFile_s) * DIR_POOL_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    pool->dirPool = (struct directnFile_s *)aspSalloc(sizeof(struct directnFile_s) * DIR_POOL_SIZE);
     if (!pool->dirPool) {
         sprintf(pmrs->log, "alloc share memory for FAT dir pool content FAIL!!!\n", pool->dirPool); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
@@ -23434,7 +23474,7 @@ int main(int argc, char *argv[])
     pool->dirMax = DIR_POOL_SIZE;
     pool->dirUsed = 0;
     
-    pool->parBuf.dirParseBuff = mmap(NULL, 8*1024*1024, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0); // 8MB
+    pool->parBuf.dirParseBuff = aspSalloc(8*1024*1024); // 8MB
     if (!pool->parBuf.dirParseBuff) {
         sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer FAIL!!!\n"); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
@@ -23736,15 +23776,15 @@ static char **memory_init(int *sz, int tsize, int csize)
     if (!(tsize / csize)) return (0);
         
     asz = tsize / csize;
-    //pma = (char **) malloc(sizeof(char *) * asz);
-    pma = (char **) mmap(NULL, (sizeof(char *) * asz), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    //pma = (char **) aspMalloc(sizeof(char *) * asz);
+    pma = (char **) aspSalloc(sizeof(char *) * asz);
     
     //sprintf(mlog, "asz:%d pma:0x%.8x\n", asz, pma);
     //print_f(mlogPool, "memory_init", mlog);
     
-    mbuf = mmap(NULL, tsize, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    mbuf = aspSalloc(tsize);
     
-    //sprintf(mlog, "mmap get 0x%.8x\n", mbuf);
+    //sprintf(mlog, "aspSalloc get 0x%.8x\n", mbuf);
     //print_f(mlogPool, "memory_init", mlog);
         
     tmpB = mbuf;
