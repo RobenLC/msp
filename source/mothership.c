@@ -20,6 +20,13 @@
 
 //main()
 #define SPI1_ENABLE (1) 
+
+#if SPI1_ENABLE
+#define SPIDEV_SWITCH (0)
+#else // spidev switch must be disable
+#define SPIDEV_SWITCH (0)
+#endif
+
 #define PULL_LOW_AFTER_DATA (1)
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
@@ -28,11 +35,11 @@
 #define SPI_MODE_2      (SPI_CPOL|0)
 #define SPI_MODE_3      (SPI_CPOL|SPI_CPHA)
 #if SPI1_ENABLE
-static char spi1[] = "/dev/spidev32766.0"; 
+static char spidev_1[] = "/dev/spidev32766.0"; 
 #else //#if SPI1_ENABLE
-static char *spi1 = 0;
+static char *spidev_1 = 0;
 #endif //#if SPI1_ENABLE
-static char spi0[] = "/dev/spidev32765.0"; 
+static char spidev_0[] = "/dev/spidev32765.0"; 
 static int *totMalloc=0;
 static int *totSalloc=0;
     
@@ -9177,6 +9184,7 @@ static int stwtbak_66(struct psdata_s *data)
                 } else if (pdt->opValue == SINSCAN_SD_ONLY) {
                     data->ansp0 = 2;
                     data->result = emb_result(data->result, NEXT);
+                    data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSACT);
                     sprintf(rs->logs, "op_66: SINSCAN_SD_ONLY go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SINSCAN_DUAL_SD) {
@@ -9419,10 +9427,10 @@ static int stwtbak_70(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
-                    data->bkofw = emb_bk(data->bkofw, VECTORS, PSACT);
+                    data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
                     data->result = emb_result(data->result, BKWRD);
                 } else {
-                    data->result = emb_result(data->result, NEXT);
+                    data->result = emb_result(data->result, FWORD);
                 }
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -9477,18 +9485,18 @@ static int stwtbak_71(struct psdata_s *data)
                     data->ansp0 = 1;
                     data->result = emb_result(data->result, NEXT);
                     data->bkofw = emb_fw(data->bkofw, WTBAKQ, PSWT);
-                    sprintf(rs->logs, "op_71: SINSCAN_WIFI_SD go to next!!\n"); 
+                    sprintf(rs->logs, "op_71: SUPBACK_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SUPBACK_RAW) {
                     data->ansp0 = 2;
                     data->result = emb_result(data->result, NEXT);
-                    sprintf(rs->logs, "op_71: SINSCAN_SD_ONLY go to next!!\n"); 
+                    sprintf(rs->logs, "op_71: SUPBACK_RAW go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SUPBACK_FAT) {
                     data->ansp0 = 3;
                     data->result = emb_result(data->result, NEXT);
                     data->bkofw = emb_fw(data->bkofw, WTBAKP, PSSET);
-                    sprintf(rs->logs, "op_71: SINSCAN_DUAL_SD go to next!!\n"); 
+                    sprintf(rs->logs, "op_71: SUPBACK_FAT go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else {
                     sprintf(rs->logs, "WARNING!!! op_71, opValue is unexpected val:%x\n", pdt->opValue);
@@ -15310,6 +15318,9 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs50", mrs->log);
 
         pr = pParBuf->dirParseBuff;
+        
+        shmem_dump(pr, 512);
+        
         psec = pfat->fatBootsec;
         /* 0  Jump command */
         psec->secJpcmd = pr[0] | (pr[1] << SF1) | (pr[2] << SF2) | (pr[3] << SF3);
@@ -18667,7 +18678,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         /* pup and push data here */
         len = ring_buf_get(&mrs->cmdTx, &addr);
         while (len <= 0) {
-            sleep(3);
+            sleep(2);
             len = ring_buf_get(&mrs->cmdTx, &addr);
         }
         
@@ -19891,7 +19902,7 @@ static int p2(struct procRes_s *rs)
 
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
-                    memset(addr, 0xff, len);
+                    memset(addr, 0x55, len);
                     msync(addr, len, MS_SYNC);                    
 #if  TIME_MEASURE
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
@@ -21724,8 +21735,8 @@ static int p6(struct procRes_s *rs)
                     break;
                 }
 
-                sprintf(rs->logs, "wait crop (%d)\n", num);
-                print_f(rs->plogs, "P6", rs->logs);
+                //sprintf(rs->logs, "wait crop (%d)\n", num);
+                //print_f(rs->plogs, "P6", rs->logs);
                 
                 if (cnt > 100) {
                     break;
@@ -23508,23 +23519,31 @@ int main(int argc, char *argv[])
 */
 // spidev id
     int fd0, fd1;
-    fd0 = open(spi0, O_RDWR);
+#if SPIDEV_SWITCH
+    fd0 = open(spidev_1, O_RDWR);
+#else
+    fd0 = open(spidev_0, O_RDWR);
+#endif
     if (fd0 <= 0) {
-        sprintf(pmrs->log, "can't open device[%s]\n", spi0); 
+        sprintf(pmrs->log, "can't open device[%s]\n", spidev_0); 
         print_f(&pmrs->plog, "SPI", pmrs->log);
         goto end;
     } else {
-        sprintf(pmrs->log, "open device[%s]\n", spi0); 
+        sprintf(pmrs->log, "open device[%s]\n", spidev_0); 
         print_f(&pmrs->plog, "SPI", pmrs->log);
     }
-    if (spi1) {
-        fd1 = open(spi1, O_RDWR);
+    if (spidev_1) {
+#if SPIDEV_SWITCH
+        fd1 = open(spidev_0, O_RDWR);
+#else
+        fd1 = open(spidev_1, O_RDWR);
+#endif
         if (fd1 <= 0) {
-            sprintf(pmrs->log, "can't open device[%s]\n", spi1); 
+            sprintf(pmrs->log, "can't open device[%s]\n", spidev_1); 
             print_f(&pmrs->plog, "SPI", pmrs->log);
             fd1 = 0;
         } else {
-            sprintf(pmrs->log, "open device[%s]\n", spi1); 
+            sprintf(pmrs->log, "open device[%s]\n", spidev_1); 
             print_f(&pmrs->plog, "SPI", pmrs->log);
         }
     } else {
