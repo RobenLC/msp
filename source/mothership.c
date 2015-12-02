@@ -132,7 +132,9 @@ static int *totSalloc=0;
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
 
-#define SPI_KTHREAD_USE    (0) 
+#define SPI_KTHREAD_USE    (1) 
+#define SPI_UPD_NO_KTHREAD     (0)
+
 #define DIR_POOL_SIZE (20480)
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -6979,7 +6981,7 @@ static int stfat_29(struct psdata_s *data)
                 } else if (pFat->fatStatus & ASPFAT_STATUS_DFERD) {
                     ch = 45;
                 } else if (pFat->fatStatus & ASPFAT_STATUS_DFEWT) {
-                    ch = 89; /*TODO*/
+                    ch = 89;
                 } else if ((c->opinfo == pFat->fatBootsec->secWhfat) && 
                     (p->opinfo == pFat->fatBootsec->secPrfat)) {
                     ch = 54; 
@@ -14162,7 +14164,8 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs16", mrs->log);
 
-#if SPI_KTHREAD_USE
+/* bullet don't need kthread mode */
+#if 0 //SPI_KTHREAD_USE 
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
@@ -14394,7 +14397,8 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
-#if SPI_KTHREAD_USE
+    
+#if 0 // SPI_KTHREAD_USE
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
     sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
@@ -17106,7 +17110,7 @@ static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs77", mrs->log);
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
@@ -17182,7 +17186,7 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             ring_buf_init(&mrs->cmdTx);
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
             bitset = 0;
             ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
@@ -17681,7 +17685,7 @@ static int fs82(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs82", mrs->log);
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
@@ -17711,7 +17715,7 @@ static int fs83(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (ch == 'F') {
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
             bitset = 0;
             ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
@@ -18070,7 +18074,7 @@ static int fs89(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs89", mrs->log);
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
@@ -18100,7 +18104,7 @@ static int fs90(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (ch == 'W') {
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
             bitset = 0;
             ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
@@ -18563,10 +18567,13 @@ static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs95", mrs->log);
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs95", mrs->log);
+#else
+    sprintf(mrs->log, "NOT start spi0 spidev thread, ret: 0x%x\n", ret);
     print_f(&mrs->plog, "fs95", mrs->log);
 #endif
 
@@ -18638,6 +18645,9 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     sh = pfat->fatSupdata;
     sc = pfat->fatSupcur;
     psec = pfat->fatBootsec;
+    
+    sprintf(mrs->log, "deal with sup back head buff!! - 1\n");
+    print_f(&mrs->plog, "fs96", mrs->log);
 
     if (!sh) {
         sprintf(mrs->log, "ERROR!!! sup back head buff is empty! \n");
@@ -18659,6 +18669,9 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     secLen = p->opinfo;
     totsz = secLen * psec->secSize;
 
+    sprintf(mrs->log, "deal with sup back head buff!! - 2\n");
+    print_f(&mrs->plog, "fs96", mrs->log);
+
     max = aspCalcSupLen(sc);
     if (totsz > max) {
         sprintf(mrs->log, "WARNING!!! totsz is larger than max rest size of sup buff, %d/%d \n", totsz, max);
@@ -18666,23 +18679,41 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         totsz = max;
     }
 
+    sprintf(mrs->log, "deal with sup back head buff!! - 3\n");
+    print_f(&mrs->plog, "fs96", mrs->log);
+
     ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_UPD);    
     if (ret) {
         val = 0;
     }
 
+    sprintf(mrs->log, "deal with sup back head buff!! - 4\n");
+    
+    print_f(&mrs->plog, "fs96", mrs->log);
+
     pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+
+    sprintf(mrs->log, "deal with sup back head buff!! - 5\n");
+    print_f(&mrs->plog, "fs96", mrs->log);
 
     mdo = 1;
     while (totsz >= 0) {
+    
+        sprintf(mrs->log, "deal with sup back head buff!! - 6\n");
+        print_f(&mrs->plog, "fs96", mrs->log);
+
         /* pup and push data here */
         len = ring_buf_get(&mrs->cmdTx, &addr);
         while (len <= 0) {
             sleep(2);
             len = ring_buf_get(&mrs->cmdTx, &addr);
         }
+
+        sprintf(mrs->log, "deal with sup back head buff!! - 7\n");
+        print_f(&mrs->plog, "fs96", mrs->log);
         
         ret = aspPopSupOut(addr, sc, len, &s);
+        
         sprintf(mrs->log, "list buff pop resutl, ret: %d/%d\n", ret, totsz);
         print_f(&mrs->plog, "fs96", mrs->log);
 
@@ -18733,7 +18764,7 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             ring_buf_init(&mrs->cmdTx);
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
             bitset = 0;
             ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
@@ -20221,7 +20252,7 @@ static int p2(struct procRes_s *rs)
 
                         if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
 
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
                         usleep(1000);
@@ -20311,7 +20342,7 @@ static int p2(struct procRes_s *rs)
                 while (1) {
                     tlen = SPI_TRUNK_SZ;
                     
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
                         usleep(1000);
@@ -20381,7 +20412,7 @@ static int p2(struct procRes_s *rs)
                 len = 0;
                 pi = 0;  
                 while (1) {
-#if SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
                         usleep(1000);
