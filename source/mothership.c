@@ -132,7 +132,7 @@ static int *totSalloc=0;
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
 
-#define SPI_KTHREAD_USE    (1) 
+#define SPI_KTHREAD_USE    (0) 
 #define SPI_UPD_NO_KTHREAD     (0)
 
 #define DIR_POOL_SIZE (20480)
@@ -966,16 +966,20 @@ struct directnFile_s{
     printf("==========================================\n");
 }
 
-static int aspCalcSupLen(struct supdataBack_s *sup)
+inline int aspCalcSupLen(struct supdataBack_s *sup)
 {
-    int len=0;
+    int len=0, cnt=0;
     struct supdataBack_s *scr;
     if (!sup) return -1;
     
     scr = sup;
     while(scr) {
         len += scr->supdataTot - scr->supdataUse;
+
+        printf("%d. calcu sup, tot / used / len = %d / %d / %d\n", cnt, scr->supdataTot, scr->supdataUse, len);
         scr = scr->n;
+
+        cnt++;
     }
     return len;
 }
@@ -14309,28 +14313,33 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
                 len = ring_buf_cons_dual_psudo(&mrs->dataRx, &addr, modersp->v);
             }
 
+            len = 0;
             s = pfat->fatSupdata;
             while (s) {
                 if (s->supdataTot == 0) {
                     break;
+                } else {
+                    len += s->supdataTot;
                 }
                 sc = s;
                 s = s->n;
             }
 
-            if (s) {
+            if (sc) {
                 sc->n = 0;
             }
 
             while (s) {
                 sc = s;
                 s = s->n;
+                
+                memset(sc, 0, sizeof(struct supdataBack_s));
                 aspFree(sc);
             }
             pfat->fatSupcur = 0;
         }
         mrs_ipc_put(mrs, "D", 1, 3);
-        sprintf(mrs->log, "%d end\n", modersp->v);
+        sprintf(mrs->log, "%d end, len: %d\n", modersp->v, len);
         print_f(&mrs->plog, "fs18", mrs->log);
 
         mrs->mchine.cur.opinfo = modersp->v;
@@ -16133,6 +16142,7 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     //cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
+    memset(s, 0, sizeof(struct supdataBack_s));
     pfat->fatSupdata = s;
     pfat->fatSupcur = pfat->fatSupdata;
 
@@ -16339,6 +16349,8 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
         sh = sh->n;
 
         pfat->fatSupdata = sh;
+        
+        memset(s, 0, sizeof(struct supdataBack_s));
         aspFree(s);
     }
 
@@ -16498,32 +16510,44 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
                 len = ring_buf_cons_psudo(&mrs->cmdRx, &addr);
             }
 
+            len = 0;
             s = pfat->fatSupdata;
             while (s) {
                 if (s->supdataTot == 0) {
                     break;
+                } else {
+                    len += s->supdataTot;
+                    sprintf(mrs->log, "tot/len: %d/%d\n", s->supdataTot, len);
+                    print_f(&mrs->plog, "fs68", mrs->log);
                 }
                 sc = s;
                 s = s->n;
             }
 
-            if (s) {
+            if (sc) {
                 sc->n = 0;
             }
 
             while (s) {
                 sc = s;
                 s = s->n;
+                
+                memset(sc, 0, sizeof(struct supdataBack_s));
                 aspFree(sc);
             }
             pfat->fatSupcur = 0;
+
+            ret = aspCalcSupLen(pfat->fatSupdata);
         }
 
         modersp->c = 0;
         mrs_ipc_put(mrs, "N", 1, 3);
-        sprintf(mrs->log, "%d end\n", modersp->v);
+        sprintf(mrs->log, "%d end, len: %d, calcu: %d\n", modersp->v, len, ret);
         print_f(&mrs->plog, "fs68", mrs->log);
         modersp->m = modersp->m + 1;
+
+        mrs->mchine.cur.opinfo = modersp->v;
+        
         return 2;
     }
 
@@ -18564,7 +18588,7 @@ static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset, ret;
 
-    sprintf(mrs->log, "trigger spi0\n");
+    sprintf(mrs->log, "trigger spi_0_\n");
     print_f(&mrs->plog, "fs95", mrs->log);
 
 #if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
@@ -18645,6 +18669,9 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     sh = pfat->fatSupdata;
     sc = pfat->fatSupcur;
     psec = pfat->fatBootsec;
+
+    s = aspMalloc(sizeof(struct supdataBack_s));
+    memset(s, 0, sizeof(struct supdataBack_s));
     
     sprintf(mrs->log, "deal with sup back head buff!! - 1\n");
     print_f(&mrs->plog, "fs96", mrs->log);
@@ -18679,6 +18706,9 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         totsz = max;
     }
 
+    sprintf(mrs->log, "totsz/max = %d/%d \n", totsz, max);
+    print_f(&mrs->plog, "fs96", mrs->log);
+
     sprintf(mrs->log, "deal with sup back head buff!! - 3\n");
     print_f(&mrs->plog, "fs96", mrs->log);
 
@@ -18711,9 +18741,13 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         sprintf(mrs->log, "deal with sup back head buff!! - 7\n");
         print_f(&mrs->plog, "fs96", mrs->log);
-        
-        ret = aspPopSupOut(addr, sc, len, &s);
-        
+
+        if (totsz > len) {
+            ret = aspPopSupOut(addr, sc, len, &s);
+        } else {
+            ret = aspPopSupOut(addr, sc, totsz, &s);
+        }
+
         sprintf(mrs->log, "list buff pop resutl, ret: %d/%d\n", ret, totsz);
         print_f(&mrs->plog, "fs96", mrs->log);
 
@@ -18724,9 +18758,11 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         ring_buf_prod(&mrs->cmdTx);
         
         mrs_ipc_put(mrs, "u", 1, 1);
-
-        sc = s;
         totsz -= len;
+
+        if (totsz <= 0) break;
+        
+        sc = s;
     }
 
     ring_buf_set_last(&mrs->cmdTx, len);
@@ -18953,7 +18989,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
                 pflnt = pflnt->n;
             }
 
-            sprintf(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+            sprintf(mrs->log, " re-calculate total free cluster: %d free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
             print_f(&mrs->plog, "fs98", mrs->log);     
             usedClst = totClst - freeClst;
 
@@ -19103,13 +19139,15 @@ static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp)
                 s = s->n;
             }
 
-            if (s) {
+            if (sc) {
                 sc->n = 0;
             }
 
             while (s) {
                 sc = s;
                 s = s->n;
+
+                memset(sc, 0, sizeof(struct supdataBack_s));
                 aspFree(sc);
             }
             pfat->fatSupcur = 0;
