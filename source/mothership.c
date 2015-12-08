@@ -132,7 +132,7 @@ static int *totSalloc=0;
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
 
-#define SPI_KTHREAD_USE    (0) 
+#define SPI_KTHREAD_USE    (1) 
 #define SPI_UPD_NO_KTHREAD     (0)
 
 #define DIR_POOL_SIZE (20480)
@@ -976,7 +976,7 @@ inline int aspCalcSupLen(struct supdataBack_s *sup)
     while(scr) {
         len += scr->supdataTot - scr->supdataUse;
 
-        printf("%d. calcu sup, tot / used / len = %d / %d / %d\n", cnt, scr->supdataTot, scr->supdataUse, len);
+        //printf("%d. calcu sup, tot / used / len = %d / %d / %d\n", cnt, scr->supdataTot, scr->supdataUse, len);
         scr = scr->n;
 
         cnt++;
@@ -14169,7 +14169,7 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs16", mrs->log);
 
 /* bullet don't need kthread mode */
-#if 0 //SPI_KTHREAD_USE 
+#if SPI_KTHREAD_USE 
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
@@ -14407,7 +14407,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Set spi 1 slave ready: %d\n", bitset);
     print_f(&mrs->plog, "fs20", mrs->log);
     
-#if 0 // SPI_KTHREAD_USE
+#if SPI_KTHREAD_USE
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
     sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
@@ -16517,8 +16517,8 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
                     break;
                 } else {
                     len += s->supdataTot;
-                    sprintf(mrs->log, "tot/len: %d/%d\n", s->supdataTot, len);
-                    print_f(&mrs->plog, "fs68", mrs->log);
+                    //sprintf(mrs->log, "tot/len: %d/%d\n", s->supdataTot, len);
+                    //print_f(&mrs->plog, "fs68", mrs->log);
                 }
                 sc = s;
                 s = s->n;
@@ -18659,7 +18659,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     uint32_t val=0;
     int ret, totsz=0, len=0, secLen, max=0, mdo=0;
     struct sdFAT_s *pfat=0;
-    struct supdataBack_s *s=0, *sc=0, *sh=0;
+    struct supdataBack_s *rs = 0, *s=0, *sc=0, *sh=0;
     struct sdbootsec_s   *psec=0;
     struct info16Bit_s *p=0, *c=0;
     struct aspConfig_s *pct=0;
@@ -18670,8 +18670,9 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     sc = pfat->fatSupcur;
     psec = pfat->fatBootsec;
 
-    s = aspMalloc(sizeof(struct supdataBack_s));
-    memset(s, 0, sizeof(struct supdataBack_s));
+    rs = aspMalloc(sizeof(struct supdataBack_s));
+    memset(rs, 0, sizeof(struct supdataBack_s));
+    s = rs;
     
     sprintf(mrs->log, "deal with sup back head buff!! - 1\n");
     print_f(&mrs->plog, "fs96", mrs->log);
@@ -18680,6 +18681,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "ERROR!!! sup back head buff is empty! \n");
         print_f(&mrs->plog, "fs96", mrs->log);
         modersp->r = 0xed;
+        aspFree(rs);
         return 1;
     }
 
@@ -18775,6 +18777,8 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs96", mrs->log);
 
     modersp->m = modersp->m + 1;
+
+    aspFree(rs);
     return 2; 
 }
 
