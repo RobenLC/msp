@@ -132,8 +132,10 @@ static int *totSalloc=0;
 #define SPI_MAX_TXSZ  (1024 * 1024)
 #define SPI_TRUNK_SZ   (32768)
 
+/* kthread */
 #define SPI_KTHREAD_USE    (1) 
 #define SPI_UPD_NO_KTHREAD     (0)
+#define SPI_KTHREAD_DLY    (0)
 
 #define DIR_POOL_SIZE (20480)
 static FILE *mlog = 0;
@@ -11153,6 +11155,7 @@ static int ring_buf_info_len(struct shmem_s *pp)
     return dist;
 }
 
+#define DUAL_STREAM_RING_LOG (0)
 static int ring_buf_init(struct shmem_s *pp)
 {
     pp->r->lead.run = 0;
@@ -11322,10 +11325,10 @@ static int ring_buf_prod_dual(struct shmem_s *pp, int sel)
         }
     }
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
-
+#if DUAL_STREAM_RING_LOG
     sprintf(str, "prod %d %d, %d %d\n", pp->r->lead.run, pp->r->lead.seq, pp->r->dual.run, pp->r->dual.seq);
     print_f(mlogPool, "ring", str);
-
+#endif
     return 0;
 }
 
@@ -11364,10 +11367,10 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
     } else {
         dist = leadn - folwn;
     }
-
+#if DUAL_STREAM_RING_LOG
     sprintf(str, "cons d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
     print_f(mlogPool, "ring", str);
-
+#endif
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
 
@@ -11523,8 +11526,8 @@ static int ring_buf_cons_psudo(struct shmem_s *pp, char **addr)
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
 
-    sprintf(str, "psudo cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
-    print_f(mlogPool, "ring", str);
+    //sprintf(str, "psudo cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
+    //print_f(mlogPool, "ring", str);
 
     if (dist < 1)  return -1;
 
@@ -19793,6 +19796,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
+#define P2_TX_LOG (0)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -19983,10 +19987,12 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
+#if SPI_KTHREAD_DLY
                         usleep(1000);
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                     }
 #else
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
@@ -19999,8 +20005,10 @@ static int p2(struct procRes_s *rs)
                     fflush(rs->fdat_s[1]);
 #endif
                     //printf("0 spi %d\n", opsz);
+#if P2_TX_LOG
                     sprintf(rs->logs, "r %d / %d\n", opsz, len);
                     print_f(rs->plogs, "P2", rs->logs);
+#endif
                     msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);                    
 #if TIME_MEASURE 
                     clock_gettime(CLOCK_REALTIME, &tnow);
@@ -20060,17 +20068,21 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE                    
                             opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                             if (opsz == 0) {
+#if SPI_KTHREAD_DLY
                                 usleep(100000);
                                 sprintf(rs->logs, "kth opsz:%d\n", opsz);
                                 print_f(rs->plogs, "P2", rs->logs);  
+#endif
                                 continue;
                             }
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
                             //usleep(10000);
+#if P2_TX_LOG
                             sprintf(rs->logs, "r %d - %d\n", opsz, pi);
                             print_f(rs->plogs, "P2", rs->logs);
+#endif
                         }
 
                         //msync(addr, len, MS_SYNC);
@@ -20116,16 +20128,21 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
+#if SPI_KTHREAD_DLY
                         usleep(1000);
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     }
 #else
                     opsz = mtx_data(rs->spifd, addr, NULL, SPI_TRUNK_SZ, tr);
 #endif
+
+#if P2_TX_LOG
                     sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
+#endif
 
                     if (opsz == 0) {
                         sprintf(rs->logs, "opsz:%d\n", opsz);
@@ -20222,10 +20239,12 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
+#if SPI_KTHREAD_DLY
                         usleep(1000);
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                     }
 #else
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
@@ -20297,10 +20316,12 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
+#if SPI_KTHREAD_DLY
                         usleep(1000);
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                     }
 #else
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
@@ -20387,20 +20408,22 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
+#if SPI_KTHREAD_DLY
                         usleep(1000);
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     }
 #else
                     msync(addr, tlen, MS_SYNC);                    
                     //shmem_dump(addr, datLen);
                     opsz = mtx_data(rs->spifd, addr, addr, tlen, tr);
 #endif
-
+#if P2_TX_LOG
                     sprintf(rs->logs, "r (%d)\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
-
+#endif
                     if (opsz == 0) {
                         sprintf(rs->logs, "opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);    
@@ -20457,18 +20480,21 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
+#if SPI_KTHREAD_DLY
                         usleep(1000);
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     }
 #else
                     msync(addr, SPI_TRUNK_SZ, MS_SYNC);
                     opsz = mtx_data(rs->spifd, rx_buff, addr, SPI_TRUNK_SZ, tr);
 #endif
+#if P2_TX_LOG
                     sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
-
+#endif
                     if (opsz == 0) {
                         sprintf(rs->logs, "opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);    
@@ -20513,17 +20539,21 @@ static int p2(struct procRes_s *rs)
 #if SPI_KTHREAD_USE                    
                             opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                             if (opsz == 0) {
+#if SPI_KTHREAD_DLY
                                 usleep(1000);
                                 sprintf(rs->logs, "kth opsz:%d\n", opsz);
                                 print_f(rs->plogs, "P2", rs->logs);  
+#endif
                                 continue;
                             }
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
                             //usleep(10000);
+#if P2_TX_LOG
                             sprintf(rs->logs, "spi0 recv %d\n", opsz);
                             print_f(rs->plogs, "P2", rs->logs);
+#endif
                         }
 
                         //msync(addr, len, MS_SYNC);
@@ -20565,6 +20595,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
+#define P3_TX_LOG  (0)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -20688,10 +20719,12 @@ static int p3(struct procRes_s *rs)
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
+#if SPI_KTHREAD_DLY
                         usleep(1000);
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
                         print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                     }
 #else // #if SPI_KTHREAD_USE
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
@@ -20718,8 +20751,10 @@ static int p3(struct procRes_s *rs)
                         fin = NULL;
                 }
 #endif
+#if P3_TX_LOG
                     sprintf(rs->logs, "r %d / %d\n", opsz, len);
                     print_f(rs->plogs, "P3", rs->logs);
+#endif
                     msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
 #if TIME_MEASURE
@@ -20791,17 +20826,21 @@ static int p3(struct procRes_s *rs)
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
+#if SPI_KTHREAD_DLY
                         usleep(100000);
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                         sprintf(rs->logs, "kth opsz:%d\n", opsz);
                         print_f(rs->plogs, "P3", rs->logs);  
+#endif
+                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                     }
 
 #else // #if SPI_KTHREAD_USE
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
+#if P3_TX_LOG
                             sprintf(rs->logs, "r %d - %d\n", opsz, pi);
                             print_f(rs->plogs, "P3", rs->logs);
+#endif
                         }
 
                         //msync(addr, len, MS_SYNC);
@@ -20827,6 +20866,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
+#define P4_TX_LOG  (0)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
@@ -20988,8 +21028,10 @@ static int p4(struct procRes_s *rs)
 #endif
                             totsz += len;
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
+#if P4_TX_LOG
                             sprintf(rs->logs, "t %d -%d \n", opsz, pi);
                             print_f(rs->plogs, "P4", rs->logs);         
+#endif
 #if MSP_P4_SAVE_DAT
                             fwrite(addr, 1, len, rs->fdat_s[0]);
                             fflush(rs->fdat_s[0]);
@@ -21164,8 +21206,10 @@ static int p4(struct procRes_s *rs)
                     
                         msync(addr, len, MS_SYNC);
                         /* send data to wifi socket */
+#if P4_TX_LOG
                         sprintf(rs->logs, " %d -%d \n", len, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
+#endif
                         if (len != 0) {
                             #if 1 /*debug*/
                             opsz = write(rs->psocket_t->connfd, addr, len);
@@ -22436,6 +22480,7 @@ static int p6(struct procRes_s *rs)
     return 0;
 }
 
+#define P7_TX_LOG (0)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
@@ -22539,8 +22584,10 @@ static int p7(struct procRes_s *rs)
                             #else
                             num = len;
                             #endif
+#if P7_TX_LOG
                             sprintf(rs->logs, "tx %d - %d \n", num, tx);
                             print_f(rs->plogs, "P7", rs->logs);         
+#endif
                         }
                         rs_ipc_put(rs, "n", 1);
                     } else {
@@ -22596,8 +22643,10 @@ static int p7(struct procRes_s *rs)
                     
                         msync(addr, len, MS_SYNC);
                         /* send data to wifi socket */
+#if P7_TX_LOG
                         sprintf(rs->logs, " %d -%d \n", len, tx);
                         print_f(rs->plogs, "P7", rs->logs);         
+#endif
                         if (len != 0) {
 #if 1 /* debug */
                             num = write(rs->psocket_n->connfd, addr, len);
