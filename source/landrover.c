@@ -2011,7 +2011,7 @@ static int stlaser_01(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = 1; 
+            ch = 5; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             break;
@@ -2208,6 +2208,8 @@ static int stauto_02(struct psdata_s *data)
             m = &data->rs->pmch->sdln;
             //memset(s, 0, sizeof(struct SdAddrs_s));
             //memset(m, 0, sizeof(struct SdAddrs_s));
+            s->f = 0;
+            m->f = 0;
 
             ch = 36; 
             rs_ipc_put(data->rs, &ch, 1);
@@ -3382,7 +3384,7 @@ static int stauto_23(struct psdata_s *data)
                 //m->d[ix] = g->data;
                 //m->f &= ~(0x1 << ix);
 
-                sprintf(str, "!! flag: 0x%.2x data: 0x%.2x !! - 1\n", m->f, p->data);  
+                sprintf(str, "!! flag: 0x%.2x opcode: 0x%.2x data: 0x%.2x !! - 1\n", m->f, g->opcode, g->data);  
                 print_f(mlogPool, "auto_23", str);  
 
                 if (m->f & (0x1 << ix)) {
@@ -5294,7 +5296,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    usleep(120000);
+    usleep(100000);
 
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -5646,7 +5648,7 @@ static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
-    usleep(60000);
+    usleep(100000);
 
     bitset = 0;
     ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
@@ -5666,7 +5668,7 @@ static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs30", mrs->log);
 
     modersp->d = modersp->m + 1;
-    modersp->m = 1;
+    modersp->m = 5;
     return 2;
 
 }
@@ -6687,13 +6689,28 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     modersp->m = 24;
     return 0;
 }
-
+#if 0
 #define CROP_COOD_01 {818, 557}
 #define CROP_COOD_02 {980, 1557}
 #define CROP_COOD_03 {1168, 1557}
 #define CROP_COOD_04 {1586, 1484}
 #define CROP_COOD_05 {1415, 487}
 #define CROP_COOD_06 {1253, 487}
+#elif 0
+#define CROP_COOD_01 {123, 15 }
+#define CROP_COOD_02 {52 , 83 }
+#define CROP_COOD_03 {121, 149}
+#define CROP_COOD_04 {145, 149}
+#define CROP_COOD_05 {213, 83 }
+#define CROP_COOD_06 {143, 15 }
+#else
+#define CROP_COOD_01 {358, 357}
+#define CROP_COOD_02 {630, 640}
+#define CROP_COOD_03 {678, 640}
+#define CROP_COOD_04 {951, 381}
+#define CROP_COOD_05 {685, 104}
+#define CROP_COOD_06 {624, 104}
+#endif
 
 #define CROP_SCALE 1
 static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)  
@@ -6897,8 +6914,9 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
     pslen = &mrs->mchine.sdln;
 
     //tmp32 = 16843832; //0x010107a8 //0x01010438
-    tmp32 = mrs->scan_length;
-
+    //tmp32 = mrs->scan_length;
+    tmp32 = 0;
+    
     pslen->n = 0;
     for (id = 0; id < 4; id++) {
         pslen->d[id] = (tmp32 >> (8 * (3 - id))) & 0xff;
@@ -7113,12 +7131,13 @@ static int p2(struct procRes_s *rs)
 
     /* spi0 */
     char ch;
-    int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0, tlen=0;
+    int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0, tlen=0, idx=0;
     char *addr;
     char filedst[128];
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/handmade.jpg";
     char filename[128] = "/mnt/mmc2/scan_pro.jpg";
+    char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
     //char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/tx/recv_%d.bin";
 #if SAVE_OUT
@@ -7131,6 +7150,8 @@ static int p2(struct procRes_s *rs)
 	
     if (infpath[0] != '\0') {
         strcpy(filename, infpath);
+    } else {
+        sprintf(filename, samplefile, (idx%36));
     }
 
     fp = fopen(filename, "r");
@@ -7154,8 +7175,22 @@ static int p2(struct procRes_s *rs)
 
         len = rs_ipc_get(rs, &ch, 1);
         if (len > 0) {
-            //sprintf(rs->logs, "%c \n", ch);
-            //print_f(rs->plogs, "P2", rs->logs);
+            sprintf(rs->logs, "%c \n", ch);
+            print_f(rs->plogs, "P2", rs->logs);
+            
+            if (((idx%36) == 13) || ((idx%36) == 14)) {
+                idx = 15;
+            }
+            
+            if ((idx%36) == 8)  {
+                idx = 9;
+            }
+            
+            sprintf(filename, samplefile, (idx%36));
+            idx++;
+
+            sprintf(rs->logs, "get sample file: [%s] \n", filename);
+            print_f(rs->plogs, "P2", rs->logs);
 
             if (ch == 'r') {
 #if SAVE_OUT
