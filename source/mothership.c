@@ -133,7 +133,7 @@ static int *totSalloc=0;
 #define SPI_TRUNK_SZ   (32768)
 
 /* kthread */
-#define SPI_KTHREAD_USE    (0) 
+#define SPI_KTHREAD_USE    (1) 
 #define SPI_UPD_NO_KTHREAD     (0)
 #define SPI_KTHREAD_DLY    (0)
 
@@ -18749,7 +18749,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
             len = ring_buf_get(&mrs->cmdTx, &addr);
         }
 
-        sprintf(mrs->log, "deal with sup back head buff!! - 7\n");
+        sprintf(mrs->log, "deal with sup back head buff!! - 7 len:%d \n", len);
         print_f(&mrs->plog, "fs96", mrs->log);
 
         if (totsz > len) {
@@ -18762,20 +18762,20 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs96", mrs->log);
 
         if ((mdo) && (val)) {
-            mdo = changeJpgLen(addr, val, len);
+            mdo = changeJpgLen(addr, val, ret);
         }
 
         ring_buf_prod(&mrs->cmdTx);
         
         mrs_ipc_put(mrs, "u", 1, 1);
-        totsz -= len;
+        totsz -= ret;
 
         if (totsz <= 0) break;
         
         sc = s;
     }
 
-    ring_buf_set_last(&mrs->cmdTx, len);
+    ring_buf_set_last(&mrs->cmdTx, ret);
     mrs_ipc_put(mrs, "u", 1, 1);
     
     mrs_ipc_put(mrs, "U", 1, 1);
@@ -19941,7 +19941,7 @@ static int p2(struct procRes_s *rs)
                     rs_ipc_put(rs, "C", 1);
                 } else {
 
-                    sprintf(rs->logs, "ch = X \n");
+                    sprintf(rs->logs, "ch = X, len = %d\n", len);
                     print_f(rs->plogs, "P2", rs->logs);
                     
                     bitset = 0;
@@ -20016,7 +20016,7 @@ static int p2(struct procRes_s *rs)
 
 #endif        
 
-                    if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                    if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
                     }
 
@@ -20099,7 +20099,7 @@ static int p2(struct procRes_s *rs)
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
-                            if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                            if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
                             }
 
@@ -20164,7 +20164,7 @@ static int p2(struct procRes_s *rs)
                     opsz = mtx_data(rs->spifd, addr, NULL, SPI_TRUNK_SZ, tr);
 #endif
 
-                    if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                    if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
                     }
 
@@ -20278,7 +20278,7 @@ static int p2(struct procRes_s *rs)
 #else
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
 #endif
-                        if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                        if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                             opsz = 0 - opsz;
                         }
 
@@ -20360,7 +20360,7 @@ static int p2(struct procRes_s *rs)
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
 #endif
 
-                        if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                        if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                             opsz = 0 - opsz;
                         }
 
@@ -20458,7 +20458,7 @@ static int p2(struct procRes_s *rs)
                     opsz = mtx_data(rs->spifd, addr, addr, tlen, tr);
 #endif
 
-                    if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                    if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
                     }
 
@@ -20534,7 +20534,7 @@ static int p2(struct procRes_s *rs)
                     opsz = mtx_data(rs->spifd, rx_buff, addr, SPI_TRUNK_SZ, tr);
 #endif
 
-                    if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                    if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
                     }
 
@@ -20596,7 +20596,7 @@ static int p2(struct procRes_s *rs)
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
-                            if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                            if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
                             }
 
@@ -20781,7 +20781,7 @@ static int p3(struct procRes_s *rs)
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif // #if SPI_KTHREAD_USE
 
-                    if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                    if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
                     }
                     
@@ -20894,7 +20894,7 @@ static int p3(struct procRes_s *rs)
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
 
-                            if ((opsz > 0) && (opsz < len)) { // workaround to fit original design
+                            if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
                             }
 
