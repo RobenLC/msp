@@ -2291,7 +2291,7 @@ static uint32_t mspSD_getNextFAT(uint32_t idx, uint8_t *fat, uint32_t max)
         i++;
     }
 
-    printf("   Get next FAT val: %d\n", val);
+    //printf("   Get next FAT val: %d\n", val);
 
     return val;    
 }
@@ -2330,7 +2330,7 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
             break;
         }
 
-        printf("  compare nxt:%d and cur:%d\n", nxt, cur);    
+        //printf("  compare nxt:%d and cur:%d\n", nxt, cur);    
         
         if (nxt == (cur+1)) {
             cur = nxt;
@@ -2343,7 +2343,7 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
             ret = mspSD_createFATLinkList(&ls->n);
             if (ret) return ret;
 
-            printf("  diff nxt:%d, cur:%d str:%d, len:%d\n", nxt, cur, lstr, llen);
+            //printf("  diff nxt:%d, cur:%d str:%d, len:%d\n", nxt, cur, lstr, llen);
 
             cur = nxt;
             lstr = cur;
@@ -2351,7 +2351,7 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
             ls = ls->n;
         }
         nxt = mspSD_getNextFAT(cur, fat, max);
-        printf("  return nxt:%d\n", nxt);
+        //printf("  return nxt:%d\n", nxt);
     }
 
     if (!lstr) {
