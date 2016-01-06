@@ -14207,6 +14207,7 @@ static int fs17(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     modersp->m = modersp->m + 1;
     modersp->v = 0;
+    modersp->c = 0;
     return 2;
 }
 
@@ -14224,9 +14225,11 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
     //print_f(&mrs->plog, "fs18", mrs->log);
     pfat = &mrs->aspFat;
     sc = pfat->fatSupcur;
-    
+
+    while (1) {
+    if (!(modersp->c % 2)) {
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
-    while (ret > 0) {
+    if (ret > 0) {
         if (ch == 'p') {
             if (sc) {
                 len = ring_buf_cons_dual_psudo(&mrs->dataRx, &addr, modersp->v);
@@ -14259,13 +14262,16 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r |= 0x1;
             //mrs_ipc_put(mrs, "e", 1, 3);
         }
-        ret = mrs_ipc_get(mrs, &ch, 1, 1);
+        //ret = mrs_ipc_get(mrs, &ch, 1, 1);
+        modersp->c += 1;
+    }else {
+        break;
+    }
     }
 
-
-
+    if (modersp->c % 2) {    
     ret = mrs_ipc_get(mrs, &ch, 1, 2);
-    while (ret > 0) {
+    if (ret > 0) {
         if (ch == 'p') {
             if (sc) {
                 len = ring_buf_cons_dual_psudo(&mrs->dataRx, &addr, modersp->v);
@@ -14297,7 +14303,12 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r |= 0x2;
             //mrs_ipc_put(mrs, "e", 1, 3);
         }
-        ret = mrs_ipc_get(mrs, &ch, 1, 2);
+        //ret = mrs_ipc_get(mrs, &ch, 1, 2);
+        modersp->c += 1;
+    }else {
+        break;
+    }
+    }
     }
 
     if (modersp->r == 0x3) {
@@ -14347,7 +14358,7 @@ static int fs18(struct mainRes_s *mrs, struct modersp_s *modersp)
             pfat->fatSupcur = 0;
         }
         mrs_ipc_put(mrs, "D", 1, 3);
-        sprintf(mrs->log, "%d end, len: %d\n", modersp->v, len);
+        sprintf(mrs->log, "%d end, len: %d, cnt:%d\n", modersp->v, len,modersp->c);
         print_f(&mrs->plog, "fs18", mrs->log);
 
         mrs->mchine.cur.opinfo = modersp->v;
@@ -20646,7 +20657,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
-#define P3_TX_LOG  (0)
+#define P3_TX_LOG  (1)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -21102,14 +21113,20 @@ static int p4(struct procRes_s *rs)
                             print_f(rs->plogs, "P4", rs->logs);         
                         }
                     } else {
-                        sprintf(rs->logs, "socket tx %d %d- end\n", opsz, pi);
+                        sprintf(rs->logs, "socket tx %d %d- wait\n", opsz, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
-                        break;
+                        //break;
                     }
 
                     if (ch != 'D') {
                         ch = 0;
                         rs_ipc_get(rs, &ch, 1);
+                    } else {
+                        if (len < 0) {
+                           sprintf(rs->logs, "socket tx %d %d- END\n", opsz, pi);
+                           print_f(rs->plogs, "P4", rs->logs);         
+                            break;
+                        }
                     }
                 }
                 
