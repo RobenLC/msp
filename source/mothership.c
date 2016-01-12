@@ -466,6 +466,7 @@ struct sdbootsec_s{
     int secSign;          // shall be 0x55 (BP510) and 0xAA (BP511)
     int secWhfat;        // indicate the sector of fat table
     int secWhroot;      // indicate the sector of root dir
+    int secBoffset;
 };
 
 struct sdFSinfo_s{
@@ -511,6 +512,7 @@ struct sdDirPool_s{
 
 struct sdFAT_s{
     int fatStatus;
+    int fatRetry;
     struct sdbootsec_s   *fatBootsec;
     struct sdFSinfo_s     *fatFSinfo;
     struct sdFATable_s   *fatTable;
@@ -1048,7 +1050,7 @@ static uint32_t aspRawCompose(char * raw, int size)
 }
 
 
-static int cfgValueOffset(int val, int offset)
+static uint32_t cfgValueOffset(uint32_t val, int offset)
 {
     return (val >> offset) & 0xff;
 }
@@ -6403,6 +6405,10 @@ static int stfat_20(struct psdata_s *data)
                 print_f(rs->plogs, "FAT", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else {
+            
+                //sprintf(rs->logs, "!!!! op20, ASPOP_SDFAT_STR01: %d !!!!\n", pdt->opValue); 
+                //print_f(rs->plogs, "FAT", rs->logs);  
+
                 c->opcode = pdt->opCode;
                 c->data = pdt->opValue;
                 memset(p, 0, sizeof(struct info16Bit_s));
@@ -6467,6 +6473,10 @@ static int stfat_21(struct psdata_s *data)
                 print_f(rs->plogs, "FAT", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else {
+            
+                //sprintf(rs->logs, "!!!! op21, ASPOP_SDFAT_STR02: %d !!!!\n", pdt->opValue); 
+                //print_f(rs->plogs, "FAT", rs->logs);  
+
                 c->opcode = pdt->opCode;
                 c->data = pdt->opValue;
                 memset(p, 0, sizeof(struct info16Bit_s));
@@ -6531,6 +6541,10 @@ static int stfat_22(struct psdata_s *data)
                 print_f(rs->plogs, "FAT", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else {
+            
+                //sprintf(rs->logs, "!!!! op22, ASPOP_SDFAT_STR03: %d !!!!\n", pdt->opValue); 
+                //print_f(rs->plogs, "FAT", rs->logs);  
+
                 c->opcode = pdt->opCode;
                 c->data = pdt->opValue;
                 memset(p, 0, sizeof(struct info16Bit_s));
@@ -6595,6 +6609,10 @@ static int stfat_23(struct psdata_s *data)
                 print_f(rs->plogs, "FAT", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else {
+            
+                //sprintf(rs->logs, "!!!! op23, ASPOP_SDFAT_STR04: %d !!!!\n", pdt->opValue); 
+                //print_f(rs->plogs, "FAT", rs->logs);  
+
                 c->opcode = pdt->opCode;
                 c->data = pdt->opValue;
                 memset(p, 0, sizeof(struct info16Bit_s));
@@ -7049,7 +7067,7 @@ static int stfat_30(struct psdata_s *data)
         case STINIT:
         
             if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
-                secStr = 0;
+                secStr = 0 + pFat->fatBootsec->secBoffset;
                 secLen = 16;
                 c->opinfo = secStr;
                 p->opinfo = secLen;
@@ -15326,7 +15344,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
 #define SF2 (8 * 2)
 #define SF3 (8 * 3)
 
-    int val=0, i=0;
+    uint32_t val=0, i=0;
     char *pr=0;
     uint32_t secStr=0, secLen=0;
     struct aspConfig_s *pct=0;
@@ -15424,14 +15442,24 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (psec->secSize == 512) {
             pfat->fatStatus |= ASPFAT_STATUS_BOOT_SEC;
+            psec->secWhfat += psec->secBoffset;
+            psec->secWhroot += psec->secBoffset;
+        } else {
+            pfat->fatRetry += 1;
+            if (pfat->fatRetry > 2) {
+                psec->secBoffset = 8192;
+            }
         }
+
+        sprintf(mrs->log, "!!!! boot retry :%d offset: %d  !!!!\n", pfat->fatRetry, psec->secBoffset);
+        print_f(&mrs->plog, "fs50", mrs->log);
 
         modersp->r = 1;
     }else {
         secStr = c->opinfo;
         secLen = p->opinfo;
 
-        sprintf(mrs->log, "buff empty, set str:%d, len:%d \n", secStr, secLen);
+        sprintf(mrs->log, "buff empty, set str:%d(0x%x), len:%d \n", secStr, secStr, secLen);
         print_f(&mrs->plog, "fs50", mrs->log);
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
@@ -15440,10 +15468,11 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
         cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
         val = cfgValueOffset(secStr, 16);
         cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
-        val = cfgValueOffset(secStr, 5);
+        val = cfgValueOffset(secStr, 8);
         cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
         val = cfgValueOffset(secStr, 0);
         cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+
         val = cfgValueOffset(secLen, 24);
         cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
         val = cfgValueOffset(secLen, 16);
