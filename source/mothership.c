@@ -1461,6 +1461,7 @@ static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
     if (len > 0) {
         printf("  SFN get, len: %d\n", len);
         shmem_dump(p, len);
+        *(p+12) = 0x18; // for windows conpatiable
         p = p + len;
     } else {
         printf("  ERROR!!! SFN get failed, len: %d\n", len);        
@@ -1560,7 +1561,7 @@ static char aspSnameFilterIn(char ch)
     char notAllow[16] = {0x22, 0x2a, 0x2b, 0x2c, 0x2f, 0x3a, 0x3b, 0x3c, 
                                      0x3d, 0x3e, 0x3f, 0x5b, 0x5c, 0x5d, 0x7c, 0x7f};
 
-    if (ch == 0x0)  return ch;
+    if (ch == 0x0)  return 0x20;
     if (ch < 0x20)  return def;
     if (ch > 0x7f)  return def;
     if ((ch > 0x60) && ch < (0x7b)) {
@@ -21470,7 +21471,7 @@ static int p4(struct procRes_s *rs)
                     len = ring_buf_get(rs->pcmdTx, &addr);
                     while (len <= 0) {
                         rs_ipc_put(rs, "h", 1);
-                        usleep(10000000);
+                        usleep(1000000);
                         len = ring_buf_get(rs->pcmdTx, &addr);
                     }
 
