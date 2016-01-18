@@ -1611,13 +1611,15 @@ static int aspFSrmspace(char *str, int len)
     char *end=0;
     if (!str) return;
     if (!len) return;
-    end = str + len;
-    while (end > str) {
+    end = str + len - 1;
+    while (end >= str) {
         if (*end == 0x20) {
             space++;
-            *end = 0;
+            //*end = 0;
+        } else {
+            break;
         }
-        if (*end != 0) break;
+        //if (*end != 0) break;
         end --;
     }
     return space;
@@ -1713,7 +1715,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
     //printf("[%.2x][%d] - [%.6x] \n", *raw, last, fs->dfstats);
     uint32_t tmp32=0;
     uint8_t sum=0;
-    int leN=0, cnt=0, idx=0, ret = 0;
+    int leN=0, cnt=0, idx=0, ret = 0, n = 0;
     char *plnN=0, *pstN=0, *nxraw=0;
     char ld=0, nd=0;
     if (!raw) return (-1);
@@ -1756,11 +1758,11 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
                 printf("CONGING!!! checksum match: 0x%x / 0x%x [%s]\n\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
             }
         } else {
-            //printf("\nSHORT file name parsing... [len:%d]\n", fs->dflen);
+            //printf("\nSHORT file name parsing... [len:%d][%s]\n", fs->dflen, pstN);
         }
 
-        cnt = aspFSrmspace(pstN, 11);
-        if (cnt == 0) {
+        cnt = aspFSrmspace(pstN+8, 3);
+        if (cnt < 3) {
             memset(pstN, 0, 16);
             ret = aspNameCpyfromRaw(raw, pstN, 0, 8, 1);
             if (ret != 8) {
@@ -1768,17 +1770,21 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
                 //printf("short name copy error ret:%d \n", ret);
                 goto fsparseEnd;
             }
-            aspFSrmspace(pstN, 8);
-            pstN += strlen(pstN);
+            ret = aspFSrmspace(pstN, 8);
+            //printf("[%s]short name space count:%d \n", pstN, ret);
+            n = strlen(pstN) - ret;
+            pstN += n;
             *pstN = '.';
             pstN += 1;
+            //printf("[%s]short name space n:%d \n", pstN, n);
             ret = aspNameCpyfromRaw(raw, pstN, 8, 3, 1);
             if (ret != 3) {
                 memset(fs, 0x00, sizeof(struct directnFile_s));
                 //printf("short name copy error ret:%d \n", ret);
                 goto fsparseEnd;
             }
-            aspFSrmspace(pstN, 3);
+            //printf("[%s]short name space \n", pstN);
+            //aspFSrmspace(pstN, 3);
         }
         
         fs->dfattrib = raw[11];
@@ -21589,7 +21595,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         return (-1);
     }
 
-    recvbuf = aspMalloc(1024);
+    recvbuf = aspMalloc(2048);
     if (!recvbuf) {
         sprintf(rs->logs, "p5 recvbuf alloc failed! \n");
         print_f(rs->plogs, "P5", rs->logs);
@@ -21651,6 +21657,15 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         memset(msg, 0x0, 256);
 
         n = read(rs->psocket_r->connfd, recvbuf, 1024);
+        
+        recvbuf[n] = '\0';
+        sprintf(rs->logs, "receive len[%d]content[%s]\n", n, recvbuf);
+        print_f(rs->plogs, "P5", rs->logs);
+        memset(sendbuf, 0, 2048);
+        sprintf(sendbuf, "Leo heard [%s]\n", recvbuf);
+        //strcpy(sendbuf, recvbuf);
+        n = strlen(sendbuf);
+        
         if (n <= 0) goto socketEnd;
         hd = atFindIdx(recvbuf, 0xfe);
         if (hd < 0) goto socketEnd;
@@ -21763,12 +21778,14 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sendbuf[7+n] = 0xfb;
         sendbuf[7+n+1] = '\0';
         sendbuf[7+n+2] = '\0';
-        ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
+
         //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, sendbuf, rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
         //print_f(rs->plogs, "P5", sendbuf);
         //printf("[p5]:%s\n", sendbuf);
 
         socketEnd:
+        ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
+        
         //sprintf(rs->logs, "END receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, recvbuf, hd, be, ed, ln, fg);
         sprintf(rs->logs, "END receive len[%d]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, hd, be, ed, ln, fg);
         print_f(rs->plogs, "P5", rs->logs);
