@@ -1461,7 +1461,7 @@ static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
     if (len > 0) {
         printf("  SFN get, len: %d\n", len);
         shmem_dump(p, len);
-        *(p+12) = 0x18; // for windows conpatiable
+        //*(p+12) = 0x18; // for windows conpatiable
         p = p + len;
     } else {
         printf("  ERROR!!! SFN get failed, len: %d\n", len);        
