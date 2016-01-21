@@ -337,6 +337,15 @@ typedef enum {
 } actOption_e;
 
 typedef enum {
+    FILE_FORMAT_NONE=0,
+    FILE_FORMAT_JPG,
+    FILE_FORMAT_PDF,
+    FILE_FORMAT_RAW,
+    FILE_FORMAT_TIFF_I,
+    FILE_FORMAT_TIFF_M,
+} fileFormat_e;
+
+typedef enum {
     SDSTATS_ERROR=0,
     SDSTATS_OK,
 } SDStatus_e;
@@ -837,6 +846,390 @@ static int aspNameCpyfromName(char *raw, char *dst, int offset, int len, int jum
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
+
+int pdfAppend(char *d, char *s, int tot, int max)
+{
+    int idx = 0, slen = 0, end = 0;
+
+    if (d == 0) return -1;
+    if (s == 0) return -2;
+    if (tot > max) return -3;
+
+    slen = strlen(s);
+    idx = tot;
+    end = tot + slen;
+    if (end > max) return -4;
+    
+    while (idx < end) {
+        d[idx] = *s;
+        idx ++;
+        s++;
+    }
+    
+    return slen;
+}
+
+int pdfHead(char *ppdf, int max)
+{
+    char tch[128], *dst = 0;
+    int tlen = 0, tot = 0, n=0;
+
+    if (ppdf == 0) return -1;
+    if (max == 0) return -2;
+
+    dst = ppdf;
+    
+    sprintf(tch, "%PDF-1.4\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+    
+    sprintf(tch, "1 0 obj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "<< /Type /Catalog\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Pages 2 0 R\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, ">>\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "endobj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "3 0 obj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "<< /Type /Page\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Parent 2 0 R\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Resources 4 0 R\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/MediaBox [0 0 1123 842]\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Contents 5 0 R\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, ">>\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "endobj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "4 0 obj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "<< /ProcSet [/PDF /ImageB]\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/XObject << /Im1 6 0 R >>\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, ">>\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "endobj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "5 0 obj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "<< /Length 107 >>\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "stream\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "   q\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "      0.701666 0 0 0.701666 0 0 cm\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "      1 0 0 1 0 0 cm\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "      1600 0 0 1200 0 0 cm\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "      /Im1 Do\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "   Q\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "\nendstream\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "endobj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "6 0 obj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "<< /Type /XObject\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Subtype /Image\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Width 1600\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Height 1200\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/ColorSpace /DeviceRGB\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/BitsPerComponent 8\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Filter/DCTDecode /Length 7 0 R>>\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "stream\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+
+    return tot;
+}
+
+int pdfTail(char *ppdf, int max)
+{
+    char tch[128], *dst = 0;
+    char end[6] = {0x25, 0x25, 0x45, 0x4f, 0x46, 0x00};
+    int tlen = 0, tot = 0, n=0;
+
+    if (ppdf == 0) return -1;
+    if (max == 0) return -2;
+
+    dst = ppdf;
+
+    sprintf(tch, "\nendstream\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "endobj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "7 0 obj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "658432\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "endobj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "2 0 obj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "<< /Type /Pages\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Kids [3 0 R ]\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Count 1\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, ">>\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "endobj\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+    
+    sprintf(tch, "xref\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0 8\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0000000000 65535 f\r\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0000000009 00000 n\r\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0000659015 00000 n\r\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0000000058 00000 n\r\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0000000162 00000 n\r\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0000000234 00000 n\r\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0000000392 00000 n\r\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "0000658993 00000 n\r\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "trailer\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "<< /Size 8\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "/Root 1 0 R\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, ">>\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "startxref\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    sprintf(tch, "659073\n");
+    n = pdfAppend(dst, tch, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    n = pdfAppend(dst, end, tot, max);
+    if (n < 0) return -3;
+    tot += n;
+
+    return tot;
+}
 
 void aspFree(void *p)
 {
@@ -16189,7 +16582,7 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     s = aspMalloc(sizeof(struct supdataBack_s));
     if (!s) {
-        sprintf(mrs->log, "FAIL to initial the fatSupdata !!! \n");
+        sprintf(mrs->log, "FAIL to initial the head fatSupdata !!! \n");
         print_f(&mrs->plog, "fs59", mrs->log);
 
         modersp->r = 2;
@@ -16198,8 +16591,33 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     //cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
     memset(s, 0, sizeof(struct supdataBack_s));
+    s->supdataTot = SPI_TRUNK_SZ;
+    s->supdataUse = SPI_TRUNK_SZ;
     pfat->fatSupdata = s;
     pfat->fatSupcur = pfat->fatSupdata;
+
+    /* test pdf head */
+    ret = pdfHead(s->supdataBuff, SPI_TRUNK_SZ);
+    s->supdataUse = 0;
+    s->supdataTot = ret;
+    shmem_dump(s->supdataBuff, s->supdataTot);
+    sprintf(mrs->log, "dump PDF head - end\n");
+    print_f(&mrs->plog, "fs59", mrs->log);
+
+    s = 0;
+    s = aspMalloc(sizeof(struct supdataBack_s));
+    if (!s) {
+        sprintf(mrs->log, "FAIL to initial the second fatSupdata !!! \n");
+        print_f(&mrs->plog, "fs59", mrs->log);
+
+        modersp->r = 2;
+        return 1;
+    }
+
+    //cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
+    memset(s, 0, sizeof(struct supdataBack_s));
+    pfat->fatSupcur->n = s;
+    pfat->fatSupcur = s;
 
     sprintf(mrs->log, "fatSupdata = 0x%.8x, fatSupcur = 0x%.8x!!!  \n", pfat->fatSupdata, pfat->fatSupcur);
     print_f(&mrs->plog, "fs59", mrs->log);
@@ -18714,7 +19132,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     uint32_t val=0;
     int ret, totsz=0, len=0, secLen, max=0, mdo=0;
     struct sdFAT_s *pfat=0;
-    struct supdataBack_s *rs = 0, *s=0, *sc=0, *sh=0;
+    struct supdataBack_s *rs = 0, *s=0, *sc=0, *sh=0, *se=0;
     struct sdbootsec_s   *psec=0;
     struct info16Bit_s *p=0, *c=0;
     struct aspConfig_s *pct=0;
@@ -18897,7 +19315,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
     struct sdFATable_s   *pftb=0;
     struct directnFile_s *upld=0, *fscur=0, *fssrh=0;
-    struct supdataBack_s *s=0, *sc=0, *sh=0;
+    struct supdataBack_s *s=0, *sc=0, *sh=0, *se=0;
     
     uint32_t adata[3], atime[3];
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
@@ -19003,6 +19421,26 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "SFN[%s] LFS[%s] len:%d\n", upld->dfSFN, upld->dfLFN, upld->dflen);
     print_f(&mrs->plog, "fs98", mrs->log);
 
+    /* test pdf tail */
+    se = sc;
+    while (se->n) {
+        se = se->n;
+    }
+    sprintf(mrs->log, "PDF Tail get!!! tot: %d, use:%d \n", se->supdataTot, se->supdataUse);
+    print_f(&mrs->plog, "fs98", mrs->log);
+    if (se->supdataTot != 0) {
+        shmem_dump(se->supdataBuff, se->supdataTot);
+        sprintf(mrs->log, "dump - end\n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+    }
+
+    ret = pdfTail(se->supdataBuff+se->supdataTot, SPI_TRUNK_SZ-se->supdataTot);
+
+    shmem_dump(se->supdataBuff+se->supdataTot, ret);
+    sprintf(mrs->log, "dump PDF tail - end\n");
+    print_f(&mrs->plog, "fs98", mrs->log);
+    se->supdataTot += ret;
+    
     /* calculate sector start and sector length of file */            
     datLen = aspCalcSupLen(sc);
     if (datLen % clstByte) {
@@ -23034,7 +23472,7 @@ int main(int argc, char *argv[])
             ctb->opCode = OP_FFORMAT;
             ctb->opType = ASPOP_TYPE_VALUE;
             ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_3;
+            ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
         case ASPOP_COLOR_MODE:  
