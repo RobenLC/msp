@@ -6098,6 +6098,7 @@ static int stdob_09(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
     uint32_t rlt;
+    
     rlt = abs_result(data->result); 
 
     //sprintf(str, "wt_01 - rlt:0x%.8x \n", data->result); 
@@ -6105,7 +6106,7 @@ static int stdob_09(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            ch = 41; 
+            ch = 101; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             //sprintf(str, "wt_01: result: 0x%.8x\n", data->result); 
@@ -10675,7 +10676,7 @@ static int stvector_81(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
 
-            ch = 101; 
+            ch = 105; 
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
@@ -12322,7 +12323,7 @@ end:
 static int cmdfunc_wt_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
-    int ret=0, ix=0, n=0, err=0, upd=0, brk=0;
+    int ret=0, ix=0, n=0, err=0, upd=0, brk=0, pass=0;
     struct aspWaitRlt_s *pwt;
     struct info16Bit_s *pkt;
     struct mainRes_s *mrs=0;
@@ -12361,6 +12362,7 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
             #if 0 /* remove for FPGA developing need */
                 ctb->opStatus = ASPOP_STA_UPD; 
             #endif
+                pass++;
             } else {
                 /*
                 sprintf(mrs->log, "<err++, n=%d rsp=%d opc:0x%x dat:0x%x>", n, rsp, pkt->opcode, pkt->data); 
@@ -12381,9 +12383,9 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
 end:
 
     if (brk | ret | err) {
-        sprintf(mrs->log, "E,%d,%d,%d", err, ret, brk);
+        sprintf(mrs->log, "wt_NG,error:%d,pass:%d,break:%d,ret:%d", err, pass, brk,ret);
     } else {
-        sprintf(mrs->log, "D,%d,%d,%d", err, ret, brk);
+        sprintf(mrs->log, "wt_PASS,error:%d,pass:%d,break:%d,ret:%d", err, pass, brk,ret);
     }
 /*
     if (brk) {
@@ -14175,6 +14177,7 @@ static int hd101(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd102(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd103(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd104(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd105(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -19675,6 +19678,102 @@ static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
+static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
+    //sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    //print_f(&mrs->plog, "fs101", mrs->log);
+
+    //printf("[fs101] \n");
+    
+    mrs_ipc_put(mrs, "c", 1, 1);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs102(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    p = &mrs->mchine.get;
+
+    //printf("[fs102] \n");
+    
+    //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x - 1\n", p->inout, p->seqnum, p->opcode, p->data);
+    //print_f(&mrs->plog, "fs102", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x - 2\n", p->inout, p->seqnum, p->opcode, p->data);
+        //print_f(&mrs->plog, "fs102", mrs->log);
+
+        if (p->opcode == OP_QRY) {
+            modersp->m = modersp->m + 1;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
+static int fs103(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
+
+    //printf("[fs103] \n");
+    
+    //sprintf(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    //print_f(&mrs->plog, "fs103", mrs->log);
+    
+    mrs_ipc_put(mrs, "c", 1, 1);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs104(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p, *c;
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.get;
+
+    //printf("[fs104] \n");
+
+    //sprintf(mrs->log, "get 0x%.2x/0x%.2x 0x%.2x/0x%.2x - 1\n", p->opcode, c->opcode, p->data, c->data);
+    //print_f(&mrs->plog, "fs104", mrs->log);
+        
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'C')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        c = &mrs->mchine.cur;
+        p = &mrs->mchine.get;
+        //sprintf(mrs->log, "get 0x%.2x/0x%.2x 0x%.2x/0x%.2x - 2\n", p->opcode, c->opcode, p->data, c->data);
+        //print_f(&mrs->plog, "fs104", mrs->log);
+
+        if (p->opcode == c->opcode) {
+            if (p->data == c->data) {
+                modersp->r = 1;
+            } else {
+                modersp->r = 2;
+            }
+            return 1;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
 #define CROP_SCALE 10
 
 #define CROP_COOD_01 {20  * CROP_SCALE, 80  * CROP_SCALE}
@@ -19773,7 +19872,7 @@ static int findReplace(double *pt, double *pp, int id1, int id2)
     return 0;
 }
 
-static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp)
+static int fs105(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret=0, id=0, id1=0, id2=0;
     double c01[2] = CROP_COOD_01;
@@ -19803,7 +19902,7 @@ static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp)
     int idm[6][2];
     
     sprintf(mrs->log, "calculate ...\n");
-    print_f(&mrs->plog, "fs101", mrs->log);
+    print_f(&mrs->plog, "fs105", mrs->log);
 
     ret = getVector(vect01, c01, c02);
     ret = getVector(vect02, c02, c03);
@@ -19907,18 +20006,19 @@ static int fs101(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
-static int fs102(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
-static int fs103(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
-static int fs104(struct mainRes_s *mrs, struct modersp_s *modersp){return 1;}
-
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 105
+#define PS_NUM 106
 
     int ret=0, len=0, tmp=0;
     char ch=0;
 
-    struct modersp_s modesw;
+    struct modersp_s *modesw = aspMalloc(sizeof(struct modersp_s));
+    if (modesw == 0) {
+        sprintf(mrs->log, "modesw memory allocation fail \n");
+        print_f(&mrs->plog, "P0", mrs->log);
+    }
+
     struct fselec_s afselec[PS_NUM] = {{ 0, fs00},{ 1, fs01},{ 2, fs02},{ 3, fs03},{ 4, fs04},
                                  { 5, fs05},{ 6, fs06},{ 7, fs07},{ 8, fs08},{ 9, fs09},
                                  {10, fs10},{11, fs11},{12, fs12},{13, fs13},{14, fs14},
@@ -19939,7 +20039,8 @@ static int p0(struct mainRes_s *mrs)
                                  {85, fs85},{86, fs86},{87, fs87},{88, fs88},{89, fs89},
                                  {90, fs90},{91, fs91},{92, fs92},{93, fs93},{94, fs94},
                                  {95, fs95},{96, fs96},{97, fs97},{98, fs98},{99, fs99},
-                                 {100, fs100},{101, fs101},{102, fs103},{103, fs103},{104, fs104}};                                 
+                                 {100, fs100},{101, fs101},{102, fs102},{103, fs103},{104, fs104},
+                                 {105, fs105}};                                 
                                  
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -19961,60 +20062,68 @@ static int p0(struct mainRes_s *mrs)
                                  {85, hd85},{86, hd86},{87, hd87},{88, hd88},{89, hd89},
                                  {90, hd90},{91, hd91},{92, hd92},{93, hd93},{94, hd94},
                                  {95, hd95},{96, hd96},{97, hd97},{98, hd98},{99, hd99},
-                                 {100, hd100},{101, hd101},{102, hd103},{103, hd103},{104, hd104}};                                 
+                                 {100, hd100},{101, hd101},{102, hd102},{103, hd103},{104, hd104},
+                                 {105, hd105}};                                 
     p0_init(mrs);
 
-    modesw.m = -2;
-    modesw.r = 0;
-    modesw.d = 0;
+    modesw->m = -2;
+    modesw->r = 0;
+    modesw->d = 0;
 
     while (1) {
         //sprintf(mrs->log, ".\n");
         //print_f(&mrs->plog, "P0", mrs->log);
         len = mrs_ipc_get(mrs, &ch, 1, 0);
         if (len > 0) {
-            sprintf(mrs->log, "modesw.m:%d ch:%d\n", modesw.m, ch);
+            sprintf(mrs->log, "modesw.m:%d ch:%d\n", modesw->m, ch);
             print_f(&mrs->plog, "P0", mrs->log);
 
-            if (modesw.m == -2) {
+            if (modesw->m == -2) {
                 if ((ch >=0) && (ch < PS_NUM)) {
-                    modesw.m = ch;
+                    modesw->m = ch;
                 }
             } else {
                 /* todo: interrupt state machine here */
                 if (ch == 0x7f) {
                     ret = 0;
-                    ret = (*errHdle[modesw.m].pfunc)(mrs, &modesw);
+                    ret = (*errHdle[modesw->m].pfunc)(mrs, modesw);
                     if (!ret) {
-                        modesw.m = -1;
-                        modesw.d = -1;
-                        modesw.r = 0xed;
+                        modesw->m = -1;
+                        modesw->d = -1;
+                        modesw->r = 0xed;
                     }
-                    sprintf(mrs->log, "!! Error handle !! m:%d d:%d ret:%d\n", modesw.m, modesw.d, ret);
+                    sprintf(mrs->log, "!! Error handle !! m:%d d:%d ret:%d\n", modesw->m, modesw->d, ret);
                     print_f(&mrs->plog, "P0", mrs->log);
                 }
             }
         }
 
-        if ((modesw.m >= 0) && (modesw.m < PS_NUM)) {
-            ret = (*afselec[modesw.m].pfunc)(mrs, &modesw);
-            //sprintf(mrs->log, "pmode:%d rsp:%d\n", modesw.m, modesw.r);
+        if ((modesw->m >= 0) && (modesw->m < PS_NUM)) {
+            msync(modesw, sizeof(struct modersp_s), MS_SYNC);
+            //sprintf(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
+            //print_f(&mrs->plog, "P0", mrs->log);
+            
+            ret = (*afselec[modesw->m].pfunc)(mrs, modesw);
+
+            msync(modesw, sizeof(struct modersp_s), MS_SYNC);
+            
+            //sprintf(mrs->log, "pmode:%d rsp:%d - 2\n", modesw->m, modesw->r);
             //print_f(&mrs->plog, "P0", mrs->log);
             if (ret == 1) {
-                tmp = modesw.m;
-                modesw.m = -1;
+                tmp = modesw->m;
+                modesw->m = -1;
             }
         }
 
-        if (modesw.m == -1) {
-            sprintf(mrs->log, "pmode:%d rsp:%d - end\n", tmp, modesw.r);
+        if (modesw->m == -1) {
+            sprintf(mrs->log, "pmode:%d rsp:%d - end\n", tmp, modesw->r);
             print_f(&mrs->plog, "P0", mrs->log);
 
-            ch = modesw.r; /* response */
-            modesw.r = 0;
-            modesw.v = 0;
-            modesw.d = 0;
-            modesw.m = -2;
+            ch = modesw->r; /* response */
+            modesw->r = 0;
+            modesw->v = 0;
+            modesw->d = 0;
+            modesw->m = -2;
             tmp = -1;
 
             mrs_ipc_put(mrs, &ch, 1, 0);
