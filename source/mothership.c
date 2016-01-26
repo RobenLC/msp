@@ -197,6 +197,7 @@ typedef enum {
     ASPOP_STA_WR = 0x01,
     ASPOP_STA_UPD = 0x02,
     ASPOP_STA_APP = 0x04,
+    ASPOP_STA_CON = 0x08,
 } aspOpSt_e;
 
 typedef enum {
@@ -9903,7 +9904,7 @@ static int stwtbak_71(struct psdata_s *data)
                 sprintf(rs->logs, "op_71, ASPOP_SUP_SAVE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op_71, ASPOP_SUP_SAVE status is wrong val:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -9979,7 +9980,7 @@ static int stwtbak_72(struct psdata_s *data)
                 sprintf(rs->logs, "op_72, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op_72, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -12347,7 +12348,7 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
         ctb = &mrs->configTable[ix];
         if (!ctb) {ret = -5; goto end;}
-        if (ctb->opStatus & ASPOP_STA_APP) {
+        if (ctb->opStatus & ASPOP_STA_CON) {
             n = 0; rsp = 0;
             /* set data for update to scanner */
             pkt->opcode = ctb->opCode;
@@ -13830,7 +13831,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
         cd = opcode[3];
 
         if (cd == ctb->opValue) {
-            ctb->opStatus |= ASPOP_STA_APP;
+            ctb->opStatus |= ASPOP_STA_CON;
             param = ctb->opValue;
             goto end;
         }
@@ -13840,7 +13841,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
             ret = (ret * 10) -6;
         } else {            
             ctb->opValue = cd;
-            ctb->opStatus |= ASPOP_STA_APP;
+            ctb->opStatus |= ASPOP_STA_CON;
         }
         
         sprintf(mrs->log, "WT opcode 0x%.2x/0x%.2x, input value: 0x%.2x, ret:%d\n", ctb->opCode, ctb->opValue, cd, ret); 
@@ -23946,10 +23947,10 @@ int main(int argc, char *argv[])
             ctb->opBitlen = 8;
             break;
         case ASPOP_SUP_SAVE: 
-            ctb->opStatus = ASPOP_STA_UPD; // for debug, should be ASPOP_STA_NONE
+            ctb->opStatus = ASPOP_STA_NONE; // for debug, should be ASPOP_STA_NONE
             ctb->opCode = OP_SUPBACK;
             ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = SUPBACK_SD; // for debug, should be 0xff
+            ctb->opValue = 0xff; // for debug, should be 0xff
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
