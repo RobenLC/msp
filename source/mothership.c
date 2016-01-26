@@ -16573,7 +16573,7 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     int ret=0;
-    uint32_t val=0;
+    uint32_t val=0, fformat=0;
     struct supdataBack_s *s=0;
     struct aspConfig_s *pct=0;
     struct sdFAT_s *pfat=0;
@@ -16583,31 +16583,14 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     sprintf(mrs->log, "initial the fatSupdata !!!  \n");
     print_f(&mrs->plog, "fs59", mrs->log);
+    pfat->fatSupdata = 0;
 
-    s = aspMalloc(sizeof(struct supdataBack_s));
-    if (!s) {
-        sprintf(mrs->log, "FAIL to initial the head fatSupdata !!! \n");
-        print_f(&mrs->plog, "fs59", mrs->log);
-
-        modersp->r = 2;
-        return 1;
+    ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+    if (ret) {
+        fformat = 0;
     }
-
+    
     //cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
-    memset(s, 0, sizeof(struct supdataBack_s));
-    s->supdataTot = SPI_TRUNK_SZ;
-    s->supdataUse = SPI_TRUNK_SZ;
-    pfat->fatSupdata = s;
-    pfat->fatSupcur = pfat->fatSupdata;
-
-    /* test pdf head */
-    ret = pdfHead(s->supdataBuff, SPI_TRUNK_SZ);
-    s->supdataUse = 0;
-    s->supdataTot = ret;
-    shmem_dump(s->supdataBuff, s->supdataTot);
-    sprintf(mrs->log, "dump PDF head - end\n");
-    print_f(&mrs->plog, "fs59", mrs->log);
-
     s = 0;
     s = aspMalloc(sizeof(struct supdataBack_s));
     if (!s) {
@@ -16620,8 +16603,28 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     //cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
     memset(s, 0, sizeof(struct supdataBack_s));
-    pfat->fatSupcur->n = s;
-    pfat->fatSupcur = s;
+    pfat->fatSupdata = s;   
+    pfat->fatSupcur = pfat->fatSupdata;
+
+    if (fformat == FILE_FORMAT_PDF) {
+        sprintf(mrs->log, "file format : PDF(%d) allocate one more trunk at the begin\n", fformat);
+        print_f(&mrs->plog, "fs59", mrs->log);
+
+        s = aspMalloc(sizeof(struct supdataBack_s));
+        if (!s) {
+            sprintf(mrs->log, "FAIL to initial the head fatSupdata !!! \n");
+            print_f(&mrs->plog, "fs59", mrs->log);
+
+            modersp->r = 2;
+            return 1;
+        }
+
+        memset(s, 0, sizeof(struct supdataBack_s));
+        pfat->fatSupcur->supdataUse = SPI_TRUNK_SZ - 512;
+        pfat->fatSupcur->supdataTot = SPI_TRUNK_SZ;
+        pfat->fatSupcur->n = s;
+        pfat->fatSupcur = s;
+    }
 
     sprintf(mrs->log, "fatSupdata = 0x%.8x, fatSupcur = 0x%.8x!!!  \n", pfat->fatSupdata, pfat->fatSupcur);
     print_f(&mrs->plog, "fs59", mrs->log);
@@ -19260,6 +19263,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "deal with sup back head buff!! - 3\n");
     print_f(&mrs->plog, "fs96", mrs->log);
 
+#if 0 // move to fs98
     ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_UPD);    
     if (ret) {
         val = 0;
@@ -19270,6 +19274,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs96", mrs->log);
 
     pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+#endif
 
     sprintf(mrs->log, "deal with sup back head buff!! - 5\n");
     print_f(&mrs->plog, "fs96", mrs->log);
@@ -19299,6 +19304,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "list buff pop resutl, ret: %d/%d\n", ret, totsz);
         print_f(&mrs->plog, "fs96", mrs->log);
 
+#if 0 // move to fs98
         if ((mdo) && (val)) {
             mdo = changeJpgLen(addr, val, ret);
         }
@@ -19308,6 +19314,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "jpg scale = (%d, %d)\n", hi, wh);
             print_f(&mrs->plog, "fs96", mrs->log);
         }
+#endif
         
         ring_buf_prod(&mrs->cmdTx);
         
@@ -19460,7 +19467,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_APP);    
+    ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
     if (ret) {
         fformat = 0;
     }
@@ -19538,25 +19545,80 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "SFN[%s] LFS[%s] len:%d\n", upld->dfSFN, upld->dfLFN, upld->dflen);
     print_f(&mrs->plog, "fs98", mrs->log);
 
-    /* test pdf tail */
-    se = sc;
-    while (se->n) {
-        se = se->n;
-    }
-    sprintf(mrs->log, "PDF Tail get!!! tot: %d, use:%d \n", se->supdataTot, se->supdataUse);
-    print_f(&mrs->plog, "fs98", mrs->log);
-    if (se->supdataTot != 0) {
-        shmem_dump(se->supdataBuff, se->supdataTot);
-        sprintf(mrs->log, "dump - end\n");
+    if (fformat == FILE_FORMAT_PDF) {
+        s = sh->n;
+        if (!s) {
+            sprintf(mrs->log, "Error!!! the first trunk is not exist!!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 2;
+            return 1;
+        }
+        
+        ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_UPD);    
+        if (ret) {
+            val = 0;
+        }
+        sprintf(mrs->log, "user defined jpg length: %d, ret:%d \n", val, ret);
         print_f(&mrs->plog, "fs98", mrs->log);
+        
+        pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+        
+        if (val) {
+            ret = changeJpgLen(s->supdataBuff, val, s->supdataTot);
+            if (ret) {
+                sprintf(mrs->log, "Error!!! can NOT find jpg length in first trunk !!!");
+                print_f(&mrs->plog, "fs98", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+        }
+        
+        ret = findJpgScale(s->supdataBuff, &hi, &wh, s->supdataTot);
+        if (ret) {
+            sprintf(mrs->log, "Error!!! can NOT find height and width in first trunk !!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        /* test pdf head */
+        sb = sh;
+        sprintf(mrs->log, "PDF Head get!!! tot: %d, use:%d \n", sb->supdataTot, sb->supdataUse);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        if (sb->supdataTot != sb->supdataUse) {
+            shmem_dump(sb->supdataBuff + sb->supdataUse, sb->supdataTot - sb->supdataUse);
+            sprintf(mrs->log, "dump - end\n");
+            print_f(&mrs->plog, "fs98", mrs->log);
+        }
+        
+        ret = pdfHead(sb->supdataBuff, SPI_TRUNK_SZ);
+        
+        sb->supdataUse = 0;
+        sb->supdataTot = ret;
+        shmem_dump(sb->supdataBuff, sb->supdataTot);
+        sprintf(mrs->log, "dump PDF head - end\n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        
+        /* test pdf tail */
+        se = sc;
+        while (se->n) {
+            se = se->n;
+        }
+        sprintf(mrs->log, "PDF Tail get!!! tot: %d, use:%d \n", se->supdataTot, se->supdataUse);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        if (se->supdataTot != 0) {
+            shmem_dump(se->supdataBuff, se->supdataTot);
+            sprintf(mrs->log, "dump - end\n");
+            print_f(&mrs->plog, "fs98", mrs->log);
+        }
+
+        ret = pdfTail(se->supdataBuff + se->supdataTot, SPI_TRUNK_SZ-se->supdataTot);
+
+        shmem_dump(se->supdataBuff+se->supdataTot, ret);
+        sprintf(mrs->log, "dump PDF tail - end\n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        se->supdataTot += ret;
     }
-
-    ret = pdfTail(se->supdataBuff+se->supdataTot, SPI_TRUNK_SZ-se->supdataTot);
-
-    shmem_dump(se->supdataBuff+se->supdataTot, ret);
-    sprintf(mrs->log, "dump PDF tail - end\n");
-    print_f(&mrs->plog, "fs98", mrs->log);
-    se->supdataTot += ret;
     
     /* calculate sector start and sector length of file */            
     datLen = aspCalcSupLen(sc);
