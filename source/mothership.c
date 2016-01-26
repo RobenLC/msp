@@ -19130,7 +19130,6 @@ static int findJpgScale(uint8_t *data, int *hi, int *wh, int max)
                 
                 printf("!!!!!!!![findJpgScale] height = %d, width = %d, m[0]:0x%.2x, m[1]:0x%.2x\n", len, width, marker[0], marker[1]);
                 
-                ret = 0;
             }
             staf = 0;
         }
@@ -19143,6 +19142,7 @@ static int findJpgScale(uint8_t *data, int *hi, int *wh, int max)
         if (scale[ix][2] != 0) {
             len = scale[ix][0];
             width = scale[ix][1];
+            ret = 0;
         }
     }
     
@@ -19302,7 +19302,11 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
             mdo = changeJpgLen(addr, val, ret);
         }
 
-        findJpgScale(addr, &hi, &wh, ret);
+        n = findJpgScale(addr, &hi, &wh, ret);
+        if (!n) {
+            sprintf(mrs->log, "jpg scale = (%d, %d)\n", hi, wh);
+            print_f(&mrs->plog, "fs96", mrs->log);
+        }
         
         ring_buf_prod(&mrs->cmdTx);
         
