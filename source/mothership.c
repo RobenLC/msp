@@ -929,7 +929,7 @@ int pdfHead(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "/MediaBox [0 0 1123 842]\n");
+    sprintf(tch, "/MediaBox [0 0 %d %d]\n", 1123, 842);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -994,7 +994,7 @@ int pdfHead(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "      0.701666 0 0 0.701666 0 0 cm\n");
+    sprintf(tch, "      %.6f 0 0 %.6f 0 0 cm\n", 0.701666, 0.701666);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1004,7 +1004,7 @@ int pdfHead(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "      1600 0 0 1200 0 0 cm\n");
+    sprintf(tch, "      %d 0 0 %d 0 0 cm\n", 1600, 1200);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1044,12 +1044,12 @@ int pdfHead(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "/Width 1600\n");
+    sprintf(tch, "/Width %d\n", 1600);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "/Height 1200\n");
+    sprintf(tch, "/Height %d\n", 1200);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1104,7 +1104,7 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "658432\n");
+    sprintf(tch, "%d\n", 658432);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1164,7 +1164,7 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "0000659015 00000 n\r\n");
+    sprintf(tch, "%.10d 00000 n\r\n", 659015);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1189,7 +1189,7 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "0000658993 00000 n\r\n");
+    sprintf(tch, "%.10d 00000 n\r\n", 658993);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1219,7 +1219,7 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "659073\n");
+    sprintf(tch, "%d\n",659073);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -19084,6 +19084,74 @@ static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 2;
 }
 
+static int findJpgScale(uint8_t *data, int *hi, int *wh, int max)
+{
+    int ret = -1, ix = 0, staf = 0;
+    uint8_t marker[2] = {0, 0};
+    uint32_t imgLen[2] = {0, 0};
+    uint32_t imgWid[2] = {0, 0};
+    uint8_t ch = 0;
+    int len = 0, width = 0;
+    int scale[5][3], si=0;
+
+    memset(scale, 0, sizeof(int) * 15);
+
+    if (!data) return -2;
+    if (!max) return -3;
+    if (!hi) return -4;
+    if (!wh) return -5;
+    
+    msync(data, max, MS_SYNC);
+    
+    for (ix=0; ix < max; ix++) {
+        ch = data[ix];
+    
+        if (ch == 0xff) {
+            marker[0] = ch;
+            staf = 1;
+        } 
+        else if (staf == 1) {
+            if (((ch >> 4) == 0xc) && ((ch & 0xf) != 4)) {
+                marker[1] = ch;
+                
+                imgLen[1] = data[ix + 4];
+                imgLen[0] = data[ix + 5];
+
+                imgWid[1] = data[ix + 6];
+                imgWid[0] = data[ix + 7];
+                                
+                len = (imgLen[1] << 8) + imgLen[0];   
+                width = (imgWid[1] << 8) + imgWid[0];   
+
+                scale[si][0] = len;
+                scale[si][1] = width;
+                scale[si][2] = 1;
+                si ++;
+                
+                printf("!!!!!!!![findJpgScale] height = %d, width = %d, m[0]:0x%.2x, m[1]:0x%.2x\n", len, width, marker[0], marker[1]);
+                
+                ret = 0;
+            }
+            staf = 0;
+        }
+        
+    }
+
+    for (ix=0; ix < si; ix++) {
+        printf("[findJpgScale] %d. hight: %d width: %d flag: %d \n", ix, scale[ix][0], scale[ix][1], scale[ix][2]);
+
+        if (scale[ix][2] != 0) {
+            len = scale[ix][0];
+            width = scale[ix][1];
+        }
+    }
+    
+    *hi = len;
+    *wh = width;
+
+    return ret;
+}
+
 static int changeJpgLen(uint8_t *data, uint32_t tlen, int max)
 {
     int ret = -1, ix = 0, staf = 0;
@@ -19134,6 +19202,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     char *addr=0;
     uint32_t val=0;
     int ret, totsz=0, len=0, secLen, max=0, mdo=0;
+    int hi = 0, wh = 0, n = 0;
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *rs = 0, *s=0, *sc=0, *sh=0, *se=0;
     struct sdbootsec_s   *psec=0;
@@ -19233,6 +19302,8 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
             mdo = changeJpgLen(addr, val, ret);
         }
 
+        findJpgScale(addr, &hi, &wh, ret);
+        
         ring_buf_prod(&mrs->cmdTx);
         
         mrs_ipc_put(mrs, "u", 1, 1);
@@ -19307,24 +19378,30 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    char fnameSave[16] = "asp%.5d.jpg";
+    char *fnameSave = 0;
+    char fnameSave_jpg[16] = "asp%.5d.jpg";
+    char fnameSave_pdf[16] = "asp%.5d.pdf";
+    char fnameSave_tif[16] = "asp%.5d.tif";
     char srhName[16];
-    int ret=0, cnt=0;
+    int ret=0, cnt=0, hi=0, wh=0;
     uint32_t secStr=0, secLen=0, clstByte, clstLen=0, clstStr=0;;
     uint32_t freeClst=0, usedClst=0, totClst=0, val=0, datLen=0;
+    uint32_t fformat=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
     struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
     struct sdFATable_s   *pftb=0;
     struct directnFile_s *upld=0, *fscur=0, *fssrh=0;
-    struct supdataBack_s *s=0, *sc=0, *sh=0, *se=0;
+    struct supdataBack_s *s=0, *sc=0, *sh=0, *se=0, *sb=0;
+    struct aspConfig_s *pct=0;
     
     uint32_t adata[3], atime[3];
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
     struct tm *p=0;
     time_t timep;
                 
+    pct = mrs->configTable;                
     pfat = &mrs->aspFat;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
@@ -19376,6 +19453,38 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs98", mrs->log);
         modersp->r = 0xed;
         return 1;
+    }
+
+    ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_APP);    
+    if (ret) {
+        fformat = 0;
+    }
+
+    if (fformat == FILE_FORMAT_JPG) {
+        fnameSave = fnameSave_jpg;
+        sprintf(mrs->log, "file format : JPG(%d) name type:[%s]\n", fformat, fnameSave);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+    } else if (fformat == FILE_FORMAT_PDF) {
+        fnameSave = fnameSave_pdf;
+        sprintf(mrs->log, "file format : PDF(%d) name type:[%s]\n", fformat, fnameSave);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+    } else if (fformat == FILE_FORMAT_TIFF_I) {
+        fnameSave = fnameSave_tif;
+        sprintf(mrs->log, "file format : TIFF_I(%d) name type:[%s]\n", fformat, fnameSave);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+    } else if (fformat == FILE_FORMAT_TIFF_M) {
+        fnameSave = fnameSave_tif;
+        sprintf(mrs->log, "file format : TIFF_M(%d) name type:[%s]\n", fformat, fnameSave);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+    } else {
+        fnameSave = fnameSave_jpg;    
+        sprintf(mrs->log, "file format : others(%d) name type:[%s]\n", fformat, fnameSave);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
     }
 
     memset(upld, 0, sizeof(struct directnFile_s));
