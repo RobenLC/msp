@@ -138,6 +138,10 @@ static int *totSalloc=0;
 #define SPI_KTHREAD_DLY    (0)
 
 #define DIR_POOL_SIZE (20480)
+
+#define MAX_PDF_H  (900.0)
+#define MAX_PDF_W (1600.0)
+
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -848,6 +852,38 @@ static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 
+int pdfParamCalcu(int hi, int wh, int *mh, int *mw)
+{
+    double jscale=0.0, tscale=0.0, dscale=0.0;;
+    double tw=0.0, th=0.0, sw=0.0, sh=0.0;;
+    
+    if (!mh) return -1;
+    if (!mw) return -2;
+    if (!hi) return -3;
+    if (!wh) return -4;
+
+    sh = hi;
+    sw = wh;
+
+    tscale = MAX_PDF_W / MAX_PDF_H;
+    jscale = sw / sh;
+
+    if (jscale > tscale) {
+        tw = MAX_PDF_W;
+        dscale = tw / sw;
+        th = sh * dscale;
+    } else {
+        th = MAX_PDF_H;
+        dscale = th / sh;
+        tw = sw * dscale;
+    }
+
+    *mh = (int) th;
+    *mw = (int) tw;
+
+    return 0;
+}
+
 int pdfAppend(char *d, char *s, int tot, int max)
 {
     int idx = 0, slen = 0, end = 0;
@@ -870,15 +906,29 @@ int pdfAppend(char *d, char *s, int tot, int max)
     return slen;
 }
 
-int pdfHead(char *ppdf, int max)
+int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
 {
+    double wscale=0.0, hscale=0.0;
+    double d1=0, d2=0;
     char tch[128], *dst = 0;
     int tlen = 0, tot = 0, n=0;
 
     if (ppdf == 0) return -1;
     if (max == 0) return -2;
+    if (hi == 0) return -7;
+    if (wh == 0) return -4;
+    if (mh == 0) return -5;
+    if (mw == 0) return -6;
 
     dst = ppdf;
+
+    d1 = mh;
+    d2 = hi;
+    hscale = d1 / d2;
+
+    d1 = mw;
+    d2 = wh;
+    wscale = d1 / d2;
     
     sprintf(tch, "%PDF-1.4\n");
     n = pdfAppend(dst, tch, tot, max);
@@ -930,7 +980,7 @@ int pdfHead(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "/MediaBox [0 0 %d %d]\n", 1123, 842);
+    sprintf(tch, "/MediaBox [0 0 %d %d]\n", mw, mh);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -995,7 +1045,7 @@ int pdfHead(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "      %.6f 0 0 %.6f 0 0 cm\n", 0.701666, 0.701666);
+    sprintf(tch, "      %.6f 0 0 %.6f 0 0 cm\n", wscale, hscale);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1005,7 +1055,7 @@ int pdfHead(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "      %d 0 0 %d 0 0 cm\n", 1600, 1200);
+    sprintf(tch, "      %d 0 0 %d 0 0 cm\n", wh, hi);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1045,12 +1095,12 @@ int pdfHead(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "/Width %d\n", 1600);
+    sprintf(tch, "/Width %d\n", wh);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "/Height %d\n", 1200);
+    sprintf(tch, "/Height %d\n", hi);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1079,11 +1129,12 @@ int pdfHead(char *ppdf, int max)
     return tot;
 }
 
-int pdfTail(char *ppdf, int max)
+int pdfTail(char *ppdf, int max, int offset, int imgSize)
 {
     char tch[128], *dst = 0;
     char end[6] = {0x25, 0x25, 0x45, 0x4f, 0x46, 0x00};
     int tlen = 0, tot = 0, n=0;
+    int offset_2=0, offset_7=0, offset_x=0;
 
     if (ppdf == 0) return -1;
     if (max == 0) return -2;
@@ -1100,12 +1151,13 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
+    offset_7 = offset + tot;
     sprintf(tch, "7 0 obj\n");
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "%d\n", 658432);
+    sprintf(tch, "%d\n", imgSize);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1115,6 +1167,8 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
+    offset_2 = offset + tot;
+    
     sprintf(tch, "2 0 obj\n");
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
@@ -1144,7 +1198,8 @@ int pdfTail(char *ppdf, int max)
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
-    
+
+    offset_x = offset + tot;
     sprintf(tch, "xref\n");
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
@@ -1165,7 +1220,7 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "%.10d 00000 n\r\n", 659015);
+    sprintf(tch, "%.10d 00000 n\r\n", offset_2);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1190,7 +1245,7 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "%.10d 00000 n\r\n", 658993);
+    sprintf(tch, "%.10d 00000 n\r\n", offset_7);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -1220,7 +1275,7 @@ int pdfTail(char *ppdf, int max)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "%d\n",659073);
+    sprintf(tch, "%d\n",offset_x);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -19395,9 +19450,10 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     char fnameSave_pdf[16] = "asp%.5d.pdf";
     char fnameSave_tif[16] = "asp%.5d.tif";
     char srhName[16];
-    int ret=0, cnt=0, hi=0, wh=0;
-    uint32_t secStr=0, secLen=0, clstByte, clstLen=0, clstStr=0;;
-    uint32_t freeClst=0, usedClst=0, totClst=0, val=0, datLen=0;
+    int ret=0, cnt=0, hi=0, wh=0, mh=0, mw=0;
+    uint32_t secStr=0, secLen=0, clstByte, clstLen=0, clstStr=0;
+    uint32_t freeClst=0, usedClst=0, totClst=0, val=0;
+    int datLen=0, imgLen=0;
     uint32_t fformat=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -19579,6 +19635,9 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
+        } else {
+            /* caluclate the pdf parameter by height and width */
+            pdfParamCalcu(hi, wh, &mh, &mw);
         }
         
         /* test pdf head */
@@ -19591,14 +19650,31 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs98", mrs->log);
         }
         
-        ret = pdfHead(sb->supdataBuff, SPI_TRUNK_SZ);
+        ret = pdfHead(sb->supdataBuff, SPI_TRUNK_SZ, hi, wh, mh, mw);
         
         sb->supdataUse = 0;
         sb->supdataTot = ret;
         shmem_dump(sb->supdataBuff, sb->supdataTot);
         sprintf(mrs->log, "dump PDF head - end\n");
         print_f(&mrs->plog, "fs98", mrs->log);
-        
+
+        /* calculate sector start and sector length of file */            
+        datLen = aspCalcSupLen(sc);
+        if (datLen < 0) {
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+
+        imgLen = aspCalcSupLen(sc->n); 
+        if (imgLen < 0) {
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+    
         /* test pdf tail */
         se = sc;
         while (se->n) {
@@ -19612,16 +19688,37 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs98", mrs->log);
         }
 
-        ret = pdfTail(se->supdataBuff + se->supdataTot, SPI_TRUNK_SZ-se->supdataTot);
+        ret = pdfTail(se->supdataBuff + se->supdataTot, SPI_TRUNK_SZ-se->supdataTot, datLen, imgLen);
+        if (ret == -3) {
+            s = 0;
+            s = aspMalloc(sizeof(struct supdataBack_s));
+            if (!s) {
+                sprintf(mrs->log, "FAIL to allcate memory for the pdf tail !!! \n");
+                print_f(&mrs->plog, "fs98", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            memset(s, 0, sizeof(struct supdataBack_s));
+            se->n = s;
+            se = s;
+            ret = pdfTail(se->supdataBuff, SPI_TRUNK_SZ, datLen, imgLen);
+        }
+        
+        if (ret < 0) {
+            sprintf(mrs->log, "Error!!! can NOT append pdf tail ret: %d !!!", ret);
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
 
         shmem_dump(se->supdataBuff+se->supdataTot, ret);
         sprintf(mrs->log, "dump PDF tail - end\n");
         print_f(&mrs->plog, "fs98", mrs->log);
         se->supdataTot += ret;
+        datLen += ret;
     }
-    
-    /* calculate sector start and sector length of file */            
-    datLen = aspCalcSupLen(sc);
+
     if (datLen % clstByte) {
         clstLen = (datLen / clstByte) + 1;
     } else {
@@ -22703,7 +22800,7 @@ static int p6(struct procRes_s *rs)
                 //sprintf(rs->logs, "wait crop (%d)\n", num);
                 //print_f(rs->plogs, "P6", rs->logs);
                 
-                if (cnt > 100) {
+                if (cnt > 10) {
                     break;
                 }
                 usleep(500000);
