@@ -19718,6 +19718,16 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         se->supdataTot += ret;
         datLen += ret;
     }
+    else {
+        /* calculate sector start and sector length of file */            
+        datLen = aspCalcSupLen(sc);
+        if (datLen < 0) {
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+    }
 
     if (datLen % clstByte) {
         clstLen = (datLen / clstByte) + 1;
@@ -22780,8 +22790,8 @@ static int p6(struct procRes_s *rs)
         sendbuf[4] = 0xfc;
 
         if (opcode == 0x15) { /* send CROP info */
-            //sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
-            //print_f(rs->plogs, "P6", rs->logs);
+            sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
 
             cnt = 0;
             while (1) {
@@ -22797,8 +22807,8 @@ static int p6(struct procRes_s *rs)
                     break;
                 }
 
-                //sprintf(rs->logs, "wait crop (%d)\n", num);
-                //print_f(rs->plogs, "P6", rs->logs);
+                sprintf(rs->logs, "wait crop (%d)\n", num);
+                print_f(rs->plogs, "P6", rs->logs);
                 
                 if (cnt > 10) {
                     break;
@@ -22838,8 +22848,8 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                //print_f(rs->plogs, "P6", rs->logs);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
             }
             
             goto socketEnd;
