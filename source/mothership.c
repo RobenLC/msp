@@ -1715,6 +1715,7 @@ static int aspCompirseSFN(uint8_t *pc, struct directnFile_s *pf, uint8_t *sfn)
 
     memset(raw, 0, 32);
 
+    printf("  Compirse SFN: ");
     printf("  [%x] type \n", pf->dftype);
     printf("  [%x] status \n", pf->dfstats);
     printf("  [%s] long file name, len:%d\n", pf->dfLFN, pf->dflen);
@@ -1736,24 +1737,24 @@ static int aspCompirseSFN(uint8_t *pc, struct directnFile_s *pf, uint8_t *sfn)
     }
 
     tmp32 = aspFStimeCps(fs->dfcretime);
-    raw[14] = tmp32 & 0xff;
     raw[15] = (tmp32 >> 8) & 0xff;
+    raw[14] = tmp32 & 0xff;
 
     tmp32 = aspFSdateCps(fs->dfcredate);
-    raw[16] = tmp32 & 0xff;
     raw[17] = (tmp32 >> 8) & 0xff;
+    raw[16] = tmp32 & 0xff;
 
     tmp32 = aspFSdateCps(fs->dflstacdate);
-    raw[18] = tmp32 & 0xff;
     raw[19] = (tmp32 >> 8) & 0xff;
+    raw[18] = tmp32 & 0xff;
 
     tmp32 = aspFStimeCps(fs->dfrecotime);
-    raw[22] = tmp32 & 0xff;
     raw[23] = (tmp32 >> 8) & 0xff;
+    raw[22] = tmp32 & 0xff;
 
     tmp32 = aspFSdateCps(fs->dfrecodate);
-    raw[24] = tmp32 & 0xff;
     raw[25] = (tmp32 >> 8) & 0xff;
+    raw[24] = tmp32 & 0xff;
 
     tmp32 = fs->dfclstnum;
     raw[26] = tmp32 & 0xff;
@@ -1767,6 +1768,10 @@ static int aspCompirseSFN(uint8_t *pc, struct directnFile_s *pf, uint8_t *sfn)
     raw[30] = (tmp32 >> 16) & 0xff;
     raw[31] = (tmp32 >> 24) & 0xff;
 
+    /* debug time and date */
+    //shmem_dump(raw, 32);
+    //printf("  dump end \n ");
+    
     aspNameCpyfromName(sfn, raw, 0, 11, 1);
     
     return 32;
@@ -2093,7 +2098,7 @@ static void aspFSadddot(char *str, int len)
 static uint32_t aspFSdateAsb(uint32_t fst)
 {
     uint32_t val=0, y=0, m=0, d=0;
-    d = fst & 0xf; // 0 -4, 5bits
+    d = fst & 0x1f; // 0 -4, 5bits
     m = (fst >> 5) & 0xf; // 5 - 8, 4bits
     y = (fst >> 9) & 0x7f; // 9 - 15, 7bits
     val |= (y << 16) | (m << 8) | d;
@@ -2104,7 +2109,7 @@ static uint32_t aspFSdateCps(uint32_t val)
 {
     uint32_t fst=0, y=0, m=0, d=0;
 
-    d = val & 0xf; // 0 -4, 5bits
+    d = val & 0x1f; // 0 -4, 5bits
     m = (val >> 8) & 0xf; // 5 - 8, 4bits
     y = (val >> 16) & 0x7f; // 9 - 15, 7bits
 
@@ -18964,7 +18969,7 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
     upld->dfcretime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
     upld->dflstacdate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
     upld->dfrecodate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
-    upld->dfrecotime = (((atime[0]  << 16)&0xff) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
+    upld->dfrecotime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
 
     upld->dflength = secLen * 512; /* file length */                                                
 
@@ -19580,7 +19585,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     upld->dfcretime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
     upld->dflstacdate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
     upld->dfrecodate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
-    upld->dfrecotime = (((atime[0]  << 16)&0xff) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));                                      
+    upld->dfrecotime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
 
     /* assign a name with sequence number */
     for (cnt=0; cnt < 10000; cnt++) {
@@ -19640,23 +19645,26 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             pdfParamCalcu(hi, wh, &mh, &mw);
         }
         
-        /* test pdf head */
+        /* pdf head */
         sb = sh;
         sprintf(mrs->log, "PDF Head get!!! tot: %d, use:%d \n", sb->supdataTot, sb->supdataUse);
         print_f(&mrs->plog, "fs98", mrs->log);
         if (sb->supdataTot != sb->supdataUse) {
-            shmem_dump(sb->supdataBuff + sb->supdataUse, sb->supdataTot - sb->supdataUse);
-            sprintf(mrs->log, "dump - end\n");
-            print_f(&mrs->plog, "fs98", mrs->log);
+            //shmem_dump(sb->supdataBuff + sb->supdataUse, sb->supdataTot - sb->supdataUse);
+            //sprintf(mrs->log, "dump - end\n");
+            //print_f(&mrs->plog, "fs98", mrs->log);
         }
         
         ret = pdfHead(sb->supdataBuff, SPI_TRUNK_SZ, hi, wh, mh, mw);
         
         sb->supdataUse = 0;
         sb->supdataTot = ret;
+
+        /*
         shmem_dump(sb->supdataBuff, sb->supdataTot);
         sprintf(mrs->log, "dump PDF head - end\n");
         print_f(&mrs->plog, "fs98", mrs->log);
+        */
 
         /* calculate sector start and sector length of file */            
         datLen = aspCalcSupLen(sc);
@@ -19675,19 +19683,20 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 1;
         }
     
-        /* test pdf tail */
+        /* pdf tail */
         se = sc;
         while (se->n) {
             se = se->n;
         }
         sprintf(mrs->log, "PDF Tail get!!! tot: %d, use:%d \n", se->supdataTot, se->supdataUse);
         print_f(&mrs->plog, "fs98", mrs->log);
+        /*
         if (se->supdataTot != 0) {
             shmem_dump(se->supdataBuff, se->supdataTot);
             sprintf(mrs->log, "dump - end\n");
             print_f(&mrs->plog, "fs98", mrs->log);
         }
-
+        */
         ret = pdfTail(se->supdataBuff + se->supdataTot, SPI_TRUNK_SZ-se->supdataTot, datLen, imgLen);
         if (ret == -3) {
             s = 0;
@@ -19712,9 +19721,11 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 1;
         }
 
+        /*
         shmem_dump(se->supdataBuff+se->supdataTot, ret);
         sprintf(mrs->log, "dump PDF tail - end\n");
         print_f(&mrs->plog, "fs98", mrs->log);
+        */
         se->supdataTot += ret;
         datLen += ret;
     }
@@ -23297,7 +23308,7 @@ static int p6(struct procRes_s *rs)
                         upld->dfcretime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
                         upld->dflstacdate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
                         upld->dfrecodate = ((((adata[0] - 1980)&0xff) << 16) | ((adata[1]&0xff) << 8) | (adata[2]&0xff));
-                        upld->dfrecotime = (((atime[0]  << 16)&0xff) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
+                        upld->dfrecotime = (((atime[0]&0xff) << 16) | ((atime[1]&0xff) << 8) | (atime[2]&0xff));
 
                         upld->dflength = num; /* file length */
                         
