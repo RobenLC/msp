@@ -451,6 +451,12 @@ static int stauto_18(struct psdata_s *data);
 static int stauto_19(struct psdata_s *data);
 static int stauto_20(struct psdata_s *data);
 
+int tiffDrawLine()
+{
+
+    return 0;
+}
+
 FILE *find_save(char *dst, char *tmple)
 {
     int i;
@@ -2160,8 +2166,11 @@ static int stauto_01(struct psdata_s *data)
             p = &data->rs->pmch->cur;
             memset(p, 0, sizeof(struct info16Bit_s));
             p->opcode = g->opcode;
+            #if 1 /* test opcode transmitting */
             p->data = g->data;
-
+            #else
+            p->data = 0xaf;
+            #endif
             ch = 24; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
@@ -5134,7 +5143,7 @@ static int fs14(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     mrs_ipc_put(mrs, "r", 1, 1);
     modersp->m = modersp->m + 1;
-    modersp->d = 0;
+    modersp->v = 0;
 
     mrs_ipc_put(mrs, "b", 1, 3);
     mrs_ipc_put(mrs, "b", 1, 4);
@@ -5149,13 +5158,13 @@ static int fs15(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0;
     char ch=0;
 
-    //sprintf(mrs->log, "fs15 \n");
-    //print_f(&mrs->plog, "fs15", mrs->log);
-
     len = mrs_ipc_get(mrs, &ch, 1, 1);
     if (len > 0) {
+        sprintf(mrs->log, "ch:%c, v:%d \n", ch, modersp->v);
+        print_f(&mrs->plog, "fs15", mrs->log);
+
         if ((ch == 'r') || (ch == 'e')) {
-            if (modersp->d % 2) {
+            if (modersp->v % 2) {
                 mrs_ipc_put(mrs, &ch, 1, 4);
             } else {
                 mrs_ipc_put(mrs, &ch, 1, 3);
@@ -5175,7 +5184,7 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
     //sprintf(mrs->log, "fs16 \n");
     //print_f(&mrs->plog, "fs16", mrs->log);
 
-    if (modersp->d % 2) {
+    if (modersp->v % 2) {
         len = mrs_ipc_get(mrs, &ch, 1, 4);
     } else {
         len = mrs_ipc_get(mrs, &ch, 1, 3);
@@ -5187,7 +5196,7 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (ch == 'r') {
             modersp->m = modersp->m - 1;
-            modersp->d += 1;
+            modersp->v += 1;
             modersp->r = 2;
             return 2;
         }
@@ -5296,7 +5305,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    usleep(100000);
+    usleep(200000);
 
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -5615,8 +5624,8 @@ static int fs29(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0;
     char ch=0;
 
-    sprintf(mrs->log, "wait!!!\n");
-    print_f(&mrs->plog, "fs29", mrs->log);
+    //sprintf(mrs->log, "wait!!!\n");
+    //print_f(&mrs->plog, "fs29", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'S')) {
@@ -5648,7 +5657,7 @@ static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
-    usleep(100000);
+    usleep(200000);
 
     bitset = 0;
     ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
@@ -7141,7 +7150,7 @@ static int p2(struct procRes_s *rs)
     //char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/tx/recv_%d.bin";
 #if SAVE_OUT
-    char fileout[128] = "/mnt/mmc2/tx/sample_%d.bin";
+    char fileout[128] = "/mnt/mmc2/tx/sample_%d.jpg";
 #endif
     //char filename[128] = "/mnt/mmc2/hilldesert.jpg";
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
@@ -7251,13 +7260,13 @@ static int p2(struct procRes_s *rs)
 
                     
                     totsz += fsize;
-                    max -= len;
+                    max -= fsize;
 
                     ring_buf_prod_dual(rs->pdataRx, pi);
 #if SAVE_OUT
-                    tlen = fwrite(addr, 1, len, fout);
+                    tlen = fwrite(addr, 1, fsize, fout);
 #else
-                    tlen = len;
+                    tlen = fsize;
 #endif
                     sprintf(rs->logs, " %d %d/%d/%d - %d/%d\n", pi, fsize, tlen, len, totsz, max);
                     print_f(rs->plogs, "P2", rs->logs);
