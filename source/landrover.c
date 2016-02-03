@@ -451,8 +451,149 @@ static int stauto_18(struct psdata_s *data);
 static int stauto_19(struct psdata_s *data);
 static int stauto_20(struct psdata_s *data);
 
-int tiffDrawLine()
+#define DOT_1 0x01
+#define DOT_2 0x02
+#define DOT_3 0x04
+#define DOT_4 0x08
+#define DOT_5 0x10
+#define DOT_6 0x20
+#define DOT_7 0x40
+#define DOT_8 0x80
+
+int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int max)
 {
+    uint8_t *dst, val=0;
+    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
+    int estMax, estWid=0;
+    int offsetX=0, offsetY=0, resX=0;
+    if (!img) return -1;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    if (estMax > max) return -5;
+
+    if (dotx >= width) {
+        dotx = width -1;
+    }
+    
+    if (doty >= length) {
+        doty = length -1;
+    }
+
+    if ((width % 8) == 0) {
+        estWid = width / 8;
+    } else {
+        estWid = (width / 8) + 1;
+    }
+
+    resX = dotx % 8;
+
+    offsetY = doty;
+    offsetX = dotx / estWid;
+
+    dst = img + (offsetX * offsetY);
+
+    val = *dst;
+    
+    val &= ~(bitSet[resX]);
+    val |= bitSet[resX];
+    
+    *dst = val;
+
+    return val;
+}
+
+int tiffDrawLine(char *img, int *cord, int width, int length, int max)
+{
+    int ret=0, cnt=0;
+    int estMax, srcx, srcy, dstx, dsty;
+    double stx=0, sty=0, edx=0, edy=0;
+    double offx=0, offy=0;
+    if (!img) return -1;
+    if (!cord) return -2;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    if (estMax > max) return -5;
+
+    srcx = cord[0]; 
+    srcy = cord[1]; 
+    dstx = cord[2];
+    dsty = cord[3];
+    
+    stx = cord[0];
+    sty = cord[1];
+    edx = cord[2];
+    edy = cord[3];
+
+    offx = edx - stx;
+    offy = edy - sty;
+
+    if (offx > offy) {
+        offy = offy / offx;
+        offx = 1.0;
+    } else {
+        offx = offx / offy;
+        offy = 1.0;
+    }
+    
+    while ((srcx != dstx) || (srcy != dsty)) {
+         ret = tiffDrawDot(img, srcx, srcy, width, length, max);
+         cnt++;
+     
+         stx += offx;
+         sty += offy;
+         srcx = (int)stx;
+         srcy = (int)sty;
+     }
+     ret = tiffDrawDot(img, srcx, srcy, width, length, max);
+     cnt++;
+     
+    return cnt;
+}
+
+int tiffDrawBox(char *img, int *cord, int width, int length, int max)
+{
+    int estMax;
+    int stx=0, sty=0, edx=0, edy=0;
+    if (!img) return -1;
+    if (!cord) return -2;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    if (estMax > max) return -5;
+
+    stx = cord[0];
+    sty = cord[1];
+    edx = cord[2];
+    edy = cord[3];
+
+    return 0;
+}
+
+int tiffClrBox(char *img, int *cord, int width, int length, int max)
+{
+    int estMax;
+    int stx=0, sty=0, edx=0, edy=0;
+    if (!img) return -1;
+    if (!cord) return -2;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    if (estMax > max) return -5;
+
+    stx = cord[0];
+    sty = cord[1];
+    edx = cord[2];
+    edy = cord[3];
 
     return 0;
 }
