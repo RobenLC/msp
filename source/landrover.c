@@ -596,7 +596,11 @@ int tiffClearLine(char *img, int *cord, int width, int length, int max)
     offx = edx - stx;
     offy = edy - sty;
 
-    if (offx > offy) {
+    if (offx < 0.0001) {
+        offx = 0;
+    } else if (offy < 0.0001) {
+        offy = 0;
+    } else if (offx > offy) {
         offy = offy / offx;
         offx = 1.0;
     } else {
@@ -651,8 +655,11 @@ int tiffDrawLine(char *img, int *cord, int width, int length, int max)
 
     offx = edx - stx;
     offy = edy - sty;
-
-    if (offx > offy) {
+    if (offx < 0.0001) {
+        offx = 0;
+    } else if (offy < 0.0001) {
+        offy = 0;
+    } else if (offx > offy) {
         offy = offy / offx;
         offx = 1.0;
     } else {
