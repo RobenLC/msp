@@ -117,6 +117,7 @@
 #define DIRECT_WT_DISK    (0)
 
 #define OPT_SIZE (OP_EXTPULSE - OP_FFORMAT + 1)
+#define TIFF_RAW (1)
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 static char *infpath;
@@ -171,6 +172,15 @@ typedef enum {
     DOUSCAN_WIFI_ONLY,
     DOUSCAN_WHITE_BAL,
 } doubleScan_e;
+
+typedef enum {
+    FILE_FORMAT_NONE=0,
+    FILE_FORMAT_JPG,
+    FILE_FORMAT_PDF,
+    FILE_FORMAT_RAW,
+    FILE_FORMAT_TIFF_I,
+    FILE_FORMAT_TIFF_M,
+} fileFormat_e;
 
 struct psdata_s {
     uint32_t result;
@@ -464,19 +474,29 @@ static int stauto_20(struct psdata_s *data);
 #define DOT_7 0x40
 #define DOT_8 0x80
 
-int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int max)
+#define DOT_1 0x01
+#define DOT_2 0x02
+#define DOT_3 0x04
+#define DOT_4 0x08
+#define DOT_5 0x10
+#define DOT_6 0x20
+#define DOT_7 0x40
+#define DOT_8 0x80
+
+int tiffClearDot(char *img, int dotx, int doty, int width, int length, int max)
 {
-    uint8_t *dst, val=0;
+    uint8_t *dst, val=0, org=0;
     uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
     int estMax, estWid=0;
     int offsetX=0, offsetY=0, resX=0;
-    if (!img) return -1;
-    if (!width) return -3;
-    if (!length) return -4;
+    
+    //if (!img) return -1;
+    //if (!width) return -3;
+    //if (!length) return -4;
 
     estMax = (width * length) / 8; 
 
-    if (estMax > max) return -5;
+    //if (estMax > max) return -5;
 
     if (dotx >= width) {
         dotx = width -1;
@@ -495,19 +515,123 @@ int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int max)
     resX = dotx % 8;
 
     offsetY = doty;
-    offsetX = dotx / estWid;
+    offsetX = dotx / 8;
 
-    dst = img + (offsetX * offsetY);
+    dst = img + (offsetX + offsetY*estWid);
 
-    val = *dst;
+    org = *dst;
     
-    val &= ~(bitSet[resX]);
-    val |= bitSet[resX];
+    val = org & (~(bitSet[resX]));
+
+    //printf("(%d, %d)clear dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d\n", dotx, doty, org, val, offsetX, offsetY, resX);
     
     *dst = val;
 
     return val;
 }
+
+int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int max)
+{
+    uint8_t *dst, val=0, org=0;
+    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
+    int estMax, estWid=0;
+    int offsetX=0, offsetY=0, resX=0;
+    //if (!img) return -1;
+    //if (!width) return -3;
+    //if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    //if (estMax > max) return -5;
+
+    if (dotx >= width) {
+        dotx = width -1;
+    }
+    
+    if (doty >= length) {
+        doty = length -1;
+    }
+
+    if ((width % 8) == 0) {
+        estWid = width / 8;
+    } else {
+        estWid = (width / 8) + 1;
+    }
+
+    resX = dotx % 8;
+
+    offsetY = doty;
+    offsetX = dotx / 8;
+
+    dst = img + (offsetX + offsetY*estWid);
+
+    org = *dst;
+    
+    val = org & (~(bitSet[resX]));
+    val |= bitSet[resX];
+
+    //printf("(%d, %d)draw dot org:0x%.2x, val:0x%.2x - x:%d, y:%d, res:%d\n", dotx, doty, org, val, offsetX, offsetY, resX);
+    
+    *dst = val;
+
+    return val;
+}
+
+int tiffClearLine(char *img, int *cord, int width, int length, int max)
+{
+    int ret=0, cnt=0;
+    int estMax, srcx, srcy, dstx, dsty;
+    double stx=0, sty=0, edx=0, edy=0;
+    double offx=0, offy=0;
+    if (!img) return -1;
+    if (!cord) return -2;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    if (estMax > max) return -5;
+
+    srcx = cord[0]; 
+    srcy = cord[1]; 
+    dstx = cord[2];
+    dsty = cord[3];
+    
+    stx = cord[0];
+    sty = cord[1];
+    edx = cord[2];
+    edy = cord[3];
+
+    offx = edx - stx;
+    offy = edy - sty;
+
+    if (offx > offy) {
+        offy = offy / offx;
+        offx = 1.0;
+    } else {
+        offx = offx / offy;
+        offy = 1.0;
+    }
+
+    printf("clear line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
+    
+    while ((srcx != dstx) || (srcy != dsty)) {
+         ret = tiffClearDot(img, srcx, srcy, width, length, max);
+         cnt++;
+     
+         stx += offx;
+         sty += offy;
+         srcx = (int)stx;
+         srcy = (int)sty;
+
+         //printf("clear %d, %d - %d\n", srcx, srcy,cnt);
+     }
+     ret = tiffClearDot(img, srcx, srcy, width, length, max);
+     cnt++;
+     
+    return cnt;
+}
+
 
 int tiffDrawLine(char *img, int *cord, int width, int length, int max)
 {
@@ -544,6 +668,8 @@ int tiffDrawLine(char *img, int *cord, int width, int length, int max)
         offx = offx / offy;
         offy = 1.0;
     }
+
+    printf("draw line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
     
     while ((srcx != dstx) || (srcy != dsty)) {
          ret = tiffDrawDot(img, srcx, srcy, width, length, max);
@@ -553,6 +679,7 @@ int tiffDrawLine(char *img, int *cord, int width, int length, int max)
          sty += offy;
          srcx = (int)stx;
          srcy = (int)sty;
+         //printf("draw %d, %d - %d\n", srcx, srcy,cnt);
      }
      ret = tiffDrawDot(img, srcx, srcy, width, length, max);
      cnt++;
@@ -562,8 +689,9 @@ int tiffDrawLine(char *img, int *cord, int width, int length, int max)
 
 int tiffDrawBox(char *img, int *cord, int width, int length, int max)
 {
-    int estMax;
+    int estMax, i;
     int stx=0, sty=0, edx=0, edy=0;
+    int rcord[4];
     if (!img) return -1;
     if (!cord) return -2;
     if (!width) return -3;
@@ -577,14 +705,26 @@ int tiffDrawBox(char *img, int *cord, int width, int length, int max)
     sty = cord[1];
     edx = cord[2];
     edy = cord[3];
+
+    rcord[0] = stx;
+    rcord[1] = sty;
+    rcord[2] = edx;
+    rcord[3] = edy;
+
+    for (i = stx; i <= edx; i++) {
+        rcord[0] = i;
+        rcord[1] = i;
+        tiffDrawLine(img, rcord, width, length, max);
+    }
 
     return 0;
 }
 
 int tiffClrBox(char *img, int *cord, int width, int length, int max)
 {
-    int estMax;
+    int estMax, i=0;
     int stx=0, sty=0, edx=0, edy=0;
+    int rcord[4];
     if (!img) return -1;
     if (!cord) return -2;
     if (!width) return -3;
@@ -598,6 +738,17 @@ int tiffClrBox(char *img, int *cord, int width, int length, int max)
     sty = cord[1];
     edx = cord[2];
     edy = cord[3];
+
+    rcord[0] = stx;
+    rcord[1] = sty;
+    rcord[2] = edx;
+    rcord[3] = edy;
+
+    for (i = stx; i <= edx; i++) {
+        rcord[0] = i;
+        rcord[1] = i;
+        tiffClearLine(img, rcord, width, length, max);
+    }
 
     return 0;
 }
@@ -7598,15 +7749,20 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 static int p2(struct procRes_s *rs)
 {
 #define SAVE_OUT (0)
+#define RAW_W 4320
+#define RAW_H  6992
 
     /* spi0 */
     char ch;
     int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0, tlen=0, idx=0;
-    char *addr;
+    char *addr, *laddr=0, *taddr;
     char filedst[128];
+    uint32_t *popt_fformat;
+    int rcord[4];
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/handmade.jpg";
     char filename[128] = "/mnt/mmc2/scan_pro.jpg";
+    char filetiffraw[128] = "/mnt/mmc2/tiff_raw.bin";
     char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
     //char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/tx/recv_%d.bin";
@@ -7617,7 +7773,9 @@ static int p2(struct procRes_s *rs)
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/pattern2.txt";
     FILE *fp = NULL, *fout=NULL;
-	
+
+    popt_fformat = rs->poptable;
+
     if (infpath[0] != '\0') {
         strcpy(filename, infpath);
     } else {
@@ -7655,9 +7813,13 @@ static int p2(struct procRes_s *rs)
             if ((idx%36) == 8)  {
                 idx = 9;
             }
-            
-            sprintf(filename, samplefile, (idx%36));
-            idx++;
+
+            if (*popt_fformat == FILE_FORMAT_TIFF_I) {
+                sprintf(filename, filetiffraw);
+            } else {
+                sprintf(filename, samplefile, (idx%36));
+                idx++;
+            }
 
             sprintf(rs->logs, "get sample file: [%s] \n", filename);
             print_f(rs->plogs, "P2", rs->logs);
@@ -7948,6 +8110,56 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);
                 }
 
+#if TIFF_RAW 
+                if (*popt_fformat == FILE_FORMAT_TIFF_I) {
+                    laddr = 0;
+                    laddr = malloc(max);
+                    if (!laddr) {
+                        sprintf(rs->logs, " allocate memory size %d falied!!! ret:%d \n", max, laddr);
+                        print_f(rs->plogs, "P2", rs->logs);
+                        continue;
+                    }
+                
+                    fsize = fread(laddr, 1, max, fp);
+                
+                    sprintf(rs->logs, " read file size %d, result: %d!!! ret:%d \n", max, fsize);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    rcord[0] = 1;
+                    rcord[1] = 1;
+                    rcord[2] = 500;
+                    rcord[3] = 500;
+
+                    ret = tiffDrawBox(laddr, rcord, RAW_W, RAW_H, max);
+                    
+                    rcord[0] = 1;
+                    rcord[1] = 1;
+                    rcord[2] = 500;
+                    rcord[3] = 500;
+                    
+                    ret = tiffClearLine(laddr, rcord, RAW_W, RAW_H, max);
+                    
+                    rcord[0] = 300;
+                    rcord[1] = 300;
+                    rcord[2] = 1200;
+                    rcord[3] = 1200;
+
+                    ret = tiffClrBox(laddr, rcord, RAW_W, RAW_H, max);
+                    
+                    rcord[0] = 300;
+                    rcord[1] = 300;
+                    rcord[2] = 1200;
+                    rcord[3] = 1200;
+
+                    ret = tiffDrawLine(laddr, rcord, RAW_W, RAW_H, max);                    
+                
+                    sprintf(rs->logs, " tiff draw line to raw, ret:%d \n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);
+                
+                    fsize = 0;
+                }
+#endif
+
                 while (1) {
                     len = 0;
                     len = ring_buf_get(rs->pdataTx, &addr);
@@ -7960,7 +8172,14 @@ static int p2(struct procRes_s *rs)
                     if (max < len) {
                         len = max;
                     }
-
+#if TIFF_RAW 
+                    if (*popt_fformat == FILE_FORMAT_TIFF_I) {
+                        taddr = laddr + totsz;
+                        memcpy(addr, taddr, len);
+                        msync(addr, len, MS_SYNC);
+                        fsize = len;
+                    }
+#else
                     ret = fseek(fp, totsz, SEEK_SET);
                     if (ret) {
                         sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
@@ -7970,7 +8189,7 @@ static int p2(struct procRes_s *rs)
                     msync(addr, len, MS_SYNC);
                     
                     fsize = fread(addr, 1, len, fp);
-
+#endif
                     totsz += fsize;
                     max -= len;
 
@@ -8011,7 +8230,12 @@ static int p2(struct procRes_s *rs)
 
                 sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
                 print_f(rs->plogs, "P2", rs->logs);
-
+#if TIFF_RAW 
+                if (laddr) {
+                    free(laddr);
+                    laddr = 0;
+                }
+#endif
                 fclose(fp);
                 fp = NULL;
             }
