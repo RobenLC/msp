@@ -465,23 +465,14 @@ static int stauto_18(struct psdata_s *data);
 static int stauto_19(struct psdata_s *data);
 static int stauto_20(struct psdata_s *data);
 
-#define DOT_1 0x01
-#define DOT_2 0x02
-#define DOT_3 0x04
-#define DOT_4 0x08
-#define DOT_5 0x10
-#define DOT_6 0x20
-#define DOT_7 0x40
-#define DOT_8 0x80
-
-#define DOT_1 0x01
-#define DOT_2 0x02
-#define DOT_3 0x04
-#define DOT_4 0x08
-#define DOT_5 0x10
-#define DOT_6 0x20
-#define DOT_7 0x40
-#define DOT_8 0x80
+#define DOT_8 0x01
+#define DOT_7 0x02
+#define DOT_6 0x04
+#define DOT_5 0x08
+#define DOT_4 0x10
+#define DOT_3 0x20
+#define DOT_2 0x40
+#define DOT_1 0x80
 
 int tiffClearDot(char *img, int dotx, int doty, int width, int length, int max)
 {
@@ -523,7 +514,7 @@ int tiffClearDot(char *img, int dotx, int doty, int width, int length, int max)
     
     val = org & (~(bitSet[resX]));
 
-    //printf("(%d, %d)clear dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d\n", dotx, doty, org, val, offsetX, offsetY, resX);
+    //printf("(%d, %d)clear dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
     
     *dst = val;
 
@@ -570,7 +561,7 @@ int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int max)
     val = org & (~(bitSet[resX]));
     val |= bitSet[resX];
 
-    //printf("(%d, %d)draw dot org:0x%.2x, val:0x%.2x - x:%d, y:%d, res:%d\n", dotx, doty, org, val, offsetX, offsetY, resX);
+    //printf("(%d, %d)draw dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
     
     *dst = val;
 
@@ -613,7 +604,7 @@ int tiffClearLine(char *img, int *cord, int width, int length, int max)
         offy = 1.0;
     }
 
-    printf("clear line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
+    //printf("clear line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
     
     while ((srcx != dstx) || (srcy != dsty)) {
          ret = tiffClearDot(img, srcx, srcy, width, length, max);
@@ -669,7 +660,7 @@ int tiffDrawLine(char *img, int *cord, int width, int length, int max)
         offy = 1.0;
     }
 
-    printf("draw line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
+    //printf("draw line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
     
     while ((srcx != dstx) || (srcy != dsty)) {
          ret = tiffDrawDot(img, srcx, srcy, width, length, max);
@@ -713,14 +704,14 @@ int tiffDrawBox(char *img, int *cord, int width, int length, int max)
 
     for (i = stx; i <= edx; i++) {
         rcord[0] = i;
-        rcord[1] = i;
+        rcord[2] = i;
         tiffDrawLine(img, rcord, width, length, max);
     }
 
     return 0;
 }
 
-int tiffClrBox(char *img, int *cord, int width, int length, int max)
+int tiffClearBox(char *img, int *cord, int width, int length, int max)
 {
     int estMax, i=0;
     int stx=0, sty=0, edx=0, edy=0;
@@ -746,7 +737,7 @@ int tiffClrBox(char *img, int *cord, int width, int length, int max)
 
     for (i = stx; i <= edx; i++) {
         rcord[0] = i;
-        rcord[1] = i;
+        rcord[2] = i;
         tiffClearLine(img, rcord, width, length, max);
     }
 
@@ -7758,7 +7749,7 @@ static int p2(struct procRes_s *rs)
     char *addr, *laddr=0, *taddr;
     char filedst[128];
     uint32_t *popt_fformat;
-    int rcord[4];
+    int rcord[4], rawoffset=0;
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/handmade.jpg";
     char filename[128] = "/mnt/mmc2/scan_pro.jpg";
@@ -8124,37 +8115,49 @@ static int p2(struct procRes_s *rs)
                 
                     sprintf(rs->logs, " read file size %d, result: %d!!! ret:%d \n", max, fsize);
                     print_f(rs->plogs, "P2", rs->logs);
+      
+                    rcord[0] = 2+(rawoffset%RAW_W);
+                    rcord[1] = 2+(rawoffset%RAW_W);
+                    rcord[2] = 1000+(rawoffset%RAW_H);
+                    rcord[3] = 1000+(rawoffset%RAW_H);
 
-                    rcord[0] = 1;
-                    rcord[1] = 1;
-                    rcord[2] = 500;
-                    rcord[3] = 500;
+                    ret = tiffClearBox(laddr, rcord, RAW_W, RAW_H, max);
 
-                    ret = tiffDrawBox(laddr, rcord, RAW_W, RAW_H, max);
-                    
-                    rcord[0] = 1;
-                    rcord[1] = 1;
-                    rcord[2] = 500;
-                    rcord[3] = 500;
-                    
-                    ret = tiffClearLine(laddr, rcord, RAW_W, RAW_H, max);
-                    
-                    rcord[0] = 300;
-                    rcord[1] = 300;
-                    rcord[2] = 1200;
-                    rcord[3] = 1200;
-
-                    ret = tiffClrBox(laddr, rcord, RAW_W, RAW_H, max);
-                    
-                    rcord[0] = 300;
-                    rcord[1] = 300;
-                    rcord[2] = 1200;
-                    rcord[3] = 1200;
+                    rcord[0] = 4+(rawoffset%RAW_W);
+                    rcord[1] = 4+(rawoffset%RAW_W);
+                    rcord[2] = 998+(rawoffset%RAW_H);
+                    rcord[3] = 998+(rawoffset%RAW_H);
 
                     ret = tiffDrawLine(laddr, rcord, RAW_W, RAW_H, max);                    
+
+                    rcord[0] = 100+(rawoffset%RAW_W);
+                    rcord[1] = 100+(rawoffset%RAW_W);
+                    rcord[2] = 900+(rawoffset%RAW_H);
+                    rcord[3] = 900+(rawoffset%RAW_H);
+
+                    ret = tiffDrawBox(laddr, rcord, RAW_W, RAW_H, max);                    
+
+                    rcord[0] = 200+(rawoffset%RAW_W);
+                    rcord[1] = 200+(rawoffset%RAW_W);
+                    rcord[2] = 800+(rawoffset%RAW_H);
+                    rcord[3] = 800+(rawoffset%RAW_H);
+
+                    ret = tiffClearBox(laddr, rcord, RAW_W, RAW_H, max);                    
+
+                    rcord[0] = 100+(rawoffset%RAW_W);
+                    rcord[1] = 100+(rawoffset%RAW_W);
+                    rcord[2] = 900+(rawoffset%RAW_H);
+                    rcord[3] = 900+(rawoffset%RAW_H);
+
+                    ret = tiffClearLine(laddr, rcord, RAW_W, RAW_H, max);                    
                 
                     sprintf(rs->logs, " tiff draw line to raw, ret:%d \n", ret);
                     print_f(rs->plogs, "P2", rs->logs);
+
+                    rawoffset += 119;
+                    while ((((rawoffset%RAW_W) + 1000) > RAW_W) ||(((rawoffset%RAW_H) + 1000) > RAW_H)) {
+                        rawoffset += 119;
+                    }
                 
                     fsize = 0;
                 }
