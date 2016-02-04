@@ -852,6 +852,44 @@ static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 
+int tiffHead(char *ptiff, int max)
+{
+    int ret=0;
+    if (!ptiff) return -1;
+    if (!max) return -2;
+    char sample[8] = {0x49, 0x49, 0x2a, 0x00, 0x08, 0xa0, 0x39, 0x00};
+
+    memcpy(ptiff, sample, 8);
+    ret = 8;
+
+    return ret;
+}
+
+int tiffTail(char *ptiff, int max)
+{
+    char patern[170] = {0x0C, 0x00, 0x00, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0xE0, 0x10, 
+         0x00, 0x00, 0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x1B, 0x00, 0x00, 0x02, 
+         0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x01, 0x03, 0x00, 
+         0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 
+         0x00, 0x01, 0x00, 0x00, 0x00, 0x11, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 
+         0x00, 0x00, 0x15, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x16, 
+         0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x1B, 0x00, 0x00, 0x17, 0x01, 0x04, 0x00, 
+         0x01, 0x00, 0x00, 0x00, 0xC0, 0x9C, 0x39, 0x00, 0x1A, 0x01, 0x05, 0x00, 0x01, 0x00, 0x00,
+         0x00, 0x62, 0x9D, 0x39, 0x00, 0x1B, 0x01, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x6A, 0x9D, 
+         0x39, 0x00, 0x1C, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 
+         0x00, 0x00, 0x00, 0xE0, 0x10, 0x00, 0x00, 0x00, 0x00, 0x80, 0x25, 0x00, 0x00, 0x20, 0x00, 
+         0x00, 0x00, 0x80, 0x25, 0x00, 0x00, 0x20, 0x00};
+    int ret=0;
+    if (!ptiff) return -1;
+    if (!max) return -2;
+    if (max < 170) return -3;
+    
+    memcpy(ptiff, patern, 170);
+    ret = 179;
+
+    return ret;
+}
+
 int pdfParamCalcu(int hi, int wh, int *mh, int *mw)
 {
     double jscale=0.0, tscale=0.0, dscale=0.0;;
@@ -16666,8 +16704,8 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     pfat->fatSupdata = s;   
     pfat->fatSupcur = pfat->fatSupdata;
 
-    if (fformat == FILE_FORMAT_PDF) {
-        sprintf(mrs->log, "file format : PDF(%d) allocate one more trunk at the begin\n", fformat);
+    if ((fformat == FILE_FORMAT_PDF) || (fformat == FILE_FORMAT_TIFF_I)) {
+        sprintf(mrs->log, "file format (%d) 2:PDF 4:tiff_i, allocate one more trunk at the begin\n", fformat);
         print_f(&mrs->plog, "fs59", mrs->log);
 
         s = aspMalloc(sizeof(struct supdataBack_s));
@@ -19726,6 +19764,92 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "dump PDF tail - end\n");
         print_f(&mrs->plog, "fs98", mrs->log);
         */
+        se->supdataTot += ret;
+        datLen += ret;
+    }
+    else if (fformat == FILE_FORMAT_TIFF_I) {
+        s = sh->n;
+        if (!s) {
+            sprintf(mrs->log, "Error!!! TIFF_I the first trunk is not exist!!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 2;
+            return 1;
+        }
+         
+        /* tiff head */
+        sb = sh;
+        sprintf(mrs->log, "TIFF_I Head get!!! tot: %d, use:%d \n", sb->supdataTot, sb->supdataUse);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        if (sb->supdataTot != sb->supdataUse) {
+            shmem_dump(sb->supdataBuff + sb->supdataUse, sb->supdataTot - sb->supdataUse);
+            sprintf(mrs->log, "dump - end\n");
+            print_f(&mrs->plog, "fs98", mrs->log);
+        }
+        
+        ret = tiffHead(sb->supdataBuff, SPI_TRUNK_SZ);
+        
+        sb->supdataUse = 0;
+        sb->supdataTot = ret;
+
+        
+        shmem_dump(sb->supdataBuff, sb->supdataTot);
+        sprintf(mrs->log, "dump TIFF_I head - end\n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        
+
+        /* calculate sector start and sector length of file */            
+        datLen = aspCalcSupLen(sc);
+        if (datLen < 0) {
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+    
+        /* pdf tail */
+        se = sc;
+        while (se->n) {
+            se = se->n;
+        }
+        sprintf(mrs->log, "TIFF_I Tail get!!! tot: %d, use:%d \n", se->supdataTot, se->supdataUse);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        
+        if (se->supdataTot != 0) {
+            shmem_dump(se->supdataBuff, se->supdataTot);
+            sprintf(mrs->log, "dump - end\n");
+            print_f(&mrs->plog, "fs98", mrs->log);
+        }
+        
+        
+        ret = tiffTail(se->supdataBuff + se->supdataTot, SPI_TRUNK_SZ-se->supdataTot);
+        if (ret == -3) {
+            s = 0;
+            s = aspMalloc(sizeof(struct supdataBack_s));
+            if (!s) {
+                sprintf(mrs->log, "FAIL to allcate memory for the TIFF_I tail !!! \n");
+                print_f(&mrs->plog, "fs98", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            memset(s, 0, sizeof(struct supdataBack_s));
+            se->n = s;
+            se = s;
+            ret = tiffTail(se->supdataBuff, SPI_TRUNK_SZ);
+        }
+        
+        if (ret < 0) {
+            sprintf(mrs->log, "Error!!! can NOT append TIFF_I tail ret: %d !!!", ret);
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+
+        
+        shmem_dump(se->supdataBuff+se->supdataTot, ret);
+        sprintf(mrs->log, "dump TIFF_I tail - end\n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        
         se->supdataTot += ret;
         datLen += ret;
     }
