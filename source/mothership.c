@@ -885,7 +885,7 @@ int tiffTail(char *ptiff, int max)
     if (max < 170) return -3;
     
     memcpy(ptiff, patern, 170);
-    ret = 179;
+    ret = 170;
 
     return ret;
 }
@@ -12391,6 +12391,7 @@ static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
     }    
     *rsp = *rlt;
 
+/*
     if (*rlt == 0x1) {
         sprintf(mrs->log, "succeed:"); 
         print_dbg(&mrs->plog, mrs->log, n);
@@ -12398,6 +12399,10 @@ static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
         sprintf(mrs->log, "failed:"); 
         print_dbg(&mrs->plog, mrs->log, n);
     }
+*/
+    sprintf(mrs->log, "result:"); 
+    print_dbg(&mrs->plog, mrs->log, n);
+
 #if FUNC_PROCEDURE_LOG
     sprintf(mrs->log, "2.wt get 0x%x\n", *rlt); 
     print_f(&mrs->plog, "DBG", mrs->log);
@@ -13489,9 +13494,10 @@ static int cmdfunc_boot_opcode(int argc, char *argv[])
         goto end;
     }
         
-    if ((n) && (rsp != 0x1)) {
+    if ((n) || (rsp != 0x4)) {
          sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -5;
     }
 
     sprintf(mrs->log, "cmdfunc_boot_opcode n = %d, rsp = %d\n", n, rsp); 
@@ -13500,9 +13506,9 @@ static int cmdfunc_boot_opcode(int argc, char *argv[])
 end:
 
     if (brk | ret) {
-        sprintf(mrs->log, "E,%d,%d", ret, brk);
+        sprintf(mrs->log, "BOOT_NG,%d,%d", ret, brk);
     } else {
-        sprintf(mrs->log, "D,%d,%d", ret, brk);
+        sprintf(mrs->log, "BOOT_OK,%d,%d", ret, brk);
     }
 
     n = strlen(mrs->log);
@@ -22942,12 +22948,13 @@ static int p6(struct procRes_s *rs)
                     break;
                 }
 
-                sprintf(rs->logs, "wait crop (%d)\n", num);
+                sprintf(rs->logs, "wait crop num:%d, %d s\n", num, cnt/2);
                 print_f(rs->plogs, "P6", rs->logs);
-                
+/*
                 if (cnt > 10) {
                     break;
                 }
+*/
                 usleep(500000);
                 cnt ++;
             }
