@@ -117,7 +117,7 @@
 #define DIRECT_WT_DISK    (0)
 
 #define OPT_SIZE (OP_EXTPULSE - OP_FFORMAT + 1)
-#define TIFF_RAW (1)
+#define TIFF_RAW (0)
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 static char *infpath;
@@ -7320,6 +7320,27 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
 #define CROP_COOD_04 {145, 149}
 #define CROP_COOD_05 {213, 83 }
 #define CROP_COOD_06 {143, 15 }
+#elif 0 /* 00 */
+#define CROP_COOD_01 {158, 2808 }
+#define CROP_COOD_02 {2453 , 3672 }
+#define CROP_COOD_03 {2487,  3672 }
+#define CROP_COOD_04 {3250,  472}
+#define CROP_COOD_05 {841, 48 }
+#define CROP_COOD_06 {758, 48 }
+#elif 1 /* 01 */
+#define CROP_COOD_01 {309, 712 }
+#define CROP_COOD_02 {949 , 3368 }
+#define CROP_COOD_03 {988,  3368 }
+#define CROP_COOD_04 {3392,  2992}
+#define CROP_COOD_05 {2657, 32 }
+#define CROP_COOD_06 {2559, 32 }
+#elif 1 /* 02 */
+#define CROP_COOD_01 {666, 1184 }
+#define CROP_COOD_02 {1567, 4016 }
+#define CROP_COOD_03 {1604, 4016 }
+#define CROP_COOD_04 {4000, 3048 }
+#define CROP_COOD_05 {2945, 32 }
+#define CROP_COOD_06 {2820, 32 }
 #else
 #define CROP_COOD_01 {358, 357}
 #define CROP_COOD_02 {630, 640}
@@ -7812,7 +7833,9 @@ static int p2(struct procRes_s *rs)
                 idx = 9;
             }
 
-            if (*popt_fformat == FILE_FORMAT_TIFF_I) {
+            if (infpath[0] != '\0') {
+                strcpy(filename, infpath);
+            } else if (*popt_fformat == FILE_FORMAT_TIFF_I) {
                 sprintf(filename, filetiffraw);
             } else {
                 sprintf(filename, samplefile, (idx%36));
@@ -7821,7 +7844,15 @@ static int p2(struct procRes_s *rs)
 
             sprintf(rs->logs, "get sample file: [%s] \n", filename);
             print_f(rs->plogs, "P2", rs->logs);
-
+#if 0 /* simulate the delay before transmitting */
+            int countD = 0;
+            while (countD < 10) {
+                sleep(1);
+                countD++;
+                sprintf(rs->logs, " %d s \n", countD);
+                print_f(rs->plogs, "P2", rs->logs);
+            }
+#endif
             if (ch == 'r') {
 #if SAVE_OUT
                 fout = find_save(filedst, fileout);
