@@ -142,6 +142,8 @@ static int *totSalloc=0;
 #define MAX_PDF_H  (900.0)
 #define MAX_PDF_W (1600.0)
 
+#define JPG_FFD9_CUT (1)
+
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -851,6 +853,42 @@ static int aspNameCpyfromName(char *raw, char *dst, int offset, int len, int jum
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
+
+int findEOF(char *p, int max)
+{
+    int index[2] = {0, 0};
+    char mark[2] = {0xff, 0xd9};
+    char target = 0;
+    int i, cnt=0;
+
+    if (!p) return -1;
+    if (max == 0) return -2;
+
+    target = mark[0];
+    for (i = 0; i < max; i++) {
+        if (cnt > 0) {
+            if (p[i] == target) {
+                index[1] = i; 
+                break;
+            } else {
+                cnt = 0;
+                target = mark[0];
+            }
+        } else {
+            if (p[i] == target) {
+                index[0] = i; 
+                cnt = 1;
+                target = mark[1];
+            }
+        }    
+    }
+
+    if (i < max) {
+        return index[0];
+    } 
+
+    return -3;
+}
 
 int tiffHead(char *ptiff, int max)
 {
@@ -20837,16 +20875,19 @@ static int p2(struct procRes_s *rs)
     int bitset, totsz=0;
     uint16_t send16, recv16;
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
+    uint32_t fformat=0;
     struct info16Bit_s *p=0, *c=0;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
     struct sdbootsec_s   *psec=0;
-    
+    struct aspConfig_s *pct=0, *pdt=0;
+
     char ch, str[128], rx8[4], tx8[4];
     char *addr, *laddr, *rx_buff;
     sprintf(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
 
+    pct = rs->pcfgTable;
     pfat = rs->psFat;
     pftb = pfat->fatTable;
     psec = pfat->fatBootsec;
@@ -21079,6 +21120,27 @@ static int p2(struct procRes_s *rs)
 
                 if (opsz == 1) opsz = 0;
 
+#if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                if (ret) {
+                    fformat = 0;
+                }
+                
+                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+                    sprintf(rs->logs, "fformat: 0x%x !!!\n", fformat);
+                    print_f(rs->plogs, "P2", rs->logs);    
+
+                    /* search the offset of 0xffd9 */
+                    ret = findEOF(addr, opsz);
+                    if (ret > 0) {
+                        memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    }
+
+                    sprintf(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
+                    print_f(rs->plogs, "P2", rs->logs);    
+                }
+#endif
+
                 if (opsz > 0) {
                     ring_buf_prod_dual(rs->pdataRx, pi);
                 }
@@ -21144,6 +21206,28 @@ static int p2(struct procRes_s *rs)
                 print_f(rs->plogs, "P2", rs->logs);    
 
                 opsz = 0 - opsz;
+
+#if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                if (ret) {
+                    fformat = 0;
+                }
+                
+                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+                    sprintf(rs->logs, "fformat: 0x%x !!!\n", fformat);
+                    print_f(rs->plogs, "P2", rs->logs);    
+
+                    /* search the offset of 0xffd9 */
+                    ret = findEOF(addr, opsz);
+                    if (ret > 0) {
+                        memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    }
+
+                    sprintf(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
+                    print_f(rs->plogs, "P2", rs->logs);    
+                }
+#endif
+                
                 ring_buf_set_last(rs->pcmdRx, opsz);
                 rs_ipc_put(rs, "d", 1);
                 sprintf(rs->logs, "spi0 recv end\n");
@@ -21357,7 +21441,7 @@ static int p2(struct procRes_s *rs)
 
                     if (len > 0) {
 #if MSP_P2_SAVE_DAT
-                    msync(addr, len, MS_SYNC);                    
+                    msync(addr, len, MS_SYNC); 
                     fwrite(addr, 1, len, rs->fdat_s[1]);
                     fflush(rs->fdat_s[1]);
 #endif
@@ -21674,10 +21758,16 @@ static int p3(struct procRes_s *rs)
 
     struct spi_ioc_transfer *tr = aspMalloc(sizeof(struct spi_ioc_transfer));
     struct timespec tnow;
+    struct aspConfig_s *pct=0, *pdt=0;
+    
     int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait;
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4];
     char *addr, *laddr;
+    uint32_t fformat=0;
+
+    pct = rs->pcfgTable;
+    
     sprintf(rs->logs, "p3, spidev:%d \n", rs->spifd);
     print_f(rs->plogs, "P3", rs->logs);
 
@@ -21874,11 +21964,30 @@ static int p3(struct procRes_s *rs)
                 opsz = 0 - opsz;
 
                 if (opsz == 1) opsz = 0;
+#if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                if (ret) {
+                    fformat = 0;
+                }
+                
+                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+                    sprintf(rs->logs, "fformat: 0x%x !!!\n", fformat);
+                    print_f(rs->plogs, "P3", rs->logs);    
 
+                    /* search the offset of 0xffd9 */
+                    ret = findEOF(addr, opsz);
+                    if (ret > 0) {
+                        memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    }
+
+                    sprintf(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
+                    print_f(rs->plogs, "P3", rs->logs);    
+                }
+#endif
                 if (opsz > 0) {
                     ring_buf_prod_dual(rs->pdataRx, pi);
                 }
-
+ 
                 ring_buf_set_last_dual(rs->pdataRx, opsz, pi);
                 rs_ipc_put(rs, "d", 1);
 
@@ -21930,6 +22039,28 @@ static int p3(struct procRes_s *rs)
                     }
                 }
                 opsz = 0 - opsz;
+
+#if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                if (ret) {
+                    fformat = 0;
+                }
+                
+                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+                    sprintf(rs->logs, "fformat: 0x%x !!!\n", fformat);
+                    print_f(rs->plogs, "P3", rs->logs);    
+
+                    /* search the offset of 0xffd9 */
+                    ret = findEOF(addr, opsz);
+                    if (ret > 0) {
+                        memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    }
+
+                    sprintf(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
+                    print_f(rs->plogs, "P3", rs->logs);    
+                }
+#endif
+
                 ring_buf_set_last(rs->pcmdTx, opsz);
                 rs_ipc_put(rs, "d", 1);
                 sprintf(rs->logs, "spi0 recv end\n");
