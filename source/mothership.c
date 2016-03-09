@@ -620,7 +620,7 @@ struct machineCtrl_s{
 };
 
 struct mainRes_s{
-    int sid[8];
+    int sid[9];
     int sfm[2];
     int smode;
     struct psdata_s stdata;
@@ -629,8 +629,8 @@ struct mainRes_s{
     struct folderQueue_s *folder_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
-    struct pipe_s pipedn[9];
-    struct pipe_s pipeup[9];
+    struct pipe_s pipedn[10];
+    struct pipe_s pipeup[10];
     // data mode share memory
     struct shmem_s dataRx;
     struct shmem_s dataTx; /* we don't have data mode Tx, so use it as cmdRx for spi1 */
@@ -649,6 +649,7 @@ struct mainRes_s{
     struct socket_s socket_t;
     struct socket_s socket_at;
     struct socket_s socket_n;
+    struct socket_s socket_v;
     struct logPool_s plog;
     struct aspWaitRlt_s wtg;
     char *dbglog;
@@ -697,6 +698,7 @@ struct procRes_s{
     struct socket_s *psocket_t;
     struct socket_s *psocket_at;
     struct socket_s *psocket_n;
+    struct socket_s *psocket_v;
     struct logPool_s *plogs;
 };
 
@@ -12217,6 +12219,20 @@ static int p7_end(struct procRes_s *rs)
     return ret;
 }
 
+static int p8_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p8_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
 static int p5_init(struct procRes_s *rs)
 {
     int ret;
@@ -15992,9 +16008,45 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
             psec->secWhroot += psec->secBoffset;
         } else {
             pfat->fatRetry += 1;
+#if 0 /* test if boot failed */
+            if (pfat->fatRetry == 2) {
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            else if (pfat->fatRetry == 4) {
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            else if (pfat->fatRetry == 6) {
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            else if (pfat->fatRetry == 8) {
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            else if (pfat->fatRetry == 10) {
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            else if (pfat->fatRetry == 12) {
+                modersp->r = 0xed;
+                return 1;
+            }
+
+            else if (pfat->fatRetry > 14) {
+                psec->secBoffset = 8192;
+            }
+#else
             if (pfat->fatRetry > 2) {
                 psec->secBoffset = 8192;
             }
+#endif
         }
 
         sprintf(mrs->log, "!!!! boot retry :%d offset: %d  !!!!\n", pfat->fatRetry, psec->secBoffset);
@@ -20994,6 +21046,9 @@ static int p2(struct procRes_s *rs)
                 print_f(rs->plogs, "P2", rs->logs);
 #endif
                 len = mtx_data(rs->spifd, rx8, tx8, 2, tr);
+
+                msync(rx8, 4, MS_SYNC);                    
+                
                 if (len > 0) {
                     recv16 = rx8[1] | (rx8[0] << 8);
                     abs_info(&rs->pmch->get, recv16);
@@ -21440,8 +21495,8 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);          
 
                     if (len > 0) {
-#if MSP_P2_SAVE_DAT
                     msync(addr, len, MS_SYNC); 
+#if MSP_P2_SAVE_DAT
                     fwrite(addr, 1, len, rs->fdat_s[1]);
                     fflush(rs->fdat_s[1]);
 #endif
@@ -22760,12 +22815,12 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
         n = read(rs->psocket_r->connfd, recvbuf, 1024);
         
-        recvbuf[n] = '\0';
+        recvbuf[n-1] = '\0';
         sprintf(rs->logs, "receive len[%d]content[%s]\n", n, recvbuf);
         print_f(rs->plogs, "P5", rs->logs);
         memset(sendbuf, 0, 2048);
         sprintf(sendbuf, "Leo heard [%s]\n", recvbuf);
-        //strcpy(sendbuf, recvbuf);
+        strcpy(sendbuf, recvbuf);
         n = strlen(sendbuf);
         
         if (n <= 0) goto socketEnd;
@@ -22778,14 +22833,15 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         ed = atFindIdx(&recvbuf[hd], 0xfb);
         if (ed < 0) goto socketEnd;
         ln = atFindIdx(&recvbuf[hd], '\0');
-
+        //if (ln < 0) goto socketEnd;
+        
         n = strlen(&recvbuf[hd]);
         if (n <= 0) {
             goto socketEnd;
         }
 
-        //sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, &recvbuf[hd], hd, be, ed, ln, fg);
-        //print_f(rs->plogs, "P5", rs->logs);
+        sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, &recvbuf[hd], hd, be, ed, ln, fg);
+        print_f(rs->plogs, "P5", rs->logs);
 
         opcode = recvbuf[hd+1]; param = recvbuf[be-1]; flag = recvbuf[fg+1];
         sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]flg[0x%x]\n", opcode, param, flag);
@@ -23975,6 +24031,87 @@ static int p7(struct procRes_s *rs)
     return 0;
 }
 
+static int p8(struct procRes_s *rs)
+{
+    int ret=0, n=0, tot=0;
+    char *recvbuf=0;
+    
+    sprintf(rs->logs, "p8\n");
+    print_f(rs->plogs, "P8", rs->logs);
+
+    p8_init(rs);
+
+    recvbuf = aspMalloc(1024);
+    if (!recvbuf) {
+        sprintf(rs->logs, "p8 get memory alloc falied");
+        error_handle(rs->logs, 24043);
+    }
+
+    rs->psocket_v->listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (rs->psocket_v->listenfd < 0) { 
+        sprintf(rs->logs, "p8 get socket ret: %d", rs->psocket_v->listenfd);
+        error_handle(rs->logs, 24025);
+    }
+
+    memset(&rs->psocket_v->serv_addr, '0', sizeof(struct sockaddr_in));
+
+    rs->psocket_v->serv_addr.sin_family = AF_INET;
+    rs->psocket_v->serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    rs->psocket_v->serv_addr.sin_port = htons(8000); 
+
+    ret = bind(rs->psocket_v->listenfd, (struct sockaddr*)&rs->psocket_v->serv_addr, sizeof(struct sockaddr_in));
+    if (ret < 0) {
+        sprintf(rs->logs, "p8 get bind ret: %d", ret);
+        error_handle(rs->logs, 24037);
+    }
+
+    ret = listen(rs->psocket_v->listenfd, 10); 
+    if (ret < 0) {
+        sprintf(rs->logs, "p8 get listen ret: %d", ret);
+        error_handle(rs->logs, 24043);
+    }
+
+    while (1) {
+        sprintf(rs->logs, "#\n");
+        print_f(rs->plogs, "P8", rs->logs);
+        
+        sprintf(rs->logs, "START \n");
+        print_f(rs->plogs, "P8", rs->logs);
+
+        rs->psocket_v->connfd = accept(rs->psocket_v->listenfd, (struct sockaddr*)NULL, NULL); 
+        if (rs->psocket_v->connfd < 0) {
+            sprintf(rs->logs, "P8 get connect failed ret:%d", rs->psocket_v->connfd);
+            error_handle(rs->logs, 24053);
+            goto socketEnd;
+        } else {
+            sprintf(rs->logs, "get connection id: %d\n", rs->psocket_v->connfd);
+            print_f(rs->plogs, "P8", rs->logs);
+        }
+
+        n = 0;
+        n = read(rs->psocket_v->connfd, recvbuf, 1);
+        while (n) {
+            tot += n;
+            sprintf(rs->logs, "get %d bytes [%s] \n", n, recvbuf);
+            print_f(rs->plogs, "P8", rs->logs);
+            //shmem_dump(recvbuf, n);
+            n = 0;
+            n = read(rs->psocket_v->connfd, recvbuf, 1);
+        }
+
+        sprintf(rs->logs, "END total: %d\n", tot);
+        print_f(rs->plogs, "P8", rs->logs);
+
+        tot = 0;
+        socketEnd:
+        close(rs->psocket_v->connfd);
+        rs->psocket_v->connfd = 0;
+    }
+
+    p8_end(rs);
+    return 0;
+}
+
 #define DATA_RX_SIZE 64
 #define DATA_TX_SIZE 64
 #define CMD_RX_SIZE 64
@@ -23985,7 +24122,7 @@ int main(int argc, char *argv[])
 //static char spi0[] = "/dev/spidev32765.0"; 
     char dir[256] = "/mnt/mmc2";
     struct mainRes_s *pmrs;
-    struct procRes_s rs[9];
+    struct procRes_s rs[10];
     int ix, ret;
     char *log;
     int tdiff;
@@ -24960,7 +25097,8 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipedn[6].rt, O_NONBLOCK);
     pipe(pmrs->pipedn[7].rt);
     pipe(pmrs->pipedn[8].rt);
-
+    pipe(pmrs->pipedn[9].rt);
+    
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[1].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[2].rt, O_NONBLOCK);
@@ -24970,7 +25108,8 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipeup[6].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[7].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[8].rt, O_NONBLOCK);
-
+    pipe2(pmrs->pipeup[9].rt, O_NONBLOCK);
+    
     res_put_in(&rs[0], pmrs, 0);
     res_put_in(&rs[1], pmrs, 1);
     res_put_in(&rs[2], pmrs, 2);
@@ -24980,7 +25119,8 @@ int main(int argc, char *argv[])
     res_put_in(&rs[6], pmrs, 6);
     res_put_in(&rs[7], pmrs, 7);
     res_put_in(&rs[8], pmrs, 8);
-
+    res_put_in(&rs[9], pmrs, 9);
+    
 //  Share memory init
     ring_buf_init(&pmrs->dataRx);
     pmrs->dataRx.r->folw.seq = 1;
@@ -25022,7 +25162,12 @@ int main(int argc, char *argv[])
                                 if (!pmrs->sid[7]) {
                                     p7(&rs[8]);
                                 } else {                
-                                    p0(pmrs);
+                                    pmrs->sid[8] = fork();
+                                    if (!pmrs->sid[8]) {
+                                        p8(&rs[9]);
+                                    } else {                
+                                        p0(pmrs);
+                                    }
                                 }
                             }
                         }
@@ -25265,6 +25410,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->psocket_t = &mrs->socket_t; 
     rs->psocket_at = &mrs->socket_at;
     rs->psocket_n = &mrs->socket_n;
+    rs->psocket_v = &mrs->socket_v;
 
     rs->pmch = &mrs->mchine;
     rs->pstdata = &mrs->stdata;
