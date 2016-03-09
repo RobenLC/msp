@@ -20614,15 +20614,15 @@ static int p0(struct mainRes_s *mrs)
 
         if ((modesw->m >= 0) && (modesw->m < PS_NUM)) {
             msync(modesw, sizeof(struct modersp_s), MS_SYNC);
-            //sprintf(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
-            //print_f(&mrs->plog, "P0", mrs->log);
+            sprintf(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
+            print_f(&mrs->plog, "P0", mrs->log);
             
             ret = (*afselec[modesw->m].pfunc)(mrs, modesw);
 
             msync(modesw, sizeof(struct modersp_s), MS_SYNC);
             
-            //sprintf(mrs->log, "pmode:%d rsp:%d - 2\n", modesw->m, modesw->r);
-            //print_f(&mrs->plog, "P0", mrs->log);
+            sprintf(mrs->log, "pmode:%d rsp:%d - 2, ret: %d\n", modesw->m, modesw->r, ret);
+            print_f(&mrs->plog, "P0", mrs->log);
             if (ret == 1) {
                 tmp = modesw->m;
                 modesw->m = -1;
@@ -22819,7 +22819,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sprintf(rs->logs, "receive len[%d]content[%s]\n", n, recvbuf);
         print_f(rs->plogs, "P5", rs->logs);
         memset(sendbuf, 0, 2048);
-        sprintf(sendbuf, "Leo heard [%s]\n", recvbuf);
+        //sprintf(sendbuf, "Leo heard [%s]\n", recvbuf);
         strcpy(sendbuf, recvbuf);
         n = strlen(sendbuf);
         
@@ -22835,8 +22835,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         ln = atFindIdx(&recvbuf[hd], '\0');
         //if (ln < 0) goto socketEnd;
         
-        n = strlen(&recvbuf[hd]);
-        if (n <= 0) {
+        num = strlen(&recvbuf[hd]);
+        if (num <= 0) {
             goto socketEnd;
         }
 
@@ -22856,28 +22856,28 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             }
         }
 
-        n = ed - be - 1;
-        if ((n < 255) && (n > 0)) {
-            memcpy(msg, &recvbuf[be+1], n);
-            msg[n] = '\0';
+        num = ed - be - 1;
+        if ((num < 255) && (num > 0)) {
+            memcpy(msg, &recvbuf[be+1], num);
+            msg[num] = '\0';
         } else {
             goto socketEnd;
         }
 
         if (opcode != OP_MSG) {
-            n = 0;
+            num = 0;
         }
 
-        if (n > 0) {
+        if (num > 0) {
             //rs_ipc_put(rs, "s", 1);
             //rs_ipc_put(rs, msg, n);
             //sprintf(rs->logs, "send to p0 [%s]\n", recvbuf);
             //print_f(rs->plogs, "P5", rs->logs);
             
             //ret = write(rs->psocket_r->connfd, msg, n);
-            sprintf(rs->logs, "send back app [%s] size:%d/%d\n", msg, ret, n);
+            sprintf(rs->logs, "send back app [%s] size:%d/%d\n", msg, ret, num);
             print_f(rs->plogs, "P5", rs->logs);
-            rs_ipc_put(rcmd, msg, n);
+            rs_ipc_put(rcmd, msg, num);
         }else {
             if ((opcode == OP_SINGLE) || (opcode == OP_DOUBLE)) {
                 msg[0] = 't';
@@ -22890,8 +22890,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                 rs_ipc_put(rcmd, msg, 2);
             }
 
-            ch = 0; n = 0;
-            n = rs_ipc_get(rcmd, &ch, 1);
+            ch = 0; num = 0;
+            num = rs_ipc_get(rcmd, &ch, 1);
 
             if (ch == 'o') {
                 if (flag & 0x04) { /* 0xaa = write, 0xad = read */
@@ -22906,15 +22906,15 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                 rs_ipc_put(rcmd, msg, 5);
             }
 
-            ch = 0; n = 0;
-            n = rs_ipc_get(rcmd, &ch, 1);
+            ch = 0; num = 0;
+            num = rs_ipc_get(rcmd, &ch, 1);
 
             if (ch != 'p') {
                 opcode = OP_ERROR; 
-                n = rs_ipc_get(rcmd, &ch, 1);
+                num = rs_ipc_get(rcmd, &ch, 1);
                 param = ch;
             } else {
-                n = rs_ipc_get(rcmd, &ch, 1);
+                num = rs_ipc_get(rcmd, &ch, 1);
                 param = ch;
             }
         }
