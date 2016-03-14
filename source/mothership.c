@@ -20614,15 +20614,15 @@ static int p0(struct mainRes_s *mrs)
 
         if ((modesw->m >= 0) && (modesw->m < PS_NUM)) {
             msync(modesw, sizeof(struct modersp_s), MS_SYNC);
-            sprintf(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
-            print_f(&mrs->plog, "P0", mrs->log);
+            //sprintf(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
+            //print_f(&mrs->plog, "P0", mrs->log);
             
             ret = (*afselec[modesw->m].pfunc)(mrs, modesw);
 
             msync(modesw, sizeof(struct modersp_s), MS_SYNC);
             
-            sprintf(mrs->log, "pmode:%d rsp:%d - 2, ret: %d\n", modesw->m, modesw->r, ret);
-            print_f(&mrs->plog, "P0", mrs->log);
+            //sprintf(mrs->log, "pmode:%d rsp:%d - 2, ret: %d\n", modesw->m, modesw->r, ret);
+            //print_f(&mrs->plog, "P0", mrs->log);
             if (ret == 1) {
                 tmp = modesw->m;
                 modesw->m = -1;
@@ -20909,9 +20909,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
-#define P2_TX_LOG (1)
+#define P2_TX_LOG (0)
 #define P2_CMD_LOG (0)
-#define P2_SIMPLE_LOG (1)
+#define P2_SIMPLE_LOG (0)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -21803,7 +21803,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
-#define P3_TX_LOG  (1)
+#define P3_TX_LOG  (0)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -22131,7 +22131,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define P4_TX_LOG  (1)
+#define P4_TX_LOG  (0)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
@@ -24035,13 +24035,14 @@ static int p8(struct procRes_s *rs)
 {
     int ret=0, n=0, tot=0;
     char *recvbuf=0;
+    char ack[8] = "ack\n\0";
     
     sprintf(rs->logs, "p8\n");
     print_f(rs->plogs, "P8", rs->logs);
 
     p8_init(rs);
 
-    recvbuf = aspMalloc(1024);
+    recvbuf = aspMalloc(2048);
     if (!recvbuf) {
         sprintf(rs->logs, "p8 get memory alloc falied");
         error_handle(rs->logs, 24043);
@@ -24088,21 +24089,24 @@ static int p8(struct procRes_s *rs)
             print_f(rs->plogs, "P8", rs->logs);
         }
 
-        n = 0;
-        n = read(rs->psocket_v->connfd, recvbuf, 1);
+        n = 0; tot = 0;
+        n = recv(rs->psocket_v->connfd, recvbuf, 1024, 0);
         while (n) {
             tot += n;
-            sprintf(rs->logs, "get %d bytes [%s] \n", n, recvbuf);
+            ret = send(rs->psocket_v->connfd, ack, 4, 0);
+            
+            sprintf(rs->logs, "get and send back %d bytes [%s] \n", n, recvbuf);
             print_f(rs->plogs, "P8", rs->logs);
+            
             //shmem_dump(recvbuf, n);
             n = 0;
-            n = read(rs->psocket_v->connfd, recvbuf, 1);
+            n = recv(rs->psocket_v->connfd, recvbuf, 1024, 0);
+
         }
 
         sprintf(rs->logs, "END total: %d\n", tot);
         print_f(rs->plogs, "P8", rs->logs);
 
-        tot = 0;
         socketEnd:
         close(rs->psocket_v->connfd);
         rs->psocket_v->connfd = 0;
