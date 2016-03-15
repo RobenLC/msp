@@ -856,7 +856,65 @@ static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 
-int findEOF(char *p, int max)
+static int doSystemCmd(char *sCommand)
+{
+#define BIGBUFLEN 2048
+#define BUFLEN 128
+
+    int ret=0, wct=0, n=0, totlog=0;
+    FILE *fpRead = 0;
+    char retBuff[BUFLEN], *pch=0, *p0=0;
+    char bigBuff[BIGBUFLEN], *pBig=0;
+
+    memset(bigBuff, 0, BIGBUFLEN);
+    memset(retBuff, 0, BUFLEN);
+
+    printf("doSystemCmd() [%s]\n", sCommand);
+    fpRead = popen(sCommand, "r");
+    //sleep(1);
+    
+    if (!fpRead) return -1;
+
+    pBig = bigBuff;
+    pch = fgets(retBuff, BUFLEN , fpRead);
+    while (pch) {
+    
+        if (pch) {
+            //printf("sCommand: \n[%s] - 1\n\n", retBuff);
+            //p0 = strstr(pch, "\n");
+            //if (p0) *p0 = '\0';
+
+            n = strlen(pch);
+            totlog += n;
+            if (totlog > BIGBUFLEN) break;
+
+            strncpy(pBig, pch, n);
+            pBig += n;
+            
+            //printf("sCommand: [%s] \n", pch);
+            //shmem_dump(retBuff, BUFLEN);
+        } else {
+            wct++;
+            //printf("sCommand: %d...\n", wct);
+            if (wct > 3) {
+                //break;
+            }
+        }
+        
+        //sleep(1);
+        //memset(retBuff, 0, BUFLEN);
+
+        pch = fgets(retBuff, BUFLEN , fpRead);
+    }
+
+    printf("scmd: [%s] \n", bigBuff);
+            
+    pclose(fpRead);
+
+    return 0;
+}
+
+static int findEOF(char *p, int max)
 {
     int index[2] = {0, 0};
     char mark[2] = {0xff, 0xd9};
@@ -892,7 +950,7 @@ int findEOF(char *p, int max)
     return -3;
 }
 
-int tiffHead(char *ptiff, int max)
+static int tiffHead(char *ptiff, int max)
 {
     int ret=0;
     if (!ptiff) return -1;
@@ -905,7 +963,7 @@ int tiffHead(char *ptiff, int max)
     return ret;
 }
 
-int tiffTail(char *ptiff, int max)
+static int tiffTail(char *ptiff, int max)
 {
     char patern[170] = {0x0C, 0x00, 0x00, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0xE0, 0x10, 
          0x00, 0x00, 0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x1B, 0x00, 0x00, 0x02, 
@@ -930,7 +988,7 @@ int tiffTail(char *ptiff, int max)
     return ret;
 }
 
-int pdfParamCalcu(int hi, int wh, int *mh, int *mw)
+static int pdfParamCalcu(int hi, int wh, int *mh, int *mw)
 {
     double jscale=0.0, tscale=0.0, dscale=0.0;;
     double tw=0.0, th=0.0, sw=0.0, sh=0.0;;
@@ -962,7 +1020,7 @@ int pdfParamCalcu(int hi, int wh, int *mh, int *mw)
     return 0;
 }
 
-int pdfAppend(char *d, char *s, int tot, int max)
+static int pdfAppend(char *d, char *s, int tot, int max)
 {
     int idx = 0, slen = 0, end = 0;
 
@@ -984,7 +1042,7 @@ int pdfAppend(char *d, char *s, int tot, int max)
     return slen;
 }
 
-int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
+static int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
 {
     double wscale=0.0, hscale=0.0;
     double d1=0, d2=0;
@@ -1207,7 +1265,7 @@ int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
     return tot;
 }
 
-int pdfTail(char *ppdf, int max, int offset, int imgSize)
+static int pdfTail(char *ppdf, int max, int offset, int imgSize)
 {
     char tch[128], *dst = 0;
     char end[6] = {0x25, 0x25, 0x45, 0x4f, 0x46, 0x00};
@@ -1365,13 +1423,13 @@ int pdfTail(char *ppdf, int max, int offset, int imgSize)
     return tot;
 }
 
-void aspFree(void *p)
+static void aspFree(void *p)
 {
     printf("  free 0x%.8x \n", p);
     //free(p);
 }
 
-void* aspMalloc(int mlen)
+static void* aspMalloc(int mlen)
 {
     int tot=0;
     char *p=0;
@@ -1385,7 +1443,7 @@ void* aspMalloc(int mlen)
     return p;
 }
 
-void* aspSalloc(int slen)
+static void* aspSalloc(int slen)
 {
     int tot=0;
     char *p=0;
@@ -1399,7 +1457,7 @@ void* aspSalloc(int slen)
     return p;
 }
 
-void debugPrintBootSec(struct sdbootsec_s *psec)
+static void debugPrintBootSec(struct sdbootsec_s *psec)
 {
             /* 0  Jump command */
     printf("[0x%x]: /* 0  Jump command */ \n", psec->secJpcmd);
@@ -1459,7 +1517,7 @@ void debugPrintBootSec(struct sdbootsec_s *psec)
 
 }
 
-void debugPrintDir(struct directnFile_s *pf)
+static void debugPrintDir(struct directnFile_s *pf)
 {
 #if 0
 struct directnFile_s{
@@ -24132,7 +24190,8 @@ int main(int argc, char *argv[])
     int tdiff;
     int arg[8];
     uint32_t bitset;
-
+    char syscmd[256] = "ls -al";
+    
     totMalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     memset(totMalloc, 0, sizeof(int));
     totSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -24159,6 +24218,7 @@ int main(int argc, char *argv[])
     sprintf(pmrs->log, "argc:%d\n", argc);
     print_f(&pmrs->plog, "main", pmrs->log);
 // show arguments
+    memset(arg, 0, 8);
     ix = 0;
     while(argc) {
         arg[ix] = atoi(argv[ix]);
@@ -24168,6 +24228,42 @@ int main(int argc, char *argv[])
         argc--;
         if (ix > 7) break;
     }
+
+// launchAP or directAccess
+    /* clear status */
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+
+    //sprintf(syscmd, "kill -9 $(ps aux | grep 'mothership' | awk '{print $1}')");
+    //ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'hostapd' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "ifconfig uap0 down");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'mlan0' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+        
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'wpa_supplicant' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "ifconfig mlan0 down");
+    ret = doSystemCmd(syscmd);
+
+    if (arg[1] == 0) {
+        /* launch AP  */
+        sprintf(syscmd, "./script/launchAP_88w8787.sh");
+        ret = doSystemCmd(syscmd);
+    } else {
+        /* launch wpa connect */
+        sprintf(syscmd, "./iw_con.sh");
+        ret = doSystemCmd(syscmd);
+    }
+
+    sleep(1);
+    
 // initial share parameter
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
