@@ -17,6 +17,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>  
+#include <netdb.h>
 
 //main()
 #define SPI1_ENABLE (1) 
@@ -581,6 +582,8 @@ struct socket_s{
     int listenfd;
     int connfd;
     struct sockaddr_in serv_addr; 
+    struct sockaddr_in clint_addr; 
+    struct addrinfo addr_in;
 };
 
 struct shmem_s{
@@ -748,6 +751,10 @@ static int p6_end(struct procRes_s *rs);
 static int p7(struct procRes_s *rs);
 static int p7_init(struct procRes_s *rs);
 static int p7_end(struct procRes_s *rs);
+//p8: get UDP broadcast and reply
+static int p8(struct procRes_s *rs);
+static int p8_init(struct procRes_s *rs);
+static int p8_end(struct procRes_s *rs);
 
 static int pn_init(struct procRes_s *rs);
 static int pn_end(struct procRes_s *rs);
@@ -22193,10 +22200,10 @@ static int p3(struct procRes_s *rs)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
-    int px, pi, ret=0, len, opsz, totsz, tdiff;
-    int cmode, acuhk, errtor=0;
+    int px, pi, ret=0, len=0, opsz, totsz, tdiff;
+    int cmode, acuhk, errtor=0, cltport=0;
     char ch, str[128];
-    char *addr, *pre;
+    char *addr, *pre, *cltaddr;
     struct info16Bit_s *p=0, *c=0;
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
     struct sdFAT_s *pfat=0;
@@ -22255,13 +22262,18 @@ static int p4(struct procRes_s *rs)
         //sprintf(rs->logs, "^\n");
         //print_f(rs->plogs, "P4", rs->logs);
 #if 1 /* remote for test */
-        rs->psocket_t->connfd = accept(rs->psocket_t->listenfd, (struct sockaddr*)NULL, NULL); \
+        len = sizeof(struct sockaddr_in);
+        memset(&rs->psocket_t->clint_addr, 0, len);
+        rs->psocket_t->connfd = accept(rs->psocket_t->listenfd, (struct sockaddr*)&rs->psocket_t->clint_addr, &len); \
         if (rs->psocket_t->connfd < 0) {
             sprintf(rs->logs, "P4 get connect failed ret:%d", rs->psocket_t->connfd);
             error_handle(rs->logs, 3157);
             continue;
         } else {
-            sprintf(rs->logs, "get connection id: %d\n", rs->psocket_t->connfd);
+            //cltaddr = rs->psocket_t->clint_addr.sa_data;
+            cltaddr = inet_ntoa(rs->psocket_t->clint_addr.sin_addr);
+            cltport = ntohs(rs->psocket_t->clint_addr.sin_port);
+            sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_t->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P4", rs->logs);
         }
 #else
@@ -22792,8 +22804,8 @@ static int p4(struct procRes_s *rs)
 static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 {
     int px, pi, size, opsz, acusz, len, acu;
-    int ret, n, num, hd, be, ed, ln, fg;
-    char ch, *recvbuf, *addr, *sendbuf;
+    int ret, n, num, hd, be, ed, ln, fg, cltport=0;
+    char ch, *recvbuf, *addr, *sendbuf, *cltaddr;
     char opcode=0, param=0, flag = 0;
     char msg[256] = "boot";
     sprintf(rs->logs, "p5\n");
@@ -22859,12 +22871,22 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         //sprintf(rs->logs, "#\n");
         //print_f(rs->plogs, "P5", rs->logs);
         ret = -1;
+        
+        len = sizeof(struct sockaddr_in);
+        memset(&rs->psocket_r->clint_addr, 0, len);
+        rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)&rs->psocket_r->clint_addr, &len);
 
-        rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)NULL, NULL); 
         if (rs->psocket_r->connfd < 0) {
             sprintf(rs->logs, "P5 get connect failed ret:%d", rs->psocket_r->connfd);
             error_handle(rs->logs, 3331);
             continue;
+        }
+        else {
+            //cltaddr = rs->psocket_r->clint_addr.sa_data;
+            cltaddr = inet_ntoa(rs->psocket_r->clint_addr.sin_addr);
+            cltport = ntohs(rs->psocket_r->clint_addr.sin_port);
+            sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_r->connfd, cltaddr, cltport);
+            print_f(rs->plogs, "P5", rs->logs);
         }
 
         memset(recvbuf, 0x0, 1024);
@@ -23036,8 +23058,8 @@ static int p6(struct procRes_s *rs)
     char strFullPath[1024];
     char strPath[32][128];
     //char **strPath; 
-    char *recvbuf, *sendbuf, *pr;
-    int ret, n, num, hd, be, ed, ln, cnt=0, i, len=0;
+    char *recvbuf, *sendbuf, *pr, *cltaddr;
+    int ret, n, num, hd, be, ed, ln, cnt=0, i, len=0, cltport=0;
     char opc=0;
     char opcode=0, param=0, flag = 0;
     uint32_t clstSize=0;
@@ -23122,12 +23144,21 @@ static int p6(struct procRes_s *rs)
         //sprintf(rs->logs, "@\n");
         //print_f(rs->plogs, "P6", rs->logs);
         cnt = 0;
-        
-        rs->psocket_at->connfd = accept(rs->psocket_at->listenfd, (struct sockaddr*)NULL, NULL); 
+
+        len = sizeof(struct sockaddr_in);
+        memset(&rs->psocket_at->clint_addr, 0, len);
+        rs->psocket_at->connfd = accept(rs->psocket_at->listenfd, (struct sockaddr*)&rs->psocket_at->clint_addr, &len); 
         if (rs->psocket_at->connfd < 0) {
             sprintf(rs->logs, "P6 get connect failed ret:%d", rs->psocket_at->connfd);
             error_handle(rs->logs, 3812);
             goto socketEnd;
+        }
+        else {
+            //cltaddr = rs->psocket_at->clint_addr.sa_data;
+            cltaddr = inet_ntoa(rs->psocket_at->clint_addr.sin_addr);
+            cltport = ntohs(rs->psocket_at->clint_addr.sin_port);
+            sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_at->connfd, cltaddr, cltport);
+            print_f(rs->plogs, "P6", rs->logs);
         }
 
         memset(recvbuf, 0x0, 1024);
@@ -23826,8 +23857,8 @@ static int p6(struct procRes_s *rs)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
-    char ch=0, *addr=0;
-    int ret=0, len=0, num=0, tx=0;
+    char ch=0, *addr=0, *cltaddr;
+    int ret=0, len=0, num=0, tx=0, cltport=0;
     int cmode;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
@@ -23873,13 +23904,18 @@ static int p7(struct procRes_s *rs)
         sprintf(rs->logs, ")\n");
         print_f(rs->plogs, "P7", rs->logs);
 #if 1 /* disable for testing */
-        rs->psocket_n->connfd = accept(rs->psocket_n->listenfd, (struct sockaddr*)NULL, NULL); 
+        len = sizeof(struct sockaddr_in);
+        memset(&rs->psocket_n->clint_addr, 0, len);
+        rs->psocket_n->connfd = accept(rs->psocket_n->listenfd, (struct sockaddr*)&rs->psocket_n->clint_addr, &len); 
         if (rs->psocket_n->connfd < 0) {
             sprintf(rs->logs, "P7 get connect failed ret:%d", rs->psocket_n->connfd);
             error_handle(rs->logs, 4045);
             goto socketEnd;
         } else {
-            sprintf(rs->logs, "get connection id: %d\n", rs->psocket_n->connfd);
+            //cltaddr = rs->psocket_n->clint_addr.sa_data;
+            cltaddr = inet_ntoa(rs->psocket_n->clint_addr.sin_addr);
+            cltport = ntohs(rs->psocket_n->clint_addr.sin_port);
+            sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_n->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P7", rs->logs);
         }
 #else
@@ -24091,9 +24127,10 @@ static int p7(struct procRes_s *rs)
 
 static int p8(struct procRes_s *rs)
 {
-    int ret=0, n=0, tot=0;
+    int ret=0, n=0, tot=0, len=0, cltport=0;
     char *recvbuf=0;
     char ack[8] = "ack\n\0";
+    char *cltaddr=0;
     
     sprintf(rs->logs, "p8\n");
     print_f(rs->plogs, "P8", rs->logs);
@@ -24137,13 +24174,19 @@ static int p8(struct procRes_s *rs)
         sprintf(rs->logs, "START \n");
         print_f(rs->plogs, "P8", rs->logs);
 
-        rs->psocket_v->connfd = accept(rs->psocket_v->listenfd, (struct sockaddr*)NULL, NULL); 
+
+        len = sizeof(struct sockaddr_in);
+        memset(&rs->psocket_v->clint_addr, 0, len);
+        rs->psocket_v->connfd = accept(rs->psocket_v->listenfd, (struct sockaddr*)&rs->psocket_v->clint_addr, &len); 
         if (rs->psocket_v->connfd < 0) {
             sprintf(rs->logs, "P8 get connect failed ret:%d", rs->psocket_v->connfd);
             error_handle(rs->logs, 24053);
             goto socketEnd;
         } else {
-            sprintf(rs->logs, "get connection id: %d\n", rs->psocket_v->connfd);
+            cltaddr = inet_ntoa(rs->psocket_v->clint_addr.sin_addr);
+            //cltaddr = rs->psocket_v->clint_addr.sa_data;
+            cltport = ntohs(rs->psocket_v->clint_addr.sin_port);
+            sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_v->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P8", rs->logs);
         }
 
