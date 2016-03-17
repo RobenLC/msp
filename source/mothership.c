@@ -22899,8 +22899,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sprintf(rs->logs, "receive len[%d]content[%s]\n", n, recvbuf);
         print_f(rs->plogs, "P5", rs->logs);
         memset(sendbuf, 0, 2048);
-        //sprintf(sendbuf, "Leo heard [%s]\n", recvbuf);
-        strcpy(sendbuf, recvbuf);
+        sprintf(sendbuf, "Leo heard [%s]\n", recvbuf);
+        //strcpy(sendbuf, recvbuf);
         n = strlen(sendbuf);
         
         if (n <= 0) goto socketEnd;
@@ -24125,25 +24125,96 @@ static int p7(struct procRes_s *rs)
     return 0;
 }
 
+void *get_in_addr(struct sockaddr *sa){
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }	
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
 static int p8(struct procRes_s *rs)
 {
+#define RECVLEN 2048
+#define MYPORT "8000"
     int ret=0, n=0, tot=0, len=0, cltport=0;
     char *recvbuf=0;
     char ack[8] = "ack\n\0";
     char *cltaddr=0;
-    
+
+    struct addrinfo hints, *servinfo, *p;
+    const struct sockaddr_storage their_addr;
+    char s[INET6_ADDRSTRLEN];
+    int rv, sockfd;
+
+    memset(&hints, 0, sizeof(hints));
+
     sprintf(rs->logs, "p8\n");
     print_f(rs->plogs, "P8", rs->logs);
 
     p8_init(rs);
 
-    recvbuf = aspMalloc(2048);
+    recvbuf = aspMalloc(RECVLEN);
     if (!recvbuf) {
         sprintf(rs->logs, "p8 get memory alloc falied");
         error_handle(rs->logs, 24043);
     }
 
-    rs->psocket_v->listenfd = socket(AF_INET, SOCK_STREAM, 0);
+#if 1
+    hints.ai_family = AF_INET; // set to AF_INET to force IPv4
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = AI_PASSIVE; // use my IP
+
+    while (1) {
+        if ((rv = getaddrinfo(NULL, MYPORT, &hints, &servinfo)) != 0) {
+            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));	
+            return 1;	
+        }
+        for(p = servinfo; p != NULL; p = p->ai_next) {
+            if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+                perror("listener: socket");
+                continue;
+            }
+            if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+                close(sockfd);
+                perror("listener: bind");
+                continue;
+            }
+            break;
+        }
+
+        if (p == NULL) {
+            fprintf(stderr, "listener: failed to bind socket\n");
+            freeaddrinfo(servinfo);
+            continue;
+        }
+
+        freeaddrinfo(servinfo);
+
+        printf("listener: waiting to recvfrom...\n");
+        memset(recvbuf, 0, RECVLEN);
+        len = sizeof(their_addr);
+        if ((n = recvfrom(sockfd, recvbuf, RECVLEN-1 , 0, (struct sockaddr *)&their_addr, &len)) == -1) {
+            perror("recvfrom");
+            continue;
+        }
+
+        inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), s, sizeof(s));
+        //inet_ntop(their_addr.ss_family, &their_addr.sin_addr, s, sizeof(s));
+        printf("listener: got packet from %s\n", s);
+        printf("listener: packet is %d bytes long\n", n);	
+        recvbuf[n] = '\0';	
+        printf("listener: packet contains \"%s\"\n", recvbuf);	
+/*
+        if (sendto(sockfd, recvbuf, strlen(recvbuf)-1 , 0, (struct sockaddr *)&their_addr, &len) == -1) {
+            perror("sendto");
+            continue;
+        }
+ */
+        close(sockfd);
+    }
+
+#else
+    rs->psocket_v->listenfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (rs->psocket_v->listenfd < 0) { 
         sprintf(rs->logs, "p8 get socket ret: %d", rs->psocket_v->listenfd);
         error_handle(rs->logs, 24025);
@@ -24212,7 +24283,7 @@ static int p8(struct procRes_s *rs)
         close(rs->psocket_v->connfd);
         rs->psocket_v->connfd = 0;
     }
-
+#endif
     p8_end(rs);
     return 0;
 }
