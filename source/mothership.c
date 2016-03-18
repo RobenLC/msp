@@ -24132,6 +24132,13 @@ void *get_in_addr(struct sockaddr *sa){
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+int get_in_port(struct sockaddr *sa){
+    if (sa->sa_family == AF_INET) {
+        return ntohs(((struct sockaddr_in*)sa)->sin_port);
+    }	
+    return ntohs(((struct sockaddr_in6*)sa)->sin6_port);
+}
+
 static int p8(struct procRes_s *rs)
 {
 #define RECVLEN 2048
@@ -24142,9 +24149,12 @@ static int p8(struct procRes_s *rs)
     char *cltaddr=0;
 
     struct addrinfo hints, *servinfo, *p;
+    struct addrinfo clients, *clintinfo;
+    struct sockaddr_in *saddr;
     const struct sockaddr_storage their_addr;
     char s[INET6_ADDRSTRLEN];
-    int rv, sockfd;
+    char port[8];
+    int rv, sockfd, sockback;
 
     memset(&hints, 0, sizeof(hints));
 
@@ -24195,22 +24205,55 @@ static int p8(struct procRes_s *rs)
         len = sizeof(their_addr);
         if ((n = recvfrom(sockfd, recvbuf, RECVLEN-1 , 0, (struct sockaddr *)&their_addr, &len)) == -1) {
             perror("recvfrom");
+            close(sockfd);
             continue;
         }
 
         inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), s, sizeof(s));
-        //inet_ntop(their_addr.ss_family, &their_addr.sin_addr, s, sizeof(s));
-        printf("listener: got packet from %s\n", s);
+        memset(port, 0, 8);
+        sprintf(port, "%d", get_in_port((struct sockaddr *)&their_addr));
+        printf("listener: got packet from %s : %s\n", s, port);
         printf("listener: packet is %d bytes long\n", n);	
         recvbuf[n] = '\0';	
         printf("listener: packet contains \"%s\"\n", recvbuf);	
-/*
-        if (sendto(sockfd, recvbuf, strlen(recvbuf)-1 , 0, (struct sockaddr *)&their_addr, &len) == -1) {
-            perror("sendto");
+
+        close(sockfd);
+        
+        memset(&clients, 0, sizeof(clients));
+        clients.ai_family = AF_INET; // set to AF_INET to force IPv4
+        clients.ai_socktype = SOCK_DGRAM;
+
+        if ((rv = getaddrinfo(s, port, &clients, &clintinfo)) != 0) {
+            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));	
+            close(sockfd);
             continue;
         }
- */
-        close(sockfd);
+
+        for(p = clintinfo; p != NULL; p = p->ai_next) {
+            if ((sockback = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+                perror("listener: socket");
+                continue;
+            }
+            break;
+        }
+
+        if (p == NULL) {
+            fprintf(stderr, "listener: failed to bind socket\n");
+            freeaddrinfo(clintinfo);
+            continue;
+        }
+        
+        saddr = (struct sockaddr_in *)p->ai_addr;
+        printf("listener: sendto packet contains \"%s\", size: %d, addr: %s \n", recvbuf, n, inet_ntop(AF_INET, &(saddr->sin_addr), s, INET_ADDRSTRLEN));	
+        
+        if (n = sendto(sockback, recvbuf, strlen(recvbuf)-1 , 0, p->ai_addr, p->ai_addrlen) == -1) {
+            perror("sendto");
+            close(sockback);
+            continue;
+        }
+
+        freeaddrinfo(clintinfo);
+        close(sockback);
     }
 
 #else
