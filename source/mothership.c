@@ -18,6 +18,7 @@
 #include <dirent.h>
 #include <sys/stat.h>  
 #include <netdb.h>
+#include <ifaddrs.h>
 
 //main()
 #define SPI1_ENABLE (1) 
@@ -43,6 +44,7 @@ static char *spidev_1 = 0;
 static char spidev_0[] = "/dev/spidev32765.0"; 
 static int *totMalloc=0;
 static int *totSalloc=0;
+static char netIntfs[16] = "uap0";
     
 /* flow operation */
 #define OP_PON            0x1                
@@ -103,6 +105,8 @@ static int *totSalloc=0;
 #define OP_CROP_06        0x4a
 
 #define OP_IMG_LEN        0x4b
+
+#define OP_AP_MODEN     0x50
 /*
 #define OP_DAT 0x08
 #define OP_SCM 0x09
@@ -288,6 +292,7 @@ typedef enum {
     ASPOP_CROP_COOR_YH,
     ASPOP_CROP_COOR_YL,
     ASPOP_EG_DECT,
+    ASPOP_AP_MODE,
     ASPOP_CODE_MAX, /* 56 */
 } aspOpCode_e;
 
@@ -20976,7 +20981,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define TIME_MEASURE (0)
 #define P2_TX_LOG (0)
 #define P2_CMD_LOG (0)
-#define P2_SIMPLE_LOG (0)
+#define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -21868,7 +21873,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
-#define P3_TX_LOG  (0)
+#define P3_TX_LOG  (1)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -22196,7 +22201,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define P4_TX_LOG  (0)
+#define P4_TX_LOG  (1)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
@@ -24161,6 +24166,8 @@ static int p8(struct procRes_s *rs)
     char port[8];
     int rv, sockfd, sockback;
 
+    struct ifaddrs *ifaddr, *ifa;
+
     memset(&hints, 0, sizeof(hints));
 
     sprintf(rs->logs, "p8\n");
@@ -24186,6 +24193,38 @@ static int p8(struct procRes_s *rs)
     hints.ai_flags = AI_PASSIVE; // use my IP
 
     while (1) {
+
+        if (getifaddrs(&ifaddr) == -1) {
+            perror("getifaddrs");        
+            //exit(EXIT_FAILURE);    
+            continue;
+        }
+
+        memset(sendbuf, 0, RECVLEN);
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == NULL)
+                continue;
+
+            ret=getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),s, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
+
+            if((strcmp(ifa->ifa_name, netIntfs)==0)&&(ifa->ifa_addr->sa_family==AF_INET)) {
+                if (ret != 0) {
+                    printf("getnameinfo() failed: %s\n", gai_strerror(ret));
+                    //exit(EXIT_FAILURE);
+                    continue;
+                }
+                printf("\tInterface : <%s>\n",ifa->ifa_name );
+                printf("\t  Address : <%s>\n", s);
+
+                sprintf(sendbuf, "addr: %s port: %d", s, 8000);
+            }
+        }
+        freeifaddrs(ifaddr);
+
+        if (strlen(sendbuf) == 0) {
+            continue;
+        }
+        
         if ((rv = getaddrinfo(NULL, MYPORT, &hints, &servinfo)) != 0) {
             fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));	
             return 1;	
@@ -24219,8 +24258,8 @@ static int p8(struct procRes_s *rs)
             continue;
         }
 
-        haddr = (struct sockaddr_in *)p->ai_addr;
-        sprintf(sendbuf, "addr: %s port: %d", inet_ntop(AF_INET, &(haddr->sin_addr), s, INET_ADDRSTRLEN), get_in_port((struct sockaddr *)&(haddr->sin_addr)));
+        //haddr = (struct sockaddr_in *)p->ai_addr;
+        //sprintf(sendbuf, "addr: %s port: %d", inet_ntop(AF_INET, &(haddr->sin_addr), s, INET_ADDRSTRLEN), get_in_port((struct sockaddr *)&(haddr->sin_addr)));
 
         inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), d, sizeof(d));
         memset(port, 0, 8);
@@ -24430,11 +24469,18 @@ int main(int argc, char *argv[])
         /* launch AP  */
         sprintf(syscmd, "./script/launchAP_88w8787.sh");
         ret = doSystemCmd(syscmd);
+        memset(netIntfs, 0, 16);
+        sprintf(netIntfs, "%s", "uap0");
     } else {
         /* launch wpa connect */
         sprintf(syscmd, "./iw_con.sh");
         ret = doSystemCmd(syscmd);
+        memset(netIntfs, 0, 16);
+        sprintf(netIntfs, "%s", "mlan0");
     }
+    
+    sprintf(pmrs->log, "network interface: %s \n", netIntfs);
+    print_f(&pmrs->plog, "inet", pmrs->log);
 
     sleep(1);
     
@@ -25174,6 +25220,14 @@ int main(int argc, char *argv[])
             ctb->opValue = 0x1;
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
+            break;
+        case ASPOP_AP_MODE: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_AP_MODEN;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0x1;
+            ctb->opMask = ASPOP_MASK_32;
+            ctb->opBitlen = 32;
             break;
         default: break;
         }
