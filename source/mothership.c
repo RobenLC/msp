@@ -44,7 +44,7 @@ static char *spidev_1 = 0;
 static char spidev_0[] = "/dev/spidev32765.0"; 
 static int *totMalloc=0;
 static int *totSalloc=0;
-static char netIntfs[16] = "uap0";
+//static char netIntfs[16] = "uap0";
     
 /* flow operation */
 #define OP_PON            0x1                
@@ -363,6 +363,12 @@ typedef enum {
     SDSTATS_OK,
 } SDStatus_e;
 
+typedef enum {
+    APM_NONE=0,
+    APM_AP,
+    APM_DIRECT,
+} APMode_e;
+
 struct aspInfoSplit_s{
     char *infoStr;
     int     infoLen;
@@ -660,6 +666,7 @@ struct mainRes_s{
     struct socket_s socket_v;
     struct logPool_s plog;
     struct aspWaitRlt_s wtg;
+    char netIntfs[16];
     char *dbglog;
 };
 
@@ -708,6 +715,7 @@ struct procRes_s{
     struct socket_s *psocket_n;
     struct socket_s *psocket_v;
     struct logPool_s *plogs;
+    char *pnetIntfs;
 };
 
 //memory alloc. put in/put out
@@ -4092,7 +4100,13 @@ static uint32_t next_VECTORS(struct psdata_s *data)
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                if (tmpAns == 1) {
+                    next = PSRLT;
+                } else if (tmpAns == 2) {
+                    next = PSTSM;
+                } else {
+                    next = PSMAX;
+                }
                 break;
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
@@ -10964,31 +10978,66 @@ static int stvector_82(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stvector_83(struct psdata_s *data)
+static int stapm_83(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
+    struct aspConfig_s *pct=0, *pdt=0;
 
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     
     sprintf(rs->logs, "op_83 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "VECTOR", rs->logs);  
+    print_f(rs->plogs, "APM", rs->logs);  
 
     switch (rlt) {
         case STINIT:
+            pdt = &pct[ASPOP_AP_MODE];
+            if (pdt->opCode != OP_AP_MODEN) {
+                sprintf(rs->logs, "op83, OP_AP_MODEN opcode is wrong val:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "APM", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
+                sprintf(rs->logs, "op83, OP_AP_MODEN status is wrong val:%x\n", pdt->opStatus); 
+                print_f(rs->plogs, "APM", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                switch(pdt->opValue) {
+                    case APM_DIRECT:
 
-            ch = 41; 
+                        ch = 106; 
+                        
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT);
+                        sprintf(rs->logs, "op_83: result: %x, goto %d\n", data->result, ch); 
+                        print_f(rs->plogs, "APM", rs->logs);  
+                        
+                        data->bkofw = emb_fw(data->bkofw, VECTORS, PSRLT);
+                        break;
+                    case APM_AP:
 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_83: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "VECTOR", rs->logs);  
+                        ch = 106; 
+                        
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT);
+                        sprintf(rs->logs, "op_83: result: %x, goto %d\n", data->result, ch); 
+                        print_f(rs->plogs, "APM", rs->logs);  
+
+                        data->bkofw = emb_fw(data->bkofw, VECTORS, PSTSM);
+                        break;
+                    default:
+                        sprintf(rs->logs, "WARNING!!! op83, opValue is unexpected val:%x\n", pdt->opValue);
+                        print_f(rs->plogs, "APM", rs->logs);  
+                        data->result = emb_result(data->result, EVTMAX);
+                        break;
+                }
+            }        
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, FWORD);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -11008,7 +11057,7 @@ static int stvector_83(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stvector_84(struct psdata_s *data)
+static int stapm_84(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -11018,17 +11067,17 @@ static int stvector_84(struct psdata_s *data)
     rlt = abs_result(data->result); 
     
     sprintf(rs->logs, "op_84 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "VECTOR", rs->logs);  
+    print_f(rs->plogs, "APM", rs->logs);  
 
     switch (rlt) {
         case STINIT:
 
-            ch = 41; 
+            ch = 107; 
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_84: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "VECTOR", rs->logs);  
+            print_f(rs->plogs, "APM", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -11052,7 +11101,7 @@ static int stvector_84(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stvector_85(struct psdata_s *data)
+static int stapm_85(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -11062,17 +11111,17 @@ static int stvector_85(struct psdata_s *data)
     rlt = abs_result(data->result); 
     
     sprintf(rs->logs, "op_85 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "VECTOR", rs->logs);  
+    print_f(rs->plogs, "APM", rs->logs);  
 
     switch (rlt) {
         case STINIT:
 
-            ch = 41; 
+            ch = 108; 
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_85: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "VECTOR", rs->logs);  
+            print_f(rs->plogs, "APM", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -13365,6 +13414,61 @@ end:
     return 0;
 }
 
+static int cmdfunc_apm_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_ap_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_DUAL_SD;
+    n = cmdfunc_upd2host(mrs, 'q', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_ap_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_vector_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
@@ -14153,7 +14257,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 26
+#define CMD_SIZE 27
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -14165,7 +14269,7 @@ static int dbg(struct mainRes_s *mrs)
                                 {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}, {15, "op1", cmdfunc_op1_opcode}
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
-                                , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}};
+                                , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}};
 
     p0_init(mrs);
 
@@ -14407,6 +14511,9 @@ static int hd102(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd103(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd104(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd105(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd106(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd107(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd108(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -20450,12 +20557,6 @@ static int calcuDistance(double *dist, double *p1, double *p2)
     return 0;
 }
 
-static int findReplace(double *pt, double *pp, int id1, int id2)
-{
-
-    return 0;
-}
-
 static int fs105(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret=0, id=0, id1=0, id2=0;
@@ -20590,9 +20691,107 @@ static int fs105(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
+static int fs106(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int ret;
+    char syscmd[256] = "ls -al";
+    
+    sprintf(mrs->log, "clear status ...\n");
+    print_f(&mrs->plog, "fs106", mrs->log);
+
+// launchAP or directAccess
+    /* clear status */
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs106", mrs->log);
+
+    //sprintf(syscmd, "kill -9 $(ps aux | grep 'mothership' | awk '{print $1}')");
+    //ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'hostapd' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs106", mrs->log);
+
+    sprintf(syscmd, "ifconfig uap0 down");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs106", mrs->log);
+
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'mlan0' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs106", mrs->log);
+
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'wpa_supplicant' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs106", mrs->log);
+
+    sprintf(syscmd, "ifconfig mlan0 down");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs106", mrs->log);
+
+    modersp->r = 1; 
+    return 1;
+}
+
+static int fs107(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int ret;
+    char syscmd[256] = "ls -al";
+    
+    sprintf(mrs->log, "launch Direct mode ...\n");
+    print_f(&mrs->plog, "fs107", mrs->log);
+
+    sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs107", mrs->log);
+    
+    memset(mrs->netIntfs, 0, 16);
+    sprintf(mrs->netIntfs, "%s", "uap0");
+    msync(mrs->netIntfs, 16, MS_SYNC);
+    
+    modersp->r = 1; 
+    return 1;
+}
+
+static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int ret;
+    char syscmd[256] = "ls -al";
+    
+    sprintf(mrs->log, "launch AP mode ...\n");
+    print_f(&mrs->plog, "fs108", mrs->log);
+
+    /* launch wpa connect */
+    sprintf(syscmd, "/root/script/iw_con.sh");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs108", mrs->log);
+
+    memset(mrs->netIntfs, 0, 16);
+    sprintf(mrs->netIntfs, "%s", "mlan0");
+    msync(mrs->netIntfs, 16, MS_SYNC);
+    
+    modersp->r = 1; 
+    return 1;
+}
+
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 106
+#define PS_NUM 109
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -20624,7 +20823,7 @@ static int p0(struct mainRes_s *mrs)
                                  {90, fs90},{91, fs91},{92, fs92},{93, fs93},{94, fs94},
                                  {95, fs95},{96, fs96},{97, fs97},{98, fs98},{99, fs99},
                                  {100, fs100},{101, fs101},{102, fs102},{103, fs103},{104, fs104},
-                                 {105, fs105}};                                 
+                                 {105, fs105},{106, fs106},{107, fs107},{108, fs108}};                                 
                                  
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -20647,7 +20846,7 @@ static int p0(struct mainRes_s *mrs)
                                  {90, hd90},{91, hd91},{92, hd92},{93, hd93},{94, hd94},
                                  {95, hd95},{96, hd96},{97, hd97},{98, hd98},{99, hd99},
                                  {100, hd100},{101, hd101},{102, hd102},{103, hd103},{104, hd104},
-                                 {105, hd105}};                                 
+                                 {105, hd105},{106, hd106},{107, hd107},{108, hd108}};                                 
     p0_init(mrs);
 
     modesw->m = -2;
@@ -20752,7 +20951,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stwtbak_66, stwtbak_67, stwtbak_68, stwtbak_69, stwtbak_70}, // WTBAKP
                             {stwtbak_71, stwtbak_72, stwtbak_73, stwtbak_74, stcrop_75}, // WTBAKQ
                             {stcrop_76, stcrop_77, stcrop_78, stcrop_79, stcrop_80}, // CROPR
-                            {stvector_81, stvector_82, stvector_83, stvector_84, stvector_85}}; // VECTORS
+                            {stvector_81, stvector_82, stapm_83, stapm_84, stapm_85}}; // VECTORS
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -20764,6 +20963,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //sprintf(rs->logs, "+\n");
         //print_f(rs->plogs, "P1", rs->logs);
 
+//     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q'};
         cmd = '\0';
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
@@ -20836,6 +21036,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'o') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, VECTORS, PSSET);
+                } else if (cmd == 'q') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, VECTORS, PSWT);
                 }
 
 
@@ -24207,7 +24410,7 @@ static int p8(struct procRes_s *rs)
 
             ret=getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),s, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
 
-            if((strcmp(ifa->ifa_name, netIntfs)==0)&&(ifa->ifa_addr->sa_family==AF_INET)) {
+            if((strcmp(ifa->ifa_name, rs->pnetIntfs)==0)&&(ifa->ifa_addr->sa_family==AF_INET)) {
                 if (ret != 0) {
                     printf("getnameinfo() failed: %s\n", gai_strerror(ret));
                     //exit(EXIT_FAILURE);
@@ -24469,17 +24672,17 @@ int main(int argc, char *argv[])
         /* launch AP  */
         sprintf(syscmd, "./script/launchAP_88w8787.sh");
         ret = doSystemCmd(syscmd);
-        memset(netIntfs, 0, 16);
-        sprintf(netIntfs, "%s", "uap0");
+        memset(pmrs->netIntfs, 0, 16);
+        sprintf(pmrs->netIntfs, "%s", "uap0");
     } else {
         /* launch wpa connect */
         sprintf(syscmd, "./iw_con.sh");
         ret = doSystemCmd(syscmd);
-        memset(netIntfs, 0, 16);
-        sprintf(netIntfs, "%s", "mlan0");
+        memset(pmrs->netIntfs, 0, 16);
+        sprintf(pmrs->netIntfs, "%s", "mlan0");
     }
     
-    sprintf(pmrs->log, "network interface: %s \n", netIntfs);
+    sprintf(pmrs->log, "network interface: %s \n", pmrs->netIntfs);
     print_f(&pmrs->plog, "inet", pmrs->log);
 
     sleep(1);
@@ -25222,10 +25425,10 @@ int main(int argc, char *argv[])
             ctb->opBitlen = 8;
             break;
         case ASPOP_AP_MODE: 
-            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opStatus = ASPOP_STA_CON; //default for debug ASPOP_STA_NONE;
             ctb->opCode = OP_AP_MODEN;
             ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0x1;
+            ctb->opValue = APM_AP;  /* default ap mode */
             ctb->opMask = ASPOP_MASK_32;
             ctb->opBitlen = 32;
             break;
@@ -25744,6 +25947,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pstdata = &mrs->stdata;
     rs->pcfgTable = mrs->configTable;
     rs->psFat = &mrs->aspFat;
+    rs->pnetIntfs = mrs->netIntfs;
 
     return 0;
 }
