@@ -22455,9 +22455,15 @@ static int p4(struct procRes_s *rs)
 
     ret = bind(rs->psocket_t->listenfd, (struct sockaddr*)&rs->psocket_t->serv_addr, sizeof(struct sockaddr_in)); 
     if (ret < 0) {
-        perror("bind:");
-        sprintf(rs->logs, "p4 get bind ret: %d", ret);
-        error_handle(rs->logs, 3140);
+        //perror("bind:");
+        
+        ret = -1;
+        if (setsockopt(rs->psocket_t->listenfd, SOL_SOCKET, SO_REUSEADDR, &ret, sizeof(int)) == -1) {
+            perror("setsockopt");    
+            
+            sprintf(rs->logs, "p4 get bind ret: %d", ret);
+            error_handle(rs->logs, 22465);
+        }
     }
 
     ret = listen(rs->psocket_t->listenfd, 10); 
@@ -23055,9 +23061,15 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
     ret = bind(rs->psocket_r->listenfd, (struct sockaddr*)&rs->psocket_r->serv_addr, sizeof(struct sockaddr_in)); 
     if (ret < 0) {
-        perror("bind:");
-        sprintf(rs->logs, "p5 get bind ret: %d", ret);
-        error_handle(rs->logs, 3314);
+        //perror("bind:");
+        
+        ret = -1;
+        if (setsockopt(rs->psocket_r->listenfd, SOL_SOCKET, SO_REUSEADDR, &ret, sizeof(int)) == -1) {
+            perror("setsockopt");    
+            
+            sprintf(rs->logs, "p5 get bind ret: %d", ret);
+            error_handle(rs->logs, 23071);
+        }
     }
 
     ret = listen(rs->psocket_r->listenfd, 10); 
@@ -23340,9 +23352,14 @@ static int p6(struct procRes_s *rs)
 
     ret = bind(rs->psocket_at->listenfd, (struct sockaddr*)&rs->psocket_at->serv_addr, sizeof(struct sockaddr_in)); 
     if (ret < 0) {
-        perror("bind:");
-        sprintf(rs->logs, "p6 get bind ret: %d", ret);
-        error_handle(rs->logs, 3795);
+        //perror("bind:");
+        ret = -1;
+        if (setsockopt(rs->psocket_at->listenfd, SOL_SOCKET, SO_REUSEADDR, &ret, sizeof(int)) == -1) {
+            perror("setsockopt");    
+            
+            sprintf(rs->logs, "p6 get bind ret: %d", ret);
+            error_handle(rs->logs, 23360);
+        }
     }
 
     ret = listen(rs->psocket_at->listenfd, 10); 
@@ -24101,9 +24118,14 @@ static int p7(struct procRes_s *rs)
 
     ret = bind(rs->psocket_n->listenfd, (struct sockaddr*)&rs->psocket_n->serv_addr, sizeof(struct sockaddr_in));
     if (ret < 0) {
-        perror("bind:");
-        sprintf(rs->logs, "p7 get bind ret: %d", ret);
-        error_handle(rs->logs, 4029);
+        //perror("bind:");
+        ret = -1;
+        if (setsockopt(rs->psocket_n->listenfd, SOL_SOCKET, SO_REUSEADDR, &ret, sizeof(int)) == -1) {
+            perror("setsockopt");    
+            
+            sprintf(rs->logs, "p7 get bind ret: %d", ret);
+            error_handle(rs->logs, 24127);
+        }
     }
 
     ret = listen(rs->psocket_n->listenfd, 10); 
@@ -24438,10 +24460,16 @@ static int p8(struct procRes_s *rs)
                 continue;
             }
             if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-                close(sockfd);
-                perror("listener: bind");
-                continue;
+
+                //perror("listener: bind");
+                ret = -1;
+                if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &ret, sizeof(int)) == -1) {
+                    perror("setsockopt");    
+                    close(sockfd);
+                    continue;
+                }
             }
+            
             break;
         }
 
