@@ -11015,6 +11015,8 @@ static int stapm_83(struct psdata_s *data)
                         print_f(rs->plogs, "APM", rs->logs);  
                         
                         data->bkofw = emb_fw(data->bkofw, VECTORS, PSRLT);
+                        
+                        pdt->opValue = APM_AP; /* for debug */
                         break;
                     case APM_AP:
 
@@ -11026,6 +11028,8 @@ static int stapm_83(struct psdata_s *data)
                         print_f(rs->plogs, "APM", rs->logs);  
 
                         data->bkofw = emb_fw(data->bkofw, VECTORS, PSTSM);
+                        
+                        pdt->opValue = APM_DIRECT; /* for debug */
                         break;
                     default:
                         sprintf(rs->logs, "WARNING!!! op83, opValue is unexpected val:%x\n", pdt->opValue);
