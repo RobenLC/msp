@@ -185,6 +185,7 @@ typedef enum {
     WTBAKQ,     // 11
     CROPR,     // 11
     VECTORS, // 12
+    SAVPARM, // 13
     SMAX,
 }state_e;
 
@@ -407,6 +408,13 @@ typedef enum {
     ASPFS_STATUS_EN,
     ASPFS_STATUS_DIS,
 } aspFSstatus_e;
+
+struct apWifiConfig_s{
+    char wfssid[36];
+    int wfsidLen;
+    char wfpsk[64];
+    int wfpskLen;
+};
 
 struct supdataBack_s{
     struct supdataBack_s   *n;
@@ -666,6 +674,7 @@ struct mainRes_s{
     struct socket_s socket_v;
     struct logPool_s plog;
     struct aspWaitRlt_s wtg;
+    struct apWifiConfig_s wifconf;
     char netIntfs[16];
     char *dbglog;
 };
@@ -714,6 +723,7 @@ struct procRes_s{
     struct socket_s *psocket_at;
     struct socket_s *psocket_n;
     struct socket_s *psocket_v;
+    struct apWifiConfig_s *pwifconf;
     struct logPool_s *plogs;
     char *pnetIntfs;
 };
@@ -4064,6 +4074,88 @@ inline uint32_t emb_process(uint32_t result, uint32_t flag)
     return result;
 }
 
+static uint32_t next_SAVPARM(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;                
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSMAX;
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = clr_bk(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = clr_fw(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static uint32_t next_VECTORS(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
@@ -5964,6 +6056,11 @@ static int ps_next(struct psdata_s *data)
             break;
         case VECTORS:
             ret = next_VECTORS(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case SAVPARM:
+            ret = next_SAVPARM(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -11149,6 +11246,226 @@ static int stapm_85(struct psdata_s *data)
     return ps_next(data);
 }
 
+static int stsparam_86(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_86 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SPM", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 109; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_86: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "SPM", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsparam_87(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_87 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SPM", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 0; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_87: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "SPM", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsparam_88(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_88 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SPM", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 0; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_88: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "SPM", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsparam_89(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_89 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SPM", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 0; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_89: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "SPM", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stsparam_90(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    sprintf(rs->logs, "op_90 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "SPM", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            ch = 0; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_90: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "SPM", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
 static int stspy_01(struct psdata_s *data)
 { 
     // keep polling, kind of idle mode
@@ -12623,6 +12940,12 @@ static int cmdfunc_wt_opcode(int argc, char *argv[])
     /* set wait result mechanism */
     pwt->wtChan = 6;
     pwt->wtMs = 300;
+
+    n = cmdfunc_upd2host(mrs, 'r', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
 
     struct aspConfig_s* ctb = 0;
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
@@ -14518,6 +14841,7 @@ static int hd105(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd106(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd107(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd108(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd109(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -20774,12 +21098,30 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret;
     char syscmd[256] = "ls -al";
-    
-    sprintf(mrs->log, "launch AP mode ...\n");
-    print_f(&mrs->plog, "fs108", mrs->log);
+    struct apWifiConfig_s *pwfc=0;
+
+    pwfc = &mrs->wifconf;
+    if ((pwfc->wfpskLen > 0) && (pwfc->wfsidLen > 0)) {
+        sprintf(mrs->log, "launch AP mode ... ssid: \"%s\", psk: \"%s\"\n", pwfc ->wfssid, pwfc->wfpsk);
+        print_f(&mrs->plog, "fs108", mrs->log);
+    } else {
+        sprintf(mrs->log, "failed to launch AP mode, no ssid and psk ...\n");
+        print_f(&mrs->plog, "fs108", mrs->log);
+        modersp->r = 2; 
+        return 1;
+    }
 
     /* launch wpa connect */
-    sprintf(syscmd, "/root/script/iw_con.sh");
+    //sprintf(syscmd, "/root/script/iw_con.sh");
+    sprintf(syscmd, "/root/wpa_conf.sh \\\"%s\\\" \\\"%s\\\" /etc/wpa_supplicant.conf ", pwfc ->wfssid, pwfc->wfpsk);
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -imlan0 -Dnl80211 -dd");
+    ret = doSystemCmd(syscmd);
+
+    sleep(1);
+
+    sprintf(syscmd, "udhcpc -i mlan0 -t 3 -n");
     ret = doSystemCmd(syscmd);
 
     sprintf(mrs->log, "exec [%s]...\n", syscmd);
@@ -20793,9 +21135,35 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
+static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int ret=0, len=0;
+    char paramFilePath[128] = "/root/scaner/scannerParam.bin";
+    FILE *f;
+    struct aspConfig_s *pct=0;
+    
+    pct = mrs->configTable;
+    len = ASPOP_CODE_MAX*sizeof(struct aspConfig_s);
+    
+    f = fopen(paramFilePath, "w+");
+    if (f) {
+        fwrite(pct, 1, len, f);
+        fflush(f);
+        fclose(f);
+        sprintf(mrs->log, "Scanner parameter table save to [%s] size:%d\n", paramFilePath, len);
+        print_f(&mrs->plog, "fs109", mrs->log);
+    } else {
+        sprintf(mrs->log, "Scanner parameter table save to [%s] failed !!!\n", paramFilePath);
+        print_f(&mrs->plog, "fs109", mrs->log);
+    }
+    
+    modersp->r = 1; 
+    return 1;
+}
+
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 109
+#define PS_NUM 110
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -20827,7 +21195,7 @@ static int p0(struct mainRes_s *mrs)
                                  {90, fs90},{91, fs91},{92, fs92},{93, fs93},{94, fs94},
                                  {95, fs95},{96, fs96},{97, fs97},{98, fs98},{99, fs99},
                                  {100, fs100},{101, fs101},{102, fs102},{103, fs103},{104, fs104},
-                                 {105, fs105},{106, fs106},{107, fs107},{108, fs108}};                                 
+                                 {105, fs105},{106, fs106},{107, fs107},{108, fs108},{109, fs109}};
                                  
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -20850,7 +21218,7 @@ static int p0(struct mainRes_s *mrs)
                                  {90, hd90},{91, hd91},{92, hd92},{93, hd93},{94, hd94},
                                  {95, hd95},{96, hd96},{97, hd97},{98, hd98},{99, hd99},
                                  {100, hd100},{101, hd101},{102, hd102},{103, hd103},{104, hd104},
-                                 {105, hd105},{106, hd106},{107, hd107},{108, hd108}};                                 
+                                 {105, hd105},{106, hd106},{107, hd107},{108, hd108},{109, hd109}};                                 
     p0_init(mrs);
 
     modesw->m = -2;
@@ -20955,7 +21323,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stwtbak_66, stwtbak_67, stwtbak_68, stwtbak_69, stwtbak_70}, // WTBAKP
                             {stwtbak_71, stwtbak_72, stwtbak_73, stwtbak_74, stcrop_75}, // WTBAKQ
                             {stcrop_76, stcrop_77, stcrop_78, stcrop_79, stcrop_80}, // CROPR
-                            {stvector_81, stvector_82, stapm_83, stapm_84, stapm_85}}; // VECTORS
+                            {stvector_81, stvector_82, stapm_83, stapm_84, stapm_85}, // VECTORS
+                            {stsparam_86, stsparam_87, stsparam_88, stsparam_89, stsparam_90}}; //SAVPARM
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -20967,7 +21336,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //sprintf(rs->logs, "+\n");
         //print_f(rs->plogs, "P1", rs->logs);
 
-//     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q'};
+//     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q', 'r'};
         cmd = '\0';
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
@@ -21043,8 +21412,10 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'q') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, VECTORS, PSWT);
+                } else if (cmd == 'r') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, SAVPARM, PSSET);
                 }
-
 
 
                 if (cmdt != '\0') {
@@ -24812,662 +25183,700 @@ int main(int argc, char *argv[])
     sprintf(pmrs->log, "write file size: %d/%d\n", ret, 16);
     print_f(&pmrs->plog, "fwrite", pmrs->log);
 
+    char paramFilePath[128] = "/root/scaner/scannerParam.bin";
+    FILE *fprm=0;
     struct aspConfig_s* ctb = 0;
-    for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
-        ctb = &pmrs->configTable[ix];
-        switch(ix) {
-        case ASPOP_CODE_NONE:   
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = 0;
-            ctb->opType = ASPOP_TYPE_NONE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_0;
-            ctb->opBitlen = 0;
-            break;
-        case ASPOP_FILE_FORMAT: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FFORMAT;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_COLOR_MODE:  
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_COLRMOD;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_3;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_COMPRES_RATE:
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_COMPRAT;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_3;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SCAN_SINGLE: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SINGLE;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SCAN_DOUBLE: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_DOUBLE;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_ACTION: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_ACTION;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_3;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_RESOLUTION:
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_RESOLTN;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_3;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SCAN_GRAVITY:
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SCANGAV;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_2;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_MAX_WIDTH:   
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_MAXWIDH;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_2;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_WIDTH_ADJ_H: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_WIDTHAD_H;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_WIDTH_ADJ_L: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_WIDTHAD_L;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SCAN_LENS_H: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SCANLEN_H;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SCAN_LENS_L: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SCANLEN_L;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_INTER_IMG: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_INTERIMG;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_3;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_AFEIC_SEL: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_AFEIC;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_EXT_PULSE: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_EXTPULSE;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_3;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_RD: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SDRD;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_WT: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SDWT;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_STR01: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_00;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_STR02: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_STR03: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_STR04: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_LEN01: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_00;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_LEN02: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_LEN03: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_LEN04: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFAT_SDAT: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_SDAT;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_REG_RD: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_RGRD;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_REG_WT: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_RGWT;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_REG_ADDRH: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_RGADD_H;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_REG_ADDRL: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_RGADD_L;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_REG_DAT: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_RGDAT;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SUP_SAVE: 
-            ctb->opStatus = ASPOP_STA_NONE; // for debug, should be ASPOP_STA_NONE
-            ctb->opCode = OP_SUPBACK;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff; // for debug, should be 0xff
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_FREESEC: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FREESEC;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_STR01: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_00;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_STR02: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_STR03: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_STR04: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_LEN01: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_00;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_LEN02: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_LEN03: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDFREE_LEN04: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_USEDSEC: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_USEDSEC;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_STR01: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_00;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_STR02: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_STR03: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_STR04: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STSEC_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_LEN01: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_00;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_LEN02: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_LEN03: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_SDUSED_LEN04: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_00: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_00;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_01: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_02: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_03: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_04: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_04;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_05: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_05;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_06: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_06;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_07: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_07;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_08: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_08;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_09: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_09;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_10: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_10;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_11: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_11;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_12: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_12;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_13: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_13;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_14: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_14;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_FUNTEST_15: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_FUNCTEST_15;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_CROP_01: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_CROP_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xffffffff;
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
-            break;
-        case ASPOP_CROP_02: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_CROP_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xffffffff;
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
-            break;
-        case ASPOP_CROP_03: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_CROP_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xffffffff;
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
-            break;
-        case ASPOP_CROP_04: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_CROP_04;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xffffffff;
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
-            break;
-        case ASPOP_CROP_05: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_CROP_05;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xffffffff;
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
-            break;
-        case ASPOP_CROP_06: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_CROP_06;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xffffffff;
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
-            break;
-        case ASPOP_IMG_LEN: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_IMG_LEN;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xffffffff;
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
-            break;
-        case ASPOP_CROP_COOR_XH: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_00;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_CROP_COOR_XL: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_01;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_CROP_COOR_YH: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_02;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_CROP_COOR_YL: 
-            ctb->opStatus = ASPOP_STA_NONE;
-            ctb->opCode = OP_STLEN_03;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0xff;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_EG_DECT: 
-            ctb->opStatus = ASPOP_STA_UPD; /* default enable to test CROP */
-            ctb->opCode = OP_EG_DECT;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = 0x1;
-            ctb->opMask = ASPOP_MASK_8;
-            ctb->opBitlen = 8;
-            break;
-        case ASPOP_AP_MODE: 
-            ctb->opStatus = ASPOP_STA_CON; //default for debug ASPOP_STA_NONE;
-            ctb->opCode = OP_AP_MODEN;
-            ctb->opType = ASPOP_TYPE_VALUE;
-            ctb->opValue = APM_AP;  /* default ap mode */
-            ctb->opMask = ASPOP_MASK_32;
-            ctb->opBitlen = 32;
-            break;
-        default: break;
+    int parmLen=0, parmTotz=0, readLen=0;
+
+    parmTotz = ASPOP_CODE_MAX*sizeof(struct aspConfig_s);
+    
+    fprm = fopen(paramFilePath, "r");
+    if (fprm) {
+        ctb = pmrs->configTable;
+
+        ret = fseek(fprm, 0, SEEK_END);
+        if (ret) {
+            sprintf(pmrs->log, " file seek failed!! ret:%d \n", ret);
+            print_f(&pmrs->plog, "PRAM", pmrs->log);
+        } 
+
+        parmLen = ftell(fprm);
+        sprintf(pmrs->log, " file [%s] size: %d \n", paramFilePath, parmLen);
+        print_f(&pmrs->plog, "PRAM", pmrs->log);
+
+        ret = fseek(fprm, 0, SEEK_SET);
+        if (ret) {
+            sprintf(pmrs->log, " file seek failed!! ret:%d \n", ret);
+            print_f(&pmrs->plog, "PRAM", pmrs->log);
+        }
+        if (parmLen == parmTotz) {
+            readLen = fread(ctb, 1, parmLen, fprm);
+        } else {
+            sprintf(pmrs->log, " file size error !!! filesize:%d, memsize: %d\n", parmLen, parmTotz);
+            print_f(&pmrs->plog, "PRAM", pmrs->log);
+        }
+        fclose(fprm);
+    }
+    
+    if (readLen == 0) { 
+        sprintf(pmrs->log, " load scaner parameter at [%s] failed !!! Reset configuration!!!", paramFilePath);
+        print_f(&pmrs->plog, "PRAM", pmrs->log);
+    
+        for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+            ctb = &pmrs->configTable[ix];
+            switch(ix) {
+            case ASPOP_CODE_NONE:   
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = 0;
+                ctb->opType = ASPOP_TYPE_NONE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_0;
+                ctb->opBitlen = 0;
+                break;
+            case ASPOP_FILE_FORMAT: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FFORMAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_COLOR_MODE:  
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_COLRMOD;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_3;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_COMPRES_RATE:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_COMPRAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_3;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SCAN_SINGLE: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SINGLE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SCAN_DOUBLE: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_DOUBLE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_ACTION: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_ACTION;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_3;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_RESOLUTION:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_RESOLTN;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_3;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SCAN_GRAVITY:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SCANGAV;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_2;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_MAX_WIDTH:   
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_MAXWIDH;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_2;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_WIDTH_ADJ_H: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_WIDTHAD_H;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_WIDTH_ADJ_L: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_WIDTHAD_L;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SCAN_LENS_H: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SCANLEN_H;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SCAN_LENS_L: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SCANLEN_L;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_INTER_IMG: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_INTERIMG;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_3;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_AFEIC_SEL: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_AFEIC;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_EXT_PULSE: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_EXTPULSE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_3;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_RD: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SDRD;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_WT: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SDWT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_STR01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_00;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_STR02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_STR03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_STR04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_LEN01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_00;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_LEN02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_LEN03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_LEN04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFAT_SDAT: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SDAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_REG_RD: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_RGRD;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_REG_WT: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_RGWT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_REG_ADDRH: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_RGADD_H;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_REG_ADDRL: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_RGADD_L;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_REG_DAT: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_RGDAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SUP_SAVE: 
+                ctb->opStatus = ASPOP_STA_NONE; // for debug, should be ASPOP_STA_NONE
+                ctb->opCode = OP_SUPBACK;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff; // for debug, should be 0xff
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_FREESEC: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FREESEC;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_STR01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_00;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_STR02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_STR03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_STR04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_LEN01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_00;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_LEN02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_LEN03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDFREE_LEN04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_USEDSEC: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_USEDSEC;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_STR01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_00;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_STR02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_STR03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_STR04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STSEC_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_LEN01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_00;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_LEN02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_LEN03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SDUSED_LEN04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_00: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_00;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_05: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_06: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_07: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_07;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_08: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_08;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_09: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_09;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_10: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_10;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_11: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_11;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_12: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_12;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_13: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_13;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_14: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_14;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNTEST_15: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_15;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_CROP_01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_05: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_06: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_IMG_LEN: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_IMG_LEN;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_COOR_XH: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_00;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_CROP_COOR_XL: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_CROP_COOR_YH: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_CROP_COOR_YL: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_STLEN_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_EG_DECT: 
+                ctb->opStatus = ASPOP_STA_UPD; /* default enable to test CROP */
+                ctb->opCode = OP_EG_DECT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x1;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_AP_MODE: 
+                ctb->opStatus = ASPOP_STA_CON; //default for debug ASPOP_STA_NONE;
+                ctb->opCode = OP_AP_MODEN;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = APM_AP;  /* default ap mode */
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            default: break;
+            }
         }
     }
-
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
         ctb = &pmrs->configTable[ix];
             printf("ctb[%d] 0x%.2x opcode:0x%.2x 0x%.2x val:0x%.2x mask:0x%.2x len:%d \n", ix,
@@ -25477,6 +25886,84 @@ int main(int argc, char *argv[])
             ctb->opValue,
             ctb->opMask,
             ctb->opBitlen);
+    }
+    
+    /* read AP config */
+    char ssidPath[128] = "/root/scaner/ssid.bin";
+    char pskPath[128] = "/root/scaner/psk.bin";
+    FILE *fssid=0, *fpsk=0;
+    int wfcLen;
+    struct apWifiConfig_s *pwfc=0;
+
+    pwfc = &pmrs->wifconf;
+    
+    fssid = fopen(ssidPath, "r");
+    if (fssid) {
+        fpsk = fopen(pskPath, "r");
+        readLen = 0;
+        if (fpsk) {
+            ret = fseek(fpsk, 0, SEEK_END);
+            if (ret) {
+                sprintf(pmrs->log, " file seek failed!! ret:%d \n", ret);
+                print_f(&pmrs->plog, "WIFC", pmrs->log);
+            } 
+
+            wfcLen = ftell(fpsk);
+            sprintf(pmrs->log, " file [%s] size: %d \n", pskPath, wfcLen);
+            print_f(&pmrs->plog, "WIFC", pmrs->log);
+
+            ret = fseek(fpsk, 0, SEEK_SET);
+            if (ret) {
+                sprintf(pmrs->log, " file seek failed!! ret:%d \n", ret);
+                print_f(&pmrs->plog, "WIFC", pmrs->log);
+            }
+
+            if ((wfcLen >= 8) && (wfcLen <=63)) {
+                readLen = fread(pwfc->wfpsk, 1, wfcLen, fpsk);
+                pwfc->wfpskLen = readLen;
+            } else {
+                sprintf(pmrs->log, " file size error !!! filesize:%d, readLen: %d\n", wfcLen, readLen);
+                print_f(&pmrs->plog, "WIFC", pmrs->log);
+            }
+            
+            fclose(fpsk);
+        }
+
+        if (readLen > 0) {
+            readLen = 0;
+            ret = fseek(fssid, 0, SEEK_END);
+            if (ret) {
+                sprintf(pmrs->log, " file seek failed!! ret:%d \n", ret);
+                print_f(&pmrs->plog, "WIFC", pmrs->log);
+            } 
+
+            wfcLen = ftell(fssid);
+            sprintf(pmrs->log, " file [%s] size: %d \n", ssidPath, wfcLen);
+            print_f(&pmrs->plog, "WIFC", pmrs->log);
+
+            ret = fseek(fssid, 0, SEEK_SET);
+            if (ret) {
+                sprintf(pmrs->log, " file seek failed!! ret:%d \n", ret);
+                print_f(&pmrs->plog, "WIFC", pmrs->log);
+            }
+
+            if ((wfcLen > 0) && (wfcLen <= 32)) {
+                readLen = fread(pwfc->wfssid, 1, wfcLen, fssid);
+                pwfc->wfsidLen = readLen;
+            } else {
+                sprintf(pmrs->log, " file size error !!! filesize:%d, readLen: %d\n", wfcLen, readLen);
+                print_f(&pmrs->plog, "WIFC", pmrs->log);
+            }            
+        }
+        fclose(fssid);
+    }
+
+    if ((pwfc->wfsidLen > 0) && (pwfc->wfpskLen > 0)) {
+        sprintf(pmrs->log, " get ssid: [%s] size: %d, psk: [%s] size: %d\n", pwfc->wfssid, pwfc->wfsidLen, pwfc->wfpsk, pwfc->wfpskLen);
+        print_f(&pmrs->plog, "WIFC", pmrs->log);
+    } else {
+        sprintf(pmrs->log, " ssid and psk are unavilable!!");
+        print_f(&pmrs->plog, "WIFC", pmrs->log);
     }
 
     /* FAT */
@@ -25980,6 +26467,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pcfgTable = mrs->configTable;
     rs->psFat = &mrs->aspFat;
     rs->pnetIntfs = mrs->netIntfs;
+    rs->pwifconf = &mrs->wifconf;
 
     return 0;
 }
