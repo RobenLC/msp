@@ -11113,7 +11113,7 @@ static int stapm_83(struct psdata_s *data)
                         
                         data->bkofw = emb_fw(data->bkofw, VECTORS, PSRLT);
                         
-                        pdt->opValue = APM_AP; /* for debug */
+                        //pdt->opValue = APM_AP; /* for debug */
                         break;
                     case APM_AP:
 
@@ -11126,7 +11126,7 @@ static int stapm_83(struct psdata_s *data)
 
                         data->bkofw = emb_fw(data->bkofw, VECTORS, PSTSM);
                         
-                        pdt->opValue = APM_DIRECT; /* for debug */
+                        //pdt->opValue = APM_DIRECT; /* for debug */
                         break;
                     default:
                         sprintf(rs->logs, "WARNING!!! op83, opValue is unexpected val:%x\n", pdt->opValue);
@@ -23652,6 +23652,9 @@ static int atFindIdx(char *str, char ch)
 }
 static int p6(struct procRes_s *rs)
 {
+    char ssidPath[128] = "/root/scaner/ssid.bin";
+    char pskPath[128] = "/root/scaner/psk.bin";
+    FILE *fssid=0, *fpsk=0;
     char strFullPath[1024];
     char strPath[32][128];
     //char **strPath; 
@@ -23809,8 +23812,72 @@ static int p6(struct procRes_s *rs)
         sendbuf[3] = 0x01; /*??*/
         sendbuf[4] = 0xfc;
 
+        if (opcode == 0x17) { /* send WIFI info */
+            sprintf(rs->logs, "handle opcode: 0x%x(WIFI_PSK)\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+            n = 0;
+
+            len = strlen(folder);
+            sprintf(rs->logs, "get psk[%s] size: %d\n", folder, len);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            fpsk = fopen(pskPath, "w+");
+            if (fpsk) {
+                fwrite(folder, 1, len, fpsk);
+                fflush(fpsk);
+                fclose(fpsk);
+
+                sprintf(rs->logs, "PSK_OK");
+            } else {
+                sprintf(rs->logs, "PSK_NG");
+            }
+
+            n = strlen(rs->logs);
+            strncpy(&sendbuf[5], rs->logs, n);
+            
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            goto socketEnd;
+        }
+        
+        if (opcode == 0x16) { /* send WIFI info */
+            sprintf(rs->logs, "handle opcode: 0x%x(WIFI_SSID)\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+            n = 0;
+            len = strlen(folder);
+            sprintf(rs->logs, "get ssid[%s] size: %d\n", folder, len);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            fssid = fopen(ssidPath, "w+");
+            if (fssid) {
+                fwrite(folder, 1, len, fssid);
+                fflush(fssid);
+                fclose(fssid);
+
+                sprintf(rs->logs, "SSID_OK");
+            } else {
+                sprintf(rs->logs, "SSID_NG");
+            }
+
+            n = strlen(rs->logs);
+            strncpy(&sendbuf[5], rs->logs, n);
+            
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            goto socketEnd;
+        }
+        
         if (opcode == 0x15) { /* send CROP info */
-            sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
+            sprintf(rs->logs, "handle opcode: 0x%x(CROP)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
             cnt = 0;
@@ -23877,7 +23944,7 @@ static int p6(struct procRes_s *rs)
         }
 
         if (opcode == 0x14) { /* update UTC time */
-            sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
+            sprintf(rs->logs, "handle opcode: 0x%x(UTC)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
             ret = asp_strsplit(&strinfo, folder, n);
@@ -25216,6 +25283,31 @@ int main(int argc, char *argv[])
             print_f(&pmrs->plog, "PRAM", pmrs->log);
         }
         fclose(fprm);
+/*
+        ctb = &pmrs->configTable[ASPOP_SCAN_SINGLE];
+        ctb->opStatus = ASPOP_STA_NONE;
+        ctb->opCode = OP_SINGLE;
+        ctb->opType = ASPOP_TYPE_VALUE;
+        ctb->opValue = 0xff;
+        ctb->opMask = ASPOP_MASK_8;
+        ctb->opBitlen = 8;
+
+        ctb = &pmrs->configTable[ASPOP_SCAN_DOUBLE];
+        ctb->opStatus = ASPOP_STA_NONE;
+        ctb->opCode = OP_DOUBLE;
+        ctb->opType = ASPOP_TYPE_VALUE;
+        ctb->opValue = 0xff;
+        ctb->opMask = ASPOP_MASK_8;
+        ctb->opBitlen = 8;
+
+        ctb = &pmrs->configTable[ASPOP_ACTION]; 
+        ctb->opStatus = ASPOP_STA_NONE;
+        ctb->opCode = OP_ACTION;
+        ctb->opType = ASPOP_TYPE_VALUE;
+        ctb->opValue = 0xff;
+        ctb->opMask = ASPOP_MASK_3;
+        ctb->opBitlen = 8;
+*/
     }
     
     if (readLen == 0) { 
@@ -25920,6 +26012,7 @@ int main(int argc, char *argv[])
 
             if ((wfcLen >= 8) && (wfcLen <=63)) {
                 readLen = fread(pwfc->wfpsk, 1, wfcLen, fpsk);
+                pwfc->wfpsk[readLen] = '\0';
                 pwfc->wfpskLen = readLen;
             } else {
                 sprintf(pmrs->log, " file size error !!! filesize:%d, readLen: %d\n", wfcLen, readLen);
@@ -25949,6 +26042,7 @@ int main(int argc, char *argv[])
 
             if ((wfcLen > 0) && (wfcLen <= 32)) {
                 readLen = fread(pwfc->wfssid, 1, wfcLen, fssid);
+                pwfc->wfssid[readLen] = '\0';
                 pwfc->wfsidLen = readLen;
             } else {
                 sprintf(pmrs->log, " file size error !!! filesize:%d, readLen: %d\n", wfcLen, readLen);
