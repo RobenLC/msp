@@ -21068,6 +21068,10 @@ static int fs106(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs106", mrs->log);
 
+    memset(mrs->netIntfs, 0, 16);
+    sprintf(mrs->netIntfs, "%s", "mlan0");
+    msync(mrs->netIntfs, 16, MS_SYNC);
+
     modersp->r = 1; 
     return 1;
 }
@@ -21113,23 +21117,19 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     /* launch wpa connect */
     //sprintf(syscmd, "/root/script/iw_con.sh");
-    sprintf(syscmd, "/root/wpa_conf.sh \\\"%s\\\" \\\"%s\\\" /etc/wpa_supplicant.conf ", pwfc ->wfssid, pwfc->wfpsk);
+    sprintf(syscmd, "/root/script/wpa_conf.sh \\\"%s\\\" \\\"%s\\\" /etc/wpa_supplicant.conf ", pwfc ->wfssid, pwfc->wfpsk);
     ret = doSystemCmd(syscmd);
 
     sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -imlan0 -Dnl80211 -dd");
     ret = doSystemCmd(syscmd);
 
-    sleep(1);
+    sleep(3);
 
     sprintf(syscmd, "udhcpc -i mlan0 -t 3 -n");
     ret = doSystemCmd(syscmd);
 
     sprintf(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs108", mrs->log);
-
-    memset(mrs->netIntfs, 0, 16);
-    sprintf(mrs->netIntfs, "%s", "mlan0");
-    msync(mrs->netIntfs, 16, MS_SYNC);
     
     modersp->r = 1; 
     return 1;
@@ -23678,10 +23678,13 @@ static int p6(struct procRes_s *rs)
     uint32_t secStr=0, secLen=0;
 
     struct aspInfoSplit_s *strinfo=0, *nexinfo=0;
-    
+
+    struct apWifiConfig_s *pwfc=0;
+
     pct = rs->pcfgTable;
     pfat = rs->psFat;
     pftb = pfat->fatTable;
+    pwfc = rs->pwifconf;
 
     char dir[256] = "/mnt/mmc2";
     //char dir[256] = "/root";
@@ -23827,6 +23830,13 @@ static int p6(struct procRes_s *rs)
                 fflush(fpsk);
                 fclose(fpsk);
 
+                if ((len >=8) && (len <= 63)) {
+                    memset(pwfc->wfpsk, 0, 64);
+                    memcpy(pwfc->wfpsk, folder, len);
+                    pwfc->wfpskLen = len;
+                    msync(pwfc->wfpsk, len, MS_SYNC);
+                }
+                
                 sprintf(rs->logs, "PSK_OK");
             } else {
                 sprintf(rs->logs, "PSK_NG");
@@ -23857,6 +23867,13 @@ static int p6(struct procRes_s *rs)
                 fwrite(folder, 1, len, fssid);
                 fflush(fssid);
                 fclose(fssid);
+
+                if (len <= 32) {
+                    memset(pwfc->wfssid, 0, 36);
+                    memcpy(pwfc->wfssid, folder, len);
+                    pwfc->wfsidLen = len;
+                    msync(pwfc->wfssid, len, MS_SYNC);
+                }
 
                 sprintf(rs->logs, "SSID_OK");
             } else {
@@ -24523,7 +24540,7 @@ static int p6(struct procRes_s *rs)
     return 0;
 }
 
-#define P7_TX_LOG (0)
+#define P7_TX_LOG (1)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
@@ -24883,7 +24900,7 @@ static int p8(struct procRes_s *rs)
                 printf("\tInterface : <%s>\n",ifa->ifa_name );
                 printf("\t  Address : <%s>\n", s);
 
-                sprintf(sendbuf, "addr: %s port: %d", s, 8000);
+                sprintf(sendbuf, "iface: %s addr: %s port: %d", rs->pnetIntfs, s, 8000);
             }
         }
         freeifaddrs(ifaddr);
@@ -25140,13 +25157,13 @@ int main(int argc, char *argv[])
 
     if (arg[1] == 0) {
         /* launch AP  */
-        sprintf(syscmd, "./script/launchAP_88w8787.sh");
+        sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
         ret = doSystemCmd(syscmd);
         memset(pmrs->netIntfs, 0, 16);
         sprintf(pmrs->netIntfs, "%s", "uap0");
     } else {
         /* launch wpa connect */
-        sprintf(syscmd, "./iw_con.sh");
+        sprintf(syscmd, "/root/script/iw_con.sh");
         ret = doSystemCmd(syscmd);
         memset(pmrs->netIntfs, 0, 16);
         sprintf(pmrs->netIntfs, "%s", "mlan0");
@@ -25283,7 +25300,7 @@ int main(int argc, char *argv[])
             print_f(&pmrs->plog, "PRAM", pmrs->log);
         }
         fclose(fprm);
-/*
+        /* reset the run time parameters */
         ctb = &pmrs->configTable[ASPOP_SCAN_SINGLE];
         ctb->opStatus = ASPOP_STA_NONE;
         ctb->opCode = OP_SINGLE;
@@ -25307,7 +25324,7 @@ int main(int argc, char *argv[])
         ctb->opValue = 0xff;
         ctb->opMask = ASPOP_MASK_3;
         ctb->opBitlen = 8;
-*/
+
     }
     
     if (readLen == 0) { 
