@@ -11096,7 +11096,7 @@ static int stapm_83(struct psdata_s *data)
                 sprintf(rs->logs, "op83, OP_AP_MODEN opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "APM", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
                 sprintf(rs->logs, "op83, OP_AP_MODEN status is wrong val:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "APM", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -13748,17 +13748,22 @@ static int cmdfunc_apm_opcode(int argc, char *argv[])
     struct aspWaitRlt_s *pwt;
     struct info16Bit_s *pkt;
     struct mainRes_s *mrs=0;
+    struct aspConfig_s* ctb = 0;
+
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
     sprintf(mrs->log, "cmdfunc_ap_opcode argc:%d\n", argc); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
+    ctb = &mrs->configTable[ASPOP_AP_MODE];
+    
     pkt = &mrs->mchine.tmp;
     pwt = &mrs->wtg;
     if (!pkt) {ret = -2; goto end;}
     if (!pwt) {ret = -3; goto end;}
     rlt = pwt->wtRlt;
     if (!rlt) {ret = -4; goto end;}
+
 
     /* set wait result mechanism */
     pwt->wtChan = 6;
@@ -13768,6 +13773,16 @@ static int cmdfunc_apm_opcode(int argc, char *argv[])
     /* set data for update to scanner */
     pkt->opcode = OP_SINGLE;
     pkt->data = SINSCAN_DUAL_SD;
+
+    ctb->opValue = APM_AP;
+    ctb->opStatus = ASPOP_STA_APP;
+    
+    n = cmdfunc_upd2host(mrs, 'r', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+    
     n = cmdfunc_upd2host(mrs, 'q', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -21144,6 +21159,8 @@ static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     len = ASPOP_CODE_MAX*sizeof(struct aspConfig_s);
+
+    msync(pct, len, MS_SYNC);
     
     f = fopen(paramFilePath, "w+");
     if (f) {
@@ -25155,6 +25172,7 @@ int main(int argc, char *argv[])
     sprintf(syscmd, "ifconfig mlan0 down");
     ret = doSystemCmd(syscmd);
 
+    #if 0 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
     if (arg[1] == 0) {
         /* launch AP  */
         sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
@@ -25168,6 +25186,7 @@ int main(int argc, char *argv[])
         memset(pmrs->netIntfs, 0, 16);
         sprintf(pmrs->netIntfs, "%s", "mlan0");
     }
+    #endif
     
     sprintf(pmrs->log, "network interface: %s \n", pmrs->netIntfs);
     print_f(&pmrs->plog, "inet", pmrs->log);
@@ -25975,7 +25994,7 @@ int main(int argc, char *argv[])
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_AP_MODE: 
-                ctb->opStatus = ASPOP_STA_CON; //default for debug ASPOP_STA_NONE;
+                ctb->opStatus = ASPOP_STA_APP; //default for debug ASPOP_STA_NONE;
                 ctb->opCode = OP_AP_MODEN;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = APM_AP;  /* default ap mode */
@@ -26069,6 +26088,98 @@ int main(int argc, char *argv[])
         fclose(fssid);
     }
 
+    /* AP mode launch or not */
+    int isLaunch = 0;
+    char s[INET6_ADDRSTRLEN];
+    struct ifaddrs *ifaddr, *ifa;
+    struct modersp_s tmpModersp;
+
+    ctb = &pmrs->configTable[ASPOP_AP_MODE];
+    if (ctb->opCode != OP_AP_MODEN) {        
+        sprintf(pmrs->log, " WARNING!!! get wrong opcode value 0x%x", ctb->opCode);
+        print_f(&pmrs->plog, "APM", pmrs->log);
+    }
+
+    if (ctb->opValue == APM_AP) {
+        /* launch wpa connect */
+        pwfc = &pmrs->wifconf;
+        if ((pwfc->wfpskLen > 0) && (pwfc->wfsidLen > 0)) {
+            sprintf(pmrs->log, "launch AP mode ... ssid: \"%s\", psk: \"%s\"\n", pwfc ->wfssid, pwfc->wfpsk);
+            print_f(&pmrs->plog, "APM", pmrs->log);
+
+            /* launch wpa connect */
+            sprintf(syscmd, "/root/script/wpa_conf.sh \\\"%s\\\" \\\"%s\\\" /etc/wpa_supplicant.conf ", pwfc ->wfssid, pwfc->wfpsk);
+            ret = doSystemCmd(syscmd);
+
+            sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -imlan0 -Dnl80211 -dd");
+            ret = doSystemCmd(syscmd);
+
+            sleep(3);
+
+            sprintf(syscmd, "udhcpc -i mlan0 -t 3 -n");
+            ret = doSystemCmd(syscmd);
+
+            sprintf(pmrs->log, "exec [%s]...\n", syscmd);
+            print_f(&pmrs->plog, "APM", pmrs->log);
+
+            memset(pmrs->netIntfs, 0, 16);
+            sprintf(pmrs->netIntfs, "%s", "mlan0");
+
+            ret = getifaddrs(&ifaddr);
+            if (ret == -1) {
+                perror("getifaddrs");        
+                //exit(EXIT_FAILURE);    
+            } 
+            else {
+                for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+                    if (ifa->ifa_addr == NULL)
+                        continue;
+
+                    ret=getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),s, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
+                    if (ret != 0) {
+                        printf("getnameinfo() failed: %s\n", gai_strerror(ret));
+                        //exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    
+                    if((strcmp(ifa->ifa_name, pmrs->netIntfs)==0) && (ifa->ifa_addr->sa_family == AF_INET)) {
+
+                        printf("\tInterface : <%s>\n",ifa->ifa_name );
+                        printf("\t  Address : <%s>\n", s);
+
+                        sprintf(pmrs->log, "iface: %s addr: %s", pmrs->netIntfs, s);
+                        print_f(&pmrs->plog, "APM", pmrs->log);
+
+                        isLaunch = 1;
+                    }
+                }
+
+                freeifaddrs(ifaddr);
+            }
+            
+            if (!isLaunch) {
+                ctb->opValue = APM_DIRECT;
+                fs109(pmrs, &tmpModersp);
+            }
+        } else {
+            sprintf(pmrs->log, "failed to launch AP mode, no ssid and psk ...\n");
+            print_f(&pmrs->plog, "APM", pmrs->log);
+        }
+    }
+    
+    if (!isLaunch) {
+        /* launch AP  */
+        sprintf(syscmd, "/root/script/clr_all.sh");
+        ret = doSystemCmd(syscmd);
+
+        sleep(1);
+
+        sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
+        ret = doSystemCmd(syscmd);
+        memset(pmrs->netIntfs, 0, 16);
+        sprintf(pmrs->netIntfs, "%s", "uap0");
+    }
+  
     if ((pwfc->wfsidLen > 0) && (pwfc->wfpskLen > 0)) {
         sprintf(pmrs->log, " get ssid: [%s] size: %d, psk: [%s] size: %d\n", pwfc->wfssid, pwfc->wfsidLen, pwfc->wfpsk, pwfc->wfpskLen);
         print_f(&pmrs->plog, "WIFC", pmrs->log);
