@@ -29,6 +29,8 @@
 #define SPIDEV_SWITCH (0)
 #endif
 
+#define MIN_SECTOR_SIZE (512)
+
 #define PULL_LOW_AFTER_DATA (1)
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
@@ -12266,9 +12268,9 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
     char str[128];
     sel = sel % 2;
 
-    tlen = size % 1024;
+    tlen = size % MIN_SECTOR_SIZE;
     if (tlen) {
-        size = size + 1024 - tlen;
+        size = size + MIN_SECTOR_SIZE - tlen;
     }
 
     if (sel) {
@@ -12289,9 +12291,9 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
 {
     char str[128];
     int tlen=0;
-    tlen = size % 1024;
+    tlen = size % MIN_SECTOR_SIZE;
     if (tlen) {
-        size = size + 1024 - tlen;
+        size = size + MIN_SECTOR_SIZE - tlen;
     }
 
     pp->lastsz = size;
@@ -21145,6 +21147,8 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     sprintf(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs108", mrs->log);
+
+    sync();
     
     modersp->r = 1; 
     return 1;
@@ -21173,6 +21177,8 @@ static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "Scanner parameter table save to [%s] failed !!!\n", paramFilePath);
         print_f(&mrs->plog, "fs109", mrs->log);
     }
+
+    sync();
     
     modersp->r = 1; 
     return 1;
