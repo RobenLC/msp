@@ -22474,7 +22474,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
-#define P3_TX_LOG  (1)
+#define P3_TX_LOG  (0)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -22802,7 +22802,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define P4_TX_LOG  (1)
+#define P4_TX_LOG  (0)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
@@ -24563,7 +24563,7 @@ static int p6(struct procRes_s *rs)
     return 0;
 }
 
-#define P7_TX_LOG (1)
+#define P7_TX_LOG (0)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
@@ -26510,6 +26510,11 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 {
     int len;
     char ch[256];
+    
+#if 0 /* remove log */
+    return 0;
+#endif
+
     if (!str) return (-1);
 
     if (head) {
@@ -26518,6 +26523,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
     } else {
         sprintf(ch, "%s", str);
     }
+    
 
     printf("%s",ch);
 
