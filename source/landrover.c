@@ -293,6 +293,15 @@ struct virtualReg_s {
     uint32_t vrValue;
 };
 
+struct cropCoord_s {
+    int CROP_COOD_01[2];// = {818, 557};
+    int CROP_COOD_02[2];// = {980, 1557};
+    int CROP_COOD_03[2];// = {1168, 1557};
+    int CROP_COOD_04[2];// = {1586, 1484};
+    int CROP_COOD_05[2];// = {1415, 487};
+    int CROP_COOD_06[2];// = {1253, 487};
+};
+
 struct mainRes_s{
     int sid[6];
     int sfm[2];
@@ -325,6 +334,7 @@ struct mainRes_s{
     struct logPool_s plog;
     char filein[128];
     uint32_t scan_length;
+    struct cropCoord_s cropCoord;
 };
 
 typedef int (*fselec)(struct mainRes_s *mrs, struct modersp_s *modersp);
@@ -368,6 +378,7 @@ struct procRes_s{
     struct socket_s *psocket_t;
     struct logPool_s *plogs;
     uint32_t *pscnlen;
+    struct cropCoord_s *pcropCoord;
 };
 
 //memory alloc. put in/put out
@@ -7306,7 +7317,8 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
     modersp->m = 24;
     return 0;
 }
-#if 0
+#if 1
+#elif 0
 #define CROP_COOD_01 {818, 557}
 #define CROP_COOD_02 {980, 1557}
 #define CROP_COOD_03 {1168, 1557}
@@ -7327,33 +7339,62 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
 #define CROP_COOD_04 {3250,  472}
 #define CROP_COOD_05 {841, 48 }
 #define CROP_COOD_06 {758, 48 }
-#elif 1 /* 01 */
+#elif 0 /* 01 */
 #define CROP_COOD_01 {309, 712 }
 #define CROP_COOD_02 {949 , 3368 }
 #define CROP_COOD_03 {988,  3368 }
 #define CROP_COOD_04 {3392,  2992}
 #define CROP_COOD_05 {2657, 32 }
 #define CROP_COOD_06 {2559, 32 }
-#elif 1 /* 02 */
+#elif 0 /* 02 */
 #define CROP_COOD_01 {666, 1184 }
 #define CROP_COOD_02 {1567, 4016 }
 #define CROP_COOD_03 {1604, 4016 }
 #define CROP_COOD_04 {4000, 3048 }
 #define CROP_COOD_05 {2945, 32 }
 #define CROP_COOD_06 {2820, 32 }
-#else
+#elif 0 /* 03 */
+#define CROP_COOD_01 {252, 608 }
+#define CROP_COOD_02 {572, 3288 }
+#define CROP_COOD_03 {634, 3288 }
+#define CROP_COOD_04 {3072, 3104 }
+#define CROP_COOD_05 {2641, 32 }
+#define CROP_COOD_06 {2578, 32 }
+#elif 0 /* 04 */
+#define CROP_COOD_01 {1721, 887 }
+#define CROP_COOD_02 {2376, 1874 }
+#define CROP_COOD_03 {2514, 1874 }
+#define CROP_COOD_04 {3169, 887 }
+#define CROP_COOD_05 {2609, 45 }
+#define CROP_COOD_06 {2281, 45 }
+#elif 0 /* 05 */
+#define CROP_COOD_01 {1321, 887 }
+#define CROP_COOD_02 {2376, 1874 }
+#define CROP_COOD_03 {2514, 1874 }
+#define CROP_COOD_04 {3269, 1017 }
+#define CROP_COOD_05 {2609, 325 }
+#define CROP_COOD_06 {2281, 325 }
+#elif 0 /* 06 */
 #define CROP_COOD_01 {358, 357}
 #define CROP_COOD_02 {630, 640}
 #define CROP_COOD_03 {678, 640}
 #define CROP_COOD_04 {951, 381}
 #define CROP_COOD_05 {685, 104}
 #define CROP_COOD_06 {624, 104}
+#else
+#define CROP_COOD_01 {0, 0}
+#define CROP_COOD_02 {0, 0}
+#define CROP_COOD_03 {0, 0}
+#define CROP_COOD_04 {0, 0}
+#define CROP_COOD_05 {0, 0}
+#define CROP_COOD_06 {0, 0}
 #endif
 
 #define CROP_SCALE 1
 static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
-    int axy[2] = CROP_COOD_01;
+    //int axy[2] = CROP_COOD_01;
+    int *axy = mrs->cropCoord.CROP_COOD_01;
     int id=0;
     uint32_t tmp32=0;
     uint16_t  x=0, y=0;
@@ -7384,7 +7425,8 @@ static int fs60(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
-    int axy[2] = CROP_COOD_02;
+    //int axy[2] = CROP_COOD_02;
+    int *axy = mrs->cropCoord.CROP_COOD_02;
     int id=0;
     uint32_t tmp32=0;
 
@@ -7416,7 +7458,8 @@ static int fs61(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
-    int axy[2] = CROP_COOD_03;
+    //int axy[2] = CROP_COOD_03;
+    int *axy = mrs->cropCoord.CROP_COOD_03;
     int id=0;
     uint32_t tmp32=0;
 
@@ -7448,7 +7491,8 @@ static int fs62(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
-    int axy[2] = CROP_COOD_04;
+    //int axy[2] = CROP_COOD_04;
+    int *axy = mrs->cropCoord.CROP_COOD_04;
     int id=0;
     uint32_t tmp32=0;
 
@@ -7480,7 +7524,8 @@ static int fs63(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
-    int axy[2] = CROP_COOD_05;
+    //int axy[2] = CROP_COOD_05;
+    int *axy = mrs->cropCoord.CROP_COOD_05;
     int id=0;
     uint32_t tmp32=0;
 
@@ -7512,7 +7557,8 @@ static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
-    int axy[2] = CROP_COOD_06;
+    //int axy[2] = CROP_COOD_06;
+    int *axy = mrs->cropCoord.CROP_COOD_06;
     int id=0;
     uint32_t tmp32=0;
 
@@ -7765,6 +7811,47 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     return 0;
 }
 
+static int randomGen(int min, int max)
+{
+    uint32_t seed[16] = {1, 3, 5, 11, 13, 17, 23, 29, 31, 37, 41, 47, 53, 57, 61, 67};
+    struct timespec ctm;
+    uint32_t ns=0;
+    int range;
+    int r;
+    int v;
+
+    range = max - min;
+    if (range < 0) range = 0;
+
+    clock_gettime(CLOCK_REALTIME, &ctm);
+    
+    printf("randomGen() - %d ~ %d\n", min, max);
+    ns = ctm.tv_nsec;
+    srandom(seed[ns%16]);
+    r = random();
+
+    v = min + (r % range);
+    printf("clock() - %d - v:%d r:%d\n", ctm.tv_nsec, v, r);
+    
+    return v;
+}
+
+static int randCrop(int *p, int minX, int maxX, int minY, int maxY)
+{
+    int x=0, y=0;
+    if (!p) return -1;
+
+    x = randomGen(minX, maxX);
+    y = randomGen(minY, maxY);
+
+    printf("randCrop get xy = (%d, %d) \n", x, y);
+
+    p[0] = x;
+    p[1] = y;
+
+    return 0;
+}
+
 static int p2(struct procRes_s *rs)
 {
 #define SAVE_OUT (0)
@@ -7792,9 +7879,25 @@ static int p2(struct procRes_s *rs)
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/pattern2.txt";
     FILE *fp = NULL, *fout=NULL;
-
+    struct cropCoord_s *pCrop;
+    
+    int *pCROP_COOD_01;
+    int *pCROP_COOD_02;
+    int *pCROP_COOD_03;
+    int *pCROP_COOD_04;
+    int *pCROP_COOD_05;
+    int *pCROP_COOD_06;
+    
     popt_fformat = rs->poptable;
+    pCrop = rs->pcropCoord;
 
+    pCROP_COOD_01 = pCrop->CROP_COOD_01;
+    pCROP_COOD_02 = pCrop->CROP_COOD_02;
+    pCROP_COOD_03 = pCrop->CROP_COOD_03;
+    pCROP_COOD_04 = pCrop->CROP_COOD_04;
+    pCROP_COOD_05 = pCrop->CROP_COOD_05;
+    pCROP_COOD_06 = pCrop->CROP_COOD_06;
+    
     if (infpath[0] != '\0') {
         strcpy(filename, infpath);
     } else {
@@ -7852,6 +7955,23 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, " %d s \n", countD);
                 print_f(rs->plogs, "P2", rs->logs);
             }
+#endif
+
+#if 1 /* random crop coordinates */
+            //randCrop(pCROP_COOD_01, 900, 1000, 1000, 2000);
+            pCROP_COOD_01[0] = randomGen(900, 1000);
+            pCROP_COOD_01[1] = randomGen(1300, 1800);
+            pCROP_COOD_02[0] = randomGen(1400, 1500);
+            pCROP_COOD_02[1] = randomGen(2001, 2100);
+            pCROP_COOD_03[0] = randomGen(1501, 1600);
+            pCROP_COOD_03[1] = pCROP_COOD_02[1];
+            //randCrop(pCROP_COOD_04, 2000, 2100, 1000, 2000);
+            pCROP_COOD_04[0] = randomGen(2001, 2100);
+            pCROP_COOD_04[1] = randomGen(1300, 1800);
+            pCROP_COOD_05[0] = randomGen(1501, 1600);
+            pCROP_COOD_05[1] = randomGen(900, 999);
+            pCROP_COOD_06[0] = randomGen(1400, 1500);
+            pCROP_COOD_06[1] = pCROP_COOD_05[1];
 #endif
             if (ch == 'r') {
 #if SAVE_OUT
@@ -9213,6 +9333,25 @@ static char spi0[] = "/dev/spidev32765.0";
     sprintf(pmrs->log, "write file size: %d/%d\n", ret, 16);
     print_f(&pmrs->plog, "fwrite", pmrs->log);
 
+    // crop coordinates preset 
+    pmrs->cropCoord.CROP_COOD_01[0] = 818;
+    pmrs->cropCoord.CROP_COOD_01[1] = 557;
+
+    pmrs->cropCoord.CROP_COOD_02[0] = 980;
+    pmrs->cropCoord.CROP_COOD_02[1] = 1557;
+
+    pmrs->cropCoord.CROP_COOD_03[0] = 1168;
+    pmrs->cropCoord.CROP_COOD_03[1] = 1557;
+
+    pmrs->cropCoord.CROP_COOD_04[0] = 1586;
+    pmrs->cropCoord.CROP_COOD_04[1] = 1484;
+    
+    pmrs->cropCoord.CROP_COOD_05[0] = 1415;
+    pmrs->cropCoord.CROP_COOD_05[1] = 487;
+
+    pmrs->cropCoord.CROP_COOD_06[0] = 1253;
+    pmrs->cropCoord.CROP_COOD_06[1] = 487;
+
 // spidev id
     int fd0, fd1;
     fd0 = open(spi0, O_RDWR);
@@ -9359,6 +9498,7 @@ static char spi0[] = "/dev/spidev32765.0";
 
 static int print_f(struct logPool_s *plog, char *head, char *str)
 {
+    static int ptcount = 0;
     int len;
     char ch[256];
     if(!str) return (-1);
@@ -9368,7 +9508,17 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
     else 
         sprintf(ch, "%s", str);
 
+#if 0 /* remove log */
+    printf(".");
+    ptcount++;
+    if ((ptcount % 32) == 0) {
+        printf("\n");
+        ptcount = 0;
+    }
+    return 0;
+#else
     printf("%s",ch);
+#endif
 
     if (!plog) return (-2);
 	
@@ -9517,6 +9667,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->psd_init = &mrs->sd_init;
 
     rs->pscnlen = &mrs->scan_length;
+    rs->pcropCoord = &mrs->cropCoord;
+
     return 0;
 }
 
