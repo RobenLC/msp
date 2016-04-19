@@ -21315,7 +21315,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(10000);
+        usleep(100);
     }
 
     p0_end(mrs);
@@ -21591,7 +21591,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define TIME_MEASURE (0)
 #define P2_TX_LOG (0)
 #define P2_CMD_LOG (0)
-#define P2_SIMPLE_LOG (0)
+#define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -25357,6 +25357,14 @@ int main(int argc, char *argv[])
         for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
             ctb = &pmrs->configTable[ix];
             switch(ix) {
+            case ASPOP_SCAN_SINGLE: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SINGLE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
             case ASPOP_SCAN_DOUBLE: 
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_DOUBLE;
