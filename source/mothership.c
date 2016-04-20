@@ -16455,7 +16455,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         pr = pParBuf->dirParseBuff;
         
-        shmem_dump(pr, 512);
+        //shmem_dump(pr, 512);
         
         psec = pfat->fatBootsec;
         /* 0  Jump command */
@@ -16523,13 +16523,14 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
         psec->secWhfat = psec->secResv;
         psec->secWhroot = psec->secWhfat + psec->secPrfat * 2;
 
-        debugPrintBootSec(psec);
         pParBuf->dirBuffUsed = 0;
 
         if (psec->secSize == 512) {
             pfat->fatStatus |= ASPFAT_STATUS_BOOT_SEC;
             psec->secWhfat += psec->secBoffset;
             psec->secWhroot += psec->secBoffset;
+
+            debugPrintBootSec(psec);
         } else {
             pfat->fatRetry += 1;
 #if 0 /* test if boot failed */
@@ -17179,8 +17180,8 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                     pr = pftb->ftbFat1 + pftb->ftbLen;
                     memcpy(pr, addr, len);
                     pftb->ftbLen += len;
-                    sprintf(mrs->log, "%d get fat len:%d, total:%d\n", pi, len, pftb->ftbLen);
-                    print_f(&mrs->plog, "fs55", mrs->log);
+                    //sprintf(mrs->log, "%d get fat len:%d, total:%d\n", pi, len, pftb->ftbLen);
+                    //print_f(&mrs->plog, "fs55", mrs->log);
                 }
             } else {
                 sprintf(mrs->log, "end, len:%d\n", len);
@@ -17656,8 +17657,8 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
             
             if (sc) {
                 len = ring_buf_cons_psudo(&mrs->cmdRx, &addr);
-                sprintf(mrs->log, "1. get psudo len:%d, cnt:%d\n", len, modersp->v);
-                print_f(&mrs->plog, "fs68", mrs->log);
+                //sprintf(mrs->log, "1. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                //print_f(&mrs->plog, "fs68", mrs->log);
 
                 if (len >= 0) {
                     dst = sc->supdataBuff;
@@ -17691,8 +17692,8 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (sc) {
             len = ring_buf_cons_psudo(&mrs->cmdRx, &addr);
             while (len >= 0) {
-                sprintf(mrs->log, "2. get psudo len:%d, cnt:%d\n", len, modersp->v);
-                print_f(&mrs->plog, "fs68", mrs->log);
+                //sprintf(mrs->log, "2. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                //print_f(&mrs->plog, "fs68", mrs->log);
 
                 dst = sc->supdataBuff;
                 memcpy(dst, addr, len);
@@ -20000,8 +20001,8 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     mdo = 1;
     while (totsz >= 0) {
     
-        sprintf(mrs->log, "deal with sup back head buff!! - 6\n");
-        print_f(&mrs->plog, "fs96", mrs->log);
+        //sprintf(mrs->log, "deal with sup back head buff!! - 6\n");
+        //print_f(&mrs->plog, "fs96", mrs->log);
 
         /* pup and push data here */
         len = ring_buf_get(&mrs->cmdTx, &addr);
@@ -20010,8 +20011,8 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
             len = ring_buf_get(&mrs->cmdTx, &addr);
         }
 
-        sprintf(mrs->log, "deal with sup back head buff!! - 7 len:%d \n", len);
-        print_f(&mrs->plog, "fs96", mrs->log);
+        //sprintf(mrs->log, "deal with sup back head buff!! - 7 len:%d \n", len);
+        //print_f(&mrs->plog, "fs96", mrs->log);
 
         if (totsz > len) {
             ret = aspPopSupOut(addr, sc, len, &s);
@@ -20019,8 +20020,8 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
             ret = aspPopSupOut(addr, sc, totsz, &s);
         }
 
-        sprintf(mrs->log, "list buff pop resutl, ret: %d/%d\n", ret, totsz);
-        print_f(&mrs->plog, "fs96", mrs->log);
+        //sprintf(mrs->log, "list buff pop resutl, ret: %d/%d\n", ret, totsz);
+        //print_f(&mrs->plog, "fs96", mrs->log);
 
 #if 0 // move to fs98
         if ((mdo) && (val)) {
@@ -20065,8 +20066,8 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "wait spi0 tx end\n");
-    print_f(&mrs->plog, "fs97", mrs->log);
+    //sprintf(mrs->log, "wait spi0 tx end\n");
+    //print_f(&mrs->plog, "fs97", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 1);
     if (len > 0) {
@@ -21591,7 +21592,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define TIME_MEASURE (0)
 #define P2_TX_LOG (0)
 #define P2_CMD_LOG (0)
-#define P2_SIMPLE_LOG (1)
+#define P2_SIMPLE_LOG (0)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -22171,8 +22172,11 @@ static int p2(struct procRes_s *rs)
                         print_f(rs->plogs, "P2", rs->logs);  
                         shmem_dump(addr, 128);
                     }
+
+#if P2_TX_LOG
                     sprintf(rs->logs, "u t %d\n", len);
                     print_f(rs->plogs, "P2", rs->logs);          
+#endif
 
                     if (len > 0) {
                     msync(addr, len, MS_SYNC); 
