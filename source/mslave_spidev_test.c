@@ -2592,7 +2592,7 @@ redo:
             printf("secter length: %.8x, send:%.2x\n", arg1, stlen);
         }
         // disable data mode
-/*
+
         bitset = 0;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
         printf("Set spi0 data mode: %d\n", bitset);
@@ -2611,8 +2611,8 @@ redo:
         bitset = 1;
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
         printf("Set spi%d slve ready: %d\n", 0, bitset);
-*/
-        bits = 8;
+
+        bits = 16;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
         if (ret == -1) 
             pabort("can't set bits per word");  
@@ -2626,41 +2626,36 @@ redo:
         goto end;
     }
     if (sel == 21){ /* command mode test ex[21 spi size bits]*/
-        int ret=0;
-        uint16_t *tx16, *rx16, *tmp16;
-        uint8_t *tx8, *rx8, *tmp8;
-        tx16 = malloc(1024);
-        rx16 = malloc(1024);
-        tx8 = malloc(1024);
-        rx8 = malloc(1024);
+        int ret=0, i=0, len=0, max=0;
+        uint16_t *tx16, *rx16;
+        uint8_t *tx8, *rx8;
+        uint8_t *tmpTx, *tmpRx;
+        tx16 = malloc(SPI_TRUNK_SZ);
+        rx16 = malloc(SPI_TRUNK_SZ);
+        tx8 = malloc(SPI_TRUNK_SZ);
+        rx8 = malloc(SPI_TRUNK_SZ);
 
-        int i;
-        tmp8 = (uint8_t *)tx16;
-        for(i = 0; i < 512; i+=2) {
-            *tmp8 = ((i + 4) % 512) & 0xff;
-            tmp8+=2;
+        max = SPI_TRUNK_SZ / 2;
+        for (i = 0; i < max; i++) {
+            tx16[i] = i;
         }
-        tx16[511] = 0x0101; 
-        tmp8 = (uint8_t *)tx8;
-        for(i = 0; i < 1024; i++) {
-            *tmp8 = i & 0xff;
-            tmp8++;
-        }
-
-        tx8[1016] = 0x01;
-        tx8[1017] = 0x01;
+        tmpTx = (uint8_t *)tx16;
         
-        tx8[1018] = 0x02;
-        tx8[1019] = 0x02;
-
-        tx8[1020] = 0x03;
-        tx8[1021] = 0x03;
-
-        tx8[1022] = 0x04;
-        tx8[1023] = 0x04;
+        max = 1024;
+        i = 0;
+        printf("\n%d.", i);
+        for (i = 0; i < max; i++) {
+            if (((i % 16) == 0) && (i != 0)) printf("\n%d.", i);
+            printf("0x%.2x ", *tmpTx);
+            tmpTx++;
+        }
 
         arg0 = arg0 % 2;
+        len = arg1;
         bits = arg2;
+
+        printf("\ncommand mode test spi_%d_ transmit %d bytes with bit width %d\n", arg0, len, bits);
+        
         ret = ioctl(fm[arg0], SPI_IOC_WR_BITS_PER_WORD, &bits);
         if (ret == -1) 
             pabort("can't set bits per word"); 
@@ -2668,41 +2663,47 @@ redo:
         ret = ioctl(fm[arg0], SPI_IOC_RD_BITS_PER_WORD, &bits); 
         if (ret == -1) 
             pabort("can't get bits per word"); 
-/*
+
         bitset = 1;
         ret = ioctl(fm[arg0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
         printf("Set slve ready: %d\n", bitset);
-*/
-        if (bits == 16) {
-            ret = tx_data_16(fm[arg0], rx16, tx16, 1, arg1, 1024);
-            int i;
-            tmp16 = rx16;
-            for (i = 0; i < ret; i+=2) {
-                if (((i % 16) == 0) && (i != 0)) printf("\n");
-                printf("0x%.4x ", *tmp16);
-                tmp16++;
-            }
-            printf("\n");
-        }
+
+        bitset = 0;
+        ret = ioctl(fm[arg0], _IOR(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_RD_DATA_MODE
+        printf("Get spi0 data mode: %d\n", bitset);
+
+        if (len > SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
+
         if (bits == 8) {
-            int i;
-            if (arg1 > 1024) arg1 = 1024;
-
-            tmp8 = rx8;
-            for (i = 0; i < arg1; i+=2) {
-                if (((i % 16) == 0) && (i != 0)) printf("\n");
-                ret = tx_data(fm[arg0], tmp8, tx8+i, 1, 2, 1024);
-
-                printf("0x%.2x-0x%.2x ", *tmp8, *(tmp8+1));
-                tmp8+=2;
-                //usleep(100000);
-            }
-            printf("\n");
-
+            tmpTx = tx8;
+            tmpRx = rx8;
+        } else if (bits == 16) {
+            tmpTx = (uint8_t *)tx16;
+            tmpRx = (uint8_t *)rx16;
+        } else {
+            tmpTx = 0;
+            tmpRx = 0;
         }
 
-        printf("spi%d bits: %d rxsize: %d/%d\n", arg0, bits, ret, arg1);
+        if ((!tmpRx) || (!tmpTx)) {
+            printf("Error input memory address, break!!\n");
+            goto end;
+        }
 
+        ret = tx_data(fm[arg0], tmpRx, tmpTx, 1, len, SPI_TRUNK_SZ);
+
+        printf("\n tx end ret: %d / %d\n", ret, len);
+
+        i = 0;
+        printf("\n%d.", i);
+        for (i = 0; i < len; i+=2) {
+            if (((i % 16) == 0) && (i != 0)) printf("\n%d.", i);
+            printf("0x%.2x-0x%.2x ", *tmpRx, *(tmpRx+1));
+            tmpRx+=2;
+        }
+        printf("\n");
+
+        printf("spi%d bits: %d rxsize: %d/%d\n", arg0, bits, ret, len);
 
         goto end;
     }
