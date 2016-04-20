@@ -7957,7 +7957,7 @@ static int p2(struct procRes_s *rs)
             }
 #endif
 
-#if 1 /* random crop coordinates */
+#if 0 /* random crop coordinates */
             //randCrop(pCROP_COOD_01, 900, 1000, 1000, 2000);
             pCROP_COOD_01[0] = randomGen(900, 1000);
             pCROP_COOD_01[1] = randomGen(1300, 1800);
@@ -9334,23 +9334,23 @@ static char spi0[] = "/dev/spidev32765.0";
     print_f(&pmrs->plog, "fwrite", pmrs->log);
 
     // crop coordinates preset 
-    pmrs->cropCoord.CROP_COOD_01[0] = 818;
-    pmrs->cropCoord.CROP_COOD_01[1] = 557;
+    pmrs->cropCoord.CROP_COOD_01[0] = 0;
+    pmrs->cropCoord.CROP_COOD_01[1] = 952;
 
-    pmrs->cropCoord.CROP_COOD_02[0] = 980;
-    pmrs->cropCoord.CROP_COOD_02[1] = 1557;
+    pmrs->cropCoord.CROP_COOD_02[0] = 1366;
+    pmrs->cropCoord.CROP_COOD_02[1] = 3104;
 
-    pmrs->cropCoord.CROP_COOD_03[0] = 1168;
-    pmrs->cropCoord.CROP_COOD_03[1] = 1557;
+    pmrs->cropCoord.CROP_COOD_03[0] = 1386;
+    pmrs->cropCoord.CROP_COOD_03[1] = 3104;
 
-    pmrs->cropCoord.CROP_COOD_04[0] = 1586;
-    pmrs->cropCoord.CROP_COOD_04[1] = 1484;
+    pmrs->cropCoord.CROP_COOD_04[0] = 3910;
+    pmrs->cropCoord.CROP_COOD_04[1] = 2048;
     
-    pmrs->cropCoord.CROP_COOD_05[0] = 1415;
-    pmrs->cropCoord.CROP_COOD_05[1] = 487;
+    pmrs->cropCoord.CROP_COOD_05[0] = 3049;
+    pmrs->cropCoord.CROP_COOD_05[1] = 0;
 
-    pmrs->cropCoord.CROP_COOD_06[0] = 1253;
-    pmrs->cropCoord.CROP_COOD_06[1] = 487;
+    pmrs->cropCoord.CROP_COOD_06[0] = 2986;
+    pmrs->cropCoord.CROP_COOD_06[1] = 0;
 
 // spidev id
     int fd0, fd1;
