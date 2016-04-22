@@ -679,6 +679,7 @@ struct mainRes_s{
     struct logPool_s plog;
     struct aspWaitRlt_s wtg;
     struct apWifiConfig_s wifconf;
+    struct aspMetaData *metadata;
     char netIntfs[16];
     char *dbglog;
 };
@@ -728,8 +729,72 @@ struct procRes_s{
     struct socket_s *psocket_n;
     struct socket_s *psocket_v;
     struct apWifiConfig_s *pwifconf;
+    struct aspMetaData *pmetadata;
     struct logPool_s *plogs;
     char *pnetIntfs;
+};
+
+struct aspMetaData{
+
+  unsigned char  FILE_FORMAT;                  //0x31
+  unsigned char  COLOR_MODE;                 //0x32
+  unsigned char  COMPRESSION_RATE;      //0x33
+  unsigned char  RESOLUTION;                  //0x34
+  unsigned char  SCAN_GRAVITY;              //0x35
+  unsigned char  CIS_MAX_Width;              //0x36
+  unsigned char  WIDTH_ADJUST_H;          //0x37
+  unsigned char  WIDTH_ADJUST_L;           //0x38
+  unsigned char  SCAN_LENGTH_H;            //0x39
+  unsigned char  SCAN_LENGTH_L;             //0x3a
+  unsigned char  INTERNAL_IMG;                //0x3b
+  unsigned char  AFE_IC_SELEC;                //0x3c
+  unsigned char  EXTNAL_PULSE;                //0x3d
+  unsigned char  SUP_WRITEBK;               //0x3e
+  unsigned char  OP_FUNC_00;              //0x70
+  unsigned char  OP_FUNC_01;              //0x71
+  unsigned char  OP_FUNC_02;              //0x72
+  unsigned char  OP_FUNC_03;              //0x73
+  unsigned char  OP_FUNC_04;              //0x74
+  unsigned char  OP_FUNC_05;              //0x75
+  unsigned char  OP_FUNC_06;              //0x76
+  unsigned char  OP_FUNC_07;              //0x77
+  unsigned char  OP_FUNC_08;              //0x78
+  unsigned char  OP_FUNC_09;              //0x79
+  unsigned char  OP_FUNC_10;              //0x7A
+  unsigned char  OP_FUNC_11;              //0x7B
+  unsigned char  OP_FUNC_12;              //0x7C
+  unsigned char  OP_FUNC_13;              //0x7D
+  unsigned char  OP_FUNC_14;              //0x7E
+  unsigned char  OP_FUNC_15;              //0x7F  
+  unsigned char  OP_APPEND[2];    //byte[30]
+  
+  unsigned int CROP_POSX_1;        //byte[32]
+  unsigned int CROP_POSY_1;        //byte[36]
+  unsigned int CROP_POSX_2;        //byte[40]
+  unsigned int CROP_POSY_2;        //byte[44]
+  unsigned int CROP_POSX_3;        //byte[48]
+  unsigned int CROP_POSY_3;        //byte[52]
+  unsigned int CROP_POSX_4;        //byte[56]
+  unsigned int CROP_POSY_4;        //byte[60]
+  unsigned int CROP_POSX_5;        //byte[64]
+  unsigned int CROP_POSY_5;        //byte[68]
+  unsigned int CROP_POSX_6;        //byte[72]
+  unsigned int CROP_POSY_6;        //byte[76]
+  unsigned int CROP_POSX_7;        //byte[80]
+  unsigned int CROP_POSY_7;        //byte[84]
+
+  unsigned int SCAN_IMAGE_LEN;     //byte[88]
+
+  unsigned int  FREE_SECTOR_ADD;   //byte[92]
+  unsigned int  FREE_SECTOR_LEN;   //byte[96]
+  unsigned int  USED_SECTOR_ADD;   //byte[100]
+  unsigned int  USED_SECTOR_LEN;   //byte[104]
+
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[108]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[112]
+  
+  unsigned char available[396];
+
 };
 
 //memory alloc. put in/put out
@@ -889,6 +954,11 @@ static int aspNameCpyfromName(char *raw, char *dst, int offset, int len, int jum
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
+
+static int aspMetaBuild(char *buf, int op, char *dat, int len) 
+{
+
+}
 
 static int doSystemCmd(char *sCommand)
 {
@@ -10593,6 +10663,7 @@ static int stcrop_76(struct psdata_s *data)
     uint8_t uch=0;
     int xyAr[6];
     int id=0, err=0;
+    uint32_t coord[2];
     char ch = 0; 
     uint32_t rlt;
     struct info16Bit_s *p=0, *c=0;
@@ -10663,7 +10734,9 @@ static int stcrop_76(struct psdata_s *data)
                         print_f(rs->plogs, "CROP", rs->logs);  
                     } else {
                         pdt = &pct[ASPOP_CROP_01 + id];
-                        sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", id, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
+                        coord[0] = pdt->opValue >> 16;
+                        coord[1] = pdt->opValue & 0xffff;
+                        sprintf(rs->logs, "%d. %x (%.4d, %.4d) / 2 = (%.4d, %.4d)\n", id, pdt->opStatus, coord[0], coord[1], (coord[0] / 2), (coord[1] / 2));
                         print_f(rs->plogs, "CROP", rs->logs);  
                     }
                 }
@@ -25143,7 +25216,7 @@ int main(int argc, char *argv[])
     char dir[256] = "/mnt/mmc2";
     struct mainRes_s *pmrs;
     struct procRes_s rs[10];
-    int ix, ret;
+    int ix, ret, len;
     char *log;
     int tdiff;
     int arg[8];
@@ -25232,6 +25305,12 @@ int main(int argc, char *argv[])
     sleep(1);
     
 // initial share parameter
+    len = sizeof(struct aspMetaData);
+    pmrs->metadata = aspSalloc(len);
+    
+    sprintf(pmrs->log, "allocate %d byte share memory for meta data, addr: 0x%.8x\n", len, pmrs->metadata);
+    print_f(&pmrs->plog, "metadata", pmrs->log);
+    
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
     pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, DATA_RX_SIZE*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
@@ -27124,6 +27203,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->psFat = &mrs->aspFat;
     rs->pnetIntfs = mrs->netIntfs;
     rs->pwifconf = &mrs->wifconf;
+    rs->pmetadata = mrs->metadata;
 
     return 0;
 }
