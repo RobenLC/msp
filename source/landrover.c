@@ -116,6 +116,34 @@
 #define SPI_TRUNK_SZ   (32768)
 #define DIRECT_WT_DISK    (0)
 
+#define RANDOM_CROP_COORD (0)
+
+#if RANDOM_CROP_COORD
+#else
+#if 0
+static int crop_01[2] = {517, 72};
+static int crop_02[2] = {545, 1304};
+static int crop_03[2] = {965, 1304};
+static int crop_04[2] = {2696, 1264};
+static int crop_05[2] = {2677, 72};
+static int crop_06[2] = {517, 72};
+#elif 1
+static int crop_01[2] = {1316, 1080};
+static int crop_02[2] = {2319, 1288};
+static int crop_03[2] = {3412, 1288};
+static int crop_04[2] = {3482, 56};
+static int crop_05[2] = {3466, 0};
+static int crop_06[2] = {1347, 0};
+#else
+static int crop_01[2] = {517*2, 580*2};
+static int crop_02[2] = {1544*2, 688*2};
+static int crop_03[2] = {1586*2, 688*2};
+static int crop_04[2] = {1611*2, 60*2};
+static int crop_05[2] = {1607*2, 32*2};
+static int crop_06[2] = {537*2, 32*2};
+#endif
+#endif
+
 #define OPT_SIZE (OP_EXTPULSE - OP_FFORMAT + 1)
 #define TIFF_RAW (0)
 static FILE *mlog = 0;
@@ -7957,7 +7985,7 @@ static int p2(struct procRes_s *rs)
             }
 #endif
 
-#if 0 /* random crop coordinates */
+#if RANDOM_CROP_COORD /* random crop coordinates */
             //randCrop(pCROP_COOD_01, 900, 1000, 1000, 2000);
             pCROP_COOD_01[0] = randomGen(900, 1000);
             pCROP_COOD_01[1] = randomGen(1300, 1800);
@@ -9334,24 +9362,43 @@ static char spi0[] = "/dev/spidev32765.0";
     print_f(&pmrs->plog, "fwrite", pmrs->log);
 
     // crop coordinates preset 
-    pmrs->cropCoord.CROP_COOD_01[0] = 0;
-    pmrs->cropCoord.CROP_COOD_01[1] = 952;
+#if RANDOM_CROP_COORD
+    pmrs->cropCoord.CROP_COOD_01[0] = 1368;
+    pmrs->cropCoord.CROP_COOD_01[1] = 200;
 
-    pmrs->cropCoord.CROP_COOD_02[0] = 1366;
-    pmrs->cropCoord.CROP_COOD_02[1] = 3104;
+    pmrs->cropCoord.CROP_COOD_02[0] = 1476;
+    pmrs->cropCoord.CROP_COOD_02[1] = 1464;
 
-    pmrs->cropCoord.CROP_COOD_03[0] = 1386;
-    pmrs->cropCoord.CROP_COOD_03[1] = 3104;
+    pmrs->cropCoord.CROP_COOD_03[0] = 1514;
+    pmrs->cropCoord.CROP_COOD_03[1] = 1646;
 
-    pmrs->cropCoord.CROP_COOD_04[0] = 3910;
-    pmrs->cropCoord.CROP_COOD_04[1] = 2048;
+    pmrs->cropCoord.CROP_COOD_04[0] = 2696;
+    pmrs->cropCoord.CROP_COOD_04[1] = 1264;
     
-    pmrs->cropCoord.CROP_COOD_05[0] = 3049;
-    pmrs->cropCoord.CROP_COOD_05[1] = 0;
+    pmrs->cropCoord.CROP_COOD_05[0] = 2677;
+    pmrs->cropCoord.CROP_COOD_05[1] = 72;
 
-    pmrs->cropCoord.CROP_COOD_06[0] = 2986;
-    pmrs->cropCoord.CROP_COOD_06[1] = 0;
+    pmrs->cropCoord.CROP_COOD_06[0] = 517;
+    pmrs->cropCoord.CROP_COOD_06[1] = 72;
+#else
+    pmrs->cropCoord.CROP_COOD_01[0] = crop_01[0];
+    pmrs->cropCoord.CROP_COOD_01[1] = crop_01[1];
 
+    pmrs->cropCoord.CROP_COOD_02[0] = crop_02[0];
+    pmrs->cropCoord.CROP_COOD_02[1] = crop_02[1];
+
+    pmrs->cropCoord.CROP_COOD_03[0] = crop_03[0];
+    pmrs->cropCoord.CROP_COOD_03[1] = crop_03[1];
+
+    pmrs->cropCoord.CROP_COOD_04[0] = crop_04[0];
+    pmrs->cropCoord.CROP_COOD_04[1] = crop_04[1];
+    
+    pmrs->cropCoord.CROP_COOD_05[0] = crop_05[0];
+    pmrs->cropCoord.CROP_COOD_05[1] = crop_05[1];
+
+    pmrs->cropCoord.CROP_COOD_06[0] = crop_06[0];
+    pmrs->cropCoord.CROP_COOD_06[1] = crop_06[1];
+#endif
 // spidev id
     int fd0, fd1;
     fd0 = open(spi0, O_RDWR);
