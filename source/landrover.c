@@ -86,6 +86,8 @@
 
 #define OP_IMG_LEN        0x4b
 
+#define OP_META_DAT     0x4c
+
 /*
 #define OP_DAT 0x08
 #define OP_SCM 0x09
@@ -330,6 +332,68 @@ struct cropCoord_s {
     int CROP_COOD_06[2];// = {1253, 487};
 };
 
+struct aspMetaData{
+
+  unsigned char  FILE_FORMAT;                  //0x31
+  unsigned char  COLOR_MODE;                 //0x32
+  unsigned char  COMPRESSION_RATE;      //0x33
+  unsigned char  RESOLUTION;                  //0x34
+  unsigned char  SCAN_GRAVITY;              //0x35
+  unsigned char  CIS_MAX_Width;              //0x36
+  unsigned char  WIDTH_ADJUST_H;          //0x37
+  unsigned char  WIDTH_ADJUST_L;           //0x38
+  unsigned char  SCAN_LENGTH_H;            //0x39
+  unsigned char  SCAN_LENGTH_L;             //0x3a
+  unsigned char  INTERNAL_IMG;                //0x3b
+  unsigned char  AFE_IC_SELEC;                //0x3c
+  unsigned char  EXTNAL_PULSE;                //0x3d
+  unsigned char  SUP_WRITEBK;               //0x3e
+  unsigned char  OP_FUNC_00;              //0x70
+  unsigned char  OP_FUNC_01;              //0x71
+  unsigned char  OP_FUNC_02;              //0x72
+  unsigned char  OP_FUNC_03;              //0x73
+  unsigned char  OP_FUNC_04;              //0x74
+  unsigned char  OP_FUNC_05;              //0x75
+  unsigned char  OP_FUNC_06;              //0x76
+  unsigned char  OP_FUNC_07;              //0x77
+  unsigned char  OP_FUNC_08;              //0x78
+  unsigned char  OP_FUNC_09;              //0x79
+  unsigned char  OP_FUNC_10;              //0x7A
+  unsigned char  OP_FUNC_11;              //0x7B
+  unsigned char  OP_FUNC_12;              //0x7C
+  unsigned char  OP_FUNC_13;              //0x7D
+  unsigned char  OP_FUNC_14;              //0x7E
+  unsigned char  OP_FUNC_15;              //0x7F  
+  unsigned char  OP_APPEND[2];    //byte[30]
+  
+  unsigned int CROP_POSX_1;        //byte[32]
+  unsigned int CROP_POSY_1;        //byte[36]
+  unsigned int CROP_POSX_2;        //byte[40]
+  unsigned int CROP_POSY_2;        //byte[44]
+  unsigned int CROP_POSX_3;        //byte[48]
+  unsigned int CROP_POSY_3;        //byte[52]
+  unsigned int CROP_POSX_4;        //byte[56]
+  unsigned int CROP_POSY_4;        //byte[60]
+  unsigned int CROP_POSX_5;        //byte[64]
+  unsigned int CROP_POSY_5;        //byte[68]
+  unsigned int CROP_POSX_6;        //byte[72]
+  unsigned int CROP_POSY_6;        //byte[76]
+  unsigned int CROP_POSX_7;        //byte[80]
+  unsigned int CROP_POSY_7;        //byte[84]
+
+  unsigned int SCAN_IMAGE_LEN;     //byte[88]
+
+  unsigned int  FREE_SECTOR_ADD;   //byte[92]
+  unsigned int  FREE_SECTOR_LEN;   //byte[96]
+  unsigned int  USED_SECTOR_ADD;   //byte[100]
+  unsigned int  USED_SECTOR_LEN;   //byte[104]
+
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[108]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[112]
+  
+  unsigned char available[396];
+};
+
 struct mainRes_s{
     int sid[6];
     int sfm[2];
@@ -408,6 +472,7 @@ struct procRes_s{
     uint32_t *pscnlen;
     struct cropCoord_s *pcropCoord;
 };
+
 
 //memory alloc. put in/put out
 static char **memory_init(int *sz, int tsize, int csize);
@@ -1115,6 +1180,10 @@ static int next_spy(struct psdata_s *data)
                 case OP_IMG_LEN:
                     next = PSACT;
                     evt = AUTO_G;
+                    break;
+                case OP_META_DAT:
+                    next = PSACT;
+                    evt = AUTO_H;
                     break;
 /*
                 case OP_SUPBACK:
@@ -2232,6 +2301,7 @@ static int stspy_05(struct psdata_s *data)
                     case OP_CROP_05:
                     case OP_CROP_06:
                     case OP_IMG_LEN:
+                    case OP_META_DAT:
 
                     case OP_SUPBACK:
                     case OP_DOUBLE:
@@ -5660,6 +5730,7 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_CROP_05:
         case OP_CROP_06:
         case OP_IMG_LEN:
+        case OP_META_DAT:
 
         case OP_SUPBACK:
         case OP_SAVE:

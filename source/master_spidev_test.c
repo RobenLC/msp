@@ -983,13 +983,26 @@ static char spi1[] = "/dev/spidev32766.0";
 
         if (bits == 16) {
             ret = tx_data_16(fm[arg0], rx16, tx16, 1, arg1, SPI_TRUNK_SZ);
-            int i;
+            int i=0;
+            printf("\n%d.", i);
             tmp16 = rx16;
             for (i = 0; i < ret; i+=2) {
-                if (((i % 16) == 0) && (i != 0)) printf("\n");
+                if (((i % 16) == 0) && (i != 0)) printf("\n%d.", i);
                 printf("0x%.4x ", *tmp16);
                 tmp16++;
             }
+            
+            printf("\n");
+
+            i = 0;
+            printf("\n%d.", i);
+            tmp8 = (uint8_t *)rx16;
+            for (i = 0; i < ret; i+=1) {
+                if (((i % 16) == 0) && (i != 0)) printf("\n%d.", i);
+                printf("0x%.2x ", *tmp8);
+                tmp8++;
+            }
+
             printf("\n");
         }
         if (bits == 8) {

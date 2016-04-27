@@ -645,6 +645,68 @@ struct machineCtrl_s{
     struct modersp_s mch;
 };
 
+struct aspMetaData{
+
+  unsigned char  FILE_FORMAT;                  //0x31
+  unsigned char  COLOR_MODE;                 //0x32
+  unsigned char  COMPRESSION_RATE;      //0x33
+  unsigned char  RESOLUTION;                  //0x34
+  unsigned char  SCAN_GRAVITY;              //0x35
+  unsigned char  CIS_MAX_Width;              //0x36
+  unsigned char  WIDTH_ADJUST_H;          //0x37
+  unsigned char  WIDTH_ADJUST_L;           //0x38
+  unsigned char  SCAN_LENGTH_H;            //0x39
+  unsigned char  SCAN_LENGTH_L;             //0x3a
+  unsigned char  INTERNAL_IMG;                //0x3b
+  unsigned char  AFE_IC_SELEC;                //0x3c
+  unsigned char  EXTNAL_PULSE;                //0x3d
+  unsigned char  SUP_WRITEBK;               //0x3e
+  unsigned char  OP_FUNC_00;              //0x70
+  unsigned char  OP_FUNC_01;              //0x71
+  unsigned char  OP_FUNC_02;              //0x72
+  unsigned char  OP_FUNC_03;              //0x73
+  unsigned char  OP_FUNC_04;              //0x74
+  unsigned char  OP_FUNC_05;              //0x75
+  unsigned char  OP_FUNC_06;              //0x76
+  unsigned char  OP_FUNC_07;              //0x77
+  unsigned char  OP_FUNC_08;              //0x78
+  unsigned char  OP_FUNC_09;              //0x79
+  unsigned char  OP_FUNC_10;              //0x7A
+  unsigned char  OP_FUNC_11;              //0x7B
+  unsigned char  OP_FUNC_12;              //0x7C
+  unsigned char  OP_FUNC_13;              //0x7D
+  unsigned char  OP_FUNC_14;              //0x7E
+  unsigned char  OP_FUNC_15;              //0x7F  
+  unsigned char  OP_APPEND[2];    //byte[30]
+  
+  unsigned int CROP_POSX_1;        //byte[32]
+  unsigned int CROP_POSY_1;        //byte[36]
+  unsigned int CROP_POSX_2;        //byte[40]
+  unsigned int CROP_POSY_2;        //byte[44]
+  unsigned int CROP_POSX_3;        //byte[48]
+  unsigned int CROP_POSY_3;        //byte[52]
+  unsigned int CROP_POSX_4;        //byte[56]
+  unsigned int CROP_POSY_4;        //byte[60]
+  unsigned int CROP_POSX_5;        //byte[64]
+  unsigned int CROP_POSY_5;        //byte[68]
+  unsigned int CROP_POSX_6;        //byte[72]
+  unsigned int CROP_POSY_6;        //byte[76]
+  unsigned int CROP_POSX_7;        //byte[80]
+  unsigned int CROP_POSY_7;        //byte[84]
+
+  unsigned int SCAN_IMAGE_LEN;     //byte[88]
+
+  unsigned int  FREE_SECTOR_ADD;   //byte[92]
+  unsigned int  FREE_SECTOR_LEN;   //byte[96]
+  unsigned int  USED_SECTOR_ADD;   //byte[100]
+  unsigned int  USED_SECTOR_LEN;   //byte[104]
+
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[108]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[112]
+  
+  unsigned char available[396];
+};
+
 struct mainRes_s{
     int sid[9];
     int sfm[2];
@@ -732,69 +794,6 @@ struct procRes_s{
     struct aspMetaData *pmetadata;
     struct logPool_s *plogs;
     char *pnetIntfs;
-};
-
-struct aspMetaData{
-
-  unsigned char  FILE_FORMAT;                  //0x31
-  unsigned char  COLOR_MODE;                 //0x32
-  unsigned char  COMPRESSION_RATE;      //0x33
-  unsigned char  RESOLUTION;                  //0x34
-  unsigned char  SCAN_GRAVITY;              //0x35
-  unsigned char  CIS_MAX_Width;              //0x36
-  unsigned char  WIDTH_ADJUST_H;          //0x37
-  unsigned char  WIDTH_ADJUST_L;           //0x38
-  unsigned char  SCAN_LENGTH_H;            //0x39
-  unsigned char  SCAN_LENGTH_L;             //0x3a
-  unsigned char  INTERNAL_IMG;                //0x3b
-  unsigned char  AFE_IC_SELEC;                //0x3c
-  unsigned char  EXTNAL_PULSE;                //0x3d
-  unsigned char  SUP_WRITEBK;               //0x3e
-  unsigned char  OP_FUNC_00;              //0x70
-  unsigned char  OP_FUNC_01;              //0x71
-  unsigned char  OP_FUNC_02;              //0x72
-  unsigned char  OP_FUNC_03;              //0x73
-  unsigned char  OP_FUNC_04;              //0x74
-  unsigned char  OP_FUNC_05;              //0x75
-  unsigned char  OP_FUNC_06;              //0x76
-  unsigned char  OP_FUNC_07;              //0x77
-  unsigned char  OP_FUNC_08;              //0x78
-  unsigned char  OP_FUNC_09;              //0x79
-  unsigned char  OP_FUNC_10;              //0x7A
-  unsigned char  OP_FUNC_11;              //0x7B
-  unsigned char  OP_FUNC_12;              //0x7C
-  unsigned char  OP_FUNC_13;              //0x7D
-  unsigned char  OP_FUNC_14;              //0x7E
-  unsigned char  OP_FUNC_15;              //0x7F  
-  unsigned char  OP_APPEND[2];    //byte[30]
-  
-  unsigned int CROP_POSX_1;        //byte[32]
-  unsigned int CROP_POSY_1;        //byte[36]
-  unsigned int CROP_POSX_2;        //byte[40]
-  unsigned int CROP_POSY_2;        //byte[44]
-  unsigned int CROP_POSX_3;        //byte[48]
-  unsigned int CROP_POSY_3;        //byte[52]
-  unsigned int CROP_POSX_4;        //byte[56]
-  unsigned int CROP_POSY_4;        //byte[60]
-  unsigned int CROP_POSX_5;        //byte[64]
-  unsigned int CROP_POSY_5;        //byte[68]
-  unsigned int CROP_POSX_6;        //byte[72]
-  unsigned int CROP_POSY_6;        //byte[76]
-  unsigned int CROP_POSX_7;        //byte[80]
-  unsigned int CROP_POSY_7;        //byte[84]
-
-  unsigned int SCAN_IMAGE_LEN;     //byte[88]
-
-  unsigned int  FREE_SECTOR_ADD;   //byte[92]
-  unsigned int  FREE_SECTOR_LEN;   //byte[96]
-  unsigned int  USED_SECTOR_ADD;   //byte[100]
-  unsigned int  USED_SECTOR_LEN;   //byte[104]
-
-  unsigned int  SD_RW_SECTOR_ADD;  //byte[108]
-  unsigned int  SD_RW_SECTOR_LEN;  //byte[112]
-  
-  unsigned char available[396];
-
 };
 
 //memory alloc. put in/put out
@@ -11371,27 +11370,39 @@ static int stsparam_87(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
+    struct info16Bit_s *p=0, *c=0;
     struct procRes_s *rs;
+
 
     rs = data->rs;
     rlt = abs_result(data->result); 
     
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+
     sprintf(rs->logs, "op_87 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SPM", rs->logs);  
+    print_f(rs->plogs, "META", rs->logs);  
 
     switch (rlt) {
         case STINIT:
+            c->opcode = OP_META_DAT;
+            c->data = 0x01;
+            memset(p, 0, sizeof(struct info16Bit_s));
 
-            ch = 0; 
+            ch = 41; 
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_87: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SPM", rs->logs);  
+            print_f(rs->plogs, "META", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                if (p->data == c->data) {
+                    data->result = emb_result(data->result, NEXT);
+                } else {
+                    data->result = emb_result(data->result, EVTMAX);    
+                }
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -13818,6 +13829,61 @@ end:
     return 0;
 }
 
+static int cmdfunc_meta_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_meta_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_DUAL_SD;
+    n = cmdfunc_upd2host(mrs, 'w', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+    }
+
+    sprintf(mrs->log, "cmdfunc_meta_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_apm_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
@@ -14676,7 +14742,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 27
+#define CMD_SIZE 28
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -14688,7 +14754,7 @@ static int dbg(struct mainRes_s *mrs)
                                 {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}, {15, "op1", cmdfunc_op1_opcode}
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
-                                , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}};
+                                , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}};
 
     p0_init(mrs);
 
@@ -14934,7 +15000,11 @@ static int hd106(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd107(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd108(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd109(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
-
+static int hd110(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd111(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd112(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd113(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd114(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     struct info16Bit_s *p;
@@ -21260,10 +21330,35 @@ static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
+static int fs110(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    return 1;
+}
+
+static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    return 1;
+}
+
+static int fs112(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    return 1;
+}
+
+static int fs113(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    return 1;
+}
+
+static int fs114(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    return 1;
+}
+
 #define P0_LOG (0)
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 110
+#define PS_NUM 115
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -21295,7 +21390,8 @@ static int p0(struct mainRes_s *mrs)
                                  {90, fs90},{91, fs91},{92, fs92},{93, fs93},{94, fs94},
                                  {95, fs95},{96, fs96},{97, fs97},{98, fs98},{99, fs99},
                                  {100, fs100},{101, fs101},{102, fs102},{103, fs103},{104, fs104},
-                                 {105, fs105},{106, fs106},{107, fs107},{108, fs108},{109, fs109}};
+                                 {105, fs105},{106, fs106},{107, fs107},{108, fs108},{109, fs109},
+                                 {110, fs110},{111, fs111},{112, fs112},{113, fs113},{114, fs114}};
                                  
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
@@ -21318,7 +21414,8 @@ static int p0(struct mainRes_s *mrs)
                                  {90, hd90},{91, hd91},{92, hd92},{93, hd93},{94, hd94},
                                  {95, hd95},{96, hd96},{97, hd97},{98, hd98},{99, hd99},
                                  {100, hd100},{101, hd101},{102, hd102},{103, hd103},{104, hd104},
-                                 {105, hd105},{106, hd106},{107, hd107},{108, hd108},{109, hd109}};                                 
+                                 {105, hd105},{106, hd106},{107, hd107},{108, hd108},{109, hd109},
+                                 {110, hd110},{111, hd111},{112, hd112},{113, hd113},{114, hd114}};
     p0_init(mrs);
 
     modesw->m = -2;
@@ -21389,7 +21486,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(100);
+        usleep(10000);
     }
 
     p0_end(mrs);
@@ -21440,7 +21537,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //sprintf(rs->logs, "+\n");
         //print_f(rs->plogs, "P1", rs->logs);
 
-//     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q', 'r'};
+//     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q', 'r', 'y'};
         cmd = '\0';
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
@@ -21519,6 +21616,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'r') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, SAVPARM, PSSET);
+                } else if (cmd == 'y') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, SAVPARM, PSACT);
                 }
 
 
@@ -21664,8 +21764,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
 #define P2_TX_LOG (0)
-#define P2_CMD_LOG (0)
-#define P2_SIMPLE_LOG (0)
+#define P2_CMD_LOG (1)
+#define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -21761,6 +21861,9 @@ static int p2(struct procRes_s *rs)
                     break;
                 case 'x':
                     cmode = 13;
+                    break;
+                case 'y':
+                    cmode = 14;
                     break;
                 default:
                     break;
@@ -22547,6 +22650,51 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "spi0 recv end, total: %d\n", totsz);
                 print_f(rs->plogs, "P2", rs->logs);
 
+            }
+            else if (cmode == 14) {
+                totsz = 0;
+                len = 0;
+                pi = 0;  
+                len = 0;
+
+                len = SPI_TRUNK_SZ;
+                addr = (char *)rs->pmetadata;
+                
+                msync(addr, 512, MS_SYNC);
+
+                opsz = 0;
+                while (opsz == 0) {
+                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+
+                    if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
+                        opsz = 0 - opsz;
+                    }
+
+                    //usleep(10000);
+#if P2_TX_LOG
+                    sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                    print_f(rs->plogs, "P2", rs->logs);
+#endif
+                    if (opsz < 0) {
+                        sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);    
+                        break;
+                    }
+
+                }
+
+                //msync(addr, len, MS_SYNC);
+
+                rs_ipc_put(rs, "Y", 1);
+
+                pi += 1;
+                
+                opsz = 0 - opsz;
+                if (opsz == 1) opsz = 0;
+                totsz += opsz;
+
+                sprintf(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
+                print_f(rs->plogs, "P2", rs->logs);
             }
             else {
                 sprintf(rs->logs, "cmode: %d \n", cmode);
@@ -25260,6 +25408,119 @@ int main(int argc, char *argv[])
         if (ix > 7) break;
     }
 
+// spidev id
+    int fd0=0, fd1=0;
+#if SPIDEV_SWITCH
+    fd0 = open(spidev_1, O_RDWR);
+#else
+    fd0 = open(spidev_0, O_RDWR);
+#endif
+    if (fd0 <= 0) {
+        sprintf(pmrs->log, "can't open device[%s]\n", spidev_0); 
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "open device[%s] id: %d \n", spidev_0, fd0); 
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+    }
+    if (spidev_1) {
+#if SPIDEV_SWITCH
+        fd1 = open(spidev_0, O_RDWR);
+#else
+        fd1 = open(spidev_1, O_RDWR);
+#endif
+        if (fd1 <= 0) {
+            sprintf(pmrs->log, "can't open device[%s]\n", spidev_1); 
+            print_f(&pmrs->plog, "SPI", pmrs->log);
+            fd1 = 0;
+        } else {
+            sprintf(pmrs->log, "open device[%s] id: %d\n", spidev_1, fd1); 
+            print_f(&pmrs->plog, "SPI", pmrs->log);
+        }
+    } else {
+        fd1 = fd0;
+    }
+
+    pmrs->sfm[0] = fd0;
+    pmrs->sfm[1] = fd1;
+    pmrs->smode = 0;
+    pmrs->smode |= SPI_MODE_1;
+
+    bitset = 1;
+    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(pmrs->log, "Set spi 0 slave ready: %d\n", bitset);
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+    bitset = 1;
+    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(pmrs->log, "Set spi 1 slave ready: %d\n", bitset);
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+    
+
+    bitset = 0;     
+    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
+    bitset = 1;    
+    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+    
+    while (1) {
+        bitset = 0;
+        msp_spi_conf(pmrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        sprintf(pmrs->log, "wait for RDY become 1, get RDY pin: %d\n", bitset);
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+        
+        //sleep(1);
+        
+        if (bitset == 1) break;
+    }
+
+    sleep(2);
+
+    /* set RDY pin to low before spi setup ready */
+    bitset = 0;
+    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(pmrs->log, "Set RDY low at beginning\n");
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+
+    sleep(2);
+    
+    while (1) {
+        bitset = 1;
+        msp_spi_conf(pmrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        sprintf(pmrs->log, "wait for RDY become 1, get RDY pin: %d\n", bitset);
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+        
+        //sleep(1);
+        
+        if (bitset == 0) break;
+    }
+
+    /* set RDY pin to low before spi setup ready */
+    bitset = 0;
+    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(pmrs->log, "Set RDY low at beginning\n");
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+
+    /*
+     * spi mode 
+     */ 
+    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_WR_MODE, &pmrs->smode);
+    if (ret == -1) 
+        printf("can't set spi mode\n"); 
+    
+    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_RD_MODE, &pmrs->smode);
+    if (ret == -1) 
+        printf("can't get spi mode\n"); 
+    
+    /*
+     * spi mode 
+     */ 
+    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_WR_MODE, &pmrs->smode); 
+    if (ret == -1) 
+        printf("can't set spi mode\n"); 
+    
+    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
+    if (ret == -1) 
+        printf("can't get spi mode\n"); 
+
 // launchAP or directAccess
     /* clear status */
     sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
@@ -25282,22 +25543,6 @@ int main(int argc, char *argv[])
 
     sprintf(syscmd, "ifconfig mlan0 down");
     ret = doSystemCmd(syscmd);
-
-    #if 0 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
-    if (arg[1] == 0) {
-        /* launch AP  */
-        sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
-        ret = doSystemCmd(syscmd);
-        memset(pmrs->netIntfs, 0, 16);
-        sprintf(pmrs->netIntfs, "%s", "uap0");
-    } else {
-        /* launch wpa connect */
-        sprintf(syscmd, "/root/script/iw_con.sh");
-        ret = doSystemCmd(syscmd);
-        memset(pmrs->netIntfs, 0, 16);
-        sprintf(pmrs->netIntfs, "%s", "mlan0");
-    }
-    #endif
     
     sprintf(pmrs->log, "network interface: %s \n", pmrs->netIntfs);
     print_f(&pmrs->plog, "inet", pmrs->log);
@@ -25437,6 +25682,31 @@ int main(int argc, char *argv[])
         }
         fclose(fprm);
         /* reset the run time parameters */
+        #if 1
+        ctb = &pmrs->configTable[ASPOP_SCAN_SINGLE];
+        ctb->opStatus = ASPOP_STA_NONE;
+        ctb->opCode = OP_SINGLE;
+        ctb->opType = ASPOP_TYPE_VALUE;
+        ctb->opValue = 0xff;
+        ctb->opMask = ASPOP_MASK_8;
+        ctb->opBitlen = 8;
+        
+        ctb = &pmrs->configTable[ASPOP_SCAN_DOUBLE];
+        ctb->opStatus = ASPOP_STA_NONE;
+        ctb->opCode = OP_DOUBLE;
+        ctb->opType = ASPOP_TYPE_VALUE;
+        ctb->opValue = 0xff;
+        ctb->opMask = ASPOP_MASK_8;
+        ctb->opBitlen = 8;
+        
+        ctb = &pmrs->configTable[ASPOP_ACTION]; 
+        ctb->opStatus = ASPOP_STA_NONE;
+        ctb->opCode = OP_ACTION;
+        ctb->opType = ASPOP_TYPE_VALUE;
+        ctb->opValue = 0xff;
+        ctb->opMask = ASPOP_MASK_3;
+        ctb->opBitlen = 8;
+        #else
         for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
             ctb = &pmrs->configTable[ix];
             switch(ix) {
@@ -25840,6 +26110,7 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
+            #if 0 /* test AP mode */
             case ASPOP_AP_MODE: 
                 ctb->opStatus = ASPOP_STA_APP; //default for debug ASPOP_STA_NONE;
                 ctb->opCode = OP_AP_MODEN;
@@ -25848,8 +26119,10 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
+            #endif
             }
         }
+        #endif
     }
     
     if (readLen == 0) { 
@@ -26512,6 +26785,7 @@ int main(int argc, char *argv[])
         }
     }
     
+    /*
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
         ctb = &pmrs->configTable[ix];
             printf("ctb[%d] 0x%.2x opcode:0x%.2x 0x%.2x val:0x%.2x mask:0x%.2x len:%d \n", ix,
@@ -26522,7 +26796,22 @@ int main(int argc, char *argv[])
             ctb->opMask,
             ctb->opBitlen);
     }
-    
+    */
+    #if 1 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
+    if (arg[1] == 0) {
+        /* launch AP  */
+        sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
+        ret = doSystemCmd(syscmd);
+        memset(pmrs->netIntfs, 0, 16);
+        sprintf(pmrs->netIntfs, "%s", "uap0");
+    } else {
+        /* launch wpa connect */
+        sprintf(syscmd, "/root/script/iw_con.sh");
+        ret = doSystemCmd(syscmd);
+        memset(pmrs->netIntfs, 0, 16);
+        sprintf(pmrs->netIntfs, "%s", "mlan0");
+    }
+    #else
     /* read AP config */
     char ssidPath[128] = "/root/scaner/ssid.bin";
     char pskPath[128] = "/root/scaner/psk.bin";
@@ -26693,7 +26982,8 @@ int main(int argc, char *argv[])
     } else {
         sprintf(pmrs->log, " ssid and psk are unavilable!!");
         print_f(&pmrs->plog, "WIFC", pmrs->log);
-    }
+    }    
+    #endif
 
     /* FAT */
     pmrs->aspFat.fatBootsec = (struct sdbootsec_s *)aspSalloc(sizeof(struct sdbootsec_s));
@@ -26783,86 +27073,6 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
 */
-// spidev id
-    int fd0, fd1;
-#if SPIDEV_SWITCH
-    fd0 = open(spidev_1, O_RDWR);
-#else
-    fd0 = open(spidev_0, O_RDWR);
-#endif
-    if (fd0 <= 0) {
-        sprintf(pmrs->log, "can't open device[%s]\n", spidev_0); 
-        print_f(&pmrs->plog, "SPI", pmrs->log);
-        goto end;
-    } else {
-        sprintf(pmrs->log, "open device[%s]\n", spidev_0); 
-        print_f(&pmrs->plog, "SPI", pmrs->log);
-    }
-    if (spidev_1) {
-#if SPIDEV_SWITCH
-        fd1 = open(spidev_0, O_RDWR);
-#else
-        fd1 = open(spidev_1, O_RDWR);
-#endif
-        if (fd1 <= 0) {
-            sprintf(pmrs->log, "can't open device[%s]\n", spidev_1); 
-            print_f(&pmrs->plog, "SPI", pmrs->log);
-            fd1 = 0;
-        } else {
-            sprintf(pmrs->log, "open device[%s]\n", spidev_1); 
-            print_f(&pmrs->plog, "SPI", pmrs->log);
-        }
-    } else {
-        fd1 = fd0;
-    }
-
-    pmrs->sfm[0] = fd0;
-    pmrs->sfm[1] = fd1;
-    pmrs->smode = 0;
-    pmrs->smode |= SPI_MODE_1;
-
-    bitset = 1;
-    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-    sprintf(pmrs->log, "Set spi 0 slave ready: %d\n", bitset);
-    print_f(&pmrs->plog, "SPI", pmrs->log);
-    bitset = 1;
-    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-    sprintf(pmrs->log, "Set spi 1 slave ready: %d\n", bitset);
-    print_f(&pmrs->plog, "SPI", pmrs->log);
-    
-
-    bitset = 0;     
-    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
-    bitset = 1;    
-    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-
-    /* set RDY pin to low before spi setup ready */
-    bitset = 0;
-    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-    sprintf(pmrs->log, "Set RDY low at beginning\n");
-    print_f(&pmrs->plog, "SPI", pmrs->log);
-
-    /*
-     * spi mode 
-     */ 
-    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_WR_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't set spi mode\n"); 
-    
-    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_RD_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't get spi mode\n"); 
-    
-    /*
-     * spi mode 
-     */ 
-    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_WR_MODE, &pmrs->smode); 
-    if (ret == -1) 
-        printf("can't set spi mode\n"); 
-    
-    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't get spi mode\n"); 
 
 // IPC
     pipe(pmrs->pipedn[0].rt);
