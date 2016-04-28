@@ -5198,6 +5198,7 @@ static int mtx_data_16(int fd, uint16_t *rx_buff, uint16_t *tx_buff, int num, in
     int remain;
 
     struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
+    memset(tr, 0, sizeof(struct spi_ioc_transfer));
     
     uint8_t tg;
     uint16_t *tx = tx_buff;

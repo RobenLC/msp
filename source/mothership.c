@@ -725,6 +725,8 @@ struct mainRes_s{
     // command mode share memory
     struct shmem_s cmdRx; /* cmdRx for spi0 */
     struct shmem_s cmdTx;
+    struct spi_ioc_transfer *spioc1;
+    struct spi_ioc_transfer *spioc2;
     // file save
     FILE *fs;
     // file log
@@ -765,6 +767,9 @@ struct procRes_s{
     struct shmem_s *pdataTx;
     struct shmem_s *pcmdRx;
     struct shmem_s *pcmdTx;
+    struct spi_ioc_transfer *rspioc1;
+    struct spi_ioc_transfer *rspioc2;
+
     struct machineCtrl_s *pmch;
 
     // data mode share memory
@@ -12651,6 +12656,8 @@ static int msp_spi_conf(int dev, int flag, void *bitset)
     }
     ret = ioctl(dev, flag, bitset);
 
+    //printf("tx/rx len: %d\n", ret);
+    
     return ret;
 }
 
@@ -12658,6 +12665,8 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
 {
     char mlog[256];
     int ret;
+
+    memset(tr, 0, sizeof(struct spi_ioc_transfer));
 
     if (pksz > SPI_MAX_TXSZ) return (-3);
 
@@ -12667,12 +12676,13 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
     tr->delay_usecs = 0;
     tr->speed_hz = 1000000;
     tr->bits_per_word = 8;
+//    tr->rx_nbits = 0;
+//    tr->tx_nbits = 0;
 
     ret = msp_spi_conf(fd, SPI_IOC_MESSAGE(1), tr);
     if (ret < 0) {
         printf("spi error code: %d \n", ret);
     }
-    //sprintf(mlog, "tx/rx len: %d\n", ret);
     
     return ret;
 }
@@ -21486,7 +21496,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(10000);
+        usleep(1000);
     }
 
     p0_end(mrs);
@@ -21764,8 +21774,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
 #define P2_TX_LOG (0)
-#define P2_CMD_LOG (1)
-#define P2_SIMPLE_LOG (1)
+#define P2_CMD_LOG (0)
+#define P2_SIMPLE_LOG (0)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -21774,7 +21784,9 @@ static int p2(struct procRes_s *rs)
     char filename[128] = "/mnt/mmc2/tx/input_x3.bin";
     FILE *fin = NULL;
 #endif
-    struct spi_ioc_transfer *tr = aspMalloc(sizeof(struct spi_ioc_transfer));
+
+    //struct spi_ioc_transfer *tr = aspMalloc(sizeof(struct spi_ioc_transfer));
+    struct spi_ioc_transfer *tr = rs->rspioc1;
     struct timespec tnow;
     struct sdParseBuff_s *pabuf=0;
     int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait, tlen=0, maxsz=0;
@@ -22716,7 +22728,8 @@ static int p3(struct procRes_s *rs)
     FILE *fin = NULL;
 #endif
 
-    struct spi_ioc_transfer *tr = aspMalloc(sizeof(struct spi_ioc_transfer));
+    //struct spi_ioc_transfer *tr = aspMalloc(sizeof(struct spi_ioc_transfer));
+    struct spi_ioc_transfer *tr = rs->rspioc2;
     struct timespec tnow;
     struct aspConfig_s *pct=0, *pdt=0;
     
@@ -25408,119 +25421,9 @@ int main(int argc, char *argv[])
         if (ix > 7) break;
     }
 
-// spidev id
-    int fd0=0, fd1=0;
-#if SPIDEV_SWITCH
-    fd0 = open(spidev_1, O_RDWR);
-#else
-    fd0 = open(spidev_0, O_RDWR);
-#endif
-    if (fd0 <= 0) {
-        sprintf(pmrs->log, "can't open device[%s]\n", spidev_0); 
-        print_f(&pmrs->plog, "SPI", pmrs->log);
-        goto end;
-    } else {
-        sprintf(pmrs->log, "open device[%s] id: %d \n", spidev_0, fd0); 
-        print_f(&pmrs->plog, "SPI", pmrs->log);
-    }
-    if (spidev_1) {
-#if SPIDEV_SWITCH
-        fd1 = open(spidev_0, O_RDWR);
-#else
-        fd1 = open(spidev_1, O_RDWR);
-#endif
-        if (fd1 <= 0) {
-            sprintf(pmrs->log, "can't open device[%s]\n", spidev_1); 
-            print_f(&pmrs->plog, "SPI", pmrs->log);
-            fd1 = 0;
-        } else {
-            sprintf(pmrs->log, "open device[%s] id: %d\n", spidev_1, fd1); 
-            print_f(&pmrs->plog, "SPI", pmrs->log);
-        }
-    } else {
-        fd1 = fd0;
-    }
-
-    pmrs->sfm[0] = fd0;
-    pmrs->sfm[1] = fd1;
-    pmrs->smode = 0;
-    pmrs->smode |= SPI_MODE_1;
-
-    bitset = 1;
-    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-    sprintf(pmrs->log, "Set spi 0 slave ready: %d\n", bitset);
-    print_f(&pmrs->plog, "SPI", pmrs->log);
-    bitset = 1;
-    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
-    sprintf(pmrs->log, "Set spi 1 slave ready: %d\n", bitset);
-    print_f(&pmrs->plog, "SPI", pmrs->log);
+    pmrs->spioc1 = aspSalloc(sizeof(struct spi_ioc_transfer));
+    pmrs->spioc2 = aspSalloc(sizeof(struct spi_ioc_transfer));
     
-
-    bitset = 0;     
-    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
-    bitset = 1;    
-    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
-    
-    while (1) {
-        bitset = 0;
-        msp_spi_conf(pmrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-        sprintf(pmrs->log, "wait for RDY become 1, get RDY pin: %d\n", bitset);
-        print_f(&pmrs->plog, "SPI", pmrs->log);
-        
-        //sleep(1);
-        
-        if (bitset == 1) break;
-    }
-
-    sleep(2);
-
-    /* set RDY pin to low before spi setup ready */
-    bitset = 0;
-    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-    sprintf(pmrs->log, "Set RDY low at beginning\n");
-    print_f(&pmrs->plog, "SPI", pmrs->log);
-
-    sleep(2);
-    
-    while (1) {
-        bitset = 1;
-        msp_spi_conf(pmrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-        sprintf(pmrs->log, "wait for RDY become 1, get RDY pin: %d\n", bitset);
-        print_f(&pmrs->plog, "SPI", pmrs->log);
-        
-        //sleep(1);
-        
-        if (bitset == 0) break;
-    }
-
-    /* set RDY pin to low before spi setup ready */
-    bitset = 0;
-    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-    sprintf(pmrs->log, "Set RDY low at beginning\n");
-    print_f(&pmrs->plog, "SPI", pmrs->log);
-
-    /*
-     * spi mode 
-     */ 
-    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_WR_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't set spi mode\n"); 
-    
-    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_RD_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't get spi mode\n"); 
-    
-    /*
-     * spi mode 
-     */ 
-    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_WR_MODE, &pmrs->smode); 
-    if (ret == -1) 
-        printf("can't set spi mode\n"); 
-    
-    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't get spi mode\n"); 
-
 // launchAP or directAccess
     /* clear status */
     sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
@@ -25682,7 +25585,7 @@ int main(int argc, char *argv[])
         }
         fclose(fprm);
         /* reset the run time parameters */
-        #if 1
+        #if 0
         ctb = &pmrs->configTable[ASPOP_SCAN_SINGLE];
         ctb->opStatus = ASPOP_STA_NONE;
         ctb->opCode = OP_SINGLE;
@@ -26110,7 +26013,7 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
-            #if 0 /* test AP mode */
+            #if 1 /* test AP mode */
             case ASPOP_AP_MODE: 
                 ctb->opStatus = ASPOP_STA_APP; //default for debug ASPOP_STA_NONE;
                 ctb->opCode = OP_AP_MODEN;
@@ -26797,7 +26700,7 @@ int main(int argc, char *argv[])
             ctb->opBitlen);
     }
     */
-    #if 1 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
+    #if 0 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
     if (arg[1] == 0) {
         /* launch AP  */
         sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
@@ -27054,6 +26957,7 @@ int main(int argc, char *argv[])
     pool->parBuf.dirBuffUsed = 0;
 
     pmrs->aspFat.fatStatus = ASPFAT_STATUS_INIT;
+
 /*
     ret = mspFS_createRoot(&pmrs->aspFat.fatRootdir, &pmrs->aspFat, dir);
     if (!ret) {
@@ -27073,6 +26977,102 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
 */
+
+// spidev id
+    int fd0=0, fd1=0;
+#if SPIDEV_SWITCH
+    fd0 = open(spidev_1, O_RDWR);
+#else
+    fd0 = open(spidev_0, O_RDWR);
+#endif
+    if (fd0 <= 0) {
+        sprintf(pmrs->log, "can't open device[%s]\n", spidev_0); 
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "open device[%s] id: %d \n", spidev_0, fd0); 
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+    }
+    if (spidev_1) {
+#if SPIDEV_SWITCH
+        fd1 = open(spidev_0, O_RDWR);
+#else
+        fd1 = open(spidev_1, O_RDWR);
+#endif
+        if (fd1 <= 0) {
+            sprintf(pmrs->log, "can't open device[%s]\n", spidev_1); 
+            print_f(&pmrs->plog, "SPI", pmrs->log);
+            fd1 = 0;
+        } else {
+            sprintf(pmrs->log, "open device[%s] id: %d\n", spidev_1, fd1); 
+            print_f(&pmrs->plog, "SPI", pmrs->log);
+        }
+    } else {
+        fd1 = fd0;
+    }
+
+    pmrs->sfm[0] = fd0;
+    pmrs->sfm[1] = fd1;
+    pmrs->smode = 0;
+    pmrs->smode |= SPI_MODE_1;
+
+    bitset = 1;
+    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(pmrs->log, "Set spi 0 slave ready: %d\n", bitset);
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+    bitset = 1;
+    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
+    sprintf(pmrs->log, "Set spi 1 slave ready: %d\n", bitset);
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+
+    bitset = 8;
+    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 3, __u8), &bitset);   //SPI_IOC_WR_BITS_PER_WORD    
+    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 3, __u8), &bitset);   //SPI_IOC_WR_BITS_PER_WORD    
+
+    bitset = 0;     
+    msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL    
+    bitset = 1;    
+    msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+    
+    while (1) {
+        bitset = 0;
+        msp_spi_conf(pmrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+        sprintf(pmrs->log, "wait for RDY become 1, get RDY pin: %d\n", bitset);
+        print_f(&pmrs->plog, "SPI", pmrs->log);
+        
+        //sleep(1);
+        
+        if (bitset == 1) break;
+    }
+
+    /* set RDY pin to low before spi setup ready */
+    bitset = 0;
+    ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(pmrs->log, "Set RDY low at beginning\n");
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+    
+    /*
+     * spi mode 
+     */ 
+    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_WR_MODE, &pmrs->smode);
+    if (ret == -1) 
+        printf("can't set spi mode\n"); 
+    
+    ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_RD_MODE, &pmrs->smode);
+    if (ret == -1) 
+        printf("can't get spi mode\n"); 
+    
+    /*
+     * spi mode 
+     */ 
+    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_WR_MODE, &pmrs->smode); 
+    if (ret == -1) 
+        printf("can't set spi mode\n"); 
+    
+    ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
+    if (ret == -1) 
+        printf("can't get spi mode\n"); 
 
 // IPC
     pipe(pmrs->pipedn[0].rt);
@@ -27414,6 +27414,9 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pnetIntfs = mrs->netIntfs;
     rs->pwifconf = &mrs->wifconf;
     rs->pmetadata = mrs->metadata;
+
+    rs->rspioc1 = mrs->spioc1;
+    rs->rspioc2 = mrs->spioc2;
 
     return 0;
 }
