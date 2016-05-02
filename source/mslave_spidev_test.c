@@ -2612,7 +2612,7 @@ redo:
         ret = ioctl(fm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
         printf("Set spi%d slve ready: %d\n", 0, bitset);
 
-        bits = 16;
+        bits = 8;
         ret = ioctl(fm[0], SPI_IOC_WR_BITS_PER_WORD, &bits);
         if (ret == -1) 
             pabort("can't set bits per word");  
@@ -2634,20 +2634,36 @@ redo:
         rx16 = malloc(SPI_TRUNK_SZ);
         tx8 = malloc(SPI_TRUNK_SZ);
         rx8 = malloc(SPI_TRUNK_SZ);
+        if (bits == 8) {
+            max = arg1;
+            for (i = 0; i < max; i++) {
+                tx8[i] = i;
+            }
+            tmpTx = (uint8_t *)tx8;
 
-        max = SPI_TRUNK_SZ / 2;
-        for (i = 0; i < max; i++) {
-            tx16[i] = i;
+            i = 0;
+            printf("\n%d.", i);
+            for (i = 0; i < max; i++) {
+                if (((i % 16) == 0) && (i != 0)) printf("\n%d.", i);
+                printf("0x%.2x ", *tmpTx);
+                tmpTx++;
+            }
         }
-        tmpTx = (uint8_t *)tx16;
-        
-        max = 1024;
-        i = 0;
-        printf("\n%d.", i);
-        for (i = 0; i < max; i++) {
-            if (((i % 16) == 0) && (i != 0)) printf("\n%d.", i);
-            printf("0x%.2x ", *tmpTx);
-            tmpTx++;
+
+        if (bits == 16) {
+            max = arg1 / 2;
+            for (i = 0; i < max; i++) {
+                tx16[i] = i;
+            }
+            tmpTx = (uint8_t *)tx16;
+
+            i = 0;
+            printf("\n%d.", i);
+            for (i = 0; i < max; i++) {
+                if (((i % 16) == 0) && (i != 0)) printf("\n%d.", i);
+                printf("0x%.2x ", *tmpTx);
+                tmpTx++;
+            }
         }
 
         arg0 = arg0 % 2;

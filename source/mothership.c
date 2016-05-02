@@ -977,7 +977,7 @@ static int doSystemCmd(char *sCommand)
     memset(bigBuff, 0, BIGBUFLEN);
     memset(retBuff, 0, BUFLEN);
 
-    printf("doSystemCmd() [%s]\n", sCommand);
+    //printf("doSystemCmd() [%s]\n", sCommand);
     fpRead = popen(sCommand, "r");
     //sleep(1);
     
@@ -1015,7 +1015,7 @@ static int doSystemCmd(char *sCommand)
         pch = fgets(retBuff, BUFLEN , fpRead);
     }
 
-    printf("scmd: [%s] \n", bigBuff);
+    //printf("scmd: [%s] \n", bigBuff);
             
     pclose(fpRead);
 
@@ -4182,7 +4182,7 @@ static uint32_t next_SAVPARM(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;                
+                next = PSWT;                
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -11436,13 +11436,13 @@ static int stsparam_88(struct psdata_s *data)
     rs = data->rs;
     rlt = abs_result(data->result); 
     
-    sprintf(rs->logs, "op_88 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SPM", rs->logs);  
+    //sprintf(rs->logs, "op_88 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SPM", rs->logs);  
 
     switch (rlt) {
         case STINIT:
 
-            ch = 0; 
+            ch = 110; 
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
@@ -12667,6 +12667,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
     int ret;
 
     memset(tr, 0, sizeof(struct spi_ioc_transfer));
+    msync(tr, sizeof(struct spi_ioc_transfer), MS_SYNC);
 
     if (pksz > SPI_MAX_TXSZ) return (-3);
 
@@ -13866,7 +13867,7 @@ static int cmdfunc_meta_opcode(int argc, char *argv[])
     /* set data for update to scanner */
     pkt->opcode = OP_SINGLE;
     pkt->data = SINSCAN_DUAL_SD;
-    n = cmdfunc_upd2host(mrs, 'w', &rsp);
+    n = cmdfunc_upd2host(mrs, 'y', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
         goto end;
@@ -21342,12 +21343,50 @@ static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs110(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    return 1;
+    struct aspMetaData *pmeta;
+    pmeta = mrs->metadata;
+
+    pmeta->FILE_FORMAT = 0x09;
+    pmeta->COLOR_MODE = 0x05;
+
+    sprintf(mrs->log, "trigger spi0 \n");
+    print_f(&mrs->plog, "fs110", mrs->log);
+
+    mrs_ipc_put(mrs, "y", 1, 1);
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    modersp->m = modersp->m + 1;
+    return 2;
 }
 
 static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    return 1;
+    int ret, bitset;
+    char ch;
+
+    //sprintf(mrs->log, "%d\n", modersp->v++);
+    //print_f(&mrs->plog, "fs111", mrs->log);
+
+    ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((ret > 0) && (ch == 'Y')){
+
+        sprintf(mrs->log, "spi 0 end, metadata get!\n");
+        print_f(&mrs->plog, "fs111", mrs->log);
+        
+        modersp->m = 48;
+
+#if PULL_LOW_AFTER_DATA
+        bitset = 0;
+        msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        sprintf(mrs->log, "set RDY pin %d\n",bitset);
+        print_f(&mrs->plog, "fs111", mrs->log);
+#endif
+        usleep(200000);
+
+        return 2;
+    }
+
+    return 0; 
 }
 
 static int fs112(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -21774,8 +21813,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
 #define P2_TX_LOG (0)
-#define P2_CMD_LOG (0)
-#define P2_SIMPLE_LOG (0)
+#define P2_CMD_LOG (1)
+#define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -21799,6 +21838,9 @@ static int p2(struct procRes_s *rs)
     struct sdFATable_s   *pftb=0;
     struct sdbootsec_s   *psec=0;
     struct aspConfig_s *pct=0, *pdt=0;
+    struct aspMetaData *pmeta;
+    
+    pmeta = rs->pmetadata;
 
     char ch, str[128], rx8[4], tx8[4];
     char *addr, *laddr, *rx_buff;
@@ -22669,14 +22711,14 @@ static int p2(struct procRes_s *rs)
                 pi = 0;  
                 len = 0;
 
-                len = SPI_TRUNK_SZ;
+                len = 512;
                 addr = (char *)rs->pmetadata;
                 
                 msync(addr, 512, MS_SYNC);
 
                 opsz = 0;
                 while (opsz == 0) {
-                    opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+                    opsz = mtx_data(rs->spifd, addr, addr, len, tr);
 
                     if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
@@ -22687,16 +22729,23 @@ static int p2(struct procRes_s *rs)
                     sprintf(rs->logs, "spi0 recv %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
+                    //shmem_dump(addr, 512);
+
+                    msync(pmeta, 512, MS_SYNC);
+                    
+                    sprintf(rs->logs, "meta get 0x%.2x 0x%.2x \n", pmeta->FILE_FORMAT, pmeta->COLOR_MODE);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    
                     if (opsz < 0) {
-                        sprintf(rs->logs, "opsz:%d break!\n", opsz);
-                        print_f(rs->plogs, "P2", rs->logs);    
+                        //sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                        //print_f(rs->plogs, "P2", rs->logs);    
                         break;
                     }
 
                 }
 
                 //msync(addr, len, MS_SYNC);
-
+                
                 rs_ipc_put(rs, "Y", 1);
 
                 pi += 1;
@@ -26013,7 +26062,7 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
-            #if 1 /* test AP mode */
+            #if 0 /* test AP mode */
             case ASPOP_AP_MODE: 
                 ctb->opStatus = ASPOP_STA_APP; //default for debug ASPOP_STA_NONE;
                 ctb->opCode = OP_AP_MODEN;
@@ -27034,7 +27083,7 @@ int main(int argc, char *argv[])
     bitset = 1;    
     msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
-    
+#if 0    
     while (1) {
         bitset = 0;
         msp_spi_conf(pmrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
@@ -27045,6 +27094,7 @@ int main(int argc, char *argv[])
         
         if (bitset == 1) break;
     }
+#endif
 
     /* set RDY pin to low before spi setup ready */
     bitset = 0;

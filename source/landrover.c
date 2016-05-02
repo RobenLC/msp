@@ -410,6 +410,9 @@ struct mainRes_s{
     // command mode share memory
     struct shmem_s cmdRx; /* cmdRx for spi0 */
     struct shmem_s cmdTx;
+    
+    struct aspMetaData *metadata;
+    
     int sd_init;
     // file save
     FILE *fptn;
@@ -448,7 +451,7 @@ struct procRes_s{
     struct shmem_s *pcmdRx;
     struct shmem_s *pcmdTx;
     struct machineCtrl_s *pmch;
-
+    struct aspMetaData *pmetadata;
     int *psd_init;
     // data mode share memory
     int cdsz_s;
@@ -578,7 +581,15 @@ static int stauto_20(struct psdata_s *data);
 #define DOT_2 0x40
 #define DOT_1 0x80
 
-int tiffClearDot(char *img, int dotx, int doty, int width, int length, int max)
+static void* aspSalloc(int slen)
+{
+    char *p=0;
+    
+    p = mmap(NULL, slen, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    return p;
+}
+
+static int tiffClearDot(char *img, int dotx, int doty, int width, int length, int max)
 {
     uint8_t *dst, val=0, org=0;
     uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
@@ -1182,6 +1193,9 @@ static int next_spy(struct psdata_s *data)
                     evt = AUTO_G;
                     break;
                 case OP_META_DAT:
+                    t->opcode = OP_META_DAT;
+                    t->data = (tmpAns >> 8) & 0xff;
+
                     next = PSACT;
                     evt = AUTO_H;
                     break;
@@ -1893,8 +1907,7 @@ static int next_auto_H(struct psdata_s *data)
             case PSACT: 
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "auto_D", str); 
-                next = PSTSM; 
-                evt = SPY;
+                next = PSWT; 
                 break;
             case PSWT: 
                 //sprintf(str, "PSWT\n"); 
@@ -4623,7 +4636,7 @@ static int stauto_37(struct psdata_s *data)
     
     rlt = abs_result(data->result);	
     sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_00", str);  
+    print_f(mlogPool, "auto_37", str);  
 
     switch (rlt) {
         case STINIT:
@@ -4631,20 +4644,22 @@ static int stauto_37(struct psdata_s *data)
             p = &data->rs->pmch->cur;
             memset(p, 0, sizeof(struct info16Bit_s));
             
-            ch = 24; 
+            ch = 48; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
 
             memset(g, 0, sizeof(struct info16Bit_s));
             break;
         case WAIT:
-            g = &data->rs->pmch->get;
 
-            if ((data->ansp0 & 0xff) == g->opcode) {
-                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
-                print_f(mlogPool, "auto_00", str);  
+            if (data->ansp0 == 1) {
+                sprintf(str, "ansp:0x%.2x, go to next!!\n", data->ansp0);  
+                print_f(mlogPool, "auto_37", str);  
+
                 data->result = emb_result(data->result, NEXT);
-            }			
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, BREAK);
+            }
             
             break;
         case NEXT:
@@ -4661,32 +4676,29 @@ static int stauto_38(struct psdata_s *data)
 {
     char str[128], ch = 0;
     uint32_t rlt;
-    struct info16Bit_s *p, *g;
     
     rlt = abs_result(data->result);	
-    sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
-    print_f(mlogPool, "auto_00", str);  
+    //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
+    //print_f(mlogPool, "auto_38", str);  
 
     switch (rlt) {
         case STINIT:
-            g = &data->rs->pmch->get;
-            p = &data->rs->pmch->cur;
-            memset(p, 0, sizeof(struct info16Bit_s));
             
-            ch = 24; 
+            ch = 67; 
             rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
 
-            memset(g, 0, sizeof(struct info16Bit_s));
+            data->result = emb_result(data->result, WAIT);
             break;
         case WAIT:
-            g = &data->rs->pmch->get;
 
-            if ((data->ansp0 & 0xff) == g->opcode) {
-                sprintf(str, "ansp:0x%.2x, get pkt: 0x%.2x 0x%.2x, go to next!!\n", data->ansp0, g->opcode, g->data);  
-                print_f(mlogPool, "auto_00", str);  
+            if (data->ansp0 == 1) {
+                sprintf(str, "ansp:0x%.2x, go to next!!\n", data->ansp0);  
+                print_f(mlogPool, "auto_38", str);  
+
                 data->result = emb_result(data->result, NEXT);
-            }			
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, BREAK);
+            }
             
             break;
         case NEXT:
@@ -5159,6 +5171,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int num, int pks
     int remain;
 
     struct spi_ioc_transfer *tr = malloc(sizeof(struct spi_ioc_transfer) * num);
+    memset(tr, 0, sizeof(struct spi_ioc_transfer));
     
     uint8_t tg;
     uint8_t *tx = tx_buff;
@@ -7717,16 +7730,40 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)  
-{
-    modersp->r = 1;
-    return 1;
+static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    struct aspMetaData *pmeta;
+
+    pmeta = mrs->metadata;
+
+    pmeta->FILE_FORMAT = 0xab;
+    pmeta->COLOR_MODE = 0xcd;
+
+    sprintf(mrs->log, "trigger metadata transfer \n");
+    print_f(&mrs->plog, "fs67", mrs->log);
+
+    mrs_ipc_put(mrs, "j", 1, 3);
+    modersp->m = modersp->m + 1;
+    return 0; 
 }
 
-static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)  
-{
-    modersp->r = 1;
-    return 1;
+static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'J')) {
+        msync(&mrs->metadata, sizeof(struct aspMetaData), MS_SYNC);
+
+        sprintf(mrs->log, "get ch = %c\n", ch);
+        print_f(&mrs->plog, "fs68", mrs->log);
+
+        modersp->m = 30;
+
+        return 2;
+    }
+    return 0; 
 }
 
 static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)  
@@ -8666,16 +8703,20 @@ static int p4(struct procRes_s *rs)
     float flsize, fltime;
     char ch, *tx, *rx, *tx_buff, *rx_buff, *addr=0;
     uint16_t *tx16, *rx16, in16;
+    char *tx8, *rx8;
     int len = 0, cmode = 0, ret, pi=0, acusz=0, starts=0, opsz=0, totsz, tdiff;
     int slen=0;
     uint32_t bitset;
     struct DiskFile_s *pf;
-    
+    struct aspMetaData *pmeta;
+
     sprintf(rs->logs, "p4\n");
     print_f(rs->plogs, "P4", rs->logs);
 
     p4_init(rs);
 
+    pmeta = rs->pmetadata;
+    
     pf = &rs->pmch->fdsk;
     tx = malloc(64);
     rx = malloc(64);
@@ -8726,6 +8767,9 @@ static int p4(struct procRes_s *rs)
                     break;
                 case 'i':
                     cmode = 7;
+                    break;
+                case 'j':
+                    cmode = 8;
                     break;
                 default:
                     break;
@@ -9051,7 +9095,55 @@ static int p4(struct procRes_s *rs)
             sprintf(rs->logs, "spi send cnt:%d total:%d- end\n", pi, totsz);
             print_f(rs->plogs, "P4", rs->logs);      
         }
+        else if (cmode == 8) {
+            int bits = 8;
+            ret = ioctl(rs->spifd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+            if (ret == -1) {
+                sprintf(rs->logs, "can't set bits per word"); 
+                print_f(rs->plogs, "P4", rs->logs);
+            }
+            ret = ioctl(rs->spifd, SPI_IOC_RD_BITS_PER_WORD, &bits); 
+            if (ret == -1) {
+                sprintf(rs->logs, "can't get bits per word"); 
+                print_f(rs->plogs, "P4", rs->logs);
+            }
+            
+            totsz = 0;
+            len = 0;
+            pi = 0;  
 
+            len = 512;
+            tx8 = (char *)rs->pmetadata;
+            rx8 = (char *)rs->pmetadata;
+            
+            msync(addr, 512, MS_SYNC);
+            opsz = 0;
+
+            opsz = mtx_data(rs->spifd, rx8, tx8, 1, len, 1024*1024);  
+
+            sprintf(rs->logs, "spi0 recv %d\n", opsz);
+            print_f(rs->plogs, "P4", rs->logs);
+
+            //shmem_dump(rx8, opsz);
+
+            msync(pmeta, 512, MS_SYNC);
+            
+            sprintf(rs->logs, "meta get 0x%.2x 0x%.2x \n", pmeta->FILE_FORMAT, pmeta->COLOR_MODE);
+            print_f(rs->plogs, "P4", rs->logs);
+
+            if (opsz < 0) {
+                sprintf(rs->logs, "opsz:%d ERROR!!!\n", opsz);
+                print_f(rs->plogs, "P4", rs->logs);    
+            }
+
+            rs_ipc_put(rs, "J", 1);
+            pi += 1;
+
+            totsz += opsz;
+
+            sprintf(rs->logs, "totsz: %d, len:%d opsz:%d break!\n", totsz, len, opsz);
+            print_f(rs->plogs, "P4", rs->logs);
+        }
     }
 
     p4_end(rs);
@@ -9255,7 +9347,7 @@ static char spi0[] = "/dev/spidev32765.0";
 
     struct mainRes_s *pmrs;
     struct procRes_s rs[7];
-    int ix, ret;
+    int ix=0, ret=0, len=0;
     char *log;
     int tdiff, speed;
     int arg[8];
@@ -9300,6 +9392,9 @@ static char spi0[] = "/dev/spidev32765.0";
         if (ix > 7) break;
     }
 // initial share parameter
+    len = sizeof(struct aspMetaData);
+    pmrs->metadata = aspSalloc(len);
+
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
     pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 4096*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
@@ -9788,6 +9883,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pscnlen = &mrs->scan_length;
     rs->pcropCoord = &mrs->cropCoord;
 
+    rs->pmetadata = mrs->metadata;
+    
     return 0;
 }
 
