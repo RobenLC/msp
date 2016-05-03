@@ -333,7 +333,8 @@ struct cropCoord_s {
 };
 
 struct aspMetaData{
-
+  unsigned int     FUNC_BITS;                      // byte[4] 
+  unsigned char  ASP_MAGIC[2];                 //byte[6] "0x20 0x14"
   unsigned char  FILE_FORMAT;                  //0x31
   unsigned char  COLOR_MODE;                 //0x32
   unsigned char  COMPRESSION_RATE;      //0x33
@@ -364,34 +365,34 @@ struct aspMetaData{
   unsigned char  OP_FUNC_13;              //0x7D
   unsigned char  OP_FUNC_14;              //0x7E
   unsigned char  OP_FUNC_15;              //0x7F  
-  unsigned char  OP_APPEND[2];    //byte[30]
+  unsigned char  OP_RESERVE[28];        // byte[64]
   
-  unsigned int CROP_POSX_1;        //byte[32]
-  unsigned int CROP_POSY_1;        //byte[36]
-  unsigned int CROP_POSX_2;        //byte[40]
-  unsigned int CROP_POSY_2;        //byte[44]
-  unsigned int CROP_POSX_3;        //byte[48]
-  unsigned int CROP_POSY_3;        //byte[52]
-  unsigned int CROP_POSX_4;        //byte[56]
-  unsigned int CROP_POSY_4;        //byte[60]
-  unsigned int CROP_POSX_5;        //byte[64]
-  unsigned int CROP_POSY_5;        //byte[68]
-  unsigned int CROP_POSX_6;        //byte[72]
-  unsigned int CROP_POSY_6;        //byte[76]
-  unsigned int CROP_POSX_7;        //byte[80]
-  unsigned int CROP_POSY_7;        //byte[84]
+  unsigned int CROP_POSX_1;        //byte[68]
+  unsigned int CROP_POSY_1;        //byte[72]
+  unsigned int CROP_POSX_2;        //byte[76]
+  unsigned int CROP_POSY_2;        //byte[80]
+  unsigned int CROP_POSX_3;        //byte[84]
+  unsigned int CROP_POSY_3;        //byte[88]
+  unsigned int CROP_POSX_4;        //byte[92]
+  unsigned int CROP_POSY_4;        //byte[96]
+  unsigned int CROP_POSX_5;        //byte[100]
+  unsigned int CROP_POSY_5;        //byte[104]
+  unsigned int CROP_POSX_6;        //byte[108]
+  unsigned int CROP_POSY_6;        //byte[112]
+  unsigned int CROP_POSX_7;        //byte[116]
+  unsigned int CROP_POSY_7;        //byte[120]
 
-  unsigned int SCAN_IMAGE_LEN;     //byte[88]
+  unsigned int SCAN_IMAGE_LEN;     //byte[124]
 
-  unsigned int  FREE_SECTOR_ADD;   //byte[92]
-  unsigned int  FREE_SECTOR_LEN;   //byte[96]
-  unsigned int  USED_SECTOR_ADD;   //byte[100]
-  unsigned int  USED_SECTOR_LEN;   //byte[104]
+  unsigned int  FREE_SECTOR_ADD;   //byte[128]
+  unsigned int  FREE_SECTOR_LEN;   //byte[132]
+  unsigned int  USED_SECTOR_ADD;   //byte[136]
+  unsigned int  USED_SECTOR_LEN;   //byte[140]
 
-  unsigned int  SD_RW_SECTOR_ADD;  //byte[108]
-  unsigned int  SD_RW_SECTOR_LEN;  //byte[112]
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[144]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[148]
   
-  unsigned char available[396];
+  unsigned char available[364];
 };
 
 struct mainRes_s{
@@ -411,7 +412,8 @@ struct mainRes_s{
     struct shmem_s cmdRx; /* cmdRx for spi0 */
     struct shmem_s cmdTx;
     
-    struct aspMetaData *metadata;
+    struct aspMetaData *metaout;
+    struct aspMetaData *metain;
     
     int sd_init;
     // file save
@@ -451,7 +453,8 @@ struct procRes_s{
     struct shmem_s *pcmdRx;
     struct shmem_s *pcmdTx;
     struct machineCtrl_s *pmch;
-    struct aspMetaData *pmetadata;
+    struct aspMetaData *pmetaout;
+    struct aspMetaData *pmetain;
     int *psd_init;
     // data mode share memory
     int cdsz_s;
@@ -4676,7 +4679,10 @@ static int stauto_38(struct psdata_s *data)
 {
     char str[128], ch = 0;
     uint32_t rlt;
+    struct procRes_s *rs;
     
+    rs = data->rs;
+
     rlt = abs_result(data->result);	
     //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
     //print_f(mlogPool, "auto_38", str);  
@@ -4692,6 +4698,9 @@ static int stauto_38(struct psdata_s *data)
         case WAIT:
 
             if (data->ansp0 == 1) {
+            
+                shmem_dump((char *) rs->pmetain, sizeof(struct aspMetaData));
+
                 sprintf(str, "ansp:0x%.2x, go to next!!\n", data->ansp0);  
                 print_f(mlogPool, "auto_38", str);  
 
@@ -7734,12 +7743,12 @@ static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     struct aspMetaData *pmeta;
 
-    pmeta = mrs->metadata;
+    pmeta = mrs->metaout;
 
     pmeta->FILE_FORMAT = 0xab;
     pmeta->COLOR_MODE = 0xcd;
 
-    sprintf(mrs->log, "trigger metadata transfer \n");
+    sprintf(mrs->log, "trigger metaout transfer \n");
     print_f(&mrs->plog, "fs67", mrs->log);
 
     mrs_ipc_put(mrs, "j", 1, 3);
@@ -7754,7 +7763,7 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'J')) {
-        msync(&mrs->metadata, sizeof(struct aspMetaData), MS_SYNC);
+        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
 
         sprintf(mrs->log, "get ch = %c\n", ch);
         print_f(&mrs->plog, "fs68", mrs->log);
@@ -8715,7 +8724,7 @@ static int p4(struct procRes_s *rs)
 
     p4_init(rs);
 
-    pmeta = rs->pmetadata;
+    pmeta = rs->pmetain;
     
     pf = &rs->pmch->fdsk;
     tx = malloc(64);
@@ -9113,8 +9122,8 @@ static int p4(struct procRes_s *rs)
             pi = 0;  
 
             len = 512;
-            tx8 = (char *)rs->pmetadata;
-            rx8 = (char *)rs->pmetadata;
+            tx8 = (char *)rs->pmetaout;
+            rx8 = (char *)rs->pmetain;
             
             msync(addr, 512, MS_SYNC);
             opsz = 0;
@@ -9128,7 +9137,7 @@ static int p4(struct procRes_s *rs)
 
             msync(pmeta, 512, MS_SYNC);
             
-            sprintf(rs->logs, "meta get 0x%.2x 0x%.2x \n", pmeta->FILE_FORMAT, pmeta->COLOR_MODE);
+            sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
             print_f(rs->plogs, "P4", rs->logs);
 
             if (opsz < 0) {
@@ -9393,8 +9402,9 @@ static char spi0[] = "/dev/spidev32765.0";
     }
 // initial share parameter
     len = sizeof(struct aspMetaData);
-    pmrs->metadata = aspSalloc(len);
-
+    pmrs->metaout = aspSalloc(len);
+    pmrs->metain = aspSalloc(len);
+    
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
     pmrs->dataRx.pp = memory_init(&pmrs->dataRx.slotn, 4096*SPI_TRUNK_SZ, SPI_TRUNK_SZ);
@@ -9883,8 +9893,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pscnlen = &mrs->scan_length;
     rs->pcropCoord = &mrs->cropCoord;
 
-    rs->pmetadata = mrs->metadata;
-    
+    rs->pmetaout = mrs->metaout;
+    rs->pmetain = mrs->metain;    
     return 0;
 }
 

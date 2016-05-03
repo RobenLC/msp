@@ -413,6 +413,17 @@ typedef enum {
     ASPFS_STATUS_DIS,
 } aspFSstatus_e;
 
+typedef enum {
+    ASPMETA_FUNC_NONE = 0,
+    ASPMETA_FUNC_CONF = 0x1,       /* 0b00000001 */
+    ASPMETA_FUNC_CROP = 0x2,       /* 0b00000010 */
+    ASPMETA_FUNC_IMGLEN = 0x4,   /* 0b00000100 */
+    ASPMETA_FUNC_SDFREE = 0x8,   /* 0b00001000 */
+    ASPMETA_FUNC_SDUSED = 0x16, /* 0b00010000 */
+    ASPMETA_FUNC_SDRD = 0x32,     /* 0b00100000 */
+    ASPMETA_FUNC_SDWT = 0x64,    /* 0b01000000 */
+} aspMetaFuncbit_e;
+
 struct apWifiConfig_s{
     char wfssid[36];
     int wfsidLen;
@@ -646,7 +657,8 @@ struct machineCtrl_s{
 };
 
 struct aspMetaData{
-
+  unsigned int     FUNC_BITS;                      // byte[4] 
+  unsigned char  ASP_MAGIC[2];                 //byte[6] "0x20 0x14"
   unsigned char  FILE_FORMAT;                  //0x31
   unsigned char  COLOR_MODE;                 //0x32
   unsigned char  COMPRESSION_RATE;      //0x33
@@ -677,34 +689,34 @@ struct aspMetaData{
   unsigned char  OP_FUNC_13;              //0x7D
   unsigned char  OP_FUNC_14;              //0x7E
   unsigned char  OP_FUNC_15;              //0x7F  
-  unsigned char  OP_APPEND[2];    //byte[30]
+  unsigned char  OP_RESERVE[28];        // byte[64]
   
-  unsigned int CROP_POSX_1;        //byte[32]
-  unsigned int CROP_POSY_1;        //byte[36]
-  unsigned int CROP_POSX_2;        //byte[40]
-  unsigned int CROP_POSY_2;        //byte[44]
-  unsigned int CROP_POSX_3;        //byte[48]
-  unsigned int CROP_POSY_3;        //byte[52]
-  unsigned int CROP_POSX_4;        //byte[56]
-  unsigned int CROP_POSY_4;        //byte[60]
-  unsigned int CROP_POSX_5;        //byte[64]
-  unsigned int CROP_POSY_5;        //byte[68]
-  unsigned int CROP_POSX_6;        //byte[72]
-  unsigned int CROP_POSY_6;        //byte[76]
-  unsigned int CROP_POSX_7;        //byte[80]
-  unsigned int CROP_POSY_7;        //byte[84]
+  unsigned int CROP_POSX_1;        //byte[68]
+  unsigned int CROP_POSY_1;        //byte[72]
+  unsigned int CROP_POSX_2;        //byte[76]
+  unsigned int CROP_POSY_2;        //byte[80]
+  unsigned int CROP_POSX_3;        //byte[84]
+  unsigned int CROP_POSY_3;        //byte[88]
+  unsigned int CROP_POSX_4;        //byte[92]
+  unsigned int CROP_POSY_4;        //byte[96]
+  unsigned int CROP_POSX_5;        //byte[100]
+  unsigned int CROP_POSY_5;        //byte[104]
+  unsigned int CROP_POSX_6;        //byte[108]
+  unsigned int CROP_POSY_6;        //byte[112]
+  unsigned int CROP_POSX_7;        //byte[116]
+  unsigned int CROP_POSY_7;        //byte[120]
 
-  unsigned int SCAN_IMAGE_LEN;     //byte[88]
+  unsigned int SCAN_IMAGE_LEN;     //byte[124]
 
-  unsigned int  FREE_SECTOR_ADD;   //byte[92]
-  unsigned int  FREE_SECTOR_LEN;   //byte[96]
-  unsigned int  USED_SECTOR_ADD;   //byte[100]
-  unsigned int  USED_SECTOR_LEN;   //byte[104]
+  unsigned int  FREE_SECTOR_ADD;   //byte[128]
+  unsigned int  FREE_SECTOR_LEN;   //byte[132]
+  unsigned int  USED_SECTOR_ADD;   //byte[136]
+  unsigned int  USED_SECTOR_LEN;   //byte[140]
 
-  unsigned int  SD_RW_SECTOR_ADD;  //byte[108]
-  unsigned int  SD_RW_SECTOR_LEN;  //byte[112]
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[144]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[148]
   
-  unsigned char available[396];
+  unsigned char available[364];
 };
 
 struct mainRes_s{
@@ -743,7 +755,9 @@ struct mainRes_s{
     struct logPool_s plog;
     struct aspWaitRlt_s wtg;
     struct apWifiConfig_s wifconf;
-    struct aspMetaData *metadata;
+    struct aspMetaData *metaout;
+    struct aspMetaData *metain;
+    
     char netIntfs[16];
     char *dbglog;
 };
@@ -796,7 +810,8 @@ struct procRes_s{
     struct socket_s *psocket_n;
     struct socket_s *psocket_v;
     struct apWifiConfig_s *pwifconf;
-    struct aspMetaData *pmetadata;
+    struct aspMetaData *pmetaout;
+    struct aspMetaData *pmetain;
     struct logPool_s *plogs;
     char *pnetIntfs;
 };
@@ -958,10 +973,178 @@ static int aspNameCpyfromName(char *raw, char *dst, int offset, int len, int jum
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
+#if 0
+    ASPMETA_FUNC_NONE = 0,
+    ASPMETA_FUNC_CONF = 0x1,       /* 0b00000001 */
+    ASPMETA_FUNC_CROP = 0x2,       /* 0b00000010 */
+    ASPMETA_FUNC_IMGLEN = 0x4,   /* 0b00000100 */
+    ASPMETA_FUNC_SDFREE = 0x8,   /* 0b00001000 */
+    ASPMETA_FUNC_SDUSED = 0x16, /* 0b00010000 */
+    ASPMETA_FUNC_SDRD = 0x32,     /* 0b00100000 */
+    ASPMETA_FUNC_SDWT = 0x64,    /* 0b01000000 */
 
-static int aspMetaBuild(char *buf, int op, char *dat, int len) 
+    ASPOP_FILE_FORMAT,
+    ASPOP_COLOR_MODE,
+    ASPOP_COMPRES_RATE,
+    ASPOP_SCAN_SINGLE,
+    ASPOP_SCAN_DOUBLE,
+    ASPOP_ACTION,
+    ASPOP_RESOLUTION,
+    ASPOP_SCAN_GRAVITY,
+    ASPOP_MAX_WIDTH,
+    ASPOP_WIDTH_ADJ_H,
+    ASPOP_WIDTH_ADJ_L,
+    ASPOP_SCAN_LENS_H,
+    ASPOP_SCAN_LENS_L,
+    ASPOP_INTER_IMG,     
+    ASPOP_AFEIC_SEL,     
+    ASPOP_EXT_PULSE,     /* 15 */
+
+#endif
+
+static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
+    int istr=0, iend=0, idx=0;
+    struct aspMetaData *pmeta;
+    struct aspConfig_s *pct=0, *pdt=0;
+    char *pvdst=0, *pvend=0;
+    
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        pmeta = mrs->metaout;
+        pct = mrs->configTable;
+    } else {
+        pmeta = rs->pmetaout;
+        pct = rs->pcfgTable;
+    }
 
+    msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
+
+    if (funcbits == ASPMETA_FUNC_NONE) return -2;
+
+    if (funcbits & ASPMETA_FUNC_CONF) {
+        istr = ASPOP_FILE_FORMAT;
+        iend = ASPOP_SUP_SAVE;
+        pvdst = &pmeta->FILE_FORMAT;
+        pvend = &pmeta->SUP_WRITEBK;
+
+        for (idx = istr; idx <= iend; idx++) {
+            if (pct[idx].opStatus & ASPOP_STA_CON) {
+                *pvdst = pct[idx].opValue & 0xff;
+            }
+            pvdst++;
+
+            if (pvend < pvdst) {
+                 break;
+            }
+        }
+
+        istr = ASPOP_FUNTEST_00;
+        iend = ASPOP_FUNTEST_15;
+        pvdst = &pmeta->OP_FUNC_00;
+        pvend = &pmeta->OP_FUNC_15;
+
+        for (idx = istr; idx <= iend; idx++) {
+            if (pct[idx].opStatus & ASPOP_STA_CON) {
+                *pvdst = pct[idx].opValue & 0xff;
+            }
+            pvdst++;
+
+            if (pvend < pvdst) {
+                 break;
+            }
+        }
+        
+    }
+    
+    if (funcbits & ASPMETA_FUNC_CROP) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_IMGLEN) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDFREE) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDUSED) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDRD) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDWT) {
+    
+    }
+
+    pmeta->ASP_MAGIC[0] = 0x20;
+    pmeta->ASP_MAGIC[1] = 0x14;
+    pmeta->FUNC_BITS = funcbits;
+
+    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    
+    return 0;
+}
+
+static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
+{
+    struct aspMetaData *pmeta;
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        pmeta = mrs->metain;
+        pct = mrs->configTable;
+    } else {
+        pmeta = rs->pmetain;
+        pct = rs->pcfgTable;
+    }
+    
+    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+
+    if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
+        return -2;
+    }
+    
+    if (funcbits == ASPMETA_FUNC_NONE) return -3;
+
+    if (funcbits & ASPMETA_FUNC_CONF) {
+    
+    }
+    
+    if (funcbits & ASPMETA_FUNC_CROP) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_IMGLEN) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDFREE) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDUSED) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDRD) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDWT) {
+    
+    }
+    
+    msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
+
+    return 0;
 }
 
 static int doSystemCmd(char *sCommand)
@@ -11442,6 +11625,8 @@ static int stsparam_88(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
 
+            aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
+            
             ch = 110; 
 
             rs_ipc_put(data->rs, &ch, 1);
@@ -11451,6 +11636,9 @@ static int stsparam_88(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+
+                shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData));
+                
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -21343,12 +21531,6 @@ static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs110(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    struct aspMetaData *pmeta;
-    pmeta = mrs->metadata;
-
-    pmeta->FILE_FORMAT = 0x09;
-    pmeta->COLOR_MODE = 0x05;
-
     sprintf(mrs->log, "trigger spi0 \n");
     print_f(&mrs->plog, "fs110", mrs->log);
 
@@ -21370,7 +21552,7 @@ static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((ret > 0) && (ch == 'Y')){
 
-        sprintf(mrs->log, "spi 0 end, metadata get!\n");
+        sprintf(mrs->log, "spi 0 end, metaout get!\n");
         print_f(&mrs->plog, "fs111", mrs->log);
         
         modersp->m = 48;
@@ -21840,7 +22022,7 @@ static int p2(struct procRes_s *rs)
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaData *pmeta;
     
-    pmeta = rs->pmetadata;
+    pmeta = rs->pmetain;
 
     char ch, str[128], rx8[4], tx8[4];
     char *addr, *laddr, *rx_buff;
@@ -22712,13 +22894,14 @@ static int p2(struct procRes_s *rs)
                 len = 0;
 
                 len = 512;
-                addr = (char *)rs->pmetadata;
+                addr = (char *)rs->pmetaout;
+                laddr = (char *)rs->pmetain;
                 
                 msync(addr, 512, MS_SYNC);
 
                 opsz = 0;
                 while (opsz == 0) {
-                    opsz = mtx_data(rs->spifd, addr, addr, len, tr);
+                    opsz = mtx_data(rs->spifd, laddr, addr, len, tr);
 
                     if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
@@ -22733,7 +22916,7 @@ static int p2(struct procRes_s *rs)
 
                     msync(pmeta, 512, MS_SYNC);
                     
-                    sprintf(rs->logs, "meta get 0x%.2x 0x%.2x \n", pmeta->FILE_FORMAT, pmeta->COLOR_MODE);
+                    sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
                     print_f(rs->plogs, "P2", rs->logs);
                     
                     if (opsz < 0) {
@@ -25503,10 +25686,11 @@ int main(int argc, char *argv[])
     
 // initial share parameter
     len = sizeof(struct aspMetaData);
-    pmrs->metadata = aspSalloc(len);
+    pmrs->metaout = aspSalloc(len);
+    pmrs->metain = aspSalloc(len);
     
-    sprintf(pmrs->log, "allocate %d byte share memory for meta data, addr: 0x%.8x\n", len, pmrs->metadata);
-    print_f(&pmrs->plog, "metadata", pmrs->log);
+    sprintf(pmrs->log, "allocate %d byte share memory for meta data, addr: 0x%.8x\n", len, pmrs->metaout);
+    print_f(&pmrs->plog, "metaout", pmrs->log);
     
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
@@ -27463,7 +27647,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->psFat = &mrs->aspFat;
     rs->pnetIntfs = mrs->netIntfs;
     rs->pwifconf = &mrs->wifconf;
-    rs->pmetadata = mrs->metadata;
+    rs->pmetaout = mrs->metaout;
+    rs->pmetain = mrs->metain;
 
     rs->rspioc1 = mrs->spioc1;
     rs->rspioc2 = mrs->spioc2;
