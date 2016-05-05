@@ -218,7 +218,7 @@ typedef enum {
 
 typedef enum {
     ASPOP_CODE_NONE = 0,
-    ASPOP_FILE_FORMAT,
+    ASPOP_FILE_FORMAT,   /* 01 */
     ASPOP_COLOR_MODE,
     ASPOP_COMPRES_RATE,
     ASPOP_SCAN_SINGLE,
@@ -233,8 +233,8 @@ typedef enum {
     ASPOP_SCAN_LENS_L,
     ASPOP_INTER_IMG,     
     ASPOP_AFEIC_SEL,     
-    ASPOP_EXT_PULSE,     /* 15 */
-    ASPOP_SDFAT_RD,      /* 16 */
+    ASPOP_EXT_PULSE,     /* 16 */
+    ASPOP_SDFAT_RD,      /* 17 */
     ASPOP_SDFAT_WT,
     ASPOP_SDFAT_STR01,
     ASPOP_SDFAT_STR02,
@@ -973,6 +973,104 @@ static int aspNameCpyfromName(char *raw, char *dst, int offset, int len, int jum
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
+
+static int dbgMeta(int funcbits, struct aspMetaData *pmeta) 
+{
+    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    printf("********************************************\n");
+    printf("[meta] debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+
+    if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
+        return -2;
+    }
+    
+    if (funcbits == ASPMETA_FUNC_NONE) return -3;
+
+    if (funcbits & ASPMETA_FUNC_CONF) {
+        printf("[meta]__ASPMETA_FUNC_CONF__\n");
+        printf("[meta]FILE_FORMAT: 0x%.2x    \n",pmeta->FILE_FORMAT     );          //0x31
+        printf("[meta]COLOR_MODE: 0x%.2x      \n",pmeta->COLOR_MODE      );        //0x32
+        printf("[meta]COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
+        printf("[meta]RESOLUTION: 0x%.2x      \n",pmeta->RESOLUTION      );         //0x34
+        printf("[meta]SCAN_GRAVITY: 0x%.2x    \n",pmeta->SCAN_GRAVITY    );       //0x35
+        printf("[meta]CIS_MAX_Width: 0x%.2x   \n",pmeta->CIS_MAX_Width   );        //0x36
+        printf("[meta]WIDTH_ADJUST_H: 0x%.2x  \n",pmeta->WIDTH_ADJUST_H  );     //0x37
+        printf("[meta]WIDTH_ADJUST_L: 0x%.2x  \n",pmeta->WIDTH_ADJUST_L  );      //0x38
+        printf("[meta]SCAN_LENGTH_H: 0x%.2x   \n",pmeta->SCAN_LENGTH_H   );      //0x39
+        printf("[meta]SCAN_LENGTH_L: 0x%.2x   \n",pmeta->SCAN_LENGTH_L   );       //0x3a
+        printf("[meta]INTERNAL_IMG: 0x%.2x    \n",pmeta->INTERNAL_IMG    );         //0x3b
+        printf("[meta]AFE_IC_SELEC: 0x%.2x    \n",pmeta->AFE_IC_SELEC    );         //0x3c
+        printf("[meta]EXTNAL_PULSE: 0x%.2x    \n",pmeta->EXTNAL_PULSE    );         //0x3d
+        printf("[meta]SUP_WRITEBK: 0x%.2x     \n",pmeta->SUP_WRITEBK     );       //0x3e
+        printf("[meta]OP_FUNC_00: 0x%.2x      \n",pmeta->OP_FUNC_00      );     //0x70
+        printf("[meta]OP_FUNC_01: 0x%.2x      \n",pmeta->OP_FUNC_01      );     //0x71
+        printf("[meta]OP_FUNC_02: 0x%.2x      \n",pmeta->OP_FUNC_02      );     //0x72
+        printf("[meta]OP_FUNC_03: 0x%.2x      \n",pmeta->OP_FUNC_03      );     //0x73
+        printf("[meta]OP_FUNC_04: 0x%.2x      \n",pmeta->OP_FUNC_04      );     //0x74
+        printf("[meta]OP_FUNC_05: 0x%.2x      \n",pmeta->OP_FUNC_05      );     //0x75
+        printf("[meta]OP_FUNC_06: 0x%.2x      \n",pmeta->OP_FUNC_06      );     //0x76
+        printf("[meta]OP_FUNC_07: 0x%.2x      \n",pmeta->OP_FUNC_07      );     //0x77
+        printf("[meta]OP_FUNC_08: 0x%.2x      \n",pmeta->OP_FUNC_08      );     //0x78
+        printf("[meta]OP_FUNC_09: 0x%.2x      \n",pmeta->OP_FUNC_09      );     //0x79
+        printf("[meta]OP_FUNC_10: 0x%.2x      \n",pmeta->OP_FUNC_10      );     //0x7A
+        printf("[meta]OP_FUNC_11: 0x%.2x      \n",pmeta->OP_FUNC_11      );     //0x7B
+        printf("[meta]OP_FUNC_12: 0x%.2x      \n",pmeta->OP_FUNC_12      );     //0x7C
+        printf("[meta]OP_FUNC_13: 0x%.2x      \n",pmeta->OP_FUNC_13      );     //0x7D
+        printf("[meta]OP_FUNC_14: 0x%.2x      \n",pmeta->OP_FUNC_14      );     //0x7E
+        printf("[meta]OP_FUNC_15: 0x%.2x      \n",pmeta->OP_FUNC_15      );     //0x7F  
+    }
+    
+    if (funcbits & ASPMETA_FUNC_CROP) {
+        printf("[meta]__ASPMETA_FUNC_CROP__\n ");
+        printf("[meta]CROP_POSX_1: %d\n", pmeta->CROP_POSX_1);                      //byte[68]
+        printf("[meta]CROP_POSY_1: %d\n", pmeta->CROP_POSY_1);                      //byte[72]
+        printf("[meta]CROP_POSX_2: %d\n", pmeta->CROP_POSX_2);                      //byte[76]
+        printf("[meta]CROP_POSY_2: %d\n", pmeta->CROP_POSY_2);                      //byte[80]
+        printf("[meta]CROP_POSX_3: %d\n", pmeta->CROP_POSX_3);                      //byte[84]
+        printf("[meta]CROP_POSY_3: %d\n", pmeta->CROP_POSY_3);                      //byte[88]
+        printf("[meta]CROP_POSX_4: %d\n", pmeta->CROP_POSX_4);                      //byte[92]
+        printf("[meta]CROP_POSY_4: %d\n", pmeta->CROP_POSY_4);                      //byte[96]
+        printf("[meta]CROP_POSX_5: %d\n", pmeta->CROP_POSX_5);                      //byte[100]
+        printf("[meta]CROP_POSY_5: %d\n", pmeta->CROP_POSY_5);                      //byte[104]
+        printf("[meta]CROP_POSX_6: %d\n", pmeta->CROP_POSX_6);                      //byte[108]
+        printf("[meta]CROP_POSY_6: %d\n", pmeta->CROP_POSY_6);                      //byte[112]
+        printf("[meta]CROP_POSX_7: %d\n", pmeta->CROP_POSX_7);                      //byte[116]
+        printf("[meta]CROP_POSY_7: %d\n", pmeta->CROP_POSY_7);                      //byte[120]    
+    }
+
+    if (funcbits & ASPMETA_FUNC_IMGLEN) {
+        printf("[meta]__ASPMETA_FUNC_IMGLEN__\n ");
+        printf("[meta]SCAN_IMAGE_LEN: %d\n", pmeta->SCAN_IMAGE_LEN);                      //byte[124]        
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDFREE) {      
+        printf("[meta]__ASPMETA_FUNC_SDFREE__\n ");
+        printf("[meta]FREE_SECTOR_ADD: %d\n", pmeta->FREE_SECTOR_ADD);                      //byte[128]            
+        printf("[meta]FREE_SECTOR_LEN: %d\n", pmeta->FREE_SECTOR_LEN);                      //byte[132]        
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDUSED) {
+        printf("[meta]__ASPMETA_FUNC_SDUSED__\n ");
+        printf("[meta]USED_SECTOR_ADD: %d\n", pmeta->USED_SECTOR_ADD);                      //byte[136]            
+        printf("[meta]USED_SECTOR_LEN: %d\n", pmeta->USED_SECTOR_LEN);                      //byte[140]        
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDRD) {
+        printf("[meta]__ASPMETA_FUNC_SDRD__\n ");
+        printf("[meta]SD_RW_SECTOR_ADD: %d\n", pmeta->SD_RW_SECTOR_ADD);                      //byte[144]            
+        printf("[meta]SD_RW_SECTOR_LEN: %d\n", pmeta->SD_RW_SECTOR_LEN);                      //byte[148]        
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDWT) {
+        printf("[meta]__ASPMETA_FUNC_SDWT__\n ");
+        printf("[meta]SD_RW_SECTOR_ADD: %d\n", pmeta->SD_RW_SECTOR_ADD);                      //byte[136]            
+        printf("[meta]SD_RW_SECTOR_LEN: %d\n", pmeta->SD_RW_SECTOR_LEN);                      //byte[140]        
+    }
+
+    printf("********************************************\n");
+    return 0;
+}
+
 #if 0
     ASPMETA_FUNC_NONE = 0,
     ASPMETA_FUNC_CONF = 0x1,       /* 0b00000001 */
@@ -1004,6 +1102,7 @@ static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 
 static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
+    int opSt=0, opEd=0;
     int istr=0, iend=0, idx=0;
     struct aspMetaData *pmeta;
     struct aspConfig_s *pct=0, *pdt=0;
@@ -1024,34 +1123,55 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     if (funcbits == ASPMETA_FUNC_NONE) return -2;
 
     if (funcbits & ASPMETA_FUNC_CONF) {
+        opSt = OP_FFORMAT;
+        opEd = OP_SUPBACK;
+        
         istr = ASPOP_FILE_FORMAT;
         iend = ASPOP_SUP_SAVE;
+        
         pvdst = &pmeta->FILE_FORMAT;
         pvend = &pmeta->SUP_WRITEBK;
 
         for (idx = istr; idx <= iend; idx++) {
-            if (pct[idx].opStatus & ASPOP_STA_CON) {
+            if ((pct[idx].opStatus & ASPOP_STA_CON) && (pct[idx].opCode == opSt)) {
                 *pvdst = pct[idx].opValue & 0xff;
+                printf("[meta] 0x%.2x = 0x%.2x (0x%.2x)\n", pct[idx].opCode, pct[idx].opValue, pct[idx].opStatus);
+
+                pvdst++;
+                opSt++;
             }
-            pvdst++;
 
             if (pvend < pvdst) {
                  break;
             }
+            
+            if (opEd < opSt) {
+                 break;
+            }
         }
+
+        opSt = OP_FUNCTEST_00;
+        opEd = OP_FUNCTEST_15;
 
         istr = ASPOP_FUNTEST_00;
         iend = ASPOP_FUNTEST_15;
+        
         pvdst = &pmeta->OP_FUNC_00;
         pvend = &pmeta->OP_FUNC_15;
 
         for (idx = istr; idx <= iend; idx++) {
-            if (pct[idx].opStatus & ASPOP_STA_CON) {
+            if ((pct[idx].opStatus & ASPOP_STA_CON) && (pct[idx].opCode == opSt)) {
                 *pvdst = pct[idx].opValue & 0xff;
+                printf("[meta] 0x%.2x = 0x%.2x (0x%.2x)\n", pct[idx].opCode, pct[idx].opValue, pct[idx].opStatus);
+
+                pvdst++;
+                opSt++;
             }
-            pvdst++;
 
             if (pvend < pvdst) {
+                 break;
+            }
+            if (opEd < opSt) {
                  break;
             }
         }
@@ -11615,10 +11735,11 @@ static int stsparam_88(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-
+    struct aspMetaData * pmeta;
+    
     rs = data->rs;
     rlt = abs_result(data->result); 
-    
+    pmeta = rs->pmetaout;
     //sprintf(rs->logs, "op_88 rlt:0x%x \n", rlt); 
     //print_f(rs->plogs, "SPM", rs->logs);  
 
@@ -11626,6 +11747,7 @@ static int stsparam_88(struct psdata_s *data)
         case STINIT:
 
             aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
+            dbgMeta(pmeta->FUNC_BITS, pmeta);
             
             ch = 110; 
 
