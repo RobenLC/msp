@@ -657,22 +657,24 @@ struct machineCtrl_s{
 };
 
 struct aspMetaData{
-  unsigned int     FUNC_BITS;                      // byte[4] 
-  unsigned char  ASP_MAGIC[2];                 //byte[6] "0x20 0x14"
-  unsigned char  FILE_FORMAT;                  //0x31
-  unsigned char  COLOR_MODE;                 //0x32
-  unsigned char  COMPRESSION_RATE;      //0x33
-  unsigned char  RESOLUTION;                  //0x34
-  unsigned char  SCAN_GRAVITY;              //0x35
-  unsigned char  CIS_MAX_Width;              //0x36
+  unsigned int     FUNC_BITS;             // byte[4] 
+  unsigned char  ASP_MAGIC[2];            //byte[6] "0x20 0x14"
+  
+  /* ASPMETA_FUNC_CONF = 0x1 */       /* 0b00000001 */
+  unsigned char  FILE_FORMAT;             //0x31
+  unsigned char  COLOR_MODE;              //0x32
+  unsigned char  COMPRESSION_RATE;        //0x33
+  unsigned char  RESOLUTION;              //0x34
+  unsigned char  SCAN_GRAVITY;            //0x35
+  unsigned char  CIS_MAX_Width;           //0x36
   unsigned char  WIDTH_ADJUST_H;          //0x37
-  unsigned char  WIDTH_ADJUST_L;           //0x38
-  unsigned char  SCAN_LENGTH_H;            //0x39
-  unsigned char  SCAN_LENGTH_L;             //0x3a
-  unsigned char  INTERNAL_IMG;                //0x3b
-  unsigned char  AFE_IC_SELEC;                //0x3c
-  unsigned char  EXTNAL_PULSE;                //0x3d
-  unsigned char  SUP_WRITEBK;               //0x3e
+  unsigned char  WIDTH_ADJUST_L;          //0x38
+  unsigned char  SCAN_LENGTH_H;           //0x39
+  unsigned char  SCAN_LENGTH_L;           //0x3a
+  unsigned char  INTERNAL_IMG;            //0x3b
+  unsigned char  AFE_IC_SELEC;            //0x3c
+  unsigned char  EXTNAL_PULSE;            //0x3d
+  unsigned char  SUP_WRITEBK;             //0x3e
   unsigned char  OP_FUNC_00;              //0x70
   unsigned char  OP_FUNC_01;              //0x71
   unsigned char  OP_FUNC_02;              //0x72
@@ -689,34 +691,36 @@ struct aspMetaData{
   unsigned char  OP_FUNC_13;              //0x7D
   unsigned char  OP_FUNC_14;              //0x7E
   unsigned char  OP_FUNC_15;              //0x7F  
-  unsigned char  OP_RESERVE[28];        // byte[64]
+  unsigned char  OP_RESERVE[28];          // byte[64]
   
-  unsigned int CROP_POSX_1;        //byte[68]
-  unsigned int CROP_POSY_1;        //byte[72]
-  unsigned int CROP_POSX_2;        //byte[76]
-  unsigned int CROP_POSY_2;        //byte[80]
-  unsigned int CROP_POSX_3;        //byte[84]
-  unsigned int CROP_POSY_3;        //byte[88]
-  unsigned int CROP_POSX_4;        //byte[92]
-  unsigned int CROP_POSY_4;        //byte[96]
-  unsigned int CROP_POSX_5;        //byte[100]
-  unsigned int CROP_POSY_5;        //byte[104]
-  unsigned int CROP_POSX_6;        //byte[108]
-  unsigned int CROP_POSY_6;        //byte[112]
-  unsigned int CROP_POSX_7;        //byte[116]
-  unsigned int CROP_POSY_7;        //byte[120]
-
-  unsigned int SCAN_IMAGE_LEN;     //byte[124]
-
-  unsigned int  FREE_SECTOR_ADD;   //byte[128]
-  unsigned int  FREE_SECTOR_LEN;   //byte[132]
-  unsigned int  USED_SECTOR_ADD;   //byte[136]
-  unsigned int  USED_SECTOR_LEN;   //byte[140]
-
-  unsigned int  SD_RW_SECTOR_ADD;  //byte[144]
-  unsigned int  SD_RW_SECTOR_LEN;  //byte[148]
+  /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
+  unsigned int CROP_POS_1;        //byte[68]
+  unsigned int CROP_POS_2;        //byte[72]
+  unsigned int CROP_POS_3;        //byte[76]
+  unsigned int CROP_POS_4;        //byte[80]
+  unsigned int CROP_POS_5;        //byte[84]
+  unsigned int CROP_POS_6;        //byte[88]
+  unsigned int CROP_POS_7;        //byte[92]
   
-  unsigned char available[364];
+  /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
+  unsigned int SCAN_IMAGE_LEN;     //byte[96]
+  
+  unsigned char  SCAN_RESERVE[32];        // byte[128]
+  
+  /* ASPMETA_FUNC_SDFREE = 0x8 */     /* 0b00001000 */
+  unsigned int  FREE_SECTOR_ADD;   //byte[132]
+  unsigned int  FREE_SECTOR_LEN;   //byte[136]
+  
+  /* ASPMETA_FUNC_SDUSED = 0x16 */    /* 0b00010000 */
+  unsigned int  USED_SECTOR_ADD;   //byte[140]
+  unsigned int  USED_SECTOR_LEN;   //byte[144]
+  
+  /* ASPMETA_FUNC_SDRD = 0x32 */      /* 0b00100000 */
+  /* ASPMETA_FUNC_SDWT = 0x64 */      /* 0b01000000 */
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[148]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[152]
+  
+  unsigned char available[360];
 };
 
 struct mainRes_s{
@@ -746,7 +750,7 @@ struct mainRes_s{
     // time measurement
     struct timespec time[2];
     // log buffer
-    char log[256];
+    char log[1024];
     struct socket_s socket_r;
     struct socket_s socket_t;
     struct socket_s socket_at;
@@ -803,7 +807,7 @@ struct procRes_s{
     // time measurement
     struct timespec *tm[2];
     struct timespec tdf[2];
-    char logs[256];
+    char logs[1024];
     struct socket_s *psocket_r;
     struct socket_s *psocket_t;
     struct socket_s *psocket_at;
@@ -1022,20 +1026,20 @@ static int dbgMeta(int funcbits, struct aspMetaData *pmeta)
     
     if (funcbits & ASPMETA_FUNC_CROP) {
         printf("[meta]__ASPMETA_FUNC_CROP__\n ");
-        printf("[meta]CROP_POSX_1: %d\n", pmeta->CROP_POSX_1);                      //byte[68]
-        printf("[meta]CROP_POSY_1: %d\n", pmeta->CROP_POSY_1);                      //byte[72]
-        printf("[meta]CROP_POSX_2: %d\n", pmeta->CROP_POSX_2);                      //byte[76]
-        printf("[meta]CROP_POSY_2: %d\n", pmeta->CROP_POSY_2);                      //byte[80]
-        printf("[meta]CROP_POSX_3: %d\n", pmeta->CROP_POSX_3);                      //byte[84]
-        printf("[meta]CROP_POSY_3: %d\n", pmeta->CROP_POSY_3);                      //byte[88]
-        printf("[meta]CROP_POSX_4: %d\n", pmeta->CROP_POSX_4);                      //byte[92]
-        printf("[meta]CROP_POSY_4: %d\n", pmeta->CROP_POSY_4);                      //byte[96]
-        printf("[meta]CROP_POSX_5: %d\n", pmeta->CROP_POSX_5);                      //byte[100]
-        printf("[meta]CROP_POSY_5: %d\n", pmeta->CROP_POSY_5);                      //byte[104]
-        printf("[meta]CROP_POSX_6: %d\n", pmeta->CROP_POSX_6);                      //byte[108]
-        printf("[meta]CROP_POSY_6: %d\n", pmeta->CROP_POSY_6);                      //byte[112]
-        printf("[meta]CROP_POSX_7: %d\n", pmeta->CROP_POSX_7);                      //byte[116]
-        printf("[meta]CROP_POSY_7: %d\n", pmeta->CROP_POSY_7);                      //byte[120]    
+        printf("[meta]CROP_POSX_1: %d\n", pmeta->CROP_POS_1 >> 16);                      //byte[68]
+        printf("[meta]CROP_POSY_1: %d\n", pmeta->CROP_POS_1 & 0xffff);                      //byte[72]
+        printf("[meta]CROP_POSX_2: %d\n", pmeta->CROP_POS_2 >> 16);                      //byte[76]
+        printf("[meta]CROP_POSY_2: %d\n", pmeta->CROP_POS_2 & 0xffff);                      //byte[80]
+        printf("[meta]CROP_POSX_3: %d\n", pmeta->CROP_POS_3 >> 16);                      //byte[84]
+        printf("[meta]CROP_POSY_3: %d\n", pmeta->CROP_POS_3 & 0xffff);                      //byte[88]
+        printf("[meta]CROP_POSX_4: %d\n", pmeta->CROP_POS_4 >> 16);                      //byte[92]
+        printf("[meta]CROP_POSY_4: %d\n", pmeta->CROP_POS_4 & 0xffff);                      //byte[96]
+        printf("[meta]CROP_POSX_5: %d\n", pmeta->CROP_POS_5 >> 16);                      //byte[100]
+        printf("[meta]CROP_POSY_5: %d\n", pmeta->CROP_POS_5 & 0xffff);                      //byte[104]
+        printf("[meta]CROP_POSX_6: %d\n", pmeta->CROP_POS_6 >> 16);                      //byte[108]
+        printf("[meta]CROP_POSY_6: %d\n", pmeta->CROP_POS_6 & 0xffff);                      //byte[112]
+        printf("[meta]CROP_POSX_7: %d\n", pmeta->CROP_POS_7 >> 16);                      //byte[116]
+        printf("[meta]CROP_POSY_7: %d\n", pmeta->CROP_POS_7 & 0xffff);                      //byte[120]    
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
@@ -14193,9 +14197,9 @@ static int cmdfunc_meta_opcode(int argc, char *argv[])
 end:
 
     if (brk | ret) {
-        sprintf(mrs->log, "E,%d,%d", ret, brk);
+        sprintf(mrs->log, "META_NG,%d,%d", ret, brk);
     } else {
-        sprintf(mrs->log, "D,%d,%d", ret, brk);
+        sprintf(mrs->log, "META_OK,%d,%d", ret, brk);
     }
 
     n = strlen(mrs->log);
@@ -24234,13 +24238,13 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sendbuf[4] = ((param & 0x80) ? 1:0) + 1;
         sendbuf[5] = param & 0x7f;
         
-        sendbuf[7+n] = 0xfb;
-        sendbuf[7+n+1] = '\0';
+        sendbuf[7+n] = '\n';
+        sendbuf[7+n+1] = 0xfb;
         sendbuf[7+n+2] = '\0';
 
-        //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, sendbuf, rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
-        //print_f(rs->plogs, "P5", sendbuf);
-        //printf("[p5]:%s\n", sendbuf);
+        sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, &sendbuf[7], rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
+        print_f(rs->plogs, "P5", rs->logs);
+        //printf("[p5]:%s\n", &sendbuf[7]);
 
         socketEnd:
         ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
@@ -24275,8 +24279,9 @@ static int atFindIdx(char *str, char ch)
     return (-3);
 }
 
-#define P6_RX_LOG    (0)
+#define P6_RX_LOG    (1)
 #define P6_UTC_LOG  (0)
+#define P6_PARA_LOG  (0)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
@@ -24291,6 +24296,8 @@ static int p6(struct procRes_s *rs)
     char opcode=0, param=0, flag = 0;
     uint32_t clstSize=0;
     uint32_t adata[3], atime[3];
+    uint32_t *scanParam=0, op=0, cd=0, fg=0;
+    int ix=0;
     char curTime[16];
     char syscmd[256] = "ls -al";
 
@@ -24313,9 +24320,9 @@ static int p6(struct procRes_s *rs)
     pftb = pfat->fatTable;
     pwfc = rs->pwifconf;
 
-    char dir[256] = "/mnt/mmc2";
+    char dir[64] = "/mnt/mmc2";
     //char dir[256] = "/root";
-    char folder[256];
+    char folder[1024];
 
     sprintf(rs->logs, "p6\n");
     print_f(rs->plogs, "P6", rs->logs);
@@ -24421,14 +24428,16 @@ static int p6(struct procRes_s *rs)
         }
 
 #if P6_RX_LOG
-        sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]\n", n, &recvbuf[hd], hd, be, ed, ln);
+        sprintf(rs->logs, "[P6] receive len[%d]contentStr[%s]hd[%d]be[%d]ed[%d]ln[%d]\n", n, &recvbuf[be], hd, be, ed, ln);
         print_f(rs->plogs, "P6", rs->logs);
 
-        sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]\n", recvbuf[hd+1], recvbuf[be-1]);
-        print_f(rs->plogs, "P6", rs->logs);
+        //sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]\n", recvbuf[hd+1], recvbuf[be-1]);
+        //print_f(rs->plogs, "P6", rs->logs);
 #endif
         n = ed - be - 1;
-        if ((n < 255) && (n > 0)) {
+        sprintf(rs->logs, "n = %d \n", n);
+        print_f(rs->plogs, "P6", rs->logs);
+        if ((n < 1024) && (n > 0)) {
             memcpy(folder, &recvbuf[be+1], n);
             folder[n] = '\0';
         } else {
@@ -24443,7 +24452,110 @@ static int p6(struct procRes_s *rs)
         sendbuf[2] = 0xfd;
         sendbuf[3] = 0x01; /*??*/
         sendbuf[4] = 0xfc;
+        
+        sendbuf[3] = 'F';
+        if (opcode == 0x18) { /* update parameter */
+            sprintf(rs->logs, "handle opcode: 0x%x(PARA)\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+#if 1
+            ret = asp_strsplit(&strinfo, folder, n);
+            n = 0;
+            if (ret > 0) {
+                sprintf(rs->logs, "split str found, ret:%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                len = ret;
+                memset(recvbuf, 0, 1024);
+                
+                scanParam = aspMalloc(len * sizeof(uint32_t));
+                memset(scanParam, 0, len * sizeof(uint32_t));
+                
+                if (scanParam) {
+                    for (i = 0; i < len; i++) {
+                        nexinfo = asp_getInfo(strinfo, i);
+                        if (nexinfo) {
+#if P6_PARA_LOG
+                            sprintf(rs->logs, "%d.[%s]\n", i, nexinfo->infoStr);
+                            print_f(rs->plogs, "P6", rs->logs);
+#endif
+                            scanParam[i] = atoi(nexinfo->infoStr);
+                            
+                        } else {
+                            sprintf(rs->logs, "split info error!!!\n");
+                            print_f(rs->plogs, "P6", rs->logs);
+                        }
+                    }                            
 
+
+                    for (i = 0; i < (len/3); i++) {
+                        for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+                            pdt = &pct[ix];
+                            op = scanParam[i*3+1];
+                            cd = scanParam[i*3+2] & 0xff;
+                            fg = scanParam[i*3+2] >> 8;
+
+                            if (op == pdt->opCode) {
+                                if ((cd == 0xff) && ((fg & 0x02) != 0)) {
+                                    cd = 0;
+                                }
+
+                                ret = cmdfunc_opchk_single(cd, pdt->opMask, pdt->opBitlen, pdt->opType);
+                                if (ret > 0) {
+                                    pdt->opValue = cd;
+                                    pdt->opStatus |= ASPOP_STA_CON;
+
+#if P6_PARA_LOG
+                                    sprintf(rs->logs, "get 0x%.2x = 0x%.2x (%d)\n", op, cd, fg);
+                                    print_f(rs->plogs, "P6", rs->logs);
+#endif
+                                    
+                                    sprintf(rs->logs, "%d,", scanParam[i*3]);
+                                    strncpy(&recvbuf[n], rs->logs, strlen(rs->logs));
+                                    n += strlen(rs->logs);
+                                }
+                            }
+                        }
+                    }
+
+                    nexinfo = asp_getInfo(strinfo, (len - 1));
+                    if (nexinfo) {
+                        sprintf(rs->logs, "%d.%s\n", (len - 1), nexinfo->infoStr);
+                        print_f(rs->plogs, "P6", rs->logs);
+
+                        if (strcmp("ASP", nexinfo->infoStr) != 0) {
+                            sendbuf[3] = 'F';
+                        } else {
+                            sendbuf[3] = 'D';
+                            strncpy(&sendbuf[5], recvbuf, n);
+                        }
+                    }
+                }                   
+            }
+            else {
+                sprintf(rs->logs, "split str not found, ret:%d\n", ret);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+#endif
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            /* free memory */
+            nexinfo = strinfo;
+            while(nexinfo) {
+                nexinfo = asp_freeInfo(nexinfo);
+            }
+            
+            if (scanParam) {
+                aspFree(scanParam);
+                scanParam = 0;
+            }
+            
+            goto socketEnd;
+        }
+        
         if (opcode == 0x17) { /* send WIFI info */
             sprintf(rs->logs, "handle opcode: 0x%x(WIFI_PSK)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
@@ -27576,7 +27688,7 @@ static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs)
 static int print_f(struct logPool_s *plog, char *head, char *str)
 {
     int len;
-    char ch[256];
+    char ch[1152];
     
 #if 0 /* remove log */
     return 0;
@@ -27590,7 +27702,6 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
     } else {
         sprintf(ch, "%s", str);
     }
-    
 
     printf("%s",ch);
 

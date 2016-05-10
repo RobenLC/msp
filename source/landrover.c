@@ -344,22 +344,24 @@ struct cropCoord_s {
 };
 
 struct aspMetaData{
-  unsigned int     FUNC_BITS;                      // byte[4] 
-  unsigned char  ASP_MAGIC[2];                 //byte[6] "0x20 0x14"
-  unsigned char  FILE_FORMAT;                  //0x31
-  unsigned char  COLOR_MODE;                 //0x32
-  unsigned char  COMPRESSION_RATE;      //0x33
-  unsigned char  RESOLUTION;                  //0x34
-  unsigned char  SCAN_GRAVITY;              //0x35
-  unsigned char  CIS_MAX_Width;              //0x36
+  unsigned int     FUNC_BITS;             // byte[4] 
+  unsigned char  ASP_MAGIC[2];            //byte[6] "0x20 0x14"
+  
+  /* ASPMETA_FUNC_CONF = 0x1 */       /* 0b00000001 */
+  unsigned char  FILE_FORMAT;             //0x31
+  unsigned char  COLOR_MODE;              //0x32
+  unsigned char  COMPRESSION_RATE;        //0x33
+  unsigned char  RESOLUTION;              //0x34
+  unsigned char  SCAN_GRAVITY;            //0x35
+  unsigned char  CIS_MAX_Width;           //0x36
   unsigned char  WIDTH_ADJUST_H;          //0x37
-  unsigned char  WIDTH_ADJUST_L;           //0x38
-  unsigned char  SCAN_LENGTH_H;            //0x39
-  unsigned char  SCAN_LENGTH_L;             //0x3a
-  unsigned char  INTERNAL_IMG;                //0x3b
-  unsigned char  AFE_IC_SELEC;                //0x3c
-  unsigned char  EXTNAL_PULSE;                //0x3d
-  unsigned char  SUP_WRITEBK;               //0x3e
+  unsigned char  WIDTH_ADJUST_L;          //0x38
+  unsigned char  SCAN_LENGTH_H;           //0x39
+  unsigned char  SCAN_LENGTH_L;           //0x3a
+  unsigned char  INTERNAL_IMG;            //0x3b
+  unsigned char  AFE_IC_SELEC;            //0x3c
+  unsigned char  EXTNAL_PULSE;            //0x3d
+  unsigned char  SUP_WRITEBK;             //0x3e
   unsigned char  OP_FUNC_00;              //0x70
   unsigned char  OP_FUNC_01;              //0x71
   unsigned char  OP_FUNC_02;              //0x72
@@ -376,34 +378,36 @@ struct aspMetaData{
   unsigned char  OP_FUNC_13;              //0x7D
   unsigned char  OP_FUNC_14;              //0x7E
   unsigned char  OP_FUNC_15;              //0x7F  
-  unsigned char  OP_RESERVE[28];        // byte[64]
+  unsigned char  OP_RESERVE[28];          // byte[64]
   
-  unsigned int CROP_POSX_1;        //byte[68]
-  unsigned int CROP_POSY_1;        //byte[72]
-  unsigned int CROP_POSX_2;        //byte[76]
-  unsigned int CROP_POSY_2;        //byte[80]
-  unsigned int CROP_POSX_3;        //byte[84]
-  unsigned int CROP_POSY_3;        //byte[88]
-  unsigned int CROP_POSX_4;        //byte[92]
-  unsigned int CROP_POSY_4;        //byte[96]
-  unsigned int CROP_POSX_5;        //byte[100]
-  unsigned int CROP_POSY_5;        //byte[104]
-  unsigned int CROP_POSX_6;        //byte[108]
-  unsigned int CROP_POSY_6;        //byte[112]
-  unsigned int CROP_POSX_7;        //byte[116]
-  unsigned int CROP_POSY_7;        //byte[120]
-
-  unsigned int SCAN_IMAGE_LEN;     //byte[124]
-
-  unsigned int  FREE_SECTOR_ADD;   //byte[128]
-  unsigned int  FREE_SECTOR_LEN;   //byte[132]
-  unsigned int  USED_SECTOR_ADD;   //byte[136]
-  unsigned int  USED_SECTOR_LEN;   //byte[140]
-
-  unsigned int  SD_RW_SECTOR_ADD;  //byte[144]
-  unsigned int  SD_RW_SECTOR_LEN;  //byte[148]
+  /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
+  unsigned int CROP_POS_1;        //byte[68]
+  unsigned int CROP_POS_2;        //byte[72]
+  unsigned int CROP_POS_3;        //byte[76]
+  unsigned int CROP_POS_4;        //byte[80]
+  unsigned int CROP_POS_5;        //byte[84]
+  unsigned int CROP_POS_6;        //byte[88]
+  unsigned int CROP_POS_7;        //byte[92]
   
-  unsigned char available[364];
+  /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
+  unsigned int SCAN_IMAGE_LEN;     //byte[96]
+  
+  unsigned char  SCAN_RESERVE[32];        // byte[128]
+  
+  /* ASPMETA_FUNC_SDFREE = 0x8 */     /* 0b00001000 */
+  unsigned int  FREE_SECTOR_ADD;   //byte[132]
+  unsigned int  FREE_SECTOR_LEN;   //byte[136]
+  
+  /* ASPMETA_FUNC_SDUSED = 0x16 */    /* 0b00010000 */
+  unsigned int  USED_SECTOR_ADD;   //byte[140]
+  unsigned int  USED_SECTOR_LEN;   //byte[144]
+  
+  /* ASPMETA_FUNC_SDRD = 0x32 */      /* 0b00100000 */
+  /* ASPMETA_FUNC_SDWT = 0x64 */      /* 0b01000000 */
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[148]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[152]
+  
+  unsigned char available[360];
 };
 
 struct mainRes_s{
@@ -599,8 +603,8 @@ static int dbgMeta(int funcbits, struct aspMetaData *pmeta)
     if (funcbits == ASPMETA_FUNC_NONE) return -3;
 
     if (funcbits & ASPMETA_FUNC_CONF) {
-        printf("[meta]__ASPMETA_FUNC_CONF__\n ");
-        printf("[meta]FILE_FORMAT: 0x%.2x    \n ",pmeta->FILE_FORMAT     );          //0x31
+        printf("[meta]__ASPMETA_FUNC_CONF__\n");
+        printf("[meta]FILE_FORMAT: 0x%.2x    \n",pmeta->FILE_FORMAT     );          //0x31
         printf("[meta]COLOR_MODE: 0x%.2x      \n",pmeta->COLOR_MODE      );        //0x32
         printf("[meta]COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
         printf("[meta]RESOLUTION: 0x%.2x      \n",pmeta->RESOLUTION      );         //0x34
@@ -634,20 +638,20 @@ static int dbgMeta(int funcbits, struct aspMetaData *pmeta)
     
     if (funcbits & ASPMETA_FUNC_CROP) {
         printf("[meta]__ASPMETA_FUNC_CROP__\n ");
-        printf("[meta]CROP_POSX_1: %d\n", pmeta->CROP_POSX_1);                      //byte[68]
-        printf("[meta]CROP_POSY_1: %d\n", pmeta->CROP_POSY_1);                      //byte[72]
-        printf("[meta]CROP_POSX_2: %d\n", pmeta->CROP_POSX_2);                      //byte[76]
-        printf("[meta]CROP_POSY_2: %d\n", pmeta->CROP_POSY_2);                      //byte[80]
-        printf("[meta]CROP_POSX_3: %d\n", pmeta->CROP_POSX_3);                      //byte[84]
-        printf("[meta]CROP_POSY_3: %d\n", pmeta->CROP_POSY_3);                      //byte[88]
-        printf("[meta]CROP_POSX_4: %d\n", pmeta->CROP_POSX_4);                      //byte[92]
-        printf("[meta]CROP_POSY_4: %d\n", pmeta->CROP_POSY_4);                      //byte[96]
-        printf("[meta]CROP_POSX_5: %d\n", pmeta->CROP_POSX_5);                      //byte[100]
-        printf("[meta]CROP_POSY_5: %d\n", pmeta->CROP_POSY_5);                      //byte[104]
-        printf("[meta]CROP_POSX_6: %d\n", pmeta->CROP_POSX_6);                      //byte[108]
-        printf("[meta]CROP_POSY_6: %d\n", pmeta->CROP_POSY_6);                      //byte[112]
-        printf("[meta]CROP_POSX_7: %d\n", pmeta->CROP_POSX_7);                      //byte[116]
-        printf("[meta]CROP_POSY_7: %d\n", pmeta->CROP_POSY_7);                      //byte[120]    
+        printf("[meta]CROP_POSX_1: %d\n", pmeta->CROP_POS_1 >> 16);                      //byte[68]
+        printf("[meta]CROP_POSY_1: %d\n", pmeta->CROP_POS_1 & 0xffff);                      //byte[72]
+        printf("[meta]CROP_POSX_2: %d\n", pmeta->CROP_POS_2 >> 16);                      //byte[76]
+        printf("[meta]CROP_POSY_2: %d\n", pmeta->CROP_POS_2 & 0xffff);                      //byte[80]
+        printf("[meta]CROP_POSX_3: %d\n", pmeta->CROP_POS_3 >> 16);                      //byte[84]
+        printf("[meta]CROP_POSY_3: %d\n", pmeta->CROP_POS_3 & 0xffff);                      //byte[88]
+        printf("[meta]CROP_POSX_4: %d\n", pmeta->CROP_POS_4 >> 16);                      //byte[92]
+        printf("[meta]CROP_POSY_4: %d\n", pmeta->CROP_POS_4 & 0xffff);                      //byte[96]
+        printf("[meta]CROP_POSX_5: %d\n", pmeta->CROP_POS_5 >> 16);                      //byte[100]
+        printf("[meta]CROP_POSY_5: %d\n", pmeta->CROP_POS_5 & 0xffff);                      //byte[104]
+        printf("[meta]CROP_POSX_6: %d\n", pmeta->CROP_POS_6 >> 16);                      //byte[108]
+        printf("[meta]CROP_POSY_6: %d\n", pmeta->CROP_POS_6 & 0xffff);                      //byte[112]
+        printf("[meta]CROP_POSX_7: %d\n", pmeta->CROP_POS_7 >> 16);                      //byte[116]
+        printf("[meta]CROP_POSY_7: %d\n", pmeta->CROP_POS_7 & 0xffff);                      //byte[120]    
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
