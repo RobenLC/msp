@@ -118,7 +118,7 @@
 #define SPI_TRUNK_SZ   (32768)
 #define DIRECT_WT_DISK    (0)
 
-#define RANDOM_CROP_COORD (0)
+#define RANDOM_CROP_COORD (1)
 
 #if RANDOM_CROP_COORD
 #else
@@ -129,7 +129,7 @@ static int crop_03[2] = {965, 1304};
 static int crop_04[2] = {2696, 1264};
 static int crop_05[2] = {2677, 72};
 static int crop_06[2] = {517, 72};
-#elif 1
+#elif 0
 static int crop_01[2] = {1316, 1080};
 static int crop_02[2] = {2319, 1288};
 static int crop_03[2] = {3412, 1288};
@@ -388,26 +388,36 @@ struct aspMetaData{
   unsigned int CROP_POS_5;        //byte[84]
   unsigned int CROP_POS_6;        //byte[88]
   unsigned int CROP_POS_7;        //byte[92]
-  
+  unsigned int CROP_POS_8;        //byte[96]
+  unsigned int CROP_POS_9;        //byte[100]
+  unsigned int CROP_POS_10;        //byte[104]
+  unsigned int CROP_POS_11;        //byte[108]
+  unsigned int CROP_POS_12;        //byte[112]
+  unsigned int CROP_POS_13;        //byte[116]
+  unsigned int CROP_POS_14;        //byte[120]
+  unsigned int CROP_POS_15;        //byte[124]
+  unsigned int CROP_POS_16;        //byte[128]
+  unsigned int CROP_POS_17;        //byte[132]
+  unsigned int CROP_POS_18;        //byte[136]
+  unsigned int CROP_RESERVE[24]; //byte[160]
+
   /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
-  unsigned int SCAN_IMAGE_LEN;     //byte[96]
-  
-  unsigned char  SCAN_RESERVE[32];        // byte[128]
+  unsigned int SCAN_IMAGE_LEN;     //byte[164]
   
   /* ASPMETA_FUNC_SDFREE = 0x8 */     /* 0b00001000 */
-  unsigned int  FREE_SECTOR_ADD;   //byte[132]
-  unsigned int  FREE_SECTOR_LEN;   //byte[136]
+  unsigned int  FREE_SECTOR_ADD;   //byte[168]
+  unsigned int  FREE_SECTOR_LEN;   //byte[172]
   
   /* ASPMETA_FUNC_SDUSED = 0x16 */    /* 0b00010000 */
-  unsigned int  USED_SECTOR_ADD;   //byte[140]
-  unsigned int  USED_SECTOR_LEN;   //byte[144]
+  unsigned int  USED_SECTOR_ADD;   //byte[176]
+  unsigned int  USED_SECTOR_LEN;   //byte[180]
   
   /* ASPMETA_FUNC_SDRD = 0x32 */      /* 0b00100000 */
   /* ASPMETA_FUNC_SDWT = 0x64 */      /* 0b01000000 */
-  unsigned int  SD_RW_SECTOR_ADD;  //byte[148]
-  unsigned int  SD_RW_SECTOR_LEN;  //byte[152]
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[184]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[188]
   
-  unsigned char available[360];
+  unsigned char available[324];
 };
 
 struct mainRes_s{
@@ -8643,7 +8653,9 @@ static int p2(struct procRes_s *rs)
                 if (tlen) {
                     totsz = totsz + 1024 - tlen;
                 }
-
+#if 1 /* debug */
+                fsize = SPI_TRUNK_SZ;
+#endif
                 ring_buf_set_last(rs->pdataTx, fsize);
                 rs_ipc_put(rs, "s", 1);
                 rs_ipc_put(rs, "S", 1);

@@ -145,6 +145,7 @@ static int *totSalloc=0;
 #define SPI_KTHREAD_USE    (1) 
 #define SPI_UPD_NO_KTHREAD     (0)
 #define SPI_KTHREAD_DLY    (0)
+#define SPI_TRUNK_FULL_FIX (0)
 
 #define DIR_POOL_SIZE (20480)
 
@@ -701,26 +702,36 @@ struct aspMetaData{
   unsigned int CROP_POS_5;        //byte[84]
   unsigned int CROP_POS_6;        //byte[88]
   unsigned int CROP_POS_7;        //byte[92]
-  
+  unsigned int CROP_POS_8;        //byte[96]
+  unsigned int CROP_POS_9;        //byte[100]
+  unsigned int CROP_POS_10;        //byte[104]
+  unsigned int CROP_POS_11;        //byte[108]
+  unsigned int CROP_POS_12;        //byte[112]
+  unsigned int CROP_POS_13;        //byte[116]
+  unsigned int CROP_POS_14;        //byte[120]
+  unsigned int CROP_POS_15;        //byte[124]
+  unsigned int CROP_POS_16;        //byte[128]
+  unsigned int CROP_POS_17;        //byte[132]
+  unsigned int CROP_POS_18;        //byte[136]
+  unsigned char CROP_RESERVE[24]; //byte[160]
+
   /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
-  unsigned int SCAN_IMAGE_LEN;     //byte[96]
-  
-  unsigned char  SCAN_RESERVE[32];        // byte[128]
+  unsigned int SCAN_IMAGE_LEN;     //byte[164]
   
   /* ASPMETA_FUNC_SDFREE = 0x8 */     /* 0b00001000 */
-  unsigned int  FREE_SECTOR_ADD;   //byte[132]
-  unsigned int  FREE_SECTOR_LEN;   //byte[136]
+  unsigned int  FREE_SECTOR_ADD;   //byte[168]
+  unsigned int  FREE_SECTOR_LEN;   //byte[172]
   
   /* ASPMETA_FUNC_SDUSED = 0x16 */    /* 0b00010000 */
-  unsigned int  USED_SECTOR_ADD;   //byte[140]
-  unsigned int  USED_SECTOR_LEN;   //byte[144]
+  unsigned int  USED_SECTOR_ADD;   //byte[176]
+  unsigned int  USED_SECTOR_LEN;   //byte[180]
   
   /* ASPMETA_FUNC_SDRD = 0x32 */      /* 0b00100000 */
   /* ASPMETA_FUNC_SDWT = 0x64 */      /* 0b01000000 */
-  unsigned int  SD_RW_SECTOR_ADD;  //byte[148]
-  unsigned int  SD_RW_SECTOR_LEN;  //byte[152]
+  unsigned int  SD_RW_SECTOR_ADD;  //byte[184]
+  unsigned int  SD_RW_SECTOR_LEN;  //byte[188]
   
-  unsigned char available[360];
+  unsigned char available[324];
 };
 
 struct mainRes_s{
@@ -11752,7 +11763,10 @@ static int stsparam_88(struct psdata_s *data)
 
             aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
             dbgMeta(pmeta->FUNC_BITS, pmeta);
-            
+            sprintf(rs->logs, "dump meta output\n"); 
+            print_f(rs->plogs, "SPM", rs->logs);  
+            shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData));            
+
             ch = 110; 
 
             rs_ipc_put(data->rs, &ch, 1);
@@ -11762,7 +11776,8 @@ static int stsparam_88(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-
+                sprintf(rs->logs, "dump meta input\n"); 
+                print_f(rs->plogs, "SPM", rs->logs);  
                 shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData));
                 
                 data->result = emb_result(data->result, NEXT);
@@ -22120,7 +22135,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
-#define P2_TX_LOG (0)
+#define P2_TX_LOG (1)
 #define P2_CMD_LOG (1)
 #define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
@@ -22352,6 +22367,18 @@ static int p2(struct procRes_s *rs)
                     if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
                     }
+                    
+#if SPI_TRUNK_FULL_FIX
+                    if (opsz < 0) {
+                        opsz = 0 - opsz;                    
+                        if (opsz == SPI_TRUNK_SZ) {
+                            opsz = 0 - opsz;    
+                        } else {
+                            sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                            print_f(rs->plogs, "P2", rs->logs);
+                        }
+                    }
+#endif
 
 #if MSP_P2_SAVE_DAT
                     msync(addr, len, MS_SYNC);                    
@@ -22457,6 +22484,18 @@ static int p2(struct procRes_s *rs)
                                 opsz = 0 - opsz;
                             }
 
+#if SPI_TRUNK_FULL_FIX
+                            if (opsz < 0) {
+                                opsz = 0 - opsz;                    
+                                if (opsz == SPI_TRUNK_SZ) {
+                                    opsz = 0 - opsz;    
+                                } else {
+                                    sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                            }
+#endif
+
                             //usleep(10000);
 #if P2_TX_LOG
                             sprintf(rs->logs, "r %d - %d\n", opsz, pi);
@@ -22543,6 +22582,18 @@ static int p2(struct procRes_s *rs)
                     if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
                     }
+                    
+#if SPI_TRUNK_FULL_FIX
+                    if (opsz < 0) {
+                        opsz = 0 - opsz;                    
+                        if (opsz == SPI_TRUNK_SZ) {
+                            opsz = 0 - opsz;    
+                        } else {
+                            sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                            print_f(rs->plogs, "P2", rs->logs);
+                        }
+                    }
+#endif
 
 #if P2_TX_LOG
                     sprintf(rs->logs, "r %d\n", opsz);
@@ -22658,6 +22709,18 @@ static int p2(struct procRes_s *rs)
                             opsz = 0 - opsz;
                         }
 
+#if SPI_TRUNK_FULL_FIX
+                        if (opsz < 0) {
+                            opsz = 0 - opsz;                    
+                            if (opsz == SPI_TRUNK_SZ) {
+                                opsz = 0 - opsz;    
+                            } else {
+                                sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                                print_f(rs->plogs, "P2", rs->logs);
+                            }
+                        }
+#endif
+
                         pi++;
                         if (opsz < 0) break;
                         totsz += opsz;
@@ -22742,6 +22805,18 @@ static int p2(struct procRes_s *rs)
                         if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                             opsz = 0 - opsz;
                         }
+                        
+#if SPI_TRUNK_FULL_FIX
+                        if (opsz < 0) {
+                            opsz = 0 - opsz;                    
+                            if (opsz == SPI_TRUNK_SZ) {
+                                opsz = 0 - opsz;    
+                            } else {
+                                sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                                print_f(rs->plogs, "P2", rs->logs);
+                            }
+                        }
+#endif
 
                         pi++;
                         if (opsz < 0) break;
@@ -22841,6 +22916,18 @@ static int p2(struct procRes_s *rs)
                         opsz = 0 - opsz;
                     }
 
+#if SPI_TRUNK_FULL_FIX
+                    if (opsz < 0) {
+                        opsz = 0 - opsz;                    
+                        if (opsz == SPI_TRUNK_SZ) {
+                            opsz = 0 - opsz;    
+                        } else {
+                            sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                            print_f(rs->plogs, "P2", rs->logs);
+                        }
+                    }
+#endif
+
 #if P2_TX_LOG
                     sprintf(rs->logs, "r (%d)\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
@@ -22917,6 +23004,18 @@ static int p2(struct procRes_s *rs)
                         opsz = 0 - opsz;
                     }
 
+#if SPI_TRUNK_FULL_FIX
+                    if (opsz < 0) {
+                        opsz = 0 - opsz;                    
+                        if (opsz == SPI_TRUNK_SZ) {
+                            opsz = 0 - opsz;    
+                        } else {
+                            sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                            print_f(rs->plogs, "P2", rs->logs);
+                        }
+                    }
+#endif
+
 #if P2_TX_LOG
                     sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
@@ -22978,6 +23077,19 @@ static int p2(struct procRes_s *rs)
                             if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
                             }
+
+#if SPI_TRUNK_FULL_FIX
+                            if (opsz < 0) {
+                                opsz = 0 - opsz;                    
+                                if (opsz == SPI_TRUNK_SZ) {
+                                    opsz = 0 - opsz;    
+                                } else {
+                                    sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+
+                            }
+#endif
 
                             //usleep(10000);
 #if P2_TX_LOG
@@ -23223,7 +23335,19 @@ static int p3(struct procRes_s *rs)
                     if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                         opsz = 0 - opsz;
                     }
-                    
+
+#if SPI_TRUNK_FULL_FIX
+                    if (opsz < 0) {
+                        opsz = 0 - opsz;                    
+                        if (opsz == SPI_TRUNK_SZ) {
+                            opsz = 0 - opsz;    
+                        } else {
+                            sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                            print_f(rs->plogs, "P2", rs->logs);
+                        }
+                    }
+#endif
+
 #else // #if SPI1_ENABLE
                     opsz = SPI_TRUNK_SZ;
 #endif // #if SPI1_ENABLE
@@ -23355,6 +23479,18 @@ static int p3(struct procRes_s *rs)
                             if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
                             }
+
+#if SPI_TRUNK_FULL_FIX
+                            if (opsz < 0) {
+                                opsz = 0 - opsz;                    
+                                if (opsz == SPI_TRUNK_SZ) {
+                                    opsz = 0 - opsz;    
+                                } else {
+                                    sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                            }
+#endif
 
 #if P3_TX_LOG
                             sprintf(rs->logs, "r %d - %d\n", opsz, pi);
@@ -24457,7 +24593,7 @@ static int p6(struct procRes_s *rs)
         if (opcode == 0x18) { /* update parameter */
             sprintf(rs->logs, "handle opcode: 0x%x(PARA)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
-#if 1
+
             ret = asp_strsplit(&strinfo, folder, n);
             n = 0;
             if (ret > 0) {
@@ -24534,7 +24670,7 @@ static int p6(struct procRes_s *rs)
                 sprintf(rs->logs, "split str not found, ret:%d\n", ret);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-#endif
+
             sendbuf[5+n] = 0xfb;
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
