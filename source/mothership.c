@@ -292,6 +292,18 @@ typedef enum {
     ASPOP_CROP_04,
     ASPOP_CROP_05,
     ASPOP_CROP_06,
+    ASPOP_CROP_07,
+    ASPOP_CROP_08,
+    ASPOP_CROP_09,
+    ASPOP_CROP_10,
+    ASPOP_CROP_11,
+    ASPOP_CROP_12,
+    ASPOP_CROP_13,
+    ASPOP_CROP_14,
+    ASPOP_CROP_15,
+    ASPOP_CROP_16,
+    ASPOP_CROP_17,
+    ASPOP_CROP_18,
     ASPOP_IMG_LEN,
     ASPOP_CROP_COOR_XH,
     ASPOP_CROP_COOR_XL,
@@ -22135,7 +22147,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
-#define P2_TX_LOG (1)
+#define P2_TX_LOG (0)
 #define P2_CMD_LOG (1)
 #define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
@@ -24590,6 +24602,74 @@ static int p6(struct procRes_s *rs)
         sendbuf[4] = 0xfc;
         
         sendbuf[3] = 'F';
+        if (opcode == 0x19) { /* send CROP info (new)*/
+            #define CROP_MAX_NUM_META (18)
+            sprintf(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            cnt = 0;
+            while (1) {
+                num = 0;
+                for (i = 0; i < CROP_MAX_NUM_META; i++) {
+                    pdt = &pct[ASPOP_CROP_01 + i];
+                    if (pdt->opStatus == ASPOP_STA_UPD) {
+                        num++;
+                    }
+                }
+
+                if (i == num) {
+                    break;
+                }
+
+                sprintf(rs->logs, "wait crop num:%d, %d s\n", num, cnt/2);
+                print_f(rs->plogs, "P6", rs->logs);
+/*
+                if (cnt > 10) {
+                    break;
+                }
+*/
+                usleep(500000);
+                cnt ++;
+            }
+
+            for (i = 0; i < CROP_MAX_NUM_META; i++) {
+                pdt = &pct[ASPOP_CROP_01 + i];
+
+                if (pdt->opStatus != ASPOP_STA_UPD) {
+                    continue;
+                }
+
+                if (i != (CROP_MAX_NUM_META - 1)) {
+                    pdt->opStatus = ASPOP_STA_APP;
+                }
+
+                sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", i, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
+                print_f(rs->plogs, "P6", rs->logs);  
+
+                sendbuf[3] = 'C';
+                
+                if (i != (CROP_MAX_NUM_META - 1)) {
+                    sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                    n = strlen(rs->logs);
+                } else {
+                    sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+                    n = strlen(rs->logs);
+                }
+                
+                if (n > 256) n = 256;
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+            
+            goto socketEnd;
+        }
+        
         if (opcode == 0x18) { /* update parameter */
             sprintf(rs->logs, "handle opcode: 0x%x(PARA)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
@@ -24770,14 +24850,15 @@ static int p6(struct procRes_s *rs)
             goto socketEnd;
         }
         
-        if (opcode == 0x15) { /* send CROP info */
+        if (opcode == 0x15) { /* send CROP info (old)*/
+            #define CROP_MAX_NUM (7)
             sprintf(rs->logs, "handle opcode: 0x%x(CROP)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
             cnt = 0;
             while (1) {
                 num = 0;
-                for (i = 0; i < 7; i++) {
+                for (i = 0; i < CROP_MAX_NUM; i++) {
                     pdt = &pct[ASPOP_CROP_01 + i];
                     if (pdt->opStatus == ASPOP_STA_UPD) {
                         num++;
@@ -24799,14 +24880,14 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
-            for (i = 0; i < 7; i++) {
+            for (i = 0; i < CROP_MAX_NUM; i++) {
                 pdt = &pct[ASPOP_CROP_01 + i];
 
                 if (pdt->opStatus != ASPOP_STA_UPD) {
                     continue;
                 }
 
-                if (i != 6) {
+                if (i != (CROP_MAX_NUM - 1)) {
                     pdt->opStatus = ASPOP_STA_APP;
                 }
 
@@ -24815,7 +24896,7 @@ static int p6(struct procRes_s *rs)
 
                 sendbuf[3] = 'C';
                 
-                if (i != 6) {
+                if (i != (CROP_MAX_NUM - 1)) {
                     sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
                     n = strlen(rs->logs);
                 } else {
@@ -27223,6 +27304,102 @@ int main(int argc, char *argv[])
                 ctb->opBitlen = 32;
                 break;
             case ASPOP_CROP_06: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_07: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_08: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_09: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_10: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_11: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_12: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_13: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_14: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_15: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_16: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_17: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_18: 
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_CROP_06;
                 ctb->opType = ASPOP_TYPE_VALUE;
