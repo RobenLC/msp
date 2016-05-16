@@ -335,12 +335,24 @@ struct virtualReg_s {
 };
 
 struct cropCoord_s {
-    int CROP_COOD_01[2];// = {818, 557};
-    int CROP_COOD_02[2];// = {980, 1557};
-    int CROP_COOD_03[2];// = {1168, 1557};
-    int CROP_COOD_04[2];// = {1586, 1484};
-    int CROP_COOD_05[2];// = {1415, 487};
-    int CROP_COOD_06[2];// = {1253, 487};
+    unsigned int CROP_COOD_01[2];// = {818, 557};
+    unsigned int CROP_COOD_02[2];// = {980, 1557};
+    unsigned int CROP_COOD_03[2];// = {1168, 1557};
+    unsigned int CROP_COOD_04[2];// = {1586, 1484};
+    unsigned int CROP_COOD_05[2];// = {1415, 487};
+    unsigned int CROP_COOD_06[2];// = {1253, 487};
+    unsigned int CROP_COOD_07[2];// = {0, 0};
+    unsigned int CROP_COOD_08[2];// = {0, 0};
+    unsigned int CROP_COOD_09[2];// = {0, 0};
+    unsigned int CROP_COOD_10[2];// = {0, 0};
+    unsigned int CROP_COOD_11[2];// = {0, 0};
+    unsigned int CROP_COOD_12[2];// = {0, 0};
+    unsigned int CROP_COOD_13[2];// = {0, 0};
+    unsigned int CROP_COOD_14[2];// = {0, 0};
+    unsigned int CROP_COOD_15[2];// = {0, 0};
+    unsigned int CROP_COOD_16[2];// = {0, 0};
+    unsigned int CROP_COOD_17[2];// = {0, 0};
+    unsigned int CROP_COOD_18[2];// = {0, 0};
 };
 
 struct aspMetaData{
@@ -353,7 +365,7 @@ struct aspMetaData{
   unsigned char  COMPRESSION_RATE;        //0x33
   unsigned char  RESOLUTION;              //0x34
   unsigned char  SCAN_GRAVITY;            //0x35
-  unsigned char  CIS_MAX_Width;           //0x36
+  unsigned char  CIS_MAX_WIDTH;           //0x36
   unsigned char  WIDTH_ADJUST_H;          //0x37
   unsigned char  WIDTH_ADJUST_L;          //0x38
   unsigned char  SCAN_LENGTH_H;           //0x39
@@ -399,7 +411,7 @@ struct aspMetaData{
   unsigned int CROP_POS_16;        //byte[128]
   unsigned int CROP_POS_17;        //byte[132]
   unsigned int CROP_POS_18;        //byte[136]
-  unsigned int CROP_RESERVE[24]; //byte[160]
+  unsigned char CROP_RESERVE[24]; //byte[160]
 
   /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
   unsigned int SCAN_IMAGE_LEN;     //byte[164]
@@ -600,6 +612,79 @@ static int stauto_18(struct psdata_s *data);
 static int stauto_19(struct psdata_s *data);
 static int stauto_20(struct psdata_s *data);
 
+static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
+{
+    unsigned int *psrc, *pdst;
+    uint32_t val=0, scan_len=0;
+    int opSt=0, opEd=0;
+    int istr=0, iend=0, idx=0;
+    struct aspMetaData *pmeta;
+    struct cropCoord_s *pCrop;
+    
+    char *pvdst=0, *pvend=0;
+    
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        pmeta = mrs->metaout;
+        pCrop = &(mrs->cropCoord);
+        scan_len = mrs->scan_length;
+    } else {
+        pmeta = rs->pmetaout;
+        pCrop = rs->pcropCoord;
+        scan_len = *(rs->pscnlen);
+    }
+
+    msync(pCrop, 18 * sizeof(struct cropCoord_s), MS_SYNC);
+
+    if (funcbits == ASPMETA_FUNC_NONE) return -2;
+
+    if (funcbits & ASPMETA_FUNC_CONF) {
+        
+    }
+    
+    if (funcbits & ASPMETA_FUNC_CROP) {
+        psrc = pCrop->CROP_COOD_01;
+        pdst = &(pmeta->CROP_POS_1);
+        for (idx = 0; idx < 18; idx++) {
+            val = (psrc[0] & 0xffff) << 16;
+            val |= psrc[1] & 0xffff;
+            *pdst = val;
+
+            pdst ++;
+            psrc += 2;
+        }
+    }
+
+    if (funcbits & ASPMETA_FUNC_IMGLEN) {
+        pmeta->SCAN_IMAGE_LEN = scan_len;
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDFREE) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDUSED) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDRD) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDWT) {
+    
+    }
+
+    pmeta->ASP_MAGIC[0] = 0x20;
+    pmeta->ASP_MAGIC[1] = 0x14;
+    pmeta->FUNC_BITS |= funcbits;
+
+    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    
+    return 0;
+}
+
 static int dbgMeta(int funcbits, struct aspMetaData *pmeta) 
 {
     msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
@@ -619,7 +704,7 @@ static int dbgMeta(int funcbits, struct aspMetaData *pmeta)
         printf("[meta]COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
         printf("[meta]RESOLUTION: 0x%.2x      \n",pmeta->RESOLUTION      );         //0x34
         printf("[meta]SCAN_GRAVITY: 0x%.2x    \n",pmeta->SCAN_GRAVITY    );       //0x35
-        printf("[meta]CIS_MAX_Width: 0x%.2x   \n",pmeta->CIS_MAX_Width   );        //0x36
+        printf("[meta]CIS_MAX_Width: 0x%.2x   \n",pmeta->CIS_MAX_WIDTH   );        //0x36
         printf("[meta]WIDTH_ADJUST_H: 0x%.2x  \n",pmeta->WIDTH_ADJUST_H  );     //0x37
         printf("[meta]WIDTH_ADJUST_L: 0x%.2x  \n",pmeta->WIDTH_ADJUST_L  );      //0x38
         printf("[meta]SCAN_LENGTH_H: 0x%.2x   \n",pmeta->SCAN_LENGTH_H   );      //0x39
@@ -8152,13 +8237,25 @@ static int p2(struct procRes_s *rs)
     FILE *fp = NULL, *fout=NULL;
     struct cropCoord_s *pCrop;
     
-    int *pCROP_COOD_01;
-    int *pCROP_COOD_02;
-    int *pCROP_COOD_03;
-    int *pCROP_COOD_04;
-    int *pCROP_COOD_05;
-    int *pCROP_COOD_06;
-    
+    unsigned int *pCROP_COOD_01;
+    unsigned int *pCROP_COOD_02;
+    unsigned int *pCROP_COOD_03;
+    unsigned int *pCROP_COOD_04;
+    unsigned int *pCROP_COOD_05;
+    unsigned int *pCROP_COOD_06;
+    unsigned int *pCROP_COOD_07;
+    unsigned int *pCROP_COOD_08;
+    unsigned int *pCROP_COOD_09;
+    unsigned int *pCROP_COOD_10;
+    unsigned int *pCROP_COOD_11;
+    unsigned int *pCROP_COOD_12;
+    unsigned int *pCROP_COOD_13;
+    unsigned int *pCROP_COOD_14;
+    unsigned int *pCROP_COOD_15;
+    unsigned int *pCROP_COOD_16;
+    unsigned int *pCROP_COOD_17;
+    unsigned int *pCROP_COOD_18;
+
     popt_fformat = rs->poptable;
     pCrop = rs->pcropCoord;
 
@@ -8168,7 +8265,19 @@ static int p2(struct procRes_s *rs)
     pCROP_COOD_04 = pCrop->CROP_COOD_04;
     pCROP_COOD_05 = pCrop->CROP_COOD_05;
     pCROP_COOD_06 = pCrop->CROP_COOD_06;
-    
+    pCROP_COOD_07 = pCrop->CROP_COOD_07;
+    pCROP_COOD_08 = pCrop->CROP_COOD_08;
+    pCROP_COOD_09 = pCrop->CROP_COOD_09;
+    pCROP_COOD_10 = pCrop->CROP_COOD_10;
+    pCROP_COOD_11 = pCrop->CROP_COOD_11;
+    pCROP_COOD_12 = pCrop->CROP_COOD_12;
+    pCROP_COOD_13 = pCrop->CROP_COOD_13;
+    pCROP_COOD_14 = pCrop->CROP_COOD_14;
+    pCROP_COOD_15 = pCrop->CROP_COOD_15;
+    pCROP_COOD_16 = pCrop->CROP_COOD_16;
+    pCROP_COOD_17 = pCrop->CROP_COOD_17;
+    pCROP_COOD_18 = pCrop->CROP_COOD_18;
+
     if (infpath[0] != '\0') {
         strcpy(filename, infpath);
     } else {
@@ -8243,6 +8352,34 @@ static int p2(struct procRes_s *rs)
             pCROP_COOD_05[1] = randomGen(900, 999);
             pCROP_COOD_06[0] = randomGen(1400, 1500);
             pCROP_COOD_06[1] = pCROP_COOD_05[1];
+            pCROP_COOD_07[0] = pCROP_COOD_06[0] - 5;
+            pCROP_COOD_07[1] = pCROP_COOD_06[1] + 5;
+            pCROP_COOD_08[0] = pCROP_COOD_05[0] + 5;
+            pCROP_COOD_08[1] = pCROP_COOD_05[1] + 5;
+            pCROP_COOD_09[0] = pCROP_COOD_07[0] - 5;
+            pCROP_COOD_09[1] = pCROP_COOD_07[1] + 5;
+            pCROP_COOD_10[0] = pCROP_COOD_08[0] + 5;
+            pCROP_COOD_10[1] = pCROP_COOD_08[1] + 5;
+
+            pCROP_COOD_17[0] = pCROP_COOD_02[0] - 5;
+            pCROP_COOD_17[1] = pCROP_COOD_02[1] - 5;
+            pCROP_COOD_18[0] = pCROP_COOD_03[0] + 5;
+            pCROP_COOD_18[1] = pCROP_COOD_03[1] - 5;
+
+            pCROP_COOD_15[0] = pCROP_COOD_17[0] - 5;
+            pCROP_COOD_15[1] = pCROP_COOD_17[1] - 5;
+            pCROP_COOD_16[0] = pCROP_COOD_18[0] + 5;
+            pCROP_COOD_16[1] = pCROP_COOD_18[1] - 5;
+            
+            pCROP_COOD_13[0] = pCROP_COOD_15[0] - 5;
+            pCROP_COOD_13[1] = pCROP_COOD_15[1] - 5;
+            pCROP_COOD_14[0] = pCROP_COOD_16[0] + 5;
+            pCROP_COOD_14[1] = pCROP_COOD_16[1] - 5;
+
+            pCROP_COOD_11[0] = pCROP_COOD_13[0] - 5;
+            pCROP_COOD_11[1] = pCROP_COOD_13[1] - 5;
+            pCROP_COOD_12[0] = pCROP_COOD_14[0] + 5;
+            pCROP_COOD_12[1] = pCROP_COOD_14[1] - 5;
 #endif
             if (ch == 'r') {
 #if SAVE_OUT

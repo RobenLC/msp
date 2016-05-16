@@ -292,6 +292,7 @@ typedef enum {
     ASPOP_CROP_04,
     ASPOP_CROP_05,
     ASPOP_CROP_06,
+    ASPOP_IMG_LEN, /* must be here for old design */
     ASPOP_CROP_07,
     ASPOP_CROP_08,
     ASPOP_CROP_09,
@@ -304,7 +305,6 @@ typedef enum {
     ASPOP_CROP_16,
     ASPOP_CROP_17,
     ASPOP_CROP_18,
-    ASPOP_IMG_LEN,
     ASPOP_CROP_COOR_XH,
     ASPOP_CROP_COOR_XL,
     ASPOP_CROP_COOR_YH,
@@ -679,7 +679,7 @@ struct aspMetaData{
   unsigned char  COMPRESSION_RATE;        //0x33
   unsigned char  RESOLUTION;              //0x34
   unsigned char  SCAN_GRAVITY;            //0x35
-  unsigned char  CIS_MAX_Width;           //0x36
+  unsigned char  CIS_MAX_WIDTH;           //0x36
   unsigned char  WIDTH_ADJUST_H;          //0x37
   unsigned char  WIDTH_ADJUST_L;          //0x38
   unsigned char  SCAN_LENGTH_H;           //0x39
@@ -1020,7 +1020,7 @@ static int dbgMeta(int funcbits, struct aspMetaData *pmeta)
         printf("[meta]COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
         printf("[meta]RESOLUTION: 0x%.2x      \n",pmeta->RESOLUTION      );         //0x34
         printf("[meta]SCAN_GRAVITY: 0x%.2x    \n",pmeta->SCAN_GRAVITY    );       //0x35
-        printf("[meta]CIS_MAX_Width: 0x%.2x   \n",pmeta->CIS_MAX_Width   );        //0x36
+        printf("[meta]CIS_MAX_Width: 0x%.2x   \n",pmeta->CIS_MAX_WIDTH   );        //0x36
         printf("[meta]WIDTH_ADJUST_H: 0x%.2x  \n",pmeta->WIDTH_ADJUST_H  );     //0x37
         printf("[meta]WIDTH_ADJUST_L: 0x%.2x  \n",pmeta->WIDTH_ADJUST_L  );      //0x38
         printf("[meta]SCAN_LENGTH_H: 0x%.2x   \n",pmeta->SCAN_LENGTH_H   );      //0x39
@@ -1231,7 +1231,7 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
 
     pmeta->ASP_MAGIC[0] = 0x20;
     pmeta->ASP_MAGIC[1] = 0x14;
-    pmeta->FUNC_BITS = funcbits;
+    pmeta->FUNC_BITS |= funcbits;
 
     msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
     
@@ -1240,6 +1240,8 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
 
 static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
+    int i=0;
+    unsigned int *pt=0;
     struct aspMetaData *pmeta;
     struct aspConfig_s *pct=0, *pdt=0;
 
@@ -1266,11 +1268,26 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
-    
+        pt = &(pmeta->CROP_POS_1);
+
+        for (i = ASPOP_CROP_01; i <= ASPOP_CROP_06; i++) {
+            pct[i].opValue = *pt;
+            pct[i].opStatus = ASPOP_STA_UPD;
+            pt++;
+        }
+
+        for (i = ASPOP_CROP_07; i <= ASPOP_CROP_18; i++) {
+            pct[i].opValue = *pt;
+            pct[i].opStatus = ASPOP_STA_UPD;
+            pt++;
+        }
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
-    
+        pt = &(pmeta->SCAN_IMAGE_LEN);    
+
+        pct[ASPOP_IMG_LEN].opValue = *pt;
+        pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_UPD;
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {
