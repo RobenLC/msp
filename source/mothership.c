@@ -32,6 +32,7 @@
 #define MIN_SECTOR_SIZE (512)
 
 #define PULL_LOW_AFTER_DATA (1)
+
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
 #define SPI_MODE_0      (0|0)
@@ -153,6 +154,8 @@ static int *totSalloc=0;
 #define MAX_PDF_W (1600.0)
 
 #define JPG_FFD9_CUT (1)
+
+#define CROP_USE_META (1)
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -427,14 +430,19 @@ typedef enum {
 } aspFSstatus_e;
 
 typedef enum {
+    ASPMETA_INPUT = 0,
+    ASPMETA_OUTPUT = 1,
+} aspMetaInoutFlag_e;
+
+typedef enum {
     ASPMETA_FUNC_NONE = 0,
-    ASPMETA_FUNC_CONF = 0x1,       /* 0b00000001 */
-    ASPMETA_FUNC_CROP = 0x2,       /* 0b00000010 */
-    ASPMETA_FUNC_IMGLEN = 0x4,   /* 0b00000100 */
-    ASPMETA_FUNC_SDFREE = 0x8,   /* 0b00001000 */
-    ASPMETA_FUNC_SDUSED = 0x16, /* 0b00010000 */
-    ASPMETA_FUNC_SDRD = 0x32,     /* 0b00100000 */
-    ASPMETA_FUNC_SDWT = 0x64,    /* 0b01000000 */
+    ASPMETA_FUNC_CONF = 0b00000001,
+    ASPMETA_FUNC_CROP = 0b00000010,
+    ASPMETA_FUNC_IMGLEN = 0b00000100,
+    ASPMETA_FUNC_SDFREE = 0b00001000,
+    ASPMETA_FUNC_SDUSED = 0b00010000,
+    ASPMETA_FUNC_SDRD = 0b00100000,
+    ASPMETA_FUNC_SDWT = 0b01000000,
 } aspMetaFuncbit_e;
 
 struct apWifiConfig_s{
@@ -1001,20 +1009,21 @@ static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 
-static int dbgMeta(int funcbits, struct aspMetaData *pmeta) 
+static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta) 
 {
     msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
     printf("********************************************\n");
     printf("[meta] debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
 
     if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
+        printf("[meta] Error!!! magic[0]: 0x%.2x magic[1]: 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
         return -2;
     }
     
     if (funcbits == ASPMETA_FUNC_NONE) return -3;
 
     if (funcbits & ASPMETA_FUNC_CONF) {
-        printf("[meta]__ASPMETA_FUNC_CONF__\n");
+        printf("[meta]__ASPMETA_FUNC_CONF__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CONF, (funcbits & ASPMETA_FUNC_CONF));
         printf("[meta]FILE_FORMAT: 0x%.2x    \n",pmeta->FILE_FORMAT     );          //0x31
         printf("[meta]COLOR_MODE: 0x%.2x      \n",pmeta->COLOR_MODE      );        //0x32
         printf("[meta]COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
@@ -1048,48 +1057,52 @@ static int dbgMeta(int funcbits, struct aspMetaData *pmeta)
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
-        printf("[meta]__ASPMETA_FUNC_CROP__\n ");
-        printf("[meta]CROP_POSX_1: %d\n", pmeta->CROP_POS_1 >> 16);                      //byte[68]
-        printf("[meta]CROP_POSY_1: %d\n", pmeta->CROP_POS_1 & 0xffff);                      //byte[72]
-        printf("[meta]CROP_POSX_2: %d\n", pmeta->CROP_POS_2 >> 16);                      //byte[76]
-        printf("[meta]CROP_POSY_2: %d\n", pmeta->CROP_POS_2 & 0xffff);                      //byte[80]
-        printf("[meta]CROP_POSX_3: %d\n", pmeta->CROP_POS_3 >> 16);                      //byte[84]
-        printf("[meta]CROP_POSY_3: %d\n", pmeta->CROP_POS_3 & 0xffff);                      //byte[88]
-        printf("[meta]CROP_POSX_4: %d\n", pmeta->CROP_POS_4 >> 16);                      //byte[92]
-        printf("[meta]CROP_POSY_4: %d\n", pmeta->CROP_POS_4 & 0xffff);                      //byte[96]
-        printf("[meta]CROP_POSX_5: %d\n", pmeta->CROP_POS_5 >> 16);                      //byte[100]
-        printf("[meta]CROP_POSY_5: %d\n", pmeta->CROP_POS_5 & 0xffff);                      //byte[104]
-        printf("[meta]CROP_POSX_6: %d\n", pmeta->CROP_POS_6 >> 16);                      //byte[108]
-        printf("[meta]CROP_POSY_6: %d\n", pmeta->CROP_POS_6 & 0xffff);                      //byte[112]
-        printf("[meta]CROP_POSX_7: %d\n", pmeta->CROP_POS_7 >> 16);                      //byte[116]
-        printf("[meta]CROP_POSY_7: %d\n", pmeta->CROP_POS_7 & 0xffff);                      //byte[120]    
+        printf("[meta]__ASPMETA_FUNC_CROP__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CROP, (funcbits & ASPMETA_FUNC_CROP));
+        printf("[meta]CROP_POSX_01: %d, %d\n", pmeta->CROP_POS_1 >> 16, pmeta->CROP_POS_1 & 0xffff);                      //byte[68]
+        printf("[meta]CROP_POSX_02: %d, %d\n", pmeta->CROP_POS_2 >> 16, pmeta->CROP_POS_2 & 0xffff);                      //byte[72]
+        printf("[meta]CROP_POSX_03: %d, %d\n", pmeta->CROP_POS_3 >> 16, pmeta->CROP_POS_3 & 0xffff);                      //byte[76]
+        printf("[meta]CROP_POSX_04: %d, %d\n", pmeta->CROP_POS_4 >> 16, pmeta->CROP_POS_4 & 0xffff);                      //byte[80]
+        printf("[meta]CROP_POSX_05: %d, %d\n", pmeta->CROP_POS_5 >> 16, pmeta->CROP_POS_5 & 0xffff);                      //byte[84]
+        printf("[meta]CROP_POSX_06: %d, %d\n", pmeta->CROP_POS_6 >> 16, pmeta->CROP_POS_6 & 0xffff);                      //byte[88]
+        printf("[meta]CROP_POSX_07: %d, %d\n", pmeta->CROP_POS_7 >> 16, pmeta->CROP_POS_7 & 0xffff);                      //byte[92]
+        printf("[meta]CROP_POSX_08: %d, %d\n", pmeta->CROP_POS_8 >> 16, pmeta->CROP_POS_8 & 0xffff);                      //byte[96]
+        printf("[meta]CROP_POSX_09: %d, %d\n", pmeta->CROP_POS_9 >> 16, pmeta->CROP_POS_9 & 0xffff);                      //byte[100]
+        printf("[meta]CROP_POSX_10: %d, %d\n", pmeta->CROP_POS_10 >> 16, pmeta->CROP_POS_10 & 0xffff);                      //byte[104]
+        printf("[meta]CROP_POSX_11: %d, %d\n", pmeta->CROP_POS_11 >> 16, pmeta->CROP_POS_11 & 0xffff);                      //byte[108]
+        printf("[meta]CROP_POSX_12: %d, %d\n", pmeta->CROP_POS_12 >> 16, pmeta->CROP_POS_12 & 0xffff);                      //byte[112]
+        printf("[meta]CROP_POSX_13: %d, %d\n", pmeta->CROP_POS_13 >> 16, pmeta->CROP_POS_13 & 0xffff);                      //byte[116]
+        printf("[meta]CROP_POSX_14: %d, %d\n", pmeta->CROP_POS_14 >> 16, pmeta->CROP_POS_14 & 0xffff);                      //byte[120]
+        printf("[meta]CROP_POSX_15: %d, %d\n", pmeta->CROP_POS_15 >> 16, pmeta->CROP_POS_15 & 0xffff);                      //byte[124]
+        printf("[meta]CROP_POSX_16: %d, %d\n", pmeta->CROP_POS_16 >> 16, pmeta->CROP_POS_16 & 0xffff);                      //byte[128]
+        printf("[meta]CROP_POSX_17: %d, %d\n", pmeta->CROP_POS_17 >> 16, pmeta->CROP_POS_17 & 0xffff);                      //byte[132]
+        printf("[meta]CROP_POSX_18: %d, %d\n", pmeta->CROP_POS_18 >> 16, pmeta->CROP_POS_18 & 0xffff);                      //byte[136]
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
-        printf("[meta]__ASPMETA_FUNC_IMGLEN__\n ");
+        printf("[meta]__ASPMETA_FUNC_IMGLEN__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_IMGLEN, (funcbits & ASPMETA_FUNC_IMGLEN));
         printf("[meta]SCAN_IMAGE_LEN: %d\n", pmeta->SCAN_IMAGE_LEN);                      //byte[124]        
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {      
-        printf("[meta]__ASPMETA_FUNC_SDFREE__\n ");
+        printf("[meta]__ASPMETA_FUNC_SDFREE__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDFREE, (funcbits & ASPMETA_FUNC_SDFREE));
         printf("[meta]FREE_SECTOR_ADD: %d\n", pmeta->FREE_SECTOR_ADD);                      //byte[128]            
         printf("[meta]FREE_SECTOR_LEN: %d\n", pmeta->FREE_SECTOR_LEN);                      //byte[132]        
     }
 
     if (funcbits & ASPMETA_FUNC_SDUSED) {
-        printf("[meta]__ASPMETA_FUNC_SDUSED__\n ");
+        printf("[meta]__ASPMETA_FUNC_SDUSED__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDUSED, (funcbits & ASPMETA_FUNC_SDUSED));
         printf("[meta]USED_SECTOR_ADD: %d\n", pmeta->USED_SECTOR_ADD);                      //byte[136]            
         printf("[meta]USED_SECTOR_LEN: %d\n", pmeta->USED_SECTOR_LEN);                      //byte[140]        
     }
 
     if (funcbits & ASPMETA_FUNC_SDRD) {
-        printf("[meta]__ASPMETA_FUNC_SDRD__\n ");
+        printf("[meta]__ASPMETA_FUNC_SDRD__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDRD, (funcbits & ASPMETA_FUNC_SDRD));
         printf("[meta]SD_RW_SECTOR_ADD: %d\n", pmeta->SD_RW_SECTOR_ADD);                      //byte[144]            
         printf("[meta]SD_RW_SECTOR_LEN: %d\n", pmeta->SD_RW_SECTOR_LEN);                      //byte[148]        
     }
 
     if (funcbits & ASPMETA_FUNC_SDWT) {
-        printf("[meta]__ASPMETA_FUNC_SDWT__\n ");
+        printf("[meta]__ASPMETA_FUNC_SDWT__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDWT, (funcbits & ASPMETA_FUNC_SDWT));
         printf("[meta]SD_RW_SECTOR_ADD: %d\n", pmeta->SD_RW_SECTOR_ADD);                      //byte[136]            
         printf("[meta]SD_RW_SECTOR_LEN: %d\n", pmeta->SD_RW_SECTOR_LEN);                      //byte[140]        
     }
@@ -1126,6 +1139,32 @@ static int dbgMeta(int funcbits, struct aspMetaData *pmeta)
     ASPOP_EXT_PULSE,     /* 15 */
 
 #endif
+
+static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out) 
+{
+    struct aspMetaData *pmeta;
+    
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        if (out) {
+            pmeta = mrs->metaout;
+        } else {
+            pmeta = mrs->metain;        
+        }
+    } else {
+        if (out) {
+            pmeta = rs->pmetaout;
+        } else {
+            pmeta = rs->pmetain;
+        }
+    }
+
+    memset(pmeta, 0, sizeof(struct aspMetaData));
+    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    
+    return 0;
+}
 
 static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
@@ -4539,12 +4578,12 @@ static uint32_t next_SAVPARM(struct psdata_s *data)
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSACT;
                 break;
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSMAX;
+                next = PSACT;
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -6817,7 +6856,11 @@ static int stdob_08(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
+#if CROP_USE_META
+                    data->bkofw = emb_bk(data->bkofw, SAVPARM, PSRLT);
+#else
                     data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
+#endif
                     data->result = emb_result(data->result, BKWRD);
                 } else {
                     data->result = emb_result(data->result, NEXT);
@@ -8627,7 +8670,11 @@ static int stsin_36(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
+#if CROP_USE_META
+                    data->bkofw = emb_bk(data->bkofw, SAVPARM, PSRLT);
+#else
                     data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
+#endif
                     data->result = emb_result(data->result, BKWRD);
                 } else {
                     data->result = emb_result(data->result, FWORD);
@@ -10599,7 +10646,11 @@ static int stwtbak_70(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
+#if CROP_USE_META
+                    data->bkofw = emb_bk(data->bkofw, SAVPARM, PSRLT);
+#else
                     data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
+#endif
                     data->result = emb_result(data->result, BKWRD);
                 } else {
                     data->result = emb_result(data->result, FWORD);
@@ -11722,7 +11773,7 @@ static int stsparam_87(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
-    struct info16Bit_s *p=0, *c=0;
+    struct info16Bit_s *p=0, *c=0, *t=0;
     struct procRes_s *rs;
 
 
@@ -11731,22 +11782,29 @@ static int stsparam_87(struct psdata_s *data)
     
     p = &rs->pmch->get;
     c = &rs->pmch->cur;
-
+    t = &rs->pmch->tmp;
+    
     sprintf(rs->logs, "op_87 rlt:0x%x \n", rlt); 
     print_f(rs->plogs, "META", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            c->opcode = OP_META_DAT;
-            c->data = 0x01;
-            memset(p, 0, sizeof(struct info16Bit_s));
+            if (t->opcode == OP_META_DAT) {
+                c->opcode = OP_META_DAT;
+                c->data = t->data;
+                memset(p, 0, sizeof(struct info16Bit_s));
 
-            ch = 41; 
+                ch = 41; 
 
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
-            sprintf(rs->logs, "op_87: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "META", rs->logs);  
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+                sprintf(rs->logs, "op_87: result: %x, goto %d\n", data->result, ch); 
+                print_f(rs->plogs, "META", rs->logs);  
+            } else {
+                sprintf(rs->logs, "op_87 error!! tmp opcode: %x break!!\n", t->opcode); 
+                print_f(rs->plogs, "META", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);                
+            }
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -11779,23 +11837,24 @@ static int stsparam_88(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData * pmeta;
+    struct aspMetaData *pmetaIn, *pmetaOut;
     
     rs = data->rs;
     rlt = abs_result(data->result); 
-    pmeta = rs->pmetaout;
+    pmetaIn = rs->pmetain;
+    pmetaOut= rs->pmetaout;
     //sprintf(rs->logs, "op_88 rlt:0x%x \n", rlt); 
     //print_f(rs->plogs, "SPM", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-
-            aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-            dbgMeta(pmeta->FUNC_BITS, pmeta);
+            aspMetaClear(0, rs, ASPMETA_INPUT);
+            
             sprintf(rs->logs, "dump meta output\n"); 
             print_f(rs->plogs, "SPM", rs->logs);  
             shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData));            
-
+            dbgMeta(pmetaOut->FUNC_BITS, pmetaOut);
+            
             ch = 110; 
 
             rs_ipc_put(data->rs, &ch, 1);
@@ -11807,8 +11866,12 @@ static int stsparam_88(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 sprintf(rs->logs, "dump meta input\n"); 
                 print_f(rs->plogs, "SPM", rs->logs);  
+
                 shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData));
+                dbgMeta(pmetaIn->FUNC_BITS, pmetaIn);
                 
+                aspMetaRelease(pmetaIn->FUNC_BITS, 0, rs);
+
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -11829,27 +11892,32 @@ static int stsparam_88(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsparam_89(struct psdata_s *data)
+static int stcropmeta_89(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
+    struct aspMetaData * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
     rlt = abs_result(data->result); 
-    
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
     sprintf(rs->logs, "op_89 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SPM", rs->logs);  
+    print_f(rs->plogs, "CPM", rs->logs);  
 
     switch (rlt) {
         case STINIT:
+            t->opcode = OP_META_DAT;
+            t->data = 0x02;
+            aspMetaClear(0, rs, ASPMETA_OUTPUT);
+            //aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
+            //dbgMeta(pmeta->FUNC_BITS, pmeta);
 
-            ch = 0; 
-
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
+            data->result = emb_result(data->result, NEXT);
             sprintf(rs->logs, "op_89: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SPM", rs->logs);  
+            print_f(rs->plogs, "CPM", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -11873,27 +11941,32 @@ static int stsparam_89(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stsparam_90(struct psdata_s *data)
+static int stcropmeta_90(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
+    struct aspMetaData * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
     rlt = abs_result(data->result); 
-    
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
     sprintf(rs->logs, "op_90 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "SPM", rs->logs);  
+    print_f(rs->plogs, "CPM", rs->logs);  
 
     switch (rlt) {
         case STINIT:
+            t->opcode = OP_META_DAT;
+            t->data = 0x00;
+            aspMetaClear(0, rs, ASPMETA_OUTPUT);
+            aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
+            dbgMeta(pmeta->FUNC_BITS, pmeta);
 
-            ch = 0; 
-
-            rs_ipc_put(data->rs, &ch, 1);
-            data->result = emb_result(data->result, WAIT);
+            data->result = emb_result(data->result, NEXT);
             sprintf(rs->logs, "op_90: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "SPM", rs->logs);  
+            print_f(rs->plogs, "CPM", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -12385,7 +12458,11 @@ static int stlaser_02(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
+#if CROP_USE_META
+                    data->bkofw = emb_bk(data->bkofw, SAVPARM, PSRLT);
+#else
                     data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
+#endif
                     data->result = emb_result(data->result, BKWRD);
                 } else {
                     data->result = emb_result(data->result, FWORD);
@@ -14223,8 +14300,8 @@ static int cmdfunc_meta_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_SINGLE;
-    pkt->data = SINSCAN_DUAL_SD;
+    pkt->opcode = OP_META_DAT;
+    pkt->data = 0;
     n = cmdfunc_upd2host(mrs, 'y', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -21926,7 +22003,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stwtbak_71, stwtbak_72, stwtbak_73, stwtbak_74, stcrop_75}, // WTBAKQ
                             {stcrop_76, stcrop_77, stcrop_78, stcrop_79, stcrop_80}, // CROPR
                             {stvector_81, stvector_82, stapm_83, stapm_84, stapm_85}, // VECTORS
-                            {stsparam_86, stsparam_87, stsparam_88, stsparam_89, stsparam_90}}; //SAVPARM
+                            {stsparam_86, stsparam_87, stsparam_88, stcropmeta_89, stcropmeta_90}}; //SAVPARM
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -22019,7 +22096,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                     stdata->result = emb_stanPro(0, STINIT, SAVPARM, PSSET);
                 } else if (cmd == 'y') {
                     cmdt = cmd;
-                    stdata->result = emb_stanPro(0, STINIT, SAVPARM, PSACT);
+                    stdata->result = emb_stanPro(0, STINIT, SAVPARM, PSTSM);
                 }
 
 

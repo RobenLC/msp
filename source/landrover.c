@@ -212,15 +212,28 @@ typedef enum {
     FILE_FORMAT_TIFF_M,
 } fileFormat_e;
 
+#if 0
 typedef enum {
     ASPMETA_FUNC_NONE = 0,
     ASPMETA_FUNC_CONF = 0x1,       /* 0b00000001 */
     ASPMETA_FUNC_CROP = 0x2,       /* 0b00000010 */
     ASPMETA_FUNC_IMGLEN = 0x4,   /* 0b00000100 */
     ASPMETA_FUNC_SDFREE = 0x8,   /* 0b00001000 */
-    ASPMETA_FUNC_SDUSED = 0x16, /* 0b00010000 */
-    ASPMETA_FUNC_SDRD = 0x32,     /* 0b00100000 */
-    ASPMETA_FUNC_SDWT = 0x64,    /* 0b01000000 */
+    ASPMETA_FUNC_SDUSED = 0x10, /* 0b00010000 */
+    ASPMETA_FUNC_SDRD = 0x20,     /* 0b00100000 */
+    ASPMETA_FUNC_SDWT = 0x40,    /* 0b01000000 */
+} aspMetaFuncbit_e;
+#endif
+
+typedef enum {
+    ASPMETA_FUNC_NONE = 0,
+    ASPMETA_FUNC_CONF = 0b00000001,
+    ASPMETA_FUNC_CROP = 0b00000010,
+    ASPMETA_FUNC_IMGLEN = 0b00000100,
+    ASPMETA_FUNC_SDFREE = 0b00001000,
+    ASPMETA_FUNC_SDUSED = 0b00010000,
+    ASPMETA_FUNC_SDRD = 0b00100000,
+    ASPMETA_FUNC_SDWT = 0b01000000,
 } aspMetaFuncbit_e;
 
 struct psdata_s {
@@ -612,6 +625,32 @@ static int stauto_18(struct psdata_s *data);
 static int stauto_19(struct psdata_s *data);
 static int stauto_20(struct psdata_s *data);
 
+static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out) 
+{
+    struct aspMetaData *pmeta;
+    
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        if (out) {
+            pmeta = mrs->metaout;
+        } else {
+            pmeta = mrs->metain;        
+        }
+    } else {
+        if (out) {
+            pmeta = rs->pmetaout;
+        } else {
+            pmeta = rs->pmetain;
+        }
+    }
+
+    memset(pmeta, 0, sizeof(struct aspMetaData));
+    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    
+    return 0;
+}
+
 static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
     unsigned int *psrc, *pdst;
@@ -678,6 +717,10 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
 
     pmeta->ASP_MAGIC[0] = 0x20;
     pmeta->ASP_MAGIC[1] = 0x14;
+
+    //pmeta->ASP_MAGIC[0] = 0xab;
+    //pmeta->ASP_MAGIC[1] = 0xcd;
+    
     pmeta->FUNC_BITS |= funcbits;
 
     msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
@@ -4842,17 +4885,23 @@ static int stauto_37(struct psdata_s *data)
 {
     char str[128], ch = 0;
     uint32_t rlt;
-    struct info16Bit_s *p, *g;
+    struct info16Bit_s *p, *g, *t;
     
     rlt = abs_result(data->result);	
+
+    g = &data->rs->pmch->get;
+    p = &data->rs->pmch->cur;
+    t = &data->rs->pmch->tmp;
     sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
     print_f(mlogPool, "auto_37", str);  
 
     switch (rlt) {
         case STINIT:
-            g = &data->rs->pmch->get;
-            p = &data->rs->pmch->cur;
+            
             memset(p, 0, sizeof(struct info16Bit_s));
+
+            t->opcode = g->opcode;
+            t->data = g->data;
             
             ch = 48; 
             rs_ipc_put(data->rs, &ch, 1);
@@ -4887,10 +4936,15 @@ static int stauto_38(struct psdata_s *data)
     char str[128], ch = 0;
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData *pmeta;
-    
+    struct aspMetaData *pmetaIn, *pmetaOut;
+    struct info16Bit_s *p, *g, *t;
+
     rs = data->rs;
-    pmeta = rs->pmetain;
+    pmetaIn = rs->pmetain;
+    pmetaOut = rs->pmetaout;
+    g = &rs->pmch->get;
+    p = &rs->pmch->cur;
+    t = &rs->pmch->tmp;
 
     rlt = abs_result(data->result);	
     //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
@@ -4898,18 +4952,46 @@ static int stauto_38(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            
-            ch = 67; 
-            rs_ipc_put(data->rs, &ch, 1);
+            if (t->opcode == OP_META_DAT) {
+                aspMetaClear(0, rs, 1);
+                aspMetaClear(0, rs, 0);
 
-            data->result = emb_result(data->result, WAIT);
+                switch (t->data) {
+                    case 0x0:
+                        aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
+                        break;
+                    case 0x1:
+                        //aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
+                        break;
+                    case 0x2:
+                        aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
+                        aspMetaBuild(ASPMETA_FUNC_IMGLEN, 0, rs);
+                        break;
+                    default:
+                        sprintf(str, "Warnning!!!meta get parameter: 0x%.2x, wrong !!! \n", t->data);  
+                        print_f(mlogPool, "auto_38", str);  
+                        break;
+                }
+
+                sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
+                print_f(mlogPool, "auto_38", str);  
+
+                ch = 67; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);    
+            } else {
+                sprintf(str, "Error!! get opcode 0x%.2x wrong !!! \n", t->opcode);  
+                print_f(mlogPool, "auto_38", str);  
+                
+                data->result = emb_result(data->result, BREAK);            
+            }
             break;
         case WAIT:
 
             if (data->ansp0 == 1) {
             
                 shmem_dump((char *) rs->pmetain, sizeof(struct aspMetaData));
-                dbgMeta(pmeta->FUNC_BITS,  pmeta);
+                dbgMeta(pmetaIn->FUNC_BITS,  pmetaIn);
                 
                 sprintf(str, "ansp:0x%.2x, go to next!!\n", data->ansp0);  
                 print_f(mlogPool, "auto_38", str);  
@@ -7951,13 +8033,6 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    struct aspMetaData *pmeta;
-
-    pmeta = mrs->metaout;
-
-    pmeta->FILE_FORMAT = 0xab;
-    pmeta->COLOR_MODE = 0xcd;
-
     sprintf(mrs->log, "trigger metaout transfer \n");
     print_f(&mrs->plog, "fs67", mrs->log);
 
