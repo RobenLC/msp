@@ -24539,7 +24539,7 @@ static int p6(struct procRes_s *rs)
     uint32_t clstSize=0;
     uint32_t adata[3], atime[3];
     uint32_t *scanParam=0, op=0, cd=0, fg=0;
-    int ix=0;
+    int ix=0, idx=0;
     char curTime[16];
     char syscmd[256] = "ls -al";
 
@@ -24704,14 +24704,41 @@ static int p6(struct procRes_s *rs)
             cnt = 0;
             while (1) {
                 num = 0;
-                for (i = 0; i < CROP_MAX_NUM_META; i++) {
-                    pdt = &pct[ASPOP_CROP_01 + i];
-                    if (pdt->opStatus == ASPOP_STA_UPD) {
-                        num++;
+                for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
+                    idx = ASPOP_CROP_01 + i;
+                    
+                    switch(idx) {
+                        case ASPOP_CROP_01:
+                        case ASPOP_CROP_02:
+                        case ASPOP_CROP_03:
+                        case ASPOP_CROP_04:
+                        case ASPOP_CROP_05:
+                        case ASPOP_CROP_06:
+                        case ASPOP_CROP_07:
+                        case ASPOP_CROP_08:
+                        case ASPOP_CROP_09:
+                        case ASPOP_CROP_10:
+                        case ASPOP_CROP_11:
+                        case ASPOP_CROP_12:
+                        case ASPOP_CROP_13:
+                        case ASPOP_CROP_14:
+                        case ASPOP_CROP_15:
+                        case ASPOP_CROP_16:
+                        case ASPOP_CROP_17:
+                        case ASPOP_CROP_18:
+                            pdt = &pct[idx];
+                            if (pdt->opStatus == ASPOP_STA_UPD) {
+                                num++;
+                            }
+
+                            break;
+                        default:
+                            break;
                     }
+                    
                 }
 
-                if (i == num) {
+                if (num == CROP_MAX_NUM_META) {
                     break;
                 }
 
@@ -24726,31 +24753,56 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
-            for (i = 0; i < CROP_MAX_NUM_META; i++) {
-                pdt = &pct[ASPOP_CROP_01 + i];
+            for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
+                idx = ASPOP_CROP_01 + i;
+                pdt = &pct[idx];
+                switch(idx) {
+                    case ASPOP_CROP_01:
+                    case ASPOP_CROP_02:
+                    case ASPOP_CROP_03:
+                    case ASPOP_CROP_04:
+                    case ASPOP_CROP_05:
+                    case ASPOP_CROP_06:
+                    case ASPOP_CROP_07:
+                    case ASPOP_CROP_08:
+                    case ASPOP_CROP_09:
+                    case ASPOP_CROP_10:
+                    case ASPOP_CROP_11:
+                    case ASPOP_CROP_12:
+                    case ASPOP_CROP_13:
+                    case ASPOP_CROP_14:
+                    case ASPOP_CROP_15:
+                    case ASPOP_CROP_16:
+                    case ASPOP_CROP_17:
+                    case ASPOP_CROP_18:
+                        pdt = &pct[idx];
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                            sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", i, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
+                            print_f(rs->plogs, "P6", rs->logs);  
+                            sendbuf[3] = 'C';
 
-                if (pdt->opStatus != ASPOP_STA_UPD) {
-                    continue;
-                }
+                            sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
 
-                if (i != (CROP_MAX_NUM_META - 1)) {
-                    pdt->opStatus = ASPOP_STA_APP;
-                }
+                            pdt->opStatus = ASPOP_STA_APP;
+                        }
 
-                sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", i, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
-                print_f(rs->plogs, "P6", rs->logs);  
-
-                sendbuf[3] = 'C';
-                
-                if (i != (CROP_MAX_NUM_META - 1)) {
-                    sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
-                    n = strlen(rs->logs);
-                } else {
-                    sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
-                    n = strlen(rs->logs);
+                        break;
+                    case ASPOP_IMG_LEN:
+                        pdt = &pct[idx];
+                        
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                            sendbuf[3] = 'L';
+                            sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+                        }
+                        break;
+                    default:
+                        break;
                 }
                 
                 if (n > 256) n = 256;
+                
                 memcpy(&sendbuf[5], rs->logs, n);
 
                 sendbuf[5+n] = 0xfb;
@@ -24945,21 +24997,36 @@ static int p6(struct procRes_s *rs)
         }
         
         if (opcode == 0x15) { /* send CROP info (old)*/
-            #define CROP_MAX_NUM (7)
+            #define CROP_MAX_NUM (6)
             sprintf(rs->logs, "handle opcode: 0x%x(CROP)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
             cnt = 0;
             while (1) {
                 num = 0;
-                for (i = 0; i < CROP_MAX_NUM; i++) {
-                    pdt = &pct[ASPOP_CROP_01 + i];
-                    if (pdt->opStatus == ASPOP_STA_UPD) {
-                        num++;
+                for (i = 0; i < (CROP_MAX_NUM+1); i++) {
+                    idx = ASPOP_CROP_01 + i;
+                    
+                    switch(idx) {
+                        case ASPOP_CROP_01:
+                        case ASPOP_CROP_02:
+                        case ASPOP_CROP_03:
+                        case ASPOP_CROP_04:
+                        case ASPOP_CROP_05:
+                        case ASPOP_CROP_06:
+                            pdt = &pct[idx];
+                            if (pdt->opStatus == ASPOP_STA_UPD) {
+                                num++;
+                            }
+
+                            break;
+                        default:
+                            break;
                     }
+                    
                 }
 
-                if (i == num) {
+                if (num == CROP_MAX_NUM) {
                     break;
                 }
 
@@ -24974,31 +25041,44 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
-            for (i = 0; i < CROP_MAX_NUM; i++) {
-                pdt = &pct[ASPOP_CROP_01 + i];
+            for (i = 0; i < (CROP_MAX_NUM+1); i++) {
+                idx = ASPOP_CROP_01 + i;
+                pdt = &pct[idx];
+                switch(idx) {
+                    case ASPOP_CROP_01:
+                    case ASPOP_CROP_02:
+                    case ASPOP_CROP_03:
+                    case ASPOP_CROP_04:
+                    case ASPOP_CROP_05:
+                    case ASPOP_CROP_06:
+                        pdt = &pct[idx];
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                            sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", i, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
+                            print_f(rs->plogs, "P6", rs->logs);  
+                            sendbuf[3] = 'C';
 
-                if (pdt->opStatus != ASPOP_STA_UPD) {
-                    continue;
-                }
+                            sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
 
-                if (i != (CROP_MAX_NUM - 1)) {
-                    pdt->opStatus = ASPOP_STA_APP;
-                }
+                            pdt->opStatus = ASPOP_STA_APP;
+                        }
 
-                sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", i, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
-                print_f(rs->plogs, "P6", rs->logs);  
-
-                sendbuf[3] = 'C';
-                
-                if (i != (CROP_MAX_NUM - 1)) {
-                    sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
-                    n = strlen(rs->logs);
-                } else {
-                    sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
-                    n = strlen(rs->logs);
+                        break;
+                    case ASPOP_IMG_LEN:
+                        pdt = &pct[idx];
+                        
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                            sendbuf[3] = 'L';
+                            sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+                        }
+                        break;
+                    default:
+                        break;
                 }
                 
                 if (n > 256) n = 256;
+                
                 memcpy(&sendbuf[5], rs->logs, n);
 
                 sendbuf[5+n] = 0xfb;
