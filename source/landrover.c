@@ -368,8 +368,15 @@ struct cropCoord_s {
     unsigned int CROP_COOD_18[2];// = {0, 0};
 };
 
+struct intMbs_s{
+    union {
+        uint32_t n;
+        uint8_t d[4];
+    };
+};
+
 struct aspMetaData{
-  unsigned int     FUNC_BITS;             // byte[4] 
+  struct intMbs_s     FUNC_BITS;             // byte[4] 
   unsigned char  ASP_MAGIC[2];            //byte[6] "0x20 0x14"
   
   /* ASPMETA_FUNC_CONF = 0x1 */       /* 0b00000001 */
@@ -406,41 +413,41 @@ struct aspMetaData{
   unsigned char  OP_RESERVE[28];          // byte[64]
   
   /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
-  unsigned int CROP_POS_1;        //byte[68]
-  unsigned int CROP_POS_2;        //byte[72]
-  unsigned int CROP_POS_3;        //byte[76]
-  unsigned int CROP_POS_4;        //byte[80]
-  unsigned int CROP_POS_5;        //byte[84]
-  unsigned int CROP_POS_6;        //byte[88]
-  unsigned int CROP_POS_7;        //byte[92]
-  unsigned int CROP_POS_8;        //byte[96]
-  unsigned int CROP_POS_9;        //byte[100]
-  unsigned int CROP_POS_10;        //byte[104]
-  unsigned int CROP_POS_11;        //byte[108]
-  unsigned int CROP_POS_12;        //byte[112]
-  unsigned int CROP_POS_13;        //byte[116]
-  unsigned int CROP_POS_14;        //byte[120]
-  unsigned int CROP_POS_15;        //byte[124]
-  unsigned int CROP_POS_16;        //byte[128]
-  unsigned int CROP_POS_17;        //byte[132]
-  unsigned int CROP_POS_18;        //byte[136]
+  struct intMbs_s CROP_POS_1;        //byte[68]
+  struct intMbs_s CROP_POS_2;        //byte[72]
+  struct intMbs_s CROP_POS_3;        //byte[76]
+  struct intMbs_s CROP_POS_4;        //byte[80]
+  struct intMbs_s CROP_POS_5;        //byte[84]
+  struct intMbs_s CROP_POS_6;        //byte[88]
+  struct intMbs_s CROP_POS_7;        //byte[92]
+  struct intMbs_s CROP_POS_8;        //byte[96]
+  struct intMbs_s CROP_POS_9;        //byte[100]
+  struct intMbs_s CROP_POS_10;        //byte[104]
+  struct intMbs_s CROP_POS_11;        //byte[108]
+  struct intMbs_s CROP_POS_12;        //byte[112]
+  struct intMbs_s CROP_POS_13;        //byte[116]
+  struct intMbs_s CROP_POS_14;        //byte[120]
+  struct intMbs_s CROP_POS_15;        //byte[124]
+  struct intMbs_s CROP_POS_16;        //byte[128]
+  struct intMbs_s CROP_POS_17;        //byte[132]
+  struct intMbs_s CROP_POS_18;        //byte[136]
   unsigned char CROP_RESERVE[24]; //byte[160]
 
   /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
-  unsigned int SCAN_IMAGE_LEN;     //byte[164]
+  struct intMbs_s SCAN_IMAGE_LEN;     //byte[164]
   
   /* ASPMETA_FUNC_SDFREE = 0x8 */     /* 0b00001000 */
-  unsigned int  FREE_SECTOR_ADD;   //byte[168]
-  unsigned int  FREE_SECTOR_LEN;   //byte[172]
+  struct intMbs_s  FREE_SECTOR_ADD;   //byte[168]
+  struct intMbs_s  FREE_SECTOR_LEN;   //byte[172]
   
   /* ASPMETA_FUNC_SDUSED = 0x16 */    /* 0b00010000 */
-  unsigned int  USED_SECTOR_ADD;   //byte[176]
-  unsigned int  USED_SECTOR_LEN;   //byte[180]
+  struct intMbs_s  USED_SECTOR_ADD;   //byte[176]
+  struct intMbs_s  USED_SECTOR_LEN;   //byte[180]
   
   /* ASPMETA_FUNC_SDRD = 0x32 */      /* 0b00100000 */
   /* ASPMETA_FUNC_SDWT = 0x64 */      /* 0b01000000 */
-  unsigned int  SD_RW_SECTOR_ADD;  //byte[184]
-  unsigned int  SD_RW_SECTOR_LEN;  //byte[188]
+  struct intMbs_s  SD_RW_SECTOR_ADD;  //byte[184]
+  struct intMbs_s  SD_RW_SECTOR_LEN;  //byte[188]
   
   unsigned char available[324];
 };
@@ -625,6 +632,47 @@ static int stauto_18(struct psdata_s *data);
 static int stauto_19(struct psdata_s *data);
 static int stauto_20(struct psdata_s *data);
 
+static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
+{
+    uint32_t org=0;
+    int i=4;
+
+    org = lsb;
+
+    while (i) {
+        i--;
+        msb->d[i] = lsb & 0xff;
+
+        //printf("[%d] :0x%.2x -> 0x%.2x \n", i, lsb & 0xff, msb->d[i]);
+        
+        lsb = lsb >> 8;
+    }
+
+    //printf("lsb2Msb() lsb:0x%.8x -> msb:0x%.8x \n", org, msb->n);
+
+    return msb->n;
+}
+
+static uint32_t msb2lsb(struct intMbs_s *msb)
+{
+    uint32_t lsb=0;
+    int i=0;
+
+    while (i < 4) {
+        lsb = lsb << 8;
+        
+        lsb |= msb->d[i];
+        
+        //printf("[%d] :0x%.2x <- 0x%.2x \n", i, lsb & 0xff, msb->d[i]);
+        
+        i++;
+    }
+
+    //printf("msb2lsb() msb:0x%.8x -> lsb:0x%.8x \n", msb->n, lsb);
+    
+    return lsb;
+}
+
 static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out) 
 {
     struct aspMetaData *pmeta;
@@ -653,7 +701,9 @@ static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out)
 
 static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
-    unsigned int *psrc, *pdst;
+    uint32_t tbits=0;
+    unsigned int *psrc;
+    struct intMbs_s *pdst;
     uint32_t val=0, scan_len=0;
     int opSt=0, opEd=0;
     int istr=0, iend=0, idx=0;
@@ -688,15 +738,19 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         for (idx = 0; idx < 18; idx++) {
             val = (psrc[0] & 0xffff) << 16;
             val |= psrc[1] & 0xffff;
-            *pdst = val;
-
+            
+            //*pdst = val;
+            lsb2Msb(pdst, val);
+            
             pdst ++;
             psrc += 2;
         }
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
-        pmeta->SCAN_IMAGE_LEN = scan_len;
+        pdst = &(pmeta->SCAN_IMAGE_LEN);
+
+        lsb2Msb(pdst, scan_len);
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {
@@ -721,27 +775,31 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     //pmeta->ASP_MAGIC[0] = 0xab;
     //pmeta->ASP_MAGIC[1] = 0xcd;
     
-    pmeta->FUNC_BITS |= funcbits;
-
+    //pmeta->FUNC_BITS |= funcbits;
+    tbits = msb2lsb(&pmeta->FUNC_BITS);
+    tbits |= funcbits;
+    lsb2Msb(&pmeta->FUNC_BITS, tbits);
+    
     msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
     
     return 0;
 }
 
-static int dbgMeta(int funcbits, struct aspMetaData *pmeta) 
+static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta) 
 {
     msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
     printf("********************************************\n");
     printf("[meta] debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
 
     if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
+        printf("[meta] Error!!! magic[0]: 0x%.2x magic[1]: 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
         return -2;
     }
     
     if (funcbits == ASPMETA_FUNC_NONE) return -3;
 
     if (funcbits & ASPMETA_FUNC_CONF) {
-        printf("[meta]__ASPMETA_FUNC_CONF__\n");
+        printf("[meta]__ASPMETA_FUNC_CONF__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CONF, (funcbits & ASPMETA_FUNC_CONF));
         printf("[meta]FILE_FORMAT: 0x%.2x    \n",pmeta->FILE_FORMAT     );          //0x31
         printf("[meta]COLOR_MODE: 0x%.2x      \n",pmeta->COLOR_MODE      );        //0x32
         printf("[meta]COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
@@ -775,50 +833,55 @@ static int dbgMeta(int funcbits, struct aspMetaData *pmeta)
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
-        printf("[meta]__ASPMETA_FUNC_CROP__\n ");
-        printf("[meta]CROP_POSX_1: %d\n", pmeta->CROP_POS_1 >> 16);                      //byte[68]
-        printf("[meta]CROP_POSY_1: %d\n", pmeta->CROP_POS_1 & 0xffff);                      //byte[72]
-        printf("[meta]CROP_POSX_2: %d\n", pmeta->CROP_POS_2 >> 16);                      //byte[76]
-        printf("[meta]CROP_POSY_2: %d\n", pmeta->CROP_POS_2 & 0xffff);                      //byte[80]
-        printf("[meta]CROP_POSX_3: %d\n", pmeta->CROP_POS_3 >> 16);                      //byte[84]
-        printf("[meta]CROP_POSY_3: %d\n", pmeta->CROP_POS_3 & 0xffff);                      //byte[88]
-        printf("[meta]CROP_POSX_4: %d\n", pmeta->CROP_POS_4 >> 16);                      //byte[92]
-        printf("[meta]CROP_POSY_4: %d\n", pmeta->CROP_POS_4 & 0xffff);                      //byte[96]
-        printf("[meta]CROP_POSX_5: %d\n", pmeta->CROP_POS_5 >> 16);                      //byte[100]
-        printf("[meta]CROP_POSY_5: %d\n", pmeta->CROP_POS_5 & 0xffff);                      //byte[104]
-        printf("[meta]CROP_POSX_6: %d\n", pmeta->CROP_POS_6 >> 16);                      //byte[108]
-        printf("[meta]CROP_POSY_6: %d\n", pmeta->CROP_POS_6 & 0xffff);                      //byte[112]
-        printf("[meta]CROP_POSX_7: %d\n", pmeta->CROP_POS_7 >> 16);                      //byte[116]
-        printf("[meta]CROP_POSY_7: %d\n", pmeta->CROP_POS_7 & 0xffff);                      //byte[120]    
+        printf("[meta]__ASPMETA_FUNC_CROP__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CROP, (funcbits & ASPMETA_FUNC_CROP));
+        printf("[meta]CROP_POSX_01: %d, %d\n", msb2lsb(&pmeta->CROP_POS_1) >> 16, msb2lsb(&pmeta->CROP_POS_1) & 0xffff);                      //byte[68]
+        printf("[meta]CROP_POSX_02: %d, %d\n", msb2lsb(&pmeta->CROP_POS_2) >> 16, msb2lsb(&pmeta->CROP_POS_2) & 0xffff);                      //byte[72]
+        printf("[meta]CROP_POSX_03: %d, %d\n", msb2lsb(&pmeta->CROP_POS_3) >> 16, msb2lsb(&pmeta->CROP_POS_3) & 0xffff);                      //byte[76]
+        printf("[meta]CROP_POSX_04: %d, %d\n", msb2lsb(&pmeta->CROP_POS_4) >> 16, msb2lsb(&pmeta->CROP_POS_4) & 0xffff);                      //byte[80]
+        printf("[meta]CROP_POSX_05: %d, %d\n", msb2lsb(&pmeta->CROP_POS_5) >> 16, msb2lsb(&pmeta->CROP_POS_5) & 0xffff);                      //byte[84]
+        printf("[meta]CROP_POSX_06: %d, %d\n", msb2lsb(&pmeta->CROP_POS_6) >> 16, msb2lsb(&pmeta->CROP_POS_6) & 0xffff);                      //byte[88]
+        printf("[meta]CROP_POSX_07: %d, %d\n", msb2lsb(&pmeta->CROP_POS_7) >> 16, msb2lsb(&pmeta->CROP_POS_7) & 0xffff);                      //byte[92]
+        printf("[meta]CROP_POSX_08: %d, %d\n", msb2lsb(&pmeta->CROP_POS_8) >> 16, msb2lsb(&pmeta->CROP_POS_8) & 0xffff);                      //byte[96]
+        printf("[meta]CROP_POSX_09: %d, %d\n", msb2lsb(&pmeta->CROP_POS_9) >> 16, msb2lsb(&pmeta->CROP_POS_9) & 0xffff);                      //byte[100]
+        printf("[meta]CROP_POSX_10: %d, %d\n", msb2lsb(&pmeta->CROP_POS_10) >> 16, msb2lsb(&pmeta->CROP_POS_10) & 0xffff);                      //byte[104]
+        printf("[meta]CROP_POSX_11: %d, %d\n", msb2lsb(&pmeta->CROP_POS_11) >> 16, msb2lsb(&pmeta->CROP_POS_11) & 0xffff);                      //byte[108]
+        printf("[meta]CROP_POSX_12: %d, %d\n", msb2lsb(&pmeta->CROP_POS_12) >> 16, msb2lsb(&pmeta->CROP_POS_12) & 0xffff);                      //byte[112]
+        printf("[meta]CROP_POSX_13: %d, %d\n", msb2lsb(&pmeta->CROP_POS_13) >> 16, msb2lsb(&pmeta->CROP_POS_13) & 0xffff);                      //byte[116]
+        printf("[meta]CROP_POSX_14: %d, %d\n", msb2lsb(&pmeta->CROP_POS_14) >> 16, msb2lsb(&pmeta->CROP_POS_14) & 0xffff);                      //byte[120]
+        printf("[meta]CROP_POSX_15: %d, %d\n", msb2lsb(&pmeta->CROP_POS_15) >> 16, msb2lsb(&pmeta->CROP_POS_15) & 0xffff);                      //byte[124]
+        printf("[meta]CROP_POSX_16: %d, %d\n", msb2lsb(&pmeta->CROP_POS_16) >> 16, msb2lsb(&pmeta->CROP_POS_16) & 0xffff);                      //byte[128]
+        printf("[meta]CROP_POSX_17: %d, %d\n", msb2lsb(&pmeta->CROP_POS_17) >> 16, msb2lsb(&pmeta->CROP_POS_17) & 0xffff);                      //byte[132]
+        printf("[meta]CROP_POSX_18: %d, %d\n", msb2lsb(&pmeta->CROP_POS_18) >> 16, msb2lsb(&pmeta->CROP_POS_18) & 0xffff);                      //byte[136]
+
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
-        printf("[meta]__ASPMETA_FUNC_IMGLEN__\n ");
-        printf("[meta]SCAN_IMAGE_LEN: %d\n", pmeta->SCAN_IMAGE_LEN);                      //byte[124]        
+        printf("[meta]__ASPMETA_FUNC_IMGLEN__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_IMGLEN, (funcbits & ASPMETA_FUNC_IMGLEN));
+        printf("[meta]SCAN_IMAGE_LEN: %d\n", msb2lsb(&pmeta->SCAN_IMAGE_LEN));                      //byte[124]        
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {      
-        printf("[meta]__ASPMETA_FUNC_SDFREE__\n ");
-        printf("[meta]FREE_SECTOR_ADD: %d\n", pmeta->FREE_SECTOR_ADD);                      //byte[128]            
-        printf("[meta]FREE_SECTOR_LEN: %d\n", pmeta->FREE_SECTOR_LEN);                      //byte[132]        
+        printf("[meta]__ASPMETA_FUNC_SDFREE__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDFREE, (funcbits & ASPMETA_FUNC_SDFREE));
+        printf("[meta]FREE_SECTOR_ADD: %d\n", msb2lsb(&pmeta->FREE_SECTOR_ADD));                      //byte[128]            
+        printf("[meta]FREE_SECTOR_LEN: %d\n", msb2lsb(&pmeta->FREE_SECTOR_LEN));                      //byte[132]        
     }
 
     if (funcbits & ASPMETA_FUNC_SDUSED) {
-        printf("[meta]__ASPMETA_FUNC_SDUSED__\n ");
-        printf("[meta]USED_SECTOR_ADD: %d\n", pmeta->USED_SECTOR_ADD);                      //byte[136]            
-        printf("[meta]USED_SECTOR_LEN: %d\n", pmeta->USED_SECTOR_LEN);                      //byte[140]        
+        printf("[meta]__ASPMETA_FUNC_SDUSED__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDUSED, (funcbits & ASPMETA_FUNC_SDUSED));
+        printf("[meta]USED_SECTOR_ADD: %d\n", msb2lsb(&pmeta->USED_SECTOR_ADD));                      //byte[136]            
+        printf("[meta]USED_SECTOR_LEN: %d\n", msb2lsb(&pmeta->USED_SECTOR_LEN));                      //byte[140]        
     }
 
     if (funcbits & ASPMETA_FUNC_SDRD) {
-        printf("[meta]__ASPMETA_FUNC_SDRD__\n ");
-        printf("[meta]SD_RW_SECTOR_ADD: %d\n", pmeta->SD_RW_SECTOR_ADD);                      //byte[144]            
-        printf("[meta]SD_RW_SECTOR_LEN: %d\n", pmeta->SD_RW_SECTOR_LEN);                      //byte[148]        
+        printf("[meta]__ASPMETA_FUNC_SDRD__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDRD, (funcbits & ASPMETA_FUNC_SDRD));
+        printf("[meta]SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[144]            
+        printf("[meta]SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[148]        
     }
 
     if (funcbits & ASPMETA_FUNC_SDWT) {
-        printf("[meta]__ASPMETA_FUNC_SDWT__\n ");
-        printf("[meta]SD_RW_SECTOR_ADD: %d\n", pmeta->SD_RW_SECTOR_ADD);                      //byte[136]            
-        printf("[meta]SD_RW_SECTOR_LEN: %d\n", pmeta->SD_RW_SECTOR_LEN);                      //byte[140]        
+        printf("[meta]__ASPMETA_FUNC_SDWT__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDWT, (funcbits & ASPMETA_FUNC_SDWT));
+        printf("[meta]SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[136]            
+        printf("[meta]SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[140]        
     }
 
     printf("********************************************\n");
@@ -4991,7 +5054,7 @@ static int stauto_38(struct psdata_s *data)
             if (data->ansp0 == 1) {
             
                 shmem_dump((char *) rs->pmetain, sizeof(struct aspMetaData));
-                dbgMeta(pmetaIn->FUNC_BITS,  pmetaIn);
+                dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS),  pmetaIn);
                 
                 sprintf(str, "ansp:0x%.2x, go to next!!\n", data->ansp0);  
                 print_f(mlogPool, "auto_38", str);  
