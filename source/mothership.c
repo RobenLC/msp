@@ -231,17 +231,17 @@ typedef enum {
     ASPOP_RESOLUTION,
     ASPOP_SCAN_GRAVITY,
     ASPOP_MAX_WIDTH,
-    ASPOP_WIDTH_ADJ_H,
+    ASPOP_WIDTH_ADJ_H, /* 10 */
     ASPOP_WIDTH_ADJ_L,
     ASPOP_SCAN_LENS_H,
     ASPOP_SCAN_LENS_L,
     ASPOP_INTER_IMG,     
     ASPOP_AFEIC_SEL,     
-    ASPOP_EXT_PULSE,     /* 16 */
-    ASPOP_SDFAT_RD,      /* 17 */
+    ASPOP_EXT_PULSE,     
+    ASPOP_SDFAT_RD,      
     ASPOP_SDFAT_WT,
     ASPOP_SDFAT_STR01,
-    ASPOP_SDFAT_STR02,
+    ASPOP_SDFAT_STR02,  /* 20 */
     ASPOP_SDFAT_STR03,
     ASPOP_SDFAT_STR04,
     ASPOP_SDFAT_LEN01,
@@ -251,7 +251,7 @@ typedef enum {
     ASPOP_SDFAT_SDAT,
     ASPOP_REG_RD,
     ASPOP_REG_WT,
-    ASPOP_REG_ADDRH,
+    ASPOP_REG_ADDRH, /* 30 */
     ASPOP_REG_ADDRL,
     ASPOP_REG_DAT,
     ASPOP_SUP_SAVE,
@@ -261,7 +261,7 @@ typedef enum {
     ASPOP_SDFREE_STR03,
     ASPOP_SDFREE_STR04,
     ASPOP_SDFREE_LEN01,
-    ASPOP_SDFREE_LEN02,
+    ASPOP_SDFREE_LEN02, /* 40 */
     ASPOP_SDFREE_LEN03,
     ASPOP_SDFREE_LEN04,
     ASPOP_SDUSED_USEDSEC,
@@ -271,7 +271,7 @@ typedef enum {
     ASPOP_SDUSED_STR04,
     ASPOP_SDUSED_LEN01,
     ASPOP_SDUSED_LEN02,
-    ASPOP_SDUSED_LEN03,
+    ASPOP_SDUSED_LEN03, /* 50 */
     ASPOP_SDUSED_LEN04,
     ASPOP_FUNTEST_00,
     ASPOP_FUNTEST_01,
@@ -281,7 +281,7 @@ typedef enum {
     ASPOP_FUNTEST_05,
     ASPOP_FUNTEST_06,
     ASPOP_FUNTEST_07,
-    ASPOP_FUNTEST_08,
+    ASPOP_FUNTEST_08, /* 60 */
     ASPOP_FUNTEST_09,
     ASPOP_FUNTEST_10,
     ASPOP_FUNTEST_11,
@@ -290,7 +290,7 @@ typedef enum {
     ASPOP_FUNTEST_14,
     ASPOP_FUNTEST_15,
     ASPOP_CROP_01,
-    ASPOP_CROP_02,
+    ASPOP_CROP_02, /* 70 */
     ASPOP_CROP_03,
     ASPOP_CROP_04,
     ASPOP_CROP_05,
@@ -300,7 +300,7 @@ typedef enum {
     ASPOP_CROP_08,
     ASPOP_CROP_09,
     ASPOP_CROP_10,
-    ASPOP_CROP_11,
+    ASPOP_CROP_11, /* 80 */
     ASPOP_CROP_12,
     ASPOP_CROP_13,
     ASPOP_CROP_14,
@@ -310,11 +310,11 @@ typedef enum {
     ASPOP_CROP_18,
     ASPOP_CROP_COOR_XH,
     ASPOP_CROP_COOR_XL,
-    ASPOP_CROP_COOR_YH,
+    ASPOP_CROP_COOR_YH, /* 90 */
     ASPOP_CROP_COOR_YL,
     ASPOP_EG_DECT,
     ASPOP_AP_MODE,
-    ASPOP_CODE_MAX, /* 56 */
+    ASPOP_CODE_MAX, /* 94 */
 } aspOpCode_e;
 
 typedef enum {
@@ -7010,7 +7010,7 @@ static int stdob_10(struct psdata_s *data)
                 sprintf(rs->logs, "op10, REG_RD opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op10, REG_RD status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -7074,7 +7074,7 @@ static int streg_11(struct psdata_s *data)
                 sprintf(rs->logs, "op11, OP_RGADD_H opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op11, OP_RGADD_H status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -7137,7 +7137,7 @@ static int streg_12(struct psdata_s *data)
                 sprintf(rs->logs, "op12, OP_RGADD_L opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op12, OP_RGADD_L status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -7200,7 +7200,7 @@ static int streg_13(struct psdata_s *data)
                 sprintf(rs->logs, "op13, OP_RGDAT opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op13, OP_RGDAT status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -7262,7 +7262,7 @@ static int streg_14(struct psdata_s *data)
                 sprintf(rs->logs, "op14, REG_WT opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op14, REG_WT status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -7326,7 +7326,7 @@ static int streg_15(struct psdata_s *data)
                 sprintf(rs->logs, "op15, OP_RGADD_H opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op15, OP_RGADD_H status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -7389,7 +7389,7 @@ static int streg_16(struct psdata_s *data)
                 sprintf(rs->logs, "op16, OP_RGADD_L opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op16, OP_RGADD_L status is wrong op:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -7452,7 +7452,7 @@ static int streg_17(struct psdata_s *data)
                 sprintf(rs->logs, "op17, OP_RGDAT opcode is wrong op:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
-            } else if (!(pdt->opStatus & ASPOP_STA_APP)) {
+            } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
                 sprintf(rs->logs, "op17, OP_RGDAT status is wrong, %x\n", pdt->opStatus); 
                 print_f(rs->plogs, "reg", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -15133,13 +15133,17 @@ static int cmdfunc_opcode(int argc, char *argv[])
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
         ctb = &mrs->configTable[ix];
         if (tg == ctb->opCode) {
+        
+            //sprintf(mrs->log, "found!!! [%d] [0x%x] [0x%x] [0x%x] \n", ix, ctb->opCode, ctb->opValue, ctb->opStatus); 
+            //print_f(&mrs->plog, "DBG", mrs->log);
+
             break;
         }
         ctb = 0;
     }
 
     if (!ctb) {
-        sprintf(mrs->log, "cmdfunc_opcode - 3\n"); 
+        sprintf(mrs->log, "Error!!! cmdfunc_opcode - 3\n"); 
         print_f(&mrs->plog, "DBG", mrs->log);
         ret = -7;
         goto end;
@@ -24418,8 +24422,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         n = read(rs->psocket_r->connfd, recvbuf, 1024);
         
         recvbuf[n-1] = '\0';
-        sprintf(rs->logs, "receive len[%d]content[%s]\n", n, recvbuf);
-        print_f(rs->plogs, "P5", rs->logs);
+        //sprintf(rs->logs, "receive len[%d]content[%s]\n", n, recvbuf);
+        //print_f(rs->plogs, "P5", rs->logs);
         memset(sendbuf, 0, 2048);
         sprintf(sendbuf, "Leo heard [%s]\n", recvbuf);
         //strcpy(sendbuf, recvbuf);
@@ -24442,8 +24446,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             goto socketEnd;
         }
 
-        sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, &recvbuf[hd], hd, be, ed, ln, fg);
-        print_f(rs->plogs, "P5", rs->logs);
+        //sprintf(rs->logs, "receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, &recvbuf[hd], hd, be, ed, ln, fg);
+        //print_f(rs->plogs, "P5", rs->logs);
 
         opcode = recvbuf[hd+1]; param = recvbuf[be-1]; flag = recvbuf[fg+1];
         sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]flg[0x%x]\n", opcode, param, flag);
@@ -24539,8 +24543,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sendbuf[7+n+1] = 0xfb;
         sendbuf[7+n+2] = '\0';
 
-        sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, &sendbuf[7], rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
-        print_f(rs->plogs, "P5", rs->logs);
+        //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, &sendbuf[7], rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
+        //print_f(rs->plogs, "P5", rs->logs);
         //printf("[p5]:%s\n", &sendbuf[7]);
 
         socketEnd:
@@ -27697,7 +27701,7 @@ int main(int argc, char *argv[])
         }
     }
     
-    /*
+    #if 0 /* debug print */
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
         ctb = &pmrs->configTable[ix];
             printf("ctb[%d] 0x%.2x opcode:0x%.2x 0x%.2x val:0x%.2x mask:0x%.2x len:%d \n", ix,
@@ -27708,7 +27712,8 @@ int main(int argc, char *argv[])
             ctb->opMask,
             ctb->opBitlen);
     }
-    */
+    #endif
+    
     #if 0 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
     if (arg[1] == 0) {
         /* launch AP  */
