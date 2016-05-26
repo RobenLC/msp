@@ -11927,7 +11927,9 @@ static int stsparam_88(struct psdata_s *data)
                 
                 aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
 
-                data->result = emb_result(data->result, NEXT);
+                //data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, FWORD);
+
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -21852,8 +21854,10 @@ static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
     int ret, bitset;
     char ch;
 
-    //sprintf(mrs->log, "%d\n", modersp->v++);
-    //print_f(&mrs->plog, "fs111", mrs->log);
+    sprintf(mrs->log, "%d\n", modersp->v++);
+    print_f(&mrs->plog, "fs111", mrs->log);
+
+    //sleep(5);
 
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((ret > 0) && (ch == 'Y')){
@@ -22967,15 +22971,18 @@ static int p2(struct procRes_s *rs)
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
 #endif
 
+                         sprintf(rs->logs, "opsz: %d \n", opsz);
+                         print_f(rs->plogs, "P2", rs->logs);
+
                         if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                             opsz = 0 - opsz;
                         }
                         
-#if SPI_TRUNK_FULL_FIX
+#if 1 /* SPI_TRUNK_FULL_FIX, the full trunk in non-kthread data mode need this */
                         if (opsz < 0) {
                             opsz = 0 - opsz;                    
                             if (opsz == SPI_TRUNK_SZ) {
-                                opsz = 0 - opsz;    
+                                //opsz = 0 - opsz;    
                             } else {
                                 sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
                                 print_f(rs->plogs, "P2", rs->logs);
@@ -23296,7 +23303,8 @@ static int p2(struct procRes_s *rs)
                 pi = 0;  
                 len = 0;
 
-                len = 512;
+                //len = 512;
+                len = 1024;
                 addr = (char *)rs->pmetaout;
                 laddr = (char *)rs->pmetain;
                 
