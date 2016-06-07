@@ -22301,10 +22301,10 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 }
 
 #define MSP_P4_SAVE_DAT (0)
-#define MSP_P2_SAVE_DAT (0)
+#define MSP_P2_SAVE_DAT (1)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
-#define P2_TX_LOG (0)
+#define P2_TX_LOG (1)
 #define P2_CMD_LOG (1)
 #define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
@@ -23304,7 +23304,7 @@ static int p2(struct procRes_s *rs)
                 len = 0;
 
                 //len = 512;
-                len = 1024;
+                len = SPI_TRUNK_SZ;
                 addr = (char *)rs->pmetaout;
                 laddr = (char *)rs->pmetain;
                 
