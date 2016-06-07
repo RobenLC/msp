@@ -118,7 +118,21 @@
 #define SPI_TRUNK_SZ   (32768)
 #define DIRECT_WT_DISK    (0)
 
-#define RANDOM_CROP_COORD (1)
+#define RANDOM_CROP_COORD (0)
+#define CROP_NUMBER   (18)
+
+#if (CROP_NUMBER == 18)
+#define CROP_SAMPLE_SIZE (7)
+
+struct cropSample_s {
+    int cropx;
+    int cropy;
+};
+
+struct cropPoints_s{
+    struct cropSample_s samples[CROP_SAMPLE_SIZE]; 
+};
+#endif
 
 #if RANDOM_CROP_COORD
 #else
@@ -136,13 +150,79 @@ static int crop_03[2] = {3412, 1288};
 static int crop_04[2] = {3482, 56};
 static int crop_05[2] = {3466, 0};
 static int crop_06[2] = {1347, 0};
-#else
+#elif 0
 static int crop_01[2] = {517*2, 580*2};
 static int crop_02[2] = {1544*2, 688*2};
 static int crop_03[2] = {1586*2, 688*2};
 static int crop_04[2] = {1611*2, 60*2};
 static int crop_05[2] = {1607*2, 32*2};
 static int crop_06[2] = {537*2, 32*2};
+#elif (CROP_NUMBER == 18)
+#if (CROP_SAMPLE_SIZE == 6)
+static struct cropPoints_s crop_01 = {{{1271, 141}, {1351, 28 }, {1163, 93 }, {520, 510 }, {877, 465 }, {924, 407 }}};
+static struct cropPoints_s crop_02 = {{{1529, 3129}, {1451, 2315}, {1309, 3282}, {1240, 3629}, {1529, 3593}, {1577, 3330}}};
+static struct cropPoints_s crop_03 = {{{1563, 3129}, {1527, 2315}, {1364, 3282}, {1260, 3629}, {1553, 3593}, {1601, 3330}}};
+static struct cropPoints_s crop_04 = {{{3317, 2937}, {2849, 2109}, {3623, 3173}, {3481, 3074}, {3788, 3104}, {3323, 2933}}};
+static struct cropPoints_s crop_05 = {{{3043, 2}, {2780, 7}, {3477, 6}, {2798, 5}, {3147, 2}, {2678, 7}}};
+static struct cropPoints_s crop_06 = {{{2934, 2}, {2431, 7}, {3271, 6}, {2738, 5}, {3088, 2}, {2637, 7}}};
+static struct cropPoints_s crop_07 = {{{2847, 10}, {1952, 15}, {3051, 14}, {2692, 13}, {3047, 10}, {2604, 15}}};
+static struct cropPoints_s crop_08 = {{{3054, 10}, {2781, 15}, {3454, 14}, {2810, 13}, {3157, 10}, {2679, 15}}};
+static struct cropPoints_s crop_09 = {{{2739, 18}, {1481, 23}, {2816, 22}, {2651, 21}, {3006, 18}, {2567, 23}}};
+static struct cropPoints_s crop_10 = {{{3064, 18}, {2780, 23}, {3481, 22}, {2811, 21}, {3158, 18}, {2681, 23}}};
+static struct cropPoints_s crop_11 = {{{1525, 3097}, {1444, 2278}, {1308, 3253}, {1234, 3604}, {1522, 3561}, {1562, 3302}}};
+static struct cropPoints_s crop_12 = {{{1863, 3097}, {1630, 2278}, {2098, 3253}, {1355, 3604}, {1690, 3561}, {1716, 3302}}};
+static struct cropPoints_s crop_13 = {{{1526, 3105}, {1444, 2286}, {1310, 3261}, {1236, 3612}, {1524, 3569}, {1564, 3310}}};
+static struct cropPoints_s crop_14 = {{{1779, 3105}, {1630, 2286}, {1865, 3261}, {1327, 3612}, {1662, 3569}, {1681, 3310}}};
+static struct cropPoints_s crop_15 = {{{1526, 3113}, {1459, 2294}, {1308, 3269}, {1239, 3620}, {1526, 3577}, {1569, 3318}}};
+static struct cropPoints_s crop_16 = {{{1706, 3113}, {1549, 2294}, {1676, 3269}, {1289, 3620}, {1621, 3577}, {1650, 3318}}};
+static struct cropPoints_s crop_17 = {{{1528, 3121}, {1451, 2310}, {1308, 3277}, {1240, 3628}, {1528, 3585}, {1575, 3326}}};
+static struct cropPoints_s crop_18 = {{{1627, 3121}, {1527, 2310}, {1471, 3277}, {1260, 3628}, {1583, 3585}, {1618, 3326}}};
+#elif (CROP_SAMPLE_SIZE == 7)
+static struct cropPoints_s crop_01 = {{{967, 105  }, {492, 3190 }, {1437, 12  }, {1135, 2976}, {1475, 150 }, {903, 2999 }, {946, 124  }}};
+static struct cropPoints_s crop_02 = {{{1100, 3290  }, {2738, 3299  }, {1491, 3038  }, {2877, 3171  }, {1761, 3154  }, {2628, 3097  }, {1161, 3125  }}};
+static struct cropPoints_s crop_03 = {{{1146, 3290}, {2792, 3299}, {1551, 3038}, {2914, 3171}, {1801, 3154}, {2690, 3097}, {1197, 3125}}};
+static struct cropPoints_s crop_04 = {{{3415, 3152}, {2881, 67  }, {3287, 2958}, {3202, 187 }, {3548, 2954}, {2826, 88  }, {2953, 2978}}};
+static struct cropPoints_s crop_05 = {{{3280, 3}, {768, 3 }, {3231, 1}, {1482, 7}, {3248, 2}, {1174, 6}, {2707, 2}}};
+static struct cropPoints_s crop_06 = {{{3086, 3}, {569, 3 }, {2462, 1}, {1413, 7}, {3152, 2}, {1028, 6}, {2604, 2}}};
+static struct cropPoints_s crop_07 = {{{2859, 11}, {569, 11 }, {1521, 9 }, {1413, 15}, {3067, 10}, {1028, 14}, {2507, 10}}};
+static struct cropPoints_s crop_08 = {{{3268, 11}, {1059, 11}, {3237, 9 }, {1555, 15}, {3257, 10}, {1363, 14}, {2723, 10}}};
+static struct cropPoints_s crop_09 = {{{2678, 19}, {569, 19 }, {1439, 17}, {1412, 23}, {2981, 18}, {1028, 22}, {2413, 18}}};
+static struct cropPoints_s crop_10 = {{{3280, 19}, {1328, 19}, {3238, 17}, {1625, 23}, {3268, 18}, {1536, 22}, {2737, 18}}};
+static struct cropPoints_s crop_11 = {{{1110, 3258}, {2188, 3274}, {1490, 3008}, {2616, 3142}, {1760, 3129}, {2029, 3069}, {1159, 3097}}};
+static struct cropPoints_s crop_12 = {{{1822, 3258}, {2811, 3274}, {2274, 3008}, {2924, 3142}, {2015, 3129}, {2698, 3069}, {1573, 3097}}};
+static struct cropPoints_s crop_13 = {{{1097, 3266}, {2356, 3282}, {1490, 3016}, {2692, 3150}, {1760, 3137}, {2215, 3077}, {1160, 3105}}};
+static struct cropPoints_s crop_14 = {{{1643, 3266}, {2804, 3282}, {2080, 3016}, {2922, 3150}, {1948, 3137}, {2697, 3077}, {1465, 3105}}};
+static struct cropPoints_s crop_15 = {{{1098, 3274}, {2546, 3290}, {1490, 3024}, {2774, 3158}, {1761, 3145}, {2384, 3085}, {1161, 3113}}};
+static struct cropPoints_s crop_16 = {{{1471, 3274}, {2802, 3290}, {1889, 3024}, {2918, 3158}, {1873, 3145}, {2693, 3085}, {1355, 3113}}};
+static struct cropPoints_s crop_17 = {{{1102, 3282}, {2738, 3298}, {1490, 3032}, {2854, 3166}, {1761, 3153}, {2572, 3093}, {1160, 3121}}};
+static struct cropPoints_s crop_18 = {{{1293, 3282}, {2792, 3298}, {1680, 3032}, {2913, 3166}, {1801, 3153}, {2689, 3093}, {1231, 3121}}};
+#else
+static int crop_01[2] = {399, 45};
+static int crop_02[2] = {432, 4392};
+static int crop_03[2] = {583, 4392};
+static int crop_04[2] = {3850, 4228};
+static int crop_05[2] = {3799, 1};
+static int crop_06[2] = {3410, 1};
+static int crop_07[2] = {2547, 10};
+static int crop_08[2] = {3825, 10};
+static int crop_09[2] = {1538, 20};
+static int crop_10[2] = {3823, 20};
+static int crop_11[2] = {431, 4301};
+static int crop_12[2] = {3850, 4301};
+static int crop_13[2] = {431, 4324};
+static int crop_14[2] = {3847, 4324};
+static int crop_15[2] = {433, 4347};
+static int crop_16[2] = {3838, 4347};
+static int crop_17[2] = {433, 4370};
+static int crop_18[2] = {2238, 4370};
+#endif
+#else
+static int crop_01[2] = {731, 31};
+static int crop_02[2] = {797, 1129};
+static int crop_03[2] = {829, 1129};
+static int crop_04[2] = {1498, 1042};
+static int crop_05[2] = {1426, 1};
+static int crop_06[2] = {1278, 1};
 #endif
 #endif
 
@@ -750,7 +830,8 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
         pdst = &(pmeta->SCAN_IMAGE_LEN);
 
-        lsb2Msb(pdst, scan_len);
+        //lsb2Msb(pdst, scan_len);
+        lsb2Msb(pdst, 5400);
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {
@@ -8364,6 +8445,12 @@ static int p2(struct procRes_s *rs)
     char filename[128] = "/mnt/mmc2/scan_pro.jpg";
     char filetiffraw[128] = "/mnt/mmc2/tiff_raw.bin";
     char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
+#if (CROP_SAMPLE_SIZE == 6)
+    char cropfile[128] = "/mnt/mmc2/crop/crop_%.2d.jpg";
+#elif (CROP_SAMPLE_SIZE == 7)
+    char cropfile[128] = "/mnt/mmc2/crop3/crop_%.2d.jpg";
+#else
+#endif
     //char filename[128] = "/mnt/mmc2/textfile_02.bin";
     char fileback[128] = "/mnt/mmc2/tx/recv_%d.bin";
 #if SAVE_OUT
@@ -8419,7 +8506,11 @@ static int p2(struct procRes_s *rs)
     if (infpath[0] != '\0') {
         strcpy(filename, infpath);
     } else {
+#if CROP_SAMPLE_SIZE
+        sprintf(filename, cropfile, (idx%CROP_SAMPLE_SIZE));
+#else
         sprintf(filename, samplefile, (idx%36));
+#endif
     }
 
     fp = fopen(filename, "r");
@@ -8459,8 +8550,11 @@ static int p2(struct procRes_s *rs)
             } else if (*popt_fformat == FILE_FORMAT_TIFF_I) {
                 sprintf(filename, filetiffraw);
             } else {
+#if CROP_SAMPLE_SIZE
+                sprintf(filename, cropfile, (idx%CROP_SAMPLE_SIZE));
+#else
                 sprintf(filename, samplefile, (idx%36));
-                idx++;
+#endif
             }
 
             sprintf(rs->logs, "get sample file: [%s] \n", filename);
@@ -8518,8 +8612,80 @@ static int p2(struct procRes_s *rs)
             pCROP_COOD_11[1] = pCROP_COOD_13[1] - 5;
             pCROP_COOD_12[0] = pCROP_COOD_14[0] + 5;
             pCROP_COOD_12[1] = pCROP_COOD_14[1] - 5;
+#else
+#if (CROP_NUMBER == 18)
+#if CROP_SAMPLE_SIZE
+            pCROP_COOD_01[0] = crop_01.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_01[1] = crop_01.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_02[0] = crop_02.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_02[1] = crop_02.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_03[0] = crop_03.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_03[1] = crop_03.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_04[0] = crop_04.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_04[1] = crop_04.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_05[0] = crop_05.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_05[1] = crop_05.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_06[0] = crop_06.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_06[1] = crop_06.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_07[0] = crop_07.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_07[1] = crop_07.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_08[0] = crop_08.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_08[1] = crop_08.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_09[0] = crop_09.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_09[1] = crop_09.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_10[0] = crop_10.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_10[1] = crop_10.samples[idx%CROP_SAMPLE_SIZE].cropy;            
+            pCROP_COOD_17[0] = crop_17.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_17[1] = crop_17.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_18[0] = crop_18.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_18[1] = crop_18.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_15[0] = crop_15.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_15[1] = crop_15.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_16[0] = crop_16.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_16[1] = crop_16.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_13[0] = crop_13.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_13[1] = crop_13.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_14[0] = crop_14.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_14[1] = crop_14.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_11[0] = crop_11.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_11[1] = crop_11.samples[idx%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_12[0] = crop_12.samples[idx%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_12[1] = crop_12.samples[idx%CROP_SAMPLE_SIZE].cropy;
 #endif
+#else
+            pCROP_COOD_07[0] = pCROP_COOD_06[0];
+            pCROP_COOD_07[1] = pCROP_COOD_06[1];
+            pCROP_COOD_08[0] = pCROP_COOD_05[0];
+            pCROP_COOD_08[1] = pCROP_COOD_05[1];
+            pCROP_COOD_09[0] = pCROP_COOD_07[0];
+            pCROP_COOD_09[1] = pCROP_COOD_07[1];
+            pCROP_COOD_10[0] = pCROP_COOD_08[0];
+            pCROP_COOD_10[1] = pCROP_COOD_08[1];
+                                                
+            pCROP_COOD_17[0] = pCROP_COOD_02[0];
+            pCROP_COOD_17[1] = pCROP_COOD_02[1];
+            pCROP_COOD_18[0] = pCROP_COOD_03[0];
+            pCROP_COOD_18[1] = pCROP_COOD_03[1];
+                                                
+            pCROP_COOD_15[0] = pCROP_COOD_17[0];
+            pCROP_COOD_15[1] = pCROP_COOD_17[1];
+            pCROP_COOD_16[0] = pCROP_COOD_18[0];
+            pCROP_COOD_16[1] = pCROP_COOD_18[1];
+                                                
+            pCROP_COOD_13[0] = pCROP_COOD_15[0];
+            pCROP_COOD_13[1] = pCROP_COOD_15[1];
+            pCROP_COOD_14[0] = pCROP_COOD_16[0];
+            pCROP_COOD_14[1] = pCROP_COOD_16[1];
+                                                
+            pCROP_COOD_11[0] = pCROP_COOD_13[0];
+            pCROP_COOD_11[1] = pCROP_COOD_13[1];
+            pCROP_COOD_12[0] = pCROP_COOD_14[0];
+            pCROP_COOD_12[1] = pCROP_COOD_14[1];
+#endif
+#endif
+            idx++;
             if (ch == 'r') {
+
 #if SAVE_OUT
                 fout = find_save(filedst, fileout);
                 if (fout) {
@@ -8776,6 +8942,17 @@ static int p2(struct procRes_s *rs)
             }
 
             if (ch == 's') { /*single*/
+#if SAVE_OUT
+                fout = find_save(filedst, fileout);
+                if (fout) {
+                    sprintf(rs->logs, "file save back to [%s]\n",filedst);
+                    print_f(rs->plogs, "P2", rs->logs); 
+                } else {
+                    sprintf(rs->logs, "FAIL to find file [%s]\n",fileback);
+                    print_f(rs->plogs, "P2", rs->logs); 
+                }
+#endif
+
                 fp = fopen(filename, "r");
                 if (!fp) {
                     sprintf(rs->logs, "file read [%s] failed \n", filename);
@@ -8875,7 +9052,7 @@ static int p2(struct procRes_s *rs)
                         len = ring_buf_get(rs->pdataTx, &addr);
                     }
 
-                    memset(addr, 0xff, len);
+                    memset(addr, 0x95, len);
                     if (max < len) {
                         len = max;
                     }
@@ -8897,11 +9074,17 @@ static int p2(struct procRes_s *rs)
                     
                     fsize = fread(addr, 1, len, fp);
 #endif
+
                     totsz += fsize;
                     max -= len;
 
                     ring_buf_prod(rs->pdataTx);
+#if SAVE_OUT
+                    tlen = fwrite(addr, 1, fsize, fout);
+#else
                     tlen = len;
+#endif
+
                     sprintf(rs->logs, " %d - %d/%d\n", pi, totsz, max);
                     print_f(rs->plogs, "P2s", rs->logs);
                     
@@ -8928,13 +9111,17 @@ static int p2(struct procRes_s *rs)
                 if (tlen) {
                     totsz = totsz + 1024 - tlen;
                 }
-#if 1 /* debug */
+#if 0 /* debug */
                 fsize = SPI_TRUNK_SZ;
 #endif
                 ring_buf_set_last(rs->pdataTx, fsize);
                 rs_ipc_put(rs, "s", 1);
                 rs_ipc_put(rs, "S", 1);
-
+                
+#if SAVE_OUT
+                fflush(fout);
+                fclose(fout);
+#endif
                 rs->pmch->cur.info = totsz;
 
                 sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
@@ -9152,8 +9339,8 @@ static int p4(struct procRes_s *rs)
         len = 0;
         len = rs_ipc_get(rs, &ch, 1);
         if (len > 0) {
-            //sprintf(rs->logs, "%c \n", ch);
-            //print_f(rs->plogs, "P4", rs->logs);
+            sprintf(rs->logs, "%c \n", ch);
+            print_f(rs->plogs, "P4", rs->logs);
 
             switch (ch) {
                 case 'g':
@@ -9960,6 +10147,46 @@ static char spi0[] = "/dev/spidev32765.0";
     pmrs->cropCoord.CROP_COOD_06[0] = 517;
     pmrs->cropCoord.CROP_COOD_06[1] = 72;
 #else
+
+#if (CROP_NUMBER == 18)
+#if CROP_SAMPLE_SIZE
+    pmrs->cropCoord.CROP_COOD_01[0] = crop_01.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_01[1] = crop_01.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_02[0] = crop_02.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_02[1] = crop_02.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_03[0] = crop_03.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_03[1] = crop_03.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_04[0] = crop_04.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_04[1] = crop_04.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_05[0] = crop_05.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_05[1] = crop_05.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_06[0] = crop_06.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_06[1] = crop_06.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_07[0] = crop_07.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_07[1] = crop_07.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_08[0] = crop_08.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_08[1] = crop_08.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_09[0] = crop_09.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_09[1] = crop_09.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_10[0] = crop_10.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_10[1] = crop_10.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_11[0] = crop_11.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_11[1] = crop_11.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_12[0] = crop_12.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_12[1] = crop_12.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_13[0] = crop_13.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_13[1] = crop_13.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_14[0] = crop_14.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_14[1] = crop_14.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_15[0] = crop_15.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_15[1] = crop_15.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_16[0] = crop_16.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_16[1] = crop_16.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_17[0] = crop_17.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_17[1] = crop_17.samples[0].cropy;
+    pmrs->cropCoord.CROP_COOD_18[0] = crop_18.samples[0].cropx;
+    pmrs->cropCoord.CROP_COOD_18[1] = crop_18.samples[0].cropy;
+#else
     pmrs->cropCoord.CROP_COOD_01[0] = crop_01[0];
     pmrs->cropCoord.CROP_COOD_01[1] = crop_01[1];
 
@@ -9977,6 +10204,62 @@ static char spi0[] = "/dev/spidev32765.0";
 
     pmrs->cropCoord.CROP_COOD_06[0] = crop_06[0];
     pmrs->cropCoord.CROP_COOD_06[1] = crop_06[1];
+
+    pmrs->cropCoord.CROP_COOD_07[0] = crop_07[0];
+    pmrs->cropCoord.CROP_COOD_07[1] = crop_07[1];
+
+    pmrs->cropCoord.CROP_COOD_08[0] = crop_08[0];
+    pmrs->cropCoord.CROP_COOD_08[1] = crop_08[1];
+
+    pmrs->cropCoord.CROP_COOD_09[0] = crop_09[0];
+    pmrs->cropCoord.CROP_COOD_09[1] = crop_09[1];
+
+    pmrs->cropCoord.CROP_COOD_10[0] = crop_10[0];
+    pmrs->cropCoord.CROP_COOD_10[1] = crop_10[1];
+    
+    pmrs->cropCoord.CROP_COOD_11[0] = crop_11[0];
+    pmrs->cropCoord.CROP_COOD_11[1] = crop_11[1];
+
+    pmrs->cropCoord.CROP_COOD_12[0] = crop_12[0];
+    pmrs->cropCoord.CROP_COOD_12[1] = crop_12[1];
+
+    pmrs->cropCoord.CROP_COOD_13[0] = crop_13[0];
+    pmrs->cropCoord.CROP_COOD_13[1] = crop_13[1];
+
+    pmrs->cropCoord.CROP_COOD_14[0] = crop_14[0];
+    pmrs->cropCoord.CROP_COOD_14[1] = crop_14[1];
+
+    pmrs->cropCoord.CROP_COOD_15[0] = crop_15[0];
+    pmrs->cropCoord.CROP_COOD_15[1] = crop_15[1];
+
+    pmrs->cropCoord.CROP_COOD_16[0] = crop_16[0];
+    pmrs->cropCoord.CROP_COOD_16[1] = crop_16[1];
+    
+    pmrs->cropCoord.CROP_COOD_17[0] = crop_17[0];
+    pmrs->cropCoord.CROP_COOD_17[1] = crop_17[1];
+
+    pmrs->cropCoord.CROP_COOD_18[0] = crop_18[0];
+    pmrs->cropCoord.CROP_COOD_18[1] = crop_18[1];
+#endif
+#else
+    pmrs->cropCoord.CROP_COOD_01[0] = crop_01[0];
+    pmrs->cropCoord.CROP_COOD_01[1] = crop_01[1];
+
+    pmrs->cropCoord.CROP_COOD_02[0] = crop_02[0];
+    pmrs->cropCoord.CROP_COOD_02[1] = crop_02[1];
+
+    pmrs->cropCoord.CROP_COOD_03[0] = crop_03[0];
+    pmrs->cropCoord.CROP_COOD_03[1] = crop_03[1];
+
+    pmrs->cropCoord.CROP_COOD_04[0] = crop_04[0];
+    pmrs->cropCoord.CROP_COOD_04[1] = crop_04[1];
+    
+    pmrs->cropCoord.CROP_COOD_05[0] = crop_05[0];
+    pmrs->cropCoord.CROP_COOD_05[1] = crop_05[1];
+
+    pmrs->cropCoord.CROP_COOD_06[0] = crop_06[0];
+    pmrs->cropCoord.CROP_COOD_06[1] = crop_06[1];
+#endif
 #endif
 // spidev id
     int fd0, fd1;
