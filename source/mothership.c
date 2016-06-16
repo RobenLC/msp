@@ -16158,7 +16158,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    usleep(200000);
+    usleep(100000);
             
     bitset = 0;
     msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
@@ -16612,7 +16612,7 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
                     msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                     sprintf(mrs->log, "set spi0 RDY pin %d\n",bitset);
                     print_f(&mrs->plog, "fs35", mrs->log);
-                    usleep(200000);
+                    usleep(210000);
 #endif
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 1);
@@ -16683,7 +16683,7 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
                     msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                     sprintf(mrs->log, "set spi1 RDY pin %d\n",bitset);
                     print_f(&mrs->plog, "fs35", mrs->log);
-                    usleep(200000);
+                    usleep(210000);
 #endif
                 }
                 ret = mrs_ipc_get(mrs, &ch, 1, 2);
@@ -17006,7 +17006,7 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs47", mrs->log);
 #endif
-        usleep(120000);
+        usleep(210000);
 
         return 2;
     }
@@ -17853,7 +17853,7 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                 sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
                 print_f(&mrs->plog, "fs55", mrs->log);
 #endif
-                usleep(120000);
+                usleep(210000);
 
                 modersp->m = 48;
                 return 2;
@@ -18255,7 +18255,7 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs66", mrs->log);
 #endif
-            usleep(120000);
+            usleep(210000);
 
             modersp->r = 1;            
             return 1;
@@ -18295,8 +18295,8 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *s=0, *sc=0;
 
-    //sprintf(mrs->log, "%d\n", modersp->v);
-    //print_f(&mrs->plog, "fs68", mrs->log);
+    sprintf(mrs->log, "%d\n", modersp->v);
+    print_f(&mrs->plog, "fs68", mrs->log);
     pfat = &mrs->aspFat;
     sc = pfat->fatSupcur;
 
@@ -18408,8 +18408,8 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    //sprintf(mrs->log, "wait spi0 tx end\n");
-    //print_f(&mrs->plog, "fs66", mrs->log);
+    sprintf(mrs->log, "wait spi0 tx end\n");
+    print_f(&mrs->plog, "fs66", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     while (len > 0) {
@@ -18437,7 +18437,7 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs69", mrs->log);
 #endif
-            usleep(120000);
+            usleep(210000);
 
             modersp->r = 1;            
             return 1;
@@ -18710,7 +18710,7 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs74", mrs->log);
 #endif
-            usleep(120000);
+            usleep(210000);
 
             modersp->m = 48;            
             return 2;
@@ -19071,7 +19071,7 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs79", mrs->log);
 #endif
-            usleep(120000);
+            usleep(210000);
 
             modersp->m = 48;            
             return 2;
@@ -19600,7 +19600,7 @@ static int fs83(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs83", mrs->log);
 #endif
-            usleep(120000);
+            usleep(210000);
 
             modersp->m = 48;            
             return 2;
@@ -19989,7 +19989,7 @@ static int fs90(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs90", mrs->log);
 #endif
-            usleep(120000);
+            usleep(210000);
 
             modersp->m = 48;            
             return 2;
@@ -20744,7 +20744,7 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs97", mrs->log);
 #endif
-            usleep(120000);
+            usleep(210000);
 
             modersp->m = 48;            
             return 2;
@@ -21358,7 +21358,7 @@ static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs100", mrs->log);
 #endif
-        usleep(120000);
+        usleep(210000);
 
         modersp->r = 1;            
         return 1;
@@ -21873,7 +21873,7 @@ static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs111", mrs->log);
 #endif
-        usleep(200000);
+        usleep(210000);
 
         return 2;
     }
@@ -23716,7 +23716,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define P4_TX_LOG  (0)
+#define P4_TX_LOG  (1)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
