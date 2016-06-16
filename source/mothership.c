@@ -21,7 +21,7 @@
 #include <ifaddrs.h>
 
 //main()
-#define SPI1_ENABLE (1) 
+#define SPI1_ENABLE (0) 
 
 #if SPI1_ENABLE
 #define SPIDEV_SWITCH (0)
@@ -430,6 +430,14 @@ typedef enum {
 } aspFSstatus_e;
 
 typedef enum {
+    ASPMETA_POWON_INIT = 0,
+    ASPMETA_SCAN_GO = 1,
+    ASPMETA_SCAN_COMPLETE = 2,
+    ASPMETA_CROP_300DPI = 3,
+    ASPMETA_CROP_600DPI = 4,
+} aspMetaParam_e;
+
+typedef enum {
     ASPMETA_INPUT = 0,
     ASPMETA_OUTPUT = 1,
 } aspMetaInoutFlag_e;
@@ -740,7 +748,14 @@ struct aspMetaData{
   struct intMbs_s CROP_POS_16;        //byte[128]
   struct intMbs_s CROP_POS_17;        //byte[132]
   struct intMbs_s CROP_POS_18;        //byte[136]
-  unsigned char CROP_RESERVE[24]; //byte[160]
+  unsigned char  Start_Pos_1st;         //byte[137]
+  unsigned char  Start_Pos_2nd;        //byte[138]
+  unsigned char  End_Pos_All;            //byte[139]
+  unsigned char  Start_Pos_RSV;        //byte[140], not using for now
+  unsigned char  YLine_Gap;               //byte[141]
+  unsigned char  Start_YLine_No;       //byte[142]
+  unsigned short YLines_Recorded;     //byte[144] 16bits
+  unsigned char CROP_RESERVE[16]; //byte[160]
 
   /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
   struct intMbs_s SCAN_IMAGE_LEN;     //byte[164]
@@ -11967,7 +11982,7 @@ static int stcropmeta_89(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             t->opcode = OP_META_DAT;
-            t->data = 0x02;
+            t->data = ASPMETA_SCAN_COMPLETE;
             aspMetaClear(0, rs, ASPMETA_OUTPUT);
             //aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
             //dbgMeta(pmeta->FUNC_BITS, pmeta);
@@ -12016,7 +12031,7 @@ static int stcropmeta_90(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             t->opcode = OP_META_DAT;
-            t->data = 0x00;
+            t->data = ASPMETA_POWON_INIT;
             aspMetaClear(0, rs, ASPMETA_OUTPUT);
             aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
             dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
@@ -14358,7 +14373,7 @@ static int cmdfunc_meta_opcode(int argc, char *argv[])
     n = 0; rsp = 0;
     /* set data for update to scanner */
     pkt->opcode = OP_META_DAT;
-    pkt->data = 0;
+    pkt->data = ASPMETA_POWON_INIT;
     n = cmdfunc_upd2host(mrs, 'y', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
