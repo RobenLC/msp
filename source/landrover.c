@@ -122,7 +122,7 @@
 #define CROP_NUMBER   (18)
 
 #if (CROP_NUMBER == 18)
-#define CROP_SAMPLE_SIZE (7)
+#define CROP_SAMPLE_SIZE (5)
 
 struct cropSample_s {
     int cropx;
@@ -158,7 +158,26 @@ static int crop_04[2] = {1611*2, 60*2};
 static int crop_05[2] = {1607*2, 32*2};
 static int crop_06[2] = {537*2, 32*2};
 #elif (CROP_NUMBER == 18)
-#if (CROP_SAMPLE_SIZE == 6)
+#if (CROP_SAMPLE_SIZE == 5)
+static struct cropPoints_s crop_01 = {{{1699, 21  }, {870, 1318 }, {1602, 1878}, {1478, 1894}, {1483, 1889}}};
+static struct cropPoints_s crop_02 = {{{1727, 2143}, {1720, 2374}, {2777, 2127}, {2654, 2161}, {2657, 2188}}};
+static struct cropPoints_s crop_03 = {{{1995, 2143}, {1746, 2374}, {2831, 2127}, {2702, 2161}, {2706, 2188}}};
+static struct cropPoints_s crop_04 = {{{2909, 2015}, {3267, 1040}, {3117, 251 }, {2958, 390 }, {3012, 254 }}};
+static struct cropPoints_s crop_05 = {{{2890, 5   }, {2399, 4   }, {2096, 2   }, {1937, 7   }, {1984, 5   }}};
+static struct cropPoints_s crop_06 = {{{2486, 5   }, {2350, 4   }, {1868, 2   }, {1712, 7   }, {1772, 5   }}};
+static struct cropPoints_s crop_07 = {{{1699, 21  }, {2339, 20  }, {1740, 18  }, {1663, 23  }, {1646, 21  }}};
+static struct cropPoints_s crop_08 = {{{2888, 21  }, {2413, 20  }, {2131, 18  }, {2205, 23  }, {2030, 21  }}};
+static struct cropPoints_s crop_09 = {{{1701, 37  }, {2327, 36  }, {1729, 34  }, {1570, 39  }, {1632, 37  }}};
+static struct cropPoints_s crop_10 = {{{2889, 37  }, {2424, 36  }, {2544, 34  }, {2786, 39  }, {2411, 37  }}};
+static struct cropPoints_s crop_11 = {{{1721, 2020}, {1605, 2275}, {1622, 2017}, {1511, 2054}, {1630, 2084}}};
+static struct cropPoints_s crop_12 = {{{2909, 2020}, {1897, 2275}, {2996, 2017}, {2859, 2054}, {2860, 2084}}};
+static struct cropPoints_s crop_13 = {{{1720, 2052}, {1657, 2307}, {1777, 2049}, {1615, 2086}, {1818, 2116}}};
+static struct cropPoints_s crop_14 = {{{2906, 2052}, {1863, 2307}, {2979, 2049}, {2859, 2086}, {2857, 2116}}};
+static struct cropPoints_s crop_15 = {{{1720, 2084}, {1688, 2339}, {2192, 2081}, {1828, 2118}, {2213, 2148}}};
+static struct cropPoints_s crop_16 = {{{2907, 2084}, {1791, 2339}, {2978, 2081}, {2855, 2118}, {2853, 2148}}};
+static struct cropPoints_s crop_17 = {{{1721, 2116}, {1715, 2371}, {2615, 2113}, {2497, 2150}, {2631, 2180}}};
+static struct cropPoints_s crop_18 = {{{2906, 2116}, {1752, 2371}, {2957, 2113}, {2734, 2150}, {2730, 2180}}};
+#elif (CROP_SAMPLE_SIZE == 6)
 static struct cropPoints_s crop_01 = {{{1271, 141}, {1351, 28 }, {1163, 93 }, {520, 510 }, {877, 465 }, {924, 407 }}};
 static struct cropPoints_s crop_02 = {{{1529, 3129}, {1451, 2315}, {1309, 3282}, {1240, 3629}, {1529, 3593}, {1577, 3330}}};
 static struct cropPoints_s crop_03 = {{{1563, 3129}, {1527, 2315}, {1364, 3282}, {1260, 3629}, {1553, 3593}, {1601, 3330}}};
@@ -6482,7 +6501,7 @@ static int fs20(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "[%d]Set RDY pin %d, cnt:%d\n",1, bitset, modersp->d);
     print_f(&mrs->plog, "fs20", mrs->log);
 
-    usleep(200000);
+    usleep(80000);
 
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -6834,7 +6853,7 @@ static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
-    usleep(200000);
+    usleep(80000);
 
     bitset = 0;
     ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
@@ -8445,7 +8464,9 @@ static int p2(struct procRes_s *rs)
     char filename[128] = "/mnt/mmc2/scan_pro.jpg";
     char filetiffraw[128] = "/mnt/mmc2/tiff_raw.bin";
     char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
-#if (CROP_SAMPLE_SIZE == 6)
+#if (CROP_SAMPLE_SIZE == 5)
+    char cropfile[128] = "/mnt/mmc2/crop5/crop_%.2d.jpg";
+#elif (CROP_SAMPLE_SIZE == 6)
     char cropfile[128] = "/mnt/mmc2/crop/crop_%.2d.jpg";
 #elif (CROP_SAMPLE_SIZE == 7)
     char cropfile[128] = "/mnt/mmc2/crop3/crop_%.2d.jpg";
