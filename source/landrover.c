@@ -335,6 +335,14 @@ typedef enum {
     ASPMETA_FUNC_SDWT = 0b01000000,
 } aspMetaFuncbit_e;
 
+typedef enum {
+    ASPMETA_POWON_INIT = 0,
+    ASPMETA_SCAN_GO = 1,
+    ASPMETA_SCAN_COMPLETE = 2,
+    ASPMETA_CROP_300DPI = 3,
+    ASPMETA_CROP_600DPI = 4,
+} aspMetaParam_e;
+
 struct psdata_s {
     uint32_t result;
     uint32_t ansp0;
@@ -530,7 +538,14 @@ struct aspMetaData{
   struct intMbs_s CROP_POS_16;        //byte[128]
   struct intMbs_s CROP_POS_17;        //byte[132]
   struct intMbs_s CROP_POS_18;        //byte[136]
-  unsigned char CROP_RESERVE[24]; //byte[160]
+  unsigned char  Start_Pos_1st;         //byte[137]
+  unsigned char  Start_Pos_2nd;        //byte[138]
+  unsigned char  End_Pos_All;            //byte[139]
+  unsigned char  Start_Pos_RSV;        //byte[140], not using for now
+  unsigned char  YLine_Gap;               //byte[141]
+  unsigned char  Start_YLine_No;       //byte[142]
+  unsigned short YLines_Recorded;     //byte[144] 16bits
+  unsigned char CROP_RESERVE[16]; //byte[160]
 
   /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
   struct intMbs_s SCAN_IMAGE_LEN;     //byte[164]
@@ -5120,13 +5135,13 @@ static int stauto_38(struct psdata_s *data)
                 aspMetaClear(0, rs, 0);
 
                 switch (t->data) {
-                    case 0x0:
+                    case ASPMETA_POWON_INIT:
                         aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
                         break;
-                    case 0x1:
+                    case ASPMETA_SCAN_GO: /* todo: meta before scan  */
                         //aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
                         break;
-                    case 0x2:
+                    case ASPMETA_SCAN_COMPLETE:
                         aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
                         aspMetaBuild(ASPMETA_FUNC_IMGLEN, 0, rs);
                         break;
