@@ -159,6 +159,26 @@ static int crop_05[2] = {1607*2, 32*2};
 static int crop_06[2] = {537*2, 32*2};
 #elif (CROP_NUMBER == 18)
 #if (CROP_SAMPLE_SIZE == 5)
+#if 1 /* 0614 */
+static struct cropPoints_s crop_01 = {{{1699, 21  }, {870, 1318 }, {1602, 1878}, {1478, 1894}, {1483, 1889}}};
+static struct cropPoints_s crop_02 = {{{1727, 2143}, {1720, 2374}, {2777, 2127}, {2654, 2161}, {2657, 2188}}};
+static struct cropPoints_s crop_03 = {{{1995, 2143}, {1746, 2374}, {2831, 2127}, {2702, 2161}, {2706, 2188}}};
+static struct cropPoints_s crop_04 = {{{2909, 2015}, {3267, 1040}, {3117, 251 }, {2958, 390 }, {3012, 254 }}};
+static struct cropPoints_s crop_05 = {{{2890, 5   }, {2399, 4   }, {2096, 2   }, {1937, 7   }, {1984, 5   }}};
+static struct cropPoints_s crop_06 = {{{2486, 5   }, {2350, 4   }, {1868, 2   }, {1712, 7   }, {1772, 5   }}};
+static struct cropPoints_s crop_07 = {{{1699, 21  }, {2339, 20  }, {1740, 18  }, {1663, 23  }, {1646, 21  }}};
+static struct cropPoints_s crop_08 = {{{2888, 21  }, {2413, 20  }, {2131, 18  }, {2205, 23  }, {2030, 21  }}};
+static struct cropPoints_s crop_09 = {{{1701, 37  }, {2327, 36  }, {1729, 34  }, {1570, 39  }, {1632, 37  }}};
+static struct cropPoints_s crop_10 = {{{2889, 37  }, {2424, 36  }, {2544, 34  }, {2786, 39  }, {2411, 37  }}};
+static struct cropPoints_s crop_11 = {{{1721, 2020}, {1605, 2275}, {1622, 2017}, {1511, 2054}, {1630, 2084}}};
+static struct cropPoints_s crop_12 = {{{2909, 2020}, {1897, 2275}, {2996, 2017}, {2859, 2054}, {2860, 2084}}};
+static struct cropPoints_s crop_13 = {{{1720, 2052}, {1657, 2307}, {1777, 2049}, {1615, 2086}, {1818, 2116}}};
+static struct cropPoints_s crop_14 = {{{2906, 2052}, {1863, 2307}, {2979, 2049}, {2859, 2086}, {2857, 2116}}};
+static struct cropPoints_s crop_15 = {{{1720, 2084}, {1688, 2339}, {2192, 2081}, {1828, 2118}, {2213, 2148}}};
+static struct cropPoints_s crop_16 = {{{2907, 2084}, {1791, 2339}, {2978, 2081}, {2855, 2118}, {2853, 2148}}};
+static struct cropPoints_s crop_17 = {{{1721, 2116}, {1715, 2371}, {2615, 2113}, {2497, 2150}, {2631, 2180}}};
+static struct cropPoints_s crop_18 = {{{2906, 2116}, {1752, 2371}, {2957, 2113}, {2734, 2150}, {2730, 2180}}};
+#else /* 0616 */
 static struct cropPoints_s crop_01 = {{{1365, 2068 }, {1284, 12   }, {1205, 2091 }, {1167, 137  }, {1174, 2103 }}};
 static struct cropPoints_s crop_02 = {{{2495, 2197 }, {1303, 2134 }, {2338, 2215 }, {1409, 2229 }, {2303, 2152 }}};
 static struct cropPoints_s crop_03 = {{{2545, 2197 }, {1723, 2134 }, {2383, 2215 }, {1456, 2229 }, {2355, 2152 }}};
@@ -177,6 +197,7 @@ static struct cropPoints_s crop_15 = {{{2409, 2190 }, {1300, 2127 }, {2284, 2208
 static struct cropPoints_s crop_16 = {{{2548, 2190 }, {2479, 2127 }, {2385, 2208 }, {1497, 2224 }, {2358, 2145 }}};
 static struct cropPoints_s crop_17 = {{{2468, 2194 }, {1299, 2131 }, {2320, 2212 }, {1409, 2228 }, {2211, 2149 }}};
 static struct cropPoints_s crop_18 = {{{2546, 2194 }, {2477, 2131 }, {2384, 2212 }, {1456, 2228 }, {2357, 2149 }}};
+#endif
 #elif (CROP_SAMPLE_SIZE == 6)
 static struct cropPoints_s crop_01 = {{{1271, 141}, {1351, 28 }, {1163, 93 }, {520, 510 }, {877, 465 }, {924, 407 }}};
 static struct cropPoints_s crop_02 = {{{1529, 3129}, {1451, 2315}, {1309, 3282}, {1240, 3629}, {1529, 3593}, {1577, 3330}}};
@@ -244,6 +265,15 @@ static int crop_05[2] = {1426, 1};
 static int crop_06[2] = {1278, 1};
 #endif
 #endif
+
+#define DOT_8 0x01
+#define DOT_7 0x02
+#define DOT_6 0x04
+#define DOT_5 0x08
+#define DOT_4 0x10
+#define DOT_3 0x20
+#define DOT_2 0x40
+#define DOT_1 0x80
 
 #define OPT_SIZE (OP_EXTPULSE - OP_FFORMAT + 1)
 #define TIFF_RAW (0)
@@ -566,6 +596,15 @@ struct aspMetaData{
   unsigned char available[324];
 };
 
+struct aspMetaMass{
+    int massUsed;
+    int massMax;
+    int massGap;
+    int massRecd;
+    int massStart;
+    char *masspt;
+};
+
 struct mainRes_s{
     int sid[6];
     int sfm[2];
@@ -585,6 +624,7 @@ struct mainRes_s{
     
     struct aspMetaData *metaout;
     struct aspMetaData *metain;
+    struct aspMetaMass metaMass;
     
     int sd_init;
     // file save
@@ -626,6 +666,7 @@ struct procRes_s{
     struct machineCtrl_s *pmch;
     struct aspMetaData *pmetaout;
     struct aspMetaData *pmetain;
+    struct aspMetaMass *pmetaMass;
     int *psd_init;
     // data mode share memory
     int cdsz_s;
@@ -745,6 +786,125 @@ static int stauto_17(struct psdata_s *data);
 static int stauto_18(struct psdata_s *data);
 static int stauto_19(struct psdata_s *data);
 static int stauto_20(struct psdata_s *data);
+static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb);
+static uint32_t msb2lsb(struct intMbs_s *msb);
+
+static int aspMetaMassCons(struct aspMetaMass *mass, int start, int end)
+{
+#define RAW_W 4320
+#define RAW_H  6992
+    unsigned int *daddr;
+    char *laddr;
+    int max=0, ret=0, buffUsed=0, buffMax=0;
+    int rcord[4];
+    int sx=0, sy=0;
+    unsigned short edlf=0, edrt;
+    unsigned int edtot=0;
+    int msStart=0, msGap;
+    
+    if (!mass) return -1;
+    
+    daddr = (unsigned int*)mass->masspt;
+    if (!daddr) return -2;
+
+    buffMax = mass->massMax;
+    msStart = mass->massStart;
+    msGap = mass->massGap;
+    if ((msStart == 0) || (msStart > 1000)) {
+        msStart = 12;
+    }
+
+    if ((msGap == 0) || (msGap > 32)) {
+        msGap = 8;
+    }
+
+    max = (RAW_W * RAW_H) / 8;
+    laddr = 0;
+    laddr = malloc(max);
+    if (!laddr) {
+        printf("[mass] allocate memory size %d falied!!! ret:%d \n", max, laddr);
+        return -1;
+    }
+
+    memset(laddr, 0, max);
+
+    rcord[0] = 100;
+    rcord[1] = 100;
+    rcord[2] = 900;
+    rcord[3] = 100;
+
+    ret = tiffDrawLine(laddr, rcord, RAW_W, RAW_H, max);                    
+
+    rcord[0] = 900;
+    rcord[1] = 100;
+    rcord[2] = 900;
+    rcord[3] = 900;
+
+    ret = tiffDrawLine(laddr, rcord, RAW_W, RAW_H, max);                    
+
+    rcord[0] = 900;
+    rcord[1] = 900;
+    rcord[2] = 100;
+    rcord[3] = 900;
+
+    ret = tiffDrawLine(laddr, rcord, RAW_W, RAW_H, max);                    
+
+    rcord[0] = 100;
+    rcord[1] = 900;
+    rcord[2] = 100;
+    rcord[3] = 100;
+
+    ret = tiffDrawLine(laddr, rcord, RAW_W, RAW_H, max);                    
+
+    rcord[0] = 1200;
+    rcord[1] = 100;
+    rcord[2] = 1200;
+    rcord[3] = 900;
+
+    ret = tiffDrawLine(laddr, rcord, RAW_W, RAW_H, max);                    
+
+    msync(laddr, max, MS_SYNC);
+
+    for (sy = 0; sy < RAW_H; sy+=msGap) {
+        edlf=0; edrt=0; edtot=0;
+        for (sx = msStart; sx < (RAW_W - 8); sx++) {
+            ret = tiffGetDot(laddr, sx, sy, RAW_W, RAW_H, max);
+            if (ret != 0) {
+                edlf = randomGen(sx - 8, sx + 8);
+                printf("[mass] get dot (%d, %d) = %d !!! \n", sx, sy, edlf);
+
+                break;
+            }
+        }
+
+        sx++;
+        
+        for (; sx < (RAW_W - 8); sx++) {
+            ret = tiffGetDot(laddr, sx, sy, RAW_W, RAW_H, max);
+            if (ret != 0) {
+                edrt = randomGen(sx - 8, sx + 8);
+                printf("[mass] get dot (%d, %d) = %d !!! \n", sx, sy, edrt);
+
+                break;
+            }
+        }
+
+        edtot = edlf;
+        edtot = (edtot << 16) | edrt;
+        
+        //*daddr = edtot;
+        lsb2Msb((struct intMbs_s *)daddr, edtot);
+        daddr++;
+        buffUsed += 4;
+
+        if (buffUsed > buffMax) break;
+    }
+
+    mass->massUsed = buffUsed;
+
+    free(laddr);
+    return buffUsed;
+}
 
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
 {
@@ -819,11 +979,11 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     unsigned int *psrc;
     struct intMbs_s *pdst;
     uint32_t val=0, scan_len=0;
-    int opSt=0, opEd=0;
+    int opSt=0, opEd=0, ret=0;
     int istr=0, iend=0, idx=0;
     struct aspMetaData *pmeta;
     struct cropCoord_s *pCrop;
-    
+    struct aspMetaMass *mass;
     char *pvdst=0, *pvend=0;
     
     if ((!mrs) && (!rs)) return -1;
@@ -832,18 +992,31 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         pmeta = mrs->metaout;
         pCrop = &(mrs->cropCoord);
         scan_len = mrs->scan_length;
+        mass = &(mrs->metaMass);
     } else {
         pmeta = rs->pmetaout;
         pCrop = rs->pcropCoord;
         scan_len = *(rs->pscnlen);
+        mass = rs->pmetaMass;
     }
 
     msync(pCrop, 18 * sizeof(struct cropCoord_s), MS_SYNC);
 
-    if (funcbits == ASPMETA_FUNC_NONE) return -2;
+    if (funcbits == ASPMETA_FUNC_NONE) {
+        /*append mass points*/
+        ret = aspMetaMassCons(mass, 0, 0);        
+
+        if (ret > 0) {
+            printf("dump meta mass: \n");
+            msync(mass->masspt, ret, MS_SYNC);
+            shmem_dump(mass->masspt, ret);
+        } else {
+            printf("Error!!! build meta mass failed!!! \n");
+        }  
+    }
 
     if (funcbits & ASPMETA_FUNC_CONF) {
-        
+
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
@@ -859,6 +1032,15 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
             pdst ++;
             psrc += 2;
         }
+
+        pmeta->YLine_Gap = mass->massGap & 0xff;
+        pmeta->Start_YLine_No = mass->massStart & 0xff;
+        
+        pdst = (struct intMbs_s *)&(pmeta->YLines_Recorded);
+        val = (mass->massRecd & 0xffff) << 16;
+        
+        lsb2Msb(pdst, val);        
+        
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
@@ -1003,15 +1185,6 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta)
     return 0;
 }
 
-#define DOT_8 0x01
-#define DOT_7 0x02
-#define DOT_6 0x04
-#define DOT_5 0x08
-#define DOT_4 0x10
-#define DOT_3 0x20
-#define DOT_2 0x40
-#define DOT_1 0x80
-
 static void* aspSalloc(int slen)
 {
     char *p=0;
@@ -1063,6 +1236,51 @@ static int tiffClearDot(char *img, int dotx, int doty, int width, int length, in
     //printf("(%d, %d)clear dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
     
     *dst = val;
+
+    return val;
+}
+
+inline int tiffGetDot(char *img, int dotx, int doty, int width, int length, int max)
+{
+    uint8_t *dst, val=0, org=0;
+    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
+    int estMax, estWid=0;
+    int offsetX=0, offsetY=0, resX=0;
+    //if (!img) return -1;
+    //if (!width) return -3;
+    //if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    //if (estMax > max) return -5;
+
+    if (dotx >= width) {
+        dotx = width -1;
+    }
+    
+    if (doty >= length) {
+        doty = length -1;
+    }
+
+    if ((width % 8) == 0) {
+        estWid = width / 8;
+    } else {
+        estWid = (width / 8) + 1;
+    }
+
+    resX = dotx % 8;
+
+    offsetY = doty;
+    offsetX = dotx / 8;
+
+    dst = img + (offsetX + offsetY*estWid);
+
+    org = *dst;
+
+    val = 0;
+    val = org & (bitSet[resX]);
+
+    //printf("(%d, %d)get dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
 
     return val;
 }
@@ -1142,16 +1360,23 @@ int tiffClearLine(char *img, int *cord, int width, int length, int max)
     offx = edx - stx;
     offy = edy - sty;
 
-    if (offx < 0.0001) {
+    if (abs(offx) < 0.0001) {
         offx = 0;
-    } else if (offy < 0.0001) {
+    } else if (abs(offy) < 0.0001) {
         offy = 0;
-    } else if (offx > offy) {
-        offy = offy / offx;
-        offx = 1.0;
+    } 
+
+    if (abs(offx) > abs(offy)) {
+        offy = offy / abs(offx);
+        offx = offx / abs(offx);
+    } else if (abs(offy) > abs(offx)) {
+        offx = offx / abs(offy);
+        offy = offy / abs(offy);
     } else {
-        offx = offx / offy;
-        offy = 1.0;
+        if (abs(offy) > 0) {
+            offx = offx / abs(offx);
+            offy = offy / abs(offy);
+        }
     }
 
     //printf("clear line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
@@ -1201,19 +1426,27 @@ int tiffDrawLine(char *img, int *cord, int width, int length, int max)
 
     offx = edx - stx;
     offy = edy - sty;
-    if (offx < 0.0001) {
+    
+    if (abs(offx) < 0.0001) {
         offx = 0;
-    } else if (offy < 0.0001) {
+    } else if (abs(offy) < 0.0001) {
         offy = 0;
-    } else if (offx > offy) {
-        offy = offy / offx;
-        offx = 1.0;
+    } 
+
+    if (abs(offx) > abs(offy)) {
+        offy = offy / abs(offx);
+        offx = offx / abs(offx);
+    } else if (abs(offy) > abs(offx)) {
+        offx = offx / abs(offy);
+        offy = offy / abs(offy);
     } else {
-        offx = offx / offy;
-        offy = 1.0;
+        if (abs(offy) > 0) {
+            offx = offx / abs(offx);
+            offy = offy / abs(offy);
+        }
     }
 
-    //printf("draw line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
+    //printf("draw line  (%d, %d) -> (%d, %d) (%f, %f)\n", srcx, srcy, dstx, dsty, offx, offy);
     
     while ((srcx != dstx) || (srcy != dsty)) {
          ret = tiffDrawDot(img, srcx, srcy, width, length, max);
@@ -5115,11 +5348,13 @@ static int stauto_38(struct psdata_s *data)
     uint32_t rlt;
     struct procRes_s *rs;
     struct aspMetaData *pmetaIn, *pmetaOut;
+    struct aspMetaMass *pmass;
     struct info16Bit_s *p, *g, *t;
 
     rs = data->rs;
     pmetaIn = rs->pmetain;
     pmetaOut = rs->pmetaout;
+    pmass = rs->pmetaMass;
     g = &rs->pmch->get;
     p = &rs->pmch->cur;
     t = &rs->pmch->tmp;
@@ -5142,8 +5377,22 @@ static int stauto_38(struct psdata_s *data)
                         //aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
                         break;
                     case ASPMETA_SCAN_COMPLETE:
+                        pmass->massStart = 12;
+                        pmass->massGap = 8;
+                        aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
+                        pmass->massRecd = pmass->massUsed / 4;
                         aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
                         aspMetaBuild(ASPMETA_FUNC_IMGLEN, 0, rs);
+                        break;
+                    case ASPMETA_CROP_300DPI:
+                        pmass->massStart = 12;
+                        pmass->massGap = 8;
+                        //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
+                        break;
+                    case ASPMETA_CROP_600DPI:
+                        pmass->massStart = 12;
+                        pmass->massGap = 8;
+                        //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
                         break;
                     default:
                         sprintf(str, "Warnning!!!meta get parameter: 0x%.2x, wrong !!! \n", t->data);  
@@ -5151,12 +5400,35 @@ static int stauto_38(struct psdata_s *data)
                         break;
                 }
 
-                sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
-                print_f(mlogPool, "auto_38", str);  
+                switch (t->data) {
+                    case ASPMETA_POWON_INIT:
+                    case ASPMETA_SCAN_GO: /* todo: meta before scan  */
+                    case ASPMETA_SCAN_COMPLETE:
+                        sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
+                        print_f(mlogPool, "auto_38", str);  
 
-                ch = 67; 
-                rs_ipc_put(data->rs, &ch, 1);
-                data->result = emb_result(data->result, WAIT);    
+                        ch = 67; 
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT); 
+                        break;
+
+                    case ASPMETA_CROP_300DPI:
+                    case ASPMETA_CROP_600DPI:
+                        sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
+                        print_f(mlogPool, "auto_38", str);  
+
+                        ch = 69; 
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT); 
+                        break;
+                    default:
+                        sprintf(str, "Error!! get opcode data 0x%.2x wrong !!! \n", t->data);  
+                        print_f(mlogPool, "auto_38", str);  
+
+                        data->result = emb_result(data->result, BREAK);  
+                        break;
+                }
+   
             } else {
                 sprintf(str, "Error!! get opcode 0x%.2x wrong !!! \n", t->opcode);  
                 print_f(mlogPool, "auto_38", str);  
@@ -8240,13 +8512,54 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
+    sprintf(mrs->log, "trigger metaout transfer \n");
+    print_f(&mrs->plog, "fs69", mrs->log);
+
+    mrs_ipc_put(mrs, "m", 1, 3);
+    modersp->m = modersp->m + 1;
+    return 0; }
+static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    int len=0;
+    char ch=0;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'M')) {
+        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+
+        sprintf(mrs->log, "get ch = %c\n", ch);
+        print_f(&mrs->plog, "fs70", mrs->log);
+
+        modersp->m = 30;
+
+        return 2;
+    }
+    return 0; 
+}
+static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    modersp->r = 1;
+    return 1;
+}
+static int fs72(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    modersp->r = 1;
+    return 1;
+}
+static int fs73(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    modersp->r = 1;
+    return 1;
+}
+static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
     modersp->r = 1;
     return 1;
 }
 
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 70
+#define PS_NUM 75
     int len, tmp, ret;
     char str[128], ch;
 
@@ -8264,7 +8577,8 @@ static int p0(struct mainRes_s *mrs)
                                  {50, fs50},{51, fs51},{52, fs52},{53, fs53},{54, fs54},
                                  {55, fs55},{56, fs56},{57, fs57},{58, fs58},{59, fs59},
                                  {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64},
-                                 {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69}};
+                                 {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69},
+                                 {70, fs70},{71, fs71},{72, fs72},{73, fs73},{74, fs74}};
 
     p0_init(mrs);
 
@@ -8420,7 +8734,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     return 0;
 }
 
-static int randomGen(int min, int max)
+inline int randomGen(int min, int max)
 {
     uint32_t seed[16] = {1, 3, 5, 11, 13, 17, 23, 29, 31, 37, 41, 47, 53, 57, 61, 67};
     struct timespec ctm;
@@ -8434,13 +8748,13 @@ static int randomGen(int min, int max)
 
     clock_gettime(CLOCK_REALTIME, &ctm);
     
-    printf("randomGen() - %d ~ %d\n", min, max);
+    //printf("randomGen() - %d ~ %d\n", min, max);
     ns = ctm.tv_nsec;
     srandom(seed[ns%16]);
     r = random();
 
     v = min + (r % range);
-    printf("clock() - %d - v:%d r:%d\n", ctm.tv_nsec, v, r);
+    //printf("clock() - %d - v:%d r:%d\n", ctm.tv_nsec, v, r);
     
     return v;
 }
@@ -8480,7 +8794,11 @@ static int p2(struct procRes_s *rs)
     char filetiffraw[128] = "/mnt/mmc2/tiff_raw.bin";
     char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
 #if (CROP_SAMPLE_SIZE == 5)
+#if 1 /* 0614 */
+    char cropfile[128] = "/mnt/mmc2/crop5_0614/crop_%.2d.jpg";
+#else /* 0616 */
     char cropfile[128] = "/mnt/mmc2/crop5/crop_%.2d.jpg";
+#endif
 #elif (CROP_SAMPLE_SIZE == 6)
     char cropfile[128] = "/mnt/mmc2/crop/crop_%.2d.jpg";
 #elif (CROP_SAMPLE_SIZE == 7)
@@ -9405,6 +9723,9 @@ static int p4(struct procRes_s *rs)
                 case 'j':
                     cmode = 8;
                     break;
+                case 'm':
+                    cmode = 9;
+                    break;
                 default:
                     break;
             }
@@ -9750,7 +10071,7 @@ static int p4(struct procRes_s *rs)
             tx8 = (char *)rs->pmetaout;
             rx8 = (char *)rs->pmetain;
             
-            msync(addr, 512, MS_SYNC);
+            msync(tx8, 512, MS_SYNC);
             opsz = 0;
 
             opsz = mtx_data(rs->spifd, rx8, tx8, 1, len, 1024*1024);  
@@ -9771,6 +10092,55 @@ static int p4(struct procRes_s *rs)
             }
 
             rs_ipc_put(rs, "J", 1);
+            pi += 1;
+
+            totsz += opsz;
+
+            sprintf(rs->logs, "totsz: %d, len:%d opsz:%d break!\n", totsz, len, opsz);
+            print_f(rs->plogs, "P4", rs->logs);
+        }
+        else if (cmode == 9) {
+            int bits = 8;
+            ret = ioctl(rs->spifd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+            if (ret == -1) {
+                sprintf(rs->logs, "can't set bits per word"); 
+                print_f(rs->plogs, "P4", rs->logs);
+            }
+            ret = ioctl(rs->spifd, SPI_IOC_RD_BITS_PER_WORD, &bits); 
+            if (ret == -1) {
+                sprintf(rs->logs, "can't get bits per word"); 
+                print_f(rs->plogs, "P4", rs->logs);
+            }
+            
+            totsz = 0;
+            len = 0;
+            pi = 0;  
+
+            len = rs->pmetaMass->massUsed;
+            tx8 = (char *)rs->pmetaMass->masspt;
+            rx8 = (char *)rx_buff;
+            
+            msync(tx8, len, MS_SYNC);
+            opsz = 0;
+
+            opsz = mtx_data(rs->spifd, rx8, tx8, 1, len, 1024*1024);  
+
+            sprintf(rs->logs, "spi0 recv %d\n", opsz);
+            print_f(rs->plogs, "P4", rs->logs);
+
+            //shmem_dump(rx8, opsz);
+
+            //msync(pmeta, 512, MS_SYNC);
+            
+            //sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+            //print_f(rs->plogs, "P4", rs->logs);
+
+            if (opsz < 0) {
+                sprintf(rs->logs, "opsz:%d ERROR!!!\n", opsz);
+                print_f(rs->plogs, "P4", rs->logs);    
+            }
+
+            rs_ipc_put(rs, "M", 1);
             pi += 1;
 
             totsz += opsz;
@@ -10029,6 +10399,19 @@ static char spi0[] = "/dev/spidev32765.0";
     len = sizeof(struct aspMetaData);
     pmrs->metaout = aspSalloc(len);
     pmrs->metain = aspSalloc(len);
+    
+    len = SPI_TRUNK_SZ;
+    pmrs->metaMass.masspt = aspSalloc(len);    
+    pmrs->metaMass.massMax = len;
+    pmrs->metaMass.massUsed = 0;
+
+    if ((pmrs->metaout) && (pmrs->metain) && (pmrs->metaMass.masspt)) {
+        sprintf(pmrs->log, "inbuff addr(0x%.8x), outbuff addr(0x%.8x), massbuff addr(0x%.8x) \n", pmrs->metain, pmrs->metaout, pmrs->metaMass.masspt);
+        print_f(&pmrs->plog, "meta", pmrs->log);
+    } else {
+        sprintf(pmrs->log, "Error!! allocate meta memory failed!!!! \n");
+        print_f(&pmrs->plog, "meta", pmrs->log);
+    }
     
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
@@ -10616,6 +10999,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 
     rs->pmetaout = mrs->metaout;
     rs->pmetain = mrs->metain;    
+    rs->pmetaMass = &mrs->metaMass;
     return 0;
 }
 
