@@ -219,6 +219,7 @@ typedef enum {
     ASPOP_STA_UPD = 0x02,
     ASPOP_STA_APP = 0x04,
     ASPOP_STA_CON = 0x08,
+    ASPOP_STA_SCAN = 0x10,
 } aspOpSt_e;
 
 typedef enum {
@@ -315,6 +316,9 @@ typedef enum {
     ASPOP_CROP_COOR_YL,
     ASPOP_EG_DECT,
     ASPOP_AP_MODE,
+    ASPOP_XCROP_GAT,
+    ASPOP_XCROP_LINSTR,
+    ASPOP_XCROP_LINREC,
     ASPOP_CODE_MAX, /* 94 */
 } aspOpCode_e;
 
@@ -328,6 +332,7 @@ typedef enum {
     ASPOP_MASK_6 = 0x3f,
     ASPOP_MASK_7 = 0x7f,
     ASPOP_MASK_8 = 0xff,
+    ASPOP_MASK_16 = 0xffff,
     ASPOP_MASK_32 = 0xffffffff,
 } aspOpMask_e;
 
@@ -379,6 +384,15 @@ typedef enum {
     FILE_FORMAT_TIFF_I,
     FILE_FORMAT_TIFF_M,
 } fileFormat_e;
+
+typedef enum {
+    RESOLUTION_NONE=0,
+    RESOLUTION_1200,
+    RESOLUTION_600,
+    RESOLUTION_300, 
+    RESOLUTION_200, 
+    RESOLUTION_150, 
+} resolution_e;
 
 typedef enum {
     SDSTATS_ERROR=0,
@@ -1041,6 +1055,7 @@ static int aspNameCpyfromName(char *raw, char *dst, int offset, int len, int jum
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
+static int cfgTableSet(struct aspConfig_s *table, int idx, uint32_t val);
 
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
 {
@@ -1417,10 +1432,14 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         val = msb2lsb(pt);
         linRec = val >> 16;
 
-        if ((linGap) && (linStart) && (linRec)) {
+        if (linRec) {
             pmass->massGap = linGap;
             pmass->massStart = linStart;
             pmass->massRecd = linRec;
+
+            cfgTableSet(pct, ASPOP_XCROP_GAT, linGap);
+            cfgTableSet(pct, ASPOP_XCROP_LINSTR, linStart);
+            cfgTableSet(pct, ASPOP_XCROP_LINREC, linRec);
 
             act |= ASPMETA_FUNC_CROP;
             
@@ -12202,12 +12221,16 @@ static int stcropmeta_90(struct psdata_s *data)
 
 static int stcropmeta_91(struct psdata_s *data)
 { 
+    int ret=0;
     char ch = 0; 
-    uint32_t rlt;
+    uint32_t rlt=0;
+    uint32_t rval=0;
     struct procRes_s *rs;
     struct aspMetaData * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
+    struct aspConfig_s *pct=0, *pdt=0;
 
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     pmeta = rs->pmetaout;
@@ -12218,14 +12241,35 @@ static int stcropmeta_91(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             t->opcode = OP_META_DAT;
-            t->data = ASPMETA_CROP_300DPI;
-            aspMetaClear(0, rs, ASPMETA_OUTPUT);
-            //aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
-
-            data->result = emb_result(data->result, NEXT);
-            sprintf(rs->logs, "op_91: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "CPM", rs->logs);  
+            ret = cfgTableGet(pct, ASPOP_RESOLUTION, &rval);
+            if (ret < 0) {
+                data->result = emb_result(data->result, EVTMAX);
+                sprintf(rs->logs, "Error!!! op_91 get ASPOP_RESOLUTION failed!!!ret = %d \n", ret); 
+                print_f(rs->plogs, "CPM", rs->logs);  
+            } else {
+                switch (rval) {
+                case RESOLUTION_1200:
+                case RESOLUTION_600:
+                    t->data = ASPMETA_CROP_600DPI;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_91: result: %x, goto %d\n", data->result, ch); 
+                    print_f(rs->plogs, "CPM", rs->logs);  
+                    break;
+                case RESOLUTION_300:
+                case RESOLUTION_200:
+                case RESOLUTION_150:
+                    t->data = ASPMETA_CROP_300DPI;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_91: result: %x, goto %d\n", data->result, ch); 
+                    print_f(rs->plogs, "CPM", rs->logs);  
+                    break;
+                default:
+                    data->result = emb_result(data->result, EVTMAX);
+                    sprintf(rs->logs, "Error!!! op_91 get ASPOP_RESOLUTION failed!!!rval = %d \n", rval); 
+                    print_f(rs->plogs, "CPM", rs->logs);  
+                    break;
+                }
+            }
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -27361,6 +27405,30 @@ int main(int argc, char *argv[])
                 ctb->opBitlen = 32;
                 break;
             #endif
+            case ASPOP_XCROP_GAT: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_XCROP_LINSTR: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_XCROP_LINREC: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_16;
+                ctb->opBitlen = 16;
+                break;
             }
         }
         #endif
@@ -28116,6 +28184,30 @@ int main(int argc, char *argv[])
                 ctb->opValue = APM_AP;  /* default ap mode */
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
+                break;
+            case ASPOP_XCROP_GAT: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_XCROP_LINSTR: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_XCROP_LINREC: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_16;
+                ctb->opBitlen = 16;
                 break;
             default: break;
             }
