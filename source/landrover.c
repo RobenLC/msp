@@ -122,7 +122,7 @@
 #define CROP_NUMBER   (18)
 
 #if (CROP_NUMBER == 18)
-#define CROP_SAMPLE_SIZE (5)
+#define CROP_SAMPLE_SIZE (4)
 
 struct cropSample_s {
     int cropx;
@@ -158,7 +158,27 @@ static int crop_04[2] = {1611*2, 60*2};
 static int crop_05[2] = {1607*2, 32*2};
 static int crop_06[2] = {537*2, 32*2};
 #elif (CROP_NUMBER == 18)
-#if (CROP_SAMPLE_SIZE == 5)
+#if (CROP_SAMPLE_SIZE == 4)
+static struct cropPoints_s crop_01 = {{{74  , 1410}, { 297,  807}, { 251, 1152}, { 235, 1150}}};
+static struct cropPoints_s crop_02 = {{{1102, 1917}, { 855, 1222}, {1491, 1183}, {1767, 1284}}};
+static struct cropPoints_s crop_03 = {{{1119, 1917}, { 877, 1222}, {1821, 1183}, {1799, 1284}}};
+static struct cropPoints_s crop_04 = {{{1793, 487 }, {1395, 362 }, {1838, 57  }, {1894, 126 }}};
+static struct cropPoints_s crop_05 = {{{ 792, 2   }, { 845, 3   }, {1135, 3   }, { 479, 2   }}};
+static struct cropPoints_s crop_06 = {{{ 742, 2   }, { 807, 3   }, { 268, 3   }, { 329, 2   }}};
+static struct cropPoints_s crop_07 = {{{ 739, 6   }, { 804, 7   }, { 268, 7   }, { 328, 6   }}};
+static struct cropPoints_s crop_08 = {{{ 800, 6   }, { 853, 7   }, {1472, 7   }, { 532, 6   }}};
+static struct cropPoints_s crop_09 = {{{ 738, 10  }, { 803, 11  }, { 267, 11  }, { 328, 10  }}};
+static struct cropPoints_s crop_10 = {{{ 808, 10  }, { 859, 11  }, {1818, 11  }, { 590, 10  }}};
+static struct cropPoints_s crop_11 = {{{1069, 1901}, { 814, 1206}, { 534, 1167}, {1578, 1268}}};
+static struct cropPoints_s crop_12 = {{{1126, 1901}, { 887, 1206}, {1821, 1167}, {1800, 1268}}};
+static struct cropPoints_s crop_13 = {{{1077, 1905}, { 831, 1210}, { 823, 1171}, {1621, 1272}}};
+static struct cropPoints_s crop_14 = {{{1124, 1905}, { 885, 1210}, {1821, 1171}, {1800, 1272}}};
+static struct cropPoints_s crop_15 = {{{1086, 1909}, { 840, 1214}, {1056, 1175}, {1663, 1276}}};
+static struct cropPoints_s crop_16 = {{{1123, 1909}, { 884, 1214}, {1821, 1175}, {1800, 1276}}};
+static struct cropPoints_s crop_17 = {{{1094, 1913}, { 847, 1218}, {1254, 1179}, {1716, 1280}}};
+static struct cropPoints_s crop_18 = {{{1121, 1913}, { 881, 1218}, {1821, 1179}, {1799, 1280}}};
+
+#elif (CROP_SAMPLE_SIZE == 5)
 #if 1 /* 0614 */
 static struct cropPoints_s crop_01 = {{{1699, 21  }, {870, 1318 }, {1602, 1878}, {1478, 1894}, {1483, 1889}}};
 static struct cropPoints_s crop_02 = {{{1727, 2143}, {1720, 2374}, {2777, 2127}, {2654, 2161}, {2657, 2188}}};
@@ -8793,7 +8813,9 @@ static int p2(struct procRes_s *rs)
     char filename[128] = "/mnt/mmc2/scan_pro.jpg";
     char filetiffraw[128] = "/mnt/mmc2/tiff_raw.bin";
     char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
-#if (CROP_SAMPLE_SIZE == 5)
+#if (CROP_SAMPLE_SIZE == 4)
+    char cropfile[128] = "/mnt/mmc2/crop4/crop_%.2d.jpg";
+#elif (CROP_SAMPLE_SIZE == 5)
 #if 1 /* 0614 */
     char cropfile[128] = "/mnt/mmc2/crop5_0614/crop_%.2d.jpg";
 #else /* 0616 */
