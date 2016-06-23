@@ -617,6 +617,7 @@ struct aspMetaData{
 };
 
 struct aspMetaMass{
+    int massIdx;
     int massUsed;
     int massMax;
     int massGap;
@@ -809,6 +810,61 @@ static int stauto_20(struct psdata_s *data);
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb);
 static uint32_t msb2lsb(struct intMbs_s *msb);
 
+static int aspMetaMassSample(struct aspMetaMass *mass)
+{
+    char *pbuf;
+    char sample[128];
+    char spox[] = "/mnt/mmc2/crop4/xpos_%.2d.bin";
+    int idx=0, ret=0, fileLen=0, maxSize=0;
+    int readLen=0;
+    FILE *fp;
+
+    idx = mass->massIdx;
+    pbuf = mass->masspt;
+    maxSize = mass->massMax;
+
+    sprintf(sample, spox, idx);
+
+    fp = fopen(sample, "r");
+
+    ret = fseek(fp, 0, SEEK_END);
+    if (ret) {
+        printf("[mass] file seek failed!! ret:%d \n", ret);
+        return -1;        
+    } 
+
+    fileLen = ftell(fp);
+    printf("[mass] file [%s] size: %d \n", sample, fileLen);
+
+    ret = fseek(fp, 0, SEEK_SET);
+    if (ret) {
+        printf("[mass] file seek failed!! ret:%d \n", ret);
+        return -2;        
+    }
+
+    if (fileLen > maxSize) {
+        readLen = maxSize;
+    } else {
+        readLen = fileLen;
+    }
+
+    ret = fread(pbuf, 1, readLen, fp);
+    if (ret != readLen) {
+        printf("[mass] WARNING!!! read file size:%d, read:%d, total:%d", ret, readLen, fileLen);  
+    }
+
+    msync(pbuf, readLen, MS_SYNC);
+    
+    mass->massUsed = readLen;
+
+    idx += 1;
+    idx = idx % 4;
+
+    mass->massIdx = idx;
+    
+    return readLen;
+}
+
 static int aspMetaMassCons(struct aspMetaMass *mass, int start, int end)
 {
 #define RAW_W 4320
@@ -995,6 +1051,8 @@ static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out)
 
 static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
+    int xposIdx=0, xparm=0;
+    uint32_t xposParm[4] = {0x080300ef, 0x080b0098, 0x08070094, 0x080700a0};
     uint32_t tbits=0;
     unsigned int *psrc;
     struct intMbs_s *pdst;
@@ -1024,7 +1082,8 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
 
     if (funcbits == ASPMETA_FUNC_NONE) {
         /*append mass points*/
-        ret = aspMetaMassCons(mass, 0, 0);        
+        //ret = aspMetaMassCons(mass, 0, 0);        
+        ret = aspMetaMassSample(mass);
 
         if (ret > 0) {
             printf("dump meta mass: \n");
@@ -1053,11 +1112,14 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
             psrc += 2;
         }
 
-        pmeta->YLine_Gap = mass->massGap & 0xff;
-        pmeta->Start_YLine_No = mass->massStart & 0xff;
+        xposIdx = mass->massIdx;
+        xparm = xposParm[xposIdx % 4];
         
+        pmeta->YLine_Gap = (xparm >> 24) & 0xff;
+        pmeta->Start_YLine_No = (xparm >> 16) & 0xff;
+
         pdst = (struct intMbs_s *)&(pmeta->YLines_Recorded);
-        val = (mass->massRecd & 0xffff) << 16;
+        val = (xparm & 0xffff) << 16;
         
         lsb2Msb(pdst, val);        
         
@@ -8920,6 +8982,10 @@ static int p2(struct procRes_s *rs)
             if ((idx%36) == 8)  {
                 idx = 9;
             }
+
+#if (CROP_SAMPLE_SIZE == 4)
+            idx = rs->pmetaMass->massIdx % 4;
+#endif
 
             if (infpath[0] != '\0') {
                 strcpy(filename, infpath);

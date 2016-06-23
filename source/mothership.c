@@ -1106,7 +1106,7 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta)
     printf("[meta] debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
 
     if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
-        printf("[meta] Error!!! magic[0]: 0x%.2x magic[1]: 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+        printf("[meta] Warning!!! magic[0]: 0x%.2x magic[1]: 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
         return -2;
     }
     
@@ -12083,23 +12083,33 @@ static int stsparam_88(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                sprintf(rs->logs, "dump meta input\n"); 
+                sprintf(rs->logs, "dump meta input (used:%d) \n", pmass->massUsed); 
                 print_f(rs->plogs, "SPM", rs->logs);  
 
-                shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData));
-                dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
-                
-                act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
-
-                if ((act > 0) && (act & ASPMETA_FUNC_CROP)) {
-                    data->bkofw = emb_bk(data->bkofw, METAT, PSSET);
-                    data->result = emb_result(data->result, BKWRD);
-
-                    sprintf(rs->logs, "act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
+                if ((pmass->massUsed > 512) && (pmass->massRecd > 0)) {
+                    sprintf(rs->logs, "dump meta mass: (gap:%d, linStart:%d, linRecd:%d)\n", pmass->massGap, pmass->massStart, pmass->massRecd); 
                     print_f(rs->plogs, "SPM", rs->logs);  
+
+                    //mem_dump((char *)pmass->masspt, pmass->massUsed);
+
+                    data->result = emb_result(data->result, FWORD);                
+                    //pmass->massRecd = 0;
+                    //pmass->massUsed = 0;
                 } else {
-                    //data->result = emb_result(data->result, NEXT);
-                    data->result = emb_result(data->result, FWORD);
+                    shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData));
+                    dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
+                    act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
+
+                    if ((act > 0) && (act & ASPMETA_FUNC_CROP)) {
+                        data->bkofw = emb_bk(data->bkofw, METAT, PSSET);
+                        data->result = emb_result(data->result, BKWRD);
+
+                        sprintf(rs->logs, "act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
+                        print_f(rs->plogs, "SPM", rs->logs);  
+                    } else {
+                        //data->result = emb_result(data->result, NEXT);
+                        data->result = emb_result(data->result, FWORD);
+                    }
                 }
 
             } else if (data->ansp0 == 2) {
@@ -12254,6 +12264,7 @@ static int stcropmeta_91(struct psdata_s *data)
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_91: result: %x, goto %d\n", data->result, ch); 
                     print_f(rs->plogs, "CPM", rs->logs);  
+                    rs->pmetaMass->massUsed = 0;
                     break;
                 case RESOLUTION_300:
                 case RESOLUTION_200:
@@ -12262,6 +12273,7 @@ static int stcropmeta_91(struct psdata_s *data)
                     data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_91: result: %x, goto %d\n", data->result, ch); 
                     print_f(rs->plogs, "CPM", rs->logs);  
+                    rs->pmetaMass->massUsed = 0;
                     break;
                 default:
                     data->result = emb_result(data->result, EVTMAX);
@@ -23769,9 +23781,6 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
                     //shmem_dump(addr, 512);
-
-                    memcpy(rs->pmetain, laddr, 512);
-                    msync(pmeta, 512, MS_SYNC);
                     
                     sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
                     print_f(rs->plogs, "P2", rs->logs);
@@ -23792,6 +23801,15 @@ static int p2(struct procRes_s *rs)
                 if (opsz == 1) opsz = 0;
                 totsz += opsz;
 
+                memcpy(rs->pmetain, laddr, 512);
+                msync(rs->pmetain, 512, MS_SYNC);
+
+                if (totsz > rs->pmetaMass->massMax) {
+                    rs->pmetaMass->massUsed = rs->pmetaMass->massMax;
+                } else {
+                    rs->pmetaMass->massUsed = totsz;
+                }
+                
                 sprintf(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
                 print_f(rs->plogs, "P2", rs->logs);
             }
@@ -25035,6 +25053,7 @@ static int atFindIdx(char *str, char ch)
 #define P6_RX_LOG    (1)
 #define P6_UTC_LOG  (0)
 #define P6_PARA_LOG  (0)
+#define P6_SEND_BUFF_SIZE (4096)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
@@ -25064,6 +25083,11 @@ static int p6(struct procRes_s *rs)
     struct sdFATable_s   *pftb=0;
     uint32_t secStr=0, secLen=0;
 
+    struct aspMetaMass *pmass=0;
+    int masUsed=0, masRecd=0;
+    int gap=0, cy=0, cxm=0, cxn=0;
+    unsigned short *ptBuf;
+
     struct aspInfoSplit_s *strinfo=0, *nexinfo=0;
 
     struct apWifiConfig_s *pwfc=0;
@@ -25072,6 +25096,7 @@ static int p6(struct procRes_s *rs)
     pfat = rs->psFat;
     pftb = pfat->fatTable;
     pwfc = rs->pwifconf;
+    pmass = rs->pmetaMass;
 
     char dir[64] = "/mnt/mmc2";
     //char dir[256] = "/root";
@@ -25096,7 +25121,7 @@ static int p6(struct procRes_s *rs)
         print_f(rs->plogs, "P6", rs->logs);
     }
 
-    sendbuf = aspMalloc(1024);
+    sendbuf = aspMalloc(P6_SEND_BUFF_SIZE);
     if (!sendbuf) {
         sprintf(rs->logs, "sendbuf alloc failed! \n");
         print_f(rs->plogs, "P6", rs->logs);
@@ -25158,7 +25183,7 @@ static int p6(struct procRes_s *rs)
         }
 
         memset(recvbuf, 0x0, 1024);
-        memset(sendbuf, 0x0, 1024);
+        memset(sendbuf, 0x0, P6_SEND_BUFF_SIZE);
         
         n = read(rs->psocket_at->connfd, recvbuf, 1024);
         if (n <= 0) goto socketEnd;
@@ -25264,6 +25289,67 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
+            if (pmass->massRecd) {
+                cnt = 0;
+                masUsed = pmass->massUsed;
+                sprintf(rs->logs, "wait meta mass (used:%d) %d\n", masUsed, cnt); 
+                print_f(rs->plogs, "P6", rs->logs);
+
+                while (!masUsed) {
+                    usleep(500000);
+                    msync(pmass, sizeof(struct aspMetaMass), MS_SYNC);
+                    masUsed = pmass->massUsed;
+                    sprintf(rs->logs, "wait meta mass (used:%d) %d\n", masUsed, cnt); 
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+
+                masRecd = pmass->massRecd;
+
+                ptBuf = (unsigned short *)pmass->masspt;
+                cy = pmass->massStart;
+                gap = pmass->massGap;
+
+                sendbuf[3] = 'T';
+                sprintf(rs->logs, "%d \n\r", masRecd); 
+                print_f(rs->plogs, "P6", rs->logs);
+
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+
+                for (i = 0; i < masRecd; i++){
+                    cy += gap;
+                    cxm = *ptBuf;
+                    ptBuf++;
+                    cxn = *ptBuf;
+                    ptBuf++;
+                    sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    sendbuf[3] = 'M';
+                    n = strlen(rs->logs);
+                    memcpy(&sendbuf[5], rs->logs, n);
+
+                    sendbuf[5+n] = 0xfb;
+                    sendbuf[5+n+1] = '\n';
+                    sendbuf[5+n+2] = '\0';
+
+                    ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                    sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+
+                shmem_dump(pmass->masspt, pmass->massUsed);
+                pmass->massRecd = 0;
+                pmass->massUsed = 0;
+            } 
+
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
                 idx = ASPOP_CROP_01 + i;
                 pdt = &pct[idx];
@@ -25312,7 +25398,7 @@ static int p6(struct procRes_s *rs)
                         break;
                 }
                 
-                if (n > 256) n = 256;
+                if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
                 
                 memcpy(&sendbuf[5], rs->logs, n);
 
