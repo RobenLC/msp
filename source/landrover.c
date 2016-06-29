@@ -7234,6 +7234,11 @@ static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs30", mrs->log);
 
     bitset = 1;
+    ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf(mrs->log, "Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
+    print_f(&mrs->plog, "fs30", mrs->log);
+
+    bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
     sprintf(mrs->log, "spi0 set ready: %d\n", bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
@@ -10784,9 +10789,10 @@ static char spi0[] = "/dev/spidev32765.0";
     pmrs->smode |= SPI_MODE_1;
 
     /* set RDY pin to low before spi setup ready */
-    //bitset = 0;
-    //ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-   // printf("[t]Set RDY low at beginning\n");
+    bitset = 1;
+    ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    printf("[t]Set RDY low at beginning\n");
+
     /*
      * spi speed 
      */ 

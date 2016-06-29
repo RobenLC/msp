@@ -6346,7 +6346,7 @@ static int next_spy(struct psdata_s *data)
             case PSSET:
                 //sprintf(str, "PSSET\n"); 
                 //print_f(mlogPool, "spy", str); 
-                next = PSACT;
+                next = PSMAX;
                 break;
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
@@ -12524,6 +12524,8 @@ static int stspy_01(struct psdata_s *data)
         case WAIT:
             if (data->ansp0 == 1) {
                 data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -14786,6 +14788,64 @@ end:
     return 0;
 }
 
+static int cmdfunc_scango_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0, ch=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_scango_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    n = cmdfunc_upd2host(mrs, 'z', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if (rsp != 0x1) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -1;
+    }
+
+    sprintf(mrs->log, "cmdfunc_scango_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "SCANGO_NG,%d,%d", ret, brk);
+        ch = 'z';
+    } else {
+        sprintf(mrs->log, "SCANGO_OK,%d,%d", ret, brk);
+        ch = 'Z';
+    }
+    
+    mrs_ipc_put(mrs, &ch, 1, 5);
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_meta_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
@@ -15703,7 +15763,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 28
+#define CMD_SIZE 29
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -15715,7 +15775,8 @@ static int dbg(struct mainRes_s *mrs)
                                 {12, "save", cmdfunc_save_opcode}, {13, "free", cmdfunc_free_opcode}, {14, "used", cmdfunc_used_opcode}, {15, "op1", cmdfunc_op1_opcode}
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
-                                , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}};
+                                , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}
+                                , {28, "scango", cmdfunc_scango_opcode}};
 
     p0_init(mrs);
 
@@ -15987,11 +16048,10 @@ static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs01(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-
     sprintf(mrs->log, "check RDY high \n");
     print_f(&mrs->plog, "fs01", mrs->log);
-
     mrs_ipc_put(mrs, "b", 1, 1);
+    modersp->c = 0;
     modersp->m = modersp->m + 1;
     return 0; 
 }
@@ -15999,19 +16059,30 @@ static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     char ch;
     int len;
-    sprintf(mrs->log, "check RDY high d:%d\n", modersp->d);
-    print_f(&mrs->plog, "fs02", mrs->log);
+    //sprintf(mrs->log, "check RDY high d:%d, c:%d\n", modersp->d, modersp->c);
+    //print_f(&mrs->plog, "fs02", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 1);
-    if ((len > 0) && (ch == 'B')){
+    if (len > 0){
+        if (ch == 'B') {
         //modersp->m = modersp->m + 1;
-        if (modersp->d) {
-            modersp->m = modersp->d;
-            modersp->d = 0;
-            return 2;
+            if (modersp->d) {
+                modersp->m = modersp->d;
+                modersp->d = 0;
+                return 2;
+            } else {
+                modersp->r = 1;
+                return 1;
+            }
         } else {
-            modersp->r = 1;
-            return 1;
+            if (modersp->c < 1) { 
+                mrs_ipc_put(mrs, "b", 1, 1);
+                modersp->c += 1;
+            } else {
+                modersp->c = 0;
+                modersp->r = 2;
+                return 1;
+            }
         }
     }
     return 0; 
@@ -22615,6 +22686,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'y') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, SAVPARM, PSTSM);
+                } else if (cmd == 'z') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, SPY, PSSET);
                 }
 
 
@@ -22934,8 +23008,9 @@ static int p2(struct procRes_s *rs)
                 //sprintf(rs->logs, "cmode: %d - 5\n", cmode);
                 //print_f(rs->plogs, "P2", rs->logs);
 
-                bitset = 0;
-                msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+                bitset = 0; 
+                px = 0;
+                //msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                 //sprintf(rs->logs, "Check if RDY pin == 1 (pin:%d)\n", bitset);
                 //print_f(rs->plogs, "P2", rs->logs);
             
@@ -22943,11 +23018,23 @@ static int p2(struct procRes_s *rs)
                     bitset = 0;
                     msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
                     //sprintf(rs->logs, "Get RDY pin: %d\n", bitset);
-                    //print_f(rs->plogs, "P4", rs->logs);
-            
+                    //print_f(rs->plogs, "P2", rs->logs);
+                    
                     if (bitset == 1) break;
+
+                    px ++;
+                    usleep(1000);
+
+                    if (px > 50) {
+                        break;
+                    }
                 }
-                if (bitset) rs_ipc_put(rs, "B", 1);
+                
+                if (bitset) {
+                    rs_ipc_put(rs, "B", 1);
+                } else {
+                    rs_ipc_put(rs, "b", 1);
+                }
             }else if (cmode == 5) {
 #if MSP_P2_SAVE_DAT
                 ret = file_save_get(&rs->fdat_s[1], "/mnt/mmc2/tx/p2%d.dat");
@@ -24803,6 +24890,13 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     p5_init(rs);
     // wait for ch from p0
     // in charge of socket recv
+
+    addr = aspMalloc(1024);
+    if (!addr) {
+        sprintf(rs->logs, "p5 addr alloc failed! \n");
+        print_f(rs->plogs, "P5", rs->logs);
+        return (-1);
+    }
     
     sendbuf = aspMalloc(2048);
     if (!sendbuf) {
@@ -24936,25 +25030,49 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         if ((num < 255) && (num > 0)) {
             memcpy(msg, &recvbuf[be+1], num);
             msg[num] = '\0';
+
+            sprintf(rs->logs, "get msg from app [%s] size:%d\n", msg, num);
+            print_f(rs->plogs, "P5", rs->logs);
         } else {
             goto socketEnd;
         }
 
-        if (opcode != OP_MSG) {
+        
+        rs_ipc_put(rcmd, "scango", 6);
+        ch = 0; ret = 0;
+        ret = rs_ipc_get(rcmd, &ch, 1024);
+        if ((ret == 1) && (ch == 'Z')) {
+            ret = rs_ipc_get(rcmd, addr, 1024);
+            addr[ret] = '\0';
+            sprintf(rs->logs, "get response [%s] size:%d\n", addr, ret);
+            print_f(rs->plogs, "P5", rs->logs);
+        } else {
+            opcode = OP_ERROR; 
+        }
+        
+        if (opcode == OP_ERROR) {
+            num = -1;
+        }
+        else if (opcode != OP_MSG) {
             num = 0;
         }
 
-        if (num > 0) {
+        sprintf(rs->logs, "num [%d] ch [%c] \n",num, ch);
+        print_f(rs->plogs, "P5", rs->logs);
+
+        if (num < 0) {
+            param = ch;
+        } else if (num > 0) {
             //rs_ipc_put(rs, "s", 1);
             //rs_ipc_put(rs, msg, n);
             //sprintf(rs->logs, "send to p0 [%s]\n", recvbuf);
             //print_f(rs->plogs, "P5", rs->logs);
             
             //ret = write(rs->psocket_r->connfd, msg, n);
-            sprintf(rs->logs, "send back app [%s] size:%d/%d\n", msg, ret, num);
-            print_f(rs->plogs, "P5", rs->logs);
+            //sprintf(rs->logs, "get msg from app [%s] size:%d\n", msg, num);
+            //print_f(rs->plogs, "P5", rs->logs);
             rs_ipc_put(rcmd, msg, num);
-        }else {
+        } else {
             if ((opcode == OP_SINGLE) || (opcode == OP_DOUBLE)) {
                 msg[0] = 't';
                 msg[1] = 'g';
