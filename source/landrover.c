@@ -159,7 +159,7 @@ static int crop_05[2] = {1607*2, 32*2};
 static int crop_06[2] = {537*2, 32*2};
 #elif (CROP_NUMBER == 18)
 #if (CROP_SAMPLE_SIZE == 4)
-static struct cropPoints_s crop_01 = {{{74  , 1410}, { 297,  807}, { 251, 1152}, { 235, 1150}}};
+static struct cropPoints_s crop_01 = {{{74  , 1410}, { 297,  869}, { 251, 1152}, { 235, 1150}}};
 static struct cropPoints_s crop_02 = {{{1102, 1917}, { 855, 1222}, {1491, 1183}, {1767, 1284}}};
 static struct cropPoints_s crop_03 = {{{1119, 1917}, { 877, 1222}, {1821, 1183}, {1799, 1284}}};
 static struct cropPoints_s crop_04 = {{{1793, 487 }, {1395, 362 }, {1838, 57  }, {1894, 126 }}};
@@ -819,7 +819,7 @@ static int aspMetaMassSample(struct aspMetaMass *mass)
     int readLen=0;
     FILE *fp;
 
-    idx = mass->massIdx;
+    idx = mass->massIdx % 4;
     pbuf = mass->masspt;
     maxSize = mass->massMax;
 
@@ -856,11 +856,6 @@ static int aspMetaMassSample(struct aspMetaMass *mass)
     msync(pbuf, readLen, MS_SYNC);
     
     mass->massUsed = readLen;
-
-    idx += 1;
-    idx = idx % 4;
-
-    mass->massIdx = idx;
     
     return readLen;
 }
@@ -5469,11 +5464,13 @@ static int stauto_38(struct psdata_s *data)
                     case ASPMETA_CROP_300DPI:
                         pmass->massStart = 12;
                         pmass->massGap = 8;
+                        pmass->massIdx += 1;
                         //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
                         break;
                     case ASPMETA_CROP_600DPI:
                         pmass->massStart = 12;
                         pmass->massGap = 8;
+                        pmass->massIdx += 1;
                         //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
                         break;
                     default:
@@ -5527,7 +5524,7 @@ static int stauto_38(struct psdata_s *data)
                 
                 sprintf(str, "ansp:0x%.2x, go to next!!\n", data->ansp0);  
                 print_f(mlogPool, "auto_38", str);  
-
+                
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, BREAK);
