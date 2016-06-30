@@ -156,7 +156,7 @@ static int *totSalloc=0;
 #define JPG_FFD9_CUT (1)
 
 #define CROP_USE_META (1)
-
+#define SCANGO_CHECK (0)
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -25037,7 +25037,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             goto socketEnd;
         }
 
-        
+#if SCANGO_CHECK 
         rs_ipc_put(rcmd, "scango", 6);
         ch = 0; ret = 0;
         ret = rs_ipc_get(rcmd, &ch, 1024);
@@ -25049,6 +25049,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         } else {
             opcode = OP_ERROR; 
         }
+#endif
         
         if (opcode == OP_ERROR) {
             num = -1;
@@ -25057,8 +25058,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             num = 0;
         }
 
-        sprintf(rs->logs, "num [%d] ch [%c] \n",num, ch);
-        print_f(rs->plogs, "P5", rs->logs);
+        //sprintf(rs->logs, "num [%d] ch [%c] \n",num, ch);
+        //print_f(rs->plogs, "P5", rs->logs);
 
         if (num < 0) {
             param = ch;
