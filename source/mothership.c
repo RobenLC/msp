@@ -12048,6 +12048,7 @@ static int stsparam_87(struct psdata_s *data)
     return ps_next(data);
 }
 
+#define SAVE_CROP_MASS (1)
 static int stsparam_88(struct psdata_s *data)
 { 
     int act=0;
@@ -12056,7 +12057,19 @@ static int stsparam_88(struct psdata_s *data)
     struct procRes_s *rs;
     struct aspMetaData *pmetaIn, *pmetaOut;
     struct aspMetaMass *pmass;
-    
+#if SAVE_CROP_MASS
+    int ret=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    FILE *f=0;
+    char supPath[128] = "/mnt/mmc2/crop/g%d_s%d_c%d_%.4d%.2d%.2d-%.2d%.2d%.2d.bin";
+    char tail[32] = "_%d.bin\0";
+    char supPathCp1[512];
+    char supDst[128];
+    int slen=0, dlen=0;
+
+    pct = data->rs->pcfgTable;
+#endif
     rs = data->rs;
     rlt = abs_result(data->result); 
     pmetaIn = rs->pmetain;
@@ -12089,8 +12102,47 @@ static int stsparam_88(struct psdata_s *data)
                 if ((pmass->massUsed > 512) && (pmass->massRecd > 0)) {
                     sprintf(rs->logs, "dump meta mass: (gap:%d, linStart:%d, linRecd:%d)\n", pmass->massGap, pmass->massStart, pmass->massRecd); 
                     print_f(rs->plogs, "SPM", rs->logs);  
+#if SAVE_CROP_MASS
+                    char syscmd[128] = "mkdir -p /mnt/mmc2/crop";
+                    char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
+                    struct tm *p; 
+                    time_t timep;
 
+                    ret = doSystemCmd(syscmd);
+    
+                    time(&timep);
+                    p=localtime(&timep);
+                    sprintf(rs->logs, "%.4d%.2d%.2d \n", (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday); 
+                    print_f(rs->plogs, "SPM", rs->logs);
+                    sprintf(rs->logs, "%s,%.2d:%.2d:%.2d\n", wday[p->tm_wday],p->tm_hour, p->tm_min, p->tm_sec); 
+                    print_f(rs->plogs, "SPM", rs->logs);       
+
+                    pdt = &pct[ASPOP_CROP_01];
+                    sprintf(supPathCp1, supPath, pmass->massGap, pmass->massStart, pmass->massRecd, (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday,  p->tm_hour, p->tm_min, p->tm_sec);
+/*
+                    dlen = strlen(supPathCp1) - 1;
+                    slen = strlen(tail);
+                    memcpy(&supPathCp1[dlen], tail, slen);
+*/
+                    //supPathCp1[dlen+slen] = '\0';
+
+                    sprintf(rs->logs, "save crop mass to [%s]->[%s] size: %d, dlen:%d, slen:%d\n", supPath, supPathCp1, pmass->massUsed, dlen, slen);
+                    print_f(rs->plogs, "SPM", rs->logs);  
+                    
+                    f = find_save(supDst, supPathCp1);
+                    if (f) {
+                        fwrite((char *)pmass->masspt, 1, pmass->massUsed, f);
+                        sprintf(rs->logs, "save crop mass to [%s]->[%s] size: %d\n", supPathCp1, supDst, pmass->massUsed);
+                        print_f(rs->plogs, "SPM", rs->logs);  
+
+                        fflush(f);
+                        fclose(f);
+
+                        sync();
+                    }
+#endif
                     //mem_dump((char *)pmass->masspt, pmass->massUsed);
+                    
 
                     data->result = emb_result(data->result, FWORD);                
                     //pmass->massRecd = 0;
@@ -25407,7 +25459,7 @@ static int p6(struct procRes_s *rs)
                 usleep(500000);
                 cnt ++;
             }
-
+#if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
                 cnt = 0;
                 masUsed = pmass->massUsed;
@@ -25468,7 +25520,7 @@ static int p6(struct procRes_s *rs)
                 pmass->massRecd = 0;
                 pmass->massUsed = 0;
             } 
-
+#endif
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
                 idx = ASPOP_CROP_01 + i;
                 pdt = &pct[idx];
