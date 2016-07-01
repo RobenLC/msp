@@ -157,6 +157,9 @@ static int *totSalloc=0;
 
 #define CROP_USE_META (1)
 #define SCANGO_CHECK (0)
+
+#define OUT_BUFF_LEN  (64*1024)
+
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -1107,10 +1110,14 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta)
 
     if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
         printf("[meta] Warning!!! magic[0]: 0x%.2x magic[1]: 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+        printf("********************************************\n");
         return -2;
     }
     
-    if (funcbits == ASPMETA_FUNC_NONE) return -3;
+    if (funcbits == ASPMETA_FUNC_NONE) {
+        printf("********************************************\n");
+        return -3;
+    }
 
     if (funcbits & ASPMETA_FUNC_CONF) {
         printf("[meta]__ASPMETA_FUNC_CONF__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CONF, (funcbits & ASPMETA_FUNC_CONF));
@@ -2058,7 +2065,7 @@ static void* aspMalloc(int mlen)
     
     tot = *totMalloc;
     tot += mlen;
-    //printf("!!!!!!!!!!!!!!!!!!!  malloc size: %d / %d\n", mlen, tot);
+    printf("!!!!!!!!!!!!!!!!!!!  malloc size: %d / %d\n", mlen, tot);
     *totMalloc = tot;
     
     p = malloc(mlen);
@@ -2072,7 +2079,7 @@ static void* aspSalloc(int slen)
     
     tot = *totSalloc;
     tot += slen;
-    //printf("*******************  salloc size: %d / %d\n", slen, tot);
+    printf("*******************  salloc size: %d / %d\n", slen, tot);
     *totSalloc = tot;
     
     p = mmap(NULL, slen, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -4784,7 +4791,8 @@ static uint32_t next_SAVPARM(struct psdata_s *data)
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSACT;
+                evt = METAT; 
                 break;
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
@@ -12084,7 +12092,7 @@ static int stsparam_88(struct psdata_s *data)
             
             sprintf(rs->logs, "dump meta output\n"); 
             print_f(rs->plogs, "SPM", rs->logs);  
-            shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData));            
+            //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData));            
             dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
             
             ch = 110; 
@@ -12107,15 +12115,13 @@ static int stsparam_88(struct psdata_s *data)
                     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
                     struct tm *p; 
                     time_t timep;
-
-                    ret = doSystemCmd(syscmd);
     
                     time(&timep);
                     p=localtime(&timep);
-                    sprintf(rs->logs, "%.4d%.2d%.2d \n", (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday); 
-                    print_f(rs->plogs, "SPM", rs->logs);
-                    sprintf(rs->logs, "%s,%.2d:%.2d:%.2d\n", wday[p->tm_wday],p->tm_hour, p->tm_min, p->tm_sec); 
-                    print_f(rs->plogs, "SPM", rs->logs);       
+                    //sprintf(rs->logs, "%.4d%.2d%.2d \n", (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday); 
+                    //print_f(rs->plogs, "SPM", rs->logs);
+                    //sprintf(rs->logs, "%s,%.2d:%.2d:%.2d\n", wday[p->tm_wday],p->tm_hour, p->tm_min, p->tm_sec); 
+                    //print_f(rs->plogs, "SPM", rs->logs);       
 
                     pdt = &pct[ASPOP_CROP_01];
                     sprintf(supPathCp1, supPath, pmass->massGap, pmass->massStart, pmass->massRecd, (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday,  p->tm_hour, p->tm_min, p->tm_sec);
@@ -12126,29 +12132,48 @@ static int stsparam_88(struct psdata_s *data)
 */
                     //supPathCp1[dlen+slen] = '\0';
 
-                    sprintf(rs->logs, "save crop mass to [%s]->[%s] size: %d, dlen:%d, slen:%d\n", supPath, supPathCp1, pmass->massUsed, dlen, slen);
+                    sprintf(rs->logs, "plan to save crop mass to [%s] size: %d\n", supPathCp1, pmass->massUsed);
                     print_f(rs->plogs, "SPM", rs->logs);  
                     
                     f = find_save(supDst, supPathCp1);
                     if (f) {
                         fwrite((char *)pmass->masspt, 1, pmass->massUsed, f);
-                        sprintf(rs->logs, "save crop mass to [%s]->[%s] size: %d\n", supPathCp1, supDst, pmass->massUsed);
+                        sprintf(rs->logs, "save crop mass to [%s] size: %d\n", supDst, pmass->massUsed);
                         print_f(rs->plogs, "SPM", rs->logs);  
 
                         fflush(f);
                         fclose(f);
 
                         sync();
+                    } else {
+                        ret = doSystemCmd(syscmd);
+
+                        f = find_save(supDst, supPathCp1);
+                        if (f) {
+                            fwrite((char *)pmass->masspt, 1, pmass->massUsed, f);
+                            sprintf(rs->logs, "save crop mass to [%s] size: %d\n", supDst, pmass->massUsed);
+                            print_f(rs->plogs, "SPM", rs->logs);  
+
+                            fflush(f);
+                            fclose(f);
+
+                            sync();
+                        } else {
+                            sprintf(rs->logs, "Error!!! failed to save crop mass to [%s] size: %d\n", supPathCp1, pmass->massUsed);
+                            print_f(rs->plogs, "SPM", rs->logs);  
+                        }
                     }
+                    
 #endif
                     //mem_dump((char *)pmass->masspt, pmass->massUsed);
                     
 
-                    data->result = emb_result(data->result, FWORD);                
+                    //data->result = emb_result(data->result, FWORD);                
+                    data->result = emb_result(data->result, NEXT);                
                     //pmass->massRecd = 0;
                     //pmass->massUsed = 0;
                 } else {
-                    shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData));
+                    //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData));
                     dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
                     act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
 
@@ -12369,24 +12394,21 @@ static int stcropmeta_92(struct psdata_s *data)
     rlt = abs_result(data->result); 
     pmeta = rs->pmetaout;
     t = &rs->pmch->tmp;
-    sprintf(rs->logs, "op_92 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "CPM", rs->logs);  
+    //sprintf(rs->logs, "op_92 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "CPM", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            t->opcode = OP_META_DAT;
-            t->data = ASPMETA_CROP_300DPI;
-            aspMetaClear(0, rs, ASPMETA_OUTPUT);
-            aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-            dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+            ch = 112;
 
-            data->result = emb_result(data->result, NEXT);
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
             sprintf(rs->logs, "op_92: result: %x, goto %d\n", data->result, ch); 
             print_f(rs->plogs, "CPM", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, FWORD);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -14942,8 +14964,10 @@ end:
 
     if (brk | ret) {
         sprintf(mrs->log, "META_NG,%d,%d", ret, brk);
+        //print_f(&mrs->plog, "DBG", mrs->log);
     } else {
         sprintf(mrs->log, "META_OK,%d,%d", ret, brk);
+        //print_f(&mrs->plog, "DBG", mrs->log);
     }
 
     n = strlen(mrs->log);
@@ -18872,8 +18896,8 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *s=0, *sc=0;
 
-    sprintf(mrs->log, "%d\n", modersp->v);
-    print_f(&mrs->plog, "fs68", mrs->log);
+    //sprintf(mrs->log, "%d\n", modersp->v);
+    //print_f(&mrs->plog, "fs68", mrs->log);
     pfat = &mrs->aspFat;
     sc = pfat->fatSupcur;
 
@@ -18985,8 +19009,8 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "wait spi0 tx end\n");
-    print_f(&mrs->plog, "fs66", mrs->log);
+    sprintf(mrs->log, "wait wifi tx end\n");
+    print_f(&mrs->plog, "fs69", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     while (len > 0) {
@@ -22431,8 +22455,8 @@ static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
     int ret, bitset;
     char ch;
 
-    sprintf(mrs->log, "%d\n", modersp->v++);
-    print_f(&mrs->plog, "fs111", mrs->log);
+    //sprintf(mrs->log, "%d\n", modersp->v++);
+    //print_f(&mrs->plog, "fs111", mrs->log);
 
     //sleep(5);
 
@@ -22460,12 +22484,35 @@ static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs112(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    return 1;
+    //sprintf(mrs->log, "send notice to P6 for meta mass ready\n");
+    //print_f(&mrs->plog, "fs112", mrs->log);
+
+    mrs_ipc_put(mrs, "c", 1, 7);
+    modersp->m = modersp->m + 1;
+    return 0;
 }
 
 static int fs113(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    return 1;
+    int len=0;
+    char ch=0;
+    //sprintf(mrs->log, "check P6 getting the notice\n");
+    //print_f(&mrs->plog, "fs113", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 7);
+    if ((len > 0) && (ch == 'C')) {
+        modersp->r = 1;
+        return 1;
+    }
+    
+    if ((len > 0) && (ch != 'C')) {
+            sprintf(mrs->log, "FAIL!!send notice to P6 again!\n");
+            print_f(&mrs->plog, "fs113", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
+
+    return 0; 
 }
 
 static int fs114(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -24950,7 +24997,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         return (-1);
     }
     
-    sendbuf = aspMalloc(2048);
+    sendbuf = aspMalloc(OUT_BUFF_LEN);
     if (!sendbuf) {
         sprintf(rs->logs, "p5 sendbuf alloc failed! \n");
         print_f(rs->plogs, "P5", rs->logs);
@@ -25032,7 +25079,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         }
 
         memset(recvbuf, 0x0, 1024);
-        memset(sendbuf, 0x0, 1024);
+        memset(sendbuf, 0x0, OUT_BUFF_LEN);
         memset(msg, 0x0, 256);
 
         n = read(rs->psocket_r->connfd, recvbuf, 1024);
@@ -25040,7 +25087,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         recvbuf[n-1] = '\0';
         //sprintf(rs->logs, "receive len[%d]content[%s]\n", n, recvbuf);
         //print_f(rs->plogs, "P5", rs->logs);
-        memset(sendbuf, 0, 2048);
+        memset(sendbuf, 0, OUT_BUFF_LEN);
         sprintf(sendbuf, "Leo heard [%s]\n", recvbuf);
         //strcpy(sendbuf, recvbuf);
         n = strlen(sendbuf);
@@ -25167,7 +25214,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         }
 
         //usleep(100000);
-        memset(sendbuf, 0, 2048);
+        memset(sendbuf, 0, OUT_BUFF_LEN);
 
         sendbuf[0] = 0xfe;
         sendbuf[1] = ((opcode & 0x80) ? 1:0) + 1;
@@ -25176,7 +25223,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         //sendbuf[3] = 'P';//0x0;
         sendbuf[6] = 0xfc;
 
-        n = rs_ipc_get(rcmd, &sendbuf[7], 2048 - 7);
+        n = rs_ipc_get(rcmd, &sendbuf[7], OUT_BUFF_LEN);
         sendbuf[4] = ((param & 0x80) ? 1:0) + 1;
         sendbuf[5] = param & 0x7f;
         
@@ -25190,10 +25237,11 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
         socketEnd:
         ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
-        
-        //sprintf(rs->logs, "END receive len[%d]content[%s]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, recvbuf, hd, be, ed, ln, fg);
-        sprintf(rs->logs, "END receive len[%d]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, hd, be, ed, ln, fg);
-        print_f(rs->plogs, "P5", rs->logs);
+
+        sendbuf[7+n] = '\0';
+        printf("[P5] END send len[%d]content[\n\n%s\n\n]len[%d]\n", n, &sendbuf[7], n);
+        //sprintf(rs->logs, "END send len[%d]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, hd, be, ed, ln, fg);
+        //print_f(rs->plogs, "P5", rs->logs);
 
         close(rs->psocket_r->connfd);
         rs->psocket_r->connfd = 0;
@@ -25255,13 +25303,14 @@ static int p6(struct procRes_s *rs)
     uint32_t secStr=0, secLen=0;
 
     struct aspMetaMass *pmass=0;
-    int masUsed=0, masRecd=0;
+    int masUsed=0, masRecd=0, masStart=0;
     int gap=0, cy=0, cxm=0, cxn=0;
     unsigned short *ptBuf;
 
     struct aspInfoSplit_s *strinfo=0, *nexinfo=0;
 
     struct apWifiConfig_s *pwfc=0;
+    char ch=0;
 
     pct = rs->pcfgTable;
     pfat = rs->psFat;
@@ -25408,6 +25457,23 @@ static int p6(struct procRes_s *rs)
             sprintf(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
+            ch = 0; ret = 0;
+            while (ch != 'c') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'c') {
+                        sprintf(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf(rs->logs, "failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            
             cnt = 0;
             while (1) {
                 num = 0;
@@ -25462,8 +25528,11 @@ static int p6(struct procRes_s *rs)
 #if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
                 cnt = 0;
+
                 masUsed = pmass->massUsed;
-                sprintf(rs->logs, "wait meta mass (used:%d) %d\n", masUsed, cnt); 
+                masStart = pmass->massStart;
+                
+                sprintf(rs->logs, "wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
                 print_f(rs->plogs, "P6", rs->logs);
 
                 while (!masUsed) {
@@ -25476,8 +25545,10 @@ static int p6(struct procRes_s *rs)
 
                 masRecd = pmass->massRecd;
 
+                msync(pmass->masspt, masUsed, MS_SYNC);
                 ptBuf = (unsigned short *)pmass->masspt;
-                cy = pmass->massStart;
+                
+                cy = masStart;
                 gap = pmass->massGap;
 
                 sendbuf[3] = 'T';
@@ -25512,13 +25583,22 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+2] = '\0';
 
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                    sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                    print_f(rs->plogs, "P6", rs->logs);
+                    //sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
+                    //print_f(rs->plogs, "P6", rs->logs);
                 }
 
-                shmem_dump(pmass->masspt, pmass->massUsed);
+                //shmem_dump(pmass->masspt, pmass->massUsed);
+
+#if 0                    
+                masStart = pmass->massStart;
+                while (masStart != 0) {
+                    masStart = pmass->massStart;
+                    usleep(100000);
+                }
+#endif                
                 pmass->massRecd = 0;
                 pmass->massUsed = 0;
+
             } 
 #endif
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
@@ -25545,11 +25625,11 @@ static int p6(struct procRes_s *rs)
                     case ASPOP_CROP_18:
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
-                            sprintf(rs->logs, "%d. %x (%d, %d) [0x%.8x]\n", i, pdt->opStatus, pdt->opValue >> 16, pdt->opValue & 0xffff, pdt->opValue); 
+                            sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
                             sendbuf[3] = 'C';
 
-                            sprintf(rs->logs, "%d,%d,\n\r", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
 
                             pdt->opStatus = ASPOP_STA_APP;
@@ -25577,9 +25657,13 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                print_f(rs->plogs, "P6", rs->logs);
+                
+                //sendbuf[5+n] = '\0';                
+                //sprintf(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
+                //print_f(rs->plogs, "P6", rs->logs);
             }
+
+            rs_ipc_put(rs, "C", 1);
             
             goto socketEnd;
         }
@@ -27017,7 +27101,7 @@ int main(int argc, char *argv[])
     pmrs = (struct mainRes_s *)aspSalloc(sizeof(struct mainRes_s));
     memset(pmrs, 0, sizeof(struct mainRes_s));
 
-    pmrs->plog.max = 1024;
+    pmrs->plog.max = OUT_BUFF_LEN - 4096;
     pmrs->plog.pool = aspSalloc(pmrs->plog.max);
     if (!pmrs->plog.pool) {printf("get log pool share memory failed\n"); return 0;}
     mlogPool = &pmrs->plog;
@@ -27048,7 +27132,17 @@ int main(int argc, char *argv[])
 
     pmrs->spioc1 = aspSalloc(sizeof(struct spi_ioc_transfer));
     pmrs->spioc2 = aspSalloc(sizeof(struct spi_ioc_transfer));
-    
+
+    /* create folder */
+    sprintf(syscmd, "mkdir -p /root/scaner");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "mkdir -p /mnt/mmc2/rx");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "mkdir -p /mnt/mmc2/tx");
+    ret = doSystemCmd(syscmd);
+
 // launchAP or directAccess
     /* clear status */
     sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
@@ -28960,7 +29054,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-#define MSP_SAVE_LOG (0)
+#define MSP_SAVE_LOG (1)
 
 static int print_dbg(struct logPool_s *plog, char *str, int size)
 {
@@ -28995,9 +29089,11 @@ static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs)
 
     msync(plog->pool, plog->len, MS_SYNC);
     mrs_ipc_put(mrs, plog->pool, plog->len, 5);
-
+    
+#if !MSP_SAVE_LOG
     plog->cur = plog->pool;
     plog->len = 0;
+#endif
 
     return 0;
 }
