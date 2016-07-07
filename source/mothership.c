@@ -156,7 +156,7 @@ static int *totSalloc=0;
 #define JPG_FFD9_CUT (1)
 
 #define CROP_USE_META (1)
-#define SCANGO_CHECK (0)
+#define SCANGO_CHECK (1)
 
 #define OUT_BUFF_LEN  (64*1024)
 
@@ -12107,7 +12107,7 @@ static int stsparam_88(struct psdata_s *data)
                 sprintf(rs->logs, "dump meta input (used:%d) \n", pmass->massUsed); 
                 print_f(rs->plogs, "SPM", rs->logs);  
 
-                if ((pmass->massUsed > 512) && (pmass->massRecd > 0)) {
+                if (pmass->massRecd > 0) {
                     sprintf(rs->logs, "dump meta mass: (gap:%d, linStart:%d, linRecd:%d)\n", pmass->massGap, pmass->massStart, pmass->massRecd); 
                     print_f(rs->plogs, "SPM", rs->logs);  
 #if SAVE_CROP_MASS
@@ -14192,8 +14192,11 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
+    
     printf_dbgflush(&mrs->plog, mrs);
 
+    printf_flush(&mrs->plog, mrs->flog);
+    
     return ret;
 }
 
@@ -15375,8 +15378,11 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
+
     printf_dbgflush(&mrs->plog, mrs);
 
+    printf_flush(&mrs->plog, mrs->flog);    
+    
     return ret;
 }
 
@@ -25457,23 +25463,6 @@ static int p6(struct procRes_s *rs)
             sprintf(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
-            ch = 0; ret = 0;
-            while (ch != 'c') {
-                ret = rs_ipc_get(rs, &ch, 1);
-                if (ret > 0) {
-                    if (ch == 'c') {
-                        sprintf(rs->logs, "succeed to get ch == %c\n", ch);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    } else {
-                        sprintf(rs->logs, "wrong!! ch == %c \n", ch);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    }
-                } else {
-                    sprintf(rs->logs, "failed to get ch ret: \n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);    
-                }
-            }
-            
             cnt = 0;
             while (1) {
                 num = 0;
@@ -25525,8 +25514,29 @@ static int p6(struct procRes_s *rs)
                 usleep(500000);
                 cnt ++;
             }
+
+            
 #if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
+            
+                ch = 0; ret = 0;
+                
+                while (ch != 'c') {
+                    ret = rs_ipc_get(rs, &ch, 1);
+                    if (ret > 0) {
+                        if (ch == 'c') {
+                            sprintf(rs->logs, "succeed to get ch == %c\n", ch);
+                            print_f(rs->plogs, "P6", rs->logs);    
+                        } else {
+                            sprintf(rs->logs, "wrong!! ch == %c \n", ch);
+                            print_f(rs->plogs, "P6", rs->logs);    
+                        }
+                    } else {
+                        sprintf(rs->logs, "failed to get ch ret: \n", ret);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                }
+
                 cnt = 0;
 
                 masUsed = pmass->massUsed;
@@ -29146,6 +29156,7 @@ static int printf_flush(struct logPool_s *plog, FILE *f)
     msync(plog->pool, plog->len, MS_SYNC);
     fwrite(plog->pool, 1, plog->len, f);
     fflush(f);
+    sync();
 
     plog->cur = plog->pool;
     plog->len = 0;
