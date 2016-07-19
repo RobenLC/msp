@@ -158,6 +158,9 @@ static int *totSalloc=0;
 #define CROP_USE_META (1)
 #define SCANGO_CHECK (1)
 
+#define SAVE_CROP_MASS (1)
+#define MSP_SAVE_LOG (1)
+
 #define OUT_BUFF_LEN  (64*1024)
 
 static FILE *mlog = 0;
@@ -1104,110 +1107,185 @@ static uint32_t msb2lsb(struct intMbs_s *msb)
 
 static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta) 
 {
+    char mlog[256];
+    
     msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
-    printf("********************************************\n");
-    printf("[meta] debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
-
+    sprintf(mlog, "********************************************\n");
+    print_f(mlogPool, "META", mlog);
+    sprintf(mlog, "_ debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+    print_f(mlogPool, "META", mlog);
+    
     if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
-        printf("[meta] Warning!!! magic[0]: 0x%.2x magic[1]: 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
-        printf("********************************************\n");
+        sprintf(mlog, " Warning!!! magic[0]: 0x%.2x magic[1]: 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "********************************************\n");
+        print_f(mlogPool, "META", mlog);
         return -2;
     }
     
     if (funcbits == ASPMETA_FUNC_NONE) {
-        printf("********************************************\n");
+        sprintf(mlog, "********************************************\n");
+        print_f(mlogPool, "META", mlog);
         return -3;
     }
 
     if (funcbits & ASPMETA_FUNC_CONF) {
-        printf("[meta]__ASPMETA_FUNC_CONF__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CONF, (funcbits & ASPMETA_FUNC_CONF));
-        printf("[meta]FILE_FORMAT: 0x%.2x    \n",pmeta->FILE_FORMAT     );          //0x31
-        printf("[meta]COLOR_MODE: 0x%.2x      \n",pmeta->COLOR_MODE      );        //0x32
-        printf("[meta]COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
-        printf("[meta]RESOLUTION: 0x%.2x      \n",pmeta->RESOLUTION      );         //0x34
-        printf("[meta]SCAN_GRAVITY: 0x%.2x    \n",pmeta->SCAN_GRAVITY    );       //0x35
-        printf("[meta]CIS_MAX_Width: 0x%.2x   \n",pmeta->CIS_MAX_WIDTH   );        //0x36
-        printf("[meta]WIDTH_ADJUST_H: 0x%.2x  \n",pmeta->WIDTH_ADJUST_H  );     //0x37
-        printf("[meta]WIDTH_ADJUST_L: 0x%.2x  \n",pmeta->WIDTH_ADJUST_L  );      //0x38
-        printf("[meta]SCAN_LENGTH_H: 0x%.2x   \n",pmeta->SCAN_LENGTH_H   );      //0x39
-        printf("[meta]SCAN_LENGTH_L: 0x%.2x   \n",pmeta->SCAN_LENGTH_L   );       //0x3a
-        printf("[meta]INTERNAL_IMG: 0x%.2x    \n",pmeta->INTERNAL_IMG    );         //0x3b
-        printf("[meta]AFE_IC_SELEC: 0x%.2x    \n",pmeta->AFE_IC_SELEC    );         //0x3c
-        printf("[meta]EXTNAL_PULSE: 0x%.2x    \n",pmeta->EXTNAL_PULSE    );         //0x3d
-        printf("[meta]SUP_WRITEBK: 0x%.2x     \n",pmeta->SUP_WRITEBK     );       //0x3e
-        printf("[meta]OP_FUNC_00: 0x%.2x      \n",pmeta->OP_FUNC_00      );     //0x70
-        printf("[meta]OP_FUNC_01: 0x%.2x      \n",pmeta->OP_FUNC_01      );     //0x71
-        printf("[meta]OP_FUNC_02: 0x%.2x      \n",pmeta->OP_FUNC_02      );     //0x72
-        printf("[meta]OP_FUNC_03: 0x%.2x      \n",pmeta->OP_FUNC_03      );     //0x73
-        printf("[meta]OP_FUNC_04: 0x%.2x      \n",pmeta->OP_FUNC_04      );     //0x74
-        printf("[meta]OP_FUNC_05: 0x%.2x      \n",pmeta->OP_FUNC_05      );     //0x75
-        printf("[meta]OP_FUNC_06: 0x%.2x      \n",pmeta->OP_FUNC_06      );     //0x76
-        printf("[meta]OP_FUNC_07: 0x%.2x      \n",pmeta->OP_FUNC_07      );     //0x77
-        printf("[meta]OP_FUNC_08: 0x%.2x      \n",pmeta->OP_FUNC_08      );     //0x78
-        printf("[meta]OP_FUNC_09: 0x%.2x      \n",pmeta->OP_FUNC_09      );     //0x79
-        printf("[meta]OP_FUNC_10: 0x%.2x      \n",pmeta->OP_FUNC_10      );     //0x7A
-        printf("[meta]OP_FUNC_11: 0x%.2x      \n",pmeta->OP_FUNC_11      );     //0x7B
-        printf("[meta]OP_FUNC_12: 0x%.2x      \n",pmeta->OP_FUNC_12      );     //0x7C
-        printf("[meta]OP_FUNC_13: 0x%.2x      \n",pmeta->OP_FUNC_13      );     //0x7D
-        printf("[meta]OP_FUNC_14: 0x%.2x      \n",pmeta->OP_FUNC_14      );     //0x7E
-        printf("[meta]OP_FUNC_15: 0x%.2x      \n",pmeta->OP_FUNC_15      );     //0x7F  
+        sprintf(mlog, "__ASPMETA_FUNC_CONF__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CONF, (funcbits & ASPMETA_FUNC_CONF));
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "FILE_FORMAT: 0x%.2x    \n",pmeta->FILE_FORMAT     );          //0x31
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "COLOR_MODE: 0x%.2x      \n",pmeta->COLOR_MODE      );        //0x32
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "RESOLUTION: 0x%.2x      \n",pmeta->RESOLUTION      );         //0x34
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SCAN_GRAVITY: 0x%.2x    \n",pmeta->SCAN_GRAVITY    );       //0x35
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CIS_MAX_Width: 0x%.2x   \n",pmeta->CIS_MAX_WIDTH   );        //0x36
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "WIDTH_ADJUST_H: 0x%.2x  \n",pmeta->WIDTH_ADJUST_H  );     //0x37
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "WIDTH_ADJUST_L: 0x%.2x  \n",pmeta->WIDTH_ADJUST_L  );      //0x38
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SCAN_LENGTH_H: 0x%.2x   \n",pmeta->SCAN_LENGTH_H   );      //0x39
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SCAN_LENGTH_L: 0x%.2x   \n",pmeta->SCAN_LENGTH_L   );       //0x3a
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "INTERNAL_IMG: 0x%.2x    \n",pmeta->INTERNAL_IMG    );         //0x3b
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "AFE_IC_SELEC: 0x%.2x    \n",pmeta->AFE_IC_SELEC    );         //0x3c
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "EXTNAL_PULSE: 0x%.2x    \n",pmeta->EXTNAL_PULSE    );         //0x3d
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SUP_WRITEBK: 0x%.2x     \n",pmeta->SUP_WRITEBK     );       //0x3e
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_00: 0x%.2x      \n",pmeta->OP_FUNC_00      );     //0x70
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_01: 0x%.2x      \n",pmeta->OP_FUNC_01      );     //0x71
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_02: 0x%.2x      \n",pmeta->OP_FUNC_02      );     //0x72
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_03: 0x%.2x      \n",pmeta->OP_FUNC_03      );     //0x73
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_04: 0x%.2x      \n",pmeta->OP_FUNC_04      );     //0x74
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_05: 0x%.2x      \n",pmeta->OP_FUNC_05      );     //0x75
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_06: 0x%.2x      \n",pmeta->OP_FUNC_06      );     //0x76
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_07: 0x%.2x      \n",pmeta->OP_FUNC_07      );     //0x77
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_08: 0x%.2x      \n",pmeta->OP_FUNC_08      );     //0x78
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_09: 0x%.2x      \n",pmeta->OP_FUNC_09      );     //0x79
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_10: 0x%.2x      \n",pmeta->OP_FUNC_10      );     //0x7A
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_11: 0x%.2x      \n",pmeta->OP_FUNC_11      );     //0x7B
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_12: 0x%.2x      \n",pmeta->OP_FUNC_12      );     //0x7C
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_13: 0x%.2x      \n",pmeta->OP_FUNC_13      );     //0x7D
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_14: 0x%.2x      \n",pmeta->OP_FUNC_14      );     //0x7E
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "OP_FUNC_15: 0x%.2x      \n",pmeta->OP_FUNC_15      );     //0x7F  
+        print_f(mlogPool, "META", mlog);
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
-        printf("[meta]__ASPMETA_FUNC_CROP__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CROP, (funcbits & ASPMETA_FUNC_CROP));
-        printf("[meta]CROP_POSX_01: %d, %d\n", msb2lsb(&pmeta->CROP_POS_1) >> 16, msb2lsb(&pmeta->CROP_POS_1) & 0xffff);                      //byte[68]
-        printf("[meta]CROP_POSX_02: %d, %d\n", msb2lsb(&pmeta->CROP_POS_2) >> 16, msb2lsb(&pmeta->CROP_POS_2) & 0xffff);                      //byte[72]
-        printf("[meta]CROP_POSX_03: %d, %d\n", msb2lsb(&pmeta->CROP_POS_3) >> 16, msb2lsb(&pmeta->CROP_POS_3) & 0xffff);                      //byte[76]
-        printf("[meta]CROP_POSX_04: %d, %d\n", msb2lsb(&pmeta->CROP_POS_4) >> 16, msb2lsb(&pmeta->CROP_POS_4) & 0xffff);                      //byte[80]
-        printf("[meta]CROP_POSX_05: %d, %d\n", msb2lsb(&pmeta->CROP_POS_5) >> 16, msb2lsb(&pmeta->CROP_POS_5) & 0xffff);                      //byte[84]
-        printf("[meta]CROP_POSX_06: %d, %d\n", msb2lsb(&pmeta->CROP_POS_6) >> 16, msb2lsb(&pmeta->CROP_POS_6) & 0xffff);                      //byte[88]
-        printf("[meta]CROP_POSX_07: %d, %d\n", msb2lsb(&pmeta->CROP_POS_7) >> 16, msb2lsb(&pmeta->CROP_POS_7) & 0xffff);                      //byte[92]
-        printf("[meta]CROP_POSX_08: %d, %d\n", msb2lsb(&pmeta->CROP_POS_8) >> 16, msb2lsb(&pmeta->CROP_POS_8) & 0xffff);                      //byte[96]
-        printf("[meta]CROP_POSX_09: %d, %d\n", msb2lsb(&pmeta->CROP_POS_9) >> 16, msb2lsb(&pmeta->CROP_POS_9) & 0xffff);                      //byte[100]
-        printf("[meta]CROP_POSX_10: %d, %d\n", msb2lsb(&pmeta->CROP_POS_10) >> 16, msb2lsb(&pmeta->CROP_POS_10) & 0xffff);                      //byte[104]
-        printf("[meta]CROP_POSX_11: %d, %d\n", msb2lsb(&pmeta->CROP_POS_11) >> 16, msb2lsb(&pmeta->CROP_POS_11) & 0xffff);                      //byte[108]
-        printf("[meta]CROP_POSX_12: %d, %d\n", msb2lsb(&pmeta->CROP_POS_12) >> 16, msb2lsb(&pmeta->CROP_POS_12) & 0xffff);                      //byte[112]
-        printf("[meta]CROP_POSX_13: %d, %d\n", msb2lsb(&pmeta->CROP_POS_13) >> 16, msb2lsb(&pmeta->CROP_POS_13) & 0xffff);                      //byte[116]
-        printf("[meta]CROP_POSX_14: %d, %d\n", msb2lsb(&pmeta->CROP_POS_14) >> 16, msb2lsb(&pmeta->CROP_POS_14) & 0xffff);                      //byte[120]
-        printf("[meta]CROP_POSX_15: %d, %d\n", msb2lsb(&pmeta->CROP_POS_15) >> 16, msb2lsb(&pmeta->CROP_POS_15) & 0xffff);                      //byte[124]
-        printf("[meta]CROP_POSX_16: %d, %d\n", msb2lsb(&pmeta->CROP_POS_16) >> 16, msb2lsb(&pmeta->CROP_POS_16) & 0xffff);                      //byte[128]
-        printf("[meta]CROP_POSX_17: %d, %d\n", msb2lsb(&pmeta->CROP_POS_17) >> 16, msb2lsb(&pmeta->CROP_POS_17) & 0xffff);                      //byte[132]
-        printf("[meta]CROP_POSX_18: %d, %d\n", msb2lsb(&pmeta->CROP_POS_18) >> 16, msb2lsb(&pmeta->CROP_POS_18) & 0xffff);                      //byte[136]
-        printf("[meta]YLine_Gap: %.d      \n",pmeta->YLine_Gap); 
-        printf("[meta]Start_YLine_No: %d      \n",pmeta->Start_YLine_No); 
-        printf("[meta]YLines_Recorded: %d      \n",msb2lsb((struct intMbs_s*)&pmeta->YLines_Recorded) >> 16); 
+        sprintf(mlog, "__ASPMETA_FUNC_CROP__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CROP, (funcbits & ASPMETA_FUNC_CROP));
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_01: %d, %d\n", msb2lsb(&pmeta->CROP_POS_1) >> 16, msb2lsb(&pmeta->CROP_POS_1) & 0xffff);                      //byte[68]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_02: %d, %d\n", msb2lsb(&pmeta->CROP_POS_2) >> 16, msb2lsb(&pmeta->CROP_POS_2) & 0xffff);                      //byte[72]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_03: %d, %d\n", msb2lsb(&pmeta->CROP_POS_3) >> 16, msb2lsb(&pmeta->CROP_POS_3) & 0xffff);                      //byte[76]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_04: %d, %d\n", msb2lsb(&pmeta->CROP_POS_4) >> 16, msb2lsb(&pmeta->CROP_POS_4) & 0xffff);                      //byte[80]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_05: %d, %d\n", msb2lsb(&pmeta->CROP_POS_5) >> 16, msb2lsb(&pmeta->CROP_POS_5) & 0xffff);                      //byte[84]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_06: %d, %d\n", msb2lsb(&pmeta->CROP_POS_6) >> 16, msb2lsb(&pmeta->CROP_POS_6) & 0xffff);                      //byte[88]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_07: %d, %d\n", msb2lsb(&pmeta->CROP_POS_7) >> 16, msb2lsb(&pmeta->CROP_POS_7) & 0xffff);                      //byte[92]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_08: %d, %d\n", msb2lsb(&pmeta->CROP_POS_8) >> 16, msb2lsb(&pmeta->CROP_POS_8) & 0xffff);                      //byte[96]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_09: %d, %d\n", msb2lsb(&pmeta->CROP_POS_9) >> 16, msb2lsb(&pmeta->CROP_POS_9) & 0xffff);                      //byte[100]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_10: %d, %d\n", msb2lsb(&pmeta->CROP_POS_10) >> 16, msb2lsb(&pmeta->CROP_POS_10) & 0xffff);                      //byte[104]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_11: %d, %d\n", msb2lsb(&pmeta->CROP_POS_11) >> 16, msb2lsb(&pmeta->CROP_POS_11) & 0xffff);                      //byte[108]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_12: %d, %d\n", msb2lsb(&pmeta->CROP_POS_12) >> 16, msb2lsb(&pmeta->CROP_POS_12) & 0xffff);                      //byte[112]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_13: %d, %d\n", msb2lsb(&pmeta->CROP_POS_13) >> 16, msb2lsb(&pmeta->CROP_POS_13) & 0xffff);                      //byte[116]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_14: %d, %d\n", msb2lsb(&pmeta->CROP_POS_14) >> 16, msb2lsb(&pmeta->CROP_POS_14) & 0xffff);                      //byte[120]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_15: %d, %d\n", msb2lsb(&pmeta->CROP_POS_15) >> 16, msb2lsb(&pmeta->CROP_POS_15) & 0xffff);                      //byte[124]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_16: %d, %d\n", msb2lsb(&pmeta->CROP_POS_16) >> 16, msb2lsb(&pmeta->CROP_POS_16) & 0xffff);                      //byte[128]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_17: %d, %d\n", msb2lsb(&pmeta->CROP_POS_17) >> 16, msb2lsb(&pmeta->CROP_POS_17) & 0xffff);                      //byte[132]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "CROP_POSX_18: %d, %d\n", msb2lsb(&pmeta->CROP_POS_18) >> 16, msb2lsb(&pmeta->CROP_POS_18) & 0xffff);                      //byte[136]
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "YLine_Gap: %.d      \n",pmeta->YLine_Gap); 
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "Start_YLine_No: %d      \n",pmeta->Start_YLine_No); 
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "YLines_Recorded: %d      \n",msb2lsb((struct intMbs_s*)&pmeta->YLines_Recorded) >> 16); 
+        print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
-        printf("[meta]__ASPMETA_FUNC_IMGLEN__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_IMGLEN, (funcbits & ASPMETA_FUNC_IMGLEN));
-        printf("[meta]SCAN_IMAGE_LEN: %d\n", msb2lsb(&pmeta->SCAN_IMAGE_LEN));                      //byte[124]        
+        sprintf(mlog, "__ASPMETA_FUNC_IMGLEN__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_IMGLEN, (funcbits & ASPMETA_FUNC_IMGLEN));
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SCAN_IMAGE_LEN: %d\n", msb2lsb(&pmeta->SCAN_IMAGE_LEN));                      //byte[124]        
+        print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {      
-        printf("[meta]__ASPMETA_FUNC_SDFREE__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDFREE, (funcbits & ASPMETA_FUNC_SDFREE));
-        printf("[meta]FREE_SECTOR_ADD: %d\n", msb2lsb(&pmeta->FREE_SECTOR_ADD));                      //byte[128]            
-        printf("[meta]FREE_SECTOR_LEN: %d\n", msb2lsb(&pmeta->FREE_SECTOR_LEN));                      //byte[132]        
+        sprintf(mlog, "__ASPMETA_FUNC_SDFREE__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDFREE, (funcbits & ASPMETA_FUNC_SDFREE));
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "FREE_SECTOR_ADD: %d\n", msb2lsb(&pmeta->FREE_SECTOR_ADD));                      //byte[128]            
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "FREE_SECTOR_LEN: %d\n", msb2lsb(&pmeta->FREE_SECTOR_LEN));                      //byte[132]        
+        print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_SDUSED) {
-        printf("[meta]__ASPMETA_FUNC_SDUSED__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDUSED, (funcbits & ASPMETA_FUNC_SDUSED));
-        printf("[meta]USED_SECTOR_ADD: %d\n", msb2lsb(&pmeta->USED_SECTOR_ADD));                      //byte[136]            
-        printf("[meta]USED_SECTOR_LEN: %d\n", msb2lsb(&pmeta->USED_SECTOR_LEN));                      //byte[140]        
+        sprintf(mlog, "__ASPMETA_FUNC_SDUSED__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDUSED, (funcbits & ASPMETA_FUNC_SDUSED));
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "USED_SECTOR_ADD: %d\n", msb2lsb(&pmeta->USED_SECTOR_ADD));                      //byte[136]            
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "USED_SECTOR_LEN: %d\n", msb2lsb(&pmeta->USED_SECTOR_LEN));                      //byte[140]        
+        print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_SDRD) {
-        printf("[meta]__ASPMETA_FUNC_SDRD__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDRD, (funcbits & ASPMETA_FUNC_SDRD));
-        printf("[meta]SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[144]            
-        printf("[meta]SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[148]        
+        sprintf(mlog, "__ASPMETA_FUNC_SDRD__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDRD, (funcbits & ASPMETA_FUNC_SDRD));
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[144]            
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[148]        
+        print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_SDWT) {
-        printf("[meta]__ASPMETA_FUNC_SDWT__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDWT, (funcbits & ASPMETA_FUNC_SDWT));
-        printf("[meta]SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[136]            
-        printf("[meta]SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[140]        
+        sprintf(mlog, "__ASPMETA_FUNC_SDWT__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDWT, (funcbits & ASPMETA_FUNC_SDWT));
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[136]            
+        print_f(mlogPool, "META", mlog);
+        sprintf(mlog, "SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[140]        
+        print_f(mlogPool, "META", mlog);
     }
 
-    printf("********************************************\n");
+    sprintf(mlog, "********************************************\n");
+    print_f(mlogPool, "META", mlog);
     return 0;
 }
 
@@ -12056,7 +12134,6 @@ static int stsparam_87(struct psdata_s *data)
     return ps_next(data);
 }
 
-#define SAVE_CROP_MASS (1)
 static int stsparam_88(struct psdata_s *data)
 { 
     int act=0;
@@ -12144,7 +12221,7 @@ static int stsparam_88(struct psdata_s *data)
                         fflush(f);
                         fclose(f);
 
-                        sync();
+                        //sync();
                     } else {
                         ret = doSystemCmd(syscmd);
 
@@ -12157,7 +12234,7 @@ static int stsparam_88(struct psdata_s *data)
                             fflush(f);
                             fclose(f);
 
-                            sync();
+                            //sync();
                         } else {
                             sprintf(rs->logs, "Error!!! failed to save crop mass to [%s] size: %d\n", supPathCp1, pmass->massUsed);
                             print_f(rs->plogs, "SPM", rs->logs);  
@@ -19015,8 +19092,8 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "wait wifi tx end\n");
-    print_f(&mrs->plog, "fs69", mrs->log);
+    //sprintf(mrs->log, "wait wifi tx end\n");
+    //print_f(&mrs->plog, "fs69", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     while (len > 0) {
@@ -22408,7 +22485,7 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs108", mrs->log);
 
-    sync();
+    //sync();
     
     modersp->r = 1; 
     return 1;
@@ -22438,7 +22515,7 @@ static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs109", mrs->log);
     }
 
-    sync();
+    //sync();
     
     modersp->r = 1; 
     return 1;
@@ -22905,6 +22982,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
                     sprintf(rs->logs, "result:0x%.8x\nEND\n", stdata->result);
                     print_f(rs->plogs, "P1", rs->logs);
+
+                    sync();
                 }
 
                 cmdt = '\0'; 
@@ -22935,11 +23014,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 }
 
 #define MSP_P4_SAVE_DAT (0)
-#define MSP_P2_SAVE_DAT (1)
+#define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
 #define P2_TX_LOG (1)
-#define P2_CMD_LOG (1)
+#define P2_CMD_LOG (0)
 #define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
 {
@@ -23159,7 +23238,7 @@ static int p2(struct procRes_s *rs)
 
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
-                    memset(addr, 0x55, len);
+                    //memset(addr, 0x55, len);
                     msync(addr, len, MS_SYNC);                    
 #if  TIME_MEASURE
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
@@ -23279,8 +23358,10 @@ static int p2(struct procRes_s *rs)
                     len = 0;
                     len = ring_buf_get(rs->pcmdRx, &addr);
                     if (len > 0) {
-                        msync(addr, len, MS_SYNC);
 
+                        //memset(addr, 0xaa, len);
+                        msync(addr, len, MS_SYNC);
+                        
                         opsz = 0;
                         while (opsz == 0) {
 #if SPI_KTHREAD_USE                    
@@ -23381,6 +23462,7 @@ static int p2(struct procRes_s *rs)
                 len = 0;
                 pi = 0;  
                 while (1) {
+                    msync(addr, SPI_TRUNK_SZ, MS_SYNC);                    
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
@@ -23508,6 +23590,8 @@ static int p2(struct procRes_s *rs)
 
                     if (len > 0) {
                         if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
+
+                        msync(addr, len, MS_SYNC);
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
@@ -25275,9 +25359,10 @@ static int atFindIdx(char *str, char ch)
     return (-3);
 }
 
-#define P6_RX_LOG    (1)
+#define P6_RX_LOG    (0)
 #define P6_UTC_LOG  (0)
 #define P6_PARA_LOG  (0)
+#define P6_CROP_LOG    (0)
 #define P6_SEND_BUFF_SIZE (4096)
 static int p6(struct procRes_s *rs)
 {
@@ -25582,8 +25667,9 @@ static int p6(struct procRes_s *rs)
                     cxn = *ptBuf;
                     ptBuf++;
                     sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
+#if P6_CROP_LOG
                     print_f(rs->plogs, "P6", rs->logs);
-
+#endif
                     sendbuf[3] = 'M';
                     n = strlen(rs->logs);
                     memcpy(&sendbuf[5], rs->logs, n);
@@ -25635,8 +25721,10 @@ static int p6(struct procRes_s *rs)
                     case ASPOP_CROP_18:
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
+#if P6_CROP_LOG
                             sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
+#endif
                             sendbuf[3] = 'C';
 
                             sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
@@ -25674,7 +25762,7 @@ static int p6(struct procRes_s *rs)
             }
 
             rs_ipc_put(rs, "C", 1);
-            
+
             goto socketEnd;
         }
         
@@ -29064,8 +29152,6 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-#define MSP_SAVE_LOG (1)
-
 static int print_dbg(struct logPool_s *plog, char *str, int size)
 {
     int len, n;
@@ -29156,7 +29242,7 @@ static int printf_flush(struct logPool_s *plog, FILE *f)
     msync(plog->pool, plog->len, MS_SYNC);
     fwrite(plog->pool, 1, plog->len, f);
     fflush(f);
-    sync();
+    //sync();
 
     plog->cur = plog->pool;
     plog->len = 0;
