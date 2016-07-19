@@ -122,7 +122,7 @@
 #define CROP_NUMBER   (18)
 
 #if (CROP_NUMBER == 18)
-#define CROP_SAMPLE_SIZE (4)
+#define CROP_SAMPLE_SIZE (30)
 
 struct cropSample_s {
     int cropx;
@@ -158,7 +158,26 @@ static int crop_04[2] = {1611*2, 60*2};
 static int crop_05[2] = {1607*2, 32*2};
 static int crop_06[2] = {537*2, 32*2};
 #elif (CROP_NUMBER == 18)
-#if (CROP_SAMPLE_SIZE == 4)
+#if (CROP_SAMPLE_SIZE == 30)
+static struct cropPoints_s crop_01 = {{{738,  146}  , {982,  69}   , {1446,  205} , {1154,  290} , {1062,  1894}, {1263,  2267}, {918,  1909} , {1003,  56}  , {714,  362}  , {881,  541}  , {1803,  195} , {671,  1565} , {1423,  48}  , {877,  2641} , {0,  2729}   , {1169,  1841}, {1591,  586} ,{365,  1224} , {491,  20}   , {575,  1107} , {314,  1314} , {421,  823}  , {623,  546} , {575,  544} , {656,  888}  , {427,  831}  , {496,  730} , {839,  94}   , {701,  887}  , {830,  980}    }}; 
+static struct cropPoints_s crop_02 = {{{824,  4030} , {1018,  1482}, {1534,  1834}, {1219,  2176}, {2316,  2375}, {2397,  2679}, {3102,  2477}, {1099,  2164}, {780,  2492} , {3010,  2781}, {1933,  3130}, {3644,  1923}, {1496,  2191}, {3169,  2992}, {2499,  4578}, {2794,  2126}, {1700,  2619},{1514,  1298}, {516,  1969} , {975,  1516} , {1124,  2033}, {1576,  1197}, {1476,  944}, {726,  923} , {1200,  1106}, {944,  1165} , {1545,  858}, {1193,  1073}, {1192,  1099}, {1424,  1088}  }}; 
+static struct cropPoints_s crop_03 = {{{865,  4030} , {1266,  1482}, {1591,  1834}, {1256,  2176}, {2351,  2375}, {2467,  2679}, {3325,  2477}, {1256,  2164}, {854,  2492} , {3096,  2781}, {1996,  3130}, {3697,  1923}, {1585,  2191}, {3196,  2992}, {2525,  4578}, {2997,  2126}, {1743,  2619},{1552,  1298}, {725,  1969} , {1769,  1516}, {1332,  2033}, {1600,  1197}, {1531,  944}, {770,  923} , {1248,  1106}, {990,  1165} , {1599,  858}, {1251,  1073}, {1290,  1099}, {1484,  1088}  }}; 
+static struct cropPoints_s crop_04 = {{{3731,  3797}, {3138,  1325}, {2964,  1555}, {2629,  1879}, {2653,  305} , {2552,  102} , {3373,  73}  , {2859,  375} , {3715,  2194}, {3139,  352} , {3134,  2796}, {3761,  318} , {2923,  2026}, {3587,  373} , {3488,  788} , {3037,  1754}, {3538,  2426},{1584,  188} , {1640,  1640}, {1788,  30}  , {1451,  728} , {1834,  374} , {1763,  364}, {1674,  260}, {1442,  180} , {1383,  296} , {1667,  115}, {1508,  700} , {1397,  345} , {1581,  91}    }}; 
+static struct cropPoints_s crop_05 = {{{3629,  3}   , {3105,  1}   , {2900,  6}   , {2591,  6}   , {1610,  7}   , {1688,  2}   , {1394,  4}   , {2793,  8}   , {3671,  6}   , {3104,  5}   , {3006,  5}   , {1132,  3}   , {2860,  6}   , {1542,  7}   , {736,  2}    , {2978,  1}   , {3434,  2}   ,{1552,  1}   , {1615,  2}   , {1342,  8}   , {1429,  2}   , {754,  2}    , {942,  7}   , {818,  1}   , {912,  2}    , {881,  7}    , {633,  6}   , {1419,  6}   , {1166,  2}   , {1072,  7}     }}; 
+static struct cropPoints_s crop_06 = {{{3375,  3}   , {2867,  1}   , {2735,  6}   , {1168,  6}   , {1384,  7}   , {1324,  2}   , {1021,  4}   , {2343,  8}   , {3306,  6}   , {893,  5}    , {2872,  5}   , {734,  3}    , {2534,  6}   , {1167,  7}   , {678,  2}    , {1210,  1}   , {2970,  2}   ,{1225,  1}   , {919,  2}    , {595,  8}    , {319,  2}    , {685,  2}    , {851,  7}   , {741,  1}   , {833,  2}    , {799,  7}    , {562,  6}   , {1337,  6}   , {1052,  2}   , {912,  7}      }}; 
+static struct cropPoints_s crop_07 = {{{3174,  11}  , {2563,  9}   , {2525,  14}  , {1163,  14}  , {1364,  15}  , {1323,  10}  , {1021,  12}  , {2138,  16}  , {2902,  14}  , {891,  13}   , {2672,  13}  , {740,  11}   , {2107,  14}  , {1158,  15}  , {676,  10}   , {1210,  9}   , {2870,  10}  ,{772,  9}    , {514,  10}   , {588,  16}   , {319,  10}   , {675,  10}   , {831,  15}  , {721,  9}   , {812,  10}   , {778,  15}   , {562,  14}  , {1258,  14}  , {1020,  10}  , {899,  15}     }}; 
+static struct cropPoints_s crop_08 = {{{3635,  11}  , {3104,  9}   , {2899,  14}  , {2593,  14}  , {1633,  15}  , {1867,  10}  , {1977,  12}  , {2824,  16}  , {3667,  14}  , {3106,  13}  , {2997,  13}  , {1263,  11}  , {2856,  14}  , {1848,  15}  , {756,  10}   , {2982,  9}   , {3435,  10}  ,{1570,  9}   , {1615,  10}  , {1785,  16}  , {1443,  10}  , {779,  10}   , {962,  15}  , {839,  9}   , {933,  10}   , {902,  15}   , {710,  14}  , {1433,  14}  , {1195,  10}  , {1255,  15}    }}; 
+static struct cropPoints_s crop_09 = {{{2879,  19}  , {2179,  17}  , {2289,  22}  , {1163,  22}  , {1259,  23}  , {1325,  18}  , {1016,  20}  , {1244,  24}  , {2324,  22}  , {891,  21}   , {2499,  21}  , {737,  19}   , {1696,  22}  , {1155,  23}  , {674,  18}   , {1212,  17}  , {2867,  18}  ,{396,  17}   , {495,  18}   , {589,  24}   , {322,  18}   , {667,  18}   , {818,  23}  , {705,  17}  , {796,  18}   , {765,  23}   , {561,  22}  , {1173,  22}  , {997,  18}   , {889,  23}     }}; 
+static struct cropPoints_s crop_10 = {{{3639,  19}  , {3104,  17}  , {2899,  22}  , {2591,  22}  , {1646,  23}  , {2060,  18}  , {2681,  20}  , {2825,  24}  , {3669,  22}  , {3105,  21}  , {3000,  21}  , {1402,  19}  , {2857,  22}  , {2269,  23}  , {787,  18}   , {2979,  17}  , {3452,  18}  ,{1572,  17}  , {1616,  18}  , {1787,  24}  , {1446,  18}  , {805,  18}   , {976,  23}  , {854,  17}  , {1115,  18}  , {917,  23}   , {789,  22}  , {1440,  22}  , {1215,  18}  , {1429,  23}    }}; 
+static struct cropPoints_s crop_11 = {{{818,  4002} , {1016,  1456}, {1528,  1805}, {1201,  2149}, {2155,  2350}, {1275,  2649}, {988,  2451} , {1066,  2135}, {771,  2461} , {899,  2756} , {1927,  3100}, {3002,  1898}, {1494,  2165}, {2842,  2966}, {2410,  4553}, {1190,  2096}, {1679,  2593},{855,  1272} , {516,  1937} , {576,  1487} , {315,  2001} , {1533,  1169}, {1423,  918}, {662,  896} , {991,  1081} , {882,  1134} , {1188,  829}, {1093,  1045}, {738,  1073} , {873,  1062}   }}; 
+static struct cropPoints_s crop_12 = {{{2182,  4002}, {2297,  1456}, {2448,  1805}, {2581,  2149}, {2370,  2350}, {2474,  2649}, {3337,  2451}, {2832,  2135}, {3081,  2461}, {3100,  2756}, {2446,  3100}, {3701,  1898}, {2284,  2165}, {3227,  2966}, {2535,  4553}, {3004,  2096}, {1996,  2593},{1558,  1272}, {1539,  1937}, {1775,  1487}, {1342,  2001}, {1603,  1169}, {1585,  918}, {984,  896} , {1302,  1081}, {1053,  1134}, {1603,  829}, {1340,  1045}, {1320,  1073}, {1523,  1062}  }}; 
+static struct cropPoints_s crop_13 = {{{820,  4010} , {1016,  1464}, {1529,  1813}, {1205,  2157}, {2169,  2358}, {1581,  2657}, {1127,  2459}, {1064,  2143}, {772,  2469} , {1051,  2764}, {1927,  3108}, {3223,  1906}, {1494,  2173}, {2941,  2974}, {2444,  4561}, {1195,  2104}, {1678,  2601},{1072,  1280}, {516,  1945} , {575,  1495} , {315,  2009} , {1543,  1177}, {1434,  926}, {674,  904} , {1158,  1089}, {892,  1142} , {1290,  837}, {1110,  1053}, {745,  1081} , {912,  1070}   }}; 
+static struct cropPoints_s crop_14 = {{{1849,  4010}, {1996,  1464}, {2191,  1813}, {2184,  2157}, {2366,  2358}, {2473,  2657}, {3314,  2459}, {2829,  2143}, {2295,  2469}, {3102,  2764}, {2309,  3108}, {3701,  1906}, {2062,  2173}, {3223,  2974}, {2539,  4561}, {3003,  2104}, {1900,  2601},{1560,  1280}, {1536,  1945}, {1774,  1495}, {1341,  2009}, {1607,  1177}, {1577,  926}, {961,  904} , {1291,  1089}, {1041,  1142}, {1603,  837}, {1325,  1053}, {1316,  1081}, {1515,  1070}  }}; 
+static struct cropPoints_s crop_15 = {{{820,  4018} , {1017,  1472}, {1530,  1821}, {1199,  2165}, {2292,  2366}, {1905,  2665}, {1824,  2467}, {1066,  2151}, {773,  2477} , {2054,  2772}, {1948,  3116}, {3474,  1914}, {1495,  2181}, {3051,  2982}, {2484,  4569}, {1197,  2112}, {1689,  2609},{1291,  1288}, {515,  1953} , {576,  1503} , {316,  2017} , {1558,  1185}, {1447,  934}, {689,  912} , {1173,  1097}, {904,  1150} , {1397,  845}, {1138,  1061}, {756,  1089} , {1138,  1078}  }}; 
+static struct cropPoints_s crop_16 = {{{1468,  4018}, {1572,  1472}, {1936,  1821}, {1757,  2165}, {2363,  2366}, {2471,  2665}, {3321,  2467}, {2191,  2151}, {1710,  2477}, {3104,  2772}, {2187,  3116}, {3701,  1914}, {1824,  2181}, {3197,  2982}, {2529,  4569}, {3003,  2112}, {1831,  2609},{1559,  1288}, {1532,  1953}, {1773,  1503}, {1336,  2017}, {1607,  1185}, {1559,  934}, {800,  912} , {1274,  1097}, {1030,  1150}, {1601,  845}, {1300,  1061}, {1308,  1089}, {1505,  1078}  }}; 
+static struct cropPoints_s crop_17 = {{{824,  4026} , {1018,  1480}, {1534,  1829}, {1198,  2173}, {2316,  2374}, {2223,  2673}, {3023,  2475}, {1075,  2159}, {777,  2485} , {3010,  2780}, {1931,  3124}, {3644,  1922}, {1496,  2189}, {3163,  2990}, {2499,  4577}, {1946,  2120}, {1697,  2617},{1491,  1296}, {516,  1961} , {585,  1511} , {620,  2025} , {1573,  1193}, {1473,  942}, {719,  920} , {1200,  1105}, {922,  1158} , {1507,  853}, {1171,  1069}, {1160,  1097}, {1376,  1086}  }}; 
+static struct cropPoints_s crop_18 = {{{1145,  4026}, {1290,  1480}, {1697,  1829}, {1295,  2173}, {2351,  2374}, {2472,  2673}, {3330,  2475}, {1516,  2159}, {1300,  2485}, {3096,  2780}, {2056,  3124}, {3697,  1922}, {1624,  2189}, {3197,  2990}, {2525,  4577}, {3000,  2120}, {1744,  2617},{1553,  1296}, {1515,  1961}, {1762,  1511}, {1333,  2025}, {1602,  1193}, {1535,  942}, {778,  920} , {1248,  1105}, {1007,  1158}, {1601,  853}, {1272,  1069}, {1294,  1097}, {1489,  1086}  }}; 
+#elif (CROP_SAMPLE_SIZE == 4)
 static struct cropPoints_s crop_01 = {{{74  , 1410}, { 297,  869}, { 251, 1152}, { 235, 1150}}};
 static struct cropPoints_s crop_02 = {{{1102, 1917}, { 855, 1222}, {1491, 1183}, {1767, 1284}}};
 static struct cropPoints_s crop_03 = {{{1119, 1917}, { 877, 1222}, {1821, 1183}, {1799, 1284}}};
@@ -814,12 +833,16 @@ static int aspMetaMassSample(struct aspMetaMass *mass)
 {
     char *pbuf;
     char sample[128];
+#if (CROP_SAMPLE_SIZE == 30)
+    char spox[] = "/mnt/mmc2/crop13/xpos_%.2d.bin";
+#elif (CROP_SAMPLE_SIZE == 4)
     char spox[] = "/mnt/mmc2/crop4/xpos_%.2d.bin";
+#endif
     int idx=0, ret=0, fileLen=0, maxSize=0;
     int readLen=0;
     FILE *fp;
 
-    idx = mass->massIdx % 4;
+    idx = mass->massIdx % CROP_SAMPLE_SIZE;
     pbuf = mass->masspt;
     maxSize = mass->massMax;
 
@@ -1047,7 +1070,17 @@ static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out)
 static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
     int xposIdx=0, xparm=0;
+#if (CROP_SAMPLE_SIZE == 30)
+    uint32_t xposParm[CROP_SAMPLE_SIZE] = 
+                                           {0x080700ce, 0x080700b9, 0x080700ce, 0x080700ce, 0x080700ce, 
+                                            0x080700ce, 0x080700ce, 0x080f00ce, 0x080700ce, 0x080700ce, 
+                                            0x080700ce, 0x080700ce, 0x080700ce, 0x080700ce, 0x080700ce, 
+                                            0x080700ce, 0x080700ce, 0x080700a2, 0x080700f6, 0x080f00bc, 
+                                            0x080700fe, 0x1007004a, 0x1007003b, 0x10070039, 0x100f0045, 
+                                            0x10070048, 0x10070035, 0x10070043, 0x10070044, 0x100f0043};
+#elif (CROP_SAMPLE_SIZE == 4)
     uint32_t xposParm[4] = {0x080300ef, 0x080b0098, 0x08070094, 0x080700a0};
+#endif
     uint32_t tbits=0;
     unsigned int *psrc;
     struct intMbs_s *pdst;
@@ -1108,7 +1141,7 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         }
 
         xposIdx = mass->massIdx;
-        xparm = xposParm[xposIdx % 4];
+        xparm = xposParm[xposIdx % CROP_SAMPLE_SIZE];
         
         pmeta->YLine_Gap = (xparm >> 24) & 0xff;
         pmeta->Start_YLine_No = (xparm >> 16) & 0xff;
@@ -5421,6 +5454,9 @@ static int stauto_37(struct psdata_s *data)
 
 static int stauto_38(struct psdata_s *data) 
 {
+    #define TEST_LEN (4)
+    //int testSeq[TEST_LEN] = {9, 13, 14, 15, 16};
+    int testSeq[TEST_LEN] = {/*0,1,2,3,4, 5,6,*/7,/*8,9,10,11,12, 13,*/14,/*15, 16, 17, 18, 19,20,21,22, 23,24,25, 26, */27, 28/*, 29*/};
     char str[128], ch = 0;
     uint32_t rlt;
     struct procRes_s *rs;
@@ -5464,13 +5500,17 @@ static int stauto_38(struct psdata_s *data)
                     case ASPMETA_CROP_300DPI:
                         pmass->massStart = 12;
                         pmass->massGap = 8;
-                        pmass->massIdx += 1;
+                        //pmass->massIdx = 9;
+                        t->info += 1;
+                        pmass->massIdx = testSeq[t->info % TEST_LEN];
                         //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
                         break;
                     case ASPMETA_CROP_600DPI:
                         pmass->massStart = 12;
                         pmass->massGap = 8;
-                        pmass->massIdx += 1;
+                        //pmass->massIdx = 9;
+                        t->info += 1;
+                        pmass->massIdx = testSeq[t->info % TEST_LEN];
                         //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
                         break;
                     default:
@@ -7228,14 +7268,14 @@ static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     //usleep(60000);
 
-    bitset = 0;
-    ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-    sprintf(mrs->log, "Get spi%d RDY pin: %d \n", 0, bitset);
-    print_f(&mrs->plog, "fs30", mrs->log);
-
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf(mrs->log, "Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
+    print_f(&mrs->plog, "fs30", mrs->log);
+
+    bitset = 0;
+    ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+    sprintf(mrs->log, "Get spi%d RDY pin: %d \n", 0, bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
     bitset = 1;
@@ -8877,7 +8917,9 @@ static int p2(struct procRes_s *rs)
     char filename[128] = "/mnt/mmc2/scan_pro.jpg";
     char filetiffraw[128] = "/mnt/mmc2/tiff_raw.bin";
     char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
-#if (CROP_SAMPLE_SIZE == 4)
+#if (CROP_SAMPLE_SIZE == 30)
+    char cropfile[128] = "/mnt/mmc2/crop13/crop_%.2d.jpg";
+#elif (CROP_SAMPLE_SIZE == 4)
     char cropfile[128] = "/mnt/mmc2/crop4/crop_%.2d.jpg";
 #elif (CROP_SAMPLE_SIZE == 5)
 #if 1 /* 0614 */
@@ -8985,16 +9027,13 @@ static int p2(struct procRes_s *rs)
                 idx = 9;
             }
 
-#if (CROP_SAMPLE_SIZE == 4)
-            idx = rs->pmetaMass->massIdx % 4;
-#endif
-
             if (infpath[0] != '\0') {
                 strcpy(filename, infpath);
             } else if (*popt_fformat == FILE_FORMAT_TIFF_I) {
                 sprintf(filename, filetiffraw);
             } else {
 #if CROP_SAMPLE_SIZE
+                idx = rs->pmetaMass->massIdx;
                 sprintf(filename, cropfile, (idx%CROP_SAMPLE_SIZE));
 #else
                 sprintf(filename, samplefile, (idx%36));
@@ -9496,7 +9535,7 @@ static int p2(struct procRes_s *rs)
                         len = ring_buf_get(rs->pdataTx, &addr);
                     }
 
-                    memset(addr, 0x95, len);
+                    memset(addr, 0x15, len);
                     if (max < len) {
                         len = max;
                     }
@@ -9514,9 +9553,9 @@ static int p2(struct procRes_s *rs)
                         print_f(rs->plogs, "P2", rs->logs);
                     }
 
-                    msync(addr, len, MS_SYNC);
                     
                     fsize = fread(addr, 1, len, fp);
+                    msync(addr, len, MS_SYNC);
 #endif
 
                     totsz += fsize;
@@ -9628,14 +9667,14 @@ static int p2(struct procRes_s *rs)
                     if (max < len) {
                         len = max;
                     }
-                    msync(addr, len, MS_SYNC);
+                    //msync(addr, len, MS_SYNC);
                     fsize = fread(addr, 1, len, fp);
+                    msync(addr, len, MS_SYNC);
                     ring_buf_prod(rs->pdataTx);
                     tlen = len;
                     sprintf(rs->logs, " %d - %d,%d - 1\n", pi, totsz, fsize);
                     print_f(rs->plogs, "P2d", rs->logs);
                     rs_ipc_put(rs, "s", 1);
-                    msync(addr, len, MS_SYNC);
 #endif
 #if 1
                     ret = fseek(fp, totsz, SEEK_SET);
@@ -9654,14 +9693,15 @@ static int p2(struct procRes_s *rs)
                     if (max < len) {
                         len = max;
                     }
-                    msync(addr, len, MS_SYNC);
+                    //msync(addr, len, MS_SYNC);
                     fsize = fread(addr, 1, len, fp);
+                    msync(addr, len, MS_SYNC);
+                    
                     ring_buf_prod(rs->pcmdTx);
                     tlen = len;
                     sprintf(rs->logs, " %d - %d,%d - 2\n", pi, totsz, fsize);
                     print_f(rs->plogs, "P2d", rs->logs);
                     rs_ipc_put(rs, "d", 1);
-                    msync(addr, len, MS_SYNC);
 #endif
                     totsz += fsize;
                     max -= len;
@@ -10788,11 +10828,11 @@ static char spi0[] = "/dev/spidev32765.0";
     pmrs->smode = 0;
     pmrs->smode |= SPI_MODE_1;
 
-    /* set RDY pin to low before spi setup ready */
+    #if 1/* set RDY pin to low before spi setup ready */
     bitset = 1;
     ret = ioctl(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     printf("[t]Set RDY low at beginning\n");
-
+    #endif
     /*
      * spi speed 
      */ 
