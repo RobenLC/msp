@@ -13290,6 +13290,20 @@ static int shmem_pop_send(struct mainRes_s *mrs, char **addr, int seq, int p)
     return sz;
 }
 
+static uint32_t shmem_check(char *src, int size)
+{
+#define CHK_LEN (2048)
+    uint32_t tag = 0;
+
+    return;
+
+    tag = (uint32_t)src;
+
+    memset(src, tag & 0xff, size);
+
+    return tag;
+}
+
 static int shmem_dump(char *src, int size)
 {
     char str[128];
@@ -21599,7 +21613,42 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "SFN[%s] LFS[%s] len:%d\n", upld->dfSFN, upld->dfLFN, upld->dflen);
     print_f(&mrs->plog, "fs98", mrs->log);
 
-    if (fformat == FILE_FORMAT_PDF) {
+    if (fformat == FILE_FORMAT_JPG) {
+        s = sh->n;
+        if (!s) {
+            sprintf(mrs->log, "Error!!! the first trunk is not exist!!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 2;
+            return 1;
+        }
+        
+        ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_UPD);    
+        if (ret) {
+            val = 0;
+        }
+        sprintf(mrs->log, "user defined jpg length: %d, ret:%d \n", val, ret);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        
+        pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+        
+        if (val) {
+            ret = changeJpgLen(s->supdataBuff, val, s->supdataTot);
+            if (ret) {
+                sprintf(mrs->log, "Error!!! can NOT find jpg length in first trunk !!!");
+                print_f(&mrs->plog, "fs98", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+        }
+
+        datLen = aspCalcSupLen(sc);
+        if (datLen < 0) {
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+    } else if (fformat == FILE_FORMAT_PDF) {
         s = sh->n;
         if (!s) {
             sprintf(mrs->log, "Error!!! the first trunk is not exist!!!");
@@ -23239,7 +23288,8 @@ static int p2(struct procRes_s *rs)
                 while (1) {
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     //memset(addr, 0x55, len);
-                    msync(addr, len, MS_SYNC);                    
+                    //msync(addr, len, MS_SYNC);                    
+                    //shmem_check(addr, len);
 #if  TIME_MEASURE
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
 #endif
@@ -23253,7 +23303,7 @@ static int p2(struct procRes_s *rs)
 #endif
                         opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                     }
-                    
+
 #else
                     opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 
@@ -23360,10 +23410,11 @@ static int p2(struct procRes_s *rs)
                     if (len > 0) {
 
                         //memset(addr, 0xaa, len);
-                        msync(addr, len, MS_SYNC);
+                        //msync(addr, len, MS_SYNC);
                         
                         opsz = 0;
                         while (opsz == 0) {
+                            //shmem_check(addr, len);
 #if SPI_KTHREAD_USE                    
                             opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                             if (opsz == 0) {
@@ -23374,6 +23425,7 @@ static int p2(struct procRes_s *rs)
 #endif
                                 continue;
                             }
+                            
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
@@ -23462,7 +23514,8 @@ static int p2(struct procRes_s *rs)
                 len = 0;
                 pi = 0;  
                 while (1) {
-                    msync(addr, SPI_TRUNK_SZ, MS_SYNC);                    
+                    //msync(addr, SPI_TRUNK_SZ, MS_SYNC);     
+                    //shmem_check(addr, len);
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
@@ -23473,6 +23526,7 @@ static int p2(struct procRes_s *rs)
 #endif
                         opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     }
+
 #else
                     opsz = mtx_data(rs->spifd, addr, NULL, SPI_TRUNK_SZ, tr);
 #endif
@@ -23591,7 +23645,8 @@ static int p2(struct procRes_s *rs)
                     if (len > 0) {
                         if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
 
-                        msync(addr, len, MS_SYNC);
+                        //msync(addr, len, MS_SYNC);
+                        //shmem_check(addr, len);
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
@@ -23602,6 +23657,7 @@ static int p2(struct procRes_s *rs)
 #endif
                         opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
                     }
+
 #else
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
 #endif
@@ -23960,8 +24016,9 @@ static int p2(struct procRes_s *rs)
                     len = 0;
                     len = ring_buf_get(rs->pcmdRx, &addr);
                     if (len > 0) {
-                        msync(addr, len, MS_SYNC);
-
+                        //msync(addr, len, MS_SYNC);
+                        //shmem_check(addr, len);
+                        
                         opsz = 0;
                         while (opsz == 0) {
 #if SPI_KTHREAD_USE                    
@@ -23974,6 +24031,7 @@ static int p2(struct procRes_s *rs)
 #endif
                                 continue;
                             }
+
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
