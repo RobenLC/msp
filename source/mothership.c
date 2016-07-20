@@ -21614,9 +21614,9 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs98", mrs->log);
 
     if (fformat == FILE_FORMAT_JPG) {
-        s = sh->n;
+        s = sh;
         if (!s) {
-            sprintf(mrs->log, "Error!!! the first trunk is not exist!!!");
+            sprintf(mrs->log, "Error!!! the first trunk is not exist!!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 2;
             return 1;
@@ -21634,24 +21634,25 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (val) {
             ret = changeJpgLen(s->supdataBuff, val, s->supdataTot);
             if (ret) {
-                sprintf(mrs->log, "Error!!! can NOT find jpg length in first trunk !!!");
+                sprintf(mrs->log, "Error!!! can NOT find jpg length in first trunk !!!\n\n");
                 print_f(&mrs->plog, "fs98", mrs->log);
-                modersp->r = 0xed;
-                return 1;
+                //modersp->r = 0xed;
+                //return 1;
             }
         }
 
         datLen = aspCalcSupLen(sc);
         if (datLen < 0) {
-            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
         }
-    } else if (fformat == FILE_FORMAT_PDF) {
+    }
+    else if (fformat == FILE_FORMAT_PDF) {
         s = sh->n;
         if (!s) {
-            sprintf(mrs->log, "Error!!! the first trunk is not exist!!!");
+            sprintf(mrs->log, "Error!!! the first trunk is not exist!!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 2;
             return 1;
@@ -21669,7 +21670,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (val) {
             ret = changeJpgLen(s->supdataBuff, val, s->supdataTot);
             if (ret) {
-                sprintf(mrs->log, "Error!!! can NOT find jpg length in first trunk !!!");
+                sprintf(mrs->log, "Error!!! can NOT find jpg length in first trunk !!!\n\n");
                 print_f(&mrs->plog, "fs98", mrs->log);
                 modersp->r = 0xed;
                 return 1;
@@ -21678,7 +21679,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         ret = findJpgScale(s->supdataBuff, &hi, &wh, s->supdataTot);
         if (ret) {
-            sprintf(mrs->log, "Error!!! can NOT find height and width in first trunk !!!");
+            sprintf(mrs->log, "Error!!! can NOT find height and width in first trunk !!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
@@ -21692,9 +21693,9 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "PDF Head get!!! tot: %d, use:%d \n", sb->supdataTot, sb->supdataUse);
         print_f(&mrs->plog, "fs98", mrs->log);
         if (sb->supdataTot != sb->supdataUse) {
-            //shmem_dump(sb->supdataBuff + sb->supdataUse, sb->supdataTot - sb->supdataUse);
-            //sprintf(mrs->log, "dump - end\n");
-            //print_f(&mrs->plog, "fs98", mrs->log);
+            shmem_dump(sb->supdataBuff + sb->supdataUse, sb->supdataTot - sb->supdataUse);
+            sprintf(mrs->log, "dump - end\n");
+            print_f(&mrs->plog, "fs98", mrs->log);
         }
         
         ret = pdfHead(sb->supdataBuff, SPI_TRUNK_SZ, hi, wh, mh, mw);
@@ -21711,7 +21712,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         /* calculate sector start and sector length of file */            
         datLen = aspCalcSupLen(sc);
         if (datLen < 0) {
-            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
@@ -21719,7 +21720,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         imgLen = aspCalcSupLen(sc->n); 
         if (imgLen < 0) {
-            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
@@ -21732,13 +21733,13 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
         sprintf(mrs->log, "PDF Tail get!!! tot: %d, use:%d \n", se->supdataTot, se->supdataUse);
         print_f(&mrs->plog, "fs98", mrs->log);
-        /*
+        
         if (se->supdataTot != 0) {
             shmem_dump(se->supdataBuff, se->supdataTot);
             sprintf(mrs->log, "dump - end\n");
             print_f(&mrs->plog, "fs98", mrs->log);
         }
-        */
+        
         ret = pdfTail(se->supdataBuff + se->supdataTot, SPI_TRUNK_SZ-se->supdataTot, datLen, imgLen);
         if (ret == -3) {
             s = 0;
@@ -21757,24 +21758,23 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
         
         if (ret < 0) {
-            sprintf(mrs->log, "Error!!! can NOT append pdf tail ret: %d !!!", ret);
+            sprintf(mrs->log, "Error!!! can NOT append pdf tail ret: %d !!!\n\n", ret);
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
         }
-
-        /*
+        
         shmem_dump(se->supdataBuff+se->supdataTot, ret);
         sprintf(mrs->log, "dump PDF tail - end\n");
         print_f(&mrs->plog, "fs98", mrs->log);
-        */
+        
         se->supdataTot += ret;
         datLen += ret;
     }
     else if (fformat == FILE_FORMAT_TIFF_I) {
         s = sh->n;
         if (!s) {
-            sprintf(mrs->log, "Error!!! TIFF_I the first trunk is not exist!!!");
+            sprintf(mrs->log, "Error!!! TIFF_I the first trunk is not exist!!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 2;
             return 1;
@@ -21804,7 +21804,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         /* calculate sector start and sector length of file */            
         datLen = aspCalcSupLen(sc);
         if (datLen < 0) {
-            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
@@ -21843,7 +21843,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
         
         if (ret < 0) {
-            sprintf(mrs->log, "Error!!! can NOT append TIFF_I tail ret: %d !!!", ret);
+            sprintf(mrs->log, "Error!!! can NOT append TIFF_I tail ret: %d !!!\n\n", ret);
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
@@ -21861,7 +21861,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         /* calculate sector start and sector length of file */            
         datLen = aspCalcSupLen(sc);
         if (datLen < 0) {
-            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!");
+            sprintf(mrs->log, "Error!!! calculate support buffer length failed !!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
             modersp->r = 0xed;
             return 1;
@@ -23380,6 +23380,9 @@ static int p2(struct procRes_s *rs)
                     ret = findEOF(addr, opsz);
                     if (ret > 0) {
                         memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    } else {
+                        sprintf(rs->logs, "warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                        print_f(rs->plogs, "P2", rs->logs);    
                     }
 
                     sprintf(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
@@ -23483,7 +23486,11 @@ static int p2(struct procRes_s *rs)
                     ret = findEOF(addr, opsz);
                     if (ret > 0) {
                         memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    } else {
+                        sprintf(rs->logs, "warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                        print_f(rs->plogs, "P2", rs->logs);    
                     }
+
 
                     sprintf(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
                     print_f(rs->plogs, "P2", rs->logs);    
@@ -23764,17 +23771,16 @@ static int p2(struct procRes_s *rs)
                         if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                             opsz = 0 - opsz;
                         }
-                        
-#if 1 /* SPI_TRUNK_FULL_FIX, the full trunk in non-kthread data mode need this */
-                        if (opsz < 0) {
-                            opsz = 0 - opsz;                    
-                            if (opsz == SPI_TRUNK_SZ) {
-                                //opsz = 0 - opsz;    
-                            } else {
-                                sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
-                                print_f(rs->plogs, "P2", rs->logs);
-                            }
+
+#if 1 /*SPI_TRUNK_FULL_FIX*/
+                    if (opsz < 0) {
+                        opsz = 0 - opsz;                    
+                        if (opsz == SPI_TRUNK_SZ) {
+                            //opsz = 0 - opsz;    
+                        } else {
+                            opsz = 0 - opsz;    
                         }
+                    }
 #endif
 
                         pi++;
@@ -24402,7 +24408,11 @@ static int p3(struct procRes_s *rs)
                     ret = findEOF(addr, opsz);
                     if (ret > 0) {
                         memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    } else {
+                        sprintf(rs->logs, "warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                        print_f(rs->plogs, "P3", rs->logs);    
                     }
+
 
                     sprintf(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
                     print_f(rs->plogs, "P3", rs->logs);    
@@ -24490,6 +24500,9 @@ static int p3(struct procRes_s *rs)
                     ret = findEOF(addr, opsz);
                     if (ret > 0) {
                         memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    } else {
+                        sprintf(rs->logs, "warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                        print_f(rs->plogs, "P3", rs->logs);    
                     }
 
                     sprintf(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
