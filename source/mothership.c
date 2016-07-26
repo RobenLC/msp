@@ -19,7 +19,7 @@
 #include <sys/stat.h>  
 #include <netdb.h>
 #include <ifaddrs.h>
-
+#include <math.h>
 //main()
 #define SPI1_ENABLE (0) 
 
@@ -1062,6 +1062,8 @@ static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 static int cfgTableSet(struct aspConfig_s *table, int idx, uint32_t val);
+static void* aspMalloc(int mlen);
+static void* aspSalloc(int slen);
 
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
 {
@@ -1561,6 +1563,315 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
 
     return act;
+}
+
+static int getParallelVectorFromV(double *vec, double *p, double *vecIn)
+{
+    double a=0, b=0, c=0, aIn=0, cIn=0;
+    double x, y;
+
+    if (vec == 0) return -1;
+    if (p == 0) return -2;
+    if (vecIn == 0) return -3;
+
+    a = vecIn[0];
+    c = vecIn[2];
+    x = p[0];
+    y = p[1];
+
+    b = y - (a * x);
+
+    vec[0] = a;
+    vec[1] = b;
+    vec[2] = c;
+
+    printf("getParallelVectorFromV() output - a = %f , b = %f, c = %f\n", a, b, c);
+    
+    return 0;
+}
+
+static int getRectVectorFromV(double *vec, double *p, double *vecIn)
+{
+    double a=0, b=0, c=0, aIn=0, cIn=0;
+    double x, y;
+
+    if (vec == 0) return -1;
+    if (p == 0) return -2;
+    if (vecIn == 0) return -3;
+
+    aIn = vecIn[0];
+    cIn = vecIn[2];
+    x = p[0];
+    y = p[1];
+
+    if (aIn == 0) {
+        c = 1;
+    } else if (cIn == 1) {
+        a = 0;
+    } else {
+        a = -1 / aIn;
+    }
+    
+    if (c == 1) {
+        a = 1;
+        b = -x;
+    } else {
+
+        b = y - (a * x);
+    }
+    vec[0] = a;
+    vec[1] = b;
+    vec[2] = c;
+
+    printf("getRectVectorFromV() output - a = %f, b = %f, c = %f\n", a, b, c);
+    
+    return 0;
+}
+
+static int getVectorFromP(double *vec, double *p1, double *p2)
+{
+    double a1, b, a2;
+    double x1, y1, x2, y2;
+
+    if (vec == 0) return -1;
+    if (p1 == 0) return -2;
+    if (p2 == 0) return -3;
+
+    x1 = p1[0];
+    y1 = p1[1];
+
+    x2 = p2[0];
+    y2 = p2[1];
+
+    vec[2] = 0;
+
+    printf("getVectorFromP() input - p1 = (%lf, %lf), p2 = (%lf, %lf)\n", x1, y1, x2, y2);
+    
+    if (x1 == x2) {
+    	if (y1 == y2) {
+    	    return -4;
+    	} else {
+    	    a1 = 1;
+    	    a2 = 1;
+    	    b = -x1;
+    	    vec[2] = 1;
+    	}
+    } else {
+        b = ((x2 * y1) - (x1 * y2)) / (x2 - x1);
+
+        a1 = ((x1 * y2) - (x1 * y1)) / ((x1 * x2) - (x1 * x1));
+        a2 = ((x2 * y2) - (x2 * y1)) / ((x2 * x2) - (x2 * x1));
+    }
+
+    printf("getVectorFromP() output - a = %lf/%lf, b = %lf\n", a1, a2, b);
+
+    vec[0] = a1;
+    vec[1] = b;
+
+    return 0;
+
+}
+
+static int getCross(double *v1, double *v2, double *pt)
+{
+    double a1, a2, b1, b2, c1, c2;
+    double x, y;
+
+    if (v1 == 0) return -1;
+    if (v2 == 0) return -2;
+    if (pt == 0) return -3;
+
+    a1 = v1[0];
+    b1 = v1[1];
+    c1 = v1[2];
+
+    a2 = v2[0];
+    b2 = v2[1];
+    c2 = v2[2];
+    
+    printf("getCross() input - v1 = (%lf, %lf, %lf) v2 = (%lf, %lf, %lf)\n", a1, b1, c1, a2, b2, c2);
+    
+    if (a1 == a2) return -4;
+
+    if ((c1 == 1) && (c2 == 1)) {
+        return -5;
+    } else if (c1 == 1) {
+        x = -(b1/a1);
+        y = a2 * x + b2;
+    } else if (c2 == 1) {
+        x = -(b2/a2);
+        y = a1 * x + b1;
+    } else {
+        y = ((a1 * b2) - (a2 * b1)) / (a1 - a2);
+        x = (b2 - b1) / (a1 - a2);
+    }
+
+    printf("getCross() output - pt = (%lf, %lf)\n", x, y);
+    
+    pt[0] = x;
+    pt[1] = y;
+    
+    return 0;
+}
+
+static double calcuDistance(double *p1, double *p2) 
+{
+    double x1, y1, x2, y2;
+    double dx, dy, ds, dt;
+
+    if (p1 == 0) return -2;
+    if (p2 == 0) return -3;
+
+    x1 = p1[0];
+    y1 = p1[1];
+
+    x2 = p2[0];
+    y2 = p2[1];
+
+    dx = x1 - x2;
+    dy = y1 - y2;
+
+    ds = dx * dx + dy * dy;
+    
+    dt = sqrt(ds);
+
+    printf("calcuDistance() output - ds = %lf \n", ds);    
+
+    return dt;
+}
+
+static double calcuVectorDistancePoint(double *vec, double *p) 
+{
+    double dist=0;
+    int ret=0;
+    double rectVect[3];
+    double crossPnt[3];
+    
+    ret = getRectVectorFromV(rectVect, p, vec);
+    if (ret < 0) {
+        return -1;
+    }
+
+    ret = getCross(vec, rectVect, crossPnt);
+    if (ret < 0) {
+        return -2;
+    }
+
+    dist = calcuDistance(p, crossPnt);
+
+    return dist;
+}
+
+static double calcuLineGroupDist(double *pGrp, double *vecTr, int gpLen) 
+{
+    double dist=0, sumDist=0, cnt=0, avgDist=0;
+    int i=0, len=0;
+
+    if (vecTr == 0) return -1;
+    if (pGrp == 0) return -2;
+
+    len = gpLen;
+    if (len == 0) return -3;
+    
+    for (i = 0; i < len; i++) {
+        dist = calcuVectorDistancePoint(vecTr, pGrp + i*2);
+        sumDist += dist;
+        cnt += 1;
+    }
+    avgDist = sumDist / cnt;
+
+    return avgDist;
+}
+
+static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen) 
+{
+    double dist=0, sumDist=0, avgDist=0;
+    int head=0, tail=0, cur=0;
+    int len=0, ret=0, minIdx=0;
+    int i=0, cnt=0, cntDist=0;
+    int gbegin=0, gend=0;
+    double *p1, *p2, minDist;
+
+    len = gpLen;
+    if (vecTr == 0) return -1;
+    
+    if (len == 0) return -2;
+    
+    head = 0;
+    tail = len - 1;
+       
+    printf("calcuGroupLine(), gplen = %d , head = %d, tail = %d\n", len, head, tail);    
+            
+    double *avd;
+    avd = (double *)aspMalloc(sizeof(double) * (tail - head));
+    int *avList;
+    avList = (int *)aspMalloc(sizeof(int) * (tail - head) * 2);
+    
+    cntDist = 0;
+    while ((tail - head) > 1) {
+        p1 = &pGrp[head * 2];
+        p2 = &pGrp[tail * 2];
+        
+        ret = getVectorFromP(vecTr,  p1,  p2);
+        if (ret < 0) {
+            return -3;
+        }
+
+        avgDist = calcuLineGroupDist(pGrp, vecTr, len);
+
+        avd[cntDist] = avgDist;
+        avList[cntDist * 2 + 0] = head;
+        avList[cntDist * 2 + 1] = tail;
+        cntDist++;
+
+        if (cur == head) {
+            tail -= 1;
+            cur = tail;
+        } else {
+            head += 1;
+            cur = head;
+        }
+
+        //Log.e(TAG, "group head = "+head+", tail = "+tail);    
+        
+    }
+
+    minIdx = -1;
+    minDist = 0;
+    for (i = 0; i < cntDist; i++) {
+        if (minIdx < 0) {
+            minIdx = i;
+            minDist = avd[i];
+        } else {
+            if (minDist > avd[i]) {
+                minDist = avd[i];
+                minIdx = i;
+            }
+        }
+        printf("group avg= %lf, head = %d, tail = %d", avd[i], avList[i*2+0], avList[i*2+1]);    
+    }
+    
+    printf("min idx = %d, min avg = %d, head = %d, tail = %d", minIdx, (int)minDist, avList[minIdx*2+0], avList[minIdx*2+1]);    
+
+    div[0] = minDist;
+    
+    if (minDist > (0.666  * (double) len)) {
+        return (0 - (int)round(minDist));
+    }
+
+    head = avList[minIdx*2+0];
+    tail = avList[minIdx*2+1];
+
+    p1 = &pGrp[head*2];
+    p2 = &pGrp[tail*2];
+
+
+    ret = getVectorFromP(vecTr,  p1,  p2);
+    if (ret < 0) {
+        return -4;
+    }
+
+    return 0;
 }
 
 static int doSystemCmd(char *sCommand)
@@ -2159,7 +2470,7 @@ static void aspFree(void *p)
 static void* aspMalloc(int mlen)
 {
     int tot=0;
-    char *p=0;
+    void *p=0;
     
     tot = *totMalloc;
     tot += mlen;
@@ -22234,7 +22545,7 @@ static int fs104(struct mainRes_s *mrs, struct modersp_s *modersp)
 #define CROP_COOD_05 {85   * CROP_SCALE, 25  * CROP_SCALE}
 #define CROP_COOD_06 {75   * CROP_SCALE, 25  * CROP_SCALE}
 
-static int getVector(double *vec, double *p1, double *p2)
+static int getVector_x(double *vec, double *p1, double *p2)
 {
     double a1, b, a2;
     double x1, y1, x2, y2;
@@ -22249,14 +22560,14 @@ static int getVector(double *vec, double *p1, double *p2)
     x2 = p2[0];
     y2 = p2[1];
 
-    printf("getVector() input - p1 = (%lf, %lf), p2 = (%lf, %lf)\n", x1, y1, x2, y2);
+    printf("getVector_x() input - p1 = (%lf, %lf), p2 = (%lf, %lf)\n", x1, y1, x2, y2);
     
     b = ((x2 * y1) - (x1 * y2)) / (x2 - x1);
 
     a1 = ((x1 * y2) - (x1 * y1)) / ((x1 * x2) - (x1 * x1));
     a2 = ((x2 * y2) - (x2 * y1)) / ((x2 * x2) - (x2 * x1));
 
-    printf("getVector() output - a = %lf/%lf, b = %lf\n", a1, a2, b);
+    printf("getVector_x() output - a = %lf/%lf, b = %lf\n", a1, a2, b);
 
     vec[0] = a1;
     vec[1] = b;
@@ -22265,7 +22576,7 @@ static int getVector(double *vec, double *p1, double *p2)
 
 }
 
-static int getCross(double *v1, double *v2, double *pt)
+static int getCross_x(double *v1, double *v2, double *pt)
 {
     double a1, a2, b1, b2;
     double x, y;
@@ -22283,7 +22594,7 @@ static int getCross(double *v1, double *v2, double *pt)
     y = ((a1 * b2) - (a2 * b1)) / (a1 - a2);
     x = (b2 - b1) / (a1 - a2);
 
-    printf("getCross() output - pt = (%lf, %lf)\n", x, y);
+    printf("getCross_x() output - pt = (%lf, %lf)\n", x, y);
 
     pt[0] = x;
     pt[1] = y;
@@ -22291,7 +22602,7 @@ static int getCross(double *v1, double *v2, double *pt)
     return 0;
 }
 
-static int calcuDistance(double *dist, double *p1, double *p2) 
+static int calcuDistance_x(double *dist, double *p1, double *p2) 
 {
     double x1, y1, x2, y2;
     double dx, dy, ds;
@@ -22311,7 +22622,7 @@ static int calcuDistance(double *dist, double *p1, double *p2)
 
     ds = dx * dx + dy * dy;
     
-    printf("calcuDistance() output - ds = %lf \n", ds);    
+    printf("calcuDistance_x() output - ds = %lf \n", ds);    
 
     *dist = ds;
     return 0;
@@ -22349,30 +22660,30 @@ static int fs105(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "calculate ...\n");
     print_f(&mrs->plog, "fs105", mrs->log);
 
-    ret = getVector(vect01, c01, c02);
-    ret = getVector(vect02, c02, c03);
-    ret = getVector(vect03, c03, c04);
-    ret = getVector(vect04, c04, c05);
-    ret = getVector(vect05, c05, c06);
-    ret = getVector(vect06, c06, c01);
+    ret = getVector_x(vect01, c01, c02);
+    ret = getVector_x(vect02, c02, c03);
+    ret = getVector_x(vect03, c03, c04);
+    ret = getVector_x(vect04, c04, c05);
+    ret = getVector_x(vect05, c05, c06);
+    ret = getVector_x(vect06, c06, c01);
 
-    ret = getCross(vect01, vect03, cross[0]);
-    ret = getCross(vect02, vect04, cross[1]);
-    ret = getCross(vect03, vect05, cross[2]);
-    ret = getCross(vect04, vect06, cross[3]);
-    ret = getCross(vect05, vect01, cross[4]);
-    ret = getCross(vect06, vect02, cross[5]);
+    ret = getCross_x(vect01, vect03, cross[0]);
+    ret = getCross_x(vect02, vect04, cross[1]);
+    ret = getCross_x(vect03, vect05, cross[2]);
+    ret = getCross_x(vect04, vect06, cross[3]);
+    ret = getCross_x(vect05, vect01, cross[4]);
+    ret = getCross_x(vect06, vect02, cross[5]);
 
     for (id = 0; id < 6; id++) {
         id1 = -1;
         id2 = -1;
-        ret = calcuDistance(&ds, cross[id], c01);
+        ret = calcuDistance_x(&ds, cross[id], c01);
         id1 = 1;
         dt1 = ds;
-        ret = calcuDistance(&ds, cross[id], c02);
+        ret = calcuDistance_x(&ds, cross[id], c02);
         id2 = 2;
         dt2 = ds;
-        ret = calcuDistance(&ds, cross[id], c03);
+        ret = calcuDistance_x(&ds, cross[id], c03);
         if ((dt1 > ds) || (dt2 > ds)) {
             if (dt1 > dt2) {
                 dt1 = ds;     
@@ -22382,7 +22693,7 @@ static int fs105(struct mainRes_s *mrs, struct modersp_s *modersp)
                 id2 = 3;
             }
         }
-        ret = calcuDistance(&ds, cross[id], c04);
+        ret = calcuDistance_x(&ds, cross[id], c04);
         if ((dt1 > ds) || (dt2 > ds)) {
             if (dt1 > dt2) {
                 dt1 = ds;     
@@ -22392,7 +22703,7 @@ static int fs105(struct mainRes_s *mrs, struct modersp_s *modersp)
                 id2 = 4;
             }
         }
-        ret = calcuDistance(&ds, cross[id], c05);
+        ret = calcuDistance_x(&ds, cross[id], c05);
         if ((dt1 > ds) || (dt2 > ds)) {
             if (dt1 > dt2) {
                 dt1 = ds;     
@@ -22402,7 +22713,7 @@ static int fs105(struct mainRes_s *mrs, struct modersp_s *modersp)
                 id2 = 5;
             }
         }
-        ret = calcuDistance(&ds, cross[id], c06);
+        ret = calcuDistance_x(&ds, cross[id], c06);
         if ((dt1 > ds) || (dt2 > ds)) {
             if (dt1 > dt2) {
                 dt1 = ds;     
@@ -25778,6 +26089,7 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
+            /* first stage of cropping algorithm */
             
 #if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
@@ -25875,6 +26187,9 @@ static int p6(struct procRes_s *rs)
 
             } 
 #endif
+
+            /* second stage of cropping algorithm */
+            
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
                 idx = ASPOP_CROP_01 + i;
                 pdt = &pct[idx];
@@ -25939,6 +26254,7 @@ static int p6(struct procRes_s *rs)
                 //print_f(rs->plogs, "P6", rs->logs);
             }
 
+            
             rs_ipc_put(rs, "C", 1);
 
             goto socketEnd;
