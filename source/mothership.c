@@ -19355,7 +19355,7 @@ static int fs72(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     ring_buf_init(&mrs->cmdRx);
 
-    mrs_ipc_put(mrs, "n", 1, 1);
+    mrs_ipc_put(mrs, "z", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
     modersp->m = modersp->m + 1;
@@ -23202,6 +23202,9 @@ static int p2(struct procRes_s *rs)
                 case 'y':
                     cmode = 14;
                     break;
+                case 'z':
+                    cmode = 15;
+                    break;
                 default:
                     break;
             }
@@ -23431,7 +23434,8 @@ static int p2(struct procRes_s *rs)
 #if MSP_P2_SAVE_DAT
                 fclose(rs->fdat_s[1]);
 #endif
-            }else if (cmode == 6) {
+            }
+            else if (cmode == 6) {
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
 
@@ -23501,7 +23505,7 @@ static int p2(struct procRes_s *rs)
 
                 opsz = 0 - opsz;
 
-#if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+#if JPG_FFD9_CUT /* find 0xffd9 in jpg */
                 ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
                 if (ret) {
                     fformat = 0;
@@ -24179,6 +24183,82 @@ static int p2(struct procRes_s *rs)
                 
                 sprintf(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
                 print_f(rs->plogs, "P2", rs->logs);
+            }
+            else if (cmode == 15) {
+                sprintf(rs->logs, "cmode: %d\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                pi = 0;  
+                while (1) {
+                    len = 0;
+                    len = ring_buf_get(rs->pcmdRx, &addr);
+                    if (len > 0) {
+
+                        //memset(addr, 0xaa, len);
+                        //msync(addr, len, MS_SYNC);
+                        
+                        opsz = 0;
+                        while (opsz == 0) {
+                            //shmem_check(addr, len);
+#if SPI_KTHREAD_USE                    
+                            opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                            if (opsz == 0) {
+#if SPI_KTHREAD_DLY
+                                usleep(100000);
+                                sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                                print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                                continue;
+                            }
+                            
+#else
+                            opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+#endif
+                            if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
+                                opsz = 0 - opsz;
+                            }
+
+#if SPI_TRUNK_FULL_FIX
+                            if (opsz < 0) {
+                                opsz = 0 - opsz;                    
+                                if (opsz == SPI_TRUNK_SZ) {
+                                    opsz = 0 - opsz;    
+                                } else {
+                                    sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                            }
+#endif
+
+                            //usleep(10000);
+#if P2_TX_LOG
+                            sprintf(rs->logs, "r %d - %d\n", opsz, pi);
+                            print_f(rs->plogs, "P2", rs->logs);
+#endif
+                        }
+
+                        //msync(addr, len, MS_SYNC);
+                        ring_buf_prod(rs->pcmdRx);    
+                        if (opsz < 0) {
+                            //sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                            //print_f(rs->plogs, "P2", rs->logs);    
+                            break;
+                        }
+                        rs_ipc_put(rs, "p", 1);
+                        pi += 1;
+                    }
+                }
+
+                sprintf(rs->logs, "len:%d opsz:%d ret:%d, break!\n", len, opsz, ret);
+                print_f(rs->plogs, "P2", rs->logs);    
+
+                opsz = 0 - opsz;
+                
+                ring_buf_set_last(rs->pcmdRx, opsz);
+                rs_ipc_put(rs, "d", 1);
+                sprintf(rs->logs, "spi0 recv end\n");
+                print_f(rs->plogs, "P2", rs->logs);
+
             }
             else {
                 sprintf(rs->logs, "cmode: %d \n", cmode);
