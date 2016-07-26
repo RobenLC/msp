@@ -158,8 +158,8 @@ static int *totSalloc=0;
 #define CROP_USE_META (1)
 #define SCANGO_CHECK (1)
 
-#define SAVE_CROP_MASS (1)
-#define MSP_SAVE_LOG (1)
+#define SAVE_CROP_MASS (0)
+#define MSP_SAVE_LOG (0)
 
 #define OUT_BUFF_LEN  (64*1024)
 
@@ -1749,12 +1749,14 @@ static int pdfAppend(char *d, char *s, int tot, int max)
     return slen;
 }
 
-static int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
+static int pdfHead(char *ppdf, int max, int inSize, int *inData)
 {
     double wscale=0.0, hscale=0.0;
     double d1=0, d2=0;
     char tch[128], *dst = 0;
     int tlen = 0, tot = 0, n=0;
+    int hi, wh, mh, mw;
+    
 
     if (ppdf == 0) return -1;
     if (max == 0) return -2;
@@ -1762,8 +1764,14 @@ static int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
     if (wh == 0) return -4;
     if (mh == 0) return -5;
     if (mw == 0) return -6;
+    if (!inData) return -7;
 
     dst = ppdf;
+
+    hi = inData[0];
+    wh = inData[1];
+    mh = inData[2];
+    mw = inData[3];
 
     d1 = mh;
     d2 = hi;
@@ -1843,6 +1851,7 @@ static int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
     if (n < 0) return -3;
     tot += n;
 
+    inData[4] = tot;
     sprintf(tch, "4 0 obj\n");
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
@@ -1868,6 +1877,7 @@ static int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
     if (n < 0) return -3;
     tot += n;
 
+    inData[5] = tot;
     sprintf(tch, "5 0 obj\n");
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
@@ -1923,6 +1933,7 @@ static int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
     if (n < 0) return -3;
     tot += n;
 
+    inData[6] = tot;
     sprintf(tch, "6 0 obj\n");
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
@@ -1972,15 +1983,24 @@ static int pdfHead(char *ppdf, int max, int hi, int wh, int mh, int mw)
     return tot;
 }
 
-static int pdfTail(char *ppdf, int max, int offset, int imgSize)
+static int pdfTail(char *ppdf, int max, int inSize, int *inData)
 {
     char tch[128], *dst = 0;
     char end[6] = {0x25, 0x25, 0x45, 0x4f, 0x46, 0x00};
     int tlen = 0, tot = 0, n=0;
     int offset_2=0, offset_7=0, offset_x=0;
+    int offset_4=0, offset_5=0, offset_6=0;
+    int offset, imgSize;
 
     if (ppdf == 0) return -1;
     if (max == 0) return -2;
+    if (!inData) return -4;
+
+    offset_4 = inData[4];
+    offset_5 = inData[5];
+    offset_6 = inData[6];
+    offset = inData[7];
+    imgSize = inData[8];
 
     dst = ppdf;
 
@@ -2073,17 +2093,17 @@ static int pdfTail(char *ppdf, int max, int offset, int imgSize)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "0000000162 00000 n\r\n");
+    sprintf(tch, "%.10d 00000 n\r\n", offset_4);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "0000000234 00000 n\r\n");
+    sprintf(tch, "%.10d 00000 n\r\n", offset_5);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "0000000392 00000 n\r\n");
+    sprintf(tch, "%.10d 00000 n\r\n", offset_6);
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -8551,7 +8571,7 @@ static int stfat_30(struct psdata_s *data)
     rlt = abs_result(data->result); 
     pFat = data->rs->psFat;
 
-    sprintf(rs->logs, "op_30 rlt:0x%x fat:0x%.8x\n", rlt, pFat->fatStatus); 
+    sprintf(rs->logs, "op_30 rlt:0x%x fat:0x%.8x ansp:0x%x\n", rlt, pFat->fatStatus, data->ansp0); 
     print_f(rs->plogs, "FAT", rs->logs);  
 
     switch (rlt) {
@@ -12221,7 +12241,7 @@ static int stsparam_88(struct psdata_s *data)
                         fflush(f);
                         fclose(f);
 
-                        //sync();
+                        sync();
                     } else {
                         ret = doSystemCmd(syscmd);
 
@@ -12234,7 +12254,7 @@ static int stsparam_88(struct psdata_s *data)
                             fflush(f);
                             fclose(f);
 
-                            //sync();
+                            sync();
                         } else {
                             sprintf(rs->logs, "Error!!! failed to save crop mass to [%s] size: %d\n", supPathCp1, pmass->massUsed);
                             print_f(rs->plogs, "SPM", rs->logs);  
@@ -21480,6 +21500,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
     struct tm *p=0;
     time_t timep;
+    int pdfParam[9];
                 
     pct = mrs->configTable;                
     pfat = &mrs->aspFat;
@@ -21697,8 +21718,14 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "dump - end\n");
             print_f(&mrs->plog, "fs98", mrs->log);
         }
+
+        memset(pdfParam, 0, 9*4);
         
-        ret = pdfHead(sb->supdataBuff, SPI_TRUNK_SZ, hi, wh, mh, mw);
+        pdfParam[0] = hi;
+        pdfParam[1] = wh;
+        pdfParam[2] = mh;
+        pdfParam[3] = mw;
+        ret = pdfHead(sb->supdataBuff, SPI_TRUNK_SZ, 9, pdfParam);
         
         sb->supdataUse = 0;
         sb->supdataTot = ret;
@@ -21731,7 +21758,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         while (se->n) {
             se = se->n;
         }
-        sprintf(mrs->log, "PDF Tail get!!! tot: %d, use:%d \n", se->supdataTot, se->supdataUse);
+        sprintf(mrs->log, "PDF Tail get!!! tot: %d, use:%d, datLen:%d, imgLen:%d \n", se->supdataTot, se->supdataUse, datLen, imgLen);
         print_f(&mrs->plog, "fs98", mrs->log);
         
         if (se->supdataTot != 0) {
@@ -21739,8 +21766,10 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "dump - end\n");
             print_f(&mrs->plog, "fs98", mrs->log);
         }
-        
-        ret = pdfTail(se->supdataBuff + se->supdataTot, SPI_TRUNK_SZ-se->supdataTot, datLen, imgLen);
+
+        pdfParam[7] = datLen;
+        pdfParam[8] = imgLen;
+        ret = pdfTail(se->supdataBuff + se->supdataTot, SPI_TRUNK_SZ-se->supdataTot, 9, pdfParam);
         if (ret == -3) {
             s = 0;
             s = aspMalloc(sizeof(struct supdataBack_s));
@@ -21754,7 +21783,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             memset(s, 0, sizeof(struct supdataBack_s));
             se->n = s;
             se = s;
-            ret = pdfTail(se->supdataBuff, SPI_TRUNK_SZ, datLen, imgLen);
+            ret = pdfTail(se->supdataBuff, SPI_TRUNK_SZ,  9, pdfParam);
         }
         
         if (ret < 0) {
@@ -21763,11 +21792,11 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r = 0xed;
             return 1;
         }
-        
+/*        
         shmem_dump(se->supdataBuff+se->supdataTot, ret);
         sprintf(mrs->log, "dump PDF tail - end\n");
         print_f(&mrs->plog, "fs98", mrs->log);
-        
+*/        
         se->supdataTot += ret;
         datLen += ret;
     }
@@ -22534,7 +22563,7 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs108", mrs->log);
 
-    //sync();
+    sync();
     
     modersp->r = 1; 
     return 1;
@@ -22564,7 +22593,7 @@ static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs109", mrs->log);
     }
 
-    //sync();
+    sync();
     
     modersp->r = 1; 
     return 1;
@@ -22968,10 +22997,10 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
             evt = stdata->result;
             pi = (evt >> 8) & 0xff;
             px = (evt & 0xff);
-/*
-            sprintf(rs->logs, "[%d,%d] %c 0x%.2x 0x%.8x - 1\n", pi, px, cmdt, ch, stdata->result);
-            print_f(rs->plogs, "P1", rs->logs);
-*/
+
+            //sprintf(rs->logs, "[%d,%d] %c 0x%.2x 0x%.8x - 1\n", pi, px, cmdt, ch, stdata->result);
+            //print_f(rs->plogs, "P1", rs->logs);
+
             if ((pi >= SMAX) && (px >= PSMAX)) {
                 sprintf(rs->logs, "cmdt:%c do nothing\n", cmdt, ch);
                 print_f(rs->plogs, "P1", rs->logs);
@@ -23032,7 +23061,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                     sprintf(rs->logs, "result:0x%.8x\nEND\n", stdata->result);
                     print_f(rs->plogs, "P1", rs->logs);
 
-                    sync();
+                    //sync();
                 }
 
                 cmdt = '\0'; 
@@ -23881,14 +23910,13 @@ static int p2(struct procRes_s *rs)
                         opsz = 0 - opsz;
                     }
 
-#if SPI_TRUNK_FULL_FIX
+#if 1 /*SPI_TRUNK_FULL_FIX*/
                     if (opsz < 0) {
                         opsz = 0 - opsz;                    
                         if (opsz == SPI_TRUNK_SZ) {
-                            opsz = 0 - opsz;    
+                            //opsz = 0 - opsz;    
                         } else {
-                            sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
-                            print_f(rs->plogs, "P2", rs->logs);
+                            opsz = 0 - opsz;    
                         }
                     }
 #endif
@@ -23969,14 +23997,13 @@ static int p2(struct procRes_s *rs)
                         opsz = 0 - opsz;
                     }
 
-#if SPI_TRUNK_FULL_FIX
+#if 1 /*SPI_TRUNK_FULL_FIX*/
                     if (opsz < 0) {
                         opsz = 0 - opsz;                    
                         if (opsz == SPI_TRUNK_SZ) {
-                            opsz = 0 - opsz;    
+                            //opsz = 0 - opsz;    
                         } else {
-                            sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
-                            print_f(rs->plogs, "P2", rs->logs);
+                            opsz = 0 - opsz;    
                         }
                     }
 #endif
@@ -24165,7 +24192,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
-#define P3_TX_LOG  (0)
+#define P3_TX_LOG  (1)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -24525,7 +24552,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define P4_TX_LOG  (1)
+#define P4_TX_LOG  (0)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
@@ -25304,7 +25331,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         if ((ret == 1) && (ch == 'Z')) {
             ret = rs_ipc_get(rcmd, addr, 1024);
             addr[ret] = '\0';
-            sprintf(rs->logs, "get response [%s] size:%d\n", addr, ret);
+            sprintf(rs->logs, "get response [\n\n%s\n] len:%d\n", addr, ret);
             print_f(rs->plogs, "P5", rs->logs);
         } else {
             opcode = OP_ERROR; 
@@ -29313,7 +29340,7 @@ static int printf_flush(struct logPool_s *plog, FILE *f)
     msync(plog->pool, plog->len, MS_SYNC);
     fwrite(plog->pool, 1, plog->len, f);
     fflush(f);
-    //sync();
+    sync();
 
     plog->cur = plog->pool;
     plog->len = 0;
