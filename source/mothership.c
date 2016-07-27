@@ -713,7 +713,7 @@ struct intMbs_s{
     };
 };
 
-struct aspMetaData{
+struct aspMetaData_s{
   struct intMbs_s     FUNC_BITS;             // byte[4] 
   unsigned char  ASP_MAGIC[2];            //byte[6] "0x20 0x14"
   
@@ -797,13 +797,33 @@ struct aspMetaData{
   unsigned char available[324];
 };
 
-struct aspMetaMass{
+struct aspMetaMass_s{
     int massUsed;
     int massMax;
     int massGap;
     int massRecd;
     int massStart;
     char *masspt;
+};
+
+struct aspCrop36_s{
+    uint32_t crp36Flag;
+    double crp36Pot[76];
+};
+
+struct aspCropExtra_s{
+    int crpexMax;
+    int crpexSize;
+    double crpexLfPots[2048];
+    double crpexRtPots[2048];
+    double *crpexPotLU;
+    double *crpexPotLD;
+    double *crpexPotRU;
+    double *crpexPotRD;
+    int crpexPLUSize;
+    int crpexPLDSize;
+    int crpexPRUSize;
+    int crpexPRDSize;
 };
 
 struct mainRes_s{
@@ -842,9 +862,11 @@ struct mainRes_s{
     struct logPool_s plog;
     struct aspWaitRlt_s wtg;
     struct apWifiConfig_s wifconf;
-    struct aspMetaData *metaout;
-    struct aspMetaData *metain;
-    struct aspMetaMass metaMass;
+    struct aspMetaData_s *metaout;
+    struct aspMetaData_s *metain;
+    struct aspMetaMass_s metaMass;
+    struct aspCrop36_s *crop32;
+    struct aspCropExtra_s *cropex;
     char netIntfs[16];
     char *dbglog;
 };
@@ -897,9 +919,12 @@ struct procRes_s{
     struct socket_s *psocket_n;
     struct socket_s *psocket_v;
     struct apWifiConfig_s *pwifconf;
-    struct aspMetaData *pmetaout;
-    struct aspMetaData *pmetain;
-    struct aspMetaMass *pmetaMass;
+    struct aspMetaData_s *pmetaout;
+    struct aspMetaData_s *pmetain;
+    struct aspMetaMass_s *pmetaMass;
+    struct aspCrop36_s *pcrop32;
+    struct aspCropExtra_s *pcropex;
+
     struct logPool_s *plogs;
     char *pnetIntfs;
 };
@@ -1107,11 +1132,11 @@ static uint32_t msb2lsb(struct intMbs_s *msb)
 }
 
 
-static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta) 
+static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta) 
 {
     char mlog[256];
     
-    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     sprintf(mlog, "********************************************\n");
     print_f(mlogPool, "META", mlog);
     sprintf(mlog, "_ debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
@@ -1322,7 +1347,7 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta)
 
 static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out) 
 {
-    struct aspMetaData *pmeta;
+    struct aspMetaData_s *pmeta;
     
     if ((!mrs) && (!rs)) return -1;
     
@@ -1340,8 +1365,8 @@ static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out)
         }
     }
 
-    memset(pmeta, 0, sizeof(struct aspMetaData));
-    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    memset(pmeta, 0, sizeof(struct aspMetaData_s));
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     
     return 0;
 }
@@ -1351,7 +1376,7 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     uint32_t tbits=0;
     int opSt=0, opEd=0;
     int istr=0, iend=0, idx=0;
-    struct aspMetaData *pmeta;
+    struct aspMetaData_s *pmeta;
     struct aspConfig_s *pct=0, *pdt=0;
     char *pvdst=0, *pvend=0;
     
@@ -1457,7 +1482,7 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     tbits |= funcbits;
     lsb2Msb(&pmeta->FUNC_BITS, tbits);
 
-    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     
     return 0;
 }
@@ -1466,8 +1491,8 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
 {
     int i=0, act=0;
     struct intMbs_s *pt=0;
-    struct aspMetaData *pmeta;
-    struct aspMetaMass *pmass;
+    struct aspMetaData_s *pmeta;
+    struct aspMetaMass_s *pmass;
     struct aspConfig_s *pct=0, *pdt=0;
     unsigned char linGap, linStart;
     unsigned short linRec;
@@ -1485,7 +1510,7 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         pmass = rs->pmetaMass;
     }
     
-    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
 
     if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
         return -2;
@@ -12471,8 +12496,8 @@ static int stsparam_88(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData *pmetaIn, *pmetaOut;
-    struct aspMetaMass *pmass;
+    struct aspMetaData_s *pmetaIn, *pmetaOut;
+    struct aspMetaMass_s *pmass;
 #if SAVE_CROP_MASS
     int ret=0;
     struct aspConfig_s *pct=0, *pdt=0;
@@ -12500,7 +12525,7 @@ static int stsparam_88(struct psdata_s *data)
             
             sprintf(rs->logs, "dump meta output\n"); 
             print_f(rs->plogs, "SPM", rs->logs);  
-            //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData));            
+            //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
             dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
             
             ch = 110; 
@@ -12581,7 +12606,7 @@ static int stsparam_88(struct psdata_s *data)
                     //pmass->massRecd = 0;
                     //pmass->massUsed = 0;
                 } else {
-                    //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData));
+                    //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
                     dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
                     act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
 
@@ -12621,7 +12646,7 @@ static int stcropmeta_89(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData * pmeta;
+    struct aspMetaData_s * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
@@ -12670,7 +12695,7 @@ static int stcropmeta_90(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData * pmeta;
+    struct aspMetaData_s * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
@@ -12721,7 +12746,7 @@ static int stcropmeta_91(struct psdata_s *data)
     uint32_t rlt=0;
     uint32_t rval=0;
     struct procRes_s *rs;
-    struct aspMetaData * pmeta;
+    struct aspMetaData_s * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
     struct aspConfig_s *pct=0, *pdt=0;
 
@@ -12795,7 +12820,7 @@ static int stcropmeta_92(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData * pmeta;
+    struct aspMetaData_s * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
@@ -12841,7 +12866,7 @@ static int stcropmeta_93(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData * pmeta;
+    struct aspMetaData_s * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
@@ -12890,7 +12915,7 @@ static int stcropmeta_94(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData * pmeta;
+    struct aspMetaData_s * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
@@ -12939,7 +12964,7 @@ static int stcropmeta_95(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData * pmeta;
+    struct aspMetaData_s * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
@@ -23432,7 +23457,7 @@ static int p2(struct procRes_s *rs)
     struct sdFATable_s   *pftb=0;
     struct sdbootsec_s   *psec=0;
     struct aspConfig_s *pct=0, *pdt=0;
-    struct aspMetaData *pmeta;
+    struct aspMetaData_s *pmeta;
     
     pmeta = rs->pmetain;
 
@@ -25882,7 +25907,7 @@ static int p6(struct procRes_s *rs)
     struct sdFATable_s   *pftb=0;
     uint32_t secStr=0, secLen=0;
 
-    struct aspMetaMass *pmass=0;
+    struct aspMetaMass_s *pmass=0;
     int masUsed=0, masRecd=0, masStart=0;
     int gap=0, cy=0, cxm=0, cxn=0;
     unsigned short *ptBuf;
@@ -25892,11 +25917,17 @@ static int p6(struct procRes_s *rs)
     struct apWifiConfig_s *pwfc=0;
     char ch=0;
 
+    int cpn=0;
+    struct aspCrop36_s *pcp36;
+    struct aspCropExtra_s *pcpex;
+
     pct = rs->pcfgTable;
     pfat = rs->psFat;
     pftb = pfat->fatTable;
     pwfc = rs->pwifconf;
     pmass = rs->pmetaMass;
+    pcp36 = rs->pcrop32;
+    pcpex = rs->pcropex;
 
     char dir[64] = "/mnt/mmc2";
     //char dir[256] = "/root";
@@ -26089,6 +26120,74 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
+            for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
+                idx = ASPOP_CROP_01 + i;
+                pdt = &pct[idx];
+                switch(idx) {
+                    case ASPOP_CROP_01:
+                    case ASPOP_CROP_02:
+                    case ASPOP_CROP_03:
+                    case ASPOP_CROP_04:
+                    case ASPOP_CROP_05:
+                    case ASPOP_CROP_06:
+                    case ASPOP_CROP_07:
+                    case ASPOP_CROP_08:
+                    case ASPOP_CROP_09:
+                    case ASPOP_CROP_10:
+                    case ASPOP_CROP_11:
+                    case ASPOP_CROP_12:
+                    case ASPOP_CROP_13:
+                    case ASPOP_CROP_14:
+                    case ASPOP_CROP_15:
+                    case ASPOP_CROP_16:
+                    case ASPOP_CROP_17:
+                    case ASPOP_CROP_18:
+                        pdt = &pct[idx];
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+#if P6_CROP_LOG
+                            sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            print_f(rs->plogs, "P6", rs->logs);  
+#endif
+                            sendbuf[3] = 'C';
+
+                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+
+                            cpn = idx - ASPOP_CROP_01;
+                            pcp36->crp36Pot[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36->crp36Pot[cpn*2+1] = pdt->opValue & 0xffff;
+
+                            pdt->opStatus = ASPOP_STA_APP;
+                        }
+
+                        break;
+                    case ASPOP_IMG_LEN:
+                        pdt = &pct[idx];
+                        
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                            sendbuf[3] = 'L';
+                            sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                
+                if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
+                
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                
+                //sendbuf[5+n] = '\0';                
+                //sprintf(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
+                //print_f(rs->plogs, "P6", rs->logs);
+            }
+            
             /* first stage of cropping algorithm */
             
 #if 1  /* skip for debug, anable later */
@@ -26122,7 +26221,7 @@ static int p6(struct procRes_s *rs)
 
                 while (!masUsed) {
                     usleep(500000);
-                    msync(pmass, sizeof(struct aspMetaMass), MS_SYNC);
+                    msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
                     masUsed = pmass->massUsed;
                     sprintf(rs->logs, "wait meta mass (used:%d) %d\n", masUsed, cnt); 
                     print_f(rs->plogs, "P6", rs->logs);
@@ -26157,6 +26256,12 @@ static int p6(struct procRes_s *rs)
                     cxn = *ptBuf;
                     ptBuf++;
                     sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
+
+                    pcpex->crpexLfPots[i*2+0] = cxm;
+                    pcpex->crpexLfPots[i*2+1] = cy;
+                    pcpex->crpexRtPots[i*2+0] = cxn;
+                    pcpex->crpexRtPots[i*2+1] = cy;
+                    
 #if P6_CROP_LOG
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -26172,6 +26277,8 @@ static int p6(struct procRes_s *rs)
                     //sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
                     //print_f(rs->plogs, "P6", rs->logs);
                 }
+
+                pcpex->crpexSize = masRecd;
 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
@@ -26189,71 +26296,20 @@ static int p6(struct procRes_s *rs)
 #endif
 
             /* second stage of cropping algorithm */
-            
-            for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
-                idx = ASPOP_CROP_01 + i;
-                pdt = &pct[idx];
-                switch(idx) {
-                    case ASPOP_CROP_01:
-                    case ASPOP_CROP_02:
-                    case ASPOP_CROP_03:
-                    case ASPOP_CROP_04:
-                    case ASPOP_CROP_05:
-                    case ASPOP_CROP_06:
-                    case ASPOP_CROP_07:
-                    case ASPOP_CROP_08:
-                    case ASPOP_CROP_09:
-                    case ASPOP_CROP_10:
-                    case ASPOP_CROP_11:
-                    case ASPOP_CROP_12:
-                    case ASPOP_CROP_13:
-                    case ASPOP_CROP_14:
-                    case ASPOP_CROP_15:
-                    case ASPOP_CROP_16:
-                    case ASPOP_CROP_17:
-                    case ASPOP_CROP_18:
-                        pdt = &pct[idx];
-                        if (pdt->opStatus == ASPOP_STA_UPD) {
-#if P6_CROP_LOG
-                            sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
-                            print_f(rs->plogs, "P6", rs->logs);  
-#endif
-                            sendbuf[3] = 'C';
-
-                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
-                            n = strlen(rs->logs);
-
-                            pdt->opStatus = ASPOP_STA_APP;
-                        }
-
-                        break;
-                    case ASPOP_IMG_LEN:
-                        pdt = &pct[idx];
-                        
-                        if (pdt->opStatus == ASPOP_STA_UPD) {
-                            sendbuf[3] = 'L';
-                            sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
-                            n = strlen(rs->logs);
-                        }
-                        break;
-                    default:
-                        break;
-                }
-                
-                if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
-                
-                memcpy(&sendbuf[5], rs->logs, n);
-
-                sendbuf[5+n] = 0xfb;
-                sendbuf[5+n+1] = '\n';
-                sendbuf[5+n+2] = '\0';
-                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                
-                //sendbuf[5+n] = '\0';                
-                //sprintf(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
-                //print_f(rs->plogs, "P6", rs->logs);
+            for (i = 0; i < 18; i++) {
+                sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pot[i*2+0], pcp36->crp36Pot[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
             }
 
+            for (i = 0; i < pcpex->crpexSize; i++) {
+                sprintf(rs->logs, "L%d. %lf, %lf \n", i, pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            for (i = 0; i < pcpex->crpexSize; i++) {
+                sprintf(rs->logs, "R%d. %lf, %lf \n", i, pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
             
             rs_ipc_put(rs, "C", 1);
 
@@ -27764,7 +27820,7 @@ int main(int argc, char *argv[])
     sleep(1);
     
 // initial share parameter
-    len = sizeof(struct aspMetaData);
+    len = sizeof(struct aspMetaData_s);
     pmrs->metaout = aspSalloc(len);
     pmrs->metain = aspSalloc(len);
 
@@ -29357,7 +29413,28 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "WIFC", pmrs->log);
     }    
     #endif
+    /* CROP */
+    pmrs->crop32= (struct aspCrop36_s *)aspSalloc(sizeof(struct aspCrop36_s));
+    if (!pmrs->crop32) {
+        sprintf(pmrs->log, "alloc share memory for crop 32 points FAIL!!! size = %d\n", sizeof(struct aspCrop36_s)); 
+        print_f(&pmrs->plog, "CROP32", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for crop 32 points DONE [0x%x] size:%d !!!\n", pmrs->crop32, sizeof(struct aspCrop36_s)); 
+        print_f(&pmrs->plog, "CROP32", pmrs->log);
+    }
 
+    pmrs->cropex= (struct aspCropExtra_s *)aspSalloc(sizeof(struct aspCropExtra_s));
+    if (!pmrs->cropex) {
+        sprintf(pmrs->log, "alloc share memory for crop extra points FAIL!!! size = %d\n", sizeof(struct aspCropExtra_s)); 
+        print_f(&pmrs->plog, "CROPEX", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for crop extra points DONE [0x%x] size:%d !!!\n", pmrs->cropex, sizeof(struct aspCropExtra_s)); 
+        print_f(&pmrs->plog, "CROPEX", pmrs->log);
+    }
+    
+    
     /* FAT */
     pmrs->aspFat.fatBootsec = (struct sdbootsec_s *)aspSalloc(sizeof(struct sdbootsec_s));
     if (!pmrs->aspFat.fatBootsec) {
@@ -29890,6 +29967,9 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 
     rs->rspioc1 = mrs->spioc1;
     rs->rspioc2 = mrs->spioc2;
+
+    rs->pcrop32 = mrs->crop32;
+    rs->pcropex = mrs->cropex;
 
     return 0;
 }
