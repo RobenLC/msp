@@ -162,6 +162,7 @@ static int *totSalloc=0;
 #define MSP_SAVE_LOG (0)
 
 #define OUT_BUFF_LEN  (64*1024)
+#define CROP_MAX_NUM_META (18)
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -808,7 +809,16 @@ struct aspMetaMass_s{
 
 struct aspCrop36_s{
     uint32_t crp36Flag;
-    double crp36Pot[76];
+    double crp36Pot[40];
+    double crp36LineUpbnd[3];
+    double crp36LineTop[3];
+    double crp36LineBotn[3];
+    double crp36LineRight[3];
+    double crp36LineLeft[3];
+    int crp36Up;
+    int crp36Dn;
+    int crp36Rt;
+    int crp36Lf;
 };
 
 struct aspCropExtra_s{
@@ -1089,6 +1099,14 @@ static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 static int cfgTableSet(struct aspConfig_s *table, int idx, uint32_t val);
 static void* aspMalloc(int mlen);
 static void* aspSalloc(int slen);
+static int getParallelVectorFromV(double *vec, double *p, double *vecIn);
+static int getRectVectorFromV(double *vec, double *p, double *vecIn);
+static int getVectorFromP(double *vec, double *p1, double *p2);
+static int getCross(double *v1, double *v2, double *pt);
+static double calcuDistance(double *p1, double *p2);
+static double calcuVectorDistancePoint(double *vec, double *p);
+static double calcuLineGroupDist(double *pGrp, double *vecTr, int gpLen);
+static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen);
 
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
 {
@@ -1588,6 +1606,117 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
 
     return act;
+}
+
+static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt, int max) 
+{
+    double ptn[40];
+    double lups[3];
+    double lrt[3];
+    double llf[3];
+    double ltop[3];
+    double lbtn[3];
+    int i, ret, p1, p2;;
+    int up=-1, dn=-1, rt=-1, lf=-1;
+    
+    if (!pcrp36) return -1;
+    if (!idxLf) return -2;
+    if (!idxRt) return -3;
+
+    if (max > 20) max = 20;
+
+    memcpy(ptn, pcrp36->crp36Pot, sizeof(double) * 40);
+
+    for (i=0; i < max; i++) {
+        printf("[crp36] %d. %lf, %lf \n", i, ptn[i*2+0], ptn[i*2+1]);
+    }
+
+    p1 = 0; 
+    p2 = CROP_MAX_NUM_META+1;
+    ret = getVectorFromP(lups, &ptn[p1*2], &ptn[p2*2]);
+    if (ret != 0) {
+        printf("[crp36] Error!!!!get up side line failed!!!");
+        return -4;
+    }        
+
+    p1 = 5; 
+    p2 = 6;
+    ret = getVectorFromP(ltop, &ptn[p1*2], &ptn[p2*2]);
+    if (ret != 0) {
+        printf("[crp36] Error!!!!get top line failed!!!");
+        return -5;
+    }
+
+    p1 = 2;
+    p2 = 3;
+    ret = getVectorFromP(lbtn, &ptn[p1*2], &ptn[p2*2]);
+    if (ret != 0) {
+        printf("[crp36] Error!!!!get botton line failed!!!");
+        return -6;
+    }
+
+    p1 = 1;
+    ret = getRectVectorFromV(llf, &ptn[p1*2], lbtn);
+    if (ret != 0) {
+        printf("[crp36] Error!!!!get left line failed!!!");
+        return -7;
+    }
+
+    p1 = 4;
+    ret = getRectVectorFromV(lrt, &ptn[p1*2], lbtn);
+    if (ret != 0) {
+        printf("[crp36] Error!!!!get right line failed!!!");
+        return -8;
+    }
+
+    memcpy(pcrp36->crp36LineUpbnd, lups, sizeof(double) * 3);
+    memcpy(pcrp36->crp36LineTop, ltop, sizeof(double) * 3);
+    memcpy(pcrp36->crp36LineBotn, lbtn, sizeof(double) * 3);
+    memcpy(pcrp36->crp36LineLeft, llf, sizeof(double) * 3);
+    memcpy(pcrp36->crp36LineRight, lrt, sizeof(double) * 3);
+
+    for (i = 1; i <= CROP_MAX_NUM_META; i++) {
+        if (up >= 0) {
+            if (up > ptn[i*2+1]) {
+                up = ptn[i*2+1];
+            }
+        } else {
+            up = ptn[i*2+1];
+        }
+
+        if (dn >= 0) {
+            if (dn < ptn[i*2+1]) {
+                dn = ptn[i*2+1];
+            }               
+        } else {
+            dn = ptn[i*2+1];;
+        }
+
+        if (lf >= 0) {
+            if (lf > ptn[i*2+0]) {
+                lf = ptn[i*2+0];
+            }
+        } else {
+            lf = ptn[i*2+0];
+        }
+
+        if (rt >= 0) {
+            if (rt < ptn[i*2+0]) {
+                rt = ptn[i*2+0];
+            }               
+        } else {
+            rt = ptn[i*2+0];
+        }
+    }
+
+    pcrp36->crp36Up = up;
+    pcrp36->crp36Dn = dn;
+    pcrp36->crp36Rt= rt;
+    pcrp36->crp36Lf = lf;
+
+    printf("[crp36] up = %d, dn = %d , lf = %d, rt = %d \n", up, dn, lf, rt);
+
+    return 0;
 }
 
 static int getParallelVectorFromV(double *vec, double *p, double *vecIn)
@@ -25920,6 +26049,12 @@ static int p6(struct procRes_s *rs)
     int cpn=0;
     struct aspCrop36_s *pcp36;
     struct aspCropExtra_s *pcpex;
+    int idxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
+    int idxR[] = {5, 8, 10, 12, 14, 16, 18, 3};
+    
+    int idxALLLf[] = {6, 7, 9, 11, 13, 15, 17, 2};
+    int idxALLRt[] = {5, 8, 10, 12, 14, 16, 18, 3};
+    
 
     pct = rs->pcfgTable;
     pfat = rs->psFat;
@@ -26064,7 +26199,6 @@ static int p6(struct procRes_s *rs)
         
         sendbuf[3] = 'F';
         if (opcode == 0x19) { /* send CROP info (new)*/
-            #define CROP_MAX_NUM_META (18)
             sprintf(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
@@ -26130,6 +26264,25 @@ static int p6(struct procRes_s *rs)
                     case ASPOP_CROP_04:
                     case ASPOP_CROP_05:
                     case ASPOP_CROP_06:
+                        cpn = (idx - ASPOP_CROP_01) + 1;
+                        pdt = &pct[idx];
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+#if P6_CROP_LOG
+                            sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            print_f(rs->plogs, "P6", rs->logs);  
+#endif
+                            sendbuf[3] = 'C';
+
+                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+
+                            pcp36->crp36Pot[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36->crp36Pot[cpn*2+1] = pdt->opValue & 0xffff;
+
+                            pdt->opStatus = ASPOP_STA_APP;
+                        }
+
+                        break;
                     case ASPOP_CROP_07:
                     case ASPOP_CROP_08:
                     case ASPOP_CROP_09:
@@ -26142,6 +26295,7 @@ static int p6(struct procRes_s *rs)
                     case ASPOP_CROP_16:
                     case ASPOP_CROP_17:
                     case ASPOP_CROP_18:
+                        cpn = idx - ASPOP_CROP_01;
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
 #if P6_CROP_LOG
@@ -26153,7 +26307,6 @@ static int p6(struct procRes_s *rs)
                             sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
 
-                            cpn = idx - ASPOP_CROP_01;
                             pcp36->crp36Pot[cpn*2+0] = pdt->opValue >> 16;
                             pcp36->crp36Pot[cpn*2+1] = pdt->opValue & 0xffff;
 
@@ -26187,7 +26340,15 @@ static int p6(struct procRes_s *rs)
                 //sprintf(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 //print_f(rs->plogs, "P6", rs->logs);
             }
-            
+
+            cpn = 0;
+            pcp36->crp36Pot[cpn*2+0] = 100;
+            pcp36->crp36Pot[cpn*2+1] = 0;
+
+            cpn = CROP_MAX_NUM_META+1;
+            pcp36->crp36Pot[cpn*2+0] = 1100;
+            pcp36->crp36Pot[cpn*2+1] = 0;
+
             /* first stage of cropping algorithm */
             
 #if 1  /* skip for debug, anable later */
@@ -26296,11 +26457,16 @@ static int p6(struct procRes_s *rs)
 #endif
 
             /* second stage of cropping algorithm */
-            for (i = 0; i < 18; i++) {
+
+            aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
+            
+#if 0 /* debug print */
+            for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pot[i*2+0], pcp36->crp36Pot[i*2+1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
 
+            
             for (i = 0; i < pcpex->crpexSize; i++) {
                 sprintf(rs->logs, "L%d. %lf, %lf \n", i, pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1]);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -26310,7 +26476,7 @@ static int p6(struct procRes_s *rs)
                 sprintf(rs->logs, "R%d. %lf, %lf \n", i, pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-            
+#endif     
             rs_ipc_put(rs, "C", 1);
 
             goto socketEnd;
