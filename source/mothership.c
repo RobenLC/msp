@@ -163,6 +163,7 @@ static int *totSalloc=0;
 
 #define OUT_BUFF_LEN  (64*1024)
 #define CROP_MAX_NUM_META (18)
+#define CROP_CALCU_DETAIL (0)
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -819,6 +820,8 @@ struct aspCrop36_s{
     int crp36Dn;
     int crp36Rt;
     int crp36Lf;
+    double crp36CsUp[2];
+    double crp36CsDn[2];
 };
 
 struct aspCropExtra_s{
@@ -1738,9 +1741,11 @@ static int getParallelVectorFromV(double *vec, double *p, double *vecIn)
     vec[0] = a;
     vec[1] = b;
     vec[2] = c;
-
-    printf("getParallelVectorFromV() output - a = %f , b = %f, c = %f\n", a, b, c);
     
+#if CROP_CALCU_DETAIL
+    printf("[vectPV] output - a = %f , b = %f, c = %f\n", a, b, c);
+#endif
+
     return 0;
 }
 
@@ -1777,8 +1782,10 @@ static int getRectVectorFromV(double *vec, double *p, double *vecIn)
     vec[1] = b;
     vec[2] = c;
 
-    printf("getRectVectorFromV() output - a = %f, b = %f, c = %f\n", a, b, c);
-    
+#if CROP_CALCU_DETAIL
+    printf("[vectRV] output - a = %f, b = %f, c = %f\n", a, b, c);
+#endif
+
     return 0;
 }
 
@@ -1798,9 +1805,9 @@ static int getVectorFromP(double *vec, double *p1, double *p2)
     y2 = p2[1];
 
     vec[2] = 0;
-
-    printf("getVectorFromP() input - p1 = (%lf, %lf), p2 = (%lf, %lf)\n", x1, y1, x2, y2);
-    
+#if CROP_CALCU_DETAIL
+    printf("[vectP] input - p1 = (%lf, %lf), p2 = (%lf, %lf)\n", x1, y1, x2, y2);
+#endif
     if (x1 == x2) {
     	if (y1 == y2) {
     	    return -4;
@@ -1816,9 +1823,9 @@ static int getVectorFromP(double *vec, double *p1, double *p2)
         a1 = ((x1 * y2) - (x1 * y1)) / ((x1 * x2) - (x1 * x1));
         a2 = ((x2 * y2) - (x2 * y1)) / ((x2 * x2) - (x2 * x1));
     }
-
-    printf("getVectorFromP() output - a = %lf/%lf, b = %lf\n", a1, a2, b);
-
+#if CROP_CALCU_DETAIL
+    printf("[vectP] output - a = %lf/%lf, b = %lf\n", a1, a2, b);
+#endif
     vec[0] = a1;
     vec[1] = b;
 
@@ -1842,9 +1849,9 @@ static int getCross(double *v1, double *v2, double *pt)
     a2 = v2[0];
     b2 = v2[1];
     c2 = v2[2];
-    
-    printf("getCross() input - v1 = (%lf, %lf, %lf) v2 = (%lf, %lf, %lf)\n", a1, b1, c1, a2, b2, c2);
-    
+#if CROP_CALCU_DETAIL
+    printf("[Cross] input - v1 = (%lf, %lf, %lf) v2 = (%lf, %lf, %lf)\n", a1, b1, c1, a2, b2, c2);
+#endif
     if (a1 == a2) return -4;
 
     if ((c1 == 1) && (c2 == 1)) {
@@ -1859,9 +1866,9 @@ static int getCross(double *v1, double *v2, double *pt)
         y = ((a1 * b2) - (a2 * b1)) / (a1 - a2);
         x = (b2 - b1) / (a1 - a2);
     }
-
-    printf("getCross() output - pt = (%lf, %lf)\n", x, y);
-    
+#if CROP_CALCU_DETAIL
+    printf("[Cross] output - pt = (%lf, %lf)\n", x, y);
+#endif
     pt[0] = x;
     pt[1] = y;
     
@@ -1888,9 +1895,9 @@ static double calcuDistance(double *p1, double *p2)
     ds = dx * dx + dy * dy;
     
     dt = sqrt(ds);
-
-    printf("calcuDistance() output - ds = %lf \n", ds);    
-
+#if CROP_CALCU_DETAIL
+    printf("[DISN] output - ds = %lf \n", ds);    
+#endif
     return dt;
 }
 
@@ -1953,9 +1960,9 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen)
     
     head = 0;
     tail = len - 1;
-       
-    printf("calcuGroupLine(), gplen = %d , head = %d, tail = %d\n", len, head, tail);    
-            
+#if CROP_CALCU_DETAIL
+    printf("[Gline] gplen = %d ,head = %d, tail = %d\n", len, head, tail);    
+#endif
     double *avd;
     avd = (double *)aspMalloc(sizeof(double) * (tail - head));
     int *avList;
@@ -2002,10 +2009,14 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen)
                 minIdx = i;
             }
         }
-        printf("group avg= %lf, head = %d, tail = %d", avd[i], avList[i*2+0], avList[i*2+1]);    
+#if CROP_CALCU_DETAIL
+        printf("[Gline] group avg= %lf, head = %d, tail = %d \n", avd[i], avList[i*2+0], avList[i*2+1]);    
+#endif
     }
-    
-    printf("min idx = %d, min avg = %d, head = %d, tail = %d", minIdx, (int)minDist, avList[minIdx*2+0], avList[minIdx*2+1]);    
+
+#if CROP_CALCU_DETAIL
+    printf("[Gline] min idx = %d, min avg = %d, head = %d, tail = %d \n", minIdx, (int)minDist, avList[minIdx*2+0], avList[minIdx*2+1]);    
+#endif
 
     div[0] = minDist;
     
@@ -2027,6 +2038,140 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen)
 
     return 0;
 }
+
+static int calcuCrossUpAph(struct aspCrop36_s *pcp36) 
+{
+#define UP_NUM 3
+#define PT_NUM 40
+    int idxALLLf[] = {6, 7, 9, 11, 13, 15, 17, 2};
+    int idxALLRt[] = {5, 8, 10, 12, 14, 16, 18, 3};
+    
+    int ret=0;
+    int i=0, j=0, Lc=0, Rc=0;
+    double pn[PT_NUM];
+    double plu[UP_NUM*2];
+    double pru[UP_NUM*2];
+
+    if (!pcp36) return -1;
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+    
+    memcpy(pn, pcp36->crp36Pot, sizeof(double)*PT_NUM);
+    
+    for (i = 0, j = 0; i < UP_NUM; i++, j++) {
+        Lc = idxALLLf[i];
+        Rc = idxALLRt[i];
+        plu[j*2+0] = pn[Lc*2+0];
+        plu[j*2+1] = pn[Lc*2+1];
+
+        pru[j*2+0] = pn[Rc*2+0];
+        pru[j*2+1] = pn[Rc*2+1];
+
+        printf( "[csUP] %d. (LU) copy (%d), %lf,  %lf (RU) copy (%d), %lf,  %lf\n", j, Lc, round(plu[j*2+0]), round(plu[j*2+1]), Rc, round(pru[j*2+0]), round(pru[j*2+1]));    
+
+    }
+
+    double vlu[3];
+    double divLU;
+    double vru[3];
+    double divRU;
+
+    ret = calcuGroupLine(plu, vlu, &divLU, UP_NUM);
+    if (ret == 0) {
+        printf("[csUP] succeed to get group line vLU, divLU = %lf \n", divLU);    
+    } else {
+        printf("[csUP] failed to get group line vLU, ret = %d \n", ret);    
+        return -2;
+    }
+
+    ret = calcuGroupLine(pru, vru, &divRU, UP_NUM);
+    if (ret == 0) {
+        printf("[csUP] succeed to get group line vRU, divRU = %lf\n", divRU);
+    } else {
+        printf("[csUP] failed to get group line vRU, ret = %d \n", ret);    
+        return -3;
+    }
+
+    double cosUp[2];
+
+    ret = getCross(vlu, vru, cosUp);
+    if (ret == 0) {
+        printf("[csUP ]succeed to get cross up = (%lf, %lf)\n", cosUp[0], cosUp[1]);
+    } else {
+        printf("[csUP] failed to get cross up, ret = %d\n", ret);
+        return -4;
+    }
+
+    memcpy(pcp36->crp36CsUp, cosUp, sizeof(double)*2);
+
+    return 0;
+}
+
+static int calcuCrossDnAph(struct aspCrop36_s *pcp36) 
+{
+#define DN_NUM 5
+#define PT_NUM 40
+    int idxALLLf[] = {6, 7, 9, 11, 13, 15, 17, 2};
+    int idxALLRt[] = {5, 8, 10, 12, 14, 16, 18, 3};
+
+    int ret=0;
+    int i=0, j=0, Lc=0, Rc=0;
+    double pn[PT_NUM];
+    double pld[DN_NUM*2];
+    double prd[DN_NUM*2];
+
+    if (!pcp36) return -1;
+
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+    
+    memcpy(pn, pcp36->crp36Pot, sizeof(double)*PT_NUM);
+
+    for (i = 3, j = 0; i < (DN_NUM+3); i++, j++) {
+        Lc = idxALLLf[i];
+        Rc = idxALLRt[i];
+        pld[j*2+0] = pn[Lc*2+0];
+        pld[j*2+1] = pn[Lc*2+1];
+
+        prd[j*2+0] = pn[Rc*2+0];
+        prd[j*2+1] = pn[Rc*2+1];
+        
+        printf( "[csDN] %d. (LD) copy (%d), %lf,  %lf (RD) copy (%d), %lf,  %lf \n", j, Lc, round(pld[j*2+0]), round(pld[j*2+1]), Rc, round(prd[j*2+0]), round(prd[j*2+1]));    
+    }
+
+    double vld[3];
+    double divLD;
+    double vrd[3];
+    double divRD;
+
+    ret = calcuGroupLine(pld, vld, &divLD, DN_NUM);
+    if (ret == 0) {
+        printf("[csDN] succeed to get group line vLD, divLD = %lf \n", divLD);    
+    } else {
+        printf("[csDN] failed to get group line vLD, ret = %d \n", ret);    
+        return -2;
+    }
+
+    ret = calcuGroupLine(prd, vrd, &divRD, DN_NUM);
+    if (ret == 0) {
+        printf("[csDN] succeed to get group line vRD, divRD = %lf \n", divRD);    
+    } else {
+        printf("[csDN] failed to get group line vRD, ret = %d \n", ret);    
+        return -3;
+    }
+
+    double csDown[2];
+
+    ret = getCross(vld, vrd, csDown);
+    if (ret == 0) {
+        printf("[csDN] succeed to get cross down = (%lf, %lf)\n", csDown[0], csDown[1]);
+    } else {
+        printf("[csDN] failed to get cross down, ret = %d\n", ret);
+        return -4;
+    }
+
+    memcpy(pcp36->crp36CsDn, csDown, sizeof(double)*2);
+
+    return 0;
+}    
 
 static int doSystemCmd(char *sCommand)
 {
@@ -26458,7 +26603,17 @@ static int p6(struct procRes_s *rs)
 
             /* second stage of cropping algorithm */
 
-            aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
+            ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
+            sprintf(rs->logs, " crop36 get boundry, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
+            ret = calcuCrossUpAph(pcp36);
+            sprintf(rs->logs, " crop36 calcu cross up, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
+            ret = calcuCrossDnAph(pcp36);
+            sprintf(rs->logs, " crop36 calcu cross down, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
             
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
