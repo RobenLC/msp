@@ -164,7 +164,7 @@ static int *totSalloc=0;
 #define OUT_BUFF_LEN  (64*1024)
 #define CROP_MAX_NUM_META (18)
 #define CROP_CALCU_DETAIL (0)
-
+#define PI (double)(3.1415)
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -822,6 +822,20 @@ struct aspCrop36_s{
     int crp36Lf;
     double crp36CsUp[2];
     double crp36CsDn[2];
+    double crp36MsLf[2];
+    double crp36MsRt[2];
+    double crp36AngleUp;
+    double crp36AngleDn;
+    double crp36AngleLf;
+    double crp36AngleRt;
+    double crp36CsLineLU[3];
+    double crp36CsLineRU[3];    
+    double crp36CsLineLD[3];
+    double crp36CsLineRD[3];    
+    double crp36P1[2];
+    double crp36P2[2];
+    double crp36P3[2];
+    double crp36P4[2];
 };
 
 struct aspCropExtra_s{
@@ -1722,6 +1736,42 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt
     return 0;
 }
 
+double getAngle(double *pSrc, double *p1, double *p2)
+{
+    double angle = 0.0f; // ����
+    
+    //Log.e(TAG, "getAngle: P1:("+Math.round(pSrc[0])+", "+Math.round(pSrc[1])+"), P2:("+Math.round(p1[0])+", "+Math.round(p1[1])+"), P3:("+Math.round(p2[0])+", "+Math.round(p2[1])+")");
+    
+    if ((p1[0] == p2[0]) && (p1[1] == p2[1])) return -1;
+    if ((p1[0] == pSrc[0]) && (p1[1] == pSrc[1])) return -1;
+    if ((p2[0] == pSrc[0]) && (p2[1] == pSrc[1])) return -1;
+    
+    double va_x = p1[0] - pSrc[0];
+    double va_y = p1[1] - pSrc[1];
+
+    double vb_x = p2[0] - pSrc[0];
+    double vb_y = p2[1] - pSrc[1];
+
+    double productValue = (va_x * vb_x) + (va_y * vb_y);  
+    double va_val = sqrt(va_x * va_x + va_y * va_y);  
+    double vb_val = sqrt(vb_x * vb_x + vb_y * vb_y);  
+    double cosValue = productValue / (va_val * vb_val);      
+
+    if(cosValue < -1 && cosValue > -2) {
+        cosValue = -1;
+    } else if (cosValue > 1 && cosValue < 2) {
+        cosValue = 1;
+    }
+
+    angle = acos(cosValue) * 180 / M_PI; 
+
+    //Log.e(TAG, "getAngle(): P1:("+Math.round(pSrc[0])+", "+Math.round(pSrc[1])+"), P2:("+Math.round(p1[0])+", "+Math.round(p1[1])+"), P3:("+Math.round(p2[0])+", "+Math.round(p2[1])+") ="+Math.round(angle));
+    
+    return angle;
+}
+
+
+
 static int getParallelVectorFromV(double *vec, double *p, double *vecIn)
 {
     double a=0, b=0, c=0, aIn=0, cIn=0;
@@ -2106,6 +2156,331 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
     return 0;
 }
 
+static int getRectPoint(struct aspCrop36_s *pcp36) 
+{
+    int ret=0, err=0;
+    double ttline[3], bbline[3], llline[3], rrline[3];
+    double pLU[2], pLD[2], pRU[2], pRD[2];
+    
+    if (!pcp36) return -2;
+
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+
+    memcpy(ttline, pcp36->crp36LineTop, sizeof(double)*3);
+    memcpy(bbline, pcp36->crp36LineBotn, sizeof(double)*3);
+    memcpy(llline, pcp36->crp36LineLeft, sizeof(double)*3);
+    memcpy(rrline, pcp36->crp36LineRight, sizeof(double)*3);
+
+    ret = getCross(ttline, llline, pLU);
+    if (ret != 0) {
+        printf("[rect] Error!!! get rect cross LU failed!!!!");
+        err++;
+    }
+
+    ret = getCross(ttline, rrline, pRU);
+    if (ret != 0) {
+        printf("[rect] Error!!! get rect cross RU failed!!!!");
+        err++;
+    }
+
+    ret = getCross(bbline, llline, pLD);
+    if (ret != 0) {
+        printf("[rect] Error!!! get rect cross LD failed!!!!");
+        err++;
+    }
+
+    ret = getCross(bbline, rrline, pRD);
+    if (ret != 0) {
+        printf("[rect] Error!!! get rect cross RD failed!!!!");
+        err++;
+    }
+
+    printf("[rect] get rect LU = (%lf, %lf) \n", pLU[0], pLU[1]);
+    printf("[rect] get rect RU = (%lf, %lf) \n", pRU[0], pRU[1]);
+    printf("[rect] get rect RD = (%lf, %lf) \n", pRD[0], pRD[1]);
+    printf("[rect] get rect LD = (%lf, %lf) \n", pLD[0], pLD[1]);
+
+    if (err) {
+        return err;
+    }
+
+    memcpy(pcp36->crp36P1, pLU, sizeof(double)*2);
+    memcpy(pcp36->crp36P2, pRU, sizeof(double)*2);
+    memcpy(pcp36->crp36P3, pRD, sizeof(double)*2);
+    memcpy(pcp36->crp36P4, pLD, sizeof(double)*2);
+
+    return 0;
+}
+
+static int calcuCrossUpLine(struct aspCrop36_s *pcp36) 
+{
+    double angleCsUp;
+    double cslineLU[3];
+    double cslineRU[3];
+    double *csUp;
+    double *pn;
+    int err=0, ret=0;
+
+    if (!pcp36) return -1;
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+
+    csUp = pcp36->crp36CsUp;
+    pn = pcp36->crp36Pot;
+
+    printf( "[csULine] cross Down = (%lf, %lf)\n", round(csUp[0]), round(csUp[1]));
+
+    angleCsUp = getAngle(csUp, &pn[1*2], &pn[4*2]);
+
+    pcp36->crp36AngleDn = angleCsUp;
+    
+    ret = getVectorFromP(cslineLU, &pn[1*2], csUp);
+    if (ret != 0) {
+        printf( "[csULine] get cslineLU vector fauled!!!\n"); 
+        err++;
+    } else {
+        printf( "[csULine] get cslineLU vector succeed!!!\n");
+        memcpy(pcp36->crp36CsLineLU, cslineLU, sizeof(double)*3);
+    }
+    
+    ret = getVectorFromP(cslineRU, &pn[4*2], csUp);
+    if (ret != 0) {
+        printf( "[csULine] get cslineRU vector fauled!!!\n"); 
+        err++;
+    } else {
+        printf( "[csULine] get cslineRU vector succeed!!!\n");
+        memcpy(pcp36->crp36CsLineRU, cslineRU, sizeof(double)*3);
+    }
+            
+    return err;
+}
+static int calcuCrossDnLine(struct aspCrop36_s *pcp36) 
+{
+    double angleCsDn;
+    double cslineLD[3];
+    double cslineRD[3];
+    double *csDn;
+    double *pn;
+    int err=0, ret=0;
+
+    if (!pcp36) return -1;
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+
+    csDn = pcp36->crp36CsDn;
+    pn = pcp36->crp36Pot;
+    
+    printf( "[csDLine] cross Down = (%lf, %lf) \n", round(csDn[0]), round(csDn[1]));
+    
+    angleCsDn = getAngle(csDn, &pn[1*2], &pn[4*2]);
+
+    pcp36->crp36AngleDn = angleCsDn;
+
+    
+    ret = getVectorFromP(cslineLD, &pn[1*2], csDn);
+    if (ret != 0) {
+        printf( "[csDLine] get cslineLD vector fauled!!!\n"); 
+        err++;
+    } else {
+        printf( "[csDLine] get cslineLD vector succeed!!!\n");
+
+        memcpy(pcp36->crp36CsLineLD, cslineLD, sizeof(double)*3);
+    }
+    
+    ret = getVectorFromP(cslineRD, &pn[4*2], csDn);
+    if (ret != 0) {
+        printf( "[csDLine] get cslineRD vector fauled!!!\n"); 
+        err++;
+    } else {
+        printf( "[csDLine] get cslineRD vector succeed!!!\n");
+
+        memcpy(pcp36->crp36CsLineRD, cslineRD, sizeof(double)*3);
+    }
+
+    return err;
+}
+
+static int calcuMostRtLf(struct aspCrop36_s *pcp36)
+{
+    int mrtset=0, mlfset=0, csupset=0, csdnset=0;
+    int ret=0, err=0;
+    double maxD= 30.0;
+    double angleCrosU=0;
+    double angleCrosD=0;
+    double angleMosR=0;
+    double angleMosL=0;
+    double distUp=0;
+    double distDn=0;      
+    double distLf=0;
+    double distRt=0;
+    double offset=0;
+    double vectorHT[3];
+    double vectorHB[3];
+    double vectorC[3];
+    double rtpoint[2];
+    double csUp[2];
+    double csDn[2];
+    double pn[40];
+
+    if (!pcp36) return -1;
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+
+    memcpy(pn, pcp36->crp36Pot, sizeof(double)*40);
+    memcpy(vectorHT, pcp36->crp36LineTop, sizeof(double)*3);
+    memcpy(vectorHB, pcp36->crp36LineBotn, sizeof(double)*3);
+    memcpy(csUp, pcp36->crp36CsUp, sizeof(double)*2);
+    memcpy(csDn, pcp36->crp36CsDn, sizeof(double)*2);
+    
+    ret = getRectVectorFromV(vectorC, csUp, vectorHT);
+    if (ret != 0) {
+        printf("[RTLF] Error!!! get vertical vector to cross failed!!!!\n");
+        err++;
+        return -2;
+    }
+    
+    ret = getCross(vectorHT, vectorC, rtpoint);
+    if (ret != 0) {
+        printf("[RTLF] Error!!! get cross failed!!!!\n");
+        err++;
+        return -3;
+    }
+    
+    distUp = calcuDistance(csUp, rtpoint);    
+    
+    ret = getRectVectorFromV(vectorC, csDn, vectorHB);
+    if (ret != 0) {
+        printf("[RTLF] Error!!! get vertical vector to cross failed!!!!\n");
+        err++;
+        return -4;
+    }
+    
+    ret = getCross(vectorHB, vectorC, rtpoint);
+    if (ret != 0) {
+        printf("[RTLF] Error!!! get cross failed!!!!\n");
+        err++;
+        return -5;
+    }
+    
+    distDn = calcuDistance(csDn, rtpoint);
+       
+    printf("[RTLF] distance Up = %lf, distance Down = %lf, max distance = %lf\n", distUp, distDn, maxD);
+    
+    if ((distUp > maxD) && (distDn > maxD)) {
+        printf("[RTLF] distance Up or Dn out of range !!!!!!\n");
+        err++;
+        return 6;
+        
+        ret = getRectPoint(pcp36);
+        if (ret != 0) {
+            printf("[RTLF] Error!!! get new rect four points failed!!!, ret: %d\n", ret);
+        }    
+    }
+    
+    if (distUp > maxD) {
+        distLf = calcuDistance(&pn[6*2], csDn);
+        distRt = calcuDistance(&pn[5*2], csDn);
+    
+        if (distLf > distRt) {
+            csUp[0] = pn[6*2+0];
+            csUp[1] = pn[6*2+1];
+            csupset = 1;
+    
+            offset = abs(pn[4*2+0] - pn[5*2+0]);
+            if (offset < 100) {
+                memcpy(pcp36->crp36MsRt, &pn[5*2], sizeof(double)*2);
+
+                mrtset = 1;
+            }
+        } else {
+            csUp[0] = pn[5*2+0];
+            csUp[1] = pn[5*2+1];
+            csupset = 1;
+            
+            offset = abs(pn[1*2+0] - pn[6*2+0]);
+            if (offset < 100) {
+                memcpy(pcp36->crp36MsLf, &pn[6*2], sizeof(double)*2);
+                
+                mlfset = 1;
+            }
+        }
+    }
+    
+    if (distDn > maxD) {
+        distLf = calcuDistance(&pn[2*2], csUp);
+        distRt = calcuDistance(&pn[3*2], csUp);
+    
+        if (distLf > distRt) {
+            csDn[0] = pn[2*2+0];
+            csDn[1] = pn[2*2+1];
+            csdnset = 1;
+            
+            offset = abs(pn[4*2+0] - pn[3*2+0]);
+            if (offset < 100) {
+                memcpy(pcp36->crp36MsRt, &pn[3*2], sizeof(double)*2);
+
+                mrtset = 1;
+            }
+        } else {
+            csDn[0] = pn[3*2+0];
+            csDn[1] = pn[3*2+1];
+            csdnset = 1;
+    
+            offset = abs(pn[1*2+0] - pn[2*2+0]);
+            if (offset < 100) {    
+                memcpy(pcp36->crp36MsLf, &pn[2*2], sizeof(double)*2);
+                
+                mlfset = 1;
+            }
+        }
+    }
+        
+    if (!mlfset) {
+        memcpy(pcp36->crp36MsLf, &pn[1*2], sizeof(double)*2);
+    }
+    
+    if (!mrtset) {
+        memcpy(pcp36->crp36MsRt, &pn[4*2], sizeof(double)*2);
+    }
+
+    if (csdnset) {
+        memcpy(pcp36->crp36CsDn, csDn, sizeof(double)*2);
+    }
+
+    if (csupset) {
+        memcpy(pcp36->crp36CsUp, csUp, sizeof(double)*2);
+    }
+
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+    double up[2], dn[2], lf[2], rt[2];
+    double aup, adn, alf, art;
+    memcpy(up, pcp36->crp36CsUp, sizeof(double)*2);
+    memcpy(dn, pcp36->crp36CsDn, sizeof(double)*2);
+    memcpy(lf, pcp36->crp36MsLf, sizeof(double)*2);
+    memcpy(rt, pcp36->crp36MsRt, sizeof(double)*2);
+
+    angleCrosU= getAngle(csUp, lf, rt);
+    angleCrosD= getAngle(csDn, lf, rt);
+    angleMosL = getAngle(lf, csUp, csDn);
+    angleMosR = getAngle(rt, csUp, csDn);
+
+    pcp36->crp36AngleLf = angleMosL;
+    pcp36->crp36AngleRt = angleMosR;
+    pcp36->crp36AngleUp= angleCrosU;
+    pcp36->crp36AngleDn= angleCrosD;
+
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+    
+    aup = pcp36->crp36AngleUp;
+    adn = pcp36->crp36AngleDn;
+    alf = pcp36->crp36AngleLf;
+    art = pcp36->crp36AngleRt;
+    
+    printf("[RTLF] angle Up = %lf, Dn = %lf, Lf = %lf, Rt = %lf \n", round(aup), round(adn), round(alf), round(art));
+    
+    printf("[RTLF] pos up(%d, %d), dn(%d, %d), lf(%d, %d), rt(%d, %d)\n", (int)round(up[0]), (int)round(up[1])
+            , (int)round(dn[0]), (int)round(dn[1]), (int)round(lf[0]), (int)round(lf[1]), (int)round(rt[0]), (int)round(rt[1]));
+    
+    return 0;
+}
+
 static int calcuCrossDnAph(struct aspCrop36_s *pcp36) 
 {
 #define DN_NUM 5
@@ -2120,7 +2495,6 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
     double prd[DN_NUM*2];
 
     if (!pcp36) return -1;
-
     msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
     
     memcpy(pn, pcp36->crp36Pot, sizeof(double)*PT_NUM);
@@ -2172,6 +2546,232 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
     return 0;
 }    
+
+static int getCrop36RotatePoints(struct aspCrop36_s *pcp36) 
+{
+    int ret=0;
+    int solidFlag = 0;
+    int talR = 10;
+    int talH = 8;
+    int rdegL = 90 - talR;
+    int rdegH = 90 + talR;
+    int pdegL = 180 - talH;
+    int pdegH = 180 + talH;
+    
+    int angCsUp= 0;
+    int angCsDn= 0;
+    int angMsLf= 0;
+    int angMsRt= 0;
+    
+    int angUpL= 0;
+    int angDnL= 0;
+    int angUpR= 0;
+    int angDnR= 0;
+
+    if (!pcp36) return -1;
+    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+
+    angCsUp= (int) round(pcp36->crp36AngleUp);
+    angCsDn= (int) round(pcp36->crp36AngleDn);
+    angMsLf= (int) round(pcp36->crp36AngleLf);
+    angMsRt= (int) round(pcp36->crp36AngleRt);
+    
+    
+    if ((angCsUp > rdegL) && (angCsUp < rdegH)) {
+        solidFlag |= 0x1;
+    }
+    if ((angCsDn > rdegL) && (angCsDn < rdegH)) {
+        solidFlag |= 0x2;
+    }
+    if ((angMsLf > rdegL) && (angMsLf < rdegH)) {
+        solidFlag |= 0x4;
+    }
+    if ((angMsRt > rdegL) && (angMsRt < rdegH)) {
+        solidFlag |= 0x8;
+    }
+    
+    //solidFlag = 214;
+    printf("[crp36] solidFlag (0x%x)\n", solidFlag);
+    
+    double csUp1[2];
+    double csDn1[2];
+    double mostLf1[2];
+    double mostRt1[2];
+
+    memcpy(csUp1, pcp36->crp36CsUp, sizeof(double)*2);
+    memcpy(csDn1, pcp36->crp36CsDn, sizeof(double)*2);
+    memcpy(mostLf1, pcp36->crp36MsLf, sizeof(double)*2);
+    memcpy(mostRt1, pcp36->crp36MsRt, sizeof(double)*2);
+
+    memcpy(pcp36->crp36P1, mostLf1, sizeof(double)*2);    
+    memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
+    memcpy(pcp36->crp36P3, mostRt1, sizeof(double)*2);    
+    memcpy(pcp36->crp36P4, csDn1, sizeof(double)*2);        
+    
+    double shif=0;
+    double csLineRU[3];
+    double csLineLU[3];
+    double csLineRD[3];
+    double csLineLD[3];
+        
+    double rtLine[3];
+    double lfLine[3];
+    double newCsLineRU[3];
+    double newCsLineLU[3];
+    double newCsLineRD[3];
+    double newCsLineLD[3];
+    double newCsDn[2];
+    double newMostLf[2];
+    double newMostRt[2];
+
+    memcpy(csLineRU, pcp36->crp36CsLineRU, sizeof(double)*3);
+    memcpy(csLineLU, pcp36->crp36CsLineLU, sizeof(double)*3);
+    memcpy(csLineRD, pcp36->crp36CsLineRD, sizeof(double)*3);
+    memcpy(csLineLD, pcp36->crp36CsLineLD, sizeof(double)*3);
+
+    memcpy(rtLine, pcp36->crp36LineRight, sizeof(double)*3);        
+    memcpy(lfLine, pcp36->crp36LineLeft, sizeof(double)*3);        
+    
+    if (csUp1[1] < 0) {
+        shif = 0 - csUp1[1];
+        csUp1[1] = 0;
+    }
+    
+    getParallelVectorFromV(newCsLineLU, csUp1, csLineLU);
+    getParallelVectorFromV(newCsLineRU, csUp1, csLineRU);
+    
+    int fstLevel = 0;
+    fstLevel = (solidFlag >> 0) & 0xf;        
+    
+    switch(fstLevel) {
+    case (0x1 | 0x2 | 0x4 | 0x8):
+    case (0x1 | 0x4 | 0x8):
+    case (0x1 | 0x8):
+    case (0x1 | 0x4):
+    case (0x1):
+        ret = getCross(csLineLD, newCsLineLU, newMostLf);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+        }            
+    
+        ret = getCross(csLineRD, newCsLineRU, newMostRt);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+        }
+    
+        printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
+        printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
+        printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
+        printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+
+        memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
+        memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
+        memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
+        memcpy(pcp36->crp36P4, csDn1, sizeof(double)*2);        
+        break;
+    case(0x2):
+        ret = getCross(csLineRD, newCsLineRU, newMostRt);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+        }
+
+        ret = getCross(csLineLD, newCsLineLU, newMostLf);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+        }            
+
+
+        printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
+        printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
+        printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
+        printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+
+        memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
+        memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
+        memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
+        memcpy(pcp36->crp36P4, csDn1, sizeof(double)*2);            
+
+        break;
+    case (0x2 | 0x4):
+    case (0x4):
+        ret = getCross(csLineRD, newCsLineRU, newMostRt);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n",ret);
+        }
+
+        ret = getCross(csLineLD, newCsLineLU, newMostLf);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+        }            
+
+        printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
+        printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
+        printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
+        printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+
+        memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
+        memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
+        memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
+        memcpy(pcp36->crp36P4, csDn1, sizeof(double)*2);         
+        break;
+    case (0x2 | 0x8):
+    case (0x8):
+        ret = getCross(csLineLD, newCsLineLU, newMostLf);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+        }            
+
+    
+        ret = getCross(csLineRD, newCsLineRU, newMostRt);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+        }
+
+        printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
+        printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
+        printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
+        printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+
+        memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
+        memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
+        memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
+        memcpy(pcp36->crp36P4, csDn1, sizeof(double)*2);         
+        break;
+    default:
+        if (fstLevel == 0) {
+            ret = getRectPoint(pcp36);
+            if (ret != 0) {
+                printf("[crp36] Error!!! get new rect four points failed!!!, ret: %d \n", ret);
+            }
+        } else {
+            getParallelVectorFromV(newCsLineLU, csUp1, csLineLU);
+            getParallelVectorFromV(newCsLineRU, csUp1, csLineRU);
+    
+            ret = getCross(newCsLineRU, csLineRD, newMostRt);
+            if (ret != 0) {
+                printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n",ret);
+            }
+    
+            ret = getCross(newCsLineLU, csLineLD, newMostLf);
+            if (ret != 0) {
+                printf("[crp36] Error!!! get new most left failed!!!, ret: %d \n",ret);
+            }
+
+            printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
+            printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
+            printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
+            printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+
+            memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
+            memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
+            memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
+            memcpy(pcp36->crp36P4, csDn1, sizeof(double)*2);                     
+        }
+        break;
+    }
+    return 0;
+}
+
 
 static int doSystemCmd(char *sCommand)
 {
@@ -26495,6 +27095,39 @@ static int p6(struct procRes_s *rs)
             pcp36->crp36Pot[cpn*2+1] = 0;
 
             /* first stage of cropping algorithm */
+            ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
+            sprintf(rs->logs, " crop36 get boundry, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ret = 0;
+            ret |= calcuCrossUpAph(pcp36);
+            sprintf(rs->logs, " crop36 calcu cross up, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
+            ret |= calcuCrossDnAph(pcp36);
+            sprintf(rs->logs, " crop36 calcu cross down, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            if (ret) {
+                getRectPoint(pcp36);
+            } else {
+                ret = calcuMostRtLf(pcp36);
+                if (ret == 0) {
+                    ret = calcuCrossUpLine(pcp36);
+                    sprintf(rs->logs, " crop36 calcu cross line up, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    ret = calcuCrossDnLine(pcp36);
+                    sprintf(rs->logs, " crop36 calcu cross line down, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    ret = getCrop36RotatePoints(pcp36);
+                    sprintf(rs->logs, " crop36 get rotate points, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+                } else {
+                    getRectPoint(pcp36);
+                }
+            }
             
 #if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
@@ -26603,18 +27236,7 @@ static int p6(struct procRes_s *rs)
 
             /* second stage of cropping algorithm */
 
-            ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
-            sprintf(rs->logs, " crop36 get boundry, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            
-            ret = calcuCrossUpAph(pcp36);
-            sprintf(rs->logs, " crop36 calcu cross up, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            
-            ret = calcuCrossDnAph(pcp36);
-            sprintf(rs->logs, " crop36 calcu cross down, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            
+
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pot[i*2+0], pcp36->crp36Pot[i*2+1]);
