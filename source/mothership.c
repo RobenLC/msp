@@ -810,7 +810,7 @@ struct aspMetaMass_s{
 
 struct aspCrop36_s{
     uint32_t crp36Flag;
-    double crp36Pot[40];
+    double crp36Pots[40];
     double crp36LineUpbnd[3];
     double crp36LineTop[3];
     double crp36LineBotn[3];
@@ -1642,7 +1642,7 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt
 
     if (max > 20) max = 20;
 
-    memcpy(ptn, pcrp36->crp36Pot, sizeof(double) * 40);
+    memcpy(ptn, pcrp36->crp36Pots, sizeof(double) * 40);
 
     for (i=0; i < max; i++) {
         printf("[crp36] %d. %lf, %lf \n", i, ptn[i*2+0], ptn[i*2+1]);
@@ -2105,7 +2105,7 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
     if (!pcp36) return -1;
     msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
     
-    memcpy(pn, pcp36->crp36Pot, sizeof(double)*PT_NUM);
+    memcpy(pn, pcp36->crp36Pots, sizeof(double)*PT_NUM);
     
     for (i = 0, j = 0; i < UP_NUM; i++, j++) {
         Lc = idxALLLf[i];
@@ -2225,7 +2225,7 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
     msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
 
     csUp = pcp36->crp36CsUp;
-    pn = pcp36->crp36Pot;
+    pn = pcp36->crp36Pots;
 
     printf( "[csULine] cross Down = (%lf, %lf)\n", round(csUp[0]), round(csUp[1]));
 
@@ -2266,7 +2266,7 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
     msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
 
     csDn = pcp36->crp36CsDn;
-    pn = pcp36->crp36Pot;
+    pn = pcp36->crp36Pots;
     
     printf( "[csDLine] cross Down = (%lf, %lf) \n", round(csDn[0]), round(csDn[1]));
     
@@ -2323,7 +2323,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
     if (!pcp36) return -1;
     msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
 
-    memcpy(pn, pcp36->crp36Pot, sizeof(double)*40);
+    memcpy(pn, pcp36->crp36Pots, sizeof(double)*40);
     memcpy(vectorHT, pcp36->crp36LineTop, sizeof(double)*3);
     memcpy(vectorHB, pcp36->crp36LineBotn, sizeof(double)*3);
     memcpy(csUp, pcp36->crp36CsUp, sizeof(double)*2);
@@ -2497,7 +2497,7 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
     if (!pcp36) return -1;
     msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
     
-    memcpy(pn, pcp36->crp36Pot, sizeof(double)*PT_NUM);
+    memcpy(pn, pcp36->crp36Pots, sizeof(double)*PT_NUM);
 
     for (i = 3, j = 0; i < (DN_NUM+3); i++, j++) {
         Lc = idxALLLf[i];
@@ -26791,7 +26791,7 @@ static int p6(struct procRes_s *rs)
     struct apWifiConfig_s *pwfc=0;
     char ch=0;
 
-    int cpn=0;
+    int cpn=0, cpx=0, cof=0, cls=0;
     struct aspCrop36_s *pcp36;
     struct aspCropExtra_s *pcpex;
     int idxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
@@ -27021,8 +27021,8 @@ static int p6(struct procRes_s *rs)
                             sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
 
-                            pcp36->crp36Pot[cpn*2+0] = pdt->opValue >> 16;
-                            pcp36->crp36Pot[cpn*2+1] = pdt->opValue & 0xffff;
+                            pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -27052,8 +27052,8 @@ static int p6(struct procRes_s *rs)
                             sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
 
-                            pcp36->crp36Pot[cpn*2+0] = pdt->opValue >> 16;
-                            pcp36->crp36Pot[cpn*2+1] = pdt->opValue & 0xffff;
+                            pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -27087,12 +27087,12 @@ static int p6(struct procRes_s *rs)
             }
 
             cpn = 0;
-            pcp36->crp36Pot[cpn*2+0] = 100;
-            pcp36->crp36Pot[cpn*2+1] = 0;
+            pcp36->crp36Pots[cpn*2+0] = 100;
+            pcp36->crp36Pots[cpn*2+1] = 0;
 
             cpn = CROP_MAX_NUM_META+1;
-            pcp36->crp36Pot[cpn*2+0] = 1100;
-            pcp36->crp36Pot[cpn*2+1] = 0;
+            pcp36->crp36Pots[cpn*2+0] = 1100;
+            pcp36->crp36Pots[cpn*2+1] = 0;
 
             /* first stage of cropping algorithm */
             ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
@@ -27128,10 +27128,65 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36);
                 }
             }
+
+            for (i = 0; i < 4; i++) { /* send the cropping result */
+                sendbuf[3] = 'F';
+
+                switch (i) {
+                    case 0:
+                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P1[0]), (int)round(pcp36->crp36P1[1]));
+                        break;
+                    case 1:
+                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P2[0]), (int)round(pcp36->crp36P2[1]));
+                        break;
+                    case 2:
+                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P3[0]), (int)round(pcp36->crp36P3[1]));
+                        break;
+                    case 3:
+                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P4[0]), (int)round(pcp36->crp36P4[1]));
+                        break;
+                    default:
+                        break;
+                }
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = '\0';
+                sendbuf[5+n+1] = 0xfb;
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
             
 #if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
-            
+                cpx = 0;
+                cpn = 6;
+                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                cpn = 5;
+                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                cpx = 1;
+                cpn = 7;
+                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                cpn = 8;
+                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                cpx = 2;
+                cpn = 9;
+                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                cpn = 10;
+                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                cof = cpx + 1;
+
                 ch = 0; ret = 0;
                 
                 while (ch != 'c') {
@@ -27188,7 +27243,7 @@ static int p6(struct procRes_s *rs)
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                 sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
 
-                for (i = 0; i < masRecd; i++){
+                for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
                     ptBuf++;
@@ -27196,10 +27251,11 @@ static int p6(struct procRes_s *rs)
                     ptBuf++;
                     sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
 
-                    pcpex->crpexLfPots[i*2+0] = cxm;
-                    pcpex->crpexLfPots[i*2+1] = cy;
-                    pcpex->crpexRtPots[i*2+0] = cxn;
-                    pcpex->crpexRtPots[i*2+1] = cy;
+                    cpx = i + cof;
+                    pcpex->crpexLfPots[cpx*2+0] = cxm;
+                    pcpex->crpexLfPots[cpx*2+1] = cy;
+                    pcpex->crpexRtPots[cpx*2+0] = cxn;
+                    pcpex->crpexRtPots[cpx*2+1] = cy;
                     
 #if P6_CROP_LOG
                     print_f(rs->plogs, "P6", rs->logs);
@@ -27219,6 +27275,72 @@ static int p6(struct procRes_s *rs)
 
                 pcpex->crpexSize = masRecd;
 
+                cpx = masRecd + cof;
+                cls =  masRecd + cof - 1;
+
+                cpn = 11;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 12;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 13;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 14;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 15;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 16;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 17;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 18;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 2;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 3;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+                
+                msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+
+                #if 0
+                sprintf(rs->logs, "total extra points size: %d \n", cpx);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                for (i = 0; i < cpx; i++) {
+                    sprintf(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
+                              , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
+                
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
 #if 0                    
@@ -27239,7 +27361,7 @@ static int p6(struct procRes_s *rs)
 
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
-                sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pot[i*2+0], pcp36->crp36Pot[i*2+1]);
+                sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pots[i*2+0], pcp36->crp36Pots[i*2+1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
 
