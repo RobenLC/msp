@@ -843,6 +843,12 @@ struct aspCropExtra_s{
     int crpexSize;
     double crpexLfPots[2048];
     double crpexRtPots[2048];
+    int crpexLfAbs[2048];
+    int crpexLfAbsUsed;
+    int crpexLfAbsMax;
+    int crpexRtAbs[2048];
+    int crpexRtAbsUsed;
+    int crpexRtAbsMax;
     double *crpexPotLU;
     double *crpexPotLD;
     double *crpexPotRU;
@@ -2772,6 +2778,242 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
     return 0;
 }
 
+static int cpyPGrp(int start, int len, double *grp, double **cpgp, int max) 
+{
+    int size=0, last=0, end=0;
+    int i=0, idx=0;
+    double *ngrp;
+
+    if (start >= max) {
+        return -1;
+    }
+
+    if (!grp) {
+        return -2;
+    }
+
+    if (!cpgp) {
+        return -3;
+    }
+
+    end = start + len;
+    if (end > max) {
+        end = max;
+    }
+    
+    len = end - start;
+
+    ngrp = &grp[start*2];
+
+    *cpgp = ngrp;
+    
+    return len;
+}
+
+static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
+{
+#define LINE_DIST  (32.0)
+    int i=0, tot=0, ret=0, head=0, glen=0, id=0;
+    int cntLf=0, cntRt=0, contL=0, contR=0;
+    double *p1, *p2;
+    double *ptLf, *ptRt;
+    double vecTr[3];
+    double dist=0;
+    double *cgrp;
+
+    if (!pcp36) return -1;
+    if (!pcpex) return -2;
+    
+    ptLf = pcpex->crpexLfPots;
+    ptRt = pcpex->crpexRtPots;
+
+    printf("[find] findLine left start \n");    
+    
+    tot = pcpex->crpexSize / 2;
+    
+    cntLf = 0;
+    pcpex->crpexLfAbsUsed = 0;
+    
+    head = 0;                        
+    printf("[find] line start  = [%d] , (%lf, %lf) total: %d\n", head, ptLf[head*2+0], ptLf[head*2+1], tot);    
+
+    pcpex->crpexLfAbs[cntLf] = 0;
+    cntLf ++;
+
+    for (i=1; i < tot; i++) {
+        p1 = &ptLf[head*2];
+        p2 = &ptLf[i*2];
+        getVectorFromP(vecTr,  p1,  p2);
+
+        ret = cpyPGrp(head, i-head, ptLf, &cgrp, 2048/2);
+        
+        if (ret > 0) {
+            glen = ret;
+        } else {
+            glen = 0;
+        }
+
+        dist = calcuLineGroupDist(cgrp, vecTr, glen);
+        
+        if (dist > LINE_DIST) {
+            printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1], dist);
+            head = i;
+
+            pcpex->crpexLfAbs[cntLf] = i - 1;
+            
+            cntLf ++;
+            
+            pcpex->crpexLfAbs[cntLf] = i;
+            
+            cntLf ++;
+        }
+
+        cgrp = 0;
+    }
+
+    printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf)\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1]);
+    head = i;
+
+    pcpex->crpexLfAbs[cntLf] = i - 1;
+    
+    cntLf ++;
+    pcpex->crpexLfAbsUsed = cntLf;
+    
+    printf("findLine right start \n");    
+
+    head = 0;
+    cntRt = 0;
+    pcpex->crpexRtAbsUsed = 0;
+     
+    printf("line start  = [%d] , (%lf, %lf) \n", head, ptRt[head*2+0], ptRt[head*2+1]);    
+
+    pcpex->crpexRtAbs[cntRt] = 0;
+    cntRt ++;
+
+    for (i=1; i < tot; i++) {
+        p1 = &ptRt[head*2];
+        p2 = &ptRt[i*2];
+        getVectorFromP(vecTr,  p1,  p2);
+
+        ret = cpyPGrp(head, i-head, ptRt, &cgrp, 2048/2);
+
+        if (ret > 0) {
+            glen = ret;
+        } else {
+            glen = 0;
+        }
+
+        dist = calcuLineGroupDist(cgrp, vecTr, glen);
+        
+        if (dist > LINE_DIST) {
+            printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1], dist);    
+            head = i;
+
+            pcpex->crpexRtAbs[cntRt] = i - 1;
+            
+            cntRt++;
+
+            pcpex->crpexRtAbs[cntRt] = i;
+            
+            cntRt++;
+        }
+
+        cgrp = 0;
+    }
+    printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf) \n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1]);    
+    head = i;
+
+    pcpex->crpexRtAbs[cntRt] = i - 1;
+    cntRt++;
+
+    pcpex->crpexRtAbsUsed = cntRt;
+    
+    for (i=0; i < cntLf; i++) {
+        id = pcpex->crpexLfAbs[i];
+        printf("%d. left abs = [%d]  =  (%lf, %lf) \n", i, id, ptLf[id*2+0], ptLf[id*2+1]);    
+    }
+
+    for (i=0; i < cntRt; i++) {
+        id = pcpex->crpexRtAbs[i];
+        printf("%d. right abs = [%d]  =  (%lf, %lf) \n", i, id, ptRt[id*2+0], ptRt[id*2+1]);    
+    }
+
+    double distP2P=0;
+    double distP2Bef=0;
+    double pc0[2];
+    double pc1[2];
+    double pc2[2];
+    int absLsize = cntLf / 2;
+    int absRsize = cntRt / 2;
+    
+    contL = 0;
+    contR = 0;
+
+    pc0[0] = -1;
+    pc0[1] = -1;
+    printf("absLsize : %d, absRsize: %d \n", absLsize, absRsize);
+    for (i=0; i < absLsize; i++) {
+        id = pcpex->crpexLfAbs[i*2+0];
+        pc1[0] = ptLf[id*2+0];
+        pc1[1] = ptLf[id*2+1];
+        
+        id = pcpex->crpexLfAbs[i*2+1];
+        pc2[0] = ptLf[id*2+0];
+        pc2[1] = ptLf[id*2+1];
+
+        distP2P = calcuDistance(pc1, pc2);
+
+        if (pc0[0] > 0) {
+            distP2Bef = calcuDistance(pc1, pc0);
+        } else {
+            distP2Bef = -1;
+        }
+        
+        if ((distP2Bef > 500) || (distP2P > 300.0)) {
+            contL++;
+
+            pc0[0] = pc2[0];
+            pc0[1] = pc2[1];
+        } else {
+            pcpex->crpexLfAbs[i*2+0] = -1;
+            pcpex->crpexLfAbs[i*2+1] = -1;        
+        }
+
+    }
+
+    pc0[0] = -1;
+    pc0[1] = -1;
+    for (i=0; i < absRsize; i++) {
+
+        id = pcpex->crpexRtAbs[i*2+0];
+        pc1[0] = ptRt[id*2+0];
+        pc1[1] = ptRt[id*2+1];
+        
+        id = pcpex->crpexRtAbs[i*2+1];
+        pc2[0] = ptRt[id*2+0];
+        pc2[1] = ptRt[id*2+1];
+
+        distP2P = calcuDistance(pc1, pc2);
+
+        if (pc0[0] > 0) {
+            distP2Bef = calcuDistance(pc1, pc0);
+        } else {
+            distP2Bef = -1;
+        }
+
+        if ((distP2Bef > 500) || (distP2P > 300.0)) {
+            contR++;
+
+            pc0[0] = pc2[0];
+            pc0[1] = pc2[1];
+        } else {
+            pcpex->crpexRtAbs[i*2+0] = -1;
+            pcpex->crpexRtAbs[i*2+1] = -1;        
+        }
+        
+    }
+    
+}
 
 static int doSystemCmd(char *sCommand)
 {
@@ -27129,7 +27371,7 @@ static int p6(struct procRes_s *rs)
                 }
             }
 
-            for (i = 0; i < 4; i++) { /* send the cropping result */
+            for (i = 0; i < 4; i++) { /* send the cropping result to APP */
                 sendbuf[3] = 'F';
 
                 switch (i) {
@@ -27151,8 +27393,8 @@ static int p6(struct procRes_s *rs)
                 n = strlen(rs->logs);
                 memcpy(&sendbuf[5], rs->logs, n);
 
-                sendbuf[5+n] = '\0';
-                sendbuf[5+n+1] = 0xfb;
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                 sprintf(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
@@ -27273,8 +27515,6 @@ static int p6(struct procRes_s *rs)
                     //print_f(rs->plogs, "P6", rs->logs);
                 }
 
-                pcpex->crpexSize = masRecd;
-
                 cpx = masRecd + cof;
                 cls =  masRecd + cof - 1;
 
@@ -27327,6 +27567,9 @@ static int p6(struct procRes_s *rs)
                     pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
                     cpx += 1;
                 }
+
+                
+                pcpex->crpexSize = cpx*2;
                 
                 msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
 
@@ -27357,7 +27600,7 @@ static int p6(struct procRes_s *rs)
 #endif
 
             /* second stage of cropping algorithm */
-
+            findLine(pcp36, pcpex);
 
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
@@ -30493,6 +30736,10 @@ int main(int argc, char *argv[])
     if (!pmrs->cropex) {
         sprintf(pmrs->log, "alloc share memory for crop extra points FAIL!!! size = %d\n", sizeof(struct aspCropExtra_s)); 
         print_f(&pmrs->plog, "CROPEX", pmrs->log);
+
+        pmrs->cropex->crpexMax = 2048;
+        pmrs->cropex->crpexLfAbsMax = 2048;
+        pmrs->cropex->crpexRtAbsMax = 2048;
         goto end;
     } else {
         sprintf(pmrs->log, "alloc share memory for crop extra points DONE [0x%x] size:%d !!!\n", pmrs->cropex, sizeof(struct aspCropExtra_s)); 
