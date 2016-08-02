@@ -855,10 +855,23 @@ struct aspCropExtra_s{
     double crpexCrosDn[2];
     double crpexMostLt[2];
     double crpexMostRt[2];
-    int crpexPLUSize;
-    int crpexPLDSize;
-    int crpexPRUSize;
-    int crpexPRDSize;
+    int crpexPLUStr;
+    int crpexPLDStr;
+    int crpexPRUStr;
+    int crpexPRDStr;
+    int crpexPLULen;
+    int crpexPLDLen;
+    int crpexPRULen;
+    int crpexPRDLen;
+    double crpexLinLU[3];
+    double crpexLinLD[3];
+    double crpexLinRU[3];
+    double crpexLinRD[3];
+    int crpexLinLUDiv;
+    int crpexLinLDDiv;
+    int crpexLinRUDiv;
+    int crpexLinRDDiv;
+
 };
 
 struct mainRes_s{
@@ -1123,6 +1136,7 @@ static int atFindIdx(char *str, char ch);
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
 static int cfgTableSet(struct aspConfig_s *table, int idx, uint32_t val);
 static void* aspMalloc(int mlen);
+static void aspFree(void *p);
 static void* aspSalloc(int slen);
 static int getParallelVectorFromV(double *vec, double *p, double *vecIn);
 static int getRectVectorFromV(double *vec, double *p, double *vecIn);
@@ -2088,7 +2102,9 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen)
     p1 = &pGrp[head*2];
     p2 = &pGrp[tail*2];
 
-
+    aspFree(avd);
+    aspFree(avList);
+    
     ret = getVectorFromP(vecTr,  p1,  p2);
     if (ret < 0) {
         return -4;
@@ -3398,6 +3414,179 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     memcpy(pcpex->crpexMostRt, srt, sizeof(double)*2);    
     memcpy(pcpex->crpexCrosDn, sdn, sizeof(double)*2);        
     
+    return 0;
+}
+
+static int calcuLine(struct aspCropExtra_s *pcpex) 
+{
+#define MIN_LINE  10
+    int i=0, j=0, ret=0;
+    int lfStrUp=-1, lfEndUp=-1, rtStrUp=-1, rtEndUp=-1;
+    int lfStrDn=-1, lfEndDn=-1, rtStrDn=-1, rtEndDn=-1;
+    int luc=0, ldc=0, ruc=0, rdc=0;
+    int szlu=0, szld=0, szru=0, szrd=0;
+    int gpCnt=0, tot=0;
+    double up[2], dn[2], lf[2], rt[2];
+    double *ptLf, *ptRt;
+    double *pGrp;
+    double vecLU[3];
+    double vecLD[3];
+    double vecRU[3];
+    double vecRD[3];
+    double divLU;
+    double divLD;
+    double divRU;
+    double divRD;
+
+    memcpy(up, pcpex->crpexCrosUp, sizeof(double)*2);
+    memcpy(dn, pcpex->crpexCrosDn, sizeof(double)*2);
+    memcpy(lf, pcpex->crpexMostLt, sizeof(double)*2);
+    memcpy(rt, pcpex->crpexMostRt, sizeof(double)*2);
+    
+    ptLf = pcpex->crpexLfPots;
+    ptRt = pcpex->crpexRtPots;
+    
+    tot = pcpex->crpexSize / 2;
+    
+    printf("msLf (%lf, %lf) rt (%lf, %lf) \n", lf[0], lf[1], rt[0], rt[1]);
+    printf("up (%lf, %lf) dn (%lf, %lf) \n", up[0], up[1], dn[0], dn[1]);
+    for (i = 0; i < tot; i++) {
+        printf("%d. Left (%lf, %lf) Right (%lf, %lf)\n", i, ptLf[i*2+0], ptLf[i*2+1], ptRt[i*2+0], ptRt[i*2+1]);
+        if ((ptLf[i*2+0] > (lf[0] - 200.0)) && (ptLf[i*2+0] < (up[0] + 200.0)) && (ptLf[i*2+1] <= lf[1]) && (ptLf[i*2+1] >= up[1])) {
+            if (lfStrUp < 0) {
+                lfStrUp = i;
+            } else {
+                lfEndUp = i;
+            }
+            printf("LU%d\n", luc);
+            luc++;
+        }
+
+        if ((ptLf[i*2+0] > (lf[0] - 200.0)) && (ptLf[i*2+0] < (dn[0] + 200.0)) && (ptLf[i*2+1] >= lf[1]) && (ptLf[i*2+1] <= dn[1])) {
+            if (lfStrDn< 0) {
+                lfStrDn= i;
+            } else {
+                lfEndDn= i;
+            }
+            printf("LD%d\n", ldc);
+            ldc++;
+        }
+
+        if ((ptRt[i*2+0] < (rt[0] + 200.0)) && (ptRt[i*2+0] > (up[0] - 200.0)) && (ptRt[i*2+1] <= rt[1]) && (ptRt[i*2+1] >= up[1])) {
+            if (rtStrUp< 0) {
+                rtStrUp = i;
+            } else {
+                rtEndUp = i;
+            }
+            printf("RU%d\n", ruc);
+            ruc++;
+        }
+
+        if ((ptRt[i*2+0] < (rt[0] + 200.0)) && (ptRt[i*2+0] > (dn[0] - 200.0)) && (ptRt[i*2+1] >= rt[1]) && (ptRt[i*2+1] <= dn[1])) {
+            if (rtStrDn< 0) {
+                rtStrDn= i;
+            } else {
+                rtEndDn= i;
+            }
+            printf("RD%d\n", rdc);
+            rdc++;
+        }
+
+    }
+
+    if ((lfStrUp >= 0) && (lfEndUp >= 0)) {
+        szlu = lfEndUp - lfStrUp + 1;
+    }
+    if ((lfEndDn >= 0) && (lfStrDn >= 0)) {        
+        szld = lfEndDn - lfStrDn + 1;
+    }
+    if ((rtEndUp >= 0) && (rtStrUp >= 0)) {
+        szru = rtEndUp - rtStrUp + 1;
+    }
+    if ((rtEndDn >= 0) && (rtStrDn >= 0)) {
+        szrd = rtEndDn - rtStrDn + 1;
+    }
+
+    printf("(size) szlu = %d, szld = %d, szru = %d, szrd = %d\n", szlu, szld, szru, szrd);    
+
+    memset(pcpex->crpexLinLU, 0, sizeof(double)*3);
+    memset(pcpex->crpexLinLD, 0, sizeof(double)*3);
+    memset(pcpex->crpexLinRU, 0, sizeof(double)*3);
+    memset(pcpex->crpexLinRD, 0, sizeof(double)*3);
+
+    pcpex->crpexLinLUDiv = 9999;
+    pcpex->crpexLinLDDiv = 9999;
+    pcpex->crpexLinRUDiv = 9999;
+    pcpex->crpexLinRDDiv = 9999;
+            
+    if (szlu > MIN_LINE) {
+        printf("(LU) copy , start idx = %d, end idx = %d, size = %d\n", lfStrUp, lfEndUp, szlu);
+
+        pcpex->crpexPLUStr = lfStrUp;
+        pcpex->crpexPLULen = szlu;
+
+        pGrp = &pcpex->crpexLfPots[lfStrUp*2];
+        ret = calcuGroupLine(pGrp, vecLU, &divLU, szlu);
+        if (ret == 0) {
+            memcpy(pcpex->crpexLinLU, vecLU, sizeof(double)*3);
+            pcpex->crpexLinLUDiv = (int) round(divLU);
+        } else {
+            pcpex->crpexLinLUDiv = (int) abs(ret);
+            printf("(LU) ret (%d), divLU (%lf)\n", ret, divLU); 
+        }
+    }
+
+    if (szld > MIN_LINE) {
+        printf("(LD) copy , start idx = %d, end idx = %d, size = %d\n", lfStrDn, lfEndDn, szld);
+
+        pcpex->crpexPLDStr = lfStrDn;
+        pcpex->crpexPLDLen = szld;
+
+        pGrp = &pcpex->crpexLfPots[lfStrDn*2];
+        ret = calcuGroupLine(pGrp, vecLD, &divLD, szld);
+        if (ret == 0) {
+            memcpy(pcpex->crpexLinLD, vecLD, sizeof(double)*3);
+            pcpex->crpexLinLDDiv = (int) round(divLD);
+        } else {
+            pcpex->crpexLinLDDiv = (int) abs(ret);
+            printf("(LD) ret (%d), divLD (%lf)\n", ret, divLD);
+        }
+    }
+
+    if (szru > MIN_LINE) {
+        printf("(RU) copy , start idx = %d, end idx = %d, size = %d\n", rtStrUp, rtEndUp, szru);    
+
+        pcpex->crpexPRUStr = rtStrUp;
+        pcpex->crpexPRULen = szru;
+
+        pGrp = &pcpex->crpexRtPots[rtStrUp*2];
+        ret = calcuGroupLine(pGrp, vecRU, &divRU, szru);
+        if (ret == 0) {
+            memcpy(pcpex->crpexLinRU, vecRU, sizeof(double)*3);
+            pcpex->crpexLinRUDiv = (int) round(divRU);
+        } else {
+            pcpex->crpexLinRUDiv = (int) abs(ret);
+            printf("(RU) ret (%d), divRU (%lf)\n", ret, divRU);
+        }
+    }
+    
+    if (szrd > MIN_LINE) {
+        printf("(RD) copy , start idx = %d, end idx = %d, size = %d\n", rtStrDn, rtEndDn, szrd);    
+        
+        pcpex->crpexPRDStr = rtStrDn;
+        pcpex->crpexPRDLen = szrd;
+
+        pGrp = &pcpex->crpexRtPots[rtStrDn*2];
+        ret = calcuGroupLine(pGrp, vecRD, &divRD, szrd);
+        if (ret == 0) {
+            memcpy(pcpex->crpexLinRD, vecRD, sizeof(double)*3);
+            pcpex->crpexLinRDDiv = (int) round(divRD);
+        } else {
+            pcpex->crpexLinRDDiv = (int) abs(ret);
+            printf("(RD) ret (%d), divRD (%lf)\n",  ret, divRD);
+        }
+    }
+
     return 0;
 }
 
@@ -27990,7 +28179,8 @@ static int p6(struct procRes_s *rs)
             findLine(pcp36, pcpex);
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
             findUniPoints(pcp36, pcpex);
-
+            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+            calcuLine(pcpex);
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pots[i*2+0], pcp36->crp36Pots[i*2+1]);
