@@ -845,14 +845,16 @@ struct aspCropExtra_s{
     double crpexRtPots[2048];
     int crpexLfAbs[2048];
     int crpexLfAbsUsed;
+    int crpexLfAbsCut;
     int crpexLfAbsMax;
     int crpexRtAbs[2048];
     int crpexRtAbsUsed;
+    int crpexRtAbsCut;
     int crpexRtAbsMax;
-    double *crpexPotLU;
-    double *crpexPotLD;
-    double *crpexPotRU;
-    double *crpexPotRD;
+    double crpexCrosUp[2];
+    double crpexCrosDn[2];
+    double crpexMostLt[2];
+    double crpexMostRt[2];
     int crpexPLUSize;
     int crpexPLDSize;
     int crpexPRUSize;
@@ -2981,10 +2983,11 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
     }
 
+    pcpex->crpexLfAbsCut = contL;
+
     pc0[0] = -1;
     pc0[1] = -1;
     for (i=0; i < absRsize; i++) {
-
         id = pcpex->crpexRtAbs[i*2+0];
         pc1[0] = ptRt[id*2+0];
         pc1[1] = ptRt[id*2+1];
@@ -3013,6 +3016,389 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         
     }
     
+    pcpex->crpexRtAbsCut = contR;
+
+    printf("absLf cut : %d, absRt cut: %d \n", contL, contR);
+    
+    return 0;
+}
+
+
+static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
+{
+    int ret=0;
+    double Lfarr[8], Rtarr[8];
+    int rtLinSize=0, lfLinSize=0, lfused=0, rtused=0;
+    double v1[3], v2[3];
+    double p1[2], p2[2], p3[2], p4[2], cs[2];
+    double sup[2];
+    double sdn[2];
+    double slf[2];
+    double srt[2];
+    int id=0, iL=0, iR=0, i=0, isrc=0, idst=0, j=0;
+    double lval=0, rval=0;
+    double upal=0, dnal=0;
+    double csUp[2], msLf[2], msRt[2], csDn[2];
+
+    memcpy(msLf, pcp36->crp36P1, sizeof(double)*2);    
+    memcpy(csUp, pcp36->crp36P2, sizeof(double)*2);    
+    memcpy(msRt, pcp36->crp36P3, sizeof(double)*2);    
+    memcpy(csDn, pcp36->crp36P4, sizeof(double)*2);        
+            
+    lfused = pcpex->crpexLfAbsUsed / 2;
+    rtused = pcpex->crpexRtAbsUsed / 2;
+
+    lfLinSize = pcpex->crpexLfAbsCut;
+    rtLinSize = pcpex->crpexRtAbsCut;
+    
+    printf("LfCut: %d, RtCut: %d, lfused: %d, rtused: %d \n", lfLinSize, rtLinSize, lfused, rtused);
+
+    memset(Lfarr, 0, sizeof(double)*8);
+    memset(Rtarr, 0, sizeof(double)*8);
+
+    for (i=0; i < 2; i++) {
+        for (iL = 0; iL < lfused; iL++) {
+            isrc = pcpex->crpexLfAbs[iL*2+0];
+            idst = pcpex->crpexLfAbs[iL*2+1];
+
+            printf("Lfabs1: %d, Lfabs2: %d \n", isrc, idst);
+            
+            if (isrc < 0) continue;
+            if (idst < 0) continue; 
+
+            Lfarr[i*4+0] = pcpex->crpexLfPots[isrc*2+0];
+            Lfarr[i*4+1] = pcpex->crpexLfPots[isrc*2+1];
+
+            Lfarr[i*4+2] = pcpex->crpexLfPots[idst*2+0];
+            Lfarr[i*4+3] = pcpex->crpexLfPots[idst*2+1];
+
+            pcpex->crpexLfAbs[iL*2+0] = -1;
+            pcpex->crpexLfAbs[iL*2+1] = -1;
+            break;
+        }
+        
+        for (iR = 0; iR < rtused; iR++) {
+            isrc = pcpex->crpexRtAbs[iR*2+0];
+            idst = pcpex->crpexRtAbs[iR*2+1];
+
+            printf("Rtabs1: %d, Rtabs2: %d \n", isrc, idst);
+
+            if (idst < 0) continue;                    
+            if (isrc < 0) continue;
+            
+            Rtarr[i*4+0] = pcpex->crpexRtPots[isrc*2+0];
+            Rtarr[i*4+1] = pcpex->crpexRtPots[isrc*2+1];
+
+            Rtarr[i*4+2] = pcpex->crpexRtPots[idst*2+0];
+            Rtarr[i*4+3] = pcpex->crpexRtPots[idst*2+1];
+
+            pcpex->crpexRtAbs[iR*2+0] = -1;
+            pcpex->crpexRtAbs[iR*2+1] = -1;
+            break;
+        }
+    }
+
+    for (i=0; i < 2; i++) {
+        for (j=0; j < 4; j++) {
+            printf("%d-%d Lfcut: %lf \n", i, j, Lfarr[i*4+j]);
+        }
+    }
+
+    for (i=0; i < 2; i++) {
+        for (j=0; j < 4; j++) {
+            printf("%d-%d Rtcut: %lf \n", i, j, Rtarr[i*4+j]);
+        }
+    }
+    
+    if (lfLinSize == 1) {
+        if (rtLinSize == 1) {
+            id = 0;
+    
+            lval = Lfarr[id*2+1];
+            rval = Rtarr[id*2+1];
+            
+            if (lval > rval) {
+                id = 0;
+                sup[0] = Rtarr[id*2+0];
+                sup[1] = Rtarr[id*2+1];
+    
+                slf[0] = Lfarr[id*2+0];
+                slf[1] = Lfarr[id*2+1];
+    
+                id = 1;
+                srt[0] = Rtarr[id*2+0];
+                srt[1] = Rtarr[id*2+1];
+    
+                sdn[0] = Lfarr[id*2+0];
+                sdn[1] = Lfarr[id*2+1];
+            } else {
+                id = 0;
+                sup[0] = Lfarr[id*2+0];
+                sup[1] = Lfarr[id*2+1];
+    
+                srt[0] = Rtarr[id*2+0];
+                srt[1] = Rtarr[id*2+1];
+    
+                id = 1; 
+                slf[0] = Lfarr[id*2+0];
+                slf[1] = Lfarr[id*2+1];
+    
+                sdn[0] = Rtarr[id*2+0];
+                sdn[1] = Rtarr[id*2+1];
+            }
+        }
+         else if (rtLinSize == 2) {    
+             id = 0;
+             p1[0] = Rtarr[id*2+0];
+             p1[1] = Rtarr[id*2+1];
+    
+             id = 1;
+             p2[0] = Rtarr[id*2+0];
+             p2[1] = Rtarr[id*2+1];
+    
+             id = 2;
+             p3[0] = Rtarr[id*2+0];
+             p3[1] = Rtarr[id*2+1];
+    
+             id = 3;
+             p4[0] = Rtarr[id*2+0];
+             p4[1] = Rtarr[id*2+1];
+    
+             ret = getVectorFromP(v1, p1, p2);
+             ret = getVectorFromP(v2, p3, p4);
+             ret = getCross(v1, v2, cs);
+             
+             id = 0;
+             upal = Rtarr[id*2+0];
+    
+             id = 3;
+             dnal = Rtarr[id*2+0];
+    
+             if (upal > dnal) {
+                 id = 0;
+                 sup[0] = Rtarr[id*2+0];
+                 sup[1] = Rtarr[id*2+1];
+    
+                 slf[0] = Lfarr[id*2+0];
+                 slf[1] = Lfarr[id*2+1];
+    
+                 srt[0] = cs[0];
+                 srt[1] = cs[1];
+    
+                 id = 1;
+                 sdn[0] = Lfarr[id*2+0];
+                 sdn[1] = Lfarr[id*2+1];
+             } else {
+                 id = 0;
+                 sup[0] = Lfarr[id*2+0];
+                 sup[1] = Lfarr[id*2+1];
+    
+                 id = 1;
+                 slf[0] = Lfarr[id*2+0];
+                 slf[1] = Lfarr[id*2+1];
+                  
+                 srt[0] = cs[0];
+                 srt[1] = cs[1];
+                 
+                 id = 3;
+                 sdn[0] = Rtarr[id*2+0];
+                 sdn[1] = Rtarr[id*2+1];
+             }
+    
+        } else {
+            printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
+            if ((csUp) && (msLf) && (msRt) && (csDn)) {
+                sup[0] = csUp[0];
+                sup[1] = csUp[1];
+    
+                slf[0] = msLf[0];
+                slf[1] = msLf[1];
+    
+                srt[0] = msRt[0];
+                srt[1] = msRt[1];
+    
+                sdn[0] = csDn[0];
+                sdn[1] = csDn[1];
+            }
+        }
+    }
+    else if (lfLinSize == 2) {
+        if (rtLinSize == 1) {
+             id = 0;
+             p1[0] = Lfarr[id*2+0];
+             p1[1] = Lfarr[id*2+1];
+    
+             id = 1;
+             p2[0] = Lfarr[id*2+0];
+             p2[1] = Lfarr[id*2+1];
+    
+             id = 2;
+             p3[0] = Lfarr[id*2+0];
+             p3[1] = Lfarr[id*2+1];
+    
+             id = 3;
+             p4[0] = Lfarr[id*2+0];
+             p4[1] = Lfarr[id*2+1];
+    
+             ret = getVectorFromP(v1, p1, p2);
+             ret = getVectorFromP(v2, p3, p4);
+             ret = getCross(v1, v2, cs);
+             
+             id = 0;
+             upal = Lfarr[id*2+0];
+    
+             id = 3;
+             dnal = Lfarr[id*2+0];
+    
+             if (upal > dnal) {
+                 id = 0;
+                 sup[0] = Rtarr[id*2+0];
+                 sup[1] = Rtarr[id*2+1];
+    
+                 id = 1;
+                 srt[0] = Rtarr[id*2+0];
+                 srt[1] = Rtarr[id*2+1];
+    
+                 slf[0] = cs[0];
+                 slf[1] = cs[1];
+                 
+                 id = 3;
+                 sdn[0] = Lfarr[id*2+0];
+                 sdn[1] = Lfarr[id*2+1];
+             } else {
+                 id = 0;
+                 sup[0] = Lfarr[id*2+0];
+                 sup[1] = Lfarr[id*2+1];
+                 
+                 srt[0] = Rtarr[id*2+0];
+                 srt[1] = Rtarr[id*2+1];
+                 
+                 slf[0] = cs[0];
+                 slf[1] = cs[1];
+    
+                 id = 1;
+                 sdn[0] = Rtarr[id*2+0];
+                 sdn[1] = Rtarr[id*2+1];
+             }
+    
+        }
+         else if (rtLinSize == 2) {
+             id = 0;
+             upal = Lfarr[id*2+1];
+             dnal = Rtarr[id*2+1];
+    
+             if (upal > dnal) {
+                 id = 0;
+                 sup[0] = Rtarr[id*2+0];
+                 sup[1] = Rtarr[id*2+1];
+             } else {
+                 id = 0;
+                 sup[0] = Lfarr[id*2+0];
+                 sup[1] = Lfarr[id*2+1];
+             }
+    
+             id = 0;
+             p1[0] = Lfarr[id*2+0];
+             p1[1] = Lfarr[id*2+1];
+    
+             id = 1;
+             p2[0] = Lfarr[id*2+0];
+             p2[1] = Lfarr[id*2+1];
+    
+             id = 2;
+             p3[0] = Lfarr[id*2+0];
+             p3[1] = Lfarr[id*2+1];
+    
+             id = 3;
+             p4[0] = Lfarr[id*2+0];
+             p4[1] = Lfarr[id*2+1];
+    
+             ret = getVectorFromP(v1, p1, p2);
+             ret = getVectorFromP(v2, p3, p4);
+             ret = getCross(v1, v2, cs);
+             
+             slf[0] = cs[0];
+             slf[1] = cs[1];
+             
+             id = 0;
+             p1[0] = Rtarr[id*2+0];
+             p1[1] = Rtarr[id*2+1];
+    
+             id = 1;
+             p2[0] = Rtarr[id*2+0];
+             p2[1] = Rtarr[id*2+1];
+    
+             id = 2;
+             p3[0] = Rtarr[id*2+0];
+             p3[1] = Rtarr[id*2+1];
+    
+             id = 3;
+             p4[0] = Rtarr[id*2+0];
+             p4[1] = Rtarr[id*2+1];
+    
+             ret = getVectorFromP(v1, p1, p2);
+             ret = getVectorFromP(v2, p3, p4);
+             ret = getCross(v1, v2, cs);
+             
+             srt[0] = cs[0];
+             srt[1] = cs[1];
+             
+             if (upal > dnal) {                 
+                 id = 3;
+                 sdn[0] = Lfarr[id*2+0];
+                 sdn[1] = Lfarr[id*2+1];
+             } else {
+                 id = 3;
+                 sdn[0] = Rtarr[id*2+0];
+                 sdn[1] = Rtarr[id*2+1];
+             }
+        } else {
+            printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
+            if ((csUp) && (msLf) && (msRt) && (csDn)){
+                sup[0] = csUp[0];
+                sup[1] = csUp[1];
+    
+                slf[0] = msLf[0];
+                slf[1] = msLf[1];
+    
+                srt[0] = msRt[0];
+                srt[1] = msRt[1];
+    
+                sdn[0] = csDn[0];
+                sdn[1] = csDn[1];
+            }
+        }
+    }
+    else {
+        printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
+        if ((csUp) && (msLf) && (msRt) && (csDn)) {
+            sup[0] = csUp[0];
+            sup[1] = csUp[1];
+    
+            slf[0] = msLf[0];
+            slf[1] = msLf[1];
+    
+            srt[0] = msRt[0];
+            srt[1] = msRt[1];
+    
+            sdn[0] = csDn[0];
+            sdn[1] = csDn[1];
+        }
+    }
+
+    if ((sup) && (sdn) && (slf) && (srt)) {
+        printf("sup = (%lf, %lf), sdn = (%lf, %lf) \n", sup[0], sup[1], sdn[0], sdn[1]);
+        printf("slf = (%lf, %lf), srt = (%lf, %lf) \n", slf[0], slf[1], srt[0], srt[1]);    
+    } else {
+        printf("Warnning!!!  sup || sdn || slf || srt == null!!! \n");
+    }
+
+    memcpy(pcpex->crpexMostLt, slf, sizeof(double)*2);    
+    memcpy(pcpex->crpexCrosUp, sup, sizeof(double)*2);    
+    memcpy(pcpex->crpexMostRt, srt, sizeof(double)*2);    
+    memcpy(pcpex->crpexCrosDn, sdn, sizeof(double)*2);        
+    
+    return 0;
 }
 
 static int doSystemCmd(char *sCommand)
@@ -27600,7 +27986,10 @@ static int p6(struct procRes_s *rs)
 #endif
 
             /* second stage of cropping algorithm */
+            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
             findLine(pcp36, pcpex);
+            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+            findUniPoints(pcp36, pcpex);
 
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
