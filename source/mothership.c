@@ -855,14 +855,18 @@ struct aspCropExtra_s{
     double crpexCrosDn[2];
     double crpexMostLt[2];
     double crpexMostRt[2];
-    int crpexPLUStr;
-    int crpexPLDStr;
-    int crpexPRUStr;
-    int crpexPRDStr;
-    int crpexPLULen;
-    int crpexPLDLen;
-    int crpexPRULen;
-    int crpexPRDLen;
+    double *crpexGrpLUpt;
+    double *crpexGrpLDpt;
+    double *crpexGrpRUpt;
+    double *crpexGrpRDpt;
+    int crpexGrpLUStr;
+    int crpexGrpLDStr;
+    int crpexGrpRUStr;
+    int crpexGrpRDStr;
+    int crpexGrpLULen;
+    int crpexGrpLDLen;
+    int crpexGrpRULen;
+    int crpexGrpRDLen;
     double crpexLinLU[3];
     double crpexLinLD[3];
     double crpexLinRU[3];
@@ -3451,14 +3455,14 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     printf("msLf (%lf, %lf) rt (%lf, %lf) \n", lf[0], lf[1], rt[0], rt[1]);
     printf("up (%lf, %lf) dn (%lf, %lf) \n", up[0], up[1], dn[0], dn[1]);
     for (i = 0; i < tot; i++) {
-        printf("%d. Left (%lf, %lf) Right (%lf, %lf)\n", i, ptLf[i*2+0], ptLf[i*2+1], ptRt[i*2+0], ptRt[i*2+1]);
+        //printf("%d. Left (%lf, %lf) Right (%lf, %lf)\n", i, ptLf[i*2+0], ptLf[i*2+1], ptRt[i*2+0], ptRt[i*2+1]);
         if ((ptLf[i*2+0] > (lf[0] - 200.0)) && (ptLf[i*2+0] < (up[0] + 200.0)) && (ptLf[i*2+1] <= lf[1]) && (ptLf[i*2+1] >= up[1])) {
             if (lfStrUp < 0) {
                 lfStrUp = i;
             } else {
                 lfEndUp = i;
             }
-            printf("LU%d\n", luc);
+            //printf("LU%d\n", luc);
             luc++;
         }
 
@@ -3468,7 +3472,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             } else {
                 lfEndDn= i;
             }
-            printf("LD%d\n", ldc);
+            //printf("LD%d\n", ldc);
             ldc++;
         }
 
@@ -3478,7 +3482,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             } else {
                 rtEndUp = i;
             }
-            printf("RU%d\n", ruc);
+            //printf("RU%d\n", ruc);
             ruc++;
         }
 
@@ -3488,7 +3492,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             } else {
                 rtEndDn= i;
             }
-            printf("RD%d\n", rdc);
+            //printf("RD%d\n", rdc);
             rdc++;
         }
 
@@ -3518,18 +3522,33 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     pcpex->crpexLinLDDiv = 9999;
     pcpex->crpexLinRUDiv = 9999;
     pcpex->crpexLinRDDiv = 9999;
-            
+
+    pcpex->crpexGrpLUpt = 0;
+    pcpex->crpexGrpLDpt = 0;
+    pcpex->crpexGrpRUpt = 0;
+    pcpex->crpexGrpRDpt = 0;
+
+    pcpex->crpexGrpLUStr = -1;
+    pcpex->crpexGrpLDStr = -1;
+    pcpex->crpexGrpRUStr = -1;
+    pcpex->crpexGrpRDStr = -1;
+
+    pcpex->crpexGrpLULen = -1;
+    pcpex->crpexGrpLDLen = -1;
+    pcpex->crpexGrpRULen = -1;
+    pcpex->crpexGrpRDLen = -1;
+    
     if (szlu > MIN_LINE) {
         printf("(LU) copy , start idx = %d, end idx = %d, size = %d\n", lfStrUp, lfEndUp, szlu);
-
-        pcpex->crpexPLUStr = lfStrUp;
-        pcpex->crpexPLULen = szlu;
 
         pGrp = &pcpex->crpexLfPots[lfStrUp*2];
         ret = calcuGroupLine(pGrp, vecLU, &divLU, szlu);
         if (ret == 0) {
             memcpy(pcpex->crpexLinLU, vecLU, sizeof(double)*3);
             pcpex->crpexLinLUDiv = (int) round(divLU);
+            pcpex->crpexGrpLUpt = pGrp;
+            pcpex->crpexGrpLUStr = lfStrUp;
+            pcpex->crpexGrpLULen = szlu;
         } else {
             pcpex->crpexLinLUDiv = (int) abs(ret);
             printf("(LU) ret (%d), divLU (%lf)\n", ret, divLU); 
@@ -3539,14 +3558,14 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     if (szld > MIN_LINE) {
         printf("(LD) copy , start idx = %d, end idx = %d, size = %d\n", lfStrDn, lfEndDn, szld);
 
-        pcpex->crpexPLDStr = lfStrDn;
-        pcpex->crpexPLDLen = szld;
-
         pGrp = &pcpex->crpexLfPots[lfStrDn*2];
         ret = calcuGroupLine(pGrp, vecLD, &divLD, szld);
         if (ret == 0) {
             memcpy(pcpex->crpexLinLD, vecLD, sizeof(double)*3);
             pcpex->crpexLinLDDiv = (int) round(divLD);
+            pcpex->crpexGrpLDpt = pGrp;
+            pcpex->crpexGrpLDStr = lfStrDn;
+            pcpex->crpexGrpLDLen = szld;
         } else {
             pcpex->crpexLinLDDiv = (int) abs(ret);
             printf("(LD) ret (%d), divLD (%lf)\n", ret, divLD);
@@ -3556,14 +3575,14 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     if (szru > MIN_LINE) {
         printf("(RU) copy , start idx = %d, end idx = %d, size = %d\n", rtStrUp, rtEndUp, szru);    
 
-        pcpex->crpexPRUStr = rtStrUp;
-        pcpex->crpexPRULen = szru;
-
         pGrp = &pcpex->crpexRtPots[rtStrUp*2];
         ret = calcuGroupLine(pGrp, vecRU, &divRU, szru);
         if (ret == 0) {
             memcpy(pcpex->crpexLinRU, vecRU, sizeof(double)*3);
             pcpex->crpexLinRUDiv = (int) round(divRU);
+            pcpex->crpexGrpRUpt = pGrp;
+            pcpex->crpexGrpRUStr = rtStrUp;
+            pcpex->crpexGrpRULen = szru;
         } else {
             pcpex->crpexLinRUDiv = (int) abs(ret);
             printf("(RU) ret (%d), divRU (%lf)\n", ret, divRU);
@@ -3573,18 +3592,548 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     if (szrd > MIN_LINE) {
         printf("(RD) copy , start idx = %d, end idx = %d, size = %d\n", rtStrDn, rtEndDn, szrd);    
         
-        pcpex->crpexPRDStr = rtStrDn;
-        pcpex->crpexPRDLen = szrd;
-
         pGrp = &pcpex->crpexRtPots[rtStrDn*2];
         ret = calcuGroupLine(pGrp, vecRD, &divRD, szrd);
         if (ret == 0) {
             memcpy(pcpex->crpexLinRD, vecRD, sizeof(double)*3);
             pcpex->crpexLinRDDiv = (int) round(divRD);
+            pcpex->crpexGrpRDpt = pGrp;
+            pcpex->crpexGrpRDStr = rtStrDn;
+            pcpex->crpexGrpRDLen = szrd;
         } else {
             pcpex->crpexLinRDDiv = (int) abs(ret);
             printf("(RD) ret (%d), divRD (%lf)\n",  ret, divRD);
         }
+    }
+
+    return 0;
+}
+
+static double aspMax(double d1, double d2) 
+{
+    if (d1 > d2) return d1;
+    else return d2;
+}
+
+static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
+{
+#define ACCEPT_OFFSET (2000.0)
+
+    double *vLU=0, *vLD=0, *vRU=0, *vRD=0;
+    double linLU[3], linLD[3], linRU[3], linRD[3];
+    double vLUDiv, vLDDiv, vRUDiv, vRDDiv;
+    double pup[2], pdn[2], plf[2], prt[2];
+    double sup[2], sdn[2], slf[2], srt[2];
+    double ptn[40];
+    double distU2L=-1, distU2R=-1;
+    double distD2L=-1, distD2R=-1;
+    double distR2U=-1, distR2D=-1;
+    double distL2U=-1, distL2D=-1;
+    double distV=-1, distN=-1;
+    int loopcnt=0;
+    double *pGrpLU, *pGrpLD, *pGrpRU, *pGrpRD;
+    int gpLUlen, gpLDlen, gpRUlen, gpRDlen;
+    int gpLUstr, gpLDstr, gpRUstr, gpRDstr;
+    int ret, i=0;
+
+    memcpy(ptn, pcp36->crp36Pots, sizeof(double)*40);
+    memcpy(sup, pcpex->crpexCrosUp, sizeof(double)*2);
+    memcpy(sdn, pcpex->crpexCrosDn, sizeof(double)*2);
+    memcpy(slf, pcpex->crpexMostLt, sizeof(double)*2);
+    memcpy(srt, pcpex->crpexMostRt, sizeof(double)*2);   
+        
+    pGrpLU = pcpex->crpexGrpLUpt;
+    pGrpLD = pcpex->crpexGrpLDpt;
+    pGrpRU = pcpex->crpexGrpRUpt;
+    pGrpRD = pcpex->crpexGrpRDpt;
+
+    gpLUlen = (double) pcpex->crpexGrpLULen;    
+    gpLDlen = (double) pcpex->crpexGrpLDLen;
+    gpRUlen = (double) pcpex->crpexGrpRULen;
+    gpRDlen = (double) pcpex->crpexGrpRDLen;
+
+    gpLUstr = pcpex->crpexGrpLUStr;
+    gpLDstr = pcpex->crpexGrpLDStr;
+    gpRUstr = pcpex->crpexGrpRUStr;
+    gpRDstr = pcpex->crpexGrpRDStr;
+
+    vLUDiv = pcpex->crpexLinLUDiv;
+    vLDDiv = pcpex->crpexLinLDDiv;
+    vRUDiv = pcpex->crpexLinRUDiv;
+    vRDDiv = pcpex->crpexLinRDDiv;
+
+    printf("line LU str:%d len:%d div:%lf \n", gpLUstr, gpLUlen, vLUDiv);
+    printf("line LD str:%d len:%d div:%lf \n", gpLDstr, gpLDlen, vLDDiv);
+    printf("line RU str:%d len:%d div:%lf \n", gpRUstr, gpRUlen, vRUDiv);
+    printf("line RD str:%d len:%d div:%lf \n", gpRDstr, gpRDlen, vRDDiv);
+/*
+    if (gpLUlen > 0)
+    for (i=0; i < gpLUlen; i++){
+        printf("%d.LU %lf, %lf \n", i, pGrpLU[gpLUstr+i*2+0], pGrpLU[gpLUstr+i*2+1]);
+    }
+
+    if (gpLDlen > 0)
+    for (i=0; i < gpLDlen; i++){
+        printf("%d.LD %lf, %lf \n", i, pGrpLD[gpLDstr+i*2+0], pGrpLD[gpLDstr+i*2+1]);
+    }
+
+    if (gpRUlen > 0)
+    for (i=0; i < gpRUlen; i++){
+        printf("%d.RU %lf, %lf \n", i, pGrpRU[gpRUstr+i*2+0], pGrpRU[gpRUstr+i*2+1]);
+    }
+
+    if (gpRDlen > 0)
+    for (i=0; i < gpRDlen; i++){
+        printf("%d.RD %lf, %lf \n", i, pGrpRD[gpRDstr+i*2+0], pGrpRD[gpRDstr+i*2+1]);
+    }
+*/
+    if (gpLUstr >= 0) {
+        memcpy(linLU, pcpex->crpexLinLU, sizeof(double)*3);   
+    } else {
+        memset(linLU, 0, sizeof(double)*3);   
+    }
+
+    if (gpLDstr >= 0) {
+        memcpy(linLD, pcpex->crpexLinLD, sizeof(double)*3);   
+    } else {
+        memset(linLD, 0, sizeof(double)*3);   
+    }
+
+    if (gpRUstr >= 0) {
+        memcpy(linRU, pcpex->crpexLinRU, sizeof(double)*3);   
+    } else {
+        memset(linRU, 0, sizeof(double)*3);   
+    }
+
+    if (gpRDstr >= 0) {
+        memcpy(linRD, pcpex->crpexLinRD, sizeof(double)*3);   
+    } else {
+        memset(linRD, 0, sizeof(double)*3);   
+    }
+
+    if (pGrpLU == 0) {
+        pGrpLU = aspMalloc(sizeof(double)*5*2);
+    
+        pGrpLU[0*2+0] = sup[0];
+        pGrpLU[0*2+1] = sup[1];
+        
+        pGrpLU[1*2+0] = ptn[6*2+0];
+        pGrpLU[1*2+1] = ptn[6*2+1];
+    
+        pGrpLU[2*2+0] = ptn[7*2+0];
+        pGrpLU[2*2+1] = ptn[7*2+1];
+    
+        pGrpLU[3*2+0] = ptn[9*2+0];
+        pGrpLU[3*2+1] = ptn[9*2+1];
+        
+        pGrpLU[4*2+0] = slf[0];
+        pGrpLU[4*2+1] = slf[1];
+
+        gpLUlen = 5;
+    }
+    
+    if (pGrpLD == 0) {
+        pGrpLD = aspMalloc(sizeof(double)*7*2);
+    
+        pGrpLD[0*2+0] = sdn[0];
+        pGrpLD[0*2+1] = sdn[1];
+    
+        pGrpLD[1*2+0] = ptn[2*2+0];
+        pGrpLD[1*2+1] = ptn[2*2+1];
+    
+        pGrpLD[2*2+0] = ptn[17*2+0];
+        pGrpLD[2*2+1] = ptn[17*2+1];
+    
+        pGrpLD[3*2+0] = ptn[15*2+0];
+        pGrpLD[3*2+1] = ptn[15*2+1];
+    
+        pGrpLD[4*2+0] = ptn[13*2+0];
+        pGrpLD[4*2+1] = ptn[13*2+1];
+    
+        pGrpLD[5*2+0] = ptn[11*2+0];
+        pGrpLD[5*2+1] = ptn[11*2+1];
+        
+        pGrpLD[6*2+0] = slf[0];
+        pGrpLD[6*2+1] = slf[1];
+        
+        gpLDlen = 7;
+    }
+    
+    if (pGrpRU == 0) {
+        pGrpRU = aspMalloc(sizeof(double)*5*2);
+        
+        pGrpRU[0*2+0] = sup[0];
+        pGrpRU[0*2+1] = sup[1];
+        
+        pGrpRU[1*2+0] = ptn[5*2+0];
+        pGrpRU[1*2+1] = ptn[5*2+1];
+    
+        pGrpRU[2*2+0] = ptn[8*2+0];
+        pGrpRU[2*2+1] = ptn[8*2+1];
+    
+        pGrpRU[3*2+0] = ptn[10*2+0];
+        pGrpRU[3*2+1] = ptn[10*2+1];
+    
+        pGrpRU[4*2+0] = srt[0];
+        pGrpRU[4*2+1] = srt[1];
+
+        gpRUlen = 5;
+    }
+    
+    if (pGrpRD == 0) {
+        pGrpRD = aspMalloc(sizeof(double)*7*2);
+        
+        pGrpRD[0*2+0] = sdn[0];
+        pGrpRD[0*2+1] = sdn[1];
+    
+        pGrpRD[1*2+0] = ptn[3*2+0];
+        pGrpRD[1*2+1] = ptn[3*2+1];
+    
+        pGrpRD[2*2+0] = ptn[18*2+0];
+        pGrpRD[2*2+1] = ptn[18*2+1];
+    
+        pGrpRD[3*2+0] = ptn[16*2+0];
+        pGrpRD[3*2+1] = ptn[16*2+1];
+    
+        pGrpRD[4*2+0] = ptn[14*2+0];
+        pGrpRD[4*2+1] = ptn[14*2+1];
+    
+        pGrpRD[5*2+0] = ptn[12*2+0];
+        pGrpRD[5*2+1] = ptn[12*2+1];
+        
+        pGrpRD[6*2+0] = srt[0];
+        pGrpRD[6*2+1] = srt[1];
+        
+        gpRDlen = 7;
+    }
+        
+    double maxDiv = 10 / 5.0 ;
+    double divGpLU= gpLUlen / vLUDiv;
+    double divGpLD= gpLDlen / vLDDiv;
+    double divGpRU= gpRUlen / vRUDiv;
+    double divGpRD= gpRDlen / vRDDiv;
+
+    printf("compare div LU:%lf(%d/%lf), LD:%lf(%d/%lf), RU:%lf(%d/%lf), RD:%lf(%d/%lf) \n", 
+            divGpLU, gpLUlen, vLUDiv, 
+            divGpLD, gpLDlen, vLDDiv, 
+            divGpRU, gpRUlen, vRUDiv, 
+            divGpRD, gpRDlen, vRDDiv);
+    
+    maxDiv = aspMax(divGpLU, maxDiv);
+    maxDiv = aspMax(divGpLD, maxDiv);
+    maxDiv = aspMax(divGpRU, maxDiv);
+    maxDiv = aspMax(divGpRD, maxDiv);
+    
+    if (maxDiv == divGpLU) {
+        printf("[LU] compare min div = %lf\n", maxDiv);
+        if (gpLUstr >= 0) {
+            vLU = linLU;
+        }
+    } else if (maxDiv == divGpLD) {
+        printf("[LD] compare min div = %lf\n", maxDiv);
+        if (gpLDstr >= 0) {
+            vLD = linLD;
+        }
+    } else if (maxDiv == divGpRU) {
+        printf("[RU] compare min div = %lf\n", maxDiv);
+        if (gpRUstr >= 0) {
+            vRU = linRU;
+        }
+    } else if (maxDiv == divGpRD) {
+        printf("[RD] compare min div = %lf\n", maxDiv);        
+        if (gpRDstr >= 0) {
+            vRD = linRD;
+        }
+    } else {
+        printf("Error!!! compare min div failed!!!\n");
+
+        if (gpLUstr >= 0) {
+            vLU = linLU;
+        }
+        
+        if (gpLDstr >= 0) {
+            vLD = linLD;
+        }
+        
+        if (gpRUstr >= 0) {
+            vRU = linRU;
+        }
+        
+        if (gpRDstr >= 0) {
+            vRD = linRD;
+        }        
+    }
+    double vLUn[3];
+    double vLUv[3];
+    double *vLUs;
+    double vLDn[3];
+    double vLDv[3];
+    double *vLDs;
+    double vRUn[3];
+    double vRUv[3];
+    double *vRUs;
+    double vRDn[3];
+    double vRDv[3];
+    double *vRDs;
+
+    while ((vLU == 0) || (vLD == 0) || (vRU == 0) || (vRD == 0)) {
+        
+        if (vLU == 0) {
+            printf("vLU == null\n");
+        
+            if ((vLD != 0) && (vRU != 0)) {
+                if (divGpLD > divGpRU) {
+                    ret =getRectVectorFromV(vLUn, sup, vLD);
+                    ret =getRectVectorFromV(vLUv, slf, vLD);
+                } else {
+                    ret =getRectVectorFromV(vLUn, sup, vRU);
+                    ret =getRectVectorFromV(vLUv, slf, vRU);
+                }
+            }
+            else if (vLD != 0) {
+                ret =getRectVectorFromV(vLUn, sup, vLD);
+                ret =getRectVectorFromV(vLUv, slf, vLD);
+            }
+            else if (vRU != 0) {
+                ret =getRectVectorFromV(vLUn, sup, vRU);
+                ret =getRectVectorFromV(vLUv, slf, vRU);
+            }
+        
+            if ((vLD != 0)  || (vRU != 0)) {
+                distN = calcuLineGroupDist(pGrpLU, vLUn, gpLUlen);
+                distV = calcuLineGroupDist(pGrpLU, vLUv, gpLUlen);
+                printf("vLU compare uv distN=%lf, distV=%lf\n", distN, distV);
+                
+                if (distN < distV) {
+                    memcpy(linLU, vLUn, sizeof(double)*3);   
+                } else {
+                    memcpy(linLU, vLUv, sizeof(double)*3);   
+                }
+                vLU = linLU;
+                vLUs = linLU;
+        
+                distU2L = calcuVectorDistancePoint(vLUs, sup);
+                distL2U = calcuVectorDistancePoint(vLUs, slf);
+                printf("vLU distU2L=%lf, distL2U=%lf\n", distU2L, distL2U);        
+                if (distU2L > ACCEPT_OFFSET || distL2U > ACCEPT_OFFSET) {
+                    gpLUstr = -1;
+                    vLU = 0;
+                    printf("vLU set to NULL\n");
+                }
+            }
+        
+        } else {
+            printf("vLU != null\n");
+            distU2L = calcuVectorDistancePoint(vLU, sup);
+            distL2U = calcuVectorDistancePoint(vLU, slf);
+            
+            printf("vLU distU2L=%lf, distL2U=%lf\n", distU2L, distL2U);
+            if (distU2L > ACCEPT_OFFSET || distL2U > ACCEPT_OFFSET) {
+                gpLUstr = -1;
+                vLU = 0;
+                printf("vLU set to NULL\n");
+            }
+        }
+        
+        if (vLD == 0) {
+            printf("vLD == null\n");
+                
+            if ((vLU != 0) && (vRD != 0)) {
+                if (divGpLU > divGpRD) {
+                    ret =getRectVectorFromV(vLDn, sdn, vLU);
+                    ret =getRectVectorFromV(vLDv, slf, vLU);                
+                } else {
+                    ret =getRectVectorFromV(vLDn, sdn, vRD);
+                    ret =getRectVectorFromV(vLDv, slf, vRD);
+                }
+            }
+            else if (vLU != 0) {
+                ret =getRectVectorFromV(vLDn, sdn, vLU);
+                ret =getRectVectorFromV(vLDv, slf, vLU);                
+            }
+            else if (vRD != 0) {
+                ret =getRectVectorFromV(vLDn, sdn, vRD);
+                ret =getRectVectorFromV(vLDv, slf, vRD);
+            }
+            
+            if ((vLU != 0) || (vRD != 0)) {
+                distN = calcuLineGroupDist(pGrpLD, vLDn, gpLDlen);
+                distV = calcuLineGroupDist(pGrpLD, vLDv, gpLDlen);
+                printf("vLD compare uv distN=%lf, distV=%lf\n", distN, distV);
+                
+                if (distN < distV) {
+                    memcpy(linLD, vLDn, sizeof(double)*3);   
+                } else {
+                    memcpy(linLD, vLDv, sizeof(double)*3);   
+                }
+
+                vLD = linLD;
+                vLDs = linLD;
+            
+                distD2L = calcuVectorDistancePoint(vLDs, sdn);
+                distL2D = calcuVectorDistancePoint(vLDs, slf);
+                printf("vLD distD2L=%lf, distL2D=%lf\n", distD2L, distL2D);        
+                if (distD2L > ACCEPT_OFFSET || distL2D > ACCEPT_OFFSET) {
+                    gpLDstr = -1;
+                    vLD = 0;
+                    printf("vLD set to NULL\n");
+                }
+            }
+        } else {
+            printf("vLD != null\n");
+            distD2L = calcuVectorDistancePoint(vLD, sdn);
+            distL2D = calcuVectorDistancePoint(vLD, slf);
+            printf("vLD distD2L=%lf, distL2D=%lf\n", distD2L, distL2D);
+            if (distD2L > ACCEPT_OFFSET || distL2D > ACCEPT_OFFSET) {
+                gpLDstr = -1;
+                vLD = 0;
+                printf("vLD set to NULL\n");
+            }
+        }
+        
+        if (vRU == 0) {
+            printf("vRU == null\n");
+        
+            if ((vRD != 0) && (vLU != 0)) {
+                if (divGpRD > divGpLU) {
+                    ret =getRectVectorFromV(vRUn, sup, vRD);
+                    ret =getRectVectorFromV(vRUv, srt, vRD);                
+                } else {
+                    ret =getRectVectorFromV(vRUn, sup, vLU);
+                    ret =getRectVectorFromV(vRUv, srt, vLU);                
+                }
+            }
+            else if (vRD != 0) {
+                ret =getRectVectorFromV(vRUn, sup, vRD);
+                ret =getRectVectorFromV(vRUv, srt, vRD);                
+            }
+            else if (vLU != 0) {
+                ret =getRectVectorFromV(vRUn, sup, vLU);
+                ret =getRectVectorFromV(vRUv, srt, vLU);                
+            }
+            if ((vRD != 0) || (vLU != 0)) {        
+                distN = calcuLineGroupDist(pGrpRU, vRUn, gpRUlen);
+                distV = calcuLineGroupDist(pGrpRU, vRUv, gpRUlen);
+                printf("vRU compare uv distN=%lf, distV=%lf\n", distN, distV);
+                
+                if (distN < distV) {
+                    memcpy(linRU, vRUn, sizeof(double)*3);   
+                } else {
+                    memcpy(linRU, vRUv, sizeof(double)*3);   
+                }
+        
+                vRU = linRU;
+                vRUs = linRU;
+        
+                distU2R = calcuVectorDistancePoint(vRUs, sup);
+                distR2U = calcuVectorDistancePoint(vRUs, srt);
+                printf("vRU distU2R=%lf, distR2U=%lf\n", distU2R, distR2U);
+                if (distU2R > ACCEPT_OFFSET || distR2U > ACCEPT_OFFSET) {
+                    gpRUstr = -1;
+                    vRU = 0;
+                    printf("vRU set to NULL\n");
+                }
+            }
+        } else {
+            printf("vRU != null\n");
+            distU2R = calcuVectorDistancePoint(vRU, sup);
+            distR2U = calcuVectorDistancePoint(vRU, srt);
+            printf("vRU distU2R=%lf, distR2U=%lf\n", distU2R, distR2U);
+            if (distU2R > ACCEPT_OFFSET || distR2U > ACCEPT_OFFSET) {
+                gpRUstr = -1;
+                vRU = 0;
+                printf("vRU set to NULL\n");
+            }
+        }
+        
+        if (vRD == 0) {
+            printf("vRD == null\n");
+            
+            if ((vRU != 0) && (vLD != 0)) {
+                if (divGpRU > divGpLD) {
+                    ret =getRectVectorFromV(vRDn, sdn, vRU);
+                    ret =getRectVectorFromV(vRDv, srt, vRU);                
+                } else {
+                    ret =getRectVectorFromV(vRDn, sdn, vLD);
+                    ret =getRectVectorFromV(vRDv, srt, vLD);                
+                }
+            }
+            else if (vRU != 0) {
+                ret =getRectVectorFromV(vRDn, sdn, vRU);
+                ret =getRectVectorFromV(vRDv, srt, vRU);                
+            }
+            else if (vLD != 0) {
+                ret =getRectVectorFromV(vRDn, sdn, vLD);
+                ret =getRectVectorFromV(vRDv, srt, vLD);                
+            }
+            if ((vRU != 0) || (vLD != 0)) {
+                distN = calcuLineGroupDist(pGrpRD, vRDn, gpRDlen);
+                distV = calcuLineGroupDist(pGrpRD, vRDv, gpRDlen);
+                printf("vRD compare uv distN=%lf, distV=%lf\n", distN, distV);
+                if (distN < distV) {
+                    memcpy(linRD, vRDn, sizeof(double)*3);   
+                } else {
+                    memcpy(linRD, vRDv, sizeof(double)*3);   
+                }
+
+                vRD = linRD;
+                vRDs = linRD;
+        
+                distD2R = calcuVectorDistancePoint(vRDs, sdn);
+                distR2D = calcuVectorDistancePoint(vRDs, srt);
+                printf("vRD distD2R=%lf, distR2D=%lf\n", distD2R, distR2D);
+                if (distD2R > ACCEPT_OFFSET || distR2D > ACCEPT_OFFSET) {
+                    gpRDstr = -1;
+                    vRD = 0;
+                    printf("vRD set to NULL\n");
+                }
+            }
+        } else {
+            printf("vRD != null\n");
+            distD2R = calcuVectorDistancePoint(vRD, sdn);
+            distR2D = calcuVectorDistancePoint(vRD, srt);
+            printf("vRD distD2R=%lf, distR2D=%lf\n", distD2R, distR2D);
+            if (distD2R > ACCEPT_OFFSET || distR2D > ACCEPT_OFFSET) {
+                gpRDstr = -1;
+                vRD = 0;
+                printf("vRD set to NULL\n");
+            }
+        }
+    
+        loopcnt++;
+        if (loopcnt > 10) break;
+    }
+
+    if (vLU) {
+        printf("vLU = %lf, %lf, %lf \n", vLU[0], vLU[1], vLU[2]);
+        memcpy(pcpex->crpexLinLU, vLU, sizeof(double)*3);   
+        pcpex->crpexGrpLUStr = 1;
+    } else {
+        pcpex->crpexGrpLUStr = -1;
+    }
+
+    if (vLD) {
+        printf("vLD = %lf, %lf, %lf \n", vLD[0], vLD[1], vLD[2]);
+        memcpy(pcpex->crpexLinLD, vLD, sizeof(double)*3);   
+        pcpex->crpexGrpLDStr = 1;
+    } else {
+        pcpex->crpexGrpLDStr = -1;
+    }
+
+    if (vRU) {
+        printf("vRU = %lf, %lf, %lf \n", vRU[0], vRU[1], vRU[2]);
+        memcpy(pcpex->crpexLinRU, vRU, sizeof(double)*3);   
+        pcpex->crpexGrpRUStr = 1;
+    } else {
+        pcpex->crpexGrpRUStr = -1;
+    }
+
+    if (vRD) {
+        printf("vRD = %lf, %lf, %lf \n", vRD[0], vRD[1], vRD[2]);
+        memcpy(pcpex->crpexLinRD, vRD, sizeof(double)*3);   
+        pcpex->crpexGrpRDStr = 1;
+    } else {
+        pcpex->crpexGrpRDStr = -1;
     }
 
     return 0;
@@ -28181,6 +28730,8 @@ static int p6(struct procRes_s *rs)
             findUniPoints(pcp36, pcpex);
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
             calcuLine(pcpex);
+            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+            findBestLine(pcp36, pcpex);
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pots[i*2+0], pcp36->crp36Pots[i*2+1]);
