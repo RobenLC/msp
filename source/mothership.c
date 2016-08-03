@@ -875,7 +875,10 @@ struct aspCropExtra_s{
     int crpexLinLDDiv;
     int crpexLinRUDiv;
     int crpexLinRDDiv;
-
+    double crpCropUp[2];
+    double crpCropDn[2];
+    double crpCropLf[2];
+    double crpCropRt[2];
 };
 
 struct mainRes_s{
@@ -1150,6 +1153,7 @@ static double calcuDistance(double *p1, double *p2);
 static double calcuVectorDistancePoint(double *vec, double *p);
 static double calcuLineGroupDist(double *pGrp, double *vecTr, int gpLen);
 static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen);
+static int topPositive(struct aspCropExtra_s *pcpex);
 
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
 {
@@ -3615,6 +3619,228 @@ static double aspMax(double d1, double d2)
     else return d2;
 }
 
+static int getRotateP1(struct aspCrop36_s *pcp36, double *cp1) 
+{
+    if (!cp1) return -1;
+    if (!pcp36) return -2;
+
+    memcpy(cp1, pcp36->crp36P1, sizeof(double)*2);
+    
+    return 0;
+}
+
+static int setRotateP1(struct aspCrop36_s *pcp36, double *rotateP1) 
+{
+    int ngcnt=0;
+    int getShpRt=0, getShpLf=0, getShpDn=0, getShpUp=0;
+    
+    if (!rotateP1) return -1;
+    if (!pcp36) return -2;
+
+    getShpRt = pcp36->crp36Rt;
+    getShpLf = pcp36->crp36Lf;
+    getShpUp = pcp36->crp36Up;
+    getShpDn = pcp36->crp36Dn;
+
+    if (rotateP1[0] > getShpRt + 200) {
+        rotateP1[0] = getShpRt + 200;
+        ngcnt++;
+    }
+    
+    if (rotateP1[0] < getShpLf - 200) {
+        rotateP1[0] = getShpLf - 200;
+        if (rotateP1[0] < 0) rotateP1[0] = 0;
+        ngcnt++;
+    }
+    if (rotateP1[1] > getShpDn + 200) {
+        rotateP1[1] = getShpDn + 200;
+        ngcnt++;
+    }
+    
+    if (rotateP1[1] < getShpUp - 200) {
+        rotateP1[1] = getShpUp - 200;
+        if (rotateP1[1] < 0) rotateP1[1] = 0;
+        ngcnt++;
+    }
+    
+    if (ngcnt == 0) {
+        memcpy(pcp36->crp36P1, rotateP1, sizeof(double)*2);
+    } else {
+        memcpy(pcp36->crp36P1, rotateP1, sizeof(double)*2);
+        //memset(pcp36->crp36P1, 0, sizeof(double)*2);
+    }
+    
+    return 0;
+}
+
+static int getRotateP2(struct aspCrop36_s *pcp36, double *cp2) 
+{
+    if (!cp2) return -1;
+    if (!pcp36) return -2;
+
+    memcpy(cp2, pcp36->crp36P2, sizeof(double)*2);
+    
+    return 0;
+}
+
+static int setRotateP2(struct aspCrop36_s *pcp36, double *rotateP2) 
+{
+    int ngcnt=0;
+    int getShpRt=0, getShpLf=0, getShpDn=0, getShpUp=0;
+    
+    if (!rotateP2) return -1;
+    if (!pcp36) return -2;
+
+    getShpRt = pcp36->crp36Rt;
+    getShpLf = pcp36->crp36Lf;
+    getShpUp = pcp36->crp36Up;
+    getShpDn = pcp36->crp36Dn;
+
+    if (!rotateP2) return -1;
+    if (!pcp36) return -2;
+
+    if (rotateP2[0] > getShpRt + 200) {
+        rotateP2[0] = getShpRt + 200;
+        ngcnt++;
+    }
+    if (rotateP2[0] < getShpLf - 200) {
+        rotateP2[0] = getShpLf - 200;
+        if (rotateP2[0] < 0) rotateP2[0] = 0;
+        ngcnt++;
+    }
+    if (rotateP2[1] > getShpDn + 200) {
+        rotateP2[1] = getShpDn + 200;
+        ngcnt++;
+    }
+    
+    if (rotateP2[1] < getShpUp - 200) {
+        rotateP2[1] = getShpUp - 200;
+        if (rotateP2[1] < 0) rotateP2[1] = 0;
+        ngcnt++;
+    }
+
+    if (ngcnt == 0) {
+        memcpy(pcp36->crp36P2, rotateP2, sizeof(double)*2);
+    } else {
+        memcpy(pcp36->crp36P2, rotateP2, sizeof(double)*2);
+        //memset(pcp36->crp36P2, 0, sizeof(double)*2);
+    }
+
+    return 0;
+}
+
+static int getRotateP3(struct aspCrop36_s *pcp36, double *cp3) 
+{
+    if (!cp3) return -1;
+    if (!pcp36) return -2;
+
+    memcpy(cp3, pcp36->crp36P3, sizeof(double)*2);
+    
+    return 0;
+}
+
+static int setRotateP3(struct aspCrop36_s *pcp36, double *rotateP3) 
+{
+    int ngcnt=0;
+    int getShpRt=0, getShpLf=0, getShpDn=0, getShpUp=0;
+    
+    if (!rotateP3) return -1;
+    if (!pcp36) return -2;
+
+    getShpRt = pcp36->crp36Rt;
+    getShpLf = pcp36->crp36Lf;
+    getShpUp = pcp36->crp36Up;
+    getShpDn = pcp36->crp36Dn;
+
+    if (!rotateP3) return -1;
+    if (!pcp36) return -2;
+
+    if (rotateP3[0] > getShpRt + 200) {
+        rotateP3[0] = getShpRt + 200;
+        ngcnt++;
+    }
+    if (rotateP3[0] < getShpLf - 200) {
+        rotateP3[0] = getShpLf - 200;
+        if (rotateP3[0] < 0) rotateP3[0] = 0;
+        ngcnt++;
+    }
+    if (rotateP3[1] > getShpDn + 200) {
+        rotateP3[1] = getShpDn + 200;
+        ngcnt++;
+    }
+    
+    if (rotateP3[1] < getShpUp - 200) {
+        rotateP3[1] = getShpUp - 200;
+        if (rotateP3[1] < 0) rotateP3[1] = 0;
+        ngcnt++;
+    }
+
+    if (ngcnt == 0) {
+        memcpy(pcp36->crp36P3, rotateP3, sizeof(double)*2);
+    } else {
+        memcpy(pcp36->crp36P3, rotateP3, sizeof(double)*2);
+        //memset(pcp36->crp36P3, 0, sizeof(double)*2);
+    }
+
+    return 0;
+}
+
+static int getRotateP4(struct aspCrop36_s *pcp36, double *cp4) 
+{
+    if (!cp4) return -1;
+    if (!pcp36) return -2;
+
+    memcpy(cp4, pcp36->crp36P4, sizeof(double)*2);
+    
+    return 0;
+}
+
+static int setRotateP4(struct aspCrop36_s *pcp36, double *rotateP4) 
+{
+    int ngcnt=0;
+    int getShpRt=0, getShpLf=0, getShpDn=0, getShpUp=0;
+    
+    if (!rotateP4) return -1;
+    if (!pcp36) return -2;
+
+    getShpRt = pcp36->crp36Rt;
+    getShpLf = pcp36->crp36Lf;
+    getShpUp = pcp36->crp36Up;
+    getShpDn = pcp36->crp36Dn;
+
+    if (!rotateP4) return -1;
+    if (!pcp36) return -2;
+
+    if (rotateP4[0] > getShpRt + 200) {
+        rotateP4[0] = getShpRt + 200;
+        ngcnt++;
+    }
+    if (rotateP4[0] < getShpLf - 200) {
+        rotateP4[0] = getShpLf - 200;
+        if (rotateP4[0] < 0) rotateP4[0] = 0;
+        ngcnt++;
+    }
+    if (rotateP4[1] > getShpDn + 200) {
+        rotateP4[1] = getShpDn + 200;
+        ngcnt++;
+    }
+    
+    if (rotateP4[1] < getShpUp - 200) {
+        rotateP4[1] = getShpUp - 200;
+        if (rotateP4[1] < 0) rotateP4[1] = 0;
+        ngcnt++;
+    }
+          
+    if (ngcnt == 0) {
+        memcpy(pcp36->crp36P4, rotateP4, sizeof(double)*2);
+    } else {
+        memcpy(pcp36->crp36P4, rotateP4, sizeof(double)*2);
+        //memset(pcp36->crp36P4, 0, sizeof(double)*2);
+    }
+
+    return 0;
+}
+
 static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 {
 #define ACCEPT_OFFSET (2000.0)
@@ -3624,6 +3850,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     double vLUDiv, vLDDiv, vRUDiv, vRDDiv;
     double pup[2], pdn[2], plf[2], prt[2];
     double sup[2], sdn[2], slf[2], srt[2];
+    double rup[2], rdn[2], rlf[2], rrt[2];
     double ptn[40];
     double distU2L=-1, distU2R=-1;
     double distD2L=-1, distD2R=-1;
@@ -4088,7 +4315,8 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
                     printf("vRD set to NULL\n");
                 }
             }
-        } else {
+        }
+        else {
             printf("vRD != null\n");
             distD2R = calcuVectorDistancePoint(vRD, sdn);
             distR2D = calcuVectorDistancePoint(vRD, srt);
@@ -4135,6 +4363,178 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     } else {
         pcpex->crpexGrpRDStr = -1;
     }
+
+    if ((vLU != 0) && (vLD != 0) && (vRU != 0) && (vRD != 0)) {
+        ret = getCross(vLU, vLD, plf);
+        if (ret == 0) {
+            double dist=0;
+            dist = calcuDistance(slf, plf);
+            
+            memcpy(pcpex->crpCropLf, plf, sizeof(double)*2);
+            
+            printf("old msLf = (%lf, %lf), new msLf = (%lf, %lf) \n", round(slf[0]), round(slf[1]), round(plf[0]), round(plf[1]));
+        }
+        
+        ret = getCross(vLU, vRU, pup);
+        if (ret == 0) {
+            double dist=0;
+            dist = calcuDistance(sup, pup);
+            if (dist < ACCEPT_OFFSET) {
+                memcpy(pcpex->crpCropUp, pup, sizeof(double)*2);
+            } else {
+                memcpy(pcpex->crpCropUp, sup, sizeof(double)*2);
+            }
+            
+            printf("old csUp = (%lf, %lf), new csUp = (%lf, %lf), dist=%lf\n", round(sup[0]), round(sup[1]), round(pup[0]), round(pup[1]), dist);
+        }
+        
+        ret = getCross(vRU, vRD, prt);
+        if (ret == 0) {
+            double dist = 0;
+            dist = calcuDistance(srt, prt);
+
+            memcpy(pcpex->crpCropRt, prt, sizeof(double)*2);
+
+            printf("old msRt = (%lf, %lf), new msRt = (%lf, %lf)\n", round(srt[0]), round(srt[1]), round(prt[0]), round(prt[1]));
+        }
+        
+        ret = getCross(vLD, vRD, pdn);
+        if (ret == 0) {
+            double dist = 0;
+            dist = calcuDistance(sdn, pdn);
+            if (dist < ACCEPT_OFFSET) {
+                memcpy(pcpex->crpCropDn, pdn, sizeof(double)*2);
+            } else {
+                memcpy(pcpex->crpCropDn, sdn, sizeof(double)*2);
+            }
+            
+            printf("old csDn = (%lf, %lf), new csDn = (%lf, %lf), dist=%lf\n", round(sdn[0]), round(sdn[1]), round(pdn[0]), round(pdn[1]), dist);
+        }            
+
+        //Log.e(TAG, "group get cross, up= ("+Math.round(pup[0])+", "+Math.round(pup[1])+"), down = ("+Math.round(pdn[0])+", "+Math.round(pdn[1])+"), left = ("+Math.round(plf[0])+", "+Math.round(plf[1])+"), right = "+Math.round(prt[0])+", "+Math.round(prt[1])+")");    
+
+        ret = topPositive(pcpex);
+
+        msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+        
+        setRotateP1(pcp36, pcpex->crpCropLf);
+        setRotateP2(pcp36, pcpex->crpCropUp);
+        setRotateP3(pcp36, pcpex->crpCropRt);
+        setRotateP4(pcp36, pcpex->crpCropDn);
+    
+        ret = getRotateP1(pcp36, rlf);
+        if (!ret) {
+            printf("get rotateP1 (%lf, %lf) \n", rlf[0], rlf[1]);
+        }
+        ret = getRotateP2(pcp36, rup);
+        if (!ret) {
+            printf("get rotateP2 (%lf, %lf) \n", rup[0], rup[1]);
+        }
+        ret = getRotateP3(pcp36, rrt);
+        if (!ret) {
+            printf("get rotateP3 (%lf, %lf) \n", rrt[0], rrt[1]);
+        }
+        ret = getRotateP4(pcp36, rdn);
+        if (!ret) {
+            printf("get rotateP4 (%lf, %lf) \n", rdn[0], rdn[1]);
+        }
+    
+    }
+    return 0;
+}
+
+static int topPositive(struct aspCropExtra_s *pcpex) 
+{
+    double vecRU[3], vecLU[3], vecRD[3], vecLD[3];
+    double vecRUsf[3], vecRDsf[3], vecLUsf[3], vecLDsf[3];
+    double lfsf[2], rtsf[2], topsf[2], dnsf[2];
+    double leftsf[2], rightsf[2];
+    double top[2], left[2], down[2], right[2];
+    int minw, maxw, minh, maxh;
+
+    memcpy(top, pcpex->crpCropUp, sizeof(double)*2);
+    memcpy(left, pcpex->crpCropLf, sizeof(double)*2);
+    memcpy(down, pcpex->crpCropDn, sizeof(double)*2);
+    memcpy(right, pcpex->crpCropRt, sizeof(double)*2);
+
+    memcpy(vecRU, pcpex->crpexLinRU, sizeof(double)*3);
+    memcpy(vecLU, pcpex->crpexLinLU, sizeof(double)*3);
+    memcpy(vecRD, pcpex->crpexLinRD, sizeof(double)*3);
+    memcpy(vecLD, pcpex->crpexLinLD, sizeof(double)*3);
+
+    memset(topsf, 0, sizeof(double)*2);
+    memset(dnsf, 0, sizeof(double)*2);
+    memset(lfsf, 0, sizeof(double)*2);
+    memset(rtsf, 0, sizeof(double)*2);
+
+    topsf[0] = top[0];
+    if (top[1] < 0) {
+        topsf[1] = 0;
+    } else {
+        topsf[1] = top[1];
+    }
+    
+    getParallelVectorFromV(vecRUsf, topsf, vecRU);
+    getParallelVectorFromV(vecLUsf, topsf, vecLU);
+
+    getCross(vecRUsf, vecRD, rtsf);
+    getCross(vecLUsf, vecLD, lfsf);
+
+    while (rtsf[1] < 0.0) {
+        rightsf[0] = rtsf[0];
+        rightsf[1] = 10;
+
+        getParallelVectorFromV(vecRUsf, rightsf, vecRU);
+        getCross(vecRUsf, vecRD, rtsf);            
+
+        printf("right shift from (%lf, %lf) to (%lf, %lf) \n", round(right[0]), round(right[1]), round(rtsf[0]), round(rtsf[1]));
+    }   
+
+    while (rtsf[0] < 0.0) {
+        rightsf[0] = 10;
+        rightsf[1] = rtsf[1];
+
+        getParallelVectorFromV(vecRDsf, rightsf, vecRD);
+        getCross(vecRDsf, vecRUsf, rtsf);            
+
+        printf("right shift again from (%lf, %lf) to (%lf, %lf)\n", round(right[0]), round(right[1]), round(rtsf[0]), round(rtsf[1]));
+    }
+
+    while (lfsf[1] < 0.0) {
+        leftsf[0] = lfsf[0];
+        leftsf[1] = 10;
+
+        getParallelVectorFromV(vecLUsf, leftsf, vecLU);
+        getCross(vecLUsf, vecLD, lfsf);            
+
+        printf("left shift from (%lf, %lf) to (%lf, %lf)\n", round(left[0]), round(left[1]), round(lfsf[0]), round(lfsf[1]));
+    }
+
+    while (lfsf[0] < 0.0) {
+        leftsf[0] = 10;
+        leftsf[1] = lfsf[1];
+        
+        getParallelVectorFromV(vecLDsf, leftsf, vecLD);
+        getCross(vecLUsf, vecLDsf, lfsf);            
+
+        printf("left shift again from (%lf, %lf) to (%lf, %lf)\n", round(left[0]), round(left[1]), round(lfsf[0]), round(lfsf[1]));
+    }
+
+    getParallelVectorFromV(vecLDsf, lfsf, vecLD);
+    getParallelVectorFromV(vecRDsf, rtsf, vecRD);
+        
+    getCross(vecRUsf, vecLUsf, topsf);
+    getCross(vecRDsf, vecLDsf, dnsf);
+
+    printf("END top shift from (%lf, %lf) to (%lf, %lf)\n", round(top[0]), round(top[1]), round(topsf[0]), round(topsf[1]));
+    printf("END left shift from (%lf, %lf) to (%lf, %lf)\n", round(left[0]), round(left[1]), round(lfsf[0]), round(lfsf[1]));
+    printf("END right shift from (%lf, %lf) to (%lf, %lf)\n", round(right[0]), round(right[1]), round(rtsf[0]), round(rtsf[1]));
+    printf("END down shift from (%lf, %lf) to (%lf, %lf)\n", round(down[0]), round(down[1]), round(dnsf[0]), round(dnsf[1]));
+
+    memcpy(pcpex->crpCropUp, topsf, sizeof(double)*2);
+    memcpy(pcpex->crpCropLf, lfsf, sizeof(double)*2);
+    memcpy(pcpex->crpCropDn, dnsf, sizeof(double)*2);
+    memcpy(pcpex->crpCropRt, rtsf, sizeof(double)*2);
 
     return 0;
 }
@@ -28365,6 +28765,11 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
+            /* initial cropping config */
+            memset(pcp36, 0, sizeof(struct aspCrop36_s));
+            memset(pcpex, 0, sizeof(struct aspCropExtra_s));
+
+
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
                 idx = ASPOP_CROP_01 + i;
                 pdt = &pct[idx];
@@ -28460,7 +28865,7 @@ static int p6(struct procRes_s *rs)
             pcp36->crp36Pots[cpn*2+0] = 1100;
             pcp36->crp36Pots[cpn*2+1] = 0;
 
-            /* first stage of cropping algorithm */
+            /* first stage of cropping algorithm */            
             ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
             sprintf(rs->logs, " crop36 get boundry, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
