@@ -1766,11 +1766,9 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt
     return 0;
 }
 
-double getAngle(double *pSrc, double *p1, double *p2)
+static double getAngle(double *pSrc, double *p1, double *p2)
 {
     double angle = 0.0f; // ����
-    
-    //Log.e(TAG, "getAngle: P1:("+Math.round(pSrc[0])+", "+Math.round(pSrc[1])+"), P2:("+Math.round(p1[0])+", "+Math.round(p1[1])+"), P3:("+Math.round(p2[0])+", "+Math.round(p2[1])+")");
     
     if ((p1[0] == p2[0]) && (p1[1] == p2[1])) return -1;
     if ((p1[0] == pSrc[0]) && (p1[1] == pSrc[1])) return -1;
@@ -1794,8 +1792,6 @@ double getAngle(double *pSrc, double *p1, double *p2)
     }
 
     angle = acos(cosValue) * 180 / M_PI; 
-
-    //Log.e(TAG, "getAngle(): P1:("+Math.round(pSrc[0])+", "+Math.round(pSrc[1])+"), P2:("+Math.round(p1[0])+", "+Math.round(p1[1])+"), P3:("+Math.round(p2[0])+", "+Math.round(p2[1])+") ="+Math.round(angle));
     
     return angle;
 }
@@ -4424,19 +4420,19 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     
         ret = getRotateP1(pcp36, rlf);
         if (!ret) {
-            printf("get rotateP1 (%lf, %lf) \n", rlf[0], rlf[1]);
+            printf("rotateP1 = (%lf, %lf) \n", rlf[0], rlf[1]);
         }
         ret = getRotateP2(pcp36, rup);
         if (!ret) {
-            printf("get rotateP2 (%lf, %lf) \n", rup[0], rup[1]);
+            printf("rotateP2 = (%lf, %lf) \n", rup[0], rup[1]);
         }
         ret = getRotateP3(pcp36, rrt);
         if (!ret) {
-            printf("get rotateP3 (%lf, %lf) \n", rrt[0], rrt[1]);
+            printf("rotateP3 = (%lf, %lf) \n", rrt[0], rrt[1]);
         }
         ret = getRotateP4(pcp36, rdn);
         if (!ret) {
-            printf("get rotateP4 (%lf, %lf) \n", rdn[0], rdn[1]);
+            printf("rotateP4 = (%lf, %lf) \n", rdn[0], rdn[1]);
         }
     
     }
@@ -28560,12 +28556,10 @@ static int p6(struct procRes_s *rs)
     int cpn=0, cpx=0, cof=0, cls=0;
     struct aspCrop36_s *pcp36;
     struct aspCropExtra_s *pcpex;
+    double rotlf[2], rotup[2], rotrt[2], rotdn[2];
+
     int idxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
-    int idxR[] = {5, 8, 10, 12, 14, 16, 18, 3};
-    
-    int idxALLLf[] = {6, 7, 9, 11, 13, 15, 17, 2};
-    int idxALLRt[] = {5, 8, 10, 12, 14, 16, 18, 3};
-    
+    int idxR[] = {5, 8, 10, 12, 14, 16, 18, 3};    
 
     pct = rs->pcfgTable;
     pfat = rs->psFat;
@@ -28899,7 +28893,7 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36);
                 }
             }
-
+#if 0 /* move behind the cropping stage 2 complete */
             for (i = 0; i < 4; i++) { /* send the cropping result to APP */
                 sendbuf[3] = 'F';
 
@@ -28929,7 +28923,8 @@ static int p6(struct procRes_s *rs)
                 sprintf(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-            
+#endif
+
 #if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
                 cpx = 0;
@@ -29010,10 +29005,10 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n] = 0xfb;
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
-
+#if 0 /* do NOT send mass pos */
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                 sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-
+#endif
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
@@ -29038,10 +29033,11 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n] = 0xfb;
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
-
+#if 0 /* do NOT send mass pos */
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                     //sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
                     //print_f(rs->plogs, "P6", rs->logs);
+#endif
                 }
 
                 cpx = masRecd + cof;
@@ -29137,6 +29133,32 @@ static int p6(struct procRes_s *rs)
             calcuLine(pcpex);
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
             findBestLine(pcp36, pcpex);
+            
+            msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+            ret = getRotateP1(pcp36, rotlf);
+            if (!ret) {
+                sprintf(rs->logs, "get rotateP1 (%lf, %lf) \n", rotlf[0], rotlf[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP2(pcp36, rotup);
+            if (!ret) {
+                sprintf(rs->logs, "get rotateP2 (%lf, %lf) \n", rotup[0], rotup[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP3(pcp36, rotrt);
+            if (!ret) {
+                sprintf(rs->logs, "get rotateP3 (%lf, %lf) \n", rotrt[0], rotrt[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP4(pcp36, rotdn);
+            if (!ret) {
+                sprintf(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+            
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pots[i*2+0], pcp36->crp36Pots[i*2+1]);
@@ -29154,6 +29176,37 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
             }
 #endif     
+
+            for (i = 0; i < 4; i++) { /* send the cropping result to APP */
+                sendbuf[3] = 'F';
+
+                switch (i) {
+                    case 0:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotlf[0]), (int)round(rotlf[1]));
+                        break;
+                    case 1:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotup[0]), (int)round(rotup[1]));
+                        break;
+                    case 2:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotrt[0]), (int)round(rotrt[1]));
+                        break;
+                    case 3:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotdn[0]), (int)round(rotdn[1]));
+                        break;
+                    default:
+                        break;
+                }
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+            
             rs_ipc_put(rs, "C", 1);
 
             goto socketEnd;
