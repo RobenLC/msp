@@ -837,12 +837,18 @@ static int aspMetaMassSample(struct aspMetaMass *mass)
     char spox[] = "/mnt/mmc2/crop13/xpos_%.2d.bin";
 #elif (CROP_SAMPLE_SIZE == 4)
     char spox[] = "/mnt/mmc2/crop4/xpos_%.2d.bin";
+#else
+    char spox[] = "/mnt/mmc2/crop4/xpos_%.2d.bin";
 #endif
     int idx=0, ret=0, fileLen=0, maxSize=0;
     int readLen=0;
     FILE *fp;
-
+#if CROP_SAMPLE_SIZE
     idx = mass->massIdx % CROP_SAMPLE_SIZE;
+#else
+    idx = 0;
+#endif
+
     pbuf = mass->masspt;
     maxSize = mass->massMax;
 
@@ -1080,6 +1086,8 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
                                             0x10070048, 0x10070035, 0x10070043, 0x10070044, 0x100f0043};
 #elif (CROP_SAMPLE_SIZE == 4)
     uint32_t xposParm[4] = {0x080300ef, 0x080b0098, 0x08070094, 0x080700a0};
+#else 
+    uint32_t xposParm[4] = {0,0,0,0};
 #endif
     uint32_t tbits=0;
     unsigned int *psrc;
@@ -1110,8 +1118,11 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
 
     if (funcbits == ASPMETA_FUNC_NONE) {
         /*append mass points*/
-        //ret = aspMetaMassCons(mass, 0, 0);        
+#if RANDOM_CROP_COORD
+        ret = aspMetaMassCons(mass, 0, 0);        
+#else
         ret = aspMetaMassSample(mass);
+#endif
 
         if (ret > 0) {
             printf("dump meta mass: \n");
@@ -1141,8 +1152,11 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         }
 
         xposIdx = mass->massIdx;
+#if CROP_SAMPLE_SIZE
         xparm = xposParm[xposIdx % CROP_SAMPLE_SIZE];
-        
+#else
+        xparm = xposParm[0];
+#endif
         pmeta->YLine_Gap = (xparm >> 24) & 0xff;
         pmeta->Start_YLine_No = (xparm >> 16) & 0xff;
 
@@ -1155,9 +1169,10 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
         pdst = &(pmeta->SCAN_IMAGE_LEN);
-
+        
+        lsb2Msb(pdst, 0);
         //lsb2Msb(pdst, scan_len);
-        lsb2Msb(pdst, 5400);
+        //lsb2Msb(pdst, 5400);
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {
@@ -5454,9 +5469,9 @@ static int stauto_37(struct psdata_s *data)
 
 static int stauto_38(struct psdata_s *data) 
 {
-    #define TEST_LEN (4)
+    #define TEST_LEN (30)
     //int testSeq[TEST_LEN] = {9, 13, 14, 15, 16};
-    int testSeq[TEST_LEN] = {/*0,1,2,3,4, 5,6,*/7,/*8,9,10,11,12, 13,*/14,/*15, 16, 17, 18, 19,20,21,22, 23,24,25, 26, */27, 28/*, 29*/};
+    int testSeq[TEST_LEN] = {0,1,2,3,4, 5,6,7,8,9,10,11,12, 13,14,15, 16, 17, 18, 19,20,21,22, 23,24,25, 26, 27, 28, 29};
     char str[128], ch = 0;
     uint32_t rlt;
     struct procRes_s *rs;
