@@ -25754,7 +25754,8 @@ static int fs115(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct sdParseBuff_s *pabuf=0;
-    int ret, bitset;
+    char *addr=0, *srcbuf=0;
+    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0;
     char ch;
 
     //sprintf(mrs->log, "%d\n", modersp->v++);
@@ -25762,28 +25763,58 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((ret > 0) && (ch == 'L')){
-        clock_gettime(CLOCK_REALTIME, &mrs->time[1]);
+        
         pabuf = &mrs->aspFat.fatDirPool->parBuf;
-        sprintf(mrs->log, "spi 0 end, buff used: %d\n", pabuf->dirBuffUsed);
+        totsz = pabuf->dirBuffUsed;
+        srcbuf = pabuf->dirParseBuff;
+        
+        sprintf(mrs->log, "spi 0 end, buff used: %d\n", totsz);
         print_f(&mrs->plog, "fs116", mrs->log);
 
         shmem_dump(pabuf->dirParseBuff, 128);
-        
-        modersp->m = modersp->m + 1;
 
-#if SPI_KTHREAD_USE
-         bitset = 0;
-         ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
-         sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
-         print_f(&mrs->plog, "fs116", mrs->log);
-#endif
-#if PULL_LOW_AFTER_DATA
-        bitset = 0;
-        msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
-        sprintf(mrs->log, "set RDY pin %d\n",bitset);
+        ring_buf_init(&mrs->cmdRx);
+
+        lstsz = totsz;
+        while (lstsz > 0) {
+            len = 0;
+            len = ring_buf_get(&mrs->cmdRx, &addr);
+            if (len < 0) {
+                usleep(800000);
+                continue;
+            }
+            
+            if (lstsz > len) {
+                memcpy(addr, srcbuf, len);
+                ring_buf_prod(&mrs->cmdRx);    
+
+                lstsz = lstsz - len;
+                srcbuf = srcbuf + len;
+
+                mrs_ipc_put(mrs, "n", 1, 3);
+            } else {
+                memcpy(addr, srcbuf, lstsz);
+                ring_buf_prod(&mrs->cmdRx);    
+                ring_buf_set_last(&mrs->cmdRx, lstsz);
+                
+                lstsz = 0;
+                mrs_ipc_put(mrs, "n", 1, 3);                
+            }
+
+            msync(addr, len, MS_SYNC);
+
+            cnt++;
+
+            //sprintf(mrs->log, "last size: %d - %d, get len: %d\n", lstsz, cnt, len);
+            //print_f(&mrs->plog, "fs116", mrs->log);
+        }
+
+        mrs_ipc_put(mrs, "N", 1, 3);       
+
+        sprintf(mrs->log, "ring buff count: %d\n", cnt);
         print_f(&mrs->plog, "fs116", mrs->log);
-#endif
-        usleep(210000);
+
+        modersp->m = modersp->m + 1;
 
         return 2;
     }
@@ -25791,63 +25822,52 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-static int fs117(struct mainRes_s *mrs, struct modersp_s *modersp)
-{
+static int fs117(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{ 
+    int len=0, bitset=0, ret=0, count=0;
+    char ch=0;
     struct info16Bit_s *p;
 
-    //sprintf(mrs->log, "get OP_FIH \n");
-    //print_f(&mrs->plog, "fs117", mrs->log);
+    sprintf(mrs->log, "wait spi0 tx end\n");
+    print_f(&mrs->plog, "fs117", mrs->log);
 
-    p = &mrs->mchine.cur;
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    while (len > 0) {
 
-    mrs->mchine.seqcnt += 1;
-    if (mrs->mchine.seqcnt >= 0x8) {
-        mrs->mchine.seqcnt = 0;
+        count++;
+        if (ch == 'N') {
+            sprintf(mrs->log, "ch: %c - end, count: %d\n", ch, count);
+            print_f(&mrs->plog, "fs117", mrs->log);
+
+            ring_buf_init(&mrs->cmdRx);
+
+#if SPI_KTHREAD_USE
+            bitset = 0;
+            ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+            sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+            print_f(&mrs->plog, "fs74", mrs->log);
+#endif
+#if PULL_LOW_AFTER_DATA
+            bitset = 0;
+            msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+            sprintf(mrs->log, "set RDY pin %d\n",bitset);
+            print_f(&mrs->plog, "fs74", mrs->log);
+#endif
+            usleep(210000);
+
+            modersp->m = 48;            
+            return 2;
+        }
+
+        len = mrs_ipc_get(mrs, &ch, 1, 3);
+        
     }
-
-    p->opcode = OP_FIH;
-    p->inout = 0;
-    p->seqnum = mrs->mchine.seqcnt;
-    
-    mrs_ipc_put(mrs, "c", 1, 1);
-    modersp->m = modersp->m + 1;
     return 0; 
 }
 
 static int fs118(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    int len=0;
-    char ch=0;
-    struct info16Bit_s *p;
-    
-    //sprintf(mrs->log, "get OP_FIH \n");
-    //print_f(&mrs->plog, "fs118", mrs->log);
-    
-    len = mrs_ipc_get(mrs, &ch, 1, 1);
-    if ((len > 0) && (ch == 'C')) {
-        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
-
-        p = &mrs->mchine.get;
-        //sprintf(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
-        //print_f(&mrs->plog, "fs118", mrs->log);
-
-        if (p->opcode == OP_FIH) {
-            modersp->m = 6; 
-            return 2;
-        } else {
-            modersp->r = 2;
-            return 1;
-        }
-    }
-    
-    if ((len > 0) && (ch == 'X')) {
-            sprintf(mrs->log, "FAIL!!send command again!\n");
-            print_f(&mrs->plog, "fs118", mrs->log);
-            modersp->m = modersp->m - 1;        
-            return 2;
-    }
-
-    return 0; 
+    return 1; 
 }
 
 static int fs119(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -27922,7 +27942,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define P4_TX_LOG  (0)
+#define P4_TX_LOG  (1)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
