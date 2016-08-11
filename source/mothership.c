@@ -881,6 +881,24 @@ struct aspCropExtra_s{
     double crpCropRt[2];
 };
 
+struct bitmapHeader_s {
+    char aspbmpMagic[4];
+    int    aspbhSize;
+    char aspbhReserve[4];
+    int    aspbhRawoffset;
+    int    aspbiSize;
+    int    aspbiWidth;
+    int    aspbiHeight;
+    int    aspbiCPP;
+    int    aspbiCompMethd;
+    int    aspbiRawSize;
+    int    aspbiResoluH;
+    int    aspbiResoluV;
+    int    aspbiNumCinCP;
+    int    aspbiNumImpColor;
+    char aspbmpPadding[2];
+};
+
 struct mainRes_s{
     int sid[9];
     int sfm[2];
@@ -922,6 +940,8 @@ struct mainRes_s{
     struct aspMetaMass_s metaMass;
     struct aspCrop36_s *crop32;
     struct aspCropExtra_s *cropex;
+    struct bitmapHeader_s bmpheader;
+
     char netIntfs[16];
     char *dbglog;
 };
@@ -979,7 +999,7 @@ struct procRes_s{
     struct aspMetaMass_s *pmetaMass;
     struct aspCrop36_s *pcrop32;
     struct aspCropExtra_s *pcropex;
-
+    struct bitmapHeader_s *pbheader;
     struct logPool_s *plogs;
     char *pnetIntfs;
 };
@@ -1196,6 +1216,65 @@ static uint32_t msb2lsb(struct intMbs_s *msb)
     return lsb;
 }
 
+static dbgBitmapHeader(struct bitmapHeader_s *ph, int len) 
+{
+    char mlog[256];
+
+    msync(ph, sizeof(struct bitmapHeader_s), MS_SYNC);
+
+    sprintf(mlog, "********************************************\n");
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "debug print bitmap header length: %d\n", len);
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "MAGIC NUMBER: [%c] [%c] \n",ph->aspbmpMagic[2], ph->aspbmpMagic[3]);         
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "FILE TOTAL LENGTH: [%d] \n",ph->aspbhSize);                                                 // mod
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "HEADER TOTAL LENGTH: [%d] \n",ph->aspbhRawoffset);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "INFO HEADER LENGTH: [%d] \n",ph->aspbiSize);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "WIDTH: [%d] \n",ph->aspbiWidth);                                                          // mod
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "HEIGHT: [%d] \n",ph->aspbiHeight);                                                        // mod
+    print_f(mlogPool, "BMP", mlog);
+    
+    sprintf(mlog, "NUM OF COLOR PLANES: [%d] \n",ph->aspbiCPP & 0xffff);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "BITS PER PIXEL: [%d] \n",ph->aspbiCPP >> 16);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "COMPRESSION METHOD: [%d] \n",ph->aspbiCompMethd);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "SIZE OF RAW: [%d] \n",ph->aspbiRawSize);                                            // mod
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "HORIZONTAL RESOLUTION: [%d] \n",ph->aspbiResoluH);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "VERTICAL RESOLUTION: [%d] \n",ph->aspbiResoluV);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "NUM OF COLORS IN CP: [%d] \n",ph->aspbiNumCinCP);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "NUM OF IMPORTANT COLORS: [%d] \n",ph->aspbiNumImpColor);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf(mlog, "********************************************\n");
+    print_f(mlogPool, "BMP", mlog);
+
+    return 0;
+}
 
 static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta) 
 {
@@ -25754,10 +25833,13 @@ static int fs115(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct sdParseBuff_s *pabuf=0;
-    char *addr=0, *srcbuf=0;
+    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0;
+    int rawsz=0;
     char ch;
+    struct bitmapHeader_s *bheader;
 
+    
     //sprintf(mrs->log, "%d\n", modersp->v++);
     //print_f(&mrs->plog, "fs116", mrs->log);
 
@@ -25771,8 +25853,31 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "spi 0 end, buff used: %d\n", totsz);
         print_f(&mrs->plog, "fs116", mrs->log);
 
-        shmem_dump(pabuf->dirParseBuff, 128);
+        /* check header */
+        shmem_dump(srcbuf, 128);
 
+        /* rotate */
+        ph = &mrs->bmpheader.aspbmpMagic[2];
+        len = sizeof(struct bitmapHeader_s) - 2;
+        memcpy(ph, srcbuf, len);
+
+        bheader = &mrs->bmpheader;
+
+        dbgBitmapHeader(bheader, len);
+
+        rawsz = bheader->aspbiRawSize;
+        rawSrc = srcbuf + bheader->aspbhRawoffset;
+
+        rawCpy = aspMalloc(rawsz);
+        if (rawCpy) {
+            memcpy(rawCpy, rawSrc, rawsz);
+        }
+
+        shmem_dump(rawCpy, 128);
+        shmem_dump(rawSrc, 128);
+
+        aspFree(rawCpy);
+        /* send BMP back */
         ring_buf_init(&mrs->cmdRx);
 
         lstsz = totsz;
@@ -33208,6 +33313,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 
     rs->pcrop32 = mrs->crop32;
     rs->pcropex = mrs->cropex;
+
+    rs->pbheader = &mrs->bmpheader;
 
     return 0;
 }
