@@ -1742,33 +1742,25 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     return act;
 }
 
-static int tiffClearDot(char *img, int dotx, int doty, int width, int length, int max)
+static int tiffClearDot(char *img, int dotx, int doty, int *scale)
 {
     uint8_t *dst, val=0, org=0;
     uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
     int estMax, estWid=0;
     int offsetX=0, offsetY=0, resX=0;
-    
-    //if (!img) return -1;
-    //if (!width) return -3;
-    //if (!length) return -4;
+    int rowsz, height, max, bpp;
 
-    estMax = (width * length) / 8; 
+    rowsz = scale[0];
+    height = scale[1];
+    max = scale[2];
+    bpp = scale[3];
 
-    //if (estMax > max) return -5;
-
-    if (dotx >= width) {
-        dotx = width -1;
+    if (dotx >= rowsz) {
+        dotx = rowsz -1;
     }
     
-    if (doty >= length) {
-        doty = length -1;
-    }
-
-    if ((width % 8) == 0) {
-        estWid = width / 8;
-    } else {
-        estWid = (width / 8) + 1;
+    if (doty >= height) {
+        doty = height -1;
     }
 
     resX = dotx % 8;
@@ -1776,7 +1768,7 @@ static int tiffClearDot(char *img, int dotx, int doty, int width, int length, in
     offsetY = doty;
     offsetX = dotx / 8;
 
-    dst = img + (offsetX + offsetY*estWid);
+    dst = img + (offsetX + offsetY*rowsz);
 
     org = *dst;
     
@@ -1834,30 +1826,31 @@ static int tiffGetDot(char *img, int dotx, int doty, int width, int length, int 
     return val;
 }
 
-static int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int max)
+static int tiffDrawDot(char *img, int dotx, int doty, int *scale)
 {
     uint8_t *dst, val=0, org=0;
     uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
     int estMax, estWid=0;
     int resX=0;
-    //if (!img) return -1;
-    //if (!width) return -3;
-    //if (!length) return -4;
+    int rowsz, height, max, bpp;
 
-    estMax = width * length; 
+    rowsz = scale[0];
+    height = scale[1];
+    max = scale[2];
+    bpp = scale[3];
 
     if (estMax > max) return -5;
 
-    if (dotx >= width) {
-        dotx = width -1;
+    if (dotx >= rowsz) {
+        dotx = rowsz -1;
     }
     
     if (dotx < 0) {
         dotx = 0;
     }
     
-    if (doty >= length) {
-        doty = length -1;
+    if (doty >= height) {
+        doty = height -1;
     }
 
     if (doty < 0) {
@@ -1866,7 +1859,7 @@ static int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int
 
     resX = dotx % 8;
 
-    dst = img + (dotx + doty*width);
+    dst = img + (dotx + doty*rowsz);
 
     org = *dst;
     
@@ -1880,7 +1873,7 @@ static int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int
     return val;
 }
 
-static int tiffClearLine(char *img, int *cord, int width, int length, int max)
+static int tiffClearLine(char *img, int *cord, int *scale)
 {
     int ret=0, cnt=0;
     int estMax, srcx, srcy, dstx, dsty;
@@ -1888,12 +1881,6 @@ static int tiffClearLine(char *img, int *cord, int width, int length, int max)
     double offx=0, offy=0;
     if (!img) return -1;
     if (!cord) return -2;
-    if (!width) return -3;
-    if (!length) return -4;
-
-    estMax = (width * length) / 8; 
-
-    if (estMax > max) return -5;
 
     srcx = cord[0]; 
     srcy = cord[1]; 
@@ -1930,7 +1917,7 @@ static int tiffClearLine(char *img, int *cord, int width, int length, int max)
     //printf("clear line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
     
     while ((srcx != dstx) || (srcy != dsty)) {
-         ret = tiffClearDot(img, srcx, srcy, width, length, max);
+         ret = tiffClearDot(img, srcx, srcy, scale);
          cnt++;
      
          stx += offx;
@@ -1940,14 +1927,14 @@ static int tiffClearLine(char *img, int *cord, int width, int length, int max)
 
          //printf("clear %d, %d - %d\n", srcx, srcy,cnt);
      }
-     ret = tiffClearDot(img, srcx, srcy, width, length, max);
+     ret = tiffClearDot(img, srcx, srcy, scale);
      cnt++;
      
     return cnt;
 }
 
 
-static int tiffDrawLine(char *img, int *cord, int width, int length, int max)
+static int tiffDrawLine(char *img, int *cord, int *scale)
 {
     int ret=0, cnt=0;
     int estMax, srcx, srcy, dstx, dsty;
@@ -1955,12 +1942,6 @@ static int tiffDrawLine(char *img, int *cord, int width, int length, int max)
     double offx=0, offy=0;
     if (!img) return -1;
     if (!cord) return -2;
-    if (!width) return -3;
-    if (!length) return -4;
-
-    estMax = width * length; 
-
-    if (estMax > max) return -5;
 
     srcx = cord[0]; 
     srcy = cord[1]; 
@@ -1997,7 +1978,7 @@ static int tiffDrawLine(char *img, int *cord, int width, int length, int max)
     printf("draw line  (%d, %d) -> (%d, %d) (%f, %f)\n", srcx, srcy, dstx, dsty, offx, offy);
     
     while ((srcx != dstx) || (srcy != dsty)) {
-         ret = tiffDrawDot(img, srcx, srcy, width, length, max);
+         ret = tiffDrawDot(img, srcx, srcy, scale);
          cnt++;
      
          stx += offx;
@@ -2006,25 +1987,19 @@ static int tiffDrawLine(char *img, int *cord, int width, int length, int max)
          srcy = (int)round(sty);
          //printf("draw %d, %d - %d, %lf, %lf\n", srcx, srcy,cnt, stx, sty);
      }
-     ret = tiffDrawDot(img, srcx, srcy, width, length, max);
+     ret = tiffDrawDot(img, srcx, srcy, scale);
      cnt++;
      
     return cnt;
 }
 
-static int tiffDrawBox(char *img, int *cord, int width, int length, int max)
+static int tiffDrawBox(char *img, int *cord, int *scale)
 {
     int estMax, i;
     int stx=0, sty=0, edx=0, edy=0;
     int rcord[4];
     if (!img) return -1;
     if (!cord) return -2;
-    if (!width) return -3;
-    if (!length) return -4;
-
-    estMax = (width * length) / 8; 
-
-    if (estMax > max) return -5;
 
     stx = cord[0];
     sty = cord[1];
@@ -2039,25 +2014,19 @@ static int tiffDrawBox(char *img, int *cord, int width, int length, int max)
     for (i = stx; i <= edx; i++) {
         rcord[0] = i;
         rcord[2] = i;
-        tiffDrawLine(img, rcord, width, length, max);
+        tiffDrawLine(img, rcord, scale);
     }
 
     return 0;
 }
 
-static int tiffClearBox(char *img, int *cord, int width, int length, int max)
+static int tiffClearBox(char *img, int *cord, int *scale)
 {
     int estMax, i=0;
     int stx=0, sty=0, edx=0, edy=0;
     int rcord[4];
     if (!img) return -1;
     if (!cord) return -2;
-    if (!width) return -3;
-    if (!length) return -4;
-
-    estMax = (width * length) / 8; 
-
-    if (estMax > max) return -5;
 
     stx = cord[0];
     sty = cord[1];
@@ -2072,7 +2041,7 @@ static int tiffClearBox(char *img, int *cord, int width, int length, int max)
     for (i = stx; i <= edx; i++) {
         rcord[0] = i;
         rcord[2] = i;
-        tiffClearLine(img, rcord, width, length, max);
+        tiffClearLine(img, rcord, scale);
     }
 
     return 0;
@@ -26232,12 +26201,11 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct bitmapHeader_s *bheader;
     double LU[2], RU[2], LD[2], RD[2];
     double LUn[2], RUn[2], LDn[2], RDn[2];
-    int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4];
+    int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4], bmpScale[4];;
     double rangle;
     double minH=0, minV=0, offsetH=0, offsetV=0;
     int maxH=0, maxV=0, rowsize=0, rawszNew=0;
-    int bpp=0;
-    
+    int bpp=0;    
     //sprintf(mrs->log, "%d\n", modersp->v++);
     //print_f(&mrs->plog, "fs116", mrs->log);
 
@@ -26286,7 +26254,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         RD[0] = bheader->aspbiWidth;
         RD[1] = 0;
 
-        modersp->v = (modersp->v + 3) % 360;
+        modersp->v = (modersp->v + 1) % 360;
 
         rangle = modersp->v;
         
@@ -26377,30 +26345,34 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         memcpy(srcbuf, ph, 54);
         /* retate raw data */
         //memset(rawSrc, 0xff, rawszNew);
-        
+        bmpScale[0] = rowsize;
+        bmpScale[1] = maxV;        
+        bmpScale[2] = rawszNew;
+        bmpScale[3] = bpp;
+
         drawCord[0] = LUt[0];
         drawCord[1] = LUt[1];
         drawCord[2] = RUt[0];
         drawCord[3] = RUt[1];
-        tiffDrawLine(rawSrc, drawCord, maxH, maxV, rawszNew);
+        tiffDrawLine(rawSrc, drawCord, bmpScale);
 
         drawCord[0] = RUt[0];
         drawCord[1] = RUt[1];
         drawCord[2] = RDt[0];
         drawCord[3] = RDt[1];
-        tiffDrawLine(rawSrc, drawCord, maxH, maxV, rawszNew);
+        tiffDrawLine(rawSrc, drawCord, bmpScale);
 
         drawCord[0] = RDt[0];
         drawCord[1] = RDt[1];
         drawCord[2] = LDt[0];
         drawCord[3] = LDt[1];
-        tiffDrawLine(rawSrc, drawCord, maxH, maxV, rawszNew);
+        tiffDrawLine(rawSrc, drawCord, bmpScale);
 
         drawCord[0] = LDt[0];
         drawCord[1] = LDt[1];
         drawCord[2] = LUt[0];
         drawCord[3] = LUt[1];
-        tiffDrawLine(rawSrc, drawCord, maxH, maxV, rawszNew);
+        tiffDrawLine(rawSrc, drawCord, bmpScale);
 
         msync(srcbuf, bheader->aspbhSize, MS_SYNC);        
         dbgBitmapHeader(bheader, len);
