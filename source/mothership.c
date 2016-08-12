@@ -165,6 +165,15 @@ static int *totSalloc=0;
 #define CROP_MAX_NUM_META (18)
 #define CROP_CALCU_DETAIL (0)
 #define PI (double)(3.1415)
+#define DOT_8 0x01
+#define DOT_7 0x02
+#define DOT_6 0x04
+#define DOT_5 0x08
+#define DOT_4 0x10
+#define DOT_3 0x20
+#define DOT_2 0x40
+#define DOT_1 0x80
+
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -896,7 +905,6 @@ struct bitmapHeader_s {
     int    aspbiResoluV;
     int    aspbiNumCinCP;
     int    aspbiNumImpColor;
-    char aspbmpPadding[2];
 };
 
 struct mainRes_s{
@@ -1732,6 +1740,372 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
 
     return act;
+}
+
+static int tiffClearDot(char *img, int dotx, int doty, int width, int length, int max)
+{
+    uint8_t *dst, val=0, org=0;
+    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
+    int estMax, estWid=0;
+    int offsetX=0, offsetY=0, resX=0;
+    
+    //if (!img) return -1;
+    //if (!width) return -3;
+    //if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    //if (estMax > max) return -5;
+
+    if (dotx >= width) {
+        dotx = width -1;
+    }
+    
+    if (doty >= length) {
+        doty = length -1;
+    }
+
+    if ((width % 8) == 0) {
+        estWid = width / 8;
+    } else {
+        estWid = (width / 8) + 1;
+    }
+
+    resX = dotx % 8;
+
+    offsetY = doty;
+    offsetX = dotx / 8;
+
+    dst = img + (offsetX + offsetY*estWid);
+
+    org = *dst;
+    
+    val = org & (~(bitSet[resX]));
+
+    //printf("(%d, %d)clear dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
+    
+    *dst = val;
+
+    return val;
+}
+
+static int tiffGetDot(char *img, int dotx, int doty, int width, int length, int max)
+{
+    uint8_t *dst, val=0, org=0;
+    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
+    int estMax, estWid=0;
+    int offsetX=0, offsetY=0, resX=0;
+    //if (!img) return -1;
+    //if (!width) return -3;
+    //if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    //if (estMax > max) return -5;
+
+    if (dotx >= width) {
+        dotx = width -1;
+    }
+    
+    if (doty >= length) {
+        doty = length -1;
+    }
+
+    if ((width % 8) == 0) {
+        estWid = width / 8;
+    } else {
+        estWid = (width / 8) + 1;
+    }
+
+    resX = dotx % 8;
+
+    offsetY = doty;
+    offsetX = dotx / 8;
+
+    dst = img + (offsetX + offsetY*estWid);
+
+    org = *dst;
+
+    val = 0;
+    val = org & (bitSet[resX]);
+
+    //printf("(%d, %d)get dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
+
+    return val;
+}
+
+static int tiffDrawDot(char *img, int dotx, int doty, int width, int length, int max)
+{
+    uint8_t *dst, val=0, org=0;
+    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
+    int estMax, estWid=0;
+    int resX=0;
+    //if (!img) return -1;
+    //if (!width) return -3;
+    //if (!length) return -4;
+
+    estMax = width * length; 
+
+    if (estMax > max) return -5;
+
+    if (dotx >= width) {
+        dotx = width -1;
+    }
+    
+    if (dotx < 0) {
+        dotx = 0;
+    }
+    
+    if (doty >= length) {
+        doty = length -1;
+    }
+
+    if (doty < 0) {
+        doty = 0;
+    }
+
+    resX = dotx % 8;
+
+    dst = img + (dotx + doty*width);
+
+    org = *dst;
+    
+    val = org & (~(bitSet[resX]));
+    val |= bitSet[resX];
+
+    //printf(" draw dot x:%d, y:%d\n", dotx, doty);
+    
+    *dst = val;
+
+    return val;
+}
+
+static int tiffClearLine(char *img, int *cord, int width, int length, int max)
+{
+    int ret=0, cnt=0;
+    int estMax, srcx, srcy, dstx, dsty;
+    double stx=0, sty=0, edx=0, edy=0;
+    double offx=0, offy=0;
+    if (!img) return -1;
+    if (!cord) return -2;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    if (estMax > max) return -5;
+
+    srcx = cord[0]; 
+    srcy = cord[1]; 
+    dstx = cord[2];
+    dsty = cord[3];
+    
+    stx = cord[0];
+    sty = cord[1];
+    edx = cord[2];
+    edy = cord[3];
+
+    offx = edx - stx;
+    offy = edy - sty;
+
+    if (abs(offx) < 0.0001) {
+        offx = 0;
+    } else if (abs(offy) < 0.0001) {
+        offy = 0;
+    } 
+
+    if (abs(offx) > abs(offy)) {
+        offy = offy / abs(offx);
+        offx = offx / abs(offx);
+    } else if (abs(offy) > abs(offx)) {
+        offx = offx / abs(offy);
+        offy = offy / abs(offy);
+    } else {
+        if (abs(offy) > 0) {
+            offx = offx / abs(offx);
+            offy = offy / abs(offy);
+        }
+    }
+
+    //printf("clear line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
+    
+    while ((srcx != dstx) || (srcy != dsty)) {
+         ret = tiffClearDot(img, srcx, srcy, width, length, max);
+         cnt++;
+     
+         stx += offx;
+         sty += offy;
+         srcx = (int)stx;
+         srcy = (int)sty;
+
+         //printf("clear %d, %d - %d\n", srcx, srcy,cnt);
+     }
+     ret = tiffClearDot(img, srcx, srcy, width, length, max);
+     cnt++;
+     
+    return cnt;
+}
+
+
+static int tiffDrawLine(char *img, int *cord, int width, int length, int max)
+{
+    int ret=0, cnt=0;
+    int estMax, srcx, srcy, dstx, dsty;
+    double stx=0, sty=0, edx=0, edy=0;
+    double offx=0, offy=0;
+    if (!img) return -1;
+    if (!cord) return -2;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = width * length; 
+
+    if (estMax > max) return -5;
+
+    srcx = cord[0]; 
+    srcy = cord[1]; 
+    dstx = cord[2];
+    dsty = cord[3];
+    
+    stx = cord[0];
+    sty = cord[1];
+    edx = cord[2];
+    edy = cord[3];
+
+    offx = edx - stx;
+    offy = edy - sty;
+    
+    if (abs(offx) < 0.0001) {
+        offx = 0;
+    } else if (abs(offy) < 0.0001) {
+        offy = 0;
+    } 
+
+    if (abs(offx) > abs(offy)) {
+        offy = offy / abs(offx);
+        offx = offx / abs(offx);
+    } else if (abs(offy) > abs(offx)) {
+        offx = offx / abs(offy);
+        offy = offy / abs(offy);
+    } else {
+        if (abs(offy) > 0) {
+            offx = offx / abs(offx);
+            offy = offy / abs(offy);
+        }
+    }
+
+    printf("draw line  (%d, %d) -> (%d, %d) (%f, %f)\n", srcx, srcy, dstx, dsty, offx, offy);
+    
+    while ((srcx != dstx) || (srcy != dsty)) {
+         ret = tiffDrawDot(img, srcx, srcy, width, length, max);
+         cnt++;
+     
+         stx += offx;
+         sty += offy;
+         srcx = (int)round(stx);
+         srcy = (int)round(sty);
+         //printf("draw %d, %d - %d, %lf, %lf\n", srcx, srcy,cnt, stx, sty);
+     }
+     ret = tiffDrawDot(img, srcx, srcy, width, length, max);
+     cnt++;
+     
+    return cnt;
+}
+
+static int tiffDrawBox(char *img, int *cord, int width, int length, int max)
+{
+    int estMax, i;
+    int stx=0, sty=0, edx=0, edy=0;
+    int rcord[4];
+    if (!img) return -1;
+    if (!cord) return -2;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    if (estMax > max) return -5;
+
+    stx = cord[0];
+    sty = cord[1];
+    edx = cord[2];
+    edy = cord[3];
+
+    rcord[0] = stx;
+    rcord[1] = sty;
+    rcord[2] = edx;
+    rcord[3] = edy;
+
+    for (i = stx; i <= edx; i++) {
+        rcord[0] = i;
+        rcord[2] = i;
+        tiffDrawLine(img, rcord, width, length, max);
+    }
+
+    return 0;
+}
+
+static int tiffClearBox(char *img, int *cord, int width, int length, int max)
+{
+    int estMax, i=0;
+    int stx=0, sty=0, edx=0, edy=0;
+    int rcord[4];
+    if (!img) return -1;
+    if (!cord) return -2;
+    if (!width) return -3;
+    if (!length) return -4;
+
+    estMax = (width * length) / 8; 
+
+    if (estMax > max) return -5;
+
+    stx = cord[0];
+    sty = cord[1];
+    edx = cord[2];
+    edy = cord[3];
+
+    rcord[0] = stx;
+    rcord[1] = sty;
+    rcord[2] = edx;
+    rcord[3] = edy;
+
+    for (i = stx; i <= edx; i++) {
+        rcord[0] = i;
+        rcord[2] = i;
+        tiffClearLine(img, rcord, width, length, max);
+    }
+
+    return 0;
+}
+
+static int calcuRotateCoordinates(int *outi, double *out, double *in, double angle) 
+{
+    double r=0;
+    double piAngle = 180.0;
+    double x1, y1;
+    double x2, y2;
+
+    if (!out) return -1;
+    if (!in) return -2;
+    if (!outi) return -1;
+
+    printf("calcu rotate input :%lf, %lf, angle:%lf \n", in[0], in[1], angle);
+
+    x1 = in[0];
+    y1 = in[1];
+
+    r = angle * M_PI / piAngle;
+
+    x2 = x1*cos(r) - y1*sin(r);
+    y2 = x1*sin(r) + y1*cos(r);
+    
+    out[0] = x2;
+    out[1] = y2;
+
+    outi[0] = (int)round(x2);
+    outi[1] = (int)round(y2);
+    
+    return 0;
 }
 
 static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt, int max) 
@@ -3691,6 +4065,24 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
 static double aspMax(double d1, double d2) 
 {
     if (d1 > d2) return d1;
+    else return d2;
+}
+
+static double aspMin(double d1, double d2) 
+{
+    if (d1 < d2) return d1;
+    else return d2;
+}
+
+static int aspMaxInt(int d1, int d2) 
+{
+    if (d1 > d2) return d1;
+    else return d2;
+}
+
+static int aspMinInt(int d1, int d2) 
+{
+    if (d1 < d2) return d1;
     else return d2;
 }
 
@@ -25838,7 +26230,13 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
     int rawsz=0;
     char ch;
     struct bitmapHeader_s *bheader;
-
+    double LU[2], RU[2], LD[2], RD[2];
+    double LUn[2], RUn[2], LDn[2], RDn[2];
+    int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4];
+    double rangle;
+    double minH=0, minV=0, offsetH=0, offsetV=0;
+    int maxH=0, maxV=0, rowsize=0, rawszNew=0;
+    int bpp=0;
     
     //sprintf(mrs->log, "%d\n", modersp->v++);
     //print_f(&mrs->plog, "fs116", mrs->log);
@@ -25876,8 +26274,140 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         shmem_dump(rawCpy, 128);
         shmem_dump(rawSrc, 128);
 
+        LU[0] = 0;
+        LU[1] = bheader->aspbiHeight;
+
+        RU[0] = bheader->aspbiWidth;
+        RU[1] = bheader->aspbiHeight;        
+
+        LD[0] = 0;
+        LD[1] = 0;
+
+        RD[0] = bheader->aspbiWidth;
+        RD[1] = 0;
+
+        modersp->v = (modersp->v + 3) % 360;
+
+        rangle = modersp->v;
+        
+        calcuRotateCoordinates(LUt, LUn, LU, rangle);
+        calcuRotateCoordinates(RUt, RUn, RU, rangle);
+        calcuRotateCoordinates(LDt, LDn, LD, rangle);
+        calcuRotateCoordinates(RDt, RDn, RD, rangle);
+
+        sprintf(mrs->log, "LUn: %lf, %lf / %3d, %3d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "RUn: %lf, %lf / %3d, %3d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "LDn: %lf, %lf / %3d, %3d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "RDn: %lf, %lf / %3d, %3d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        minH = aspMin(LUn[0], RUn[0]);
+        minH = aspMin(minH, LDn[0]);
+        minH = aspMin(minH, RDn[0]);
+
+        minV = aspMin(LUn[1], RUn[1]);
+        minV = aspMin(minV, LDn[1]);
+        minV = aspMin(minV, RDn[1]);
+
+        sprintf(mrs->log, "minH: %lf, minV: %lf \n", minH, minV);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        offsetH = 0 - minH;
+        offsetV = 0 - minV;
+
+        LUn[0] += offsetH;
+        LUn[1] += offsetV;
+
+        RUn[0] += offsetH;
+        RUn[1] += offsetV;
+
+        LDn[0] += offsetH;
+        LDn[1] += offsetV;
+
+        RDn[0] += offsetH;
+        RDn[1] += offsetV;
+
+        LUt[0] = (int)round(LUn[0]);
+        LUt[1] = (int)round(LUn[1]);
+
+        RUt[0] = (int)round(RUn[0]);
+        RUt[1] = (int)round(RUn[1]);
+
+        LDt[0] = (int)round(LDn[0]);
+        LDt[1] = (int)round(LDn[1]);
+
+        RDt[0] = (int)round(RDn[0]);
+        RDt[1] = (int)round(RDn[1]);
+
+        sprintf(mrs->log, "LUn: %lf, %lf / %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "RUn: %lf, %lf / %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "LDn: %lf, %lf / %d, %d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "RDn: %lf, %lf / %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        maxH= aspMaxInt(LUt[0], RUt[0]);
+        maxH = aspMaxInt(maxH, LDt[0]);
+        maxH = aspMaxInt(maxH, RDt[0]);
+
+        maxV = aspMaxInt(LUt[1], RUt[1]);
+        maxV = aspMaxInt(maxV, LDt[1]);
+        maxV = aspMaxInt(maxV, RDt[1]);
+
+        bpp = bheader->aspbiCPP >> 16;
+        
+        rowsize = ((bpp * maxH + 31) / 32) * 4;
+        rawszNew = rowsize * maxV;
+
+        sprintf(mrs->log, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d \n", maxH, maxV, rowsize, rawszNew, totsz);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        memset(rawSrc, 0, rawszNew);
+
+        bheader->aspbhSize = bheader->aspbhRawoffset + rawszNew;
+        bheader->aspbiWidth = maxH;
+        bheader->aspbiHeight = maxV;
+        bheader->aspbiRawSize = rawszNew;
+
+        memcpy(srcbuf, ph, 54);
+        /* retate raw data */
+        //memset(rawSrc, 0xff, rawszNew);
+        
+        drawCord[0] = LUt[0];
+        drawCord[1] = LUt[1];
+        drawCord[2] = RUt[0];
+        drawCord[3] = RUt[1];
+        tiffDrawLine(rawSrc, drawCord, maxH, maxV, rawszNew);
+
+        drawCord[0] = RUt[0];
+        drawCord[1] = RUt[1];
+        drawCord[2] = RDt[0];
+        drawCord[3] = RDt[1];
+        tiffDrawLine(rawSrc, drawCord, maxH, maxV, rawszNew);
+
+        drawCord[0] = RDt[0];
+        drawCord[1] = RDt[1];
+        drawCord[2] = LDt[0];
+        drawCord[3] = LDt[1];
+        tiffDrawLine(rawSrc, drawCord, maxH, maxV, rawszNew);
+
+        drawCord[0] = LDt[0];
+        drawCord[1] = LDt[1];
+        drawCord[2] = LUt[0];
+        drawCord[3] = LUt[1];
+        tiffDrawLine(rawSrc, drawCord, maxH, maxV, rawszNew);
+
+        msync(srcbuf, bheader->aspbhSize, MS_SYNC);        
+        dbgBitmapHeader(bheader, len);
+        
         aspFree(rawCpy);
         /* send BMP back */
+        totsz = bheader->aspbhSize;
         ring_buf_init(&mrs->cmdRx);
 
         lstsz = totsz;
@@ -26129,7 +26659,7 @@ static int p0(struct mainRes_s *mrs)
 
             ch = modesw->r; /* response */
             modesw->r = 0;
-            modesw->v = 0;
+            //modesw->v = 0; /* do not reset */
             modesw->d = 0;
             modesw->m = -2;
             tmp = -1;
