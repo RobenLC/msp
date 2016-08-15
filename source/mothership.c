@@ -1781,65 +1781,19 @@ static int tiffClearDot(char *img, int dotx, int doty, int *scale)
     return val;
 }
 
-static int tiffGetDot(char *img, int dotx, int doty, int width, int length, int max)
+static int tiffGetDot(char *img, int *dot, char *pta, int *scale)
 {
-    uint8_t *dst, val=0, org=0;
-    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
-    int estMax, estWid=0;
-    int offsetX=0, offsetY=0, resX=0;
-    //if (!img) return -1;
-    //if (!width) return -3;
-    //if (!length) return -4;
-
-    estMax = (width * length) / 8; 
-
-    //if (estMax > max) return -5;
-
-    if (dotx >= width) {
-        dotx = width -1;
-    }
-    
-    if (doty >= length) {
-        doty = length -1;
-    }
-
-    if ((width % 8) == 0) {
-        estWid = width / 8;
-    } else {
-        estWid = (width / 8) + 1;
-    }
-
-    resX = dotx % 8;
-
-    offsetY = doty;
-    offsetX = dotx / 8;
-
-    dst = img + (offsetX + offsetY*estWid);
-
-    org = *dst;
-
-    val = 0;
-    val = org & (bitSet[resX]);
-
-    //printf("(%d, %d)get dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
-
-    return val;
-}
-
-static int tiffDrawDot(char *img, int dotx, int doty, int *scale)
-{
-    uint8_t *dst, val=0, org=0;
-    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
-    int estMax, estWid=0;
-    int resX=0;
+    uint8_t *dst, val=0;
     int rowsz, height, max, bpp;
+    int dotx=0, doty=0;
+
+    dotx = dot[0];
+    doty = dot[1];
 
     rowsz = scale[0];
     height = scale[1];
     max = scale[2];
-    bpp = scale[3];
-
-    if (estMax > max) return -5;
+    bpp = scale[3] / 8;
 
     if (dotx >= rowsz) {
         dotx = rowsz -1;
@@ -1857,18 +1811,70 @@ static int tiffDrawDot(char *img, int dotx, int doty, int *scale)
         doty = 0;
     }
 
-    resX = dotx % 8;
+    dst = img + (dotx*bpp + doty*rowsz);
 
-    dst = img + (dotx + doty*rowsz);
+    val = 0;
+    while (bpp > 0) {
+        val <<= 8;
 
-    org = *dst;
+        *pta = *dst;
+        val |= *dst;
+
+        bpp --;
+        pta++;
+        dst++;
+    }
+
+    //printf("(%d, %d)get dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
+
+    return val;
+}
+
+static int tiffDrawDot(char *img, int *dot, char *pta, int *scale)
+{
+    uint8_t *dst, val=0;
+    int rowsz, height, max, bpp;
+    int dotx=0, doty=0;
+
+    dotx = dot[0];
+    doty = dot[1];
+
+    rowsz = scale[0];
+    height = scale[1];
+    max = scale[2];
+    bpp = scale[3] / 8;
+
+    if (dotx >= rowsz) {
+        dotx = rowsz -1;
+    }
     
-    val = org & (~(bitSet[resX]));
-    val |= bitSet[resX];
+    if (dotx < 0) {
+        dotx = 0;
+    }
+    
+    if (doty >= height) {
+        doty = height -1;
+    }
 
+    if (doty < 0) {
+        doty = 0;
+    }
+
+    dst = img + (dotx*bpp + doty*rowsz);
+    
     //printf(" draw dot x:%d, y:%d\n", dotx, doty);
-    
-    *dst = val;
+
+    val = 0;
+    while (bpp > 0) {
+        val <<= 8;
+        
+        *dst = *pta;
+        val |= *pta;
+        
+        bpp --;
+        pta++;
+        dst++;
+    }
 
     return val;
 }
@@ -1937,7 +1943,10 @@ static int tiffClearLine(char *img, int *cord, int *scale)
 static int tiffDrawLine(char *img, int *cord, int *scale)
 {
     int ret=0, cnt=0;
-    int estMax, srcx, srcy, dstx, dsty;
+    int estMax, srcx, srcy, dstx, dsty, lstx, lsty;
+    int dot[2];
+    int bpp=0;
+    char dat[3];
     double stx=0, sty=0, edx=0, edy=0;
     double offx=0, offy=0;
     if (!img) return -1;
@@ -1948,13 +1957,15 @@ static int tiffDrawLine(char *img, int *cord, int *scale)
     dstx = cord[2];
     dsty = cord[3];
     
-    stx = cord[0];
-    sty = cord[1];
-    edx = cord[2];
-    edy = cord[3];
+    stx = (double)cord[0];
+    sty = (double)cord[1];
+    edx = (double)cord[2];
+    edy = (double)cord[3];
 
     offx = edx - stx;
     offy = edy - sty;
+
+    bpp = scale[3] / 8;
     
     if (abs(offx) < 0.0001) {
         offx = 0;
@@ -1976,19 +1987,52 @@ static int tiffDrawLine(char *img, int *cord, int *scale)
     }
 
     printf("draw line  (%d, %d) -> (%d, %d) (%f, %f)\n", srcx, srcy, dstx, dsty, offx, offy);
+
+    switch (bpp) {
+    case 1:
+        dat[0] = 0xff;
+        dat[1] = 0;
+        dat[2] = 0;
+        break;
+    case 3:
+        dat[0] = 0xff;
+        dat[1] = 0xff;
+        dat[2] = 0xff;
+        break;
+    default:
+        printf("ERROR!!! draw line  bpp = %d \n", bpp);
+        break;
+    }
     
     while ((srcx != dstx) || (srcy != dsty)) {
-         ret = tiffDrawDot(img, srcx, srcy, scale);
-         cnt++;
-     
+         ret = tiffDrawDot(img, dot, dat, scale);
+
+         lstx = srcx;
+         lsty = srcy;
+         
          stx += offx;
          sty += offy;
          srcx = (int)round(stx);
          srcy = (int)round(sty);
+         
+         if ((lstx == srcx) && (lsty == srcy)) {
+             cnt++;
+         } else {
+             cnt = 0;
+         }
+
+         if (cnt > 3) {
+             srcx = (int)round(stx);
+             srcy = (int)round(sty);
+         }
+         
+         dot[0] = srcx;
+         dot[1] = srcy;
+
          //printf("draw %d, %d - %d, %lf, %lf\n", srcx, srcy,cnt, stx, sty);
      }
-     ret = tiffDrawDot(img, srcx, srcy, scale);
-     cnt++;
+     
+     ret = tiffDrawDot(img, dot, dat, scale);
      
     return cnt;
 }
@@ -26196,12 +26240,12 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdParseBuff_s *pabuf=0;
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0;
-    int rawsz=0;
+    int rawsz=0, oldWidth=0, oldRowsz=0;
     char ch;
     struct bitmapHeader_s *bheader;
     double LU[2], RU[2], LD[2], RD[2];
     double LUn[2], RUn[2], LDn[2], RDn[2];
-    int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4], bmpScale[4];;
+    int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4], bmpScale[4], oldScale[4];
     double rangle;
     double minH=0, minV=0, offsetH=0, offsetV=0;
     int maxH=0, maxV=0, rowsize=0, rawszNew=0;
@@ -26233,6 +26277,9 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         rawsz = bheader->aspbiRawSize;
         rawSrc = srcbuf + bheader->aspbhRawoffset;
+        oldWidth = bheader->aspbiWidth;
+        bpp = bheader->aspbiCPP >> 16;
+        oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
 
         rawCpy = aspMalloc(rawsz);
         if (rawCpy) {
@@ -26326,8 +26373,6 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         maxV = aspMaxInt(LUt[1], RUt[1]);
         maxV = aspMaxInt(maxV, LDt[1]);
         maxV = aspMaxInt(maxV, RDt[1]);
-
-        bpp = bheader->aspbiCPP >> 16;
         
         rowsize = ((bpp * maxH + 31) / 32) * 4;
         rawszNew = rowsize * maxV;
@@ -26345,6 +26390,11 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         memcpy(srcbuf, ph, 54);
         /* retate raw data */
         //memset(rawSrc, 0xff, rawszNew);
+        oldScale[0] = oldRowsz;
+        oldScale[1] = oldWidth;
+        oldScale[2] = rawsz;
+        oldScale[3] = bpp;        
+        
         bmpScale[0] = rowsize;
         bmpScale[1] = maxV;        
         bmpScale[2] = rawszNew;
