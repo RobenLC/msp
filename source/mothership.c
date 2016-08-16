@@ -1781,7 +1781,7 @@ static int tiffClearDot(char *img, int dotx, int doty, int *scale)
     return val;
 }
 
-static int tiffGetDot(char *img, int *dot, char *pta, int *scale)
+inline int tiffGetDot(char *img, int *dot, char *pta, int *scale)
 {
     uint8_t *dst, val=0;
     int rowsz, height, max, bpp;
@@ -1813,12 +1813,9 @@ static int tiffGetDot(char *img, int *dot, char *pta, int *scale)
 
     dst = img + (dotx*bpp + doty*rowsz);
 
-    val = 0;
     while (bpp > 0) {
-        val <<= 8;
 
         *pta = *dst;
-        val |= *dst;
 
         bpp --;
         pta++;
@@ -1830,7 +1827,7 @@ static int tiffGetDot(char *img, int *dot, char *pta, int *scale)
     return val;
 }
 
-static int tiffDrawDot(char *img, int *dot, char *pta, int *scale)
+inline int tiffDrawDot(char *img, int *dot, char *pta, int *scale)
 {
     uint8_t *dst, val=0;
     int rowsz, height, max, bpp;
@@ -1947,8 +1944,8 @@ static int tiffDrawLine(char *img, int *cord, int *scale)
     int dot[2];
     int bpp=0;
     char dat[3];
-    double stx=0, sty=0, edx=0, edy=0;
-    double offx=0, offy=0;
+    float stx=0, sty=0, edx=0, edy=0;
+    float offx=0, offy=0;
     if (!img) return -1;
     if (!cord) return -2;
 
@@ -1957,10 +1954,10 @@ static int tiffDrawLine(char *img, int *cord, int *scale)
     dstx = cord[2];
     dsty = cord[3];
     
-    stx = (double)cord[0];
-    sty = (double)cord[1];
-    edx = (double)cord[2];
-    edy = (double)cord[3];
+    stx = (float)cord[0];
+    sty = (float)cord[1];
+    edx = (float)cord[2];
+    edy = (float)cord[3];
 
     offx = edx - stx;
     offy = edy - sty;
@@ -2091,9 +2088,32 @@ static int tiffClearBox(char *img, int *cord, int *scale)
     return 0;
 }
 
-static int calcuRotateCoordinates(int *outi, double *out, double *in, double *angle) 
+inline int calcuRotateCoordFast(float *out, float *in) 
 {
-    double r=0;
+    float r=0;
+    float x1, y1;
+    float x2, y2;
+    float dx, dy;
+    
+    x1 = in[0];
+    x2 = in[1];
+    y1 = in[2];
+    y2 = in[3];
+    
+    dx = x1 - x2;
+    dy = y1 + y2;
+    
+    out[0] = dx;
+    out[1] = dy;
+
+    //printf("calcu rotate input :%lf, %lf, output: (%d, %d) (%lf, %lf) \n", in[0], in[1], outi[0], outi[1], out[0], out[1]);
+    
+    return 0;
+}
+
+static int calcuRotateCoordinates(int *outi, float *out, float *in, float *angle) 
+{
+    float r=0;
     float x1, y1;
     float x2, y2;
     float cosA, sinA;
@@ -2121,8 +2141,10 @@ static int calcuRotateCoordinates(int *outi, double *out, double *in, double *an
     out[0] = x2;
     out[1] = y2;
 
-    outi[0] = (int)round(x2);
-    outi[1] = (int)round(y2);
+    outi[0] = (int)(x2);
+    outi[1] = (int)(y2);
+
+    //printf("calcu rotate input :%lf, %lf, output: (%d, %d) (%lf, %lf) \n", in[0], in[1], outi[0], outi[1], out[0], out[1]);
     
     return 0;
 }
@@ -26246,19 +26268,21 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdParseBuff_s *pabuf=0;
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0;
-    int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0;
+    int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
     char ch;
     struct bitmapHeader_s *bheader;
-    double LU[2], RU[2], LD[2], RD[2];
-    double LUn[2], RUn[2], LDn[2], RDn[2];
+    float LU[2], RU[2], LD[2], RD[2];
+    float LUn[2], RUn[2], LDn[2], RDn[2];
     int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4], bmpScale[4], oldScale[4];
     int sdot[2], ddot[2];
-    double rangle[2], thacos=0, thasin=0, theta, piAngle = 180.0;
-    double minH=0, minV=0, offsetH=0, offsetV=0;
+    float rangle[2], thacos=0, thasin=0, theta, piAngle = 180.0;
+    float minH=0, minV=0, offsetH=0, offsetV=0;
     int maxH=0, maxV=0, rowsize=0, rawszNew=0;
     int bpp=0, ix=0, iy=0, dx=0, dy=0, outi[2];    
-    double ind[2], outd[2];
+    float ind[4], outd[2];
+    float *tars, *tarc;
     char gdat[3];
+    char *dst=0;
     //sprintf(mrs->log, "%d\n", modersp->v++);
     //print_f(&mrs->plog, "fs116", mrs->log);
 
@@ -26313,7 +26337,11 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         modersp->v = (modersp->v + 5) % 360;
 
-        theta = (double)modersp->v;
+        theta = (float)modersp->v;
+        
+        sprintf(mrs->log, "rotate angle = %f \n", theta);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
         theta = theta * M_PI / piAngle;
 
         thacos = cos(theta);
@@ -26417,35 +26445,89 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         bmpScale[2] = rawszNew;
         bmpScale[3] = bpp;
 
+        #if 0
         rawTmp = aspMalloc(rawszNew);
-        memset(rawTmp, 0xaa, rawszNew);
+        #else
+        rawTmp = rawSrc;
+        #endif
+        
+        memset(rawTmp, 0x55, rawszNew);
 
+        if (oldWidth > oldHeight) {
+            oldTot = oldWidth;
+        } else {
+            oldTot = oldHeight;
+        }
+
+        tars = aspMalloc(sizeof(float) * oldTot);
+        tarc = aspMalloc(sizeof(float) * oldTot);
+        
+        for (ix = 0; ix < oldTot; ix++) {
+            tars[ix] = ix * thasin;
+            tarc[ix] = ix * thacos;
+        }
+        
         for (ix = 0; ix < oldWidth; ix++) {
             for (iy = 0; iy < oldHeight; iy++) {
+            #if 0
                 sdot[0] = ix;
                 sdot[1] = iy;
                 tiffGetDot(rawCpy, sdot, gdat, oldScale);
+            #else
+                bitset = bpp / 8;
+                dst = rawCpy + (ix*bitset + iy*oldRowsz);
 
-                ind[0] = (double)ix;
-                ind[1] = (double)iy;
+                cnt = 0;
+                while (bitset > 0) {
+                    gdat[cnt] = *dst;
 
-/*
-                gdat[0] = 0xaa;
-                gdat[1] = 0;
-                gdat[2] = 0;
-*/
-                ret = calcuRotateCoordinates(outi, outd, ind, rangle);
+                    bitset --;
+                    cnt++;
+                    dst++;
 
-                dx = outi[0] + offsetH;
-                dy = outi[1] + offsetV;
+                    if (cnt > 2) break;
+                }
+            #endif
+
+            #if 0
+                ind[0] = tarc[ix];
+                ind[1] = tars[iy];
+                ind[2] = tars[ix];
+                ind[3] = tarc[iy];
+
+                ret = calcuRotateCoordFast(outd, ind);
+            #else
+                dx = (int) round(tarc[ix] - tars[iy] + offsetH);
+                dy = (int) round(tars[ix] + tarc[iy] + offsetV);
+            #endif
+                
+            #if 0
+                dx = (int) round(outd[0] + offsetH);
+                dy = (int) round(outd[1] + offsetV);
 
                 ddot[0] = dx;
                 ddot[1] = dy;
 
                 tiffDrawDot(rawTmp, ddot, gdat, bmpScale);
+            #else
+                bitset = bpp / 8;
+                dst = rawTmp + (dx*bitset + dy*rowsize);
+
+                cnt = 0;
+                while (bitset > 0) {
+                    *dst = gdat[cnt];
+
+                    bitset --;
+                    cnt++;
+                    dst++;
+                    
+                    if (cnt > 2) break;
+                }
+            #endif
             }
         }
-        
+
+        /*
         drawCord[0] = LUt[0];
         drawCord[1] = LUt[1];
         drawCord[2] = RUt[0];
@@ -26469,19 +26551,24 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         drawCord[2] = LUt[0];
         drawCord[3] = LUt[1];
         tiffDrawLine(rawTmp, drawCord, bmpScale);
-
-        memcpy(rawSrc, rawTmp, rawszNew);
+        */
+        
+        //memcpy(rawSrc, rawTmp, rawszNew);
 
         msync(srcbuf, bheader->aspbhSize, MS_SYNC);        
         dbgBitmapHeader(bheader, len);
         
         aspFree(rawCpy);
-        aspFree(rawTmp);
+
+        //aspFree(rawTmp);
+
+        aspFree(tars);
         /* send BMP back */
         totsz = bheader->aspbhSize;
         ring_buf_init(&mrs->cmdRx);
 
         lstsz = totsz;
+        cnt = 0;
         while (lstsz > 0) {
             len = 0;
             len = ring_buf_get(&mrs->cmdRx, &addr);
