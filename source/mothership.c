@@ -1944,8 +1944,8 @@ static int tiffDrawLine(char *img, int *cord, int *scale)
     int dot[2];
     int bpp=0;
     char dat[3];
-    float stx=0, sty=0, edx=0, edy=0;
-    float offx=0, offy=0;
+    double stx=0, sty=0, edx=0, edy=0;
+    double offx=0, offy=0;
     if (!img) return -1;
     if (!cord) return -2;
 
@@ -1954,10 +1954,10 @@ static int tiffDrawLine(char *img, int *cord, int *scale)
     dstx = cord[2];
     dsty = cord[3];
     
-    stx = (float)cord[0];
-    sty = (float)cord[1];
-    edx = (float)cord[2];
-    edy = (float)cord[3];
+    stx = (double)cord[0];
+    sty = (double)cord[1];
+    edx = (double)cord[2];
+    edy = (double)cord[3];
 
     offx = edx - stx;
     offy = edy - sty;
@@ -2088,12 +2088,12 @@ static int tiffClearBox(char *img, int *cord, int *scale)
     return 0;
 }
 
-inline int calcuRotateCoordFast(float *out, float *in) 
+inline int calcuRotateCoordFast(double *out, double *in) 
 {
-    float r=0;
-    float x1, y1;
-    float x2, y2;
-    float dx, dy;
+    double r=0;
+    double x1, y1;
+    double x2, y2;
+    double dx, dy;
     
     x1 = in[0];
     x2 = in[1];
@@ -2111,12 +2111,12 @@ inline int calcuRotateCoordFast(float *out, float *in)
     return 0;
 }
 
-static int calcuRotateCoordinates(int *outi, float *out, float *in, float *angle) 
+static int calcuRotateCoordinates(int *outi, double *out, double *in, double *angle) 
 {
-    float r=0;
-    float x1, y1;
-    float x2, y2;
-    float cosA, sinA;
+    double r=0;
+    double x1, y1;
+    double x2, y2;
+    double cosA, sinA;
 
     if (!out) return -1;
     if (!in) return -2;
@@ -26282,20 +26282,20 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct sdParseBuff_s *pabuf=0;
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp;
-    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0;
+    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0;
     int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
     char ch;
     struct bitmapHeader_s *bheader;
-    float LU[2], RU[2], LD[2], RD[2];
-    float LUn[2], RUn[2], LDn[2], RDn[2];
+    double LU[2], RU[2], LD[2], RD[2];
+    double LUn[2], RUn[2], LDn[2], RDn[2];
     int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4], bmpScale[4], oldScale[4];
     int sdot[2], ddot[2];
-    float rangle[2], thacos=0, thasin=0, theta, piAngle = 180.0;
-    float minH=0, minV=0, offsetH=0, offsetV=0;
+    double rangle[2], thacos=0, thasin=0, theta, piAngle = 180.0;
+    double minH=0, minV=0, offsetH=0, offsetV=0;
     int maxhint=0, maxvint=0, minhint=0, minvint=0, rowsize=0, rawszNew=0;
-    int bpp=0, ix=0, iy=0, dx=0, dy=0, outi[2], id=0, ixd=0;    
-    float ind[4], outd[2], fx=0, fy=0, tx=0, ty=0;
-    float *tars, *tarc;
+    int bpp=0, ix=0, iy=0, dx=0, dy=0, outi[2], id=0, ixd=0, iyn=0, ixn=0, offsetCal=0;
+    double ind[4], outd[2], fx=0, fy=0, tx=0, ty=0;
+    double *tars, *tarc;
     char gdat[3];
     char *dst=0;
 
@@ -26318,7 +26318,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs116", mrs->log);
 
         /* check header */
-        shmem_dump(srcbuf, 128);
+        //shmem_dump(srcbuf, 128);
 
         /* rotate */
         ph = &mrs->bmpheader.aspbmpMagic[2];
@@ -26341,8 +26341,8 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             memcpy(rawCpy, rawSrc, rawsz);
         }
 
-        shmem_dump(rawCpy, 128);
-        shmem_dump(rawSrc, 128);
+        //shmem_dump(rawCpy, 128);
+        //shmem_dump(rawSrc, 128);
 
         LU[0] = 0;
         LU[1] = bheader->aspbiHeight;
@@ -26358,7 +26358,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         modersp->v = (modersp->v + 1) % (360*5);
 
-        theta = (float)modersp->v;
+        theta = (double)modersp->v;
         theta = theta / 5.0;
         
         sprintf(mrs->log, "rotate angle = %f \n", theta);
@@ -26376,7 +26376,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         calcuRotateCoordinates(RUt, RUn, RU, rangle);
         calcuRotateCoordinates(LDt, LDn, LD, rangle);
         calcuRotateCoordinates(RDt, RDn, RD, rangle);
-
+#if 0
         sprintf(mrs->log, "LUn: %lf, %lf / %3d, %3d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
         print_f(&mrs->plog, "fs116", mrs->log);
         sprintf(mrs->log, "RUn: %lf, %lf / %3d, %3d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
@@ -26385,7 +26385,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs116", mrs->log);
         sprintf(mrs->log, "RDn: %lf, %lf / %3d, %3d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
         print_f(&mrs->plog, "fs116", mrs->log);
-
+#endif
         minH = aspMin(LUn[0], RUn[0]);
         minH = aspMin(minH, LDn[0]);
         minH = aspMin(minH, RDn[0]);
@@ -26423,7 +26423,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         RDt[0] = (int)round(RDn[0]);
         RDt[1] = (int)round(RDn[1]);
-
+#if 0
         sprintf(mrs->log, "LUn: %lf, %lf / %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
         print_f(&mrs->plog, "fs116", mrs->log);
         sprintf(mrs->log, "RUn: %lf, %lf / %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
@@ -26432,7 +26432,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs116", mrs->log);
         sprintf(mrs->log, "RDn: %lf, %lf / %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
         print_f(&mrs->plog, "fs116", mrs->log);
-
+#endif
         maxhint= aspMaxInt(LUt[0], RUt[0]);
         maxhint = aspMaxInt(maxhint, LDt[0]);
         maxhint = aspMaxInt(maxhint, RDt[0]);
@@ -26683,7 +26683,6 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
                 }
             }
         }
-                    
 
         if (maxhint == LUt[0]) {
             sprintf(mrs->log, "LU =  %d, %d match maxhint: %d !!!right - 0\n", LUt[0], LUt[1], maxhint);
@@ -26909,6 +26908,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             }
         }
 
+#if 0
         sprintf(mrs->log, "PLU: %lf, %lf \n", pLU[0], pLU[1]);
         print_f(&mrs->plog, "fs116", mrs->log);
         sprintf(mrs->log, "PRU: %lf, %lf \n", pRU[0], pRU[1]);
@@ -26917,6 +26917,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs116", mrs->log);
         sprintf(mrs->log, "PRD: %lf, %lf \n", pRD[0], pRD[1]);
         print_f(&mrs->plog, "fs116", mrs->log);
+#endif
 
         if (pLU[1] > pRU[1]) {
             getVectorFromP(linLU, pLU, pLD);
@@ -26942,6 +26943,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             prm[1] = pRD[1];
         }
         
+#if 0
         ret = getCross(linLD, linLU, plc);
         sprintf(mrs->log, "test cross left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
         print_f(&mrs->plog, "fs116", mrs->log);
@@ -26957,7 +26959,8 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         ret= getCross(linRD, linLD, pn);
         sprintf(mrs->log, "test cross down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
         print_f(&mrs->plog, "fs116", mrs->log);
-        
+#endif
+
         pal[0] = 100;
         pal[1] = 100;
 
@@ -27029,18 +27032,15 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         bmpScale[2] = rawszNew;
         bmpScale[3] = bpp;
 
-        #if 0
-        rawTmp = aspMalloc(rawszNew);
-        #else
         rawTmp = rawSrc;
-        #endif
+        memset(rawTmp, 0xff, rawszNew);
         
-        memset(rawTmp, 0x55, rawszNew);
-#if 1 /* reverse to fill the rotate image */
-        theta = (float) (360*5 - modersp->v);
+        /* reverse to fill the rotate image */
+        
+        theta = (double) (360*5 - modersp->v);
         theta = theta / 5;
         
-        sprintf(mrs->log, "reverse rotate angle = %f \n", theta);
+        sprintf(mrs->log, "reverse rotate angle = %lf \n", theta);
         print_f(&mrs->plog, "fs116", mrs->log);
 
         theta = theta * M_PI / piAngle;
@@ -27048,20 +27048,41 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         thacos = cos(theta);
         thasin = sin(theta);
 
+        ix = (int)round(0 - offsetH);
+        iy = (int)round(0 - offsetV);
+        
         if (maxhint > maxvint) {
-            oldTot = maxhint;
+            oldTot = (int)round(maxhint - offsetH + 1);
         } else {
-            oldTot = maxvint;
+            oldTot = (int)round(maxvint - offsetV + 1);
         }
 
-        tars = aspMalloc(sizeof(float) * oldTot);
-        tarc = aspMalloc(sizeof(float) * oldTot);
-
-        for (ix = 0; ix < oldTot; ix++) {
-            tars[ix] = ix * thasin;
-            tarc[ix] = ix * thacos;
+        if (ix < iy) {
+            id = ix - 1;
+        } else {
+            id = iy - 1;
         }
 
+        offsetCal = 0 - id;
+
+        len = oldTot - id;
+
+        sprintf(mrs->log, "pre-calculating buffer size: %d, max: %d, min: %d, offset: %d \n", len, oldTot, id, offsetCal);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        tars = aspMalloc(sizeof(double) * len);
+        tarc = aspMalloc(sizeof(double) * len);
+
+        for (ix = id, iy = 0; iy < len; ix++, iy++) {
+            //sprintf(mrs->log, "pre-calculate %d\n", ix);
+            //print_f(&mrs->plog, "fs116", mrs->log);
+
+            fx = (double)ix;
+            tars[iy] = fx * thasin;
+            tarc[iy] = fx * thacos;
+        }
+
+#if 0
         fx = LUn[0] - offsetH;
         fy = LUn[1] - offsetV;
         dx = (int) round(fx*thacos - fy*thasin);
@@ -27089,7 +27110,11 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         dy = (int) round(fx*thasin + fy*thacos);
         sprintf(mrs->log, "LD back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", LDt[0], fx, LDt[1], fy,  dx, dy, offsetH, offsetV);
         print_f(&mrs->plog, "fs116", mrs->log);
+#endif
 
+        lstsz = 0;
+        totsz = bheader->aspbhSize;
+        ring_buf_init(&mrs->cmdRx);
 
         cnt = 0;
         for (id=0; id < (maxvint-minvint+1); id++) {
@@ -27097,30 +27122,41 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             ix = crsAry[id*3+1];
             ixd = crsAry[id*3+2]; 
 
-            fx = (float)ix;
-            fy = (float)iy;
+            //fx = (double)ix;
+            fy = (double)iy;
             
-            fx -= offsetH;
+            //fx -= offsetH;
             fy -= offsetV;
 
-            dx = (int) round(fx*thacos - fy*thasin);
-            dy = (int) round(fx*thasin + fy*thacos);
+            //dx = (int) round(fx*thacos - fy*thasin);
+            //dy = (int) round(fx*thasin + fy*thacos);
 
             //sprintf(mrs->log, "back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", ix, fx, iy, fy,  dx, dy, offsetH, offsetV);
             //print_f(&mrs->plog, "fs116", mrs->log);
 
-            for (;ix <= ixd; ix++) {        
-                fx = ix - offsetH;
-                fy = iy - offsetV;
-                
-                dx = (int) round(fx*thacos - fy*thasin);
-                dy = (int) round(fx*thasin + fy*thacos);
+            iyn = (int)round(fy);
+            iyn += offsetCal;
+            
+            for (;ix <= ixd; ix++) {       
+
+                fx = (double)ix;
+
+                fx -= offsetH;
+
+                ixn = (int)round(fx);
+                ixn += offsetCal;
+
+                dx = (int) round(tarc[ixn] - tars[iyn]);
+                dy = (int) round(tars[ixn] + tarc[iyn]);
+
+                //dx = (int) round(fx*thacos - fy*thasin);
+                //dy = (int) round(fx*thasin + fy*thacos);
 
                 cnt++;
 
                 if ((dx < 0) || (dy < 0) || (dx > oldWidth) || (dy > oldHeight)) {
-                    sprintf(mrs->log, "%d. %d, %d => %d, %d \n",id, ix, iy,  dx, dy);
-                    print_f(&mrs->plog, "fs116", mrs->log);
+                    //sprintf(mrs->log, "%d. %d, %d => %d, %d \n",id, ix, iy,  dx, dy);
+                    //print_f(&mrs->plog, "fs116", mrs->log);
                     continue;
                 }
 
@@ -27152,124 +27188,73 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
                     if (cnt > 2) break;
                 }
 
+                lstsz = bheader->aspbhRawoffset + iy*rowsize;  
+                
+                while ((lstsz - acusz) > SPI_TRUNK_SZ) {
+                    len = 0;
+                    len = ring_buf_get(&mrs->cmdRx, &addr);
+                    if (len < 0) {
+                        break;
+                    }
+
+                    msync(srcbuf, len, MS_SYNC);
+                    memcpy(addr, srcbuf, len);
+                    ring_buf_prod(&mrs->cmdRx);    
+
+                    acusz= acusz + len;
+                    srcbuf = srcbuf + len;
+                    mrs_ipc_put(mrs, "n", 1, 3); 
+                }                
+                
             }
 
         }
 
-        sprintf(mrs->log, "cnt: %d\n", cnt);
+        lstsz = totsz - acusz;
+
+        sprintf(mrs->log, "last size: %d\n", lstsz);
         print_f(&mrs->plog, "fs116", mrs->log);
 
-#else
-        if (oldWidth > oldHeight) {
-            oldTot = oldWidth;
-        } else {
-            oldTot = oldHeight;
-        }
+        while (lstsz > 0) {
+            len = 0;
+            len = ring_buf_get(&mrs->cmdRx, &addr);
+            if (len > 0) {
+                if (len > lstsz) { 
+                    msync(srcbuf, len, MS_SYNC);
+                    memcpy(addr, srcbuf, len);
+                    ring_buf_prod(&mrs->cmdRx);    
 
-        tars = aspMalloc(sizeof(float) * oldTot);
-        tarc = aspMalloc(sizeof(float) * oldTot);
-        
-        for (ix = 0; ix < oldTot; ix++) {
-            tars[ix] = ix * thasin;
-            tarc[ix] = ix * thacos;
-        }
-        
-        for (ix = 0; ix < oldWidth; ix++) {
-            for (iy = 0; iy < oldHeight; iy++) {
-            #if 0
-                sdot[0] = ix;
-                sdot[1] = iy;
-                tiffGetDot(rawCpy, sdot, gdat, oldScale);
-            #else
-                bitset = bpp / 8;
-                dst = rawCpy + (ix*bitset + iy*oldRowsz);
-
-                cnt = 0;
-                while (bitset > 0) {
-                    gdat[cnt] = *dst;
-
-                    bitset --;
-                    cnt++;
-                    dst++;
-
-                    if (cnt > 2) break;
-                }
-            #endif
-
-            #if 0
-                ind[0] = tarc[ix];
-                ind[1] = tars[iy];
-                ind[2] = tars[ix];
-                ind[3] = tarc[iy];
-
-                ret = calcuRotateCoordFast(outd, ind);
-            #else
-                dx = (int) round(tarc[ix] - tars[iy] + offsetH);
-                dy = (int) round(tars[ix] + tarc[iy] + offsetV);
-            #endif
+                    lstsz = lstsz - len;
+                    srcbuf = srcbuf + len;
+                    mrs_ipc_put(mrs, "n", 1, 3); 
+                } else {
+                    msync(srcbuf, lstsz, MS_SYNC);
+                    memcpy(addr, srcbuf, lstsz);
+                    ring_buf_prod(&mrs->cmdRx);    
+                    ring_buf_set_last(&mrs->cmdRx, lstsz);
                 
-            #if 0
-                dx = (int) round(outd[0] + offsetH);
-                dy = (int) round(outd[1] + offsetV);
-
-                ddot[0] = dx;
-                ddot[1] = dy;
-
-                tiffDrawDot(rawTmp, ddot, gdat, bmpScale);
-            #else
-                bitset = bpp / 8;
-                dst = rawTmp + (dx*bitset + dy*rowsize);
-
-                cnt = 0;
-                while (bitset > 0) {
-                    *dst = gdat[cnt];
-
-                    bitset --;
-                    cnt++;
-                    dst++;
-                    
-                    if (cnt > 2) break;
+                    lstsz = 0;
+                    mrs_ipc_put(mrs, "n", 1, 3);        
                 }
-            #endif
+            } else {
+                usleep(800000);
             }
-        }
-#endif
-        /*
-        drawCord[0] = LUt[0];
-        drawCord[1] = LUt[1];
-        drawCord[2] = RUt[0];
-        drawCord[3] = RUt[1];
-        tiffDrawLine(rawTmp, drawCord, bmpScale);
+        }                
 
-        drawCord[0] = RUt[0];
-        drawCord[1] = RUt[1];
-        drawCord[2] = RDt[0];
-        drawCord[3] = RDt[1];
-        tiffDrawLine(rawTmp, drawCord, bmpScale);
+        mrs_ipc_put(mrs, "N", 1, 3);       
 
-        drawCord[0] = RDt[0];
-        drawCord[1] = RDt[1];
-        drawCord[2] = LDt[0];
-        drawCord[3] = LDt[1];
-        tiffDrawLine(rawTmp, drawCord, bmpScale);
+        sprintf(mrs->log, "ring buff count: %d\n", cnt);
+        print_f(&mrs->plog, "fs116", mrs->log);
 
-        drawCord[0] = LDt[0];
-        drawCord[1] = LDt[1];
-        drawCord[2] = LUt[0];
-        drawCord[3] = LUt[1];
-        tiffDrawLine(rawTmp, drawCord, bmpScale);
-        */
-        
-        //memcpy(rawSrc, rawTmp, rawszNew);
-
-        msync(srcbuf, bheader->aspbhSize, MS_SYNC);        
         dbgBitmapHeader(bheader, len);
         
         aspFree(rawCpy);
-
         //aspFree(rawTmp);
 
         aspFree(tars);
+        aspFree(tarc);
+        
+#if 0
         /* send BMP back */
         totsz = bheader->aspbhSize;
         ring_buf_init(&mrs->cmdRx);
@@ -27313,6 +27298,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         sprintf(mrs->log, "ring buff count: %d\n", cnt);
         print_f(&mrs->plog, "fs116", mrs->log);
+#endif
 
         modersp->m = modersp->m + 1;
 
@@ -34229,7 +34215,7 @@ int main(int argc, char *argv[])
     pool->dirMax = DIR_POOL_SIZE;
     pool->dirUsed = 0;
     
-    pool->parBuf.dirParseBuff = aspSalloc(8*1024*1024); // 8MB
+    pool->parBuf.dirParseBuff = aspSalloc(16*1024*1024); // 16MB
     if (!pool->parBuf.dirParseBuff) {
         sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer FAIL!!!\n"); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
@@ -34238,7 +34224,7 @@ int main(int argc, char *argv[])
         sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer DONE [0x%x] , size is %d!!!\n", pool->parBuf.dirParseBuff, 8*1024*1024); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
-    pool->parBuf.dirBuffMax = 8*1024*1024;
+    pool->parBuf.dirBuffMax = 16*1024*1024;
     pool->parBuf.dirBuffUsed = 0;
 
     pmrs->aspFat.fatStatus = ASPFAT_STATUS_INIT;
