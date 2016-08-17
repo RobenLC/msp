@@ -2390,13 +2390,28 @@ static int getVectorFromP(double *vec, double *p1, double *p2)
     } else {
         b = ((x2 * y1) - (x1 * y2)) / (x2 - x1);
 
-        a1 = ((x1 * y2) - (x1 * y1)) / ((x1 * x2) - (x1 * x1));
-        a2 = ((x2 * y2) - (x2 * y1)) / ((x2 * x2) - (x2 * x1));
+        if (x1 == 0) {
+            a1 = 0;
+        } else {
+            a1 = ((x1 * y2) - (x1 * y1)) / ((x1 * x2) - (x1 * x1));
+        }
+
+        if (x2 == 0) {
+            a2 = 0;
+        } else {
+            a2 = ((x2 * y2) - (x2 * y1)) / ((x2 * x2) - (x2 * x1));
+        }
     }
 #if CROP_CALCU_DETAIL
     printf("[vectP] output - a = %lf/%lf, b = %lf\n", a1, a2, b);
 #endif
-    vec[0] = a1;
+
+    if (a1 == 0) {
+        vec[0] = a2;
+    } else {
+        vec[0] = a1;
+    }
+
     vec[1] = b;
 
     return 0;
@@ -26277,12 +26292,18 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
     int sdot[2], ddot[2];
     float rangle[2], thacos=0, thasin=0, theta, piAngle = 180.0;
     float minH=0, minV=0, offsetH=0, offsetV=0;
-    int maxH=0, maxV=0, rowsize=0, rawszNew=0;
-    int bpp=0, ix=0, iy=0, dx=0, dy=0, outi[2];    
-    float ind[4], outd[2];
+    int maxhint=0, maxvint=0, minhint=0, minvint=0, rowsize=0, rawszNew=0;
+    int bpp=0, ix=0, iy=0, dx=0, dy=0, outi[2], id=0, ixd=0;    
+    float ind[4], outd[2], fx=0, fy=0, tx=0, ty=0;
     float *tars, *tarc;
     char gdat[3];
     char *dst=0;
+
+    int *crsAry;
+    double linLU[3], linRU[3], linLD[3], linRD[3], linPal[3], linCrs[3];
+    double pLU[2], pRU[2], pLD[2], pRD[2], pal[2], par[2], pt[2];
+    double plm[2], prm[2], plc[2], prc[2], pn[2];
+    double maxhf=0, maxvf=0, minhf=0, minvf=0;
     //sprintf(mrs->log, "%d\n", modersp->v++);
     //print_f(&mrs->plog, "fs116", mrs->log);
 
@@ -26335,9 +26356,10 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         RD[0] = bheader->aspbiWidth;
         RD[1] = 0;
 
-        modersp->v = (modersp->v + 5) % 360;
+        modersp->v = (modersp->v + 1) % (360*5);
 
         theta = (float)modersp->v;
+        theta = theta / 5.0;
         
         sprintf(mrs->log, "rotate angle = %f \n", theta);
         print_f(&mrs->plog, "fs116", mrs->log);
@@ -26411,25 +26433,587 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "RDn: %lf, %lf / %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
         print_f(&mrs->plog, "fs116", mrs->log);
 
-        maxH= aspMaxInt(LUt[0], RUt[0]);
-        maxH = aspMaxInt(maxH, LDt[0]);
-        maxH = aspMaxInt(maxH, RDt[0]);
+        maxhint= aspMaxInt(LUt[0], RUt[0]);
+        maxhint = aspMaxInt(maxhint, LDt[0]);
+        maxhint = aspMaxInt(maxhint, RDt[0]);
 
-        maxV = aspMaxInt(LUt[1], RUt[1]);
-        maxV = aspMaxInt(maxV, LDt[1]);
-        maxV = aspMaxInt(maxV, RDt[1]);
+        maxvint = aspMaxInt(LUt[1], RUt[1]);
+        maxvint = aspMaxInt(maxvint, LDt[1]);
+        maxvint = aspMaxInt(maxvint, RDt[1]);
+
+        minhint= aspMinInt(LUt[0], RUt[0]);
+        minhint = aspMinInt(minhint, LDt[0]);
+        minhint = aspMinInt(minhint, RDt[0]);
+
+        minvint = aspMinInt(LUt[1], RUt[1]);
+        minvint = aspMinInt(minvint, LDt[1]);
+        minvint = aspMinInt(minvint, RDt[1]);
         
-        rowsize = ((bpp * maxH + 31) / 32) * 4;
-        rawszNew = rowsize * maxV;
+        rowsize = ((bpp * maxhint + 31) / 32) * 4;
+        rawszNew = rowsize * maxvint;
 
-        sprintf(mrs->log, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d \n", maxH, maxV, rowsize, rawszNew, totsz);
+        sprintf(mrs->log, "maxh: %d, minh: %d, maxv: %d, minv: %d \n", maxhint, minhint, maxvint, minvint);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        pLU[0] = -1;
+        pLU[1] = -1;
+        pRU[0] = -1;
+        pRU[1] = -1;
+        pLD[0] = -1;
+        pLD[1] = -1;
+        pRD[0] = -1;
+        pRD[1] = -1;
+
+        if (minhint == LUt[0]) {
+            sprintf(mrs->log, "LU =  %d, %d match minhint: %d !!!left - 0\n", LUt[0], LUt[1], minhint);
+            print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (minvint == LUt[1]) {
+                sprintf(mrs->log, "LU =  %d, %d match minvint: %d !!!left - 0\n", LUt[0], LUt[1], minvint);
+                print_f(&mrs->plog, "fs116", mrs->log);
+            
+                pLD[0] = LUn[0];
+                pLD[1] = LUn[1];
+                
+                sprintf(mrs->log, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+            } else {
+                if (maxvint == LUt[1]) {
+                    sprintf(mrs->log, "LU =  %d, %d match maxvint: %d !!!left - 0\n", LUt[0], LUt[1], maxvint);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                    pLU[0] = LUn[0];
+                    pLU[1] = LUn[1];
+
+                    sprintf(mrs->log, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                } else {
+                    if (maxvint == RUt[1]) {
+                        if (minvint == LDt[1]) {
+                            if (RUt[0] > LDt[0]) {
+                                pLU[0] = LUn[0];
+                                pLU[1] = LUn[1];
+
+                                pLD[0] = LDn[0];
+                                pLD[1] = LDn[1];
+                            } else if (RUt[0] < LDt[0]) {
+                                pLU[0] = RUn[0];
+                                pLU[1] = RUn[1];
+
+                                pLD[0] = LUn[0];
+                                pLD[1] = LUn[1];
+                            } else {
+                                sprintf(mrs->log, "WARNING!! LU =  %d, %d not match!!!left - 1\n", LUt[0], LUt[1]);
+                                print_f(&mrs->plog, "fs116", mrs->log);
+                            }
+                        } else {
+                            sprintf(mrs->log, "WARNING!! LU =  %d, %d not match!!! left - 2\n", LUt[0], LUt[1]);
+                            print_f(&mrs->plog, "fs116", mrs->log);
+                        }
+                    } else {
+                        sprintf(mrs->log, "WARNING!! LU =  %d, %d not match!!!left - 3\n", LUt[0], LUt[1]);
+                        print_f(&mrs->plog, "fs116", mrs->log);
+                    }
+                }
+            }
+        }
+        
+        if (minhint == RUt[0]) {
+            sprintf(mrs->log, "RU =  %d, %d match minhint: %d !!!left - 0\n", RUt[0], RUt[1], minhint);
+            print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (minvint == RUt[1]) {
+                sprintf(mrs->log, "RU =  %d, %d match minvint: %d !!!left - 0\n", RUt[0], RUt[1], minvint);
+                print_f(&mrs->plog, "fs116", mrs->log);
+                
+                pLD[0] = RUn[0];
+                pLD[1] = RUn[1];
+
+                sprintf(mrs->log, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+                print_f(&mrs->plog, "fs116", mrs->log);
+            } else {
+                if (maxvint == RUt[1]) {
+                    sprintf(mrs->log, "RU =  %d, %d match maxvint: %d !!!left - 0\n", RUt[0], RUt[1], maxvint);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+                    
+                    pLU[0] = RUn[0];
+                    pLU[1] = RUn[1];
+
+                    sprintf(mrs->log, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                } else {
+                    if (maxvint == RDt[1]) {
+                        if (minvint == LUt[1]) {
+                            if (RDt[0] > LUt[0]) {
+                                pLU[0] = RUn[0];
+                                pLU[1] = RUn[1];
+                    
+                                pLD[0] = LUn[0];
+                                pLD[1] = LUn[1];
+                            } else if (RDt[0] < LUt[0]) {
+                                pLU[0] = RDn[0];
+                                pLU[1] = RDn[1];
+                    
+                                pLD[0] = RUn[0];
+                                pLD[1] = RUn[1];
+                            } else {
+                                sprintf(mrs->log, "WARNING!! RU =  %d, %d not match!!!left - 1\n", RUt[0], RUt[1]);
+                                print_f(&mrs->plog, "fs116", mrs->log);
+                            }
+                        } else {
+                            sprintf(mrs->log, "WARNING!! RU =  %d, %d not match!!!left - 2\n", RUt[0], RUt[1]);
+                            print_f(&mrs->plog, "fs116", mrs->log);
+                        }
+                    } else {
+                        sprintf(mrs->log, "WARNING!! RU =  %d, %d not match!!!left - 3\n", RUt[0], RUt[1]);
+                        print_f(&mrs->plog, "fs116", mrs->log);
+                    }                    
+                }
+            }
+        }
+            
+        if (minhint == LDt[0]) {
+            sprintf(mrs->log, "LD =  %d, %d match minhint: %d !!!left - 0\n", LDt[0], LDt[1], minhint);
+            print_f(&mrs->plog, "fs116", mrs->log);
+            
+            if (minvint == LDt[1]) {
+                sprintf(mrs->log, "LD =  %d, %d match minvint: %d !!!left - 0\n", LDt[0], LDt[1], minvint);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+                pLD[0] = LDn[0];
+                pLD[1] = LDn[1];
+
+                sprintf(mrs->log, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+                print_f(&mrs->plog, "fs116", mrs->log);
+            } else {
+                if (maxvint == LDt[1]) {
+                    sprintf(mrs->log, "LD =  %d, %d match maxvint: %d !!!left - 0\n", LDt[0], LDt[1], maxvint);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                    pLU[0] = LDn[0];
+                    pLU[1] = LDn[1];
+
+                    sprintf(mrs->log, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                } else {
+                    if (maxvint == LUt[1]) {
+                        if (minvint == RDt[1]) {
+                            if (LUt[0] > RDt[0]) {
+                                pLU[0] = LDn[0];
+                                pLU[1] = LDn[1];
+                    
+                                pLD[0] = RDn[0];
+                                pLD[1] = RDn[1];
+                            } else if (LUt[0] < RDt[0]) {
+                                pLU[0] = LUn[0];
+                                pLU[1] = LUn[1];
+                    
+                                pLD[0] = LDn[0];
+                                pLD[1] = LDn[1];
+                            } else {
+                                sprintf(mrs->log, "WARNING!! LD =  %d, %d not match!!!left - 1\n", LDt[0], LDt[1]);
+                                print_f(&mrs->plog, "fs116", mrs->log);
+                            }
+                        } else {
+                            sprintf(mrs->log, "WARNING!! LD =  %d, %d not match!!!left - 2\n", LDt[0], LDt[1]);
+                            print_f(&mrs->plog, "fs116", mrs->log);
+                        }
+                    } else {
+                        sprintf(mrs->log, "WARNING!! LD =  %d, %d not match!!!left - 3\n", LDt[0], LDt[1]);
+                        print_f(&mrs->plog, "fs116", mrs->log);
+                    }                                   
+                }
+            }
+        }
+            
+        if (minhint == RDt[0]) {
+            sprintf(mrs->log, "RD =  %d, %d match minhint: %d !!!left - 0\n", RDt[0], RDt[1], minhint);
+            print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (minvint == RDt[1]) {
+                sprintf(mrs->log, "RD =  %d, %d match minvint: %d !!!left - 0\n", RDt[0], RDt[1], minvint);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+                pLD[0] = RDn[0];
+                pLD[1] = RDn[1];                    
+
+                sprintf(mrs->log, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+                print_f(&mrs->plog, "fs116", mrs->log);
+            } else {
+                if (maxvint == RDt[1]) {
+                    sprintf(mrs->log, "RD =  %d, %d match maxvint: %d !!!left - 0\n", RDt[0], RDt[1], maxvint);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                    pLU[0] = RDn[0];
+                    pLU[1] = RDn[1];
+
+                    sprintf(mrs->log, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+                } else {
+                    if (maxvint == LDt[1]) {
+                        if (minvint == RUt[1]) {
+                            if (LDt[0] > RUt[0]) {
+                                pLU[0] = RDn[0];
+                                pLU[1] = RDn[1];
+                    
+                                pLD[0] = RUn[0];
+                                pLD[1] = RUn[1];
+                            } else if (LDt[0] < RUt[0]) {
+                                pLU[0] = LDn[0];
+                                pLU[1] = LDn[1];
+                    
+                                pLD[0] = RDn[0];
+                                pLD[1] = RDn[1];
+                            } else {
+                                sprintf(mrs->log, "WARNING!! RD =  %d, %d not match!!!left - 1\n", RDt[0], RDt[1]);
+                                print_f(&mrs->plog, "fs116", mrs->log);
+                            }
+                        } else {
+                            sprintf(mrs->log, "WARNING!! RD =  %d, %d not match!!!left - 2\n", RDt[0], RDt[1]);
+                            print_f(&mrs->plog, "fs116", mrs->log);
+                        }
+                    } else {
+                        sprintf(mrs->log, "WARNING!! RD =  %d, %d not match!!!left - 3\n", RDt[0], RDt[1]);
+                        print_f(&mrs->plog, "fs116", mrs->log);
+                    }                                
+                }
+            }
+        }
+                    
+
+        if (maxhint == LUt[0]) {
+            sprintf(mrs->log, "LU =  %d, %d match maxhint: %d !!!right - 0\n", LUt[0], LUt[1], maxhint);
+            print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (minvint == LUt[1]) {
+                sprintf(mrs->log, "LU =  %d, %d match minvint: %d !!!right - 0\n", LUt[0], LUt[1], minvint);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+                pRD[0] = LUn[0];
+                pRD[1] = LUn[1];
+
+                sprintf(mrs->log, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+            } else {
+                if (maxvint == LUt[1]) {
+                    sprintf(mrs->log, "LU =  %d, %d match maxvint: %d !!!right - 0\n", LUt[0], LUt[1], maxvint);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                    pRU[0] = LUn[0];
+                    pRU[1] = LUn[1];
+
+                    sprintf(mrs->log, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                } else {
+                    if (maxvint == LDt[1]) {
+                        if (minvint == RUt[1]) {
+                            if (RUt[0] < LDt[0]) {
+                                pRU[0] = LDn[0];
+                                pRU[1] = LDn[1];
+
+                                pRD[0] = LUn[0];
+                                pRD[1] = LUn[1];
+                            } else if (RUt[0] > LDt[0]) {
+                                pRU[0] = LUn[0];
+                                pRU[1] = LUn[1];
+
+                                pRD[0] = RUn[0];
+                                pRD[1] = RUn[1];
+                            } else {
+                                sprintf(mrs->log, "WARNING!! LU =  %d, %d not match!!!right - 1\n", LUt[0], LUt[1]);
+                                print_f(&mrs->plog, "fs116", mrs->log);
+                            }
+                        } else {
+                            sprintf(mrs->log, "WARNING!! LU =  %d, %d not match!!!right - 2\n", LUt[0], LUt[1]);
+                            print_f(&mrs->plog, "fs116", mrs->log);
+                        }
+                    } else {
+                        sprintf(mrs->log, "WARNING!! LU =  %d, %d not match!!!right - 3\n", LUt[0], LUt[1]);
+                        print_f(&mrs->plog, "fs116", mrs->log);
+                    }
+                }
+            }
+        }
+        
+        if (maxhint == RUt[0]) {
+            sprintf(mrs->log, "RU =  %d, %d match maxhint: %d !!!right - 0\n", RUt[0], RUt[1], maxhint);
+            print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (minvint == RUt[1]) {
+                sprintf(mrs->log, "RU =  %d, %d match minvint: %d !!!right - 0\n", RUt[0], RUt[1], minvint);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+                pRD[0] = RUn[0];
+                pRD[1] = RUn[1];
+
+                sprintf(mrs->log, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+            } else {
+                if (maxvint == RUt[1]) {
+                    sprintf(mrs->log, "RU =  %d, %d match maxvint: %d !!!right - 0\n", RUt[0], RUt[1], maxvint);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                    pRU[0] = RUn[0];
+                    pRU[1] = RUn[1];
+
+                    sprintf(mrs->log, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                } else {
+                    if (maxvint == LUt[1]) {
+                        if (minvint == RDt[1]) {
+                            if (RDt[0] < LUt[0]) {
+                                pRU[0] = LUn[0];
+                                pRU[1] = LUn[1];
+                    
+                                pRD[0] = RUn[0];
+                                pRD[1] = RUn[1];
+                            } else if (RDt[0] > LUt[0]) {
+                                pRU[0] = RUn[0];
+                                pRU[1] = RUn[1];
+                    
+                                pRD[0] = RDn[0];
+                                pRD[1] = RDn[1];
+                            } else {
+                                sprintf(mrs->log, "WARNING!! RU =  %d, %d not match!!!right - 1\n", RUt[0], RUt[1]);
+                                print_f(&mrs->plog, "fs116", mrs->log);
+                            }
+                        } else {
+                            sprintf(mrs->log, "WARNING!! RU =  %d, %d not match!!!right - 2\n", RUt[0], RUt[1]);
+                            print_f(&mrs->plog, "fs116", mrs->log);
+                        }
+                    } else {
+                        sprintf(mrs->log, "WARNING!! RU =  %d, %d not match!!!right - 3\n", RUt[0], RUt[1]);
+                        print_f(&mrs->plog, "fs116", mrs->log);
+                    }                    
+                }
+            }
+        }
+            
+        if (maxhint == LDt[0]) {
+            sprintf(mrs->log, "LD =  %d, %d match maxhint: %d !!!right - 0\n", LDt[0], LDt[1], maxhint);
+            print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (minvint == LDt[1]) {
+                sprintf(mrs->log, "LD =  %d, %d match minvint: %d !!!right - 0\n", LDt[0], LDt[1], minvint);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+                pRD[0] = LDn[0];
+                pRD[1] = LDn[1];                  
+
+                sprintf(mrs->log, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+            } else {
+                if (maxvint == LDt[1]) {
+                    sprintf(mrs->log, "LD =  %d, %d match maxvint: %d !!!right - 0\n", LDt[0], LDt[1], maxvint);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                    pRU[0] = LDn[0];
+                    pRU[1] = LDn[1];
+
+                    sprintf(mrs->log, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                } else {
+                    if (maxvint == RDt[1]) {
+                        if (minvint == LUt[1]) {
+                            if (LUt[0] < RDt[0]) {
+                                pRU[0] = RDn[0];
+                                pRU[1] = RDn[1];
+                    
+                                pRD[0] = LDn[0];
+                                pRD[1] = LDn[1];
+                            } else if (LUt[0] > RDt[0]) {
+                                pRU[0] = LDn[0];
+                                pRU[1] = LDn[1];
+                    
+                                pRD[0] = LUn[0];
+                                pRD[1] = LUn[1];
+                            } else {
+                                sprintf(mrs->log, "WARNING!! LD =  %d, %d not match!!!right - 1\n", LDt[0], LDt[1]);
+                                print_f(&mrs->plog, "fs116", mrs->log);
+                            }
+                        } else {
+                            sprintf(mrs->log, "WARNING!! LD =  %d, %d not match!!!right - 2\n", LDt[0], LDt[1]);
+                            print_f(&mrs->plog, "fs116", mrs->log);
+                        }
+                    } else {
+                        sprintf(mrs->log, "WARNING!! LD =  %d, %d not match!!!right - 3\n", LDt[0], LDt[1]);
+                        print_f(&mrs->plog, "fs116", mrs->log);
+                    }                                   
+                }
+            }
+        }
+                
+        if (maxhint == RDt[0]) {
+            sprintf(mrs->log, "RD =  %d, %d match maxhint: %d !!!right - 0\n", RDt[0], RDt[1], maxhint);
+            print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (minvint == RDt[1]) {
+                sprintf(mrs->log, "RD =  %d, %d match minvint: %d !!!right - 0\n", RDt[0], RDt[1], minvint);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+                pRD[0] = RDn[0];
+                pRD[1] = RDn[1];                    
+
+                sprintf(mrs->log, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+                print_f(&mrs->plog, "fs116", mrs->log);
+
+            } else {
+                if (maxvint == RDt[1]) {
+                    sprintf(mrs->log, "RD =  %d, %d match maxvint: %d !!!right - 0\n", RDt[0], RDt[1], maxvint);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                    pRU[0] = RDn[0];
+                    pRU[1] = RDn[1];
+
+                    sprintf(mrs->log, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+
+                } else {
+                    if (maxvint == RUt[1]) {
+                        if (minvint == LDt[1]) {
+                            if (LDt[0] < RUt[0]) {
+                                pRU[0] = RUn[0];
+                                pRU[1] = RUn[1];
+                    
+                                pRD[0] = RDn[0];
+                                pRD[1] = RDn[1];
+                            } else if (LDt[0] > RUt[0]) {
+                                pRU[0] = RDn[0];
+                                pRU[1] = RDn[1];
+                    
+                                pRD[0] = LDn[0];
+                                pRD[1] = LDn[1];
+                            } else {
+                                sprintf(mrs->log, "WARNING!! RD =  %d, %d not match!!!right - 1\n", RDt[0], RDt[1]);
+                                print_f(&mrs->plog, "fs116", mrs->log);
+                            }
+                        } else {
+                            sprintf(mrs->log, "WARNING!! RD =  %d, %d not match!!!right - 2\n", RDt[0], RDt[1]);
+                            print_f(&mrs->plog, "fs116", mrs->log);
+                        }
+                    } else {
+                        sprintf(mrs->log, "WARNING!! RD =  %d, %d not match!!!right - 3\n", RDt[0], RDt[1]);
+                        print_f(&mrs->plog, "fs116", mrs->log);
+                    }                                
+                }
+            }
+        }
+
+        sprintf(mrs->log, "PLU: %lf, %lf \n", pLU[0], pLU[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "PRU: %lf, %lf \n", pRU[0], pRU[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "PLD: %lf, %lf \n", pLD[0], pLD[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        sprintf(mrs->log, "PRD: %lf, %lf \n", pRD[0], pRD[1]);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        if (pLU[1] > pRU[1]) {
+            getVectorFromP(linLU, pLU, pLD);
+            getVectorFromP(linLD, pLD, pRD);
+            getVectorFromP(linRD, pRD, pRU);
+            getVectorFromP(linRU, pRU, pLU);
+
+            plm[0] = pLD[0];
+            plm[1] = pLD[1];
+            
+            prm[0] = pRU[0];
+            prm[1] = pRU[1];
+        } else {
+            getVectorFromP(linLU, pRU, pLU);
+            getVectorFromP(linLD, pLU, pLD);
+            getVectorFromP(linRD, pLD, pRD);
+            getVectorFromP(linRU, pRD, pRU);
+
+            plm[0] = pLU[0];
+            plm[1] = pLU[1];
+            
+            prm[0] = pRD[0];
+            prm[1] = pRD[1];
+        }
+        
+        ret = getCross(linLD, linLU, plc);
+        sprintf(mrs->log, "test cross left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
+        print_f(&mrs->plog, "fs116", mrs->log);
+                
+        ret = getCross(linRD, linRU, prc);
+        sprintf(mrs->log, "test cross right %lf, %lf ret: %d \n", prc[0], prc[1], ret);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        ret = getCross(linRU, linLU, pt);
+        sprintf(mrs->log, "test cross top %lf, %lf ret: %d \n", pt[0], pt[1], ret);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        ret= getCross(linRD, linLD, pn);
+        sprintf(mrs->log, "test cross down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        
+        pal[0] = 100;
+        pal[1] = 100;
+
+        par[0] = 100;
+        par[1] = 1000;
+        getVectorFromP(linPal, par, pal);        
+        crsAry = aspMalloc(sizeof(int)*(maxvint-minvint+1)*3);
+        
+        ix = 0;
+        pt[0] = 200.0;
+        for (iy = minvint; iy <= maxvint; iy++) {
+            pt[1] = (double)iy;
+            getRectVectorFromV(linCrs, pt, linPal);
+
+            //getCross(linCrs, linPal, pn);
+            //sprintf(mrs->log, "pn: %.4lf, %.4lf \n", pn[0], pn[1]);
+            //print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (pt[1] > plm[1]) {
+                getCross(linCrs, linLU, plc);
+            } else {
+                getCross(linCrs, linLD, plc);
+            }
+
+            //sprintf(mrs->log, "%.4lf %.4lf, left cross (%.4lf, %.4lf) \n", pt[1], plm[1], plc[0], plc[1]);
+            //print_f(&mrs->plog, "fs116", mrs->log);
+
+            if (pt[1] > prm[1]) {
+                getCross(linCrs, linRU, prc);
+            } else {
+                getCross(linCrs, linRD, prc);
+            }
+
+            //sprintf(mrs->log, "%.4lf %.4lf, right cross (%.4lf, %.4lf) \n", pt[1], prm[1], prc[0], prc[1]);
+            //print_f(&mrs->plog, "fs116", mrs->log);
+            
+            crsAry[ix*3+0] = iy;
+            crsAry[ix*3+1] = (int)round(plc[0]);
+            crsAry[ix*3+2] = (int)round(prc[0]);
+            ix++;
+        }
+
+/*
+        for (ix=0; ix < (maxvint-minvint+1); ix++) {
+            sprintf(mrs->log, "%d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
+            print_f(&mrs->plog, "fs116", mrs->log);
+        }
+*/
+        sprintf(mrs->log, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d \n", maxhint, maxvint, rowsize, rawszNew, totsz);
         print_f(&mrs->plog, "fs116", mrs->log);
 
         memset(rawSrc, 0, rawszNew);
 
         bheader->aspbhSize = bheader->aspbhRawoffset + rawszNew;
-        bheader->aspbiWidth = maxH;
-        bheader->aspbiHeight = maxV;
+        bheader->aspbiWidth = maxhint;
+        bheader->aspbiHeight = maxvint;
         bheader->aspbiRawSize = rawszNew;
 
         memcpy(srcbuf, ph, 54);
@@ -26441,7 +27025,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         oldScale[3] = bpp;        
 
         bmpScale[0] = rowsize;
-        bmpScale[1] = maxV;        
+        bmpScale[1] = maxvint;        
         bmpScale[2] = rawszNew;
         bmpScale[3] = bpp;
 
@@ -26452,7 +27036,130 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         #endif
         
         memset(rawTmp, 0x55, rawszNew);
+#if 1 /* reverse to fill the rotate image */
+        theta = (float) (360*5 - modersp->v);
+        theta = theta / 5;
+        
+        sprintf(mrs->log, "reverse rotate angle = %f \n", theta);
+        print_f(&mrs->plog, "fs116", mrs->log);
 
+        theta = theta * M_PI / piAngle;
+
+        thacos = cos(theta);
+        thasin = sin(theta);
+
+        if (maxhint > maxvint) {
+            oldTot = maxhint;
+        } else {
+            oldTot = maxvint;
+        }
+
+        tars = aspMalloc(sizeof(float) * oldTot);
+        tarc = aspMalloc(sizeof(float) * oldTot);
+
+        for (ix = 0; ix < oldTot; ix++) {
+            tars[ix] = ix * thasin;
+            tarc[ix] = ix * thacos;
+        }
+
+        fx = LUn[0] - offsetH;
+        fy = LUn[1] - offsetV;
+        dx = (int) round(fx*thacos - fy*thasin);
+        dy = (int) round(fx*thasin + fy*thacos);
+        sprintf(mrs->log, "LU back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", LUt[0], fx, LUt[1], fy,  dx, dy, offsetH, offsetV);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        
+        fx = RUn[0] - offsetH;
+        fy = RUn[1] - offsetV;
+        dx = (int) round(fx*thacos - fy*thasin);
+        dy = (int) round(fx*thasin + fy*thacos);
+        sprintf(mrs->log, "RU back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", RUt[0], fx, RUt[1], fy,  dx, dy, offsetH, offsetV);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        fx = RDn[0] - offsetH;
+        fy = RDn[1] - offsetV;
+        dx = (int) round(fx*thacos - fy*thasin);
+        dy = (int) round(fx*thasin + fy*thacos);
+        sprintf(mrs->log, "RD back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", RDt[0], fx, RDt[1], fy,  dx, dy, offsetH, offsetV);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+        fx = LDn[0] - offsetH;
+        fy = LDn[1] - offsetV;
+        dx = (int) round(fx*thacos - fy*thasin);
+        dy = (int) round(fx*thasin + fy*thacos);
+        sprintf(mrs->log, "LD back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", LDt[0], fx, LDt[1], fy,  dx, dy, offsetH, offsetV);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+
+        cnt = 0;
+        for (id=0; id < (maxvint-minvint+1); id++) {
+            iy = crsAry[id*3+0];
+            ix = crsAry[id*3+1];
+            ixd = crsAry[id*3+2]; 
+
+            fx = (float)ix;
+            fy = (float)iy;
+            
+            fx -= offsetH;
+            fy -= offsetV;
+
+            dx = (int) round(fx*thacos - fy*thasin);
+            dy = (int) round(fx*thasin + fy*thacos);
+
+            //sprintf(mrs->log, "back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", ix, fx, iy, fy,  dx, dy, offsetH, offsetV);
+            //print_f(&mrs->plog, "fs116", mrs->log);
+
+            for (;ix <= ixd; ix++) {        
+                fx = ix - offsetH;
+                fy = iy - offsetV;
+                
+                dx = (int) round(fx*thacos - fy*thasin);
+                dy = (int) round(fx*thasin + fy*thacos);
+
+                cnt++;
+
+                if ((dx < 0) || (dy < 0) || (dx > oldWidth) || (dy > oldHeight)) {
+                    sprintf(mrs->log, "%d. %d, %d => %d, %d \n",id, ix, iy,  dx, dy);
+                    print_f(&mrs->plog, "fs116", mrs->log);
+                    continue;
+                }
+
+                bitset = bpp / 8;
+                dst = rawCpy + (dx*bitset + dy*oldRowsz);
+
+                cnt = 0;
+                while (bitset > 0) {
+                    gdat[cnt] = *dst;
+
+                    bitset --;
+                    cnt++;
+                    dst++;
+
+                    if (cnt > 2) break;
+                }
+
+                bitset = bpp / 8;
+                dst = rawTmp + (ix*bitset + iy*rowsize);
+
+                cnt = 0;
+                while (bitset > 0) {
+                    *dst = gdat[cnt];
+
+                    bitset --;
+                    cnt++;
+                    dst++;
+                    
+                    if (cnt > 2) break;
+                }
+
+            }
+
+        }
+
+        sprintf(mrs->log, "cnt: %d\n", cnt);
+        print_f(&mrs->plog, "fs116", mrs->log);
+
+#else
         if (oldWidth > oldHeight) {
             oldTot = oldWidth;
         } else {
@@ -26526,7 +27233,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             #endif
             }
         }
-
+#endif
         /*
         drawCord[0] = LUt[0];
         drawCord[1] = LUt[1];
