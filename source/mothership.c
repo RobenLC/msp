@@ -907,6 +907,13 @@ struct bitmapHeader_s {
     int    aspbiNumImpColor;
 };
 
+struct bitmapRotate_s {
+    char *aspRotCrossAry;
+    int aspRotCASize;
+    char *aspRotCpyBuff;
+    int aspRotBuffSize;
+};
+
 struct mainRes_s{
     int sid[9];
     int sfm[2];
@@ -949,7 +956,7 @@ struct mainRes_s{
     struct aspCrop36_s *crop32;
     struct aspCropExtra_s *cropex;
     struct bitmapHeader_s bmpheader;
-
+    struct bitmapRotate_s bmpRotate;
     char netIntfs[16];
     char *dbglog;
 };
@@ -1008,6 +1015,7 @@ struct procRes_s{
     struct aspCrop36_s *pcrop32;
     struct aspCropExtra_s *pcropex;
     struct bitmapHeader_s *pbheader;
+    struct bitmapRotate_s *pbrotate;
     struct logPool_s *plogs;
     char *pnetIntfs;
 };
@@ -5662,7 +5670,7 @@ static void* aspMalloc(int mlen)
     
     tot = *totMalloc;
     tot += mlen;
-    printf("!!!!!!!!!!!!!!!!!!!  malloc size: %d / %d\n", mlen, tot);
+    //printf("!!!!!!!!!!!!!!!!!!!  malloc size: %d / %d\n", mlen, tot);
     *totMalloc = tot;
     
     p = malloc(mlen);
@@ -5676,7 +5684,7 @@ static void* aspSalloc(int slen)
     
     tot = *totSalloc;
     tot += slen;
-    printf("*******************  salloc size: %d / %d\n", slen, tot);
+    //printf("*******************  salloc size: %d / %d\n", slen, tot);
     *totSalloc = tot;
     
     p = mmap(NULL, slen, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -16988,6 +16996,12 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
     char str[128];
     sel = sel % 2;
 
+    if (size > SPI_TRUNK_SZ) {
+        sprintf(str, "ERROR!!! set last %d > max %d \n", size, SPI_TRUNK_SZ);
+        print_f(mlogPool, "ring", str);
+        size = SPI_TRUNK_SZ;
+    }
+    
     tlen = size % MIN_SECTOR_SIZE;
     if (tlen) {
         size = size + MIN_SECTOR_SIZE - tlen;
@@ -17011,6 +17025,13 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
 {
     char str[128];
     int tlen=0;
+
+    if (size > SPI_TRUNK_SZ) {
+        sprintf(str, "ERROR!!! set last %d > max %d \n", size, SPI_TRUNK_SZ);
+        print_f(mlogPool, "ring", str);
+        size = SPI_TRUNK_SZ;
+    }
+    
     tlen = size % MIN_SECTOR_SIZE;
     if (tlen) {
         size = size + MIN_SECTOR_SIZE - tlen;
@@ -26274,6 +26295,8 @@ static int fs115(struct mainRes_s *mrs, struct modersp_s *modersp)
     mrs_ipc_put(mrs, "l", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
+    //modersp->v = 45;
+    
     modersp->m = modersp->m + 1;
     return 2;
 }
@@ -26299,7 +26322,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
     char gdat[3];
     char *dst=0;
 
-    int *crsAry;
+    int *crsAry, crsASize, expCAsize;
     double linLU[3], linRU[3], linLD[3], linRD[3], linPal[3], linCrs[3];
     double pLU[2], pRU[2], pLD[2], pRD[2], pal[2], par[2], pt[2];
     double plm[2], prm[2], plc[2], prc[2], pn[2];
@@ -26336,11 +26359,18 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         bpp = bheader->aspbiCPP >> 16;
         oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
 
-        rawCpy = aspMalloc(rawsz);
-        if (rawCpy) {
-            memcpy(rawCpy, rawSrc, rawsz);
+        //rawCpy = aspMalloc(rawsz);
+        rawCpy = mrs->bmpRotate.aspRotCpyBuff;
+        len = mrs->bmpRotate.aspRotBuffSize;
+        if (len < rawsz) {
+            sprintf(mrs->log, "ERROR!!! copy buffer is not enough!!! size %d, need %d !!!\n", len, rawsz);
+            print_f(&mrs->plog, "fs116", mrs->log);
+            modersp->r = 0xed;
+            return 1;
         }
-
+        
+        memcpy(rawCpy, rawSrc, rawsz);
+        
         //shmem_dump(rawCpy, 128);
         //shmem_dump(rawSrc, 128);
 
@@ -26543,7 +26573,6 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                     sprintf(mrs->log, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
                     print_f(&mrs->plog, "fs116", mrs->log);
-
                 } else {
                     if (maxvint == RDt[1]) {
                         if (minvint == LUt[1]) {
@@ -26967,11 +26996,19 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         par[0] = 100;
         par[1] = 1000;
         getVectorFromP(linPal, par, pal);        
-        crsAry = aspMalloc(sizeof(int)*(maxvint-minvint+1)*3);
-        
-        ix = 0;
+
+        expCAsize = maxvint-minvint+1;
+        len = 3*sizeof(int);
+        //crsAry = aspMalloc(expCAsize*len);
+        crsAry = (int *)mrs->bmpRotate.aspRotCrossAry;
+        crsASize = mrs->bmpRotate.aspRotCASize /len;
+
+        if (expCAsize > crsASize) {
+            expCAsize = crsASize;
+        }
+
         pt[0] = 200.0;
-        for (iy = minvint; iy <= maxvint; iy++) {
+        for (iy=minvint, ix=0; ix < expCAsize; iy++, ix++) {
             pt[1] = (double)iy;
             getRectVectorFromV(linCrs, pt, linPal);
 
@@ -27000,7 +27037,6 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             crsAry[ix*3+0] = iy;
             crsAry[ix*3+1] = (int)round(plc[0]);
             crsAry[ix*3+2] = (int)round(prc[0]);
-            ix++;
         }
 
 /*
@@ -27009,10 +27045,10 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs116", mrs->log);
         }
 */
-        sprintf(mrs->log, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d \n", maxhint, maxvint, rowsize, rawszNew, totsz);
+        sprintf(mrs->log, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d, sizeof crsArry: %d\n", maxhint, maxvint, rowsize, rawszNew, totsz, expCAsize);
         print_f(&mrs->plog, "fs116", mrs->log);
 
-        memset(rawSrc, 0, rawszNew);
+        //memset(rawSrc, 0, rawszNew);
 
         bheader->aspbhSize = bheader->aspbhRawoffset + rawszNew;
         bheader->aspbiWidth = maxhint;
@@ -27020,6 +27056,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         bheader->aspbiRawSize = rawszNew;
 
         memcpy(srcbuf, ph, 54);
+        
         /* retate raw data */
         //memset(rawSrc, 0xff, rawszNew);
         oldScale[0] = oldRowsz;
@@ -27064,23 +27101,26 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
 
         offsetCal = 0 - id;
-
         len = oldTot - id;
-
-        sprintf(mrs->log, "pre-calculating buffer size: %d, max: %d, min: %d, offset: %d \n", len, oldTot, id, offsetCal);
-        print_f(&mrs->plog, "fs116", mrs->log);
-
+#if 0 
         tars = aspMalloc(sizeof(double) * len);
         tarc = aspMalloc(sizeof(double) * len);
 
+        sprintf(mrs->log, "pre-calculating buffer size: %d, max: %d, min: %d, offset: %d, tars: 0x%.8x, tarc: 0x%.8x\n", len, oldTot, id, offsetCal, tars, tarc);
+        print_f(&mrs->plog, "fs116", mrs->log);
+        
+       
         for (ix = id, iy = 0; iy < len; ix++, iy++) {
-            //sprintf(mrs->log, "pre-calculate %d\n", ix);
-            //print_f(&mrs->plog, "fs116", mrs->log);
 
             fx = (double)ix;
             tars[iy] = fx * thasin;
             tarc[iy] = fx * thacos;
+
+            sprintf(mrs->log, "pre-calculate fx: %lf, sin: %lf, cos: %lf \n", fx, tars[iy], tarc[iy]);
+            print_f(&mrs->plog, "fs116", mrs->log);
+
         }
+#endif
 
 #if 0
         fx = LUn[0] - offsetH;
@@ -27116,8 +27156,10 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         totsz = bheader->aspbhSize;
         ring_buf_init(&mrs->cmdRx);
 
+        msync(crsAry, expCAsize*3*4, MS_SYNC);
+        
         cnt = 0;
-        for (id=0; id < (maxvint-minvint+1); id++) {
+        for (id=0; id < expCAsize; id++) {
             iy = crsAry[id*3+0];
             ix = crsAry[id*3+1];
             ixd = crsAry[id*3+2]; 
@@ -27129,7 +27171,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             fy -= offsetV;
 
             //dx = (int) round(fx*thacos - fy*thasin);
-            //dy = (int) round(fx*thasin + fy*thacos);
+            dy = (int) round(fx*thasin + fy*thacos);
 
             //sprintf(mrs->log, "back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", ix, fx, iy, fy,  dx, dy, offsetH, offsetV);
             //print_f(&mrs->plog, "fs116", mrs->log);
@@ -27146,16 +27188,16 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
                 ixn = (int)round(fx);
                 ixn += offsetCal;
 
-                dx = (int) round(tarc[ixn] - tars[iyn]);
-                dy = (int) round(tars[ixn] + tarc[iyn]);
+                //dx = (int) round(tarc[ixn] - tars[iyn]);
+                //dy = (int) round(tars[ixn] + tarc[iyn]);
 
-                //dx = (int) round(fx*thacos - fy*thasin);
-                //dy = (int) round(fx*thasin + fy*thacos);
+                dx = (int) round(fx*thacos - fy*thasin);
+                dy = (int) round(fx*thasin + fy*thacos);
 
                 cnt++;
 
-                if ((dx < 0) || (dy < 0) || (dx > oldWidth) || (dy > oldHeight)) {
-                    //sprintf(mrs->log, "%d. %d, %d => %d, %d \n",id, ix, iy,  dx, dy);
+                if ((dx < 0) || (dy < 0) || (dx >= oldWidth) || (dy >= oldHeight)) {
+                    //sprintf(mrs->log, "%d. %d, %d => %d, %d (%d, %d)\n",id, ix, iy,  dx, dy, oldWidth, oldHeight);
                     //print_f(&mrs->plog, "fs116", mrs->log);
                     continue;
                 }
@@ -27219,7 +27261,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
             len = 0;
             len = ring_buf_get(&mrs->cmdRx, &addr);
             if (len > 0) {
-                if (len > lstsz) { 
+                if (len < lstsz) { 
                     msync(srcbuf, len, MS_SYNC);
                     memcpy(addr, srcbuf, len);
                     ring_buf_prod(&mrs->cmdRx);    
@@ -27248,12 +27290,13 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         dbgBitmapHeader(bheader, len);
         
+#if 0
         aspFree(rawCpy);
-        //aspFree(rawTmp);
-
+        aspFree(crsAry);
         aspFree(tars);
         aspFree(tarc);
-        
+#endif
+
 #if 0
         /* send BMP back */
         totsz = bheader->aspbhSize;
@@ -27314,8 +27357,8 @@ static int fs117(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "wait spi0 tx end\n");
-    print_f(&mrs->plog, "fs117", mrs->log);
+    //sprintf(mrs->log, "wait spi0 tx end\n");
+    //print_f(&mrs->plog, "fs117", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     while (len > 0) {
@@ -34157,7 +34200,31 @@ int main(int argc, char *argv[])
         sprintf(pmrs->log, "alloc share memory for crop extra points DONE [0x%x] size:%d !!!\n", pmrs->cropex, sizeof(struct aspCropExtra_s)); 
         print_f(&pmrs->plog, "CROPEX", pmrs->log);
     }
-    
+    /* BITMAP */
+    pmrs->bmpRotate.aspRotCrossAry= aspSalloc(8192*4*3);
+    if (!pmrs->bmpRotate.aspRotCrossAry) {
+        sprintf(pmrs->log, "alloc share memory for BITMAP ROTATE FAIL!!! size = %d\n", 8192*4*3); 
+        print_f(&pmrs->plog, "BITMAP", pmrs->log);
+        pmrs->bmpRotate.aspRotCASize = 0;
+        goto end;
+    } else {
+        pmrs->bmpRotate.aspRotCASize = 8192*4*3;
+        
+        sprintf(pmrs->log, "alloc share memory for BITMAP ROTATE DONE [0x%.8x]!!! size = %d\n", pmrs->bmpRotate.aspRotCrossAry, pmrs->bmpRotate.aspRotCASize); 
+        print_f(&pmrs->plog, "BITMAP", pmrs->log);
+    }
+
+    pmrs->bmpRotate.aspRotCpyBuff= aspSalloc(8*1024*1024);
+    if (!pmrs->bmpRotate.aspRotCpyBuff) {
+        sprintf(pmrs->log, "alloc share memory for BITMAP copy buffer FAIL!!! size = %d\n", 8*1024*1024); 
+        print_f(&pmrs->plog, "BITMAP", pmrs->log);
+        pmrs->bmpRotate.aspRotCASize = 0;
+    } else {
+        pmrs->bmpRotate.aspRotBuffSize = 8*1024*1024;
+        
+        sprintf(pmrs->log, "alloc share memory for BITMAP copy buffer DONE [0x%.8x]!!! size = %d\n", pmrs->bmpRotate.aspRotCpyBuff, pmrs->bmpRotate.aspRotBuffSize); 
+        print_f(&pmrs->plog, "BITMAP", pmrs->log);
+    }
     
     /* FAT */
     pmrs->aspFat.fatBootsec = (struct sdbootsec_s *)aspSalloc(sizeof(struct sdbootsec_s));
@@ -34215,13 +34282,13 @@ int main(int argc, char *argv[])
     pool->dirMax = DIR_POOL_SIZE;
     pool->dirUsed = 0;
     
-    pool->parBuf.dirParseBuff = aspSalloc(16*1024*1024); // 16MB
+    pool->parBuf.dirParseBuff = aspSalloc(16*1024*1024); // 8MB
     if (!pool->parBuf.dirParseBuff) {
         sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer FAIL!!!\n"); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
         goto end;
     } else {
-        sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer DONE [0x%x] , size is %d!!!\n", pool->parBuf.dirParseBuff, 8*1024*1024); 
+        sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer DONE [0x%x] , size is %d!!!\n", pool->parBuf.dirParseBuff, 16*1024*1024); 
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
     pool->parBuf.dirBuffMax = 16*1024*1024;
@@ -34696,6 +34763,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pcropex = mrs->cropex;
 
     rs->pbheader = &mrs->bmpheader;
+    rs->pbrotate = &mrs->bmpRotate;
 
     return 0;
 }
