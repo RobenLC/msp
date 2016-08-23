@@ -411,6 +411,9 @@ typedef enum {
     ASPMETA_SCAN_COMPLETE = 2,
     ASPMETA_CROP_300DPI = 3,
     ASPMETA_CROP_600DPI = 4,
+    ASPMETA_SCAN_COMPLE_DUO = 5,
+    ASPMETA_CROP_300DPI_DUO = 6,
+    ASPMETA_CROP_600DPI_DUO = 7,
 } aspMetaParam_e;
 
 struct psdata_s {
@@ -666,6 +669,10 @@ struct mainRes_s{
     struct aspMetaData *metaout;
     struct aspMetaData *metain;
     struct aspMetaMass metaMass;
+
+    struct aspMetaData *metaoutDuo;
+    struct aspMetaData *metainDuo;
+    struct aspMetaMass metaMassDuo;
     
     int sd_init;
     // file save
@@ -684,6 +691,7 @@ struct mainRes_s{
     char filein[128];
     uint32_t scan_length;
     struct cropCoord_s cropCoord;
+    struct cropCoord_s cropCoordDuo;
 };
 
 typedef int (*fselec)(struct mainRes_s *mrs, struct modersp_s *modersp);
@@ -708,6 +716,10 @@ struct procRes_s{
     struct aspMetaData *pmetaout;
     struct aspMetaData *pmetain;
     struct aspMetaMass *pmetaMass;
+    struct aspMetaData *pmetaoutduo;
+    struct aspMetaData *pmetainduo;
+    struct aspMetaMass *pmetaMassduo;
+
     int *psd_init;
     // data mode share memory
     int cdsz_s;
@@ -730,6 +742,7 @@ struct procRes_s{
     struct logPool_s *plogs;
     uint32_t *pscnlen;
     struct cropCoord_s *pcropCoord;
+    struct cropCoord_s *pcropCoordDuo;
 };
 
 
@@ -1165,7 +1178,6 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         val = (xparm & 0xffff) << 16;
         
         lsb2Msb(pdst, val);        
-        
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
@@ -1208,6 +1220,142 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     return 0;
 }
 
+static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
+{
+    int xposIdx=0, xparm=0;
+#if (CROP_SAMPLE_SIZE == 30)
+    uint32_t xposParm[CROP_SAMPLE_SIZE] = 
+                                           {0x080700ce, 0x080700b9, 0x080700ce, 0x080700ce, 0x080700ce, 
+                                            0x080700ce, 0x080700ce, 0x080f00ce, 0x080700ce, 0x080700ce, 
+                                            0x080700ce, 0x080700ce, 0x080700ce, 0x080700ce, 0x080700ce, 
+                                            0x080700ce, 0x080700ce, 0x080700a2, 0x080700f6, 0x080f00bc, 
+                                            0x080700fe, 0x1007004a, 0x1007003b, 0x10070039, 0x100f0045, 
+                                            0x10070048, 0x10070035, 0x10070043, 0x10070044, 0x100f0043};
+#elif (CROP_SAMPLE_SIZE == 4)
+    uint32_t xposParm[4] = {0x080300ef, 0x080b0098, 0x08070094, 0x080700a0};
+#else 
+    uint32_t xposParm[4] = {0,0,0,0};
+#endif
+    uint32_t tbits=0;
+    unsigned int *psrc;
+    struct intMbs_s *pdst;
+    uint32_t val=0, scan_len=0;
+    int opSt=0, opEd=0, ret=0;
+    int istr=0, iend=0, idx=0;
+    struct aspMetaData *pmetaduo;
+    struct cropCoord_s *pCropDuo;
+    struct aspMetaMass *mass, *massduo;
+    char *pvdst=0, *pvend=0;
+    
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        pmetaduo = mrs->metaoutDuo;
+        pCropDuo= &(mrs->cropCoordDuo);        
+        scan_len = mrs->scan_length;
+        mass = &(mrs->metaMass);
+        massduo = &(mrs->metaMassDuo);
+    } else {
+        pmetaduo = rs->pmetaoutduo;
+        pCropDuo = rs->pcropCoordDuo;
+        scan_len = *(rs->pscnlen);
+        mass = rs->pmetaMass;
+        massduo = rs->pmetaMassduo;
+    }
+
+    msync(pCropDuo, 18 * sizeof(struct cropCoord_s), MS_SYNC);
+
+    if (funcbits == ASPMETA_FUNC_NONE) {
+        /*append mass points*/
+#if RANDOM_CROP_COORD
+        ret = aspMetaMassCons(massduo, 0, 0);        
+#else
+        ret = aspMetaMassSample(massduo);
+#endif
+
+        if (ret > 0) {
+            printf("dump meta mass: \n");
+            msync(massduo->masspt, ret, MS_SYNC);
+            shmem_dump(massduo->masspt, ret);
+        } else {
+            printf("Error!!! build meta mass failed!!! \n");
+        }  
+    }
+
+    if (funcbits & ASPMETA_FUNC_CONF) {
+
+    }
+    
+    if (funcbits & ASPMETA_FUNC_CROP) {
+        massduo->massIdx = mass->massIdx + 1;
+    
+        psrc = pCropDuo->CROP_COOD_01;
+        pdst = &(pmetaduo->CROP_POS_1);
+        for (idx = 0; idx < 18; idx++) {
+            val = (psrc[0] & 0xffff) << 16;
+            val |= psrc[1] & 0xffff;
+            
+            //*pdst = val;
+            lsb2Msb(pdst, val);
+            
+            pdst ++;
+            psrc += 2;
+        }
+
+        xposIdx = massduo->massIdx;
+#if CROP_SAMPLE_SIZE
+        xparm = xposParm[xposIdx % CROP_SAMPLE_SIZE];
+#else
+        xparm = xposParm[0];
+#endif
+        pmetaduo->YLine_Gap = (xparm >> 24) & 0xff;
+        pmetaduo->Start_YLine_No = (xparm >> 16) & 0xff;
+
+        pdst = (struct intMbs_s *)&(pmetaduo->YLines_Recorded);
+        val = (xparm & 0xffff) << 16;
+        
+        lsb2Msb(pdst, val);        
+    }
+
+    if (funcbits & ASPMETA_FUNC_IMGLEN) {
+        pdst = &(pmetaduo->SCAN_IMAGE_LEN);
+        
+        lsb2Msb(pdst, 0);
+        //lsb2Msb(pdst, scan_len);
+        //lsb2Msb(pdst, 5400);
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDFREE) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDUSED) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDRD) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDWT) {
+    
+    }
+
+    pmetaduo->ASP_MAGIC[0] = 0x20;
+    pmetaduo->ASP_MAGIC[1] = 0x14;
+
+    //pmeta->ASP_MAGIC[0] = 0xab;
+    //pmeta->ASP_MAGIC[1] = 0xcd;
+    
+    //pmeta->FUNC_BITS |= funcbits;
+    tbits = msb2lsb(&pmetaduo->FUNC_BITS);
+    tbits |= funcbits;
+    lsb2Msb(&pmetaduo->FUNC_BITS, tbits);
+    
+    msync(pmetaduo, sizeof(struct aspMetaData), MS_SYNC);
+    
+    return 0;
+}
 static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta) 
 {
     msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
@@ -5564,11 +5712,17 @@ static int stauto_38(struct psdata_s *data)
     struct aspMetaData *pmetaIn, *pmetaOut;
     struct aspMetaMass *pmass;
     struct info16Bit_s *p, *g, *t;
+    struct aspMetaData *pmetaInDuo, *pmetaOutDuo;
+    struct aspMetaMass *pmassDuo;
 
     rs = data->rs;
     pmetaIn = rs->pmetain;
     pmetaOut = rs->pmetaout;
     pmass = rs->pmetaMass;
+    pmetaInDuo = rs->pmetainduo;
+    pmetaOutDuo = rs->pmetaoutduo;
+    pmassDuo = rs->pmetaMassduo;
+
     g = &rs->pmch->get;
     p = &rs->pmch->cur;
     t = &rs->pmch->tmp;
@@ -5614,6 +5768,41 @@ static int stauto_38(struct psdata_s *data)
                         pmass->massIdx = testSeq[t->info % TEST_LEN];
                         //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
                         break;
+                     /*todo: double side scan S*/
+                    case ASPMETA_SCAN_COMPLE_DUO:
+                        pmass->massStart = 12;
+                        pmass->massGap = 8;
+                        aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
+                        pmass->massRecd = pmass->massUsed / 4;
+                        aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
+                        aspMetaBuild(ASPMETA_FUNC_IMGLEN, 0, rs);
+
+                        pmassDuo->massStart = 12;
+                        pmassDuo->massGap = 8;
+                        aspMetaBuildDuo(ASPMETA_FUNC_NONE, 0, rs);
+                        pmassDuo->massRecd = pmassDuo->massUsed / 4;
+                        aspMetaBuildDuo(ASPMETA_FUNC_CROP, 0, rs);
+                        aspMetaBuildDuo(ASPMETA_FUNC_IMGLEN, 0, rs);
+                        break;
+                    case ASPMETA_CROP_300DPI_DUO:
+                        pmass->massStart = 12;
+                        pmass->massGap = 8;
+                        t->info += 1;
+                        pmass->massIdx = testSeq[t->info % TEST_LEN];
+
+                        pmassDuo->massStart = 12;
+                        pmassDuo->massGap = 8;
+                        break;
+                    case ASPMETA_CROP_600DPI_DUO:
+                        pmass->massStart = 12;
+                        pmass->massGap = 8;
+                        t->info += 1;
+                        pmass->massIdx = testSeq[t->info % TEST_LEN];
+
+                        pmassDuo->massStart = 12;
+                        pmassDuo->massGap = 8;
+                        break;
+                     /*todo: double side scan E*/
                     default:
                         sprintf(str, "Warnning!!!meta get parameter: 0x%.2x, wrong !!! \n", t->data);  
                         print_f(mlogPool, "auto_38", str);  
@@ -5631,7 +5820,6 @@ static int stauto_38(struct psdata_s *data)
                         rs_ipc_put(data->rs, &ch, 1);
                         data->result = emb_result(data->result, WAIT); 
                         break;
-
                     case ASPMETA_CROP_300DPI:
                     case ASPMETA_CROP_600DPI:
                         sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
@@ -5641,6 +5829,25 @@ static int stauto_38(struct psdata_s *data)
                         rs_ipc_put(data->rs, &ch, 1);
                         data->result = emb_result(data->result, WAIT); 
                         break;
+                     /*todo: double side scan S*/
+                    case ASPMETA_SCAN_COMPLE_DUO:
+                        sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
+                        print_f(mlogPool, "auto_38", str);  
+
+                        ch = 74; 
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT); 
+                        break;
+                    case ASPMETA_CROP_300DPI_DUO:
+                    case ASPMETA_CROP_600DPI_DUO:
+                        sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
+                        print_f(mlogPool, "auto_38", str);  
+
+                        ch = 76; 
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT); 
+                        break;
+                     /*todo: double side scan E*/
                     default:
                         sprintf(str, "Error!! get opcode data 0x%.2x wrong !!! \n", t->data);  
                         print_f(mlogPool, "auto_38", str);  
@@ -9047,15 +9254,109 @@ static int fs73(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)  
+static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    sprintf(mrs->log, "trigger metaout transfer \n");
+    print_f(&mrs->plog, "fs74", mrs->log);
+
+    mrs_ipc_put(mrs, "j", 1, 3);
+    mrs_ipc_put(mrs, "j", 1, 4);
+    modersp->v = 0;
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
+{ 
+    int len=0;
+    char ch=0;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'J')) {
+        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+
+        sprintf(mrs->log, "get ch = %c from p4\n", ch);
+        print_f(&mrs->plog, "fs75", mrs->log);
+
+        modersp->v |= 0x01;
+    }
+
+    len = mrs_ipc_get(mrs, &ch, 1, 4);
+    if ((len > 0) && (ch == 'J')) {
+        msync(&mrs->metaoutDuo, sizeof(struct aspMetaData), MS_SYNC);
+
+        sprintf(mrs->log, "get ch = %c from p5\n", ch);
+        print_f(&mrs->plog, "fs75", mrs->log);
+
+        modersp->v |= 0x10;
+    }
+
+    if (modersp->v == 0x11) {
+        modersp->m = 30;
+        return 2;
+    }
+
+    return 0; 
+}
+
+static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    sprintf(mrs->log, "trigger metaout transfer \n");
+    print_f(&mrs->plog, "fs76", mrs->log);
+
+    mrs_ipc_put(mrs, "m", 1, 3);
+    mrs_ipc_put(mrs, "m", 1, 4);
+    modersp->v = 0;
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    int len=0;
+    char ch=0;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 3);
+    if ((len > 0) && (ch == 'M')) {
+        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+
+        sprintf(mrs->log, "get ch = %c from p4\n", ch);
+        print_f(&mrs->plog, "fs77", mrs->log);
+
+        modersp->v |= 0x01;
+    }
+
+    len = mrs_ipc_get(mrs, &ch, 1, 4);
+    if ((len > 0) && (ch == 'M')) {
+        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+
+        sprintf(mrs->log, "get ch = %c from p5\n", ch);
+        print_f(&mrs->plog, "fs77", mrs->log);
+
+        modersp->v |= 0x10;
+    }
+
+    if (modersp->v == 0x11) {
+        modersp->m = 30;
+        return 2;
+    }
+
+    return 0; 
+}
+
+static int fs78(struct mainRes_s *mrs, struct modersp_s *modersp)  
 {
     modersp->r = 1;
     return 1;
 }
-
+static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)  
+{
+    modersp->r = 1;
+    return 1;
+}
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 75
+#define PS_NUM 80
     int len, tmp, ret;
     char str[128], ch;
 
@@ -9074,7 +9375,8 @@ static int p0(struct mainRes_s *mrs)
                                  {55, fs55},{56, fs56},{57, fs57},{58, fs58},{59, fs59},
                                  {60, fs60},{61, fs61},{62, fs62},{63, fs63},{64, fs64},
                                  {65, fs65},{66, fs66},{67, fs67},{68, fs68},{69, fs69},
-                                 {70, fs70},{71, fs71},{72, fs72},{73, fs73},{74, fs74}};
+                                 {70, fs70},{71, fs71},{72, fs72},{73, fs73},{74, fs74},
+                                 {75, fs75},{76, fs76},{77, fs77},{78, fs78},{79, fs79}};
 
     p0_init(mrs);
 
@@ -9281,15 +9583,19 @@ static int p2(struct procRes_s *rs)
     /* spi0 */
     char ch;
     int totsz=0, fsize=0, pi=0, len, opsz=0, ret=0, max=0, tlen=0, idx=0;
+    int totduo, iduo=0, maxduo=0;
     char *addr, *laddr=0, *taddr;
     char filedst[128];
     uint32_t *popt_fformat;
     int rcord[4], rawoffset=0;
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/handmade.jpg";
-    char filebmpraw[128] = "/mnt/mmc2/bmp/crop_20.bmp";
-    char filebmpraw24bits[128] = "/mnt/mmc2/bmp/crop_20_24bits.bmp";
+    //char filebmpraw[128] = "/mnt/mmc2/bmp/cut.bmp";
+    char filebmpraw[128] = "/mnt/mmc2/bmp/crop_20_cut.bmp";
+    //char filebmpraw[128] = "/mnt/mmc2/bmp/crop_20_cut_24bits.bmp";
+    //char filebmpraw[128] = "/mnt/mmc2/bmp/crop_20_24bits.bmp";
     char filename[128] = "/mnt/mmc2/scan_pro.jpg";
+    char filenameDuo[128] = "/mnt/mmc2/scan_pro.jpg";
     char filetiffraw[128] = "/mnt/mmc2/tiff_raw.bin";
     char samplefile[128] = "/mnt/mmc2/sample/greenhill_%.2d.jpg";
 #if (CROP_SAMPLE_SIZE == 30)
@@ -9316,8 +9622,10 @@ static int p2(struct procRes_s *rs)
     //char filename[128] = "/mnt/mmc2/hilldesert.jpg";
     //char filename[128] = "/mnt/mmc2/sample1.mp4";
     //char filename[128] = "/mnt/mmc2/pattern2.txt";
-    FILE *fp = NULL, *fout=NULL;
+    FILE *fp = NULL, *fout=NULL, *fduo=NULL;
+    
     struct cropCoord_s *pCrop;
+    struct cropCoord_s *pCropDuo;
     
     unsigned int *pCROP_COOD_01;
     unsigned int *pCROP_COOD_02;
@@ -9338,8 +9646,28 @@ static int p2(struct procRes_s *rs)
     unsigned int *pCROP_COOD_17;
     unsigned int *pCROP_COOD_18;
 
+    unsigned int *pCROP_COOD_01_duo;
+    unsigned int *pCROP_COOD_02_duo;
+    unsigned int *pCROP_COOD_03_duo;
+    unsigned int *pCROP_COOD_04_duo;
+    unsigned int *pCROP_COOD_05_duo;
+    unsigned int *pCROP_COOD_06_duo;
+    unsigned int *pCROP_COOD_07_duo;
+    unsigned int *pCROP_COOD_08_duo;
+    unsigned int *pCROP_COOD_09_duo;
+    unsigned int *pCROP_COOD_10_duo;
+    unsigned int *pCROP_COOD_11_duo;
+    unsigned int *pCROP_COOD_12_duo;
+    unsigned int *pCROP_COOD_13_duo;
+    unsigned int *pCROP_COOD_14_duo;
+    unsigned int *pCROP_COOD_15_duo;
+    unsigned int *pCROP_COOD_16_duo;
+    unsigned int *pCROP_COOD_17_duo;
+    unsigned int *pCROP_COOD_18_duo;
+    
     popt_fformat = rs->poptable;
     pCrop = rs->pcropCoord;
+    pCropDuo = rs->pcropCoordDuo;
 
     pCROP_COOD_01 = pCrop->CROP_COOD_01;
     pCROP_COOD_02 = pCrop->CROP_COOD_02;
@@ -9360,13 +9688,34 @@ static int p2(struct procRes_s *rs)
     pCROP_COOD_17 = pCrop->CROP_COOD_17;
     pCROP_COOD_18 = pCrop->CROP_COOD_18;
 
+    pCROP_COOD_01_duo = pCropDuo->CROP_COOD_01;
+    pCROP_COOD_02_duo = pCropDuo->CROP_COOD_02;
+    pCROP_COOD_03_duo = pCropDuo->CROP_COOD_03;
+    pCROP_COOD_04_duo = pCropDuo->CROP_COOD_04;
+    pCROP_COOD_05_duo = pCropDuo->CROP_COOD_05;
+    pCROP_COOD_06_duo = pCropDuo->CROP_COOD_06;
+    pCROP_COOD_07_duo = pCropDuo->CROP_COOD_07;
+    pCROP_COOD_08_duo = pCropDuo->CROP_COOD_08;
+    pCROP_COOD_09_duo = pCropDuo->CROP_COOD_09;
+    pCROP_COOD_10_duo = pCropDuo->CROP_COOD_10;
+    pCROP_COOD_11_duo = pCropDuo->CROP_COOD_11;
+    pCROP_COOD_12_duo = pCropDuo->CROP_COOD_12;
+    pCROP_COOD_13_duo = pCropDuo->CROP_COOD_13;
+    pCROP_COOD_14_duo = pCropDuo->CROP_COOD_14;
+    pCROP_COOD_15_duo = pCropDuo->CROP_COOD_15;
+    pCROP_COOD_16_duo = pCropDuo->CROP_COOD_16;
+    pCROP_COOD_17_duo = pCropDuo->CROP_COOD_17;
+    pCROP_COOD_18_duo = pCropDuo->CROP_COOD_18;
+
     if (infpath[0] != '\0') {
         strcpy(filename, infpath);
     } else {
 #if CROP_SAMPLE_SIZE
         sprintf(filename, cropfile, (idx%CROP_SAMPLE_SIZE));
+        sprintf(filenameDuo, cropfile, ((idx+1)%CROP_SAMPLE_SIZE));
 #else
         sprintf(filename, samplefile, (idx%36));
+        sprintf(filenameDuo, samplefile, ((idx+1)%36));
 #endif
     }
 
@@ -9380,6 +9729,17 @@ static int p2(struct procRes_s *rs)
         print_f(rs->plogs, "P2", rs->logs);
     }
     fclose(fp);
+
+    fduo = fopen(filenameDuo, "r");
+    if (!fduo) {
+        sprintf(rs->logs, "duo file read [%s] failed \n", filenameDuo);
+        print_f(rs->plogs, "P2", rs->logs);
+        while(1);
+    } else {
+        sprintf(rs->logs, "duo file read [%s] ok \n", filenameDuo);
+        print_f(rs->plogs, "P2", rs->logs);
+    }
+    fclose(fduo);
 
     sprintf(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
@@ -9410,13 +9770,19 @@ static int p2(struct procRes_s *rs)
 #if CROP_SAMPLE_SIZE
                 idx = rs->pmetaMass->massIdx;
                 sprintf(filename, cropfile, (idx%CROP_SAMPLE_SIZE));
+                sprintf(filenameDuo, cropfile, ((idx+1)%CROP_SAMPLE_SIZE));
 #else
                 sprintf(filename, samplefile, (idx%36));
+                sprintf(filenameDuo, samplefile, ((idx+1)%36));
 #endif
             }
 
             sprintf(rs->logs, "get sample file: [%s] \n", filename);
             print_f(rs->plogs, "P2", rs->logs);
+            
+            sprintf(rs->logs, "get duo sample file: [%s] \n", filenameDuo);
+            print_f(rs->plogs, "P2", rs->logs);
+
 #if 0 /* simulate the delay before transmitting */
             int countD = 0;
             while (countD < 10) {
@@ -9509,6 +9875,43 @@ static int p2(struct procRes_s *rs)
             pCROP_COOD_11[1] = crop_11.samples[idx%CROP_SAMPLE_SIZE].cropy;
             pCROP_COOD_12[0] = crop_12.samples[idx%CROP_SAMPLE_SIZE].cropx;
             pCROP_COOD_12[1] = crop_12.samples[idx%CROP_SAMPLE_SIZE].cropy;
+
+            pCROP_COOD_01_duo[0] = crop_01.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_01_duo[1] = crop_01.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_02_duo[0] = crop_02.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_02_duo[1] = crop_02.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_03_duo[0] = crop_03.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_03_duo[1] = crop_03.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_04_duo[0] = crop_04.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_04_duo[1] = crop_04.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_05_duo[0] = crop_05.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_05_duo[1] = crop_05.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_06_duo[0] = crop_06.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_06_duo[1] = crop_06.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_07_duo[0] = crop_07.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_07_duo[1] = crop_07.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_08_duo[0] = crop_08.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_08_duo[1] = crop_08.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_09_duo[0] = crop_09.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_09_duo[1] = crop_09.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_10_duo[0] = crop_10.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_10_duo[1] = crop_10.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;            
+            pCROP_COOD_17_duo[0] = crop_17.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_17_duo[1] = crop_17.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_18_duo[0] = crop_18.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_18_duo[1] = crop_18.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_15_duo[0] = crop_15.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_15_duo[1] = crop_15.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_16_duo[0] = crop_16.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_16_duo[1] = crop_16.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_13_duo[0] = crop_13.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_13_duo[1] = crop_13.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_14_duo[0] = crop_14.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_14_duo[1] = crop_14.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_11_duo[0] = crop_11.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_11_duo[1] = crop_11.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
+            pCROP_COOD_12_duo[0] = crop_12.samples[(idx+1)%CROP_SAMPLE_SIZE].cropx;
+            pCROP_COOD_12_duo[1] = crop_12.samples[(idx+1)%CROP_SAMPLE_SIZE].cropy;
 #endif
 #else
             pCROP_COOD_07[0] = pCROP_COOD_06[0];
@@ -10005,9 +10408,6 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2d", rs->logs);
                 }
 
-                totsz = 0;
-                pi = 0;
-                
                 ret = fseek(fp, 0, SEEK_END);
                 if (ret) {
                     sprintf(rs->logs, " file seek failed!! ret:%d \n", ret);
@@ -10024,97 +10424,170 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);
                 }
 
-                while (1) {
+                fduo = fopen(filenameDuo, "r");
+                if (!fduo) {
+                    sprintf(rs->logs, "duo file read [%s] failed \n", filenameDuo);
+                    print_f(rs->plogs, "P2d", rs->logs);
+                    continue;
+                } else {
+                    sprintf(rs->logs, "duo file read [%s] ok \n", filenameDuo);
+                    print_f(rs->plogs, "P2d", rs->logs);
+                }
+                
+                ret = fseek(fduo, 0, SEEK_END);
+                if (ret) {
+                    sprintf(rs->logs, " duo file seek failed!! ret:%d \n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);
+                } 
+                
+                maxduo = ftell(fduo);
+                sprintf(rs->logs, " duo file [%s] size: %d \n", filenameDuo, maxduo);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                ret = fseek(fduo, 0, SEEK_SET);
+                if (ret) {
+                    sprintf(rs->logs, " duo file seek failed!! ret:%d \n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                totsz = 0;
+                pi = 0;
+
+                totduo = 0;
+                iduo = 0;
+
+                while ((max > 0) || (maxduo > 0)) {
 #if 1
-                    ret = fseek(fp, totsz, SEEK_SET);
-                    if (ret) {
-                        sprintf(rs->logs, " file seek failed!! ret:%d - 1\n", ret);
-                        print_f(rs->plogs, "P2", rs->logs);
-                        break;
-                    }
-                    len = 0;
-                    len = ring_buf_get(rs->pdataTx, &addr);
-                    while (len <= 0) {
-                        usleep(10000);
+                    if (max > 0) {
+                        ret = fseek(fp, totsz, SEEK_SET);
+                        if (ret) {
+                            sprintf(rs->logs, " file seek failed!! ret:%d - 1\n", ret);
+                            print_f(rs->plogs, "P2", rs->logs);
+                            break;
+                        }
+                        len = 0;
                         len = ring_buf_get(rs->pdataTx, &addr);
+                        while (len <= 0) {
+                            usleep(10000);
+                            len = ring_buf_get(rs->pdataTx, &addr);
+                        }
+                        memset(addr, 0xff, len);
+                        if (max < len) {
+                            len = max;
+                            max = 0;
+                        } else {
+                            max -= len;
+                        }
+                        
+                        //msync(addr, len, MS_SYNC);
+                        fsize = fread(addr, 1, len, fp);
+                        msync(addr, len, MS_SYNC);
+                        ring_buf_prod(rs->pdataTx);
+                        tlen = len;
+                        sprintf(rs->logs, " %d - %d,%d - 1\n", pi, totsz, fsize);
+                        print_f(rs->plogs, "P2d", rs->logs);
+                        rs_ipc_put(rs, "s", 1);
+                        
+                        totsz += fsize;
+                        pi++;
+
+                        if (max == 0) {
+                            /* align to SPI_TRUNK_SZ */
+                            tlen = fsize % 1024;
+                            sprintf(rs->logs, "1.r %d sz %d \n", tlen, fsize);
+                            print_f(rs->plogs, "P2", rs->logs);
+
+                            if (tlen) {
+                                fsize = fsize + 1024 - tlen;
+                            }
+
+                            tlen = totsz % 1024;
+                            sprintf(rs->logs, "2.r %d sz %d \n", tlen, totsz);
+                            print_f(rs->plogs, "P2", rs->logs);
+
+                            if (tlen) {
+                                totsz = totsz + 1024 - tlen;
+                            }
+                            ring_buf_set_last(rs->pdataTx, fsize);
+                        }
                     }
-                    memset(addr, 0xff, len);
-                    if (max < len) {
-                        len = max;
-                    }
-                    //msync(addr, len, MS_SYNC);
-                    fsize = fread(addr, 1, len, fp);
-                    msync(addr, len, MS_SYNC);
-                    ring_buf_prod(rs->pdataTx);
-                    tlen = len;
-                    sprintf(rs->logs, " %d - %d,%d - 1\n", pi, totsz, fsize);
-                    print_f(rs->plogs, "P2d", rs->logs);
-                    rs_ipc_put(rs, "s", 1);
 #endif
 #if 1
-                    ret = fseek(fp, totsz, SEEK_SET);
-                    if (ret) {
-                        sprintf(rs->logs, " file seek failed!! ret:%d - 2\n", ret);
-                        print_f(rs->plogs, "P2", rs->logs);
-                        break;
-                    }
-                    len = 0;
-                    len = ring_buf_get(rs->pcmdTx, &addr);
-                    while (len <= 0) {
-                        usleep(10000);
+                    if (maxduo > 0) {
+                        ret = fseek(fduo, totduo, SEEK_SET);
+                        if (ret) {
+                            sprintf(rs->logs, " file seek failed!! ret:%d - 2\n", ret);
+                            print_f(rs->plogs, "P2", rs->logs);
+                            break;
+                        }
+                        len = 0;
                         len = ring_buf_get(rs->pcmdTx, &addr);
+                        while (len <= 0) {
+                            usleep(10000);
+                            len = ring_buf_get(rs->pcmdTx, &addr);
+                        }
+                        memset(addr, 0xff, len);
+                        if (maxduo < len) {
+                            len = maxduo;
+                            maxduo = 0;
+                        } else {
+                            maxduo -= len;
+                        }
+                        
+                        //msync(addr, len, MS_SYNC);
+                        fsize = fread(addr, 1, len, fduo);
+                        msync(addr, len, MS_SYNC);
+                        
+                        ring_buf_prod(rs->pcmdTx);
+                        tlen = len;
+                        sprintf(rs->logs, " %d - %d,%d - 2\n", iduo, totduo, fsize);
+                        print_f(rs->plogs, "P2d", rs->logs);
+                        rs_ipc_put(rs, "d", 1);
+                        totduo += fsize;
+                        iduo++;
+
+                        if (maxduo == 0) {
+                            /* align to SPI_TRUNK_SZ */
+                            tlen = fsize % 1024;
+                            sprintf(rs->logs, "1. duo r %d sz %d \n", tlen, fsize);
+                            print_f(rs->plogs, "P2", rs->logs);
+
+                            if (tlen) {
+                                fsize = fsize + 1024 - tlen;
+                            }
+
+                            tlen = totduo % 1024;
+                            sprintf(rs->logs, "2. duo r %d sz %d \n", tlen, totduo);
+                            print_f(rs->plogs, "P2", rs->logs);
+
+                            if (tlen) {
+                                totduo = totduo + 1024 - tlen;
+                            }
+
+                            ring_buf_set_last(rs->pcmdTx, fsize);
+                        }
                     }
-                    memset(addr, 0xff, len);
-                    if (max < len) {
-                        len = max;
-                    }
-                    //msync(addr, len, MS_SYNC);
-                    fsize = fread(addr, 1, len, fp);
-                    msync(addr, len, MS_SYNC);
-                    
-                    ring_buf_prod(rs->pcmdTx);
-                    tlen = len;
-                    sprintf(rs->logs, " %d - %d,%d - 2\n", pi, totsz, fsize);
-                    print_f(rs->plogs, "P2d", rs->logs);
-                    rs_ipc_put(rs, "d", 1);
 #endif
-                    totsz += fsize;
-                    max -= len;
-                    
-                    if (!max) break;
-                    pi++;
+
                 }
                 
 
-                /* align to SPI_TRUNK_SZ */
-                tlen = fsize % 1024;
-                sprintf(rs->logs, "1.r %d sz %d \n", tlen, fsize);
-                print_f(rs->plogs, "P2", rs->logs);
-
-                if (tlen) {
-                    fsize = fsize + 1024 - tlen;
-                }
-
-                tlen = totsz % 1024;
-                sprintf(rs->logs, "2.r %d sz %d \n", tlen, totsz);
-                print_f(rs->plogs, "P2", rs->logs);
-
-                if (tlen) {
-                    totsz = totsz + 1024 - tlen;
-                }
-
-                ring_buf_set_last(rs->pdataTx, fsize);
-                ring_buf_set_last(rs->pcmdTx, fsize);
                 rs_ipc_put(rs, "S", 1);
                 rs_ipc_put(rs, "D", 1);
 
                 rs->pmch->cur.info = totsz;
-
+                rs->pmch->tmp.info = totduo;
+                
                 sprintf(rs->logs, "file [%s] read size: %d \n",filename, totsz);
+                print_f(rs->plogs, "P2d", rs->logs);
+                
+                sprintf(rs->logs, "duo file [%s] read size: %d \n",filenameDuo, totduo);
                 print_f(rs->plogs, "P2d", rs->logs);
 
                 fclose(fp);
+                fclose(fduo);
                 fp = NULL;
+                fduo = NULL;
             }
 
             if (ch == 'b') { /*raw*/
@@ -10782,10 +11255,14 @@ static int p4(struct procRes_s *rs)
 static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 {
     char ch, *tx, *rx, *addr=0;
+    char *tx8, *rx8;
     uint16_t *tx16, *rx16;
     int len, cmode, ret, pi=1;
     uint32_t bitset;
     int totsz=0, opsz=0;
+    struct aspMetaData *pmetaduo;
+
+    pmetaduo = rs->pmetainduo;
 
     sprintf(rs->logs, "p5\n");
     print_f(rs->plogs, "P5", rs->logs);
@@ -10794,8 +11271,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
     rs_ipc_put(rcmd, "poll", 4);
 
-    tx = malloc(64);
-    rx = malloc(64);
+    tx = malloc(SPI_TRUNK_SZ);
+    rx = malloc(SPI_TRUNK_SZ);
 
     int i;
     for (i = 0; i < 64; i+=4) {
@@ -10833,6 +11310,12 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                     break;
                 case 'i':
                     cmode = 5;
+                    break;
+                case 'j':
+                    cmode = 6;
+                    break;
+                case 'm':
+                    cmode = 7;
                     break;
                 default:
                     break;
@@ -10952,6 +11435,104 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             sprintf(rs->logs, "spi send cnt:%d total:%d- end\n", pi, totsz);
             print_f(rs->plogs, "P5", rs->logs);      
         }
+        else if (cmode == 6) {
+            int bits = 8;
+            ret = ioctl(rs->spifd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+            if (ret == -1) {
+                sprintf(rs->logs, "can't set bits per word"); 
+                print_f(rs->plogs, "P5", rs->logs);
+            }
+            ret = ioctl(rs->spifd, SPI_IOC_RD_BITS_PER_WORD, &bits); 
+            if (ret == -1) {
+                sprintf(rs->logs, "can't get bits per word"); 
+                print_f(rs->plogs, "P5", rs->logs);
+            }
+            
+            totsz = 0;
+            len = 0;
+            pi = 0;  
+
+            len = 512;
+            tx8 = (char *)rs->pmetaoutduo;
+            rx8 = (char *)rs->pmetainduo;
+            
+            msync(tx8, 512, MS_SYNC);
+            opsz = 0;
+
+            opsz = mtx_data(rs->spifd, rx8, tx8, 1, len, 1024*1024);  
+
+            sprintf(rs->logs, "spi0 recv %d\n", opsz);
+            print_f(rs->plogs, "P5", rs->logs);
+
+            //shmem_dump(rx8, opsz);
+
+            msync(pmetaduo, 512, MS_SYNC);
+            
+            sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmetaduo->ASP_MAGIC[0], pmetaduo->ASP_MAGIC[1]);
+            print_f(rs->plogs, "P5", rs->logs);
+
+            if (opsz < 0) {
+                sprintf(rs->logs, "opsz:%d ERROR!!!\n", opsz);
+                print_f(rs->plogs, "P5", rs->logs);    
+            }
+
+            rs_ipc_put(rs, "J", 1);
+            pi += 1;
+
+            totsz += opsz;
+
+            sprintf(rs->logs, "totsz: %d, len:%d opsz:%d break!\n", totsz, len, opsz);
+            print_f(rs->plogs, "P5", rs->logs);
+        }
+        else if (cmode == 7) {
+            int bits = 8;
+            ret = ioctl(rs->spifd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+            if (ret == -1) {
+                sprintf(rs->logs, "can't set bits per word"); 
+                print_f(rs->plogs, "P5", rs->logs);
+            }
+            ret = ioctl(rs->spifd, SPI_IOC_RD_BITS_PER_WORD, &bits); 
+            if (ret == -1) {
+                sprintf(rs->logs, "can't get bits per word"); 
+                print_f(rs->plogs, "P5", rs->logs);
+            }
+            
+            totsz = 0;
+            len = 0;
+            pi = 0;  
+
+            len = rs->pmetaMassduo->massUsed;
+            tx8 = (char *)rs->pmetaMassduo->masspt;
+            rx8 = (char *)rx;
+            
+            msync(tx8, len, MS_SYNC);
+            opsz = 0;
+
+            opsz = mtx_data(rs->spifd, rx8, tx8, 1, len, 1024*1024);  
+
+            sprintf(rs->logs, "spi0 recv %d\n", opsz);
+            print_f(rs->plogs, "P5", rs->logs);
+
+            //shmem_dump(rx8, opsz);
+
+            //msync(pmeta, 512, MS_SYNC);
+            
+            //sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+            //print_f(rs->plogs, "P4", rs->logs);
+
+            if (opsz < 0) {
+                sprintf(rs->logs, "opsz:%d ERROR!!!\n", opsz);
+                print_f(rs->plogs, "P5", rs->logs);    
+            }
+
+            rs_ipc_put(rs, "M", 1);
+            pi += 1;
+
+            totsz += opsz;
+
+            sprintf(rs->logs, "totsz: %d, len:%d opsz:%d break!\n", totsz, len, opsz);
+            print_f(rs->plogs, "P5", rs->logs);
+        }
     }
 
     p5_end(rs);
@@ -11035,6 +11616,23 @@ static char spi0[] = "/dev/spidev32765.0";
         print_f(&pmrs->plog, "meta", pmrs->log);
     } else {
         sprintf(pmrs->log, "Error!! allocate meta memory failed!!!! \n");
+        print_f(&pmrs->plog, "meta", pmrs->log);
+    }
+
+    len = sizeof(struct aspMetaData);
+    pmrs->metaoutDuo= aspSalloc(len);
+    pmrs->metainDuo= aspSalloc(len);
+    
+    len = SPI_TRUNK_SZ;
+    pmrs->metaMassDuo.masspt = aspSalloc(len);    
+    pmrs->metaMassDuo.massMax = len;
+    pmrs->metaMassDuo.massUsed = 0;
+
+    if ((pmrs->metaoutDuo) && (pmrs->metainDuo) && (pmrs->metaMassDuo.masspt)) {
+        sprintf(pmrs->log, "duo inbuff addr(0x%.8x), outbuff addr(0x%.8x), massbuff addr(0x%.8x) \n", pmrs->metainDuo, pmrs->metaoutDuo, pmrs->metaMassDuo.masspt);
+        print_f(&pmrs->plog, "meta", pmrs->log);
+    } else {
+        sprintf(pmrs->log, "Error!! allocate duo meta memory failed!!!! \n");
         print_f(&pmrs->plog, "meta", pmrs->log);
     }
     
@@ -11622,10 +12220,16 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 
     rs->pscnlen = &mrs->scan_length;
     rs->pcropCoord = &mrs->cropCoord;
+    rs->pcropCoordDuo = &mrs->cropCoordDuo;
 
     rs->pmetaout = mrs->metaout;
     rs->pmetain = mrs->metain;    
     rs->pmetaMass = &mrs->metaMass;
+    
+    rs->pmetaoutduo = mrs->metaoutDuo;
+    rs->pmetainduo = mrs->metainDuo;    
+    rs->pmetaMassduo = &mrs->metaMassDuo;
+
     return 0;
 }
 
