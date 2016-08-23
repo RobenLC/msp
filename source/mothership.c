@@ -21,7 +21,7 @@
 #include <ifaddrs.h>
 #include <math.h>
 //main()
-#define SPI1_ENABLE (0) 
+#define SPI1_ENABLE (1) 
 
 #if SPI1_ENABLE
 #define SPIDEV_SWITCH (0)
@@ -165,14 +165,6 @@ static int *totSalloc=0;
 #define CROP_MAX_NUM_META (18)
 #define CROP_CALCU_DETAIL (0)
 #define PI (double)(3.1415)
-#define DOT_8 0x01
-#define DOT_7 0x02
-#define DOT_6 0x04
-#define DOT_5 0x08
-#define DOT_4 0x10
-#define DOT_3 0x20
-#define DOT_2 0x40
-#define DOT_1 0x80
 
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
@@ -336,7 +328,29 @@ typedef enum {
     ASPOP_XCROP_GAT,
     ASPOP_XCROP_LINSTR,
     ASPOP_XCROP_LINREC,
-    ASPOP_CODE_MAX, /* 94 */
+    ASPOP_CROP_01_DUO,
+    ASPOP_CROP_02_DUO, 
+    ASPOP_CROP_03_DUO,
+    ASPOP_CROP_04_DUO,   /* 100 */
+    ASPOP_CROP_05_DUO,
+    ASPOP_CROP_06_DUO,
+    ASPOP_IMG_LEN_DUO, /* must be here for old design */
+    ASPOP_CROP_07_DUO,
+    ASPOP_CROP_08_DUO,
+    ASPOP_CROP_09_DUO,
+    ASPOP_CROP_10_DUO,
+    ASPOP_CROP_11_DUO, 
+    ASPOP_CROP_12_DUO,
+    ASPOP_CROP_13_DUO,  /* 110 */
+    ASPOP_CROP_14_DUO,
+    ASPOP_CROP_15_DUO,
+    ASPOP_CROP_16_DUO,
+    ASPOP_CROP_17_DUO,
+    ASPOP_CROP_18_DUO,
+    ASPOP_XCROP_GAT_DUO,
+    ASPOP_XCROP_LINSTR_DUO,
+    ASPOP_XCROP_LINREC_DUO,
+    ASPOP_CODE_MAX, /* 119 */
 } aspOpCode_e;
 
 typedef enum {
@@ -467,6 +481,9 @@ typedef enum {
     ASPMETA_SCAN_COMPLETE = 2,
     ASPMETA_CROP_300DPI = 3,
     ASPMETA_CROP_600DPI = 4,
+    ASPMETA_SCAN_COMPLE_DUO = 5,
+    ASPMETA_CROP_300DPI_DUO = 6,
+    ASPMETA_CROP_600DPI_DUO = 7,
 } aspMetaParam_e;
 
 typedef enum {
@@ -955,6 +972,10 @@ struct mainRes_s{
     struct aspMetaMass_s metaMass;
     struct aspCrop36_s *crop32;
     struct aspCropExtra_s *cropex;
+    struct aspMetaData_s *metainDuo;
+    struct aspMetaMass_s metaMassDuo;
+    struct aspCrop36_s *crop32Duo;
+    struct aspCropExtra_s *cropexDuo;
     struct bitmapHeader_s bmpheader;
     struct bitmapRotate_s bmpRotate;
     char netIntfs[16];
@@ -1014,6 +1035,10 @@ struct procRes_s{
     struct aspMetaMass_s *pmetaMass;
     struct aspCrop36_s *pcrop32;
     struct aspCropExtra_s *pcropex;
+    struct aspMetaData_s *pmetainduo;
+    struct aspMetaMass_s *pmetaMassduo;
+    struct aspCrop36_s *pcrop32duo;
+    struct aspCropExtra_s *pcropexduo;
     struct bitmapHeader_s *pbheader;
     struct bitmapRotate_s *pbrotate;
     struct logPool_s *plogs;
@@ -1750,43 +1775,107 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     return act;
 }
 
-static int tiffClearDot(char *img, int dotx, int doty, int *scale)
+static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
-    uint8_t *dst, val=0, org=0;
-    uint8_t bitSet[8] = {DOT_1, DOT_2, DOT_3, DOT_4, DOT_5, DOT_6, DOT_7, DOT_8};
-    int estMax, estWid=0;
-    int offsetX=0, offsetY=0, resX=0;
-    int rowsz, height, max, bpp;
+    int i=0, act=0;
+    struct intMbs_s *pt=0;
+    struct aspMetaData_s *pmetaDuo;
+    struct aspMetaMass_s *pmassDuo;
+    struct aspConfig_s *pct=0, *pdt=0;
+    unsigned char linGap, linStart;
+    unsigned short linRec;
+    unsigned int val;
 
-    rowsz = scale[0];
-    height = scale[1];
-    max = scale[2];
-    bpp = scale[3];
-
-    if (dotx >= rowsz) {
-        dotx = rowsz -1;
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        pmetaDuo= mrs->metainDuo;
+        pct = mrs->configTable;
+        pmassDuo= &mrs->metaMassDuo;
+    } else {
+        pmetaDuo= rs->pmetainduo;
+        pct = rs->pcfgTable;
+        pmassDuo= rs->pmetaMassduo;
     }
     
-    if (doty >= height) {
-        doty = height -1;
+    msync(pmetaDuo, sizeof(struct aspMetaData_s), MS_SYNC);
+
+    if ((pmetaDuo->ASP_MAGIC[0] != 0x20) || (pmetaDuo->ASP_MAGIC[1] != 0x14)) {
+        return -2;
+    }
+    
+    if (funcbits == ASPMETA_FUNC_NONE) return -3;
+
+    if (funcbits & ASPMETA_FUNC_CONF) {
+    
+    }
+    
+    if (funcbits & ASPMETA_FUNC_CROP) {
+        pt = &(pmetaDuo->CROP_POS_1);
+
+        for (i = ASPOP_CROP_01_DUO; i <= ASPOP_CROP_06_DUO; i++) {
+            pct[i].opValue = msb2lsb(pt);
+            pct[i].opStatus = ASPOP_STA_UPD;
+            pt++;
+        }
+
+        for (i = ASPOP_CROP_07_DUO; i <= ASPOP_CROP_18_DUO; i++) {
+            pct[i].opValue = msb2lsb(pt);
+            pct[i].opStatus = ASPOP_STA_UPD;
+            pt++;
+        }
+
+        linGap = pmetaDuo->YLine_Gap;
+        linStart = pmetaDuo->Start_YLine_No;
+        
+        pt = (struct intMbs_s *)&(pmetaDuo->YLines_Recorded);
+        val = msb2lsb(pt);
+        linRec = val >> 16;
+
+        if (linRec) {
+            pmassDuo->massGap = linGap;
+            pmassDuo->massStart = linStart;
+            pmassDuo->massRecd = linRec;
+
+            cfgTableSet(pct, ASPOP_XCROP_GAT_DUO, linGap);
+            cfgTableSet(pct, ASPOP_XCROP_LINSTR_DUO, linStart);
+            cfgTableSet(pct, ASPOP_XCROP_LINREC_DUO, linRec);
+
+            act |= ASPMETA_FUNC_CROP;
+            
+        } else {
+            pmassDuo->massGap = 0;
+            pmassDuo->massStart = 0;
+            pmassDuo->massRecd = 0;
+        }
     }
 
-    resX = dotx % 8;
+    if (funcbits & ASPMETA_FUNC_IMGLEN) {
+        pt = &(pmetaDuo->SCAN_IMAGE_LEN);    
 
-    offsetY = doty;
-    offsetX = dotx / 8;
+        pct[ASPOP_IMG_LEN_DUO].opValue = msb2lsb(pt);
+        pct[ASPOP_IMG_LEN_DUO].opStatus = ASPOP_STA_UPD;
+    }
 
-    dst = img + (offsetX + offsetY*rowsz);
-
-    org = *dst;
+    if (funcbits & ASPMETA_FUNC_SDFREE) {
     
-    val = org & (~(bitSet[resX]));
+    }
 
-    //printf("(%d, %d)clear dot, org: 0x%.2x, val: 0x%.2x - x:%d, y:%d, res:%d (%d)\n", dotx, doty, org, val, offsetX, offsetY, resX, (offsetX + offsetY*estWid));
+    if (funcbits & ASPMETA_FUNC_SDUSED) {
     
-    *dst = val;
+    }
 
-    return val;
+    if (funcbits & ASPMETA_FUNC_SDRD) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDWT) {
+    
+    }
+    
+    msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
+
+    return act;
 }
 
 inline int tiffGetDot(char *img, int *dot, char *pta, int *scale)
@@ -1883,67 +1972,6 @@ inline int tiffDrawDot(char *img, int *dot, char *pta, int *scale)
 
     return val;
 }
-
-static int tiffClearLine(char *img, int *cord, int *scale)
-{
-    int ret=0, cnt=0;
-    int estMax, srcx, srcy, dstx, dsty;
-    double stx=0, sty=0, edx=0, edy=0;
-    double offx=0, offy=0;
-    if (!img) return -1;
-    if (!cord) return -2;
-
-    srcx = cord[0]; 
-    srcy = cord[1]; 
-    dstx = cord[2];
-    dsty = cord[3];
-    
-    stx = cord[0];
-    sty = cord[1];
-    edx = cord[2];
-    edy = cord[3];
-
-    offx = edx - stx;
-    offy = edy - sty;
-
-    if (abs(offx) < 0.0001) {
-        offx = 0;
-    } else if (abs(offy) < 0.0001) {
-        offy = 0;
-    } 
-
-    if (abs(offx) > abs(offy)) {
-        offy = offy / abs(offx);
-        offx = offx / abs(offx);
-    } else if (abs(offy) > abs(offx)) {
-        offx = offx / abs(offy);
-        offy = offy / abs(offy);
-    } else {
-        if (abs(offy) > 0) {
-            offx = offx / abs(offx);
-            offy = offy / abs(offy);
-        }
-    }
-
-    //printf("clear line  (%d, %d) -> (%d, %d)\n", srcx, srcy, dstx, dsty);
-    
-    while ((srcx != dstx) || (srcy != dsty)) {
-         ret = tiffClearDot(img, srcx, srcy, scale);
-         cnt++;
-     
-         stx += offx;
-         sty += offy;
-         srcx = (int)stx;
-         srcy = (int)sty;
-
-         //printf("clear %d, %d - %d\n", srcx, srcy,cnt);
-     }
-     ret = tiffClearDot(img, srcx, srcy, scale);
-     cnt++;
-     
-    return cnt;
-}
-
 
 static int tiffDrawLine(char *img, int *cord, int *scale)
 {
@@ -2064,33 +2092,6 @@ static int tiffDrawBox(char *img, int *cord, int *scale)
         rcord[0] = i;
         rcord[2] = i;
         tiffDrawLine(img, rcord, scale);
-    }
-
-    return 0;
-}
-
-static int tiffClearBox(char *img, int *cord, int *scale)
-{
-    int estMax, i=0;
-    int stx=0, sty=0, edx=0, edy=0;
-    int rcord[4];
-    if (!img) return -1;
-    if (!cord) return -2;
-
-    stx = cord[0];
-    sty = cord[1];
-    edx = cord[2];
-    edy = cord[3];
-
-    rcord[0] = stx;
-    rcord[1] = sty;
-    rcord[2] = edx;
-    rcord[3] = edy;
-
-    for (i = stx; i <= edx; i++) {
-        rcord[0] = i;
-        rcord[2] = i;
-        tiffClearLine(img, rcord, scale);
     }
 
     return 0;
@@ -31949,7 +31950,7 @@ static int p6(struct procRes_s *rs)
     return 0;
 }
 
-#define P7_TX_LOG (0)
+#define P7_TX_LOG (1)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
@@ -32599,9 +32600,22 @@ int main(int argc, char *argv[])
         sprintf(pmrs->log, "Error!! allocate meta memory failed!!!! \n");
         print_f(&pmrs->plog, "meta", pmrs->log);
     }
+    
+    len = sizeof(struct aspMetaData_s);
+    pmrs->metainDuo= aspSalloc(len);
 
-    sprintf(pmrs->log, "allocate %d byte share memory for meta data, addr: 0x%.8x\n", len, pmrs->metaout);
-    print_f(&pmrs->plog, "metaout", pmrs->log);
+    len = SPI_TRUNK_SZ;
+    pmrs->metaMassDuo.masspt = aspSalloc(len);    
+    pmrs->metaMassDuo.massMax = len;
+    pmrs->metaMassDuo.massUsed = 0;
+
+    if ((pmrs->metainDuo) && (pmrs->metaMassDuo.masspt)) {
+        sprintf(pmrs->log, " duo inbuff addr(0x%.8x), massbuff addr(0x%.8x) \n", pmrs->metainDuo, pmrs->metaMassDuo.masspt);
+        print_f(&pmrs->plog, "metaduo", pmrs->log);
+    } else {
+        sprintf(pmrs->log, "Error!! duo allocate meta memory failed!!!! \n");
+        print_f(&pmrs->plog, "metaduo", pmrs->log);
+    }
     
     /* data mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
@@ -34177,7 +34191,7 @@ int main(int argc, char *argv[])
     }    
     #endif
     /* CROP */
-    pmrs->crop32= (struct aspCrop36_s *)aspSalloc(sizeof(struct aspCrop36_s));
+    pmrs->crop32 = (struct aspCrop36_s *)aspSalloc(sizeof(struct aspCrop36_s));
     if (!pmrs->crop32) {
         sprintf(pmrs->log, "alloc share memory for crop 32 points FAIL!!! size = %d\n", sizeof(struct aspCrop36_s)); 
         print_f(&pmrs->plog, "CROP32", pmrs->log);
@@ -34187,7 +34201,7 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "CROP32", pmrs->log);
     }
 
-    pmrs->cropex= (struct aspCropExtra_s *)aspSalloc(sizeof(struct aspCropExtra_s));
+    pmrs->cropex = (struct aspCropExtra_s *)aspSalloc(sizeof(struct aspCropExtra_s));
     if (!pmrs->cropex) {
         sprintf(pmrs->log, "alloc share memory for crop extra points FAIL!!! size = %d\n", sizeof(struct aspCropExtra_s)); 
         print_f(&pmrs->plog, "CROPEX", pmrs->log);
@@ -34200,6 +34214,31 @@ int main(int argc, char *argv[])
         sprintf(pmrs->log, "alloc share memory for crop extra points DONE [0x%x] size:%d !!!\n", pmrs->cropex, sizeof(struct aspCropExtra_s)); 
         print_f(&pmrs->plog, "CROPEX", pmrs->log);
     }
+
+    pmrs->crop32Duo = (struct aspCrop36_s *)aspSalloc(sizeof(struct aspCrop36_s));
+    if (!pmrs->crop32Duo) {
+        sprintf(pmrs->log, "alloc duo share memory for crop 32 points FAIL!!! size = %d\n", sizeof(struct aspCrop36_s)); 
+        print_f(&pmrs->plog, "CROP32DUO", pmrs->log);
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc duo share memory for crop 32 points DONE [0x%x] size:%d !!!\n", pmrs->crop32Duo, sizeof(struct aspCrop36_s)); 
+        print_f(&pmrs->plog, "CROP32DUO", pmrs->log);
+    }
+
+    pmrs->cropexDuo= (struct aspCropExtra_s *)aspSalloc(sizeof(struct aspCropExtra_s));
+    if (!pmrs->cropexDuo) {
+        sprintf(pmrs->log, "alloc share memory for crop extra points FAIL!!! size = %d\n", sizeof(struct aspCropExtra_s)); 
+        print_f(&pmrs->plog, "CROPEXDUO", pmrs->log);
+
+        pmrs->cropexDuo->crpexMax = 2048;
+        pmrs->cropexDuo->crpexLfAbsMax = 2048;
+        pmrs->cropexDuo->crpexRtAbsMax = 2048;
+        goto end;
+    } else {
+        sprintf(pmrs->log, "alloc share memory for crop extra points DONE [0x%x] size:%d !!!\n", pmrs->cropexDuo, sizeof(struct aspCropExtra_s)); 
+        print_f(&pmrs->plog, "CROPEXDUO", pmrs->log);
+    }
+
     /* BITMAP */
     pmrs->bmpRotate.aspRotCrossAry= aspSalloc(8192*4*3);
     if (!pmrs->bmpRotate.aspRotCrossAry) {
@@ -34755,12 +34794,16 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pmetaout = mrs->metaout;
     rs->pmetain = mrs->metain;
     rs->pmetaMass = &mrs->metaMass;
+    rs->pmetainduo= mrs->metainDuo;
+    rs->pmetaMassduo= &mrs->metaMassDuo;
 
     rs->rspioc1 = mrs->spioc1;
     rs->rspioc2 = mrs->spioc2;
 
     rs->pcrop32 = mrs->crop32;
     rs->pcropex = mrs->cropex;
+    rs->pcrop32duo= mrs->crop32Duo;
+    rs->pcropexduo= mrs->cropexDuo;
 
     rs->pbheader = &mrs->bmpheader;
     rs->pbrotate = &mrs->bmpRotate;
