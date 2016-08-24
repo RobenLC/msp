@@ -204,6 +204,7 @@ typedef enum {
     VECTORS, // 12
     SAVPARM, // 13
     METAT, // 14
+    MDUOU, // 15
     SMAX,
 }state_e;
 
@@ -8279,6 +8280,88 @@ inline uint32_t emb_process(uint32_t result, uint32_t flag)
     return result;
 }
 
+static uint32_t next_MDUOU(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSACT;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;                
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSMAX;
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = clr_bk(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = clr_fw(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static uint32_t next_METAT(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
@@ -8325,7 +8408,8 @@ static uint32_t next_METAT(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSMAX;
+                next = PSSET;
+                evt = MDUOU; 
                 break;
             default:
                 //sprintf(str, "default\n"); 
@@ -10358,6 +10442,11 @@ static int ps_next(struct psdata_s *data)
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
+        case MDUOU:
+            ret = next_MDUOU(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
         default:
             ret = next_error(data);
             evt = (ret >> 24) & 0xff;
@@ -10687,7 +10776,7 @@ static int stdob_08(struct psdata_s *data)
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
 #if CROP_USE_META
-                    data->bkofw = emb_bk(data->bkofw, SAVPARM, PSRLT);
+                    data->bkofw = emb_bk(data->bkofw, MDUOU, PSSET);
 #else
                     data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
 #endif
@@ -15701,7 +15790,7 @@ static int stsparam_88(struct psdata_s *data)
             //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
             dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
             
-            ch = 110; 
+            ch = 118; 
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
@@ -16128,7 +16217,393 @@ static int stcropmeta_94(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stcropmeta_95(struct psdata_s *data)
+static int stmetaduo_95(struct psdata_s *data)
+{ 
+    int ret=0;
+    char ch = 0; 
+    uint32_t rlt=0;
+    uint32_t rval=0;
+    struct procRes_s *rs;
+    struct aspMetaData_s * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    pct = data->rs->pcfgTable;
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
+    sprintf(rs->logs, "op_95: rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "MDUO", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            t->opcode = OP_META_DAT;
+            ret = cfgTableGet(pct, ASPOP_RESOLUTION, &rval);
+            if (ret < 0) {
+                data->result = emb_result(data->result, EVTMAX);
+                sprintf(rs->logs, "op_95: Error!!! op_91 get ASPOP_RESOLUTION failed!!!ret = %d \n", ret); 
+                print_f(rs->plogs, "MDUO", rs->logs);  
+            } else {
+                switch (rval) {
+                case RESOLUTION_1200:
+                case RESOLUTION_600:
+                    t->data = ASPMETA_CROP_600DPI_DUO;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_95:: result: %x, goto %d\n", data->result, ch); 
+                    print_f(rs->plogs, "MDUO", rs->logs);  
+                    rs->pmetaMass->massUsed = 0;
+                    break;
+                case RESOLUTION_300:
+                case RESOLUTION_200:
+                case RESOLUTION_150:
+                    t->data = ASPMETA_CROP_300DPI_DUO;
+                    data->result = emb_result(data->result, NEXT);
+                    sprintf(rs->logs, "op_95:: result: %x, goto %d\n", data->result, ch); 
+                    print_f(rs->plogs, "MDUO", rs->logs);  
+                    rs->pmetaMass->massUsed = 0;
+                    break;
+                default:
+                    data->result = emb_result(data->result, EVTMAX);
+                    sprintf(rs->logs, "op_95: Error!!! op_91 get ASPOP_RESOLUTION failed!!!rval = %d \n", rval); 
+                    print_f(rs->plogs, "MDUO", rs->logs);  
+                    break;
+                }
+            }
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetaduo_96(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+    struct procRes_s *rs;
+
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+    t = &rs->pmch->tmp;
+    
+    //sprintf(rs->logs, "op_95 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "MDUO", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            if (t->opcode == OP_META_DAT) {
+                c->opcode = OP_META_DAT;
+                c->data = t->data;
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                ch = 41; 
+
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+                sprintf(rs->logs, "op_96: result: %x, goto %d\n", data->result, ch); 
+                print_f(rs->plogs, "MDUO", rs->logs);  
+            } else {
+                sprintf(rs->logs, "op_96: error!! tmp opcode: %x break!!\n", t->opcode); 
+                print_f(rs->plogs, "MDUO", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);                
+            }
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                if (p->data == c->data) {
+                    data->result = emb_result(data->result, NEXT);
+                } else {
+                    data->result = emb_result(data->result, EVTMAX);    
+                }
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetaduo_97(struct psdata_s *data)
+{ 
+    int act=0;
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct aspMetaData_s *pmetaIn, *pmetaOut;
+    struct aspMetaMass_s *pmass;
+#if SAVE_CROP_MASS
+    int ret=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    FILE *f=0;
+    char supPath[128] = "/mnt/mmc2/crop/g%d_s%d_c%d_%.4d%.2d%.2d-%.2d%.2d%.2d.bin";
+    char tail[32] = "_%d.bin\0";
+    char supPathCp1[512];
+    char supDst[128];
+    int slen=0, dlen=0;
+
+    pct = data->rs->pcfgTable;
+#endif
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmetaIn = rs->pmetain;
+    pmetaOut= rs->pmetaout;
+    pmass = rs->pmetaMass;
+    //sprintf(rs->logs, "op_88 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "SPM", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            aspMetaClear(0, rs, ASPMETA_INPUT);
+            
+            sprintf(rs->logs, "op_97: dump meta output\n"); 
+            print_f(rs->plogs, "MDUO", rs->logs);  
+            //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
+            dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
+            
+            ch = 118; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_97: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "MDUO", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                sprintf(rs->logs, "op_97: dump meta input (used:%d) \n", pmass->massUsed); 
+                print_f(rs->plogs, "MDUO", rs->logs);  
+
+                if (pmass->massRecd > 0) {
+                    sprintf(rs->logs, "op_97: dump meta mass: (gap:%d, linStart:%d, linRecd:%d)\n", pmass->massGap, pmass->massStart, pmass->massRecd); 
+                    print_f(rs->plogs, "MDUO", rs->logs);  
+#if SAVE_CROP_MASS
+                    char syscmd[128] = "mkdir -p /mnt/mmc2/crop";
+                    char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
+                    struct tm *p; 
+                    time_t timep;
+    
+                    time(&timep);
+                    p=localtime(&timep);
+                    //sprintf(rs->logs, "%.4d%.2d%.2d \n", (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday); 
+                    //print_f(rs->plogs, "SPM", rs->logs);
+                    //sprintf(rs->logs, "%s,%.2d:%.2d:%.2d\n", wday[p->tm_wday],p->tm_hour, p->tm_min, p->tm_sec); 
+                    //print_f(rs->plogs, "SPM", rs->logs);       
+
+                    pdt = &pct[ASPOP_CROP_01];
+                    sprintf(supPathCp1, supPath, pmass->massGap, pmass->massStart, pmass->massRecd, (1900+p->tm_year),( 1+p-> tm_mon), p->tm_mday,  p->tm_hour, p->tm_min, p->tm_sec);
+/*
+                    dlen = strlen(supPathCp1) - 1;
+                    slen = strlen(tail);
+                    memcpy(&supPathCp1[dlen], tail, slen);
+*/
+                    //supPathCp1[dlen+slen] = '\0';
+
+                    sprintf(rs->logs, "op_97: plan to save crop mass to [%s] size: %d\n", supPathCp1, pmass->massUsed);
+                    print_f(rs->plogs, "MDUO", rs->logs);  
+                    
+                    f = find_save(supDst, supPathCp1);
+                    if (f) {
+                        fwrite((char *)pmass->masspt, 1, pmass->massUsed, f);
+                        sprintf(rs->logs, "op_97: save crop mass to [%s] size: %d\n", supDst, pmass->massUsed);
+                        print_f(rs->plogs, "MDUO", rs->logs);  
+
+                        fflush(f);
+                        fclose(f);
+
+                        sync();
+                    } else {
+                        ret = doSystemCmd(syscmd);
+
+                        f = find_save(supDst, supPathCp1);
+                        if (f) {
+                            fwrite((char *)pmass->masspt, 1, pmass->massUsed, f);
+                            sprintf(rs->logs, "op_97: save crop mass to [%s] size: %d\n", supDst, pmass->massUsed);
+                            print_f(rs->plogs, "MDUO", rs->logs);  
+
+                            fflush(f);
+                            fclose(f);
+
+                            sync();
+                        } else {
+                            sprintf(rs->logs, "op_97: Error!!! failed to save crop mass to [%s] size: %d\n", supPathCp1, pmass->massUsed);
+                            print_f(rs->plogs, "MDUO", rs->logs);  
+                        }
+                    }
+                    
+#endif
+                    //mem_dump((char *)pmass->masspt, pmass->massUsed);
+                    
+
+                    //data->result = emb_result(data->result, FWORD);                
+                    data->result = emb_result(data->result, NEXT);                
+                    //pmass->massRecd = 0;
+                    //pmass->massUsed = 0;
+                } else {
+                    //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
+                    dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
+                    act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
+                    aspMetaReleaseDuo(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
+                    
+                    if ((act > 0) && (act & ASPMETA_FUNC_CROP)) {
+                        data->bkofw = emb_bk(data->bkofw, METAT, PSTSM);
+                        data->result = emb_result(data->result, BKWRD);
+
+                        sprintf(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
+                        print_f(rs->plogs, "MDUO", rs->logs);  
+                    } else {
+                        //data->result = emb_result(data->result, NEXT);
+                        data->result = emb_result(data->result, FWORD);
+                    }
+                }
+
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetaduo_98(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct aspMetaData_s * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
+    //sprintf(rs->logs, "op_98 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "MDUO", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 120;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_98: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "MDUO", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, FWORD);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetaduo_99(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct aspMetaData_s * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
+    sprintf(rs->logs, "op_98 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "MDUO", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            t->opcode = OP_META_DAT;
+            t->data = ASPMETA_SCAN_COMPLE_DUO;
+            aspMetaClear(0, rs, ASPMETA_OUTPUT);
+            //aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
+            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+
+            data->result = emb_result(data->result, NEXT);
+            sprintf(rs->logs, "op_99: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "MDUO", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetaduo_100(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -16141,7 +16616,7 @@ static int stcropmeta_95(struct psdata_s *data)
     pmeta = rs->pmetaout;
     t = &rs->pmch->tmp;
     sprintf(rs->logs, "op_00 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "CPM", rs->logs);  
+    print_f(rs->plogs, "MDUO", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -16153,7 +16628,7 @@ static int stcropmeta_95(struct psdata_s *data)
 
             data->result = emb_result(data->result, NEXT);
             sprintf(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "CPM", rs->logs);  
+            print_f(rs->plogs, "MDUO", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -27397,22 +27872,101 @@ static int fs117(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs118(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    return 1; 
+    sprintf(mrs->log, "trigger spi0 and spi1 \n");
+    print_f(&mrs->plog, "fs118", mrs->log);
+
+    mrs_ipc_put(mrs, "y", 1, 1);
+    mrs_ipc_put(mrs, "y", 1, 2);
+
+    modersp->v = 0;
+    
+    modersp->m = modersp->m + 1;
+    return 2;
 }
 
 static int fs119(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    return 1;
+    int ret, bitset;
+    char ch;
+
+    //sprintf(mrs->log, "%d\n", modersp->v++);
+    //print_f(&mrs->plog, "fs111", mrs->log);
+
+    //sleep(5);
+
+    ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((ret > 0) && (ch == 'Y')){
+
+        sprintf(mrs->log, "spi 0 end, metaout get!\n");
+        print_f(&mrs->plog, "fs119", mrs->log);
+        
+#if PULL_LOW_AFTER_DATA
+        bitset = 0;
+        msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        sprintf(mrs->log, "set RDY pin %d\n",bitset);
+        print_f(&mrs->plog, "fs119", mrs->log);
+#endif
+        usleep(210000);
+
+        modersp->v |= 0x01;
+    }
+
+    ret = mrs_ipc_get(mrs, &ch, 1, 2);
+    if ((ret > 0) && (ch == 'Y')){
+
+        sprintf(mrs->log, "spi 1 end, metaout get!\n");
+        print_f(&mrs->plog, "fs119", mrs->log);
+        
+#if PULL_LOW_AFTER_DATA
+        bitset = 0;
+        msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+        sprintf(mrs->log, "set RDY pin %d\n",bitset);
+        print_f(&mrs->plog, "fs119", mrs->log);
+#endif
+        usleep(210000);
+
+        modersp->v |= 0x10;
+    }
+
+    if (modersp->v == 0x11) {
+        modersp->m = 48;
+        return 2;
+    }
+    
+    return 0; 
 }
 
 static int fs120(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    return 1;
+    //sprintf(mrs->log, "send notice to P6 for meta mass ready\n");
+    //print_f(&mrs->plog, "fs120", mrs->log);
+
+    mrs_ipc_put(mrs, "d", 1, 7);
+    modersp->m = modersp->m + 1;
+    return 0;
 }
 
 static int fs121(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    return 1;
+    int len=0;
+    char ch=0;
+    //sprintf(mrs->log, "check P6 getting the notice\n");
+    //print_f(&mrs->plog, "fs121", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 7);
+    if ((len > 0) && (ch == 'D')) {
+        modersp->r = 1;
+        return 1;
+    }
+    
+    if ((len > 0) && (ch != 'D')) {
+            sprintf(mrs->log, "FAIL!!send notice to P6 again!\n");
+            print_f(&mrs->plog, "fs121", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
+
+    return 0; 
 }
 
 static int fs122(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -27604,7 +28158,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stcrop_76, stcrop_77, stcrop_78, stcrop_79, stcrop_80}, // CROPR
                             {stvector_81, stvector_82, stapm_83, stapm_84, stapm_85}, // VECTORS
                             {stsparam_86, stsparam_87, stsparam_88, stcropmeta_89, stcropmeta_90}, //SAVPARM
-                            {stcropmeta_91, stcropmeta_92, stcropmeta_93, stcropmeta_94, stcropmeta_95}}; //METAT
+                            {stcropmeta_91, stcropmeta_92, stcropmeta_93, stcropmeta_94, stmetaduo_95}, //METAT
+                            {stmetaduo_96, stmetaduo_97, stmetaduo_98, stmetaduo_99, stmetaduo_100}}; //MDUOU
 
     p1_init(rs);
     stdata = rs->pstdata;
@@ -28916,10 +29471,7 @@ static int p2(struct procRes_s *rs)
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
                     //shmem_dump(addr, 512);
-                    
-                    sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
-                    print_f(rs->plogs, "P2", rs->logs);
-                    
+                                        
                     if (opsz < 0) {
                         //sprintf(rs->logs, "opsz:%d break!\n", opsz);
                         //print_f(rs->plogs, "P2", rs->logs);    
@@ -28939,14 +29491,18 @@ static int p2(struct procRes_s *rs)
                 memcpy(rs->pmetain, laddr, 512);
                 msync(rs->pmetain, 512, MS_SYNC);
 
+                sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                sprintf(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
+                print_f(rs->plogs, "P2", rs->logs);
+
                 if (totsz > rs->pmetaMass->massMax) {
                     rs->pmetaMass->massUsed = rs->pmetaMass->massMax;
                 } else {
                     rs->pmetaMass->massUsed = totsz;
                 }
                 
-                sprintf(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
-                print_f(rs->plogs, "P2", rs->logs);
             }
             else if (cmode == 15) {
                 sprintf(rs->logs, "cmode: %d\n", cmode);
@@ -29124,13 +29680,16 @@ static int p3(struct procRes_s *rs)
     struct spi_ioc_transfer *tr = rs->rspioc2;
     struct timespec tnow;
     struct aspConfig_s *pct=0, *pdt=0;
+
     
-    int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait;
+    int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait, totsz=0;
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4];
     char *addr, *laddr;
     uint32_t fformat=0;
-
+    struct aspMetaData_s *pmetaduo;
+    
+    pmetaduo = rs->pmetainduo;
     pct = rs->pcfgTable;
     
     sprintf(rs->logs, "p3, spidev:%d \n", rs->spifd);
@@ -29181,6 +29740,9 @@ static int p3(struct procRes_s *rs)
                     break;
                 case 'n':
                     cmode = 6;
+                    break;
+                case 'y':
+                    cmode = 7;
                     break;
                 default:
                     break;
@@ -29461,7 +30023,70 @@ static int p3(struct procRes_s *rs)
                 rs_ipc_put(rs, "d", 1);
                 sprintf(rs->logs, "spi0 recv end\n");
                 print_f(rs->plogs, "P3", rs->logs);
-            } else {
+            }
+            else if (cmode == 7) {
+                totsz = 0;
+                len = 0;
+                pi = 0;  
+                len = 0;
+
+                //len = 512;
+                len = SPI_TRUNK_SZ;
+                addr = (char *)rs->pmetaout;
+                //laddr = (char *)rs->pmetain;
+                laddr = (char *)rs->pmetaMassduo->masspt;
+                
+                memcpy(laddr, addr, 512);
+                msync(laddr, 512, MS_SYNC);
+
+                opsz = 0;
+                while (opsz == 0) {
+                    opsz = mtx_data(rs->spifd, laddr, laddr, len, tr);
+
+                    if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
+                        opsz = 0 - opsz;
+                    }
+
+                    //usleep(10000);
+#if P3_TX_LOG
+                    sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                    print_f(rs->plogs, "P3", rs->logs);
+#endif
+                    //shmem_dump(addr, 512);
+                                        
+                    if (opsz < 0) {
+                        //sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                        //print_f(rs->plogs, "P2", rs->logs);    
+                        break;
+                    }
+
+                }
+                
+                rs_ipc_put(rs, "Y", 1);
+
+                pi += 1;
+                
+                opsz = 0 - opsz;
+                if (opsz == 1) opsz = 0;
+                totsz += opsz;
+
+                memcpy(rs->pmetainduo, laddr, 512);
+                msync(rs->pmetainduo, 512, MS_SYNC);
+
+                sprintf(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmetaduo->ASP_MAGIC[0], pmetaduo->ASP_MAGIC[1]);
+                print_f(rs->plogs, "P3", rs->logs);
+
+                sprintf(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                if (totsz > rs->pmetaMass->massMax) {
+                    rs->pmetaMass->massUsed = rs->pmetaMass->massMax;
+                } else {
+                    rs->pmetaMass->massUsed = totsz;
+                }
+                
+            }
+            else {
                 sprintf(rs->logs, "cmode: %d - 7\n", cmode);
                 print_f(rs->plogs, "P3", rs->logs);
             }
@@ -30411,7 +31036,7 @@ static int p6(struct procRes_s *rs)
     struct sdFATable_s   *pftb=0;
     uint32_t secStr=0, secLen=0;
 
-    struct aspMetaMass_s *pmass=0;
+    struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int masUsed=0, masRecd=0, masStart=0;
     int gap=0, cy=0, cxm=0, cxn=0;
     unsigned short *ptBuf;
@@ -30422,8 +31047,8 @@ static int p6(struct procRes_s *rs)
     char ch=0;
 
     int cpn=0, cpx=0, cof=0, cls=0;
-    struct aspCrop36_s *pcp36;
-    struct aspCropExtra_s *pcpex;
+    struct aspCrop36_s *pcp36, *pcp36duo;
+    struct aspCropExtra_s *pcpex, *pcpexduo;
     double rotlf[2], rotup[2], rotrt[2], rotdn[2];
 
     int idxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
@@ -30436,6 +31061,9 @@ static int p6(struct procRes_s *rs)
     pmass = rs->pmetaMass;
     pcp36 = rs->pcrop32;
     pcpex = rs->pcropex;
+    pmassduo= rs->pmetaMassduo;
+    pcp36duo= rs->pcrop32duo;
+    pcpexduo= rs->pcropexduo;
 
     char dir[64] = "/mnt/mmc2";
     //char dir[256] = "/root";
@@ -30571,6 +31199,515 @@ static int p6(struct procRes_s *rs)
         sendbuf[4] = 0xfc;
         
         sendbuf[3] = 'F';
+
+        if (opcode == 0x20) { /* send CROP info (duo)*/
+            sprintf(rs->logs, "handle opcode: 0x%x(CROP duo)\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            cnt = 0;
+            while (1) {
+                num = 0;
+                for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
+                    idx = ASPOP_CROP_01 + i;
+                    
+                    switch(idx) {
+                        case ASPOP_CROP_01:
+                        case ASPOP_CROP_02:
+                        case ASPOP_CROP_03:
+                        case ASPOP_CROP_04:
+                        case ASPOP_CROP_05:
+                        case ASPOP_CROP_06:
+                        case ASPOP_CROP_07:
+                        case ASPOP_CROP_08:
+                        case ASPOP_CROP_09:
+                        case ASPOP_CROP_10:
+                        case ASPOP_CROP_11:
+                        case ASPOP_CROP_12:
+                        case ASPOP_CROP_13:
+                        case ASPOP_CROP_14:
+                        case ASPOP_CROP_15:
+                        case ASPOP_CROP_16:
+                        case ASPOP_CROP_17:
+                        case ASPOP_CROP_18:
+                            pdt = &pct[idx];
+                            if (pdt->opStatus == ASPOP_STA_UPD) {
+                                num++;
+                            }
+
+                            break;
+                        default:
+                            break;
+                    }
+                    
+                }
+
+                if (num == CROP_MAX_NUM_META) {
+                    break;
+                }
+
+                sprintf(rs->logs, "wait crop num:%d, %d s\n", num, cnt/2);
+                print_f(rs->plogs, "P6", rs->logs);
+/*
+                if (cnt > 10) {
+                    break;
+                }
+*/
+                usleep(500000);
+                cnt ++;
+            }
+
+            /* initial cropping config */
+            memset(pcp36, 0, sizeof(struct aspCrop36_s));
+            memset(pcpex, 0, sizeof(struct aspCropExtra_s));
+
+
+            for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
+                idx = ASPOP_CROP_01 + i;
+                pdt = &pct[idx];
+                switch(idx) {
+                    case ASPOP_CROP_01:
+                    case ASPOP_CROP_02:
+                    case ASPOP_CROP_03:
+                    case ASPOP_CROP_04:
+                    case ASPOP_CROP_05:
+                    case ASPOP_CROP_06:
+                        cpn = (idx - ASPOP_CROP_01) + 1;
+                        pdt = &pct[idx];
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+#if P6_CROP_LOG
+                            sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            print_f(rs->plogs, "P6", rs->logs);  
+#endif
+                            sendbuf[3] = 'C';
+
+                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+
+                            pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+
+                            pdt->opStatus = ASPOP_STA_APP;
+                        }
+
+                        break;
+                    case ASPOP_CROP_07:
+                    case ASPOP_CROP_08:
+                    case ASPOP_CROP_09:
+                    case ASPOP_CROP_10:
+                    case ASPOP_CROP_11:
+                    case ASPOP_CROP_12:
+                    case ASPOP_CROP_13:
+                    case ASPOP_CROP_14:
+                    case ASPOP_CROP_15:
+                    case ASPOP_CROP_16:
+                    case ASPOP_CROP_17:
+                    case ASPOP_CROP_18:
+                        cpn = idx - ASPOP_CROP_01;
+                        pdt = &pct[idx];
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+#if P6_CROP_LOG
+                            sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            print_f(rs->plogs, "P6", rs->logs);  
+#endif
+                            sendbuf[3] = 'C';
+
+                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+
+                            pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+
+                            pdt->opStatus = ASPOP_STA_APP;
+                        }
+
+                        break;
+                    case ASPOP_IMG_LEN:
+                        pdt = &pct[idx];
+                        
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                            sendbuf[3] = 'L';
+                            sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                
+                if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
+                
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                
+                //sendbuf[5+n] = '\0';                
+                //sprintf(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
+                //print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            cpn = 0;
+            pcp36->crp36Pots[cpn*2+0] = 100;
+            pcp36->crp36Pots[cpn*2+1] = 0;
+
+            cpn = CROP_MAX_NUM_META+1;
+            pcp36->crp36Pots[cpn*2+0] = 1100;
+            pcp36->crp36Pots[cpn*2+1] = 0;
+
+            /* first stage of cropping algorithm */            
+            ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
+            sprintf(rs->logs, " crop36 get boundry, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ret = 0;
+            ret |= calcuCrossUpAph(pcp36);
+            sprintf(rs->logs, " crop36 calcu cross up, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
+            ret |= calcuCrossDnAph(pcp36);
+            sprintf(rs->logs, " crop36 calcu cross down, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            if (ret) {
+                getRectPoint(pcp36);
+            } else {
+                ret = calcuMostRtLf(pcp36);
+                if (ret == 0) {
+                    ret = calcuCrossUpLine(pcp36);
+                    sprintf(rs->logs, " crop36 calcu cross line up, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    ret = calcuCrossDnLine(pcp36);
+                    sprintf(rs->logs, " crop36 calcu cross line down, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    ret = getCrop36RotatePoints(pcp36);
+                    sprintf(rs->logs, " crop36 get rotate points, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+                } else {
+                    getRectPoint(pcp36);
+                }
+            }
+#if 0 /* move behind the cropping stage 2 complete */
+            for (i = 0; i < 4; i++) { /* send the cropping result to APP */
+                sendbuf[3] = 'F';
+
+                switch (i) {
+                    case 0:
+                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P1[0]), (int)round(pcp36->crp36P1[1]));
+                        break;
+                    case 1:
+                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P2[0]), (int)round(pcp36->crp36P2[1]));
+                        break;
+                    case 2:
+                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P3[0]), (int)round(pcp36->crp36P3[1]));
+                        break;
+                    case 3:
+                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P4[0]), (int)round(pcp36->crp36P4[1]));
+                        break;
+                    default:
+                        break;
+                }
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+#endif
+
+#if 1  /* skip for debug, anable later */
+            if (pmass->massRecd) {
+                cpx = 0;
+                cpn = 6;
+                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                cpn = 5;
+                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                cpx = 1;
+                cpn = 7;
+                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                cpn = 8;
+                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                cpx = 2;
+                cpn = 9;
+                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                cpn = 10;
+                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                cof = cpx + 1;
+
+                ch = 0; ret = 0;
+                
+                while (ch != 'c') {
+                    ret = rs_ipc_get(rs, &ch, 1);
+                    if (ret > 0) {
+                        if (ch == 'c') {
+                            sprintf(rs->logs, "succeed to get ch == %c\n", ch);
+                            print_f(rs->plogs, "P6", rs->logs);    
+                        } else {
+                            sprintf(rs->logs, "wrong!! ch == %c \n", ch);
+                            print_f(rs->plogs, "P6", rs->logs);    
+                        }
+                    } else {
+                        sprintf(rs->logs, "failed to get ch ret: \n", ret);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                }
+
+                cnt = 0;
+
+                masUsed = pmass->massUsed;
+                masStart = pmass->massStart;
+                
+                sprintf(rs->logs, "wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
+                print_f(rs->plogs, "P6", rs->logs);
+
+                while (!masUsed) {
+                    usleep(500000);
+                    msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
+                    masUsed = pmass->massUsed;
+                    sprintf(rs->logs, "wait meta mass (used:%d) %d\n", masUsed, cnt); 
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+
+                masRecd = pmass->massRecd;
+
+                msync(pmass->masspt, masUsed, MS_SYNC);
+                ptBuf = (unsigned short *)pmass->masspt;
+                
+                cy = masStart;
+                gap = pmass->massGap;
+
+                sendbuf[3] = 'T';
+                sprintf(rs->logs, "%d \n\r", masRecd); 
+                print_f(rs->plogs, "P6", rs->logs);
+
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+#if 0 /* do NOT send mass pos */
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+#endif
+                for (i = 0; i < masRecd; i++) {
+                    cy += gap;
+                    cxm = *ptBuf;
+                    ptBuf++;
+                    cxn = *ptBuf;
+                    ptBuf++;
+                    sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
+
+                    cpx = i + cof;
+                    pcpex->crpexLfPots[cpx*2+0] = cxm;
+                    pcpex->crpexLfPots[cpx*2+1] = cy;
+                    pcpex->crpexRtPots[cpx*2+0] = cxn;
+                    pcpex->crpexRtPots[cpx*2+1] = cy;
+                    
+#if P6_CROP_LOG
+                    print_f(rs->plogs, "P6", rs->logs);
+#endif
+                    sendbuf[3] = 'M';
+                    n = strlen(rs->logs);
+                    memcpy(&sendbuf[5], rs->logs, n);
+
+                    sendbuf[5+n] = 0xfb;
+                    sendbuf[5+n+1] = '\n';
+                    sendbuf[5+n+2] = '\0';
+#if 0 /* do NOT send mass pos */
+                    ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                    //sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
+                    //print_f(rs->plogs, "P6", rs->logs);
+#endif
+                }
+
+                cpx = masRecd + cof;
+                cls =  masRecd + cof - 1;
+
+                cpn = 11;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 12;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 13;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 14;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 15;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 16;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 17;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 18;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 2;
+                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 3;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                
+                pcpex->crpexSize = cpx*2;
+                
+                msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+
+                #if 0
+                sprintf(rs->logs, "total extra points size: %d \n", cpx);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                for (i = 0; i < cpx; i++) {
+                    sprintf(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
+                              , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
+                
+                //shmem_dump(pmass->masspt, pmass->massUsed);
+
+#if 0                    
+                masStart = pmass->massStart;
+                while (masStart != 0) {
+                    masStart = pmass->massStart;
+                    usleep(100000);
+                }
+#endif                
+                pmass->massRecd = 0;
+                pmass->massUsed = 0;
+
+            } 
+#endif
+
+            /* second stage of cropping algorithm */
+            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+            findLine(pcp36, pcpex);
+            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+            findUniPoints(pcp36, pcpex);
+            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+            calcuLine(pcpex);
+            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
+            findBestLine(pcp36, pcpex);
+            
+            msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
+            ret = getRotateP1(pcp36, rotlf);
+            if (!ret) {
+                sprintf(rs->logs, "get rotateP1 (%lf, %lf) \n", rotlf[0], rotlf[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP2(pcp36, rotup);
+            if (!ret) {
+                sprintf(rs->logs, "get rotateP2 (%lf, %lf) \n", rotup[0], rotup[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP3(pcp36, rotrt);
+            if (!ret) {
+                sprintf(rs->logs, "get rotateP3 (%lf, %lf) \n", rotrt[0], rotrt[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP4(pcp36, rotdn);
+            if (!ret) {
+                sprintf(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+            
+#if 0 /* debug print */
+            for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
+                sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pots[i*2+0], pcp36->crp36Pots[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            
+            for (i = 0; i < pcpex->crpexSize; i++) {
+                sprintf(rs->logs, "L%d. %lf, %lf \n", i, pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            for (i = 0; i < pcpex->crpexSize; i++) {
+                sprintf(rs->logs, "R%d. %lf, %lf \n", i, pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+#endif     
+
+            for (i = 0; i < 4; i++) { /* send the cropping result to APP */
+                sendbuf[3] = 'F';
+
+                switch (i) {
+                    case 0:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotlf[0]), (int)round(rotlf[1]));
+                        break;
+                    case 1:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotup[0]), (int)round(rotup[1]));
+                        break;
+                    case 2:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotrt[0]), (int)round(rotrt[1]));
+                        break;
+                    case 3:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotdn[0]), (int)round(rotdn[1]));
+                        break;
+                    default:
+                        break;
+                }
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+            
+            rs_ipc_put(rs, "C", 1);
+
+            goto socketEnd;
+        }
         if (opcode == 0x19) { /* send CROP info (new)*/
             sprintf(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
