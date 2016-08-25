@@ -877,7 +877,7 @@ static int aspMetaMassSample(struct aspMetaMass *mass)
     } 
 
     fileLen = ftell(fp);
-    printf("[mass] file [%s] size: %d \n", sample, fileLen);
+    printf("[mass] file [%s] size: %d, idx: %d \n", sample, fileLen, idx);
 
     ret = fseek(fp, 0, SEEK_SET);
     if (ret) {
@@ -1287,8 +1287,6 @@ static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct 
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
-        massduo->massIdx = mass->massIdx + 1;
-    
         psrc = pCropDuo->CROP_COOD_01;
         pdst = &(pmetaduo->CROP_POS_1);
         for (idx = 0; idx < 18; idx++) {
@@ -5756,16 +5754,19 @@ static int stauto_38(struct psdata_s *data)
                         pmass->massStart = 12;
                         pmass->massGap = 8;
                         //pmass->massIdx = 9;
-                        t->info += 1;
-                        pmass->massIdx = testSeq[t->info % TEST_LEN];
+                        //t->info += 1;
+                        //pmass->massIdx = testSeq[t->info % TEST_LEN];
+                        pmass->massIdx += 1;
+                        
                         //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
                         break;
                     case ASPMETA_CROP_600DPI:
                         pmass->massStart = 12;
                         pmass->massGap = 8;
                         //pmass->massIdx = 9;
-                        t->info += 1;
-                        pmass->massIdx = testSeq[t->info % TEST_LEN];
+                        //t->info += 1;
+                        //pmass->massIdx = testSeq[t->info % TEST_LEN];
+                        pmass->massIdx += 1;
                         //aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
                         break;
                      /*todo: double side scan S*/
@@ -5777,6 +5778,7 @@ static int stauto_38(struct psdata_s *data)
                         aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
                         aspMetaBuild(ASPMETA_FUNC_IMGLEN, 0, rs);
 
+                        pmassDuo->massIdx = pmass->massIdx + 1;
                         pmassDuo->massStart = 12;
                         pmassDuo->massGap = 8;
                         aspMetaBuildDuo(ASPMETA_FUNC_NONE, 0, rs);
@@ -5787,17 +5789,19 @@ static int stauto_38(struct psdata_s *data)
                     case ASPMETA_CROP_300DPI_DUO:
                         pmass->massStart = 12;
                         pmass->massGap = 8;
-                        t->info += 1;
-                        pmass->massIdx = testSeq[t->info % TEST_LEN];
-
+                        //t->info += 1;
+                        //pmass->massIdx = testSeq[t->info % TEST_LEN];
+                        pmass->massIdx += 1;
+                        
                         pmassDuo->massStart = 12;
                         pmassDuo->massGap = 8;
                         break;
                     case ASPMETA_CROP_600DPI_DUO:
                         pmass->massStart = 12;
                         pmass->massGap = 8;
-                        t->info += 1;
-                        pmass->massIdx = testSeq[t->info % TEST_LEN];
+                        //t->info += 1;
+                        //pmass->massIdx = testSeq[t->info % TEST_LEN];
+                        pmass->massIdx += 1;
 
                         pmassDuo->massStart = 12;
                         pmassDuo->massGap = 8;
@@ -5808,6 +5812,9 @@ static int stauto_38(struct psdata_s *data)
                         print_f(mlogPool, "auto_38", str);  
                         break;
                 }
+
+                sprintf(str, "\n\ncheck index, org: %d, duo: %d info: %d\n\n\n", pmass->massIdx, pmassDuo->massIdx, t->info);  
+                print_f(mlogPool, "auto_38", str);  
 
                 switch (t->data) {
                     case ASPMETA_POWON_INIT:
