@@ -2636,6 +2636,7 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen)
     return 0;
 }
 
+#define CROP_CROSUP_LOG (0)
 static int calcuCrossUpAph(struct aspCrop36_s *pcp36) 
 {
 #define UP_NUM 3
@@ -2662,8 +2663,9 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
 
         pru[j*2+0] = pn[Rc*2+0];
         pru[j*2+1] = pn[Rc*2+1];
-
+#if CROP_CROSUP_LOG
         printf( "[csUP] %d. (LU) copy (%d), %lf,  %lf (RU) copy (%d), %lf,  %lf\n", j, Lc, round(plu[j*2+0]), round(plu[j*2+1]), Rc, round(pru[j*2+0]), round(pru[j*2+1]));    
+#endif
 
     }
 
@@ -2682,9 +2684,11 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
 
     ret = calcuGroupLine(pru, vru, &divRU, UP_NUM);
     if (ret == 0) {
+#if CROP_CROSUP_LOG
         printf("[csUP] succeed to get group line vRU, divRU = %lf\n", divRU);
+#endif
     } else {
-        printf("[csUP] failed to get group line vRU, ret = %d \n", ret);    
+        printf("[csUP] WARNNING!!! failed to get group line vRU, ret = %d \n", ret);    
         return -3;
     }
 
@@ -2692,9 +2696,11 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
 
     ret = getCross(vlu, vru, cosUp);
     if (ret == 0) {
+#if CROP_CROSUP_LOG
         printf("[csUP ]succeed to get cross up = (%lf, %lf)\n", cosUp[0], cosUp[1]);
+#endif
     } else {
-        printf("[csUP] failed to get cross up, ret = %d\n", ret);
+        printf("[csUP] WARNNING!!! failed to get cross up, ret = %d\n", ret);
         return -4;
     }
 
@@ -2703,6 +2709,7 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
     return 0;
 }
 
+#define CROP_RECT_LOG (0)
 static int getRectPoint(struct aspCrop36_s *pcp36) 
 {
     int ret=0, err=0;
@@ -2741,12 +2748,12 @@ static int getRectPoint(struct aspCrop36_s *pcp36)
         printf("[rect] Error!!! get rect cross RD failed!!!!");
         err++;
     }
-
+#if CROP_RECT_LOG
     printf("[rect] get rect LU = (%lf, %lf) \n", pLU[0], pLU[1]);
     printf("[rect] get rect RU = (%lf, %lf) \n", pRU[0], pRU[1]);
     printf("[rect] get rect RD = (%lf, %lf) \n", pRD[0], pRD[1]);
     printf("[rect] get rect LD = (%lf, %lf) \n", pLD[0], pLD[1]);
-
+#endif
     if (err) {
         return err;
     }
@@ -2759,6 +2766,7 @@ static int getRectPoint(struct aspCrop36_s *pcp36)
     return 0;
 }
 
+#define CROP_CROSSUPLINE_LOG (0)
 static int calcuCrossUpLine(struct aspCrop36_s *pcp36) 
 {
     double angleCsUp;
@@ -2773,9 +2781,9 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
 
     csUp = pcp36->crp36CsUp;
     pn = pcp36->crp36Pots;
-
+#if CROP_CROSSUPLINE_LOG
     printf( "[csULine] cross Down = (%lf, %lf)\n", round(csUp[0]), round(csUp[1]));
-
+#endif
     angleCsUp = getAngle(csUp, &pn[1*2], &pn[4*2]);
 
     pcp36->crp36AngleDn = angleCsUp;
@@ -2785,7 +2793,9 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
         printf( "[csULine] get cslineLU vector fauled!!!\n"); 
         err++;
     } else {
+#if CROP_CROSSUPLINE_LOG
         printf( "[csULine] get cslineLU vector succeed!!!\n");
+#endif
         memcpy(pcp36->crp36CsLineLU, cslineLU, sizeof(double)*3);
     }
     
@@ -2794,12 +2804,16 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
         printf( "[csULine] get cslineRU vector fauled!!!\n"); 
         err++;
     } else {
+#if CROP_CROSSUPLINE_LOG
         printf( "[csULine] get cslineRU vector succeed!!!\n");
+#endif
         memcpy(pcp36->crp36CsLineRU, cslineRU, sizeof(double)*3);
     }
             
     return err;
 }
+
+#define CROP_CROSSDNLINE_LOG (0)
 static int calcuCrossDnLine(struct aspCrop36_s *pcp36) 
 {
     double angleCsDn;
@@ -2814,9 +2828,9 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
 
     csDn = pcp36->crp36CsDn;
     pn = pcp36->crp36Pots;
-    
+#if CROP_CROSSDNLINE_LOG
     printf( "[csDLine] cross Down = (%lf, %lf) \n", round(csDn[0]), round(csDn[1]));
-    
+#endif    
     angleCsDn = getAngle(csDn, &pn[1*2], &pn[4*2]);
 
     pcp36->crp36AngleDn = angleCsDn;
@@ -2827,8 +2841,9 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
         printf( "[csDLine] get cslineLD vector fauled!!!\n"); 
         err++;
     } else {
+#if CROP_CROSSDNLINE_LOG
         printf( "[csDLine] get cslineLD vector succeed!!!\n");
-
+#endif
         memcpy(pcp36->crp36CsLineLD, cslineLD, sizeof(double)*3);
     }
     
@@ -2837,14 +2852,16 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
         printf( "[csDLine] get cslineRD vector fauled!!!\n"); 
         err++;
     } else {
+#if CROP_CROSSDNLINE_LOG
         printf( "[csDLine] get cslineRD vector succeed!!!\n");
-
+#endif
         memcpy(pcp36->crp36CsLineRD, cslineRD, sizeof(double)*3);
     }
 
     return err;
 }
 
+#define CROP_MOSTRL_LOG (0)
 static int calcuMostRtLf(struct aspCrop36_s *pcp36)
 {
     int mrtset=0, mlfset=0, csupset=0, csdnset=0;
@@ -2907,9 +2924,9 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
     }
     
     distDn = calcuDistance(csDn, rtpoint);
-       
+#if CROP_MOSTRL_LOG
     printf("[RTLF] distance Up = %lf, distance Down = %lf, max distance = %lf\n", distUp, distDn, maxD);
-    
+#endif    
     if ((distUp > maxD) && (distDn > maxD)) {
         printf("[RTLF] distance Up or Dn out of range !!!!!!\n");
         err++;
@@ -3019,15 +3036,16 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
     adn = pcp36->crp36AngleDn;
     alf = pcp36->crp36AngleLf;
     art = pcp36->crp36AngleRt;
-    
+#if CROP_MOSTRL_LOG
     printf("[RTLF] angle Up = %lf, Dn = %lf, Lf = %lf, Rt = %lf \n", round(aup), round(adn), round(alf), round(art));
     
     printf("[RTLF] pos up(%d, %d), dn(%d, %d), lf(%d, %d), rt(%d, %d)\n", (int)round(up[0]), (int)round(up[1])
             , (int)round(dn[0]), (int)round(dn[1]), (int)round(lf[0]), (int)round(lf[1]), (int)round(rt[0]), (int)round(rt[1]));
-    
+#endif
     return 0;
 }
 
+#define CROP_CROSSDNAPH_LOG (0)
 static int calcuCrossDnAph(struct aspCrop36_s *pcp36) 
 {
 #define DN_NUM 5
@@ -3054,8 +3072,9 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
         prd[j*2+0] = pn[Rc*2+0];
         prd[j*2+1] = pn[Rc*2+1];
-        
+#if CROP_CROSSDNAPH_LOG
         printf( "[csDN] %d. (LD) copy (%d), %lf,  %lf (RD) copy (%d), %lf,  %lf \n", j, Lc, round(pld[j*2+0]), round(pld[j*2+1]), Rc, round(prd[j*2+0]), round(prd[j*2+1]));    
+#endif
     }
 
     double vld[3];
@@ -3065,7 +3084,9 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
     ret = calcuGroupLine(pld, vld, &divLD, DN_NUM);
     if (ret == 0) {
+#if CROP_CROSSDNAPH_LOG
         printf("[csDN] succeed to get group line vLD, divLD = %lf \n", divLD);    
+#endif
     } else {
         printf("[csDN] failed to get group line vLD, ret = %d \n", ret);    
         return -2;
@@ -3073,7 +3094,9 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
     ret = calcuGroupLine(prd, vrd, &divRD, DN_NUM);
     if (ret == 0) {
+#if CROP_CROSSDNAPH_LOG
         printf("[csDN] succeed to get group line vRD, divRD = %lf \n", divRD);    
+#endif
     } else {
         printf("[csDN] failed to get group line vRD, ret = %d \n", ret);    
         return -3;
@@ -3083,7 +3106,9 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
     ret = getCross(vld, vrd, csDown);
     if (ret == 0) {
+#if CROP_CROSSDNAPH_LOG
         printf("[csDN] succeed to get cross down = (%lf, %lf)\n", csDown[0], csDown[1]);
+#endif
     } else {
         printf("[csDN] failed to get cross down, ret = %d\n", ret);
         return -4;
@@ -3094,6 +3119,7 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
     return 0;
 }    
 
+#define CROP_ROT36_LOG (0)
 static int getCrop36RotatePoints(struct aspCrop36_s *pcp36) 
 {
     int ret=0;
@@ -3138,8 +3164,9 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
     }
     
     //solidFlag = 214;
+#if CROP_ROT36_LOG
     printf("[crp36] solidFlag (0x%x)\n", solidFlag);
-    
+#endif    
     double csUp1[2];
     double csDn1[2];
     double mostLf1[2];
@@ -3205,12 +3232,12 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
         if (ret != 0) {
             printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
         }
-    
+#if CROP_ROT36_LOG
         printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
         printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
         printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
-
+#endif
         memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
         memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
         memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
@@ -3227,12 +3254,12 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
             printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
         }            
 
-
+#if CROP_ROT36_LOG
         printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
         printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
         printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
-
+#endif
         memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
         memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
         memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
@@ -3250,12 +3277,12 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
         if (ret != 0) {
             printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
         }            
-
+#if CROP_ROT36_LOG
         printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
         printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
         printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
-
+#endif
         memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
         memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
         memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
@@ -3273,12 +3300,12 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
         if (ret != 0) {
             printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
         }
-
+#if CROP_ROT36_LOG
         printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
         printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
         printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
-
+#endif
         memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
         memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
         memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
@@ -3303,12 +3330,12 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
             if (ret != 0) {
                 printf("[crp36] Error!!! get new most left failed!!!, ret: %d \n",ret);
             }
-
+#if CROP_ROT36_LOG
             printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
             printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
             printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
             printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
-
+#endif
             memcpy(pcp36->crp36P1, newMostLf, sizeof(double)*2);    
             memcpy(pcp36->crp36P2, csUp1, sizeof(double)*2);    
             memcpy(pcp36->crp36P3, newMostRt, sizeof(double)*2);    
@@ -3351,6 +3378,7 @@ static int cpyPGrp(int start, int len, double *grp, double **cpgp, int max)
     return len;
 }
 
+#define CROP_FINDBASELINE_LOG (0)
 static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
 {
 #define LINE_DIST  (32.0)
@@ -3367,17 +3395,18 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     
     ptLf = pcpex->crpexLfPots;
     ptRt = pcpex->crpexRtPots;
-
+#if CROP_FINDBASELINE_LOG
     printf("[find] findLine left start \n");    
-    
+#endif
     tot = pcpex->crpexSize / 2;
     
     cntLf = 0;
     pcpex->crpexLfAbsUsed = 0;
     
     head = 0;                        
+#if CROP_FINDBASELINE_LOG
     printf("[find] line start  = [%d] , (%lf, %lf) total: %d\n", head, ptLf[head*2+0], ptLf[head*2+1], tot);    
-
+#endif
     pcpex->crpexLfAbs[cntLf] = 0;
     cntLf ++;
 
@@ -3397,7 +3426,9 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         dist = calcuLineGroupDist(cgrp, vecTr, glen);
         
         if (dist > LINE_DIST) {
+#if CROP_FINDBASELINE_LOG
             printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1], dist);
+#endif
             head = i;
 
             pcpex->crpexLfAbs[cntLf] = i - 1;
@@ -3411,23 +3442,24 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
         cgrp = 0;
     }
-
+#if CROP_FINDBASELINE_LOG
     printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf)\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1]);
+#endif
     head = i;
 
     pcpex->crpexLfAbs[cntLf] = i - 1;
     
     cntLf ++;
     pcpex->crpexLfAbsUsed = cntLf;
-    
+#if CROP_FINDBASELINE_LOG
     printf("findLine right start \n");    
-
+#endif
     head = 0;
     cntRt = 0;
     pcpex->crpexRtAbsUsed = 0;
-     
+#if CROP_FINDBASELINE_LOG
     printf("line start  = [%d] , (%lf, %lf) \n", head, ptRt[head*2+0], ptRt[head*2+1]);    
-
+#endif
     pcpex->crpexRtAbs[cntRt] = 0;
     cntRt ++;
 
@@ -3447,7 +3479,9 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         dist = calcuLineGroupDist(cgrp, vecTr, glen);
         
         if (dist > LINE_DIST) {
+#if CROP_FINDBASELINE_LOG
             printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1], dist);    
+#endif
             head = i;
 
             pcpex->crpexRtAbs[cntRt] = i - 1;
@@ -3461,7 +3495,10 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
         cgrp = 0;
     }
+
+#if CROP_FINDBASELINE_LOG
     printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf) \n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1]);    
+#endif
     head = i;
 
     pcpex->crpexRtAbs[cntRt] = i - 1;
@@ -3471,12 +3508,16 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     
     for (i=0; i < cntLf; i++) {
         id = pcpex->crpexLfAbs[i];
+#if CROP_FINDBASELINE_LOG
         printf("%d. left abs = [%d]  =  (%lf, %lf) \n", i, id, ptLf[id*2+0], ptLf[id*2+1]);    
+#endif
     }
 
     for (i=0; i < cntRt; i++) {
         id = pcpex->crpexRtAbs[i];
+#if CROP_FINDBASELINE_LOG
         printf("%d. right abs = [%d]  =  (%lf, %lf) \n", i, id, ptRt[id*2+0], ptRt[id*2+1]);    
+#endif
     }
 
     double distP2P=0;
@@ -3492,7 +3533,9 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
     pc0[0] = -1;
     pc0[1] = -1;
+#if CROP_FINDBASELINE_LOG
     printf("absLsize : %d, absRsize: %d \n", absLsize, absRsize);
+#endif
     for (i=0; i < absLsize; i++) {
         id = pcpex->crpexLfAbs[i*2+0];
         pc1[0] = ptLf[id*2+0];
@@ -3556,13 +3599,13 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
     
     pcpex->crpexRtAbsCut = contR;
-
+#if CROP_FINDBASELINE_LOG
     printf("absLf cut : %d, absRt cut: %d \n", contL, contR);
-    
+#endif
     return 0;
 }
 
-
+#define CROP_FINDPOINTS_LOG (0)
 static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
 {
     int ret=0;
@@ -3589,9 +3632,9 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
     lfLinSize = pcpex->crpexLfAbsCut;
     rtLinSize = pcpex->crpexRtAbsCut;
-    
+#if CROP_FINDPOINTS_LOG
     printf("LfCut: %d, RtCut: %d, lfused: %d, rtused: %d \n", lfLinSize, rtLinSize, lfused, rtused);
-
+#endif
     memset(Lfarr, 0, sizeof(double)*8);
     memset(Rtarr, 0, sizeof(double)*8);
 
@@ -3599,9 +3642,9 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         for (iL = 0; iL < lfused; iL++) {
             isrc = pcpex->crpexLfAbs[iL*2+0];
             idst = pcpex->crpexLfAbs[iL*2+1];
-
+#if CROP_FINDPOINTS_LOG
             printf("Lfabs1: %d, Lfabs2: %d \n", isrc, idst);
-            
+#endif
             if (isrc < 0) continue;
             if (idst < 0) continue; 
 
@@ -3619,9 +3662,9 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         for (iR = 0; iR < rtused; iR++) {
             isrc = pcpex->crpexRtAbs[iR*2+0];
             idst = pcpex->crpexRtAbs[iR*2+1];
-
+#if CROP_FINDPOINTS_LOG
             printf("Rtabs1: %d, Rtabs2: %d \n", isrc, idst);
-
+#endif
             if (idst < 0) continue;                    
             if (isrc < 0) continue;
             
@@ -3639,13 +3682,17 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
     for (i=0; i < 2; i++) {
         for (j=0; j < 4; j++) {
+#if CROP_FINDPOINTS_LOG
             printf("%d-%d Lfcut: %lf \n", i, j, Lfarr[i*4+j]);
+#endif
         }
     }
 
     for (i=0; i < 2; i++) {
         for (j=0; j < 4; j++) {
+#if CROP_FINDPOINTS_LOG
             printf("%d-%d Rtcut: %lf \n", i, j, Rtarr[i*4+j]);
+#endif
         }
     }
     
@@ -3926,8 +3973,10 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     }
 
     if ((sup) && (sdn) && (slf) && (srt)) {
+#if CROP_FINDPOINTS_LOG
         printf("sup = (%lf, %lf), sdn = (%lf, %lf) \n", sup[0], sup[1], sdn[0], sdn[1]);
         printf("slf = (%lf, %lf), srt = (%lf, %lf) \n", slf[0], slf[1], srt[0], srt[1]);    
+#endif
     } else {
         printf("Warnning!!!  sup || sdn || slf || srt == null!!! \n");
     }
@@ -3940,6 +3989,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     return 0;
 }
 
+#define CROP_CALCULINE_LOG (0)
 static int calcuLine(struct aspCropExtra_s *pcpex) 
 {
 #define MIN_LINE  10
@@ -3970,9 +4020,10 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     ptRt = pcpex->crpexRtPots;
     
     tot = pcpex->crpexSize / 2;
-    
+#if CROP_CALCULINE_LOG
     printf("msLf (%lf, %lf) rt (%lf, %lf) \n", lf[0], lf[1], rt[0], rt[1]);
     printf("up (%lf, %lf) dn (%lf, %lf) \n", up[0], up[1], dn[0], dn[1]);
+#endif
     for (i = 0; i < tot; i++) {
         //printf("%d. Left (%lf, %lf) Right (%lf, %lf)\n", i, ptLf[i*2+0], ptLf[i*2+1], ptRt[i*2+0], ptRt[i*2+1]);
         if ((ptLf[i*2+0] > (lf[0] - 200.0)) && (ptLf[i*2+0] < (up[0] + 200.0)) && (ptLf[i*2+1] <= lf[1]) && (ptLf[i*2+1] >= up[1])) {
@@ -4029,9 +4080,9 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     if ((rtEndDn >= 0) && (rtStrDn >= 0)) {
         szrd = rtEndDn - rtStrDn + 1;
     }
-
+#if CROP_CALCULINE_LOG
     printf("(size) szlu = %d, szld = %d, szru = %d, szrd = %d\n", szlu, szld, szru, szrd);    
-
+#endif
     memset(pcpex->crpexLinLU, 0, sizeof(double)*3);
     memset(pcpex->crpexLinLD, 0, sizeof(double)*3);
     memset(pcpex->crpexLinRU, 0, sizeof(double)*3);
@@ -4058,8 +4109,9 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     pcpex->crpexGrpRDLen = -1;
     
     if (szlu > MIN_LINE) {
+#if CROP_CALCULINE_LOG
         printf("(LU) copy , start idx = %d, end idx = %d, size = %d\n", lfStrUp, lfEndUp, szlu);
-
+#endif
         pGrp = &pcpex->crpexLfPots[lfStrUp*2];
         ret = calcuGroupLine(pGrp, vecLU, &divLU, szlu);
         if (ret == 0) {
@@ -4070,13 +4122,16 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             pcpex->crpexGrpLULen = szlu;
         } else {
             pcpex->crpexLinLUDiv = (int) abs(ret);
+#if CROP_CALCULINE_LOG
             printf("(LU) ret (%d), divLU (%lf)\n", ret, divLU); 
+#endif
         }
     }
 
     if (szld > MIN_LINE) {
+#if CROP_CALCULINE_LOG
         printf("(LD) copy , start idx = %d, end idx = %d, size = %d\n", lfStrDn, lfEndDn, szld);
-
+#endif
         pGrp = &pcpex->crpexLfPots[lfStrDn*2];
         ret = calcuGroupLine(pGrp, vecLD, &divLD, szld);
         if (ret == 0) {
@@ -4087,13 +4142,16 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             pcpex->crpexGrpLDLen = szld;
         } else {
             pcpex->crpexLinLDDiv = (int) abs(ret);
+#if CROP_CALCULINE_LOG
             printf("(LD) ret (%d), divLD (%lf)\n", ret, divLD);
+#endif
         }
     }
 
     if (szru > MIN_LINE) {
+#if CROP_CALCULINE_LOG
         printf("(RU) copy , start idx = %d, end idx = %d, size = %d\n", rtStrUp, rtEndUp, szru);    
-
+#endif
         pGrp = &pcpex->crpexRtPots[rtStrUp*2];
         ret = calcuGroupLine(pGrp, vecRU, &divRU, szru);
         if (ret == 0) {
@@ -4104,13 +4162,16 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             pcpex->crpexGrpRULen = szru;
         } else {
             pcpex->crpexLinRUDiv = (int) abs(ret);
+#if CROP_CALCULINE_LOG
             printf("(RU) ret (%d), divRU (%lf)\n", ret, divRU);
+#endif
         }
     }
     
     if (szrd > MIN_LINE) {
+#if CROP_CALCULINE_LOG
         printf("(RD) copy , start idx = %d, end idx = %d, size = %d\n", rtStrDn, rtEndDn, szrd);    
-        
+#endif
         pGrp = &pcpex->crpexRtPots[rtStrDn*2];
         ret = calcuGroupLine(pGrp, vecRD, &divRD, szrd);
         if (ret == 0) {
@@ -4121,7 +4182,9 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             pcpex->crpexGrpRDLen = szrd;
         } else {
             pcpex->crpexLinRDDiv = (int) abs(ret);
+#if CROP_CALCULINE_LOG
             printf("(RD) ret (%d), divRD (%lf)\n",  ret, divRD);
+#endif
         }
     }
 
@@ -4374,6 +4437,7 @@ static int setRotateP4(struct aspCrop36_s *pcp36, double *rotateP4)
     return 0;
 }
 
+#define CROP_FINDLINE_LOG (0)
 static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 {
 #define ACCEPT_OFFSET (2000.0)
@@ -4421,11 +4485,12 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     vLDDiv = pcpex->crpexLinLDDiv;
     vRUDiv = pcpex->crpexLinRUDiv;
     vRDDiv = pcpex->crpexLinRDDiv;
-
+#if CROP_FINDLINE_LOG
     printf("line LU str:%d len:%d div:%lf \n", gpLUstr, gpLUlen, vLUDiv);
     printf("line LD str:%d len:%d div:%lf \n", gpLDstr, gpLDlen, vLDDiv);
     printf("line RU str:%d len:%d div:%lf \n", gpRUstr, gpRUlen, vRUDiv);
     printf("line RD str:%d len:%d div:%lf \n", gpRDstr, gpRDlen, vRDDiv);
+#endif
 /*
     if (gpLUlen > 0)
     for (i=0; i < gpLUlen; i++){
@@ -4572,35 +4637,45 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     double divGpLD= gpLDlen / vLDDiv;
     double divGpRU= gpRUlen / vRUDiv;
     double divGpRD= gpRDlen / vRDDiv;
-
+    
+#if CROP_FINDLINE_LOG
     printf("compare div LU:%lf(%d/%lf), LD:%lf(%d/%lf), RU:%lf(%d/%lf), RD:%lf(%d/%lf) \n", 
             divGpLU, gpLUlen, vLUDiv, 
             divGpLD, gpLDlen, vLDDiv, 
             divGpRU, gpRUlen, vRUDiv, 
             divGpRD, gpRDlen, vRDDiv);
-    
+#endif
+
     maxDiv = aspMax(divGpLU, maxDiv);
     maxDiv = aspMax(divGpLD, maxDiv);
     maxDiv = aspMax(divGpRU, maxDiv);
     maxDiv = aspMax(divGpRD, maxDiv);
     
     if (maxDiv == divGpLU) {
+#if CROP_FINDLINE_LOG
         printf("[LU] compare min div = %lf\n", maxDiv);
+#endif
         if (gpLUstr >= 0) {
             vLU = linLU;
         }
     } else if (maxDiv == divGpLD) {
+#if CROP_FINDLINE_LOG    
         printf("[LD] compare min div = %lf\n", maxDiv);
+#endif
         if (gpLDstr >= 0) {
             vLD = linLD;
         }
     } else if (maxDiv == divGpRU) {
+#if CROP_FINDLINE_LOG
         printf("[RU] compare min div = %lf\n", maxDiv);
+#endif
         if (gpRUstr >= 0) {
             vRU = linRU;
         }
     } else if (maxDiv == divGpRD) {
+#if CROP_FINDLINE_LOG
         printf("[RD] compare min div = %lf\n", maxDiv);        
+#endif
         if (gpRDstr >= 0) {
             vRD = linRD;
         }
@@ -4639,8 +4714,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     while ((vLU == 0) || (vLD == 0) || (vRU == 0) || (vRD == 0)) {
         
         if (vLU == 0) {
+#if CROP_FINDLINE_LOG
             printf("vLU == null\n");
-        
+#endif
             if ((vLD != 0) && (vRU != 0)) {
                 if (divGpLD > divGpRU) {
                     ret =getRectVectorFromV(vLUn, sup, vLD);
@@ -4662,8 +4738,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             if ((vLD != 0)  || (vRU != 0)) {
                 distN = calcuLineGroupDist(pGrpLU, vLUn, gpLUlen);
                 distV = calcuLineGroupDist(pGrpLU, vLUv, gpLUlen);
+#if CROP_FINDLINE_LOG
                 printf("vLU compare uv distN=%lf, distV=%lf\n", distN, distV);
-                
+#endif
                 if (distN < distV) {
                     memcpy(linLU, vLUn, sizeof(double)*3);   
                 } else {
@@ -4674,30 +4751,41 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         
                 distU2L = calcuVectorDistancePoint(vLUs, sup);
                 distL2U = calcuVectorDistancePoint(vLUs, slf);
+#if CROP_FINDLINE_LOG
                 printf("vLU distU2L=%lf, distL2U=%lf\n", distU2L, distL2U);        
+#endif
                 if (distU2L > ACCEPT_OFFSET || distL2U > ACCEPT_OFFSET) {
                     gpLUstr = -1;
                     vLU = 0;
+#if CROP_FINDLINE_LOG
                     printf("vLU set to NULL\n");
+#endif
                 }
             }
         
-        } else {
+        }
+        else {
+#if CROP_FINDLINE_LOG
             printf("vLU != null\n");
+#endif
             distU2L = calcuVectorDistancePoint(vLU, sup);
             distL2U = calcuVectorDistancePoint(vLU, slf);
-            
+#if CROP_FINDLINE_LOG
             printf("vLU distU2L=%lf, distL2U=%lf\n", distU2L, distL2U);
+#endif
             if (distU2L > ACCEPT_OFFSET || distL2U > ACCEPT_OFFSET) {
                 gpLUstr = -1;
                 vLU = 0;
+#if CROP_FINDLINE_LOG
                 printf("vLU set to NULL\n");
+#endif
             }
         }
         
         if (vLD == 0) {
+#if CROP_FINDLINE_LOG
             printf("vLD == null\n");
-                
+#endif
             if ((vLU != 0) && (vRD != 0)) {
                 if (divGpLU > divGpRD) {
                     ret =getRectVectorFromV(vLDn, sdn, vLU);
@@ -4719,8 +4807,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             if ((vLU != 0) || (vRD != 0)) {
                 distN = calcuLineGroupDist(pGrpLD, vLDn, gpLDlen);
                 distV = calcuLineGroupDist(pGrpLD, vLDv, gpLDlen);
+#if CROP_FINDLINE_LOG
                 printf("vLD compare uv distN=%lf, distV=%lf\n", distN, distV);
-                
+#endif
                 if (distN < distV) {
                     memcpy(linLD, vLDn, sizeof(double)*3);   
                 } else {
@@ -4732,28 +4821,40 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             
                 distD2L = calcuVectorDistancePoint(vLDs, sdn);
                 distL2D = calcuVectorDistancePoint(vLDs, slf);
+#if CROP_FINDLINE_LOG
                 printf("vLD distD2L=%lf, distL2D=%lf\n", distD2L, distL2D);        
+#endif
                 if (distD2L > ACCEPT_OFFSET || distL2D > ACCEPT_OFFSET) {
                     gpLDstr = -1;
                     vLD = 0;
+#if CROP_FINDLINE_LOG
                     printf("vLD set to NULL\n");
+#endif
                 }
             }
-        } else {
+        }
+        else {
+#if CROP_FINDLINE_LOG
             printf("vLD != null\n");
+#endif
             distD2L = calcuVectorDistancePoint(vLD, sdn);
             distL2D = calcuVectorDistancePoint(vLD, slf);
+#if CROP_FINDLINE_LOG
             printf("vLD distD2L=%lf, distL2D=%lf\n", distD2L, distL2D);
+#endif
             if (distD2L > ACCEPT_OFFSET || distL2D > ACCEPT_OFFSET) {
                 gpLDstr = -1;
                 vLD = 0;
+#if CROP_FINDLINE_LOG
                 printf("vLD set to NULL\n");
+#endif
             }
         }
         
         if (vRU == 0) {
+#if CROP_FINDLINE_LOG
             printf("vRU == null\n");
-        
+#endif
             if ((vRD != 0) && (vLU != 0)) {
                 if (divGpRD > divGpLU) {
                     ret =getRectVectorFromV(vRUn, sup, vRD);
@@ -4774,8 +4875,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             if ((vRD != 0) || (vLU != 0)) {        
                 distN = calcuLineGroupDist(pGrpRU, vRUn, gpRUlen);
                 distV = calcuLineGroupDist(pGrpRU, vRUv, gpRUlen);
+#if CROP_FINDLINE_LOG
                 printf("vRU compare uv distN=%lf, distV=%lf\n", distN, distV);
-                
+#endif
                 if (distN < distV) {
                     memcpy(linRU, vRUn, sizeof(double)*3);   
                 } else {
@@ -4787,28 +4889,40 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         
                 distU2R = calcuVectorDistancePoint(vRUs, sup);
                 distR2U = calcuVectorDistancePoint(vRUs, srt);
+#if CROP_FINDLINE_LOG
                 printf("vRU distU2R=%lf, distR2U=%lf\n", distU2R, distR2U);
+#endif
                 if (distU2R > ACCEPT_OFFSET || distR2U > ACCEPT_OFFSET) {
                     gpRUstr = -1;
                     vRU = 0;
+#if CROP_FINDLINE_LOG
                     printf("vRU set to NULL\n");
+#endif
                 }
             }
-        } else {
+        }
+        else {
+#if CROP_FINDLINE_LOG
             printf("vRU != null\n");
+#endif
             distU2R = calcuVectorDistancePoint(vRU, sup);
             distR2U = calcuVectorDistancePoint(vRU, srt);
+#if CROP_FINDLINE_LOG
             printf("vRU distU2R=%lf, distR2U=%lf\n", distU2R, distR2U);
+#endif
             if (distU2R > ACCEPT_OFFSET || distR2U > ACCEPT_OFFSET) {
                 gpRUstr = -1;
                 vRU = 0;
+#if CROP_FINDLINE_LOG
                 printf("vRU set to NULL\n");
+#endif
             }
         }
         
         if (vRD == 0) {
+#if CROP_FINDLINE_LOG
             printf("vRD == null\n");
-            
+#endif
             if ((vRU != 0) && (vLD != 0)) {
                 if (divGpRU > divGpLD) {
                     ret =getRectVectorFromV(vRDn, sdn, vRU);
@@ -4829,7 +4943,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             if ((vRU != 0) || (vLD != 0)) {
                 distN = calcuLineGroupDist(pGrpRD, vRDn, gpRDlen);
                 distV = calcuLineGroupDist(pGrpRD, vRDv, gpRDlen);
+#if CROP_FINDLINE_LOG
                 printf("vRD compare uv distN=%lf, distV=%lf\n", distN, distV);
+#endif
                 if (distN < distV) {
                     memcpy(linRD, vRDn, sizeof(double)*3);   
                 } else {
@@ -4841,23 +4957,33 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         
                 distD2R = calcuVectorDistancePoint(vRDs, sdn);
                 distR2D = calcuVectorDistancePoint(vRDs, srt);
+#if CROP_FINDLINE_LOG
                 printf("vRD distD2R=%lf, distR2D=%lf\n", distD2R, distR2D);
+#endif
                 if (distD2R > ACCEPT_OFFSET || distR2D > ACCEPT_OFFSET) {
                     gpRDstr = -1;
                     vRD = 0;
+#if CROP_FINDLINE_LOG
                     printf("vRD set to NULL\n");
+#endif
                 }
             }
         }
         else {
+#if CROP_FINDLINE_LOG
             printf("vRD != null\n");
+#endif
             distD2R = calcuVectorDistancePoint(vRD, sdn);
             distR2D = calcuVectorDistancePoint(vRD, srt);
+#if CROP_FINDLINE_LOG
             printf("vRD distD2R=%lf, distR2D=%lf\n", distD2R, distR2D);
+#endif
             if (distD2R > ACCEPT_OFFSET || distR2D > ACCEPT_OFFSET) {
                 gpRDstr = -1;
                 vRD = 0;
+#if CROP_FINDLINE_LOG
                 printf("vRD set to NULL\n");
+#endif
             }
         }
     
@@ -4866,7 +4992,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (vLU) {
+#if CROP_FINDLINE_LOG
         printf("vLU = %lf, %lf, %lf \n", vLU[0], vLU[1], vLU[2]);
+#endif
         memcpy(pcpex->crpexLinLU, vLU, sizeof(double)*3);   
         pcpex->crpexGrpLUStr = 1;
     } else {
@@ -4874,7 +5002,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (vLD) {
+#if CROP_FINDLINE_LOG
         printf("vLD = %lf, %lf, %lf \n", vLD[0], vLD[1], vLD[2]);
+#endif
         memcpy(pcpex->crpexLinLD, vLD, sizeof(double)*3);   
         pcpex->crpexGrpLDStr = 1;
     } else {
@@ -4882,7 +5012,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (vRU) {
+#if CROP_FINDLINE_LOG
         printf("vRU = %lf, %lf, %lf \n", vRU[0], vRU[1], vRU[2]);
+#endif
         memcpy(pcpex->crpexLinRU, vRU, sizeof(double)*3);   
         pcpex->crpexGrpRUStr = 1;
     } else {
@@ -4890,7 +5022,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (vRD) {
+#if CROP_FINDLINE_LOG
         printf("vRD = %lf, %lf, %lf \n", vRD[0], vRD[1], vRD[2]);
+#endif
         memcpy(pcpex->crpexLinRD, vRD, sizeof(double)*3);   
         pcpex->crpexGrpRDStr = 1;
     } else {
@@ -4904,8 +5038,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             dist = calcuDistance(slf, plf);
             
             memcpy(pcpex->crpCropLf, plf, sizeof(double)*2);
-            
+#if CROP_FINDLINE_LOG
             printf("old msLf = (%lf, %lf), new msLf = (%lf, %lf) \n", round(slf[0]), round(slf[1]), round(plf[0]), round(plf[1]));
+#endif
         }
         
         ret = getCross(vLU, vRU, pup);
@@ -4917,8 +5052,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             } else {
                 memcpy(pcpex->crpCropUp, sup, sizeof(double)*2);
             }
-            
+#if CROP_FINDLINE_LOG
             printf("old csUp = (%lf, %lf), new csUp = (%lf, %lf), dist=%lf\n", round(sup[0]), round(sup[1]), round(pup[0]), round(pup[1]), dist);
+#endif
         }
         
         ret = getCross(vRU, vRD, prt);
@@ -4927,8 +5063,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             dist = calcuDistance(srt, prt);
 
             memcpy(pcpex->crpCropRt, prt, sizeof(double)*2);
-
+#if CROP_FINDLINE_LOG
             printf("old msRt = (%lf, %lf), new msRt = (%lf, %lf)\n", round(srt[0]), round(srt[1]), round(prt[0]), round(prt[1]));
+#endif
         }
         
         ret = getCross(vLD, vRD, pdn);
@@ -4940,8 +5077,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             } else {
                 memcpy(pcpex->crpCropDn, sdn, sizeof(double)*2);
             }
-            
+#if CROP_FINDLINE_LOG
             printf("old csDn = (%lf, %lf), new csDn = (%lf, %lf), dist=%lf\n", round(sdn[0]), round(sdn[1]), round(pdn[0]), round(pdn[1]), dist);
+#endif
         }            
 
         //Log.e(TAG, "group get cross, up= ("+Math.round(pup[0])+", "+Math.round(pup[1])+"), down = ("+Math.round(pdn[0])+", "+Math.round(pdn[1])+"), left = ("+Math.round(plf[0])+", "+Math.round(plf[1])+"), right = "+Math.round(prt[0])+", "+Math.round(prt[1])+")");    
@@ -4957,25 +5095,34 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     
         ret = getRotateP1(pcp36, rlf);
         if (!ret) {
+#if CROP_FINDLINE_LOG
             printf("rotateP1 = (%lf, %lf) \n", rlf[0], rlf[1]);
+#endif
         }
         ret = getRotateP2(pcp36, rup);
         if (!ret) {
+#if CROP_FINDLINE_LOG
             printf("rotateP2 = (%lf, %lf) \n", rup[0], rup[1]);
+#endif
         }
         ret = getRotateP3(pcp36, rrt);
         if (!ret) {
+#if CROP_FINDLINE_LOG
             printf("rotateP3 = (%lf, %lf) \n", rrt[0], rrt[1]);
+#endif
         }
         ret = getRotateP4(pcp36, rdn);
         if (!ret) {
+#if CROP_FINDLINE_LOG
             printf("rotateP4 = (%lf, %lf) \n", rdn[0], rdn[1]);
+#endif
         }
     
     }
     return 0;
 }
 
+#define CROP_TOPOFFSET_LOG (0)
 static int topPositive(struct aspCropExtra_s *pcpex) 
 {
     double vecRU[3], vecLU[3], vecRD[3], vecLD[3];
@@ -5019,10 +5166,11 @@ static int topPositive(struct aspCropExtra_s *pcpex)
 
         getParallelVectorFromV(vecRUsf, rightsf, vecRU);
         getCross(vecRUsf, vecRD, rtsf);            
-
+#if CROP_TOPOFFSET_LOG
         printf("right shift from (%lf, %lf) to (%lf, %lf) \n", round(right[0]), round(right[1]), round(rtsf[0]), round(rtsf[1]));
+#endif
     }   
-
+/*
     while (rtsf[0] < 0.0) {
         rightsf[0] = 10;
         rightsf[1] = rtsf[1];
@@ -5032,17 +5180,18 @@ static int topPositive(struct aspCropExtra_s *pcpex)
 
         printf("right shift again from (%lf, %lf) to (%lf, %lf)\n", round(right[0]), round(right[1]), round(rtsf[0]), round(rtsf[1]));
     }
-
+*/
     while (lfsf[1] < 0.0) {
         leftsf[0] = lfsf[0];
         leftsf[1] = 10;
 
         getParallelVectorFromV(vecLUsf, leftsf, vecLU);
         getCross(vecLUsf, vecLD, lfsf);            
-
+#if CROP_TOPOFFSET_LOG
         printf("left shift from (%lf, %lf) to (%lf, %lf)\n", round(left[0]), round(left[1]), round(lfsf[0]), round(lfsf[1]));
+#endif
     }
-
+/*
     while (lfsf[0] < 0.0) {
         leftsf[0] = 10;
         leftsf[1] = lfsf[1];
@@ -5052,18 +5201,19 @@ static int topPositive(struct aspCropExtra_s *pcpex)
 
         printf("left shift again from (%lf, %lf) to (%lf, %lf)\n", round(left[0]), round(left[1]), round(lfsf[0]), round(lfsf[1]));
     }
-
+*/
     getParallelVectorFromV(vecLDsf, lfsf, vecLD);
     getParallelVectorFromV(vecRDsf, rtsf, vecRD);
         
     getCross(vecRUsf, vecLUsf, topsf);
     getCross(vecRDsf, vecLDsf, dnsf);
 
+#if CROP_TOPOFFSET_LOG
     printf("END top shift from (%lf, %lf) to (%lf, %lf)\n", round(top[0]), round(top[1]), round(topsf[0]), round(topsf[1]));
     printf("END left shift from (%lf, %lf) to (%lf, %lf)\n", round(left[0]), round(left[1]), round(lfsf[0]), round(lfsf[1]));
     printf("END right shift from (%lf, %lf) to (%lf, %lf)\n", round(right[0]), round(right[1]), round(rtsf[0]), round(rtsf[1]));
     printf("END down shift from (%lf, %lf) to (%lf, %lf)\n", round(down[0]), round(down[1]), round(dnsf[0]), round(dnsf[1]));
-
+#endif
     memcpy(pcpex->crpCropUp, topsf, sizeof(double)*2);
     memcpy(pcpex->crpCropLf, lfsf, sizeof(double)*2);
     memcpy(pcpex->crpCropDn, dnsf, sizeof(double)*2);
@@ -10776,7 +10926,7 @@ static int stdob_08(struct psdata_s *data)
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
 #if CROP_USE_META
-                    data->bkofw = emb_bk(data->bkofw, MDUOU, PSSET);
+                    data->bkofw = emb_bk(data->bkofw, MDUOU, PSRLT);
 #else
                     data->bkofw = emb_bk(data->bkofw, WTBAKQ, PSTSM);
 #endif
@@ -27942,6 +28092,8 @@ static int fs120(struct mainRes_s *mrs, struct modersp_s *modersp)
     //print_f(&mrs->plog, "fs120", mrs->log);
 
     mrs_ipc_put(mrs, "d", 1, 7);
+    mrs_ipc_put(mrs, "d", 1, 7);
+
     modersp->m = modersp->m + 1;
     return 0;
 }
@@ -30079,10 +30231,10 @@ static int p3(struct procRes_s *rs)
                 sprintf(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
                 print_f(rs->plogs, "P2", rs->logs);
 
-                if (totsz > rs->pmetaMass->massMax) {
-                    rs->pmetaMass->massUsed = rs->pmetaMass->massMax;
+                if (totsz > rs->pmetaMassduo->massMax) {
+                    rs->pmetaMassduo->massUsed = rs->pmetaMassduo->massMax;
                 } else {
-                    rs->pmetaMass->massUsed = totsz;
+                    rs->pmetaMassduo->massUsed = totsz;
                 }
                 
             }
@@ -31199,7 +31351,30 @@ static int p6(struct procRes_s *rs)
         sendbuf[4] = 0xfc;
         
         sendbuf[3] = 'F';
+        if (opcode == 0x21) { /* send CROP info (raw)*/
+            #define CROP_MAX_NUM (6)
+            sprintf(rs->logs, "handle opcode: 0x%x(raw)\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
 
+            pdt = &pct[ASPOP_IMG_LEN];
+            sendbuf[3] = 'H';
+
+            sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
+            goto socketEnd;
+        }
+        
         if (opcode == 0x20) { /* send CROP info (duo)*/
             sprintf(rs->logs, "handle opcode: 0x%x(CROP duo)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
@@ -31256,10 +31431,64 @@ static int p6(struct procRes_s *rs)
                 cnt ++;
             }
 
+            cnt = 0;
+            while (1) {
+                num = 0;
+                for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
+                    idx = ASPOP_CROP_01_DUO+ i;
+                    
+                    switch(idx) {
+                        case ASPOP_CROP_01_DUO:
+                        case ASPOP_CROP_02_DUO:
+                        case ASPOP_CROP_03_DUO:
+                        case ASPOP_CROP_04_DUO:
+                        case ASPOP_CROP_05_DUO:
+                        case ASPOP_CROP_06_DUO:
+                        case ASPOP_CROP_07_DUO:
+                        case ASPOP_CROP_08_DUO:
+                        case ASPOP_CROP_09_DUO:
+                        case ASPOP_CROP_10_DUO:
+                        case ASPOP_CROP_11_DUO:
+                        case ASPOP_CROP_12_DUO:
+                        case ASPOP_CROP_13_DUO:
+                        case ASPOP_CROP_14_DUO:
+                        case ASPOP_CROP_15_DUO:
+                        case ASPOP_CROP_16_DUO:
+                        case ASPOP_CROP_17_DUO:
+                        case ASPOP_CROP_18_DUO:                         
+                            pdt = &pct[idx];
+                            if (pdt->opStatus == ASPOP_STA_UPD) {
+                                num++;
+                            }
+
+                            break;
+                        default:
+                            break;
+                    }
+                    
+                }
+
+                if (num == CROP_MAX_NUM_META) {
+                    break;
+                }
+
+                sprintf(rs->logs, "wait duo crop num:%d, %d s\n", num, cnt/2);
+                print_f(rs->plogs, "P6", rs->logs);
+/*
+                if (cnt > 10) {
+                    break;
+                }
+*/
+                usleep(500000);
+                cnt ++;
+            }
+            
             /* initial cropping config */
             memset(pcp36, 0, sizeof(struct aspCrop36_s));
             memset(pcpex, 0, sizeof(struct aspCropExtra_s));
 
+            memset(pcp36duo, 0, sizeof(struct aspCrop36_s));
+            memset(pcpexduo, 0, sizeof(struct aspCropExtra_s));
 
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
                 idx = ASPOP_CROP_01 + i;
@@ -31278,10 +31507,6 @@ static int p6(struct procRes_s *rs)
                             sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
-                            sendbuf[3] = 'C';
-
-                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
-                            n = strlen(rs->logs);
 
                             pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
                             pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
@@ -31309,10 +31534,6 @@ static int p6(struct procRes_s *rs)
                             sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
-                            sendbuf[3] = 'C';
-
-                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
-                            n = strlen(rs->logs);
 
                             pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
                             pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
@@ -31325,24 +31546,105 @@ static int p6(struct procRes_s *rs)
                         pdt = &pct[idx];
                         
                         if (pdt->opStatus == ASPOP_STA_UPD) {
-                            sendbuf[3] = 'L';
+                            sendbuf[3] = 'H';
                             sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
+
+                            if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
+
+                            memcpy(&sendbuf[5], rs->logs, n);
+
+                            sendbuf[5+n] = 0xfb;
+                            sendbuf[5+n+1] = '\n';
+                            sendbuf[5+n+2] = '\0';
+                            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);        
                         }
+
                         break;
                     default:
                         break;
                 }
-                
-                if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
-                
-                memcpy(&sendbuf[5], rs->logs, n);
+                                
+                //sendbuf[5+n] = '\0';                
+                //sprintf(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
+                //print_f(rs->plogs, "P6", rs->logs);
+            }
 
-                sendbuf[5+n] = 0xfb;
-                sendbuf[5+n+1] = '\n';
-                sendbuf[5+n+2] = '\0';
-                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                
+            for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
+                idx = ASPOP_CROP_01_DUO+ i;
+                pdt = &pct[idx];
+                switch(idx) {
+                    case ASPOP_CROP_01_DUO:
+                    case ASPOP_CROP_02_DUO:
+                    case ASPOP_CROP_03_DUO:
+                    case ASPOP_CROP_04_DUO:
+                    case ASPOP_CROP_05_DUO:
+                    case ASPOP_CROP_06_DUO:
+                        cpn = (idx - ASPOP_CROP_01_DUO) + 1;
+                        pdt = &pct[idx];
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+#if P6_CROP_LOG
+                            sprintf(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            print_f(rs->plogs, "P6", rs->logs);  
+#endif
+
+                            pcp36duo->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36duo->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+
+                            pdt->opStatus = ASPOP_STA_APP;
+                        }
+
+                        break;
+                    case ASPOP_CROP_07_DUO:
+                    case ASPOP_CROP_08_DUO:
+                    case ASPOP_CROP_09_DUO:
+                    case ASPOP_CROP_10_DUO:
+                    case ASPOP_CROP_11_DUO:
+                    case ASPOP_CROP_12_DUO:
+                    case ASPOP_CROP_13_DUO:
+                    case ASPOP_CROP_14_DUO:
+                    case ASPOP_CROP_15_DUO:
+                    case ASPOP_CROP_16_DUO:
+                    case ASPOP_CROP_17_DUO:
+                    case ASPOP_CROP_18_DUO:
+                        cpn = idx - ASPOP_CROP_01_DUO;
+                        pdt = &pct[idx];
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+#if P6_CROP_LOG
+                            sprintf(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            print_f(rs->plogs, "P6", rs->logs);  
+#endif
+
+                            pcp36duo->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36duo->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+
+                            pdt->opStatus = ASPOP_STA_APP;
+                        }
+
+                        break;
+                    case ASPOP_IMG_LEN_DUO:
+                        pdt = &pct[idx];
+                        
+                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                            sendbuf[3] = 'h';
+                            sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+                            n = strlen(rs->logs);
+
+                            if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
+
+                            memcpy(&sendbuf[5], rs->logs, n);
+
+                            sendbuf[5+n] = 0xfb;
+                            sendbuf[5+n+1] = '\n';
+                            sendbuf[5+n+2] = '\0';
+                            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);        
+                        }
+
+                        break;
+                    default:
+                        break;
+                }
+                                
                 //sendbuf[5+n] = '\0';                
                 //sprintf(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 //print_f(rs->plogs, "P6", rs->logs);
@@ -31390,39 +31692,50 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36);
                 }
             }
-#if 0 /* move behind the cropping stage 2 complete */
-            for (i = 0; i < 4; i++) { /* send the cropping result to APP */
-                sendbuf[3] = 'F';
 
-                switch (i) {
-                    case 0:
-                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P1[0]), (int)round(pcp36->crp36P1[1]));
-                        break;
-                    case 1:
-                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P2[0]), (int)round(pcp36->crp36P2[1]));
-                        break;
-                    case 2:
-                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P3[0]), (int)round(pcp36->crp36P3[1]));
-                        break;
-                    case 3:
-                        sprintf(rs->logs, "%d,%d,", (int)round(pcp36->crp36P4[0]), (int)round(pcp36->crp36P4[1]));
-                        break;
-                    default:
-                        break;
+            cpn = 0;
+            pcp36duo->crp36Pots[cpn*2+0] = 100;
+            pcp36duo->crp36Pots[cpn*2+1] = 0;
+
+            cpn = CROP_MAX_NUM_META+1;
+            pcp36duo->crp36Pots[cpn*2+0] = 1100;
+            pcp36duo->crp36Pots[cpn*2+1] = 0;
+
+            /* first stage of cropping algorithm */            
+            ret = aspCrp36GetBoundry(pcp36duo, idxL, idxR, CROP_MAX_NUM_META+2);
+            sprintf(rs->logs, " duo crop36 get boundry, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ret = 0;
+            ret |= calcuCrossUpAph(pcp36duo);
+            sprintf(rs->logs, " duo crop36 calcu cross up, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
+            ret |= calcuCrossDnAph(pcp36duo);
+            sprintf(rs->logs, " duo crop36 calcu cross down, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            if (ret) {
+                getRectPoint(pcp36duo);
+            } else {
+                ret = calcuMostRtLf(pcp36duo);
+                if (ret == 0) {
+                    ret = calcuCrossUpLine(pcp36duo);
+                    sprintf(rs->logs, " duo crop36 calcu cross line up, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    ret = calcuCrossDnLine(pcp36duo);
+                    sprintf(rs->logs, " duo crop36 calcu cross line down, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                    ret = getCrop36RotatePoints(pcp36duo);
+                    sprintf(rs->logs, " duo crop36 get rotate points, ret = %d\n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+                } else {
+                    getRectPoint(pcp36duo);
                 }
-                n = strlen(rs->logs);
-                memcpy(&sendbuf[5], rs->logs, n);
-
-                sendbuf[5+n] = 0xfb;
-                sendbuf[5+n+1] = '\n';
-                sendbuf[5+n+2] = '\0';
-                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                sprintf(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
-                print_f(rs->plogs, "P6", rs->logs);
             }
-#endif
-
-#if 1  /* skip for debug, anable later */
+            
             if (pmass->massRecd) {
                 cpx = 0;
                 cpn = 6;
@@ -31452,10 +31765,10 @@ static int p6(struct procRes_s *rs)
 
                 ch = 0; ret = 0;
                 
-                while (ch != 'c') {
+                while (ch != 'd') {
                     ret = rs_ipc_get(rs, &ch, 1);
                     if (ret > 0) {
-                        if (ch == 'c') {
+                        if (ch == 'd') {
                             sprintf(rs->logs, "succeed to get ch == %c\n", ch);
                             print_f(rs->plogs, "P6", rs->logs);    
                         } else {
@@ -31492,20 +31805,9 @@ static int p6(struct procRes_s *rs)
                 cy = masStart;
                 gap = pmass->massGap;
 
-                sendbuf[3] = 'T';
                 sprintf(rs->logs, "%d \n\r", masRecd); 
                 print_f(rs->plogs, "P6", rs->logs);
 
-                n = strlen(rs->logs);
-                memcpy(&sendbuf[5], rs->logs, n);
-
-                sendbuf[5+n] = 0xfb;
-                sendbuf[5+n+1] = '\n';
-                sendbuf[5+n+2] = '\0';
-#if 0 /* do NOT send mass pos */
-                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-#endif
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
@@ -31522,18 +31824,6 @@ static int p6(struct procRes_s *rs)
                     
 #if P6_CROP_LOG
                     print_f(rs->plogs, "P6", rs->logs);
-#endif
-                    sendbuf[3] = 'M';
-                    n = strlen(rs->logs);
-                    memcpy(&sendbuf[5], rs->logs, n);
-
-                    sendbuf[5+n] = 0xfb;
-                    sendbuf[5+n+1] = '\n';
-                    sendbuf[5+n+2] = '\0';
-#if 0 /* do NOT send mass pos */
-                    ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                    //sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
-                    //print_f(rs->plogs, "P6", rs->logs);
 #endif
                 }
 
@@ -31608,18 +31898,10 @@ static int p6(struct procRes_s *rs)
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
-#if 0                    
-                masStart = pmass->massStart;
-                while (masStart != 0) {
-                    masStart = pmass->massStart;
-                    usleep(100000);
-                }
-#endif                
                 pmass->massRecd = 0;
                 pmass->massUsed = 0;
 
             } 
-#endif
 
             /* second stage of cropping algorithm */
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
@@ -31700,14 +31982,266 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                sprintf(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
+                sprintf(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            if (pmassduo->massRecd) {
+                cpx = 0;
+                cpn = 6;
+                pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                cpn = 5;
+                pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+
+                cpx = 1;
+                cpn = 7;
+                pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                cpn = 8;
+                pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+
+                cpx = 2;
+                cpn = 9;
+                pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                cpn = 10;
+                pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+
+                cof = cpx + 1;
+
+                ch = 0; ret = 0;
+                
+                while (ch != 'd') {
+                    ret = rs_ipc_get(rs, &ch, 1);
+                    if (ret > 0) {
+                        if (ch == 'd') {
+                            sprintf(rs->logs, "duo succeed to get ch == %c\n", ch);
+                            print_f(rs->plogs, "P6", rs->logs);    
+                        } else {
+                            sprintf(rs->logs, "duo wrong!! ch == %c \n", ch);
+                            print_f(rs->plogs, "P6", rs->logs);    
+                        }
+                    } else {
+                        sprintf(rs->logs, "duo failed to get ch ret: \n", ret);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                }
+
+                cnt = 0;
+
+                masUsed = pmassduo->massUsed;
+                masStart = pmassduo->massStart;
+                
+                sprintf(rs->logs, "duo wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
+                print_f(rs->plogs, "P6", rs->logs);
+
+                while (!masUsed) {
+                    usleep(500000);
+                    msync(pmassduo, sizeof(struct aspMetaMass_s), MS_SYNC);
+                    masUsed = pmassduo->massUsed;
+                    sprintf(rs->logs, "duo wait meta mass (used:%d) %d\n", masUsed, cnt); 
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+
+                masRecd = pmassduo->massRecd;
+
+                msync(pmassduo->masspt, masUsed, MS_SYNC);
+                ptBuf = (unsigned short *)pmassduo->masspt;
+                
+                cy = masStart;
+                gap = pmassduo->massGap;
+
+                sprintf(rs->logs, "duo %d \n\r", masRecd); 
+                print_f(rs->plogs, "P6", rs->logs);
+
+                for (i = 0; i < masRecd; i++) {
+                    cy += gap;
+                    cxm = *ptBuf;
+                    ptBuf++;
+                    cxn = *ptBuf;
+                    ptBuf++;
+                    sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
+
+                    cpx = i + cof;
+                    pcpexduo->crpexLfPots[cpx*2+0] = cxm;
+                    pcpexduo->crpexLfPots[cpx*2+1] = cy;
+                    pcpexduo->crpexRtPots[cpx*2+0] = cxn;
+                    pcpexduo->crpexRtPots[cpx*2+1] = cy;
+                    
+#if P6_CROP_LOG
+                    print_f(rs->plogs, "P6", rs->logs);
+#endif
+
+                }
+
+                cpx = masRecd + cof;
+                cls =  masRecd + cof - 1;
+
+                cpn = 11;
+                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 12;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 13;
+                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 14;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 15;
+                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 16;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 17;
+                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 18;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                cpn = 2;
+                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 3;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpx += 1;
+                }
+
+                
+                pcpexduo->crpexSize = cpx*2;
+                
+                msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
+
+                #if 0
+                sprintf(rs->logs, "total extra points size: %d \n", cpx);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                for (i = 0; i < cpx; i++) {
+                    sprintf(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
+                              , pcpexduo->crpexLfPots[i*2+0], pcpexduo->crpexLfPots[i*2+1], pcpexduo->crpexRtPots[i*2+0], pcpexduo->crpexRtPots[i*2+1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
+                
+                //shmem_dump(pmass->masspt, pmass->massUsed);
+
+                pmassduo->massRecd = 0;
+                pmassduo->massUsed = 0;
+
+            } 
+
+            /* second stage of cropping algorithm */
+            msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
+            findLine(pcp36duo, pcpexduo);
+            msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
+            findUniPoints(pcp36duo, pcpexduo);
+            msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
+            calcuLine(pcpexduo);
+            msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
+            findBestLine(pcp36duo, pcpexduo);
+            
+            msync(pcp36duo, sizeof(struct aspCrop36_s), MS_SYNC);
+            ret = getRotateP1(pcp36duo, rotlf);
+            if (!ret) {
+                sprintf(rs->logs, "duo get rotateP1 (%lf, %lf) \n", rotlf[0], rotlf[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP2(pcp36duo, rotup);
+            if (!ret) {
+                sprintf(rs->logs, "duo get rotateP2 (%lf, %lf) \n", rotup[0], rotup[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP3(pcp36duo, rotrt);
+            if (!ret) {
+                sprintf(rs->logs, "duo get rotateP3 (%lf, %lf) \n", rotrt[0], rotrt[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            ret = getRotateP4(pcp36duo, rotdn);
+            if (!ret) {
+                sprintf(rs->logs, "duo get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
             
-            rs_ipc_put(rs, "C", 1);
+#if 0 /* debug print */
+            for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
+                sprintf(rs->logs, "%d. %lf, %lf \n", i, pcp36duo->crp36Pots[i*2+0], pcp36duo->crp36Pots[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            
+            for (i = 0; i < pcpexduo->crpexSize; i++) {
+                sprintf(rs->logs, "L%d. %lf, %lf \n", i, pcpexduo->crpexLfPots[i*2+0], pcpexduo->crpexLfPots[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            for (i = 0; i < pcpexduo->crpexSize; i++) {
+                sprintf(rs->logs, "R%d. %lf, %lf \n", i, pcpexduo->crpexRtPots[i*2+0], pcpexduo->crpexRtPots[i*2+1]);
+                print_f(rs->plogs, "P6", rs->logs);
+            }
+#endif     
+
+            for (i = 0; i < 4; i++) { /* send the cropping result to APP */
+                sendbuf[3] = 'f';
+
+                switch (i) {
+                    case 0:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotlf[0]), (int)round(rotlf[1]));
+                        break;
+                    case 1:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotup[0]), (int)round(rotup[1]));
+                        break;
+                    case 2:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotrt[0]), (int)round(rotrt[1]));
+                        break;
+                    case 3:
+                        sprintf(rs->logs, "%d,%d,", (int)round(rotdn[0]), (int)round(rotdn[1]));
+                        break;
+                    default:
+                        break;
+                }
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
+                print_f(rs->plogs, "P6", rs->logs);
+            }          
+            
+            rs_ipc_put(rs, "D", 1);
 
             goto socketEnd;
         }
+        
         if (opcode == 0x19) { /* send CROP info (new)*/
             sprintf(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
