@@ -19101,7 +19101,7 @@ end:
             ch = 'p';
             mrs_ipc_put(mrs, &ch, 1, 5);
 
-            sprintf(mrs->log, "same: result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);   
+            sprintf(mrs->log, "succeed: same result 0x%x/0x%x, ret: %d", ctb->opCode, ctb->opValue, ret);   
         } else {
             ch = 'p';
             mrs_ipc_put(mrs, &ch, 1, 5);
