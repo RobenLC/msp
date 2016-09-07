@@ -2727,25 +2727,25 @@ static int getRectPoint(struct aspCrop36_s *pcp36)
 
     ret = getCross(ttline, llline, pLU);
     if (ret != 0) {
-        printf("[rect] Error!!! get rect cross LU failed!!!!");
+        printf("[rect] Error!!! get rect cross LU failed!!!!\n");
         err++;
     }
 
     ret = getCross(ttline, rrline, pRU);
     if (ret != 0) {
-        printf("[rect] Error!!! get rect cross RU failed!!!!");
+        printf("[rect] Error!!! get rect cross RU failed!!!!\n");
         err++;
     }
 
     ret = getCross(bbline, llline, pLD);
     if (ret != 0) {
-        printf("[rect] Error!!! get rect cross LD failed!!!!");
+        printf("[rect] Error!!! get rect cross LD failed!!!!\n");
         err++;
     }
 
     ret = getCross(bbline, rrline, pRD);
     if (ret != 0) {
-        printf("[rect] Error!!! get rect cross RD failed!!!!");
+        printf("[rect] Error!!! get rect cross RD failed!!!!\n");
         err++;
     }
 #if CROP_RECT_LOG
@@ -15940,7 +15940,7 @@ static int stsparam_88(struct psdata_s *data)
             //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
             dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
             
-            ch = 118; 
+            ch = 110; 
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
