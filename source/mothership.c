@@ -389,6 +389,7 @@ typedef enum {
 typedef enum {
     DOUSCAN_NONE=0,
     DOUSCAN_WIFI_ONLY,
+    DOUSCAN_WIFI_SD,
     DOUSCAN_WHIT_BLNC,
 } doubleScan_e;
 
@@ -16513,7 +16514,9 @@ static int stmetaduo_97(struct psdata_s *data)
     uint32_t rlt;
     struct procRes_s *rs;
     struct aspMetaData_s *pmetaIn, *pmetaOut;
+    struct aspMetaData_s *pmetaInduo;
     struct aspMetaMass_s *pmass;
+    struct aspMetaMass_s *pmassduo;
 #if SAVE_CROP_MASS
     int ret=0;
     struct aspConfig_s *pct=0, *pdt=0;
@@ -16531,7 +16534,10 @@ static int stmetaduo_97(struct psdata_s *data)
     rlt = abs_result(data->result); 
     pmetaIn = rs->pmetain;
     pmetaOut= rs->pmetaout;
+    pmetaInduo= rs->pmetainduo;
+
     pmass = rs->pmetaMass;
+    pmassduo = rs->pmetaMassduo;
     //sprintf(rs->logs, "op_88 rlt:0x%x \n", rlt); 
     //print_f(rs->plogs, "SPM", rs->logs);  
 
@@ -16624,8 +16630,9 @@ static int stmetaduo_97(struct psdata_s *data)
                 } else {
                     //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
                     dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
+                    dbgMeta(msb2lsb(&pmetaInduo->FUNC_BITS), pmetaInduo);
                     act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
-                    aspMetaReleaseDuo(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
+                    aspMetaReleaseDuo(msb2lsb(&pmetaInduo->FUNC_BITS), 0, rs);
                     
                     if ((act > 0) && (act & ASPMETA_FUNC_CROP)) {
                         data->bkofw = emb_bk(data->bkofw, METAT, PSTSM);
@@ -16633,6 +16640,10 @@ static int stmetaduo_97(struct psdata_s *data)
 
                         sprintf(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
                         print_f(rs->plogs, "MDUO", rs->logs);  
+                        
+                        sprintf(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d (duo)\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd); 
+                        print_f(rs->plogs, "MDUO", rs->logs);  
+
                     } else {
                         //data->result = emb_result(data->result, NEXT);
                         data->result = emb_result(data->result, FWORD);
@@ -24217,7 +24228,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                 print_f(&mrs->plog, "fs81", mrs->log);
                 shmem_dump(pdef, len);
             } else {
-                sprintf(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
+                sprintf(mrs->log, "DFE table find save to [%s] failed !!!\n", clstPath);
                 print_f(&mrs->plog, "fs81", mrs->log);
             }
             
@@ -30201,7 +30212,7 @@ static int p3(struct procRes_s *rs)
 
                     //usleep(10000);
 #if P3_TX_LOG
-                    sprintf(rs->logs, "spi0 recv %d\n", opsz);
+                    sprintf(rs->logs, "spi1 recv %d\n", opsz);
                     print_f(rs->plogs, "P3", rs->logs);
 #endif
                     //shmem_dump(addr, 512);
@@ -30229,7 +30240,7 @@ static int p3(struct procRes_s *rs)
                 print_f(rs->plogs, "P3", rs->logs);
 
                 sprintf(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
-                print_f(rs->plogs, "P2", rs->logs);
+                print_f(rs->plogs, "P3", rs->logs);
 
                 if (totsz > rs->pmetaMassduo->massMax) {
                     rs->pmetaMassduo->massUsed = rs->pmetaMassduo->massMax;
