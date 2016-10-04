@@ -196,7 +196,6 @@ static struct cropPoints_s crop_15 = {{{1086, 1909}, { 840, 1214}, {1056, 1175},
 static struct cropPoints_s crop_16 = {{{1123, 1909}, { 884, 1214}, {1821, 1175}, {1800, 1276}}};
 static struct cropPoints_s crop_17 = {{{1094, 1913}, { 847, 1218}, {1254, 1179}, {1716, 1280}}};
 static struct cropPoints_s crop_18 = {{{1121, 1913}, { 881, 1218}, {1821, 1179}, {1799, 1280}}};
-
 #elif (CROP_SAMPLE_SIZE == 5)
 #if 1 /* 0614 */
 static struct cropPoints_s crop_01 = {{{1699, 21  }, {870, 1318 }, {1602, 1878}, {1478, 1894}, {1483, 1889}}};
@@ -414,6 +413,7 @@ typedef enum {
     ASPMETA_SCAN_COMPLE_DUO = 5,
     ASPMETA_CROP_300DPI_DUO = 6,
     ASPMETA_CROP_600DPI_DUO = 7,
+    ASPMETA_SD = 8,
 } aspMetaParam_e;
 
 struct psdata_s {
@@ -555,7 +555,7 @@ struct intMbs_s{
     };
 };
 
-struct aspMetaData{
+struct aspMetaData_s{
   struct intMbs_s     FUNC_BITS;             // byte[4] 
   unsigned char  ASP_MAGIC[2];            //byte[6] "0x20 0x14"
   
@@ -639,7 +639,7 @@ struct aspMetaData{
   unsigned char available[324];
 };
 
-struct aspMetaMass{
+struct aspMetaMass_s{
     int massIdx;
     int massUsed;
     int massMax;
@@ -666,13 +666,13 @@ struct mainRes_s{
     struct shmem_s cmdRx; /* cmdRx for spi0 */
     struct shmem_s cmdTx;
     
-    struct aspMetaData *metaout;
-    struct aspMetaData *metain;
-    struct aspMetaMass metaMass;
+    struct aspMetaData_s *metaout;
+    struct aspMetaData_s *metain;
+    struct aspMetaMass_s metaMass;
 
-    struct aspMetaData *metaoutDuo;
-    struct aspMetaData *metainDuo;
-    struct aspMetaMass metaMassDuo;
+    struct aspMetaData_s *metaoutDuo;
+    struct aspMetaData_s *metainDuo;
+    struct aspMetaMass_s metaMassDuo;
     
     int sd_init;
     // file save
@@ -713,12 +713,12 @@ struct procRes_s{
     struct shmem_s *pcmdRx;
     struct shmem_s *pcmdTx;
     struct machineCtrl_s *pmch;
-    struct aspMetaData *pmetaout;
-    struct aspMetaData *pmetain;
-    struct aspMetaMass *pmetaMass;
-    struct aspMetaData *pmetaoutduo;
-    struct aspMetaData *pmetainduo;
-    struct aspMetaMass *pmetaMassduo;
+    struct aspMetaData_s *pmetaout;
+    struct aspMetaData_s *pmetain;
+    struct aspMetaMass_s *pmetaMass;
+    struct aspMetaData_s *pmetaoutduo;
+    struct aspMetaData_s *pmetainduo;
+    struct aspMetaMass_s *pmetaMassduo;
 
     int *psd_init;
     // data mode share memory
@@ -843,7 +843,7 @@ static int stauto_20(struct psdata_s *data);
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb);
 static uint32_t msb2lsb(struct intMbs_s *msb);
 
-static int aspMetaMassSample(struct aspMetaMass *mass)
+static int aspMetaMassSample(struct aspMetaMass_s *mass)
 {
     char *pbuf;
     char sample[128];
@@ -903,7 +903,7 @@ static int aspMetaMassSample(struct aspMetaMass *mass)
     return readLen;
 }
 
-static int aspMetaMassCons(struct aspMetaMass *mass, int start, int end)
+static int aspMetaMassCons(struct aspMetaMass_s *mass, int start, int end)
 {
 #define RAW_W 4320
 #define RAW_H  6992
@@ -1061,9 +1061,95 @@ static uint32_t msb2lsb(struct intMbs_s *msb)
     return lsb;
 }
 
+static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
+{
+    int i=0, act=0;
+    struct intMbs_s *pt=0;
+    struct aspMetaData_s *pmeta;
+    struct aspMetaMass_s *pmass;
+    struct SdAddrs_s *sds, *sdn;
+
+    unsigned char linGap, linStart;
+    unsigned short linRec;
+    unsigned int val;
+    uint32_t secStr=0, secLen=0;
+
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        sds = &mrs->mchine.sdst;
+        sdn = &mrs->mchine.sdln;
+
+        pmeta = mrs->metain;
+        pmass = &mrs->metaMass;
+    } else {
+        sds = &rs->pmch->sdst;
+        sdn = &rs->pmch->sdln;
+
+        pmeta = rs->pmetain;
+        pmass = rs->pmetaMass;
+    }
+    
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
+    
+    if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
+        printf("Error!!! magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+        return -2;
+    }
+    
+    if (funcbits == ASPMETA_FUNC_NONE) return -3;
+
+    if (funcbits & ASPMETA_FUNC_CONF) {
+    
+    }
+    
+    if (funcbits & ASPMETA_FUNC_CROP) {
+    }
+
+    if (funcbits & ASPMETA_FUNC_IMGLEN) {
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDFREE) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDUSED) {
+    
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDRD) {
+        pt = &pmeta->SD_RW_SECTOR_ADD;
+        secStr = msb2lsb(pt);
+        pt = &pmeta->SD_RW_SECTOR_LEN;
+        secLen = msb2lsb(pt);
+
+        sds->n = secStr;
+        sdn->n = secLen;
+
+        printf("read secStr: %d, secLen: %d \n", secStr, secLen);
+        act |= ASPMETA_FUNC_SDRD;
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDWT) {
+        pt = &pmeta->SD_RW_SECTOR_ADD;
+        secStr = msb2lsb(pt);
+        pt = &pmeta->SD_RW_SECTOR_LEN;
+        secLen = msb2lsb(pt);
+
+        sds->n = secStr;
+        sdn->n = secLen;
+
+        printf("read secStr: %d, secLen: %d \n", secStr, secLen);
+
+        act |= ASPMETA_FUNC_SDWT;
+    }
+
+    return act;
+}
+
 static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out) 
 {
-    struct aspMetaData *pmeta;
+    struct aspMetaData_s *pmeta;
     
     if ((!mrs) && (!rs)) return -1;
     
@@ -1081,8 +1167,8 @@ static int aspMetaClear(struct mainRes_s *mrs, struct procRes_s *rs, int out)
         }
     }
 
-    memset(pmeta, 0, sizeof(struct aspMetaData));
-    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    memset(pmeta, 0, sizeof(struct aspMetaData_s));
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     
     return 0;
 }
@@ -1109,9 +1195,9 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     uint32_t val=0, scan_len=0;
     int opSt=0, opEd=0, ret=0;
     int istr=0, iend=0, idx=0;
-    struct aspMetaData *pmeta;
+    struct aspMetaData_s *pmeta;
     struct cropCoord_s *pCrop;
-    struct aspMetaMass *mass;
+    struct aspMetaMass_s *mass;
     char *pvdst=0, *pvend=0;
     
     if ((!mrs) && (!rs)) return -1;
@@ -1215,7 +1301,7 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     tbits |= funcbits;
     lsb2Msb(&pmeta->FUNC_BITS, tbits);
     
-    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     
     return 0;
 }
@@ -1242,9 +1328,9 @@ static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct 
     uint32_t val=0, scan_len=0;
     int opSt=0, opEd=0, ret=0;
     int istr=0, iend=0, idx=0;
-    struct aspMetaData *pmetaduo;
+    struct aspMetaData_s *pmetaduo;
     struct cropCoord_s *pCropDuo;
-    struct aspMetaMass *mass, *massduo;
+    struct aspMetaMass_s *mass, *massduo;
     char *pvdst=0, *pvend=0;
     
     if ((!mrs) && (!rs)) return -1;
@@ -1350,13 +1436,13 @@ static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct 
     tbits |= funcbits;
     lsb2Msb(&pmetaduo->FUNC_BITS, tbits);
     
-    msync(pmetaduo, sizeof(struct aspMetaData), MS_SYNC);
+    msync(pmetaduo, sizeof(struct aspMetaData_s), MS_SYNC);
     
     return 0;
 }
-static int dbgMeta(unsigned int funcbits, struct aspMetaData *pmeta) 
+static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta) 
 {
-    msync(pmeta, sizeof(struct aspMetaData), MS_SYNC);
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     printf("********************************************\n");
     printf("[meta] debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
 
@@ -5706,14 +5792,18 @@ static int stauto_38(struct psdata_s *data)
     int testSeq[TEST_LEN] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 16, 17,18,19,20,21,22, 23,24,25, 26, 27, 28, 29};
     char str[128], ch = 0;
     uint32_t rlt;
+    int ret = 0;
     struct procRes_s *rs;
-    struct aspMetaData *pmetaIn, *pmetaOut;
-    struct aspMetaMass *pmass;
+    struct aspMetaData_s *pmetaIn, *pmetaOut;
+    struct aspMetaMass_s *pmass;
     struct info16Bit_s *p, *g, *t;
-    struct aspMetaData *pmetaInDuo, *pmetaOutDuo;
-    struct aspMetaMass *pmassDuo;
+    struct aspMetaData_s *pmetaInDuo, *pmetaOutDuo;
+    struct aspMetaMass_s *pmassDuo;
+    uint32_t funcbits=0;
+    struct DiskFile_s *fd;
 
     rs = data->rs;
+    fd = &rs->pmch->fdsk;
     pmetaIn = rs->pmetain;
     pmetaOut = rs->pmetaout;
     pmass = rs->pmetaMass;
@@ -5806,6 +5896,9 @@ static int stauto_38(struct psdata_s *data)
                         pmassDuo->massStart = 12;
                         pmassDuo->massGap = 8;
                         break;
+                    case ASPMETA_SD:
+                        aspMetaBuild(ASPMETA_FUNC_SDRD, 0, rs);
+                        break;
                      /*todo: double side scan E*/
                     default:
                         sprintf(str, "Warnning!!!meta get parameter: 0x%.2x, wrong !!! \n", t->data);  
@@ -5854,6 +5947,14 @@ static int stauto_38(struct psdata_s *data)
                         rs_ipc_put(data->rs, &ch, 1);
                         data->result = emb_result(data->result, WAIT); 
                         break;
+                    case ASPMETA_SD:
+                        sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
+                        print_f(mlogPool, "auto_38", str);  
+
+                        ch = 67; 
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT); 
+                        break;
                      /*todo: double side scan E*/
                     default:
                         sprintf(str, "Error!! get opcode data 0x%.2x wrong !!! \n", t->data);  
@@ -5873,11 +5974,19 @@ static int stauto_38(struct psdata_s *data)
         case WAIT:
 
             if (data->ansp0 == 1) {
-            
-                shmem_dump((char *) rs->pmetain, sizeof(struct aspMetaData));
-                dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS),  pmetaIn);
+                funcbits = msb2lsb(&pmetaIn->FUNC_BITS);
+                ret = aspMetaRelease(funcbits, 0, rs);
+                shmem_dump((char *) rs->pmetain, sizeof(struct aspMetaData_s));
+                dbgMeta(funcbits,  pmetaIn);
+
+                if (funcbits & ASPMETA_FUNC_SDRD) {
+                    fd->rtops =  OP_SDRD;
+                } 
+                else if (funcbits & ASPMETA_FUNC_SDWT) {
+                    fd->rtops =  OP_SDWT;
+                } 
                 
-                sprintf(str, "ansp:0x%.2x, go to next!!\n", data->ansp0);  
+                sprintf(str, "ansp:0x%.2x, go to next!!(rtops:0x%x,funcbits:0x%x)\n", data->ansp0, fd->rtops, funcbits);  
                 print_f(mlogPool, "auto_38", str);  
                 
                 data->result = emb_result(data->result, NEXT);
@@ -7951,8 +8060,10 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
-
-
+    struct aspMetaData_s *pmeta;
+    uint32_t funcbits=0;
+    
+    pmeta = mrs->metain;
     fd = &mrs->mchine.fdsk;
     p = &mrs->mchine.get;
     c = &mrs->mchine.cur;
@@ -7971,7 +8082,8 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
         goto err;
     }
 */
-    sprintf(mrs->log, "open disk file [%s], op:0x%x\n", diskname, p->opcode);
+    funcbits = msb2lsb(&pmeta->FUNC_BITS);
+    sprintf(mrs->log, "open disk file [%s], op:0x%x, func: 0x%x \n", diskname, p->opcode, funcbits);
     print_f(&mrs->plog, "fs36", mrs->log);
 
     if (p->opcode == OP_SDRD) {
@@ -7982,7 +8094,21 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
         fp = fopen(diskname, "w+");
 #endif
     } else {
-        goto err;
+        if (funcbits & ASPMETA_FUNC_SDRD) {
+            fd->rtops =  OP_SDRD;
+            modersp->m = 67;
+            modersp->d = 0;
+            return 2;
+        } 
+        else if (funcbits & ASPMETA_FUNC_SDWT) {
+            fd->rtops =  OP_SDWT;
+            modersp->m = 67;
+            modersp->d = 0;
+            return 2;
+        } 
+        else {
+            goto err;
+        }
     }
 
     if (!fd->sdt) {
@@ -9141,7 +9267,7 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'J')) {
-        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+        msync(&mrs->metaout, sizeof(struct aspMetaData_s), MS_SYNC);
 
         sprintf(mrs->log, "get ch = %c\n", ch);
         print_f(&mrs->plog, "fs68", mrs->log);
@@ -9170,7 +9296,7 @@ static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'M')) {
-        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+        msync(&mrs->metaout, sizeof(struct aspMetaData_s), MS_SYNC);
 
         sprintf(mrs->log, "get ch = %c\n", ch);
         print_f(&mrs->plog, "fs70", mrs->log);
@@ -9280,7 +9406,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'J')) {
-        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+        msync(&mrs->metaout, sizeof(struct aspMetaData_s), MS_SYNC);
 
         sprintf(mrs->log, "get ch = %c from p4\n", ch);
         print_f(&mrs->plog, "fs75", mrs->log);
@@ -9290,7 +9416,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 4);
     if ((len > 0) && (ch == 'J')) {
-        msync(&mrs->metaoutDuo, sizeof(struct aspMetaData), MS_SYNC);
+        msync(&mrs->metaoutDuo, sizeof(struct aspMetaData_s), MS_SYNC);
 
         sprintf(mrs->log, "get ch = %c from p5\n", ch);
         print_f(&mrs->plog, "fs75", mrs->log);
@@ -9325,7 +9451,7 @@ static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if ((len > 0) && (ch == 'M')) {
-        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+        msync(&mrs->metaout, sizeof(struct aspMetaData_s), MS_SYNC);
 
         sprintf(mrs->log, "get ch = %c from p4\n", ch);
         print_f(&mrs->plog, "fs77", mrs->log);
@@ -9335,7 +9461,7 @@ static int fs77(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 4);
     if ((len > 0) && (ch == 'M')) {
-        msync(&mrs->metaout, sizeof(struct aspMetaData), MS_SYNC);
+        msync(&mrs->metaout, sizeof(struct aspMetaData_s), MS_SYNC);
 
         sprintf(mrs->log, "get ch = %c from p5\n", ch);
         print_f(&mrs->plog, "fs77", mrs->log);
@@ -10765,7 +10891,7 @@ static int p4(struct procRes_s *rs)
     int slen=0;
     uint32_t bitset;
     struct DiskFile_s *pf;
-    struct aspMetaData *pmeta;
+    struct aspMetaData_s *pmeta;
 
     sprintf(rs->logs, "p4\n");
     print_f(rs->plogs, "P4", rs->logs);
@@ -10960,6 +11086,9 @@ static int p4(struct procRes_s *rs)
             starts = rs->pmch->sdst.n * SEC_LEN;
             acusz = rs->pmch->sdln.n * SEC_LEN;
 
+            sprintf(rs->logs, "offset:%d, len: %d (rtop: 0x%x)\n", starts, acusz, pf->rtops);
+            print_f(rs->plogs, "P4", rs->logs);
+
             rs->pmch->sdln.f = 0;
             rs->pmch->sdst.f = 0;
 
@@ -11014,13 +11143,15 @@ static int p4(struct procRes_s *rs)
 
                 }
 #endif
-                } else if (pf->rtops ==  OP_SDRD) {
+                }
+                else if (pf->rtops ==  OP_SDRD) {
                     len = mtx_data(rs->spifd, rx_buff, tx_buff, 1, slen, 1024*1024);                
-                } else {
+                }
+                else {
                     len = 0;
                 }
 
-                sprintf(rs->logs, "%d.Send %d/%d bytes!!\n", pi, len, slen);
+                sprintf(rs->logs, "%d.Send %d/%d bytes!!(rtop: 0x%x)\n", pi, len, slen, pf->rtops);
                 print_f(rs->plogs, "P4", rs->logs);
 
 #if MSP_P4_SAVE_DAT
@@ -11267,7 +11398,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     int len, cmode, ret, pi=1;
     uint32_t bitset;
     int totsz=0, opsz=0;
-    struct aspMetaData *pmetaduo;
+    struct aspMetaData_s *pmetaduo;
 
     pmetaduo = rs->pmetainduo;
 
@@ -11609,7 +11740,7 @@ static char spi0[] = "/dev/spidev32765.0";
         if (ix > 7) break;
     }
 // initial share parameter
-    len = sizeof(struct aspMetaData);
+    len = sizeof(struct aspMetaData_s);
     pmrs->metaout = aspSalloc(len);
     pmrs->metain = aspSalloc(len);
     
@@ -11626,7 +11757,7 @@ static char spi0[] = "/dev/spidev32765.0";
         print_f(&pmrs->plog, "meta", pmrs->log);
     }
 
-    len = sizeof(struct aspMetaData);
+    len = sizeof(struct aspMetaData_s);
     pmrs->metaoutDuo= aspSalloc(len);
     pmrs->metainDuo= aspSalloc(len);
     

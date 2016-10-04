@@ -166,6 +166,8 @@ static int *totSalloc=0;
 #define CROP_CALCU_DETAIL (0)
 #define PI (double)(3.1415)
 
+#define SD_RDWT_USING_META (1)
+
 static FILE *mlog = 0;
 static struct logPool_s *mlogPool;
 
@@ -205,6 +207,7 @@ typedef enum {
     SAVPARM, // 13
     METAT, // 14
     MDUOU, // 15
+    MTSDV, // 16
     SMAX,
 }state_e;
 
@@ -486,6 +489,7 @@ typedef enum {
     ASPMETA_SCAN_COMPLE_DUO = 5,
     ASPMETA_CROP_300DPI_DUO = 6,
     ASPMETA_CROP_600DPI_DUO = 7,
+    ASPMETA_SD = 8,
 } aspMetaParam_e;
 
 typedef enum {
@@ -1217,6 +1221,7 @@ static double calcuVectorDistancePoint(double *vec, double *p);
 static double calcuLineGroupDist(double *pGrp, double *vecTr, int gpLen);
 static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen);
 static int topPositive(struct aspCropExtra_s *pcpex);
+static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
 {
@@ -1562,10 +1567,11 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
 {
     uint32_t tbits=0;
     int opSt=0, opEd=0;
-    int istr=0, iend=0, idx=0;
+    int istr=0, iend=0, idx=0, ret=0;
     struct aspMetaData_s *pmeta;
     struct aspConfig_s *pct=0, *pdt=0;
     char *pvdst=0, *pvend=0;
+    uint32_t val=0, b32=0, secStr=0, secLen=0;
     
     if ((!mrs) && (!rs)) return -1;
     
@@ -1654,10 +1660,71 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     }
 
     if (funcbits & ASPMETA_FUNC_SDRD) {
-    
+
+        b32 = 0;
+        ret += cfgTableGet(pct, ASPOP_SDFAT_STR01, &val);
+        b32 |= val << 24;
+
+        ret += cfgTableGet(pct, ASPOP_SDFAT_STR02, &val);
+        b32 |= val << 16;
+
+       ret += cfgTableGet(pct, ASPOP_SDFAT_STR03, &val);
+       b32 |= val << 8;
+
+        ret += cfgTableGet(pct, ASPOP_SDFAT_STR04, &val);
+        b32 |= val ;
+        secStr = b32;
+
+        b32 = 0;
+        ret += cfgTableGet(pct, ASPOP_SDFAT_LEN01, &val);
+        b32 |= val << 24;
+
+        ret += cfgTableGet(pct, ASPOP_SDFAT_LEN02, &val);
+        b32 |= val << 16;
+
+       ret += cfgTableGet(pct, ASPOP_SDFAT_LEN03, &val);
+       b32 |= val << 8;
+
+        ret += cfgTableGet(pct, ASPOP_SDFAT_LEN04, &val);
+        b32 |= val;
+        secLen = b32;
+
+        lsb2Msb(&pmeta->SD_RW_SECTOR_ADD, secStr);
+        lsb2Msb(&pmeta->SD_RW_SECTOR_LEN, secLen);
     }
 
     if (funcbits & ASPMETA_FUNC_SDWT) {
+    
+        b32 = 0;
+        ret += cfgTableGet(pct, ASPOP_SDFAT_STR01, &val);
+        b32 |= val << 24;
+
+        ret += cfgTableGet(pct, ASPOP_SDFAT_STR02, &val);
+        b32 |= val << 16;
+
+       ret += cfgTableGet(pct, ASPOP_SDFAT_STR03, &val);
+       b32 |= val << 8;
+
+        ret += cfgTableGet(pct, ASPOP_SDFAT_STR04, &val);
+        b32 |= val ;
+        secStr = b32;
+
+        b32 = 0;
+        ret += cfgTableGet(pct, ASPOP_SDFAT_LEN01, &val);
+        b32 |= val << 24;
+
+        ret += cfgTableGet(pct, ASPOP_SDFAT_LEN02, &val);
+        b32 |= val << 16;
+
+       ret += cfgTableGet(pct, ASPOP_SDFAT_LEN03, &val);
+       b32 |= val << 8;
+
+        ret += cfgTableGet(pct, ASPOP_SDFAT_LEN04, &val);
+        b32 |= val;
+        secLen = b32;
+
+        lsb2Msb(&pmeta->SD_RW_SECTOR_ADD, secStr);
+        lsb2Msb(&pmeta->SD_RW_SECTOR_LEN, secLen);
     
     }
 
@@ -8476,6 +8543,90 @@ static uint32_t next_MDUOU(struct psdata_s *data)
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
+                next = PSACT;
+                evt = MTSDV; 
+                break;
+            default:
+                //sprintf(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = clr_bk(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = clr_fw(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static uint32_t next_MTSDV(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSACT;
+                break;
+            case PSACT:
+                //sprintf(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;
+                evt = FATH; 
+                break;
+            case PSWT:
+                //sprintf(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSRLT:
+                //sprintf(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSTSM:
+                //sprintf(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
                 next = PSMAX;
                 break;
             default:
@@ -9710,11 +9861,21 @@ static uint32_t next_FAT32H(struct psdata_s *data)
                     evt = FATH; 
                     next = PSTSM;
                 } else if (tmpAns == 2) {
+#if SD_RDWT_USING_META
+                    evt = MDUOU; 
+                    next = PSTSM;
+#else
                     evt = REGF; 
                     next = PSWT;
+#endif
                 } else if (tmpAns == 3) {
+#if SD_RDWT_USING_META
+                    evt = MTSDV; 
+                    next = PSSET;
+#else
                     evt = REGF; 
                     next = PSRLT;
+#endif
                 } else {
                     next = PSMAX;
                 }
@@ -10595,6 +10756,11 @@ static int ps_next(struct psdata_s *data)
             break;
         case MDUOU:
             ret = next_MDUOU(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case MTSDV:
+            ret = next_MTSDV(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -16727,7 +16893,7 @@ static int stmetaduo_99(struct psdata_s *data)
     rlt = abs_result(data->result); 
     pmeta = rs->pmetaout;
     t = &rs->pmch->tmp;
-    sprintf(rs->logs, "op_98 rlt:0x%x \n", rlt); 
+    sprintf(rs->logs, "op_99 rlt:0x%x \n", rlt); 
     print_f(rs->plogs, "MDUO", rs->logs);  
 
     switch (rlt) {
@@ -16764,7 +16930,221 @@ static int stmetaduo_99(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stmetaduo_100(struct psdata_s *data)
+static int stmetasd_100(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct aspMetaData_s * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+    uint32_t secStr=0, secLen = 0;
+    struct aspConfig_s *pct=0, *pdt=0;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
+    p = &rs->pmch->get;
+    pct = data->rs->pcfgTable;
+    //sprintf(rs->logs, "op_100 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "MTSD", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_RD];
+            if (pdt->opCode != OP_SDRD) {
+                sprintf(rs->logs, "op_100, OP_SDRD opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "MTSD", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op_100, OP_SDRD status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "MTSD", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                secStr = c->opinfo;
+                secLen = p->opinfo;
+
+                c->opcode = OP_META_DAT;
+                c->data = ASPMETA_SD;
+                
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                sprintf(rs->logs, "op_100: set str:%d(0x%x), len:%d \n", secStr, secStr, secLen);
+                print_f(rs->plogs, "MTSD", rs->logs);  
+
+                aspMetaClear(0, rs, ASPMETA_OUTPUT);
+                aspMetaBuild(ASPMETA_FUNC_SDRD, 0, rs);
+                dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+                
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            }            
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetasd_101(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct aspMetaData_s * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+    uint32_t secStr=0, secLen = 0;
+    struct aspConfig_s *pct=0, *pdt=0;
+    
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
+    p = &rs->pmch->get;
+    pct = data->rs->pcfgTable;
+    
+    //sprintf(rs->logs, "op_101 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "MTSD", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            pdt = &pct[ASPOP_SDFAT_WT];
+            if (pdt->opCode != OP_SDWT) {
+                sprintf(rs->logs, "op_101, OP_SDWT opcode is wrong op:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "MTSD", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (pdt->opStatus != ASPOP_STA_WR) {
+                sprintf(rs->logs, "op_101, OP_SDWT status is wrong, %x\n", pdt->opStatus); 
+                print_f(rs->plogs, "MTSD", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                secStr = c->opinfo;
+                secLen = p->opinfo;
+                
+                c->opcode = OP_META_DAT;
+                c->data = ASPMETA_SD;
+                
+                memset(p, 0, sizeof(struct info16Bit_s));
+
+                sprintf(rs->logs, "op_101: set str:%d(0x%x), len:%d \n", secStr, secStr, secLen);
+                print_f(rs->plogs, "MTSD", rs->logs);  
+
+                aspMetaClear(0, rs, ASPMETA_OUTPUT);
+                aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
+                dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+
+                ch = 41; 
+                rs_ipc_put(data->rs, &ch, 1);
+                
+                data->result = emb_result(data->result, WAIT);
+                sprintf(rs->logs, "op_101: result: %x, goto %d\n", data->result, ch); 
+                print_f(rs->plogs, "MTSD", rs->logs);  
+            }     
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetasd_102(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct aspMetaData_s * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+    struct aspMetaData_s *pmetaIn, *pmetaOut;
+    struct aspMetaMass_s *pmass;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
+    pmetaIn = rs->pmetain;
+    pmetaOut= rs->pmetaout;
+    pmass = rs->pmetaMass;
+    //sprintf(rs->logs, "op_102 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "MTSD", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            aspMetaClear(0, rs, ASPMETA_INPUT);
+            
+            sprintf(rs->logs, "op_102: dump meta output\n"); 
+            print_f(rs->plogs, "MTSD", rs->logs);  
+            //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
+            dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
+            
+            ch = 110; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_102: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "MTSD", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                sprintf(rs->logs, "op_102: meta input (used:%d) \n", pmass->massUsed); 
+                print_f(rs->plogs, "MTSD", rs->logs);  
+                data->result = emb_result(data->result, NEXT);
+            }
+            else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetasd_103(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -16777,7 +17157,7 @@ static int stmetaduo_100(struct psdata_s *data)
     pmeta = rs->pmetaout;
     t = &rs->pmch->tmp;
     sprintf(rs->logs, "op_00 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "MDUO", rs->logs);  
+    print_f(rs->plogs, "MTSD", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -16789,7 +17169,105 @@ static int stmetaduo_100(struct psdata_s *data)
 
             data->result = emb_result(data->result, NEXT);
             sprintf(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "MDUO", rs->logs);  
+            print_f(rs->plogs, "MTSD", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetasd_104(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct aspMetaData_s * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
+    sprintf(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "MTSD", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            t->opcode = OP_META_DAT;
+            t->data = ASPMETA_CROP_300DPI;
+            aspMetaClear(0, rs, ASPMETA_OUTPUT);
+            aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
+            dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+
+            data->result = emb_result(data->result, NEXT);
+            sprintf(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "MTSD", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stmetasd_105(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct aspMetaData_s * pmeta;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmeta = rs->pmetaout;
+    t = &rs->pmch->tmp;
+    sprintf(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "MTSD", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            t->opcode = OP_META_DAT;
+            t->data = ASPMETA_CROP_300DPI;
+            aspMetaClear(0, rs, ASPMETA_OUTPUT);
+            aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
+            dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+
+            data->result = emb_result(data->result, NEXT);
+            sprintf(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "MTSD", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -22003,10 +22481,10 @@ static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
     
     if ((len > 0) && (ch == 'X')) {
-            sprintf(mrs->log, "FAIL!!send command again!\n");
-            print_f(&mrs->plog, "fs49", mrs->log);
-            modersp->m = modersp->m - 1;        
-            return 2;
+        sprintf(mrs->log, "FAIL!!send command again!\n");
+        print_f(&mrs->plog, "fs49", mrs->log);
+        modersp->m = modersp->m - 1;        
+        return 2;
     }
 
     return 0; 
@@ -28322,7 +28800,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stvector_81, stvector_82, stapm_83, stapm_84, stapm_85}, // VECTORS
                             {stsparam_86, stsparam_87, stsparam_88, stcropmeta_89, stcropmeta_90}, //SAVPARM
                             {stcropmeta_91, stcropmeta_92, stcropmeta_93, stcropmeta_94, stmetaduo_95}, //METAT
-                            {stmetaduo_96, stmetaduo_97, stmetaduo_98, stmetaduo_99, stmetaduo_100}}; //MDUOU
+                            {stmetaduo_96, stmetaduo_97, stmetaduo_98, stmetaduo_99, stmetasd_100},  //MDUOU
+                            {stmetasd_101, stmetasd_102, stmetasd_103, stmetasd_104, stmetasd_105}}; //MTSDV
+                            
 
     p1_init(rs);
     stdata = rs->pstdata;
