@@ -17156,8 +17156,8 @@ static int stmetasd_103(struct psdata_s *data)
     rlt = abs_result(data->result); 
     pmeta = rs->pmetaout;
     t = &rs->pmch->tmp;
-    sprintf(rs->logs, "op_00 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "MTSD", rs->logs);  
+    sprintf(rs->logs, "op_103 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "GOSD", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -17169,7 +17169,7 @@ static int stmetasd_103(struct psdata_s *data)
 
             data->result = emb_result(data->result, NEXT);
             sprintf(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "MTSD", rs->logs);  
+            print_f(rs->plogs, "GOSD", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -18447,7 +18447,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
 
     ret = msp_spi_conf(fd, SPI_IOC_MESSAGE(1), tr);
     if (ret < 0) {
-        printf("spi error code: %d \n", ret);
+        //printf("spi error code: %d \n", ret);
     }
     
     return ret;
@@ -19608,6 +19608,62 @@ end:
     return 0;
 }
 
+static int cmdfunc_gosd_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0, ch=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_gosd_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_RAW;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, '1', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if (rsp != 0x1) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -1;
+    }
+
+    sprintf(mrs->log, "cmdfunc_gosd_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "GOSD_NG,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "GOSD_OK,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_raw_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0, ch=0;
@@ -20644,7 +20700,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 30
+#define CMD_SIZE 31
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -20657,7 +20713,7 @@ static int dbg(struct mainRes_s *mrs)
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
                                 , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}
-                                , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}};
+                                , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}};
 
     p0_init(mrs);
 
@@ -27344,8 +27400,8 @@ static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs112(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    //sprintf(mrs->log, "send notice to P6 for meta mass ready\n");
-    //print_f(&mrs->plog, "fs112", mrs->log);
+    sprintf(mrs->log, "send notice to P6 for meta mass ready\n");
+    print_f(&mrs->plog, "fs112", mrs->log);
 
     mrs_ipc_put(mrs, "c", 1, 7);
     modersp->m = modersp->m + 1;
@@ -28815,7 +28871,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //print_f(rs->plogs, "P1", rs->logs);
 
 //     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q', 'r', 'y', 'z'};
-//       a, b, c, d, e, f, g, h, i, j, k, m, n, o, p, q, r, s, t, u, v, y, z
+//       a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, y, z, 1
         cmd = '\0';
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
@@ -28903,7 +28959,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'l') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, METAT, PSWT);
+                } else if (cmd == '1') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, MTSDV, PSWT);
                 }
+
 
 
                 if (cmdt != '\0') {
@@ -29760,8 +29820,8 @@ static int p2(struct procRes_s *rs)
                         opsz = mtx_data(rs->spifd, addr, addr, len, tr);
 #endif
 
-                         sprintf(rs->logs, "opsz: %d \n", opsz);
-                         print_f(rs->plogs, "P2", rs->logs);
+                         //sprintf(rs->logs, "opsz: %d \n", opsz);
+                         //print_f(rs->plogs, "P2", rs->logs);
 
                         if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                             opsz = 0 - opsz;
