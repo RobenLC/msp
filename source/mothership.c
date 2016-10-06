@@ -658,6 +658,8 @@ struct sdFAT_s{
     struct sdDirPool_s    *fatDirPool;
     struct supdataBack_s *fatSupdata;
     struct supdataBack_s *fatSupcur;
+    struct supdataBack_s *fatSupdataDuo;
+    struct supdataBack_s *fatSupcurDuo;
 };
 
 struct psdata_s {
@@ -8423,6 +8425,11 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
     return info;
 }
 
+inline uint32_t chk_bk(uint32_t bkf) 
+{
+    return (bkf & 0xffff0000);
+}
+
 inline uint32_t clr_bk(uint32_t bkf) 
 {
     bkf &= ~0xffff0000;
@@ -8434,6 +8441,11 @@ inline uint32_t emb_bk(uint32_t bkf, uint8_t evt, uint8_t ste)
     bkf &= ~0xffff0000;
     bkf |= ((evt << 8) | ste) << 16;
     return bkf;
+}
+
+inline uint32_t chk_fw(uint32_t bkf) 
+{
+    return (bkf & 0x0000ffff);
 }
 
 inline uint32_t clr_fw(uint32_t bkf) 
@@ -12482,7 +12494,7 @@ static int stfat_30(struct psdata_s *data)
     c = &rs->pmch->cur;
 
     pct = data->rs->pcfgTable;
-    uint32_t rlt;
+    uint32_t rlt, chk;
     rlt = abs_result(data->result); 
     pFat = data->rs->psFat;
 
@@ -12595,7 +12607,12 @@ static int stfat_30(struct psdata_s *data)
             } else if (data->ansp0 == 3) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 4) {
-                data->result = emb_result(data->result, FWORD);
+                chk = chk_bk(data->bkofw);
+                if (chk) {
+                    data->result = emb_result(data->result, BKWRD);
+                } else {
+                    data->result = emb_result(data->result, FWORD);
+                }
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             } else {
@@ -14453,7 +14470,7 @@ static int stsda_62(struct psdata_s *data)
 static int stwbk_63(struct psdata_s *data)
 { 
     char str[128], ch = 0; 
-    uint32_t rlt;
+    uint32_t rlt, chk;
     struct procRes_s *rs;
     
     rs = data->rs;
@@ -14474,7 +14491,13 @@ static int stwbk_63(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                chk = chk_bk(data->bkofw);
+                if (!chk) {
+                    data->bkofw = emb_bk(data->bkofw, SDAO, PSWT);
+                    data->result = emb_result(data->result, NEXT);
+                } else {
+                    data->result = emb_result(data->result, EVTMAX);
+                }
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -26261,12 +26284,13 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     pfat = &mrs->aspFat;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
+    
     clstByte = psec->secSize * psec->secPrClst;
     if (!clstByte) {
-        sprintf(mrs->log, "ERROR!! bytes number of cluster is zero \n");
+        sprintf(mrs->log, "WARNING!! bytes number of cluster is zero \n");
         print_f(&mrs->plog, "fs98", mrs->log);
 
-        modersp->r = 0xed;
+        modersp->r = 2;
         return 1;
     }
 
@@ -26274,14 +26298,14 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     if (!pfre) {
         sprintf(mrs->log, "Error!! free space link list is empty \n");
         print_f(&mrs->plog, "fs98", mrs->log);
-        modersp->r = 0xed;
+        modersp->r = 2;
         return 1;
     }
 
     if (!pfat->fatCurDir) {
         sprintf(mrs->log, "Error!! current folder is null \n");
         print_f(&mrs->plog, "fs98", mrs->log);
-        modersp->r = 0xed;
+        modersp->r = 2;
         return 1;
     }
     fscur = pfat->fatCurDir;
@@ -26295,13 +26319,13 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     sc = pfat->fatSupcur;
-    if (!sc) {
-        sprintf(mrs->log, "WARNING!!! current buffered link list is NULL \n");
+    if (sc) {
+        sprintf(mrs->log, "WARNING!!! current buffered link list is NOT NULL \n");
         print_f(&mrs->plog, "fs98", mrs->log);
-
-        pfat->fatSupcur = sh;
-        sc = sh;
     }
+
+    pfat->fatSupcur = sh;
+    sc = sh;
 
     ret = mspFS_allocDir(pfat, &upld);
     if (ret) {
@@ -26394,7 +26418,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (!s) {
             sprintf(mrs->log, "Error!!! the first trunk is not exist!!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
-            modersp->r = 2;
+            modersp->r = 0xed;
             return 1;
         }
         
@@ -26430,7 +26454,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (!s) {
             sprintf(mrs->log, "Error!!! the first trunk is not exist!!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
-            modersp->r = 2;
+            modersp->r = 0xed;
             return 1;
         }
         
@@ -26560,7 +26584,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (!s) {
             sprintf(mrs->log, "Error!!! TIFF_I the first trunk is not exist!!!\n\n");
             print_f(&mrs->plog, "fs98", mrs->log);
-            modersp->r = 2;
+            modersp->r = 0xed;
             return 1;
         }
          
@@ -28667,8 +28691,74 @@ static int fs121(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 
 static int fs122(struct mainRes_s *mrs, struct modersp_s *modersp)
-{
-    return 1;
+{ 
+    int ret=0;
+    uint32_t val=0, fformat=0;
+    struct supdataBack_s *s=0;
+    struct aspConfig_s *pct=0;
+    struct sdFAT_s *pfat=0;
+
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+
+    sprintf(mrs->log, "initial the fatSupdata for double side scan !!!  \n");
+    print_f(&mrs->plog, "fs122", mrs->log);
+    pfat->fatSupdataDuo= 0;
+
+    ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+    if (ret) {
+        fformat = 0;
+    }
+    
+    //cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
+    s = 0;
+    s = aspMalloc(sizeof(struct supdataBack_s));
+    if (!s) {
+        sprintf(mrs->log, "FAIL to initial the second fatSupdata !!! \n");
+        print_f(&mrs->plog, "fs122", mrs->log);
+
+        modersp->r = 2;
+        return 1;
+    }
+
+    //cfgTableSet(pct, ASPOP_SUP_SAVE, (uint32_t)s);
+    memset(s, 0, sizeof(struct supdataBack_s));
+    pfat->fatSupdataDuo = s;   
+    pfat->fatSupcurDuo = pfat->fatSupdataDuo;
+
+    if ((fformat == FILE_FORMAT_PDF) || (fformat == FILE_FORMAT_TIFF_I)) {
+        sprintf(mrs->log, "file format (%d) 2:PDF 4:tiff_i, allocate one more trunk at the begin\n", fformat);
+        print_f(&mrs->plog, "fs122", mrs->log);
+
+        s = aspMalloc(sizeof(struct supdataBack_s));
+        if (!s) {
+            sprintf(mrs->log, "FAIL to initial the head fatSupdataDuo !!! \n");
+            print_f(&mrs->plog, "fs122", mrs->log);
+
+            modersp->r = 2;
+            return 1;
+        }
+
+        memset(s, 0, sizeof(struct supdataBack_s));
+        pfat->fatSupcurDuo->supdataUse = SPI_TRUNK_SZ - 512;
+        pfat->fatSupcurDuo->supdataTot = SPI_TRUNK_SZ;
+        pfat->fatSupcurDuo->n = s;
+        pfat->fatSupcurDuo = s;
+    }
+
+    sprintf(mrs->log, "fatSupdataDuo = 0x%.8x, fatSupcurDuo = 0x%.8x!!!  \n", pfat->fatSupdataDuo, pfat->fatSupcurDuo);
+    print_f(&mrs->plog, "fs122", mrs->log);
+
+    modersp->d = 59;
+
+    if (modersp->d) {
+        modersp->m = modersp->d;
+        modersp->d = 0;
+        return 2;
+    } else {
+        modersp->r = 1;
+        return 1;
+    }
 }
 
 static int fs123(struct mainRes_s *mrs, struct modersp_s *modersp)
