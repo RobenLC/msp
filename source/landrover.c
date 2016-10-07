@@ -368,7 +368,8 @@ typedef enum {
 typedef enum {
     DOUSCAN_NONE=0,
     DOUSCAN_WIFI_ONLY,
-    DOUSCAN_WHITE_BAL,
+    DOUSCAN_WIFI_SD,
+    DOUSCAN_WHIT_BLNC,
 } doubleScan_e;
 
 typedef enum {
@@ -2071,6 +2072,7 @@ static int next_spy(struct psdata_s *data)
                 case OP_DOUBLE: 
                     switch ((tmpAns >> 8) & 0xff) {
                         case DOUSCAN_WIFI_ONLY:
+                        case DOUSCAN_WIFI_SD:
                             next = PSACT;
                             evt = AUTO_D;
                             break;
@@ -4624,6 +4626,7 @@ static int stauto_17(struct psdata_s *data)
 {
     char str[128], ch = 0;
     uint32_t rlt;
+    struct info16Bit_s *p, *g;
     
     rlt = abs_result(data->result);	
     //sprintf(str, "result: %.8x ansp:%d\n", data->result, data->ansp0);  
@@ -4631,6 +4634,15 @@ static int stauto_17(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+            g = &data->rs->pmch->get;
+            p = &data->rs->pmch->cur;
+
+            p->opcode = g->opcode;
+            p->data = g->data;
+
+            sprintf(str, "g(op:0x%x, arg:0x%x) t(op:0x%x, arg:0x%x) \n", g->opcode, g->data, p->opcode, p->data);  
+            print_f(mlogPool, "auto_17", str);  
+            
             ch = 53; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
@@ -8616,15 +8628,15 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
     p = &mrs->mchine.cur;
 
     sprintf(mrs->log, "set 0x%.2x 0x%.2x \n", p->opcode, p->data);
-    print_f(&mrs->plog, "fs48", mrs->log);
+    print_f(&mrs->plog, "fs53", mrs->log);
 
     mrs->mchine.seqcnt += 1;
     if (mrs->mchine.seqcnt >= 0x8) {
         mrs->mchine.seqcnt = 0;
     }
 
-    p->opcode = OP_DOUBLE;
-    p->data = DOUSCAN_WIFI_ONLY;
+    //p->opcode = OP_DOUBLE;
+    //p->data = DOUSCAN_WIFI_ONLY;
     
     mrs_ipc_put(mrs, "c", 1, 3);
     modersp->m = modersp->m + 1;
@@ -8646,7 +8658,7 @@ static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs54", mrs->log);
 
-        if ((p->opcode == OP_DOUBLE) && (p->data == DOUSCAN_WIFI_ONLY)) {
+        if ((p->opcode == OP_DOUBLE) && ((p->data == DOUSCAN_WIFI_ONLY) || (p->data == DOUSCAN_WIFI_SD))) {
             modersp->r = 1;
             return 1;
         } else {
@@ -11429,8 +11441,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
         len = rs_ipc_get(rs, &ch, 1);
         if (len > 0) {
-            //sprintf(rs->logs, "%c \n", ch);
-            //print_f(rs->plogs, "P5", rs->logs);
+            sprintf(rs->logs, "%c \n", ch);
+            print_f(rs->plogs, "P5", rs->logs);
 
             switch (ch) {
                 case 'g':
