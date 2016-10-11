@@ -145,7 +145,7 @@ static int *totSalloc=0;
 /* kthread */
 #define SPI_KTHREAD_USE    (1) 
 #define SPI_UPD_NO_KTHREAD     (0)
-#define SPI_KTHREAD_DLY    (0)
+#define SPI_KTHREAD_DLY    (1)
 #define SPI_TRUNK_FULL_FIX (0)
 
 #define DIR_POOL_SIZE (20480)
@@ -19770,7 +19770,7 @@ static int cmdfunc_gosd_opcode(int argc, char *argv[])
         goto end;
     }
         
-    if (rsp != 0x1) {
+    if (rsp != 0x4) {
          sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
          ret = -1;
@@ -22137,6 +22137,9 @@ static int fs33(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs33", mrs->log);
 #endif
 
+    mrs_ipc_put(mrs, "n", 1, 2);
+    usleep(100000);
+    
     modersp->m = modersp->m + 1;
     //modersp->r = 1;
     return 0;
@@ -22147,12 +22150,12 @@ static int fs34(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0 spi1 \n");
     print_f(&mrs->plog, "fs34", mrs->log);
 
+    //mrs_ipc_put(mrs, "n", 1, 1);
+    
 
-    mrs_ipc_put(mrs, "n", 1, 2);
-    clock_gettime(CLOCK_REALTIME, &mrs->time[1]);
-    usleep(100);
     mrs_ipc_put(mrs, "n", 1, 1);
-    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+    //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
 
     modersp->m = modersp->m + 1;
     modersp->v = 0;
@@ -23485,7 +23488,7 @@ static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     ring_buf_init(&mrs->cmdRx);
 
-    mrs_ipc_put(mrs, "n", 1, 1);
+    mrs_ipc_put(mrs, "a", 1, 1);
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
     modersp->m = modersp->m + 1;
@@ -24397,8 +24400,8 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf(mrs->log, "wait spi0 tx end\n");
-    print_f(&mrs->plog, "fs74", mrs->log);
+    //sprintf(mrs->log, "wait spi0 tx end\n");
+    //print_f(&mrs->plog, "fs74", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     while (len > 0) {
@@ -29544,6 +29547,9 @@ static int p2(struct procRes_s *rs)
                 case 'l':
                     cmode = 16;
                     break;
+                case 'a':
+                    cmode = 17;
+                    break;
                 default:
                     break;
             }
@@ -29785,7 +29791,7 @@ static int p2(struct procRes_s *rs)
                     if (len > 0) {
 
                         //memset(addr, 0xaa, len);
-                        //msync(addr, len, MS_SYNC);
+                        msync(addr, len, MS_SYNC);
                         
                         opsz = 0;
                         while (opsz == 0) {
@@ -30681,6 +30687,82 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "spi0 recv end - total len: %d\n", len);
                 print_f(rs->plogs, "P2", rs->logs);
             }
+            else if (cmode == 17) {
+                sprintf(rs->logs, "cmode: %d\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                pi = 0;  
+                while (1) {
+                    len = 0;
+                    len = ring_buf_get(rs->pcmdRx, &addr);
+                    if (len > 0) {
+
+                        //memset(addr, 0xaa, len);
+                        //msync(addr, len, MS_SYNC);
+                        
+                        opsz = 0;
+                        while (opsz == 0) {
+                            //shmem_check(addr, len);
+#if SPI_KTHREAD_USE                    
+                            opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                            if (opsz == 0) {
+#if SPI_KTHREAD_DLY
+                                usleep(100000);
+                                sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                                print_f(rs->plogs, "P2", rs->logs);  
+#endif
+                                continue;
+                            }
+                            
+#else
+                            opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
+#endif
+                            if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
+                                opsz = 0 - opsz;
+                            }
+
+#if SPI_TRUNK_FULL_FIX
+                            if (opsz < 0) {
+                                opsz = 0 - opsz;                    
+                                if (opsz == SPI_TRUNK_SZ) {
+                                    opsz = 0 - opsz;    
+                                } else {
+                                    sprintf(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                            }
+#endif
+
+                            //usleep(10000);
+#if P2_TX_LOG
+                            sprintf(rs->logs, "r %d - %d\n", opsz, pi);
+                            print_f(rs->plogs, "P2", rs->logs);
+#endif
+                        }
+
+                        //msync(addr, len, MS_SYNC);
+                        ring_buf_prod(rs->pcmdRx);    
+                        if (opsz < 0) {
+                            //sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                            //print_f(rs->plogs, "P2", rs->logs);    
+                            break;
+                        }
+                        rs_ipc_put(rs, "p", 1);
+                        pi += 1;
+                    }
+                }
+
+                sprintf(rs->logs, "len:%d opsz:%d ret:%d, break!\n", len, opsz, ret);
+                print_f(rs->plogs, "P2", rs->logs);    
+
+                opsz = 0 - opsz;
+                
+                ring_buf_set_last(rs->pcmdRx, opsz);
+                rs_ipc_put(rs, "d", 1);
+                sprintf(rs->logs, "spi0 recv end\n");
+                print_f(rs->plogs, "P2", rs->logs);
+
+            }
             else {
                 sprintf(rs->logs, "cmode: %d \n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
@@ -30962,7 +31044,7 @@ static int p3(struct procRes_s *rs)
                 sprintf(rs->logs, "spi1 recv end, the last sector size: %d\n", opsz);
                 print_f(rs->plogs, "P3", rs->logs);
             }
-            else  if (cmode == 6) {
+            else if (cmode == 6) {
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P3", rs->logs);
 
@@ -30973,18 +31055,20 @@ static int p3(struct procRes_s *rs)
                     len = ring_buf_get(rs->pcmdTx, &addr);
                     if (len > 0) {
 
+                        msync(addr, len, MS_SYNC);
+                        
                         opsz = 0;
                         while (opsz == 0) {
-#if SPI_KTHREAD_USE
-                    opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
-                    while (opsz == 0) {
+#if SPI_KTHREAD_USE 
+                            opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
+                            if (opsz == 0) {
 #if SPI_KTHREAD_DLY
-                        usleep(100000);
-                        sprintf(rs->logs, "kth opsz:%d\n", opsz);
-                        print_f(rs->plogs, "P3", rs->logs);  
+                                usleep(100000);
+                                sprintf(rs->logs, "kth opsz:%d\n", opsz);
+                                print_f(rs->plogs, "P3", rs->logs);  
 #endif
-                        opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr); //kthread 
-                    }
+                                continue;
+                            }
 
 #else // #if SPI_KTHREAD_USE
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
