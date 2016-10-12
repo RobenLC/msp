@@ -145,7 +145,7 @@ static int *totSalloc=0;
 /* kthread */
 #define SPI_KTHREAD_USE    (1) 
 #define SPI_UPD_NO_KTHREAD     (0)
-#define SPI_KTHREAD_DLY    (1)
+#define SPI_KTHREAD_DLY    (0)
 #define SPI_TRUNK_FULL_FIX (0)
 
 #define DIR_POOL_SIZE (20480)
@@ -22125,37 +22125,33 @@ static int fs33(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs33", mrs->log);
 
-#if SPI_KTHREAD_USE
-    bitset = 0;
-    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
-    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
-    print_f(&mrs->plog, "fs33", mrs->log);
+    mrs_ipc_put(mrs, "n", 1, 2);
+    usleep(100000);
 
+#if SPI_KTHREAD_USE
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[1], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi1 spidev thread, ret: 0x%x\n", ret);
     print_f(&mrs->plog, "fs33", mrs->log);
-#endif
 
-    mrs_ipc_put(mrs, "n", 1, 2);
-    usleep(100000);
+    bitset = 0;
+    ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
+    sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
+    print_f(&mrs->plog, "fs33", mrs->log);
+#endif
     
     modersp->m = modersp->m + 1;
-    //modersp->r = 1;
+
     return 0;
 }
 
 static int fs34(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
+    int bitset=0, ret;
     sprintf(mrs->log, "trigger spi0 spi1 \n");
     print_f(&mrs->plog, "fs34", mrs->log);
-
-    //mrs_ipc_put(mrs, "n", 1, 1);
     
-
     mrs_ipc_put(mrs, "n", 1, 1);
-    //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
-
 
     modersp->m = modersp->m + 1;
     modersp->v = 0;
