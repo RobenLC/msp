@@ -1973,6 +1973,9 @@ static int aspMemClear(struct aspMemAsign_s *msa, int *memtot, int pidx)
     if (memtot == 0) return -2;
     if (pidx >= MSP_P_NUM) return -3;
 
+    msync(msa, sizeof(struct aspMemAsign_s) * MSP_P_NUM, MS_SYNC);
+    msync(memtot, sizeof(int) * MSP_P_NUM, MS_SYNC);
+
     ms = &msa[pidx];
     tot = memtot[pidx];
 
@@ -1982,20 +1985,26 @@ static int aspMemClear(struct aspMemAsign_s *msa, int *memtot, int pidx)
             ad32 = ms->aspMemAddr[mi];
 
             pfree = (char *)ad32;
+            
+            memset(pfree, 0, asz);
             free(pfree);
+            //memset(pfree, 0xff, asz);
+            
             tot -= asz;
             memtot[pidx] = tot;
 
             ms->aspMemAddr[mi] = 0;
             ms->aspMemSize[mi] = 0;
             
-            sprintf(mlog, "FREE [%d] ADDR: 0x%.8x, SIZE: %d, TOTAL: %d\n", mi, ad32, asz, tot);
+            sprintf(mlog, "[%d] FREE [%d] ADDR: 0x%.8x, SIZE: %d, TOTAL: %d\n", pidx, mi, ad32, asz, tot);
             print_f(mlogPool, "MEM", mlog);
         }
     }
     
     msync(ms, sizeof(struct aspMemAsign_s), MS_SYNC);
     msync(memtot, sizeof(int) * MSP_P_NUM, MS_SYNC);
+
+    sync();
     
     return 0;
 }
@@ -2018,9 +2027,13 @@ static int aspMemDebug(struct aspMemAsign_s *msa, int *memtot, int *shmemtot)
     sprintf(mlog, "SHARE MEM TOTAL_SIZE: %d\n", stot);
     print_f(mlogPool, "MEM", mlog);
 
+    msync(msa, sizeof(struct aspMemAsign_s) * MSP_P_NUM, MS_SYNC);
+    msync(memtot, sizeof(int) * MSP_P_NUM, MS_SYNC);
+    
     for (pi = 0; pi < MSP_P_NUM; pi++) {
         ms = &msa[pi];
         tot = memtot[pi];
+        
         switch (level) {
         case 1:
             sprintf(mlog, "P%d TOTAL_SIZE: %d\n", pi, tot);
@@ -2061,17 +2074,30 @@ static void* aspMemalloc(uint32_t asz, int pidx)
     mlen = asz;
     rst = mlen % MIN_MEM_ALLOC_SIZE;
 
+    sprintf(mlog, "malloc rst: %d, asz:%d, mlen: %d\n", rst, asz, mlen);
+    print_f(mlogPool, "MEM", mlog);
+
     if (rst != 0) {
         num = mlen / MIN_MEM_ALLOC_SIZE;
         mlen = (num + 1) * MIN_MEM_ALLOC_SIZE;
+
+        sprintf(mlog, "malloc num: %d, mlen: %d\n", num, mlen);
+        print_f(mlogPool, "MEM", mlog);
     }
     
     tot = asptotMalloc[pidx];
     ms = &aspMemAsign[pidx];
-
+    
+    msync(ms, sizeof(struct aspMemAsign_s), MS_SYNC);
+    
     for (mi = 0; mi < ASP_MEM_SLOT_NUM; mi++) {
         if (ms->aspMemAddr[mi] == 0) {
+            
+            sprintf(mlog, "malloc [%d] SIZE: %d\n", mi, mlen);
+            print_f(mlogPool, "MEM", mlog);
+
             addr = malloc(mlen);
+            
             if (!addr) return 0;
             
             ms->aspMemSize[mi] = mlen;
@@ -2083,7 +2109,7 @@ static void* aspMemalloc(uint32_t asz, int pidx)
             msync(ms, sizeof(struct aspMemAsign_s), MS_SYNC);
             msync(asptotMalloc, sizeof(int) * MSP_P_NUM, MS_SYNC);
 
-            sprintf(mlog, "ALLOC [%d] ADDR: 0x%.8x, SIZE: %d\n", mi, ms->aspMemAddr[mi], ms->aspMemSize[mi]);
+            sprintf(mlog, "[%d ] ALLOC [%d] ADDR: 0x%.8x, SIZE: %d\n", pidx, mi, ms->aspMemAddr[mi], ms->aspMemSize[mi]);
             print_f(mlogPool, "MEM", mlog);
 
             return addr;
@@ -2098,7 +2124,8 @@ static void* aspMemalloc(uint32_t asz, int pidx)
 static int aspMemFree(void *dval, int pidx)
 {
     return 0;
-    
+#if 0
+    char mlog[256];
     struct aspMemAsign_s *ms;
     int i=0, tot=0;
     uint32_t asz=0, ad32=0;
@@ -2108,9 +2135,14 @@ static int aspMemFree(void *dval, int pidx)
 
     ad32 = (uint32_t) dval;
 
+    sprintf(mlog, " FREE [%d] ADDR: 0x%.8x\n", pidx, ad32);
+    print_f(mlogPool, "MEM", mlog);
+
     tot = asptotMalloc[pidx];
     ms = &aspMemAsign[pidx];
 
+    msync(ms, sizeof(struct aspMemAsign_s), MS_SYNC);
+    
     for (i = 0; i < ASP_MEM_SLOT_NUM; i++) {
         if (ms->aspMemAddr[i] == ad32) {
             asz = ms->aspMemSize[i];
@@ -2122,6 +2154,7 @@ static int aspMemFree(void *dval, int pidx)
             asptotMalloc[pidx] = tot;
 
             pfree = (char *)ad32;
+            
             free(pfree);
 
             return tot;
@@ -2129,6 +2162,7 @@ static int aspMemFree(void *dval, int pidx)
     }
 
     return -3;
+#endif
 }
 
 inline int tiffGetDot(char *img, int *dot, char *pta, int *scale)
@@ -2877,8 +2911,8 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen)
     p1 = &pGrp[head*2];
     p2 = &pGrp[tail*2];
 
-    aspMemFree(avd, 9);
-    aspMemFree(avList, 9);
+    aspMemFree(avd, 6);
+    aspMemFree(avList, 6);
     
     ret = getVectorFromP(vecTr,  p1,  p2);
     if (ret < 0) {
@@ -6408,7 +6442,7 @@ static int asp_strsplit(struct aspInfoSplit_s **info, char *str, int max)
 
         if (len == 0) {
             cur = nex+1;            
-            aspMemFree(p, 9);
+            aspMemFree(p, 6);
             continue;
         }
         
@@ -9282,16 +9316,15 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
             case PSRLT:
                 //sprintf(str, "PSRLT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                if (tmpAns == 1) {
+                if (tmpAns == SINSCAN_WIFI_SD) {
                     next = PSMAX;
-                } else if (tmpAns == 2) {
+                } else if (tmpAns == SINSCAN_SD_ONLY) {
                     next = PSMAX;
-                } else if (tmpAns == 3) {
+                } else if (tmpAns == SINSCAN_DUAL_SD) {
                     next = PSMAX;
                 } else {
                     next = PSMAX;
                 }
-
                 break;
             case PSTSM:
                 //sprintf(str, "PSTSM\n"); 
@@ -10495,8 +10528,14 @@ static uint32_t next_doubleD(struct psdata_s *data)
             case PSACT:
                 //sprintf(str, "PSACT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSWT;
-                evt = SDAO;
+                if (tmpAns == 1) {
+                    next = PSWT;
+                    evt = SDAO;
+                } else if (tmpAns == 2) {
+                    next = PSMAX;  
+                } else {
+                    next = PSMAX;
+                }
                 break;
             case PSWT:
                 //sprintf(str, "PSWT\n"); 
@@ -11251,12 +11290,10 @@ static int stdob_05(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 pdt = &pct[ASPOP_SCAN_DOUBLE];
                 data->ansp0 = pdt->opValue;
-                if (pdt->opValue == DOUSCAN_WIFI_SD) {
-                    sprintf(rs->logs, "op_05, set FORWARD to SD write back \n");
-                    print_f(rs->plogs, "DOB", rs->logs);  
- 
-                    data->bkofw = emb_fw(data->bkofw, DOUBLED, PSWT);
-                }
+
+                sprintf(rs->logs, "op_05, set FORWARD to status check \n");
+                print_f(rs->plogs, "DOB", rs->logs);  
+                data->bkofw = emb_fw(data->bkofw, DOUBLED, PSWT);
 
                 pdt = &pct[ASPOP_EG_DECT];
                 if ((pdt->opStatus == ASPOP_STA_UPD) && (pdt->opValue == 1)) {
@@ -11339,6 +11376,9 @@ static int stdob_07(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+                data->bkofw = emb_fw(data->bkofw, DOUBLED, PSACT);
+            } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -13121,7 +13161,7 @@ static int stsup_34(struct psdata_s *data)
                         //print_f(rs->plogs, "SIG", rs->logs);  
                         break;
                     default:
-                        sprintf(rs->logs, "WARNING!!! op34, opValue is unexpected val:%x\n", pdt->opValue);
+                        sprintf(rs->logs, "ERROR!!! op34, opValue is unexpected val:%x\n", pdt->opValue);
                         print_f(rs->plogs, "SIG", rs->logs);  
                         data->result = emb_result(data->result, EVTMAX);
                         break;
@@ -15503,20 +15543,35 @@ static int stwtbak_74(struct psdata_s *data)
             } else {
                 if (pdt->opValue == SINSCAN_WIFI_SD) {
                     pdt->opStatus = ASPOP_STA_UPD;
-                    data->ansp0 = 1;
-                    data->result = emb_result(data->result, NEXT);
+
+                    ch = 124; 
+                    rs_ipc_put(data->rs, &ch, 1);
+                    data->result = emb_result(data->result, WAIT);
+
+                    //data->ansp0 = 1;
+                    //data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_74: SINSCAN_WIFI_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SINSCAN_SD_ONLY) {
                     pdt->opStatus = ASPOP_STA_UPD;
-                    data->ansp0 = 2;
-                    data->result = emb_result(data->result, NEXT);
+                    
+                    ch = 124; 
+                    rs_ipc_put(data->rs, &ch, 1);
+                    data->result = emb_result(data->result, WAIT);
+
+                    //data->ansp0 = 2;
+                    //data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_74: SINSCAN_SD_ONLY go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else if (pdt->opValue == SINSCAN_DUAL_SD) {
                     pdt->opStatus = ASPOP_STA_UPD;
-                    data->ansp0 = 3;
-                    data->result = emb_result(data->result, NEXT);
+
+                    ch = 124; 
+                    rs_ipc_put(data->rs, &ch, 1);
+                    data->result = emb_result(data->result, WAIT);
+
+                    //data->ansp0 = 3;
+                    //data->result = emb_result(data->result, NEXT);
                     sprintf(rs->logs, "op_74: SINSCAN_DUAL_SD go to next!!\n"); 
                     print_f(rs->plogs, "WTBAK", rs->logs);  
                 } else {
@@ -15529,6 +15584,8 @@ static int stwtbak_74(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
+                pdt = &pct[ASPOP_SCAN_SINGLE];
+                data->ansp0 = pdt->opValue;
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
@@ -21293,6 +21350,11 @@ static int hd121(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd122(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd123(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd124(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd125(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd126(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd127(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd128(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd129(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -21741,6 +21803,10 @@ static int fs16(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs17(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
+    struct sdFAT_s *pfat=0;
+    pfat = &mrs->aspFat;
+    pfat->fatSupcur = pfat->fatSupdata;
+    
     sprintf(mrs->log, "trigger spi0 spi1 \n");
     print_f(&mrs->plog, "fs17", mrs->log);
 
@@ -22126,10 +22192,71 @@ static int fs24(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs25(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
+    struct sdFAT_s *pfat=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+    uint32_t val_s = 0, val_d = 0;
+            
     sprintf(mrs->log, "check 01 socket status\n");
     print_f(&mrs->plog, "fs25", mrs->log);
+
+    pfat = &mrs->aspFat;
+    pct = mrs->configTable;
     
     mrs_ipc_put(mrs, "r", 1, 3);
+
+#if 0
+    pdt = &pct[ASPOP_SCAN_SINGLE];
+    if ((pdt->opStatus & ASPOP_STA_WR)) {
+        val_s = pdt->opValue;
+    }
+
+    pdt = &pct[ASPOP_SCAN_DOUBLE];
+    if ((pdt->opStatus & ASPOP_STA_WR)) {
+        val_d = pdt->opValue;
+    }
+    
+    sprintf(mrs->log, "ASPOP_SCAN table val_s: 0x%x, val_d: 0x%x \n", val_s, val_d);
+    print_f(&mrs->plog, "fs25", mrs->log);
+
+    if (val_s) {
+        switch(val_s) {
+            case SINSCAN_WIFI_ONLY:
+                //case SINSCAN_WHIT_BLNC:
+                //case SINSCAN_USB:
+                //case SINSCAN_DUAL_STRM:
+                pfat->fatSupdata = 0;
+                pfat->fatSupcur = 0;
+                aspMemClear(aspMemAsign, asptotMalloc, 10);
+                break;
+            //case SINSCAN_SD_ONLY:
+            case SINSCAN_WIFI_SD:
+            //case SINSCAN_DUAL_SD:
+                break;
+            default:
+                sprintf(mrs->log, "WARNING: unexpected ASPOP_SCAN_SINGLE table val: 0x%x \n", val_s);
+                print_f(&mrs->plog, "fs25", mrs->log);
+                break;
+        }
+    }
+    else if (val_d) {
+        switch(val_d) {
+            case DOUSCAN_WIFI_ONLY:
+                pfat->fatSupdata = 0;
+                pfat->fatSupcur = 0;
+                pfat->fatSupdataDuo = 0;
+                pfat->fatSupcurDuo = 0;
+                aspMemClear(aspMemAsign, asptotMalloc, 10);
+                break;
+            case DOUSCAN_WIFI_SD:
+                //case DOUSCAN_WHIT_BLNC:  
+                break;       
+            default:
+                sprintf(mrs->log, "WARNING: unexpected ASPOP_SCAN_DOUBLE table val: 0x%x \n", val_d);
+                print_f(&mrs->plog, "fs25", mrs->log);
+                break;
+        }
+    }
+#endif
 
     modersp->m = modersp->m + 1;
     return 0; 
@@ -22140,10 +22267,10 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0;
     char ch=0;
     struct info16Bit_s *p;
-
+    
     sprintf(mrs->log, "wait socket status\n");
     print_f(&mrs->plog, "fs26", mrs->log);
-
+    
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if (len > 0) {
 
@@ -22168,10 +22295,41 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs27(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
+    struct sdFAT_s *pfat=0;
+    struct aspConfig_s *pct=0;
+    uint32_t val = 0;
+    
     sprintf(mrs->log, "check 02 socket status\n");
     print_f(&mrs->plog, "fs27", mrs->log);
+
+    pfat = &mrs->aspFat;
+    pct = mrs->configTable;
     
     mrs_ipc_put(mrs, "r", 1, 8);
+    
+#if 0
+    cfgTableGet(pct, ASPOP_SCAN_DOUBLE, &val);
+
+    sprintf(mrs->log, "ASPOP_SCAN_DOUBLE table val: 0x%x \n", val);
+    print_f(&mrs->plog, "fs27", mrs->log);
+
+    switch(val) {
+        case DOUSCAN_WIFI_ONLY:
+            pfat->fatSupdata = 0;
+            pfat->fatSupcur = 0;
+            pfat->fatSupdataDuo = 0;
+            pfat->fatSupcurDuo = 0;
+            aspMemClear(aspMemAsign, asptotMalloc, 10);
+            break;
+        case DOUSCAN_WIFI_SD:
+        //case DOUSCAN_WHIT_BLNC:
+            break;       
+        default:
+            sprintf(mrs->log, "WARNING: unexpected ASPOP_SCAN_DOUBLE table val: 0x%x \n", val);
+            print_f(&mrs->plog, "fs27", mrs->log);
+            break;
+    }
+#endif
 
     modersp->m = modersp->m + 1;
     return 0; 
@@ -22231,7 +22389,7 @@ static int fs29(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 
 static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
-{ 
+{
     int len=0;
     char ch=0;
     struct info16Bit_s *p;
@@ -22338,6 +22496,11 @@ static int fs33(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs34(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int bitset=0, ret;
+    struct sdFAT_s *pfat=0;
+    pfat = &mrs->aspFat;
+    pfat->fatSupcur = pfat->fatSupdata;
+    pfat->fatSupcurDuo= pfat->fatSupdataDuo;
+
     sprintf(mrs->log, "trigger spi0 spi1 \n");
     print_f(&mrs->plog, "fs34", mrs->log);
     
@@ -23785,8 +23948,8 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         pfat->fatCurDir = pfat->fatRootdir;
     } else {
-        aspMemClear(aspMemAsign, asptotMalloc, 10);
-
+        //aspMemClear(aspMemAsign, asptotMalloc, 10);
+        
         if(pfat->fatCurDir) {
             curDir = pfat->fatCurDir;
             mspFS_folderList(curDir, 4);            
@@ -24172,6 +24335,10 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
     int bitset, ret;
+    struct sdFAT_s *pfat=0;
+    pfat = &mrs->aspFat;
+    pfat->fatSupcur = pfat->fatSupdata;
+        
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs67", mrs->log);
 
@@ -24185,6 +24352,7 @@ static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
     ring_buf_init(&mrs->cmdRx);
 
     mrs_ipc_put(mrs, "n", 1, 1);
+    
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
     modersp->v = 0;
@@ -26491,9 +26659,9 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
     sc = pfat->fatSupcur;
     psec = pfat->fatBootsec;
 
-    rs = aspMemalloc(sizeof(struct supdataBack_s), 10);
-    memset(rs, 0, sizeof(struct supdataBack_s));
-    s = rs;
+    //rs = aspMemalloc(sizeof(struct supdataBack_s), 10);
+    //memset(rs, 0, sizeof(struct supdataBack_s));
+    //s = rs;
     
     sprintf(mrs->log, "deal with sup back head buff!! - 1\n");
     print_f(&mrs->plog, "fs96", mrs->log);
@@ -26502,7 +26670,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "ERROR!!! sup back head buff is empty! \n");
         print_f(&mrs->plog, "fs96", mrs->log);
         modersp->r = 0xed;
-        aspMemFree(rs, 0);
+        //aspMemFree(rs, 10);
         return 1;
     }
 
@@ -27178,6 +27346,10 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs99(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
     int bitset, ret;
+    struct sdFAT_s *pfat=0;
+    pfat = &mrs->aspFat;
+    pfat->fatSupcur = pfat->fatSupdata;
+
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs99", mrs->log);
 
@@ -29175,34 +29347,104 @@ static int fs123(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     pfat = &mrs->aspFat;
 
+    sh = pfat->fatSupdata;
     shduo = pfat->fatSupdataDuo;
 
-    if (!shduo) {
+    if ((sh) && (shduo)) {
+        pfat->fatSupdata = shduo;
+        pfat->fatSupdataDuo = 0;
+        sprintf(mrs->log, "procede for secord page SD writing back \n");
+        print_f(&mrs->plog, "fs123", mrs->log);
+
+        modersp->r = 1;
+    } else if ((sh) && (!shduo)) {
+        pfat->fatSupdata = 0;
+        pfat->fatSupcur = 0;
+        pfat->fatSupdataDuo = 0;    
+        pfat->fatSupcurDuo = 0;
+        aspMemClear(aspMemAsign, asptotMalloc, 10);
+
+        modersp->r = 2;
+        
+        sprintf(mrs->log, "release resource for double side SD write back\n");
+        print_f(&mrs->plog, "fs123", mrs->log);
+    } else {
+        sprintf(mrs->log, "ERROR!!! backup buffer is not correct sh: 0x%x, shduo: 0x%x\n", sh, shduo);
+        print_f(&mrs->plog, "fs123", mrs->log);
         modersp->r = 0xed;
         return 1;
     }
-    
-    pfat->fatSupdata = shduo;
-    pfat->fatSupdataDuo = 0;
-    modersp->r = 1;
     
     return 1;
 }
 
 static int fs124(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
+    struct sdFAT_s *pfat=0;
+            
+    sprintf(mrs->log, "release resource for single side SD write back\n");
+    print_f(&mrs->plog, "fs124", mrs->log);
+
+    pfat = &mrs->aspFat;
+
+    pfat->fatSupdata = 0;
+    pfat->fatSupcur = 0;
+    aspMemClear(aspMemAsign, asptotMalloc, 10);
+
+    modersp->r = 1;
+    
+    return 1;
+}
+
+static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    sprintf(mrs->log, "empty !!!\n");
+    print_f(&mrs->plog, "fs125", mrs->log);
+
+    return 1;
+}
+
+static int fs126(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    sprintf(mrs->log, "empty !!!\n");
+    print_f(&mrs->plog, "fs126", mrs->log);
+
+    return 1;
+}
+
+static int fs127(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    sprintf(mrs->log, "empty !!!\n");
+    print_f(&mrs->plog, "fs127", mrs->log);
+
+    return 1;
+}
+
+static int fs128(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    sprintf(mrs->log, "empty !!!\n");
+    print_f(&mrs->plog, "fs128", mrs->log);
+
+    return 1;
+}
+
+static int fs129(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    sprintf(mrs->log, "empty !!!\n");
+    print_f(&mrs->plog, "fs129", mrs->log);
+
     return 1;
 }
 
 #define P0_LOG (0)
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 125
+#define PS_NUM 130
 
     int ret=0, len=0, tmp=0;
     char ch=0;
 
-    struct modersp_s *modesw = aspMemalloc(sizeof(struct modersp_s), 0);
+    struct modersp_s *modesw = aspMemalloc(sizeof(struct modersp_s), 8);
     if (modesw == 0) {
         sprintf(mrs->log, "modesw memory allocation fail \n");
         print_f(&mrs->plog, "P0", mrs->log);
@@ -29232,7 +29474,8 @@ static int p0(struct mainRes_s *mrs)
                                  {105, fs105},{106, fs106},{107, fs107},{108, fs108},{109, fs109},
                                  {110, fs110},{111, fs111},{112, fs112},{113, fs113},{114, fs114},
                                  {115, fs115},{116, fs116},{117, fs117},{118, fs118},{119, fs119},
-                                 {120, fs120},{121, fs121},{122, fs122},{123, fs123},{124, fs124}};
+                                 {120, fs120},{121, fs121},{122, fs122},{123, fs123},{124, fs124},
+                                 {125, fs125},{126, fs126},{127, fs127},{128, fs128},{129, fs129}};
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
                                  {10, hd10},{11, hd11},{12, hd12},{13, hd13},{14, hd14},
@@ -29257,7 +29500,8 @@ static int p0(struct mainRes_s *mrs)
                                  {105, hd105},{106, hd106},{107, hd107},{108, hd108},{109, hd109},
                                  {110, hd110},{111, hd111},{112, hd112},{113, hd113},{114, hd114},
                                  {115, hd115},{116, hd116},{117, hd117},{118, hd118},{119, hd119},
-                                 {120, hd120},{121, hd121},{122, hd122},{123, hd123},{124, hd124}};
+                                 {120, hd120},{121, hd121},{122, hd122},{123, hd123},{124, hd124},
+                                 {125, hd125},{126, hd126},{127, hd127},{128, hd128},{129, hd129}};
     p0_init(mrs);
 
     modesw->m = -2;
@@ -29325,6 +29569,7 @@ static int p0(struct mainRes_s *mrs)
 
             mrs_ipc_put(mrs, &ch, 1, 0);
 
+            aspMemClear(aspMemAsign, asptotMalloc, 0);
             //aspMemDebug(aspMemAsign, asptotMalloc, totSalloc);
         } else {
             mrs_ipc_put(mrs, "$", 1, 0);
@@ -29673,7 +29918,7 @@ static int p2(struct procRes_s *rs)
     // 'd': data mode, store the incomming infom into share memory
     // send 'd' to notice the p0 that we have incomming data chunk
 
-    rx_buff = aspMemalloc(SPI_TRUNK_SZ, 9);
+    rx_buff = aspMemalloc(SPI_TRUNK_SZ, 8);
     ch = '2';
 
     while (1) {
@@ -29686,6 +29931,8 @@ static int p2(struct procRes_s *rs)
             //sprintf(rs->logs, "recv ch: %c\n", ch);
             //print_f(rs->plogs, "P2", rs->logs);
 
+            aspMemClear(aspMemAsign, asptotMalloc, 2);
+            
             switch (ch) {
                 case 'g':
                     cmode = 1;
@@ -30032,6 +30279,11 @@ static int p2(struct procRes_s *rs)
                         }
                         rs_ipc_put(rs, "p", 1);
                         pi += 1;
+                    }
+                    else {
+                        sprintf(rs->logs, "failed to get buffer en:%d!\n", len, opsz, ret);
+                        print_f(rs->plogs, "P2", rs->logs);    
+                        usleep(100000);
                     }
                 }
 
@@ -31018,6 +31270,8 @@ static int p3(struct procRes_s *rs)
             //sprintf(rs->logs, "recv ch: %c\n", ch);
             //print_f(rs->plogs, "P3", rs->logs);
 
+            aspMemClear(aspMemAsign, asptotMalloc, 3);
+            
             switch (ch) {
                 case 'g':
                     cmode = 1;
@@ -31425,7 +31679,7 @@ static int p4(struct procRes_s *rs)
 
     char *recvbuf, *tmp;
 
-    recvbuf = aspMemalloc(1024, 4);
+    recvbuf = aspMemalloc(1024, 8);
     if (!recvbuf) {
         sprintf(rs->logs, "p4 recvbuf alloc failed! \n");
         print_f(rs->plogs, "P4", rs->logs);
@@ -31484,6 +31738,8 @@ static int p4(struct procRes_s *rs)
             cltport = ntohs(rs->psocket_t->clint_addr.sin_port);
             sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_t->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P4", rs->logs);
+
+            aspMemClear(aspMemAsign, asptotMalloc, 4);
         }
 #else
         rs->psocket_t->connfd = 4;
@@ -31502,8 +31758,8 @@ static int p4(struct procRes_s *rs)
             ret = 0;
             ret = rs_ipc_get(rs, &ch, 1);               
             
-            //sprintf(rs->logs, "%c ret:%d \n", ch, ret);
-            //print_f(rs->plogs, "P4", rs->logs);
+            sprintf(rs->logs, "%c ret:%d \n", ch, ret);
+            print_f(rs->plogs, "P4", rs->logs);
 
             switch (ch) {
                 case 'E':
@@ -31751,16 +32007,20 @@ static int p4(struct procRes_s *rs)
                 pi = 0;
                 while (1) {
                     len = ring_buf_cons(rs->pcmdRx, &addr);
+
+                    sprintf(rs->logs, "get ring buff len: %d \n", len);
+                    print_f(rs->plogs, "P4", rs->logs);         
+
                     if (len >= 0) {
                         pi++;
                     
-                        msync(addr, len, MS_SYNC);
                         /* send data to wifi socket */
 #if P4_TX_LOG
                         sprintf(rs->logs, " %d -%d \n", len, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
 #endif
                         if (len != 0) {
+                            msync(addr, len, MS_SYNC);
                             #if 1 /*debug*/
                             opsz = write(rs->psocket_t->connfd, addr, len);
                             #else
@@ -32024,21 +32284,21 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     // wait for ch from p0
     // in charge of socket recv
 
-    addr = aspMemalloc(1024, 5);
+    addr = aspMemalloc(1024, 8);
     if (!addr) {
         sprintf(rs->logs, "p5 addr alloc failed! \n");
         print_f(rs->plogs, "P5", rs->logs);
         return (-1);
     }
     
-    sendbuf = aspMemalloc(OUT_BUFF_LEN, 5);
+    sendbuf = aspMemalloc(OUT_BUFF_LEN, 8);
     if (!sendbuf) {
         sprintf(rs->logs, "p5 sendbuf alloc failed! \n");
         print_f(rs->plogs, "P5", rs->logs);
         return (-1);
     }
 
-    recvbuf = aspMemalloc(2048, 5);
+    recvbuf = aspMemalloc(2048, 8);
     if (!recvbuf) {
         sprintf(rs->logs, "p5 recvbuf alloc failed! \n");
         print_f(rs->plogs, "P5", rs->logs);
@@ -32110,6 +32370,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             cltport = ntohs(rs->psocket_r->clint_addr.sin_port);
             sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_r->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P5", rs->logs);
+
+            aspMemClear(aspMemAsign, asptotMalloc, 5);
         }
 
         memset(recvbuf, 0x0, 1024);
@@ -32379,7 +32641,7 @@ static int p6(struct procRes_s *rs)
     fscur = rs->psFat->fatRootdir;
 */
 
-    recvbuf = aspMemalloc(1024, 6);
+    recvbuf = aspMemalloc(1024, 8);
     if (!recvbuf) {
         sprintf(rs->logs, "recvbuf alloc failed! \n");
         print_f(rs->plogs, "P6", rs->logs);
@@ -32389,7 +32651,7 @@ static int p6(struct procRes_s *rs)
         print_f(rs->plogs, "P6", rs->logs);
     }
 
-    sendbuf = aspMemalloc(P6_SEND_BUFF_SIZE, 6);
+    sendbuf = aspMemalloc(P6_SEND_BUFF_SIZE, 8);
     if (!sendbuf) {
         sprintf(rs->logs, "sendbuf alloc failed! \n");
         print_f(rs->plogs, "P6", rs->logs);
@@ -32448,6 +32710,8 @@ static int p6(struct procRes_s *rs)
             cltport = ntohs(rs->psocket_at->clint_addr.sin_port);
             sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_at->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P6", rs->logs);
+
+            aspMemClear(aspMemAsign, asptotMalloc, 6);
         }
 
         memset(recvbuf, 0x0, 1024);
@@ -34840,6 +35104,8 @@ static int p7(struct procRes_s *rs)
             cltport = ntohs(rs->psocket_n->clint_addr.sin_port);
             sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_n->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P7", rs->logs);
+
+            aspMemClear(aspMemAsign, asptotMalloc, 7);
         }
 #else
         rs->psocket_n->connfd = 7;
