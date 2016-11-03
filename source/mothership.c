@@ -1996,8 +1996,8 @@ static int aspMemClear(struct aspMemAsign_s *msa, int *memtot, int pidx)
             ms->aspMemAddr[mi] = 0;
             ms->aspMemSize[mi] = 0;
             
-            sprintf(mlog, "[%d] FREE [%d] ADDR: 0x%.8x, SIZE: %d, TOTAL: %d\n", pidx, mi, ad32, asz, tot);
-            print_f(mlogPool, "MEM", mlog);
+            //sprintf(mlog, "[%d] FREE [%d] ADDR: 0x%.8x, SIZE: %d, TOTAL: %d\n", pidx, mi, ad32, asz, tot);
+            //print_f(mlogPool, "MEM", mlog);
         }
     }
     
@@ -2062,6 +2062,7 @@ static int aspMemDebug(struct aspMemAsign_s *msa, int *memtot, int *shmemtot)
     return 0;
 }
 
+#define DEBUG_MEMALLOC_LOG (0)
 static void* aspMemalloc(uint32_t asz, int pidx) 
 {
     char mlog[256];
@@ -2073,16 +2074,17 @@ static void* aspMemalloc(uint32_t asz, int pidx)
 
     mlen = asz;
     rst = mlen % MIN_MEM_ALLOC_SIZE;
-
+#if DEBUG_MEMALLOC_LOG
     sprintf(mlog, "malloc rst: %d, asz:%d, mlen: %d\n", rst, asz, mlen);
     print_f(mlogPool, "MEM", mlog);
-
+#endif
     if (rst != 0) {
         num = mlen / MIN_MEM_ALLOC_SIZE;
         mlen = (num + 1) * MIN_MEM_ALLOC_SIZE;
-
+#if DEBUG_MEMALLOC_LOG
         sprintf(mlog, "malloc num: %d, mlen: %d\n", num, mlen);
         print_f(mlogPool, "MEM", mlog);
+#endif
     }
     
     tot = asptotMalloc[pidx];
@@ -2092,10 +2094,10 @@ static void* aspMemalloc(uint32_t asz, int pidx)
     
     for (mi = 0; mi < ASP_MEM_SLOT_NUM; mi++) {
         if (ms->aspMemAddr[mi] == 0) {
-            
+#if DEBUG_MEMALLOC_LOG
             sprintf(mlog, "malloc [%d] SIZE: %d\n", mi, mlen);
             print_f(mlogPool, "MEM", mlog);
-
+#endif
             addr = malloc(mlen);
             
             if (!addr) return 0;
@@ -2108,10 +2110,10 @@ static void* aspMemalloc(uint32_t asz, int pidx)
 
             msync(ms, sizeof(struct aspMemAsign_s), MS_SYNC);
             msync(asptotMalloc, sizeof(int) * MSP_P_NUM, MS_SYNC);
-
+#if DEBUG_MEMALLOC_LOG
             sprintf(mlog, "[%d ] ALLOC [%d] ADDR: 0x%.8x, SIZE: %d\n", pidx, mi, ms->aspMemAddr[mi], ms->aspMemSize[mi]);
             print_f(mlogPool, "MEM", mlog);
-
+#endif
             return addr;
         }
     }
@@ -11422,6 +11424,9 @@ static int stdob_08(struct psdata_s *data)
                 print_f(rs->plogs, "DOB", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else {
+                pct[ASPOP_IMG_LEN].opValue = 0;
+                pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+
                 if (pdt->opValue == DOUSCAN_WIFI_ONLY) {
                     pdt->opStatus = ASPOP_STA_UPD;
                     data->ansp0 = 1;
@@ -20015,7 +20020,7 @@ static int cmdfunc_gosd_opcode(int argc, char *argv[])
         goto end;
     }
         
-    if (rsp != 0x4) {
+    if (rsp != 0x2) {
          sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
          ret = -1;
@@ -21155,7 +21160,7 @@ static int dbg(struct mainRes_s *mrs)
                 loglen = 0;
                 memset(cmd, 0, 256);
 
-                aspMemDebug(aspMemAsign, asptotMalloc, totSalloc);
+                //aspMemDebug(aspMemAsign, asptotMalloc, totSalloc);
             } else {
                 mrs_ipc_put(mrs, "?", 1, 5); 
                 continue;
@@ -22473,6 +22478,9 @@ static int fs33(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "spi1 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs33", mrs->log);
 
+    ring_buf_init(&mrs->cmdRx);
+    ring_buf_init(&mrs->cmdTx);
+
     mrs_ipc_put(mrs, "n", 1, 2);
     usleep(100000);
 
@@ -22526,7 +22534,7 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
     sc = pfat->fatSupcur;
     scduo= pfat->fatSupcurDuo;
 
-    //sprintf(mrs->log, "%d\n", modersp->v);
+    //sprintf(mrs->log, "v:%d, c:%d, r:0x%x\n", modersp->v, modersp->c, modersp->r);
     //print_f(&mrs->plog, "fs35", mrs->log);
 
     if (modersp->r & 0x4) {
@@ -22709,13 +22717,22 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         }
     }
+/*
+    ret = aspCalcSupLen(pfat->fatSupdata);
 
+    sprintf(mrs->log, "1. calcu total: %d\n", ret);
+    print_f(&mrs->plog, "fs35", mrs->log);
+
+    ret = aspCalcSupLen(pfat->fatSupdataDuo);
+    sprintf(mrs->log, "2. calcu total: %d\n", ret);
+    print_f(&mrs->plog, "fs35", mrs->log);
+*/
     if ((modersp->r & 0x3) == 0x3) {
         if (sc) {
             len = ring_buf_cons_psudo(&mrs->cmdRx, &addr);
             while (len >= 0) {
-                //sprintf(mrs->log, "2. get psudo len:%d, cnt:%d\n", len, modersp->v);
-                //print_f(&mrs->plog, "fs68", mrs->log);
+                sprintf(mrs->log, "1. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                print_f(&mrs->plog, "fs35", mrs->log);
 
                 dst = sc->supdataBuff;
                 memcpy(dst, addr, len);
@@ -22767,8 +22784,8 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (scduo) {
             len = ring_buf_cons_psudo(&mrs->cmdTx, &addr);
             while (len >= 0) {
-                //sprintf(mrs->log, "2. get psudo len:%d, cnt:%d\n", len, modersp->v);
-                //print_f(&mrs->plog, "fs68", mrs->log);
+                sprintf(mrs->log, "2. get psudo len:%d, cnt:%d\n", len, modersp->v);
+                print_f(&mrs->plog, "fs68", mrs->log);
 
                 dst = scduo->supdataBuff;
                 memcpy(dst, addr, len);
@@ -27004,7 +27021,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "user defined jpg length: %d, ret:%d \n", val, ret);
         print_f(&mrs->plog, "fs98", mrs->log);
         
-        pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+        //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
         
         if (val) {
             ret = changeJpgLen(s->supdataBuff, val, s->supdataTot);
@@ -27040,7 +27057,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "user defined jpg length: %d, ret:%d \n", val, ret);
         print_f(&mrs->plog, "fs98", mrs->log);
         
-        pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+        //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
         
         if (val) {
             ret = changeJpgLen(s->supdataBuff, val, s->supdataTot);
@@ -30218,6 +30235,7 @@ static int p2(struct procRes_s *rs)
 #endif
             }
             else if (cmode == 6) {
+                totsz = 0;
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
 
@@ -30247,10 +30265,13 @@ static int p2(struct procRes_s *rs)
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
+
+                            totsz += opsz;
+                            
                             if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
                             }
-
+                            
 #if SPI_TRUNK_FULL_FIX
                             if (opsz < 0) {
                                 opsz = 0 - opsz;                    
@@ -30265,7 +30286,7 @@ static int p2(struct procRes_s *rs)
 
                             //usleep(10000);
 #if P2_TX_LOG
-                            sprintf(rs->logs, "r %d - %d\n", opsz, pi);
+                            sprintf(rs->logs, "r %d/%d - %d\n", opsz, totsz, pi);
                             print_f(rs->plogs, "P2", rs->logs);
 #endif
                         }
@@ -30287,7 +30308,7 @@ static int p2(struct procRes_s *rs)
                     }
                 }
 
-                sprintf(rs->logs, "len:%d opsz:%d ret:%d, break!\n", len, opsz, ret);
+                sprintf(rs->logs, "totsz:%d opsz:%d ret:%d, break!\n", totsz, opsz, ret);
                 print_f(rs->plogs, "P2", rs->logs);    
 
                 opsz = 0 - opsz;
@@ -30319,7 +30340,7 @@ static int p2(struct procRes_s *rs)
                 
                 ring_buf_set_last(rs->pcmdRx, opsz);
                 rs_ipc_put(rs, "d", 1);
-                sprintf(rs->logs, "spi0 recv end\n");
+                sprintf(rs->logs, "spi0 recv end totsz: %d\n", totsz);
                 print_f(rs->plogs, "P2", rs->logs);
 
             }
@@ -31490,6 +31511,7 @@ static int p3(struct procRes_s *rs)
                 print_f(rs->plogs, "P3", rs->logs);
             }
             else if (cmode == 6) {
+                totsz = 0;
                 sprintf(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P3", rs->logs);
 
@@ -31519,6 +31541,8 @@ static int p3(struct procRes_s *rs)
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
 
+                            totsz += opsz;
+                            
                             if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
                             }
@@ -31536,7 +31560,7 @@ static int p3(struct procRes_s *rs)
 #endif
 
 #if P3_TX_LOG
-                            sprintf(rs->logs, "r %d - %d\n", opsz, pi);
+                            sprintf(rs->logs, "r %d/%d - %d\n", opsz, totsz, pi);
                             print_f(rs->plogs, "P3", rs->logs);
 #endif
                         }
@@ -31576,7 +31600,7 @@ static int p3(struct procRes_s *rs)
 
                 ring_buf_set_last(rs->pcmdTx, opsz);
                 rs_ipc_put(rs, "d", 1);
-                sprintf(rs->logs, "spi0 recv end\n");
+                sprintf(rs->logs, "spi0 recv end totsz: %d\n", totsz);
                 print_f(rs->plogs, "P3", rs->logs);
             }
             else if (cmode == 7) {
