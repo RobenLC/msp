@@ -2424,7 +2424,7 @@ static int mpu_read_fifo_stream(unsigned short length, unsigned char *data, unsi
         return -3;
         
     fifo_count = (tmp[0] << 8) | tmp[1];
-    //printf("[GSTEAM] FIFO count: %hd read len:  %hd\n", fifo_count, length);    
+    printf("[GSTEAM] FIFO count: %hd read len:  %hd\n", fifo_count, length);    
     
     if (fifo_count < length) {
         more[0] = 0;
@@ -2442,7 +2442,7 @@ static int mpu_read_fifo_stream(unsigned short length, unsigned char *data, unsi
 
         if (tmp[0] & BIT_FIFO_OVERFLOW) {
             printf("[GSTEAM] FIFO overflow status: 0x%x \n", tmp[0]);
-            delay_ms(1000);
+            //delay_ms(1000);
             
             mpu_reset_fifo();
             return -6;
@@ -2564,7 +2564,7 @@ static int dmp_read_fifo(short *gyro, short *accel, unsigned int *quat,
             printf("Quaternion is outside of the acceptable threshold. \n");
             //usleep(1000000);
             
-            //mpu_reset_fifo();
+            mpu_reset_fifo();
             sensors[0] = 0;
             return -1;
         }
@@ -2619,6 +2619,7 @@ static int dmp_read_fifo(short *gyro, short *accel, unsigned int *quat,
 static int mpu_read_fifo(short *gyro, short *accel, struct timespec *timestamp,
         unsigned char *sensors, unsigned char *more)
 {
+static long nsLast=0;
     /* Assumes maximum packet size is gyro (6) + accel (6). */
     unsigned char tmp[2];
     unsigned char data[MAX_PACKET_LENGTH];
@@ -2644,6 +2645,14 @@ static int mpu_read_fifo(short *gyro, short *accel, struct timespec *timestamp,
         packet_size += 2;
     if (st->chip_cfg.fifo_enable & INV_XYZ_ACCEL)
         packet_size += 6;
+
+    if (i2c_read(st->hw->addr, st->reg->fifo_count_h, 2, data))
+        return -4;
+    fifo_count = (data[0] << 8) | data[1];
+    
+    if (fifo_count < packet_size)
+        return 0;
+
 /*
     if (i2c_read(st->hw->addr, st->reg->fifo_count_h, 1, &tmp[0]))
         return -3;
@@ -2652,19 +2661,14 @@ static int mpu_read_fifo(short *gyro, short *accel, struct timespec *timestamp,
         return -3;
 
     fifo_count1 = (tmp[0] << 8) | tmp[1]; 
-*/
-
-    if (i2c_read(st->hw->addr, st->reg->fifo_count_h, 2, data))
-        return -4;
-    fifo_count = (data[0] << 8) | data[1];
-    
-    if (fifo_count < packet_size)
-        return 0;
-    //log_i("FIFO count: %hd, %hd\n", fifo_count, fifo_count1);
-    
-    #if 0
+        
+    log_i("FIFO count: %hd, %hd\n", fifo_count, fifo_count1);
+*/    
+    #if 1
     if (fifo_count > (st->hw->max_fifo >> 1)) {
         /* FIFO is 50% full, better check overflow bit. */
+        get_curtime(timestamp);
+        log_i("FIFO count: %hd (%ld) \n", fifo_count, timestamp->tv_nsec - nsLast);
         if (i2c_read(st->hw->addr, st->reg->int_status, 1, data))
             return -5;
         if (data[0] & BIT_FIFO_OVERFLOW) {
@@ -2673,7 +2677,7 @@ static int mpu_read_fifo(short *gyro, short *accel, struct timespec *timestamp,
         }
     }
     #endif
-    //get_curtime(timestamp);
+
 
     if (i2c_read(st->hw->addr, st->reg->fifo_r_w, packet_size, data))
         return -7;
@@ -2702,6 +2706,9 @@ static int mpu_read_fifo(short *gyro, short *accel, struct timespec *timestamp,
         sensors[0] |= INV_Z_GYRO;
         index += 2;
     }
+
+    get_curtime(timestamp);
+    nsLast = timestamp->tv_nsec;
 
     return 0;
 }
@@ -4057,9 +4064,9 @@ static int gyro_init(void)
     st->chip_cfg.dmp_loaded = 0;
     st->chip_cfg.dmp_sample_rate = 0;
 
-    if (mpu_set_gyro_fsr(2000))
+    if (mpu_set_gyro_fsr(250))
         return -1;
-    if (mpu_set_accel_fsr(4))
+    if (mpu_set_accel_fsr(2))
         return -1;
     if (mpu_set_lpf(42))
         return -1;
@@ -4263,12 +4270,6 @@ static int handle_input(char c)
     return 0;
 }
 
-static int calab_gyro(struct gyroc_info_s *pgyc, short *dgyr, float lsb) 
-{
-
-    return 0;
-}
-
 static inline float calab_abs_f(float f) 
 {
     if (f < 0) {
@@ -4339,7 +4340,7 @@ static int calab_find_steady(struct calab_data_s *pcd, int val, int lsb)
            printf("error!!!find div failed ret:%d !!!\n", ret);
            return -1;
        } else {
-           //printf("succeed to find steady val:%f div = %f\n", pcd->calab_avg, pcd->calab_div);
+           printf("succeed to find steady val:%f div = %f\n", pcd->calab_avg, pcd->calab_div);
            pcd->calab_done = 1;
            return pcd->calab_count;
        }
@@ -4365,7 +4366,7 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
     }
 
     flsbthd = lsb;
-    flsbthd = flsbthd * 100;
+    flsbthd = flsbthd / 100.0;
     flsbrang = lsb * 2;
     frangdiv = flsbrang / 50.0;
     
@@ -4374,14 +4375,13 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
     if (!(pacc->accelc_status & 0x1)) {
         ret = calab_find_steady(&pacc->accelc_xtmp, acx, lsb);
     }
-    
     if (ret > 0) {
         printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         pcdt = &pacc->accelc_xtmp;
         pdmax =& pacc->accelc_xmax;
         pdmin = &pacc->accelc_xmin;
 
-        //printf("accelx div = %f, threshold = %f \n", pcdt->calab_div, flsbthd);
+        printf("accelx div = %f, threshold = %f \n", pcdt->calab_div, flsbthd);
 
         if (pcdt->calab_div > flsbthd) {
             printf("accelx div = %f > %f \n", pcdt->calab_div, flsbthd);
@@ -4406,7 +4406,7 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
             range = pdmax->calab_avg - pdmin->calab_avg;
             rdiv = calab_abs_lf(flsbrang - range);
             if (rdiv < frangdiv) {
-                printf("calab get x accel range = %lf \n", range);              
+                printf("calab get x accel range = %lf, div = (%.2lf / %.2lf) \n", range, rdiv, frangdiv);              
                 pacc->accelc_status |= 0x1;
 
                 pacc->accelc_xradio = flsbrang / range;
@@ -4429,7 +4429,6 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
     if (!(pacc->accelc_status & 0x2)) {    
         ret = calab_find_steady(&pacc->accelc_ytmp, acy, lsb);
     }
-    
     if (ret > 0) {
         printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         pcdt = &pacc->accelc_ytmp;
@@ -4482,7 +4481,6 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
     if (!(pacc->accelc_status & 0x4)) {    
         ret = calab_find_steady(&pacc->accelc_ztmp, acz, lsb);
     }
-    
     if (ret > 0) {
         printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         pcdt = &pacc->accelc_ztmp;
@@ -4546,7 +4544,7 @@ static int calab_gyro(struct gyroc_info_s *pgyc, short *dgyo, float lsb)
     grx = dgyo[0];
     ret = calab_find_steady(&pgyc->gyroc_zerox, grx, (int)lsb);
     if (ret > 0) {
-        if ()
+
     }
 
     return 0;
@@ -5317,7 +5315,7 @@ static char spi1[] = "/dev/spidev32766.0";
         hal->sensors = ACCEL_ON | GYRO_ON;
         hal->report = PRINT_ACCEL;
 
-        run_self_test();
+        //run_self_test();
 
 #if 0
         /* To initialize the DMP:
@@ -5440,6 +5438,8 @@ static char spi1[] = "/dev/spidev32766.0";
              * being filled with accel data. The more parameter is non-zero if
              * there are leftover packets in the FIFO.
              */
+            //usleep(100);
+            clock_gettime(CLOCK_REALTIME, &gyrotime);
             ret = mpu_read_fifo(gyro, accel, &gyrotdif[1], &sensors, &more);
             if (ret) {
                 printf("warning!!! mpu_read_fifo ret %d \n", ret);
@@ -5452,8 +5452,11 @@ static char spi1[] = "/dev/spidev32766.0";
                     ret = calab_accel(pacclc, accel, acclsb);
                     if (ret == 0x7) {
                         midx = (pacclc->accelc_xmax.calab_avg + pacclc->accelc_xmin.calab_avg) /2;
+                        printf("Xmin: %f, Xmax: %f \n", pacclc->accelc_xmin.calab_avg, pacclc->accelc_xmax.calab_avg);
                         midy = (pacclc->accelc_ymax.calab_avg + pacclc->accelc_ymin.calab_avg) /2;
+                        printf("Ymin: %f, Ymax: %f \n", pacclc->accelc_ymin.calab_avg, pacclc->accelc_ymax.calab_avg);
                         midz = (pacclc->accelc_zmax.calab_avg + pacclc->accelc_zmin.calab_avg) /2;
+                        printf("Zmin: %f, Zmax: %f \n", pacclc->accelc_zmin.calab_avg, pacclc->accelc_zmax.calab_avg);
                         printf("accel calab succeed: xmid = %hd, ymid = %hd, zmid = %hd (%lf, %lf, %lf)\n", midx, midy, midz, pacclc->accelc_xradio, pacclc->accelc_yradio, pacclc->accelc_zradio);
                     }
                 } else {
@@ -5486,7 +5489,7 @@ static char spi1[] = "/dev/spidev32766.0";
             }
 
             if (sensors & INV_XYZ_GYRO && hal->report & PRINT_GYRO) {
-                printf("gyro:[%.5hd, %.5hd, %.5hd] ms:%llu %.1f MPU\n", gyro[0], gyro[1], gyro[2], time_get_ms(&gyrotime), gyrolsb);
+                //printf("gyro:[%.5hd, %.5hd, %.5hd] ms:%llu %.1f MPU\n", gyro[0], gyro[1], gyro[2], time_get_ms(&gyrotime), gyrolsb);
                 //send_packet(PACKET_TYPE_GYRO, gyro);
             }
             
@@ -5497,7 +5500,7 @@ static char spi1[] = "/dev/spidev32766.0";
 
             //ch = getchar();
             
-            //printf("[gyrotime] sec:%d, ms:%llu, ch:%c\n", gyrotime.tv_sec, time_get_ms(&gyrotime), ch);
+            printf("[gyrotime] sec:%d, ms:%llu, ch:%c\n", gyrotime.tv_sec, time_get_ms(&gyrotime), ch);
 
             //usleep(1200000);
             if (ch)
@@ -5585,7 +5588,7 @@ static char spi1[] = "/dev/spidev32766.0";
                 if (sensors & INV_XYZ_ACCEL && hal->report & PRINT_ACCEL) {
                     //printf("    INV_XYZ_ACCEL\n");
                     printf("accel:[%.5hd, %.5hd, %.5hd] ms:%llu lsb:%d DMP\n", accel[0], accel[1], accel[2], time_get_ms(&gyrotime), acclsb);
-                    dmp_accel_shift(accel[0], accel[1], accel[2], acclsb);
+                    //dmp_accel_shift(accel[0], accel[1], accel[2], acclsb);
                     //send_packet(PACKET_TYPE_ACCEL, accel);
                 }
                 /* Unlike gyro and accel, quaternions are written to the FIFO in
