@@ -124,6 +124,10 @@ struct accelc_info_s {
     double accelc_xradio;
     double accelc_yradio;
     double accelc_zradio;
+    double accelc_frangdiv;
+    double accelc_grange;
+    float accelc_flsbthd;
+    short   accelc_mid[4];
     struct calab_data_s accelc_xmax;
     struct calab_data_s accelc_xmin;
     struct calab_data_s accelc_xtmp;
@@ -2403,7 +2407,7 @@ static int mpu_set_dmp_state(unsigned char enable)
  *  @param[in]  data    FIFO packet.
  *  @param[in]  more    Number of remaining packets.
  */
-static int mpu_read_fifo_stream(unsigned short length, unsigned char *data, unsigned char *more)
+static int mpu_read_fifo_stream(unsigned short length, unsigned char *data, unsigned int *more)
 {
     unsigned char tmp[2];
     unsigned short fifo_count;
@@ -2506,7 +2510,7 @@ static int decode_gesture(unsigned char *gesture)
  *  @return     0 if successful.
  */
 static int dmp_read_fifo(short *gyro, short *accel, unsigned int *quat,
-    struct timespec *timestamp, short *sensors, unsigned char *more)
+    struct timespec *timestamp, short *sensors, unsigned int *more)
 {
     int ret=0;
     unsigned char fifo_data[HWST_MAX_PACKET_LENGTH];
@@ -2617,43 +2621,64 @@ static int dmp_read_fifo(short *gyro, short *accel, unsigned int *quat,
  *  @return     0 if successful.
  */
 static int mpu_read_fifo(short *gyro, short *accel, struct timespec *timestamp,
-        unsigned char *sensors, unsigned char *more)
+        unsigned char *sensors, unsigned int *more)
 {
 static long nsLast=0;
     /* Assumes maximum packet size is gyro (6) + accel (6). */
-    unsigned char tmp[2];
-    unsigned char data[MAX_PACKET_LENGTH];
-    unsigned char packet_size = 0;
-    unsigned short fifo_count, index = 0, fifo_count1;
+    unsigned char tmp[2], sflag=0;
+    unsigned short index = 0, fifo_count1;
 
+    int packet_size=0, fifo_count=0, read_count=0, readsz=0;
+    char *data=0, pbuf[1024];
+
+    //pbuf = malloc(1024);
+
+    if (!pbuf) {
+        printf("Error: allocate memory for read buffer failed!!!");
+        return -1;
+    }
+
+    data = pbuf;
+    
     if (st->chip_cfg.dmp_on) {
         printf("[GMPU] error!!! DMP is on (%d)!!!\n", st->chip_cfg.dmp_on);
         //return -1;
     }
 
-    sensors[0] = 0;
-    if (!st->chip_cfg.sensors)
+    if (!st->chip_cfg.sensors) {
         return -2;
-    if (!st->chip_cfg.fifo_enable)
+    }
+    if (!st->chip_cfg.fifo_enable) {
         return -3;
+    }
 
-    if (st->chip_cfg.fifo_enable & INV_X_GYRO)
+    if (st->chip_cfg.fifo_enable & INV_X_GYRO) {
         packet_size += 2;
-    if (st->chip_cfg.fifo_enable & INV_Y_GYRO)
+        sflag |= INV_X_GYRO;
+    }
+    if (st->chip_cfg.fifo_enable & INV_Y_GYRO) {
         packet_size += 2;
-    if (st->chip_cfg.fifo_enable & INV_Z_GYRO)
+        sflag |= INV_Y_GYRO;
+    }
+    if (st->chip_cfg.fifo_enable & INV_Z_GYRO) {
         packet_size += 2;
-    if (st->chip_cfg.fifo_enable & INV_XYZ_ACCEL)
+        sflag |= INV_Z_GYRO;
+    }
+    if (st->chip_cfg.fifo_enable & INV_XYZ_ACCEL) {
         packet_size += 6;
+        sflag |= INV_XYZ_ACCEL;
+    }
 
-    if (i2c_read(st->hw->addr, st->reg->fifo_count_h, 2, data))
+
+    if (i2c_read(st->hw->addr, st->reg->fifo_count_h, 2, data)) {
         return -4;
-    fifo_count = (data[0] << 8) | data[1];
-    
-    if (fifo_count < packet_size)
-        return 0;
+    }
 
-/*
+    fifo_count = (data[0] << 8) | data[1];
+        
+    //log_i("FIFO count: %hd\n", fifo_count);
+    
+#if 0
     if (i2c_read(st->hw->addr, st->reg->fifo_count_h, 1, &tmp[0]))
         return -3;
 
@@ -2663,7 +2688,8 @@ static long nsLast=0;
     fifo_count1 = (tmp[0] << 8) | tmp[1]; 
         
     log_i("FIFO count: %hd, %hd\n", fifo_count, fifo_count1);
-*/    
+#endif
+
     #if 1
     if (fifo_count > (st->hw->max_fifo >> 1)) {
         /* FIFO is 50% full, better check overflow bit. */
@@ -2678,37 +2704,50 @@ static long nsLast=0;
     }
     #endif
 
+    if (fifo_count < packet_size) {
+        return 0;
+    } else {
+        read_count = fifo_count / packet_size;
+        readsz = read_count * packet_size;
+    }
 
-    if (i2c_read(st->hw->addr, st->reg->fifo_r_w, packet_size, data))
+    if (i2c_read(st->hw->addr, st->reg->fifo_r_w, readsz, pbuf)) {
         return -7;
-    more[0] = fifo_count / packet_size - 1;
-    sensors[0] = 0;
+    }
+        
+    *more = read_count;
 
-    if ((index != packet_size) && st->chip_cfg.fifo_enable & INV_XYZ_ACCEL) {
-        accel[0] = (data[index+0] << 8) | data[index+1];
-        accel[1] = (data[index+2] << 8) | data[index+3];
-        accel[2] = (data[index+4] << 8) | data[index+5];
-        sensors[0] |= INV_XYZ_ACCEL;
-        index += 6;
-    }
-    if ((index != packet_size) && st->chip_cfg.fifo_enable & INV_X_GYRO) {
-        gyro[0] = (data[index+0] << 8) | data[index+1];
-        sensors[0] |= INV_X_GYRO;
-        index += 2;
-    }
-    if ((index != packet_size) && st->chip_cfg.fifo_enable & INV_Y_GYRO) {
-        gyro[1] = (data[index+0] << 8) | data[index+1];
-        sensors[0] |= INV_Y_GYRO;
-        index += 2;
-    }
-    if ((index != packet_size) && st->chip_cfg.fifo_enable & INV_Z_GYRO) {
-        gyro[2] = (data[index+0] << 8) | data[index+1];
-        sensors[0] |= INV_Z_GYRO;
-        index += 2;
+    while (read_count) {
+        if (sflag & INV_XYZ_ACCEL) {
+            accel[0] = (data[index+0] << 8) | data[index+1];
+            accel[1] = (data[index+2] << 8) | data[index+3];
+            accel[2] = (data[index+4] << 8) | data[index+5];
+            index += 6;
+        }
+        if (sflag & INV_X_GYRO) {
+            gyro[0] = (data[index+0] << 8) | data[index+1];
+            index += 2;
+        }
+        if (sflag & INV_Y_GYRO) {
+            gyro[1] = (data[index+0] << 8) | data[index+1];
+            index += 2;
+        }
+        if (sflag & INV_Z_GYRO) {
+            gyro[2] = (data[index+0] << 8) | data[index+1];
+            index += 2;
+        }
+
+        data += packet_size;
+        accel += 3;
+        gyro += 3;
+        index = 0;
+        read_count --;
     }
 
-    get_curtime(timestamp);
-    nsLast = timestamp->tv_nsec;
+    *sensors = sflag;
+    
+    //get_curtime(timestamp);
+    //nsLast = timestamp->tv_nsec;
 
     return 0;
 }
@@ -4365,10 +4404,9 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
         return pacc->accelc_status;
     }
 
-    flsbthd = lsb;
-    flsbthd = flsbthd / 100.0;
-    flsbrang = lsb * 2;
-    frangdiv = flsbrang / 50.0;
+    flsbthd = pacc->accelc_flsbthd;
+    frangdiv = pacc->accelc_frangdiv;
+    flsbrang = pacc->accelc_grange;
     
     acx = dacc[0];
     ret = 0;
@@ -4376,12 +4414,12 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
         ret = calab_find_steady(&pacc->accelc_xtmp, acx, lsb);
     }
     if (ret > 0) {
-        printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
+        //printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         pcdt = &pacc->accelc_xtmp;
         pdmax =& pacc->accelc_xmax;
         pdmin = &pacc->accelc_xmin;
 
-        printf("accelx div = %f, threshold = %f \n", pcdt->calab_div, flsbthd);
+        //printf("accelx div = %f, threshold = %f \n", pcdt->calab_div, flsbthd);
 
         if (pcdt->calab_div > flsbthd) {
             printf("accelx div = %f > %f \n", pcdt->calab_div, flsbthd);
@@ -4419,7 +4457,7 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
             printf("calab get min x accel = %f \n", pdmin->calab_avg);
         }
         
-        printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
+        //printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         memset(pcdt, 0, sizeof(struct calab_data_s));
     }
 
@@ -4430,7 +4468,7 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
         ret = calab_find_steady(&pacc->accelc_ytmp, acy, lsb);
     }
     if (ret > 0) {
-        printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
+        //printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         pcdt = &pacc->accelc_ytmp;
         pdmax =& pacc->accelc_ymax;
         pdmin = &pacc->accelc_ymin;
@@ -4472,7 +4510,7 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
             printf("calab get min y accel = %f \n", pdmin->calab_avg);
         }
         
-        printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
+        //printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         memset(pcdt, 0, sizeof(struct calab_data_s));
     }
 
@@ -4482,7 +4520,7 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
         ret = calab_find_steady(&pacc->accelc_ztmp, acz, lsb);
     }
     if (ret > 0) {
-        printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
+        //printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         pcdt = &pacc->accelc_ztmp;
         pdmax =& pacc->accelc_zmax;
         pdmin = &pacc->accelc_zmin;
@@ -4524,7 +4562,7 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
         } else if (pdmin->calab_done) {
             printf("calab get min z accel = %f \n", pdmin->calab_avg);
         }
-        printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
+        //printf("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n");
         memset(pcdt, 0, sizeof(struct calab_data_s));
     }    
 
@@ -5258,7 +5296,9 @@ static char spi1[] = "/dev/spidev32766.0";
     if (ret == -1) pabort("can't set bits per word");  
     ret = ioctl(fm[0], SPI_IOC_RD_BITS_PER_WORD, &bits); 
     if (ret == -1) pabort("can't get bits per word"); 
-	
+
+
+#define GSENSOR_TIME_LOG (0)
     if (sel == 20){ /* command mode test ex[20 ]*/ /* gyro init */
         /* Starting sampling rate. */
         #define DEFAULT_DMP_HZ  (200)
@@ -5401,13 +5441,18 @@ static char spi1[] = "/dev/spidev32766.0";
         struct accelc_info_s *pacclc=0;
         struct gyroc_info_s *pgyroc=0;
 
-        pacclc = malloc(sizeof(struct accelc_info_s));
+        float flsbthd;
+        double flsbrang, frangdiv;
+
+        pacclc = mmap(NULL, sizeof(struct accelc_info_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        //pacclc = malloc(sizeof(struct accelc_info_s));
         if (!pacclc) {
             printf("malloc for accelc failed!!! \n");
         }
         memset(pacclc, 0, sizeof(struct accelc_info_s));
         
-        pgyroc = malloc(sizeof(struct gyroc_info_s));
+        pgyroc = mmap(NULL, sizeof(struct gyroc_info_s), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        //pgyroc = malloc(sizeof(struct gyroc_info_s));
         if (!pgyroc) {
             printf("malloc for pgyroc failed!!! \n");
         }
@@ -5422,13 +5467,71 @@ static char spi1[] = "/dev/spidev32766.0";
             acclsb = -1;
         }
 
+        flsbthd = acclsb;
+        flsbthd = flsbthd / 100.0;
+        flsbrang = acclsb * 2;
+        frangdiv = flsbrang / 50.0;
+
+        pacclc->accelc_frangdiv = frangdiv;
+        pacclc->accelc_flsbthd = flsbthd;
+        pacclc->accelc_grange = flsbrang;
+        
+#define ACCEL_CALAB_DONE (1)
+#if ACCEL_CALAB_DONE
+    #define ACCEL_MID_X      (-6019)
+    #define ACCEL_MID_Y      (-11488)
+    #define ACCEL_MID_Z      (-3195)
+    #define ACCEL_RADIO_X  (1.001162)
+    #define ACCEL_RADIO_Y  (0.999877)
+    #define ACCEL_RADIO_Z  (0.994124)
+#endif
+
+#if ACCEL_CALAB_DONE                            
+        pacclc->accelc_mid[0] = ACCEL_MID_X;
+        pacclc->accelc_mid[1] = ACCEL_MID_Y;
+        pacclc->accelc_mid[2] = ACCEL_MID_Z;
+        pacclc->accelc_xradio = ACCEL_RADIO_X;
+        pacclc->accelc_yradio = ACCEL_RADIO_Y;
+        pacclc->accelc_zradio = ACCEL_RADIO_Z;
+#endif
+
 #define GSENSOR_CALAB  (1)
 
 #if 1 //GSENSOR_CALAB /* calabrate */
-        short gyro[3], accel[3];
-        unsigned char sensors=0, more=0;
+        int bufsize=0;
+        short *gybuf, *acbuf;
+        short *gyro, *accel;
+        unsigned char sensors=0;
         short midx=0, midy=0, midz=0;
+        short mgyx=0, mgyy=0, mgyz=0;
         double dx, dy, dz, dq, dg, dlsb;
+        double radx=0, rady=0, radz=0;
+
+        uint32_t procede=0;
+
+        int d_ms=0, more=0;
+
+        bufsize = 1024;
+        gybuf = malloc(bufsize);
+        if (!gybuf) {
+            printf("allocate memory for gyro failed!!! \n");
+        }
+        
+        acbuf = malloc(bufsize);
+        if (!acbuf) {
+            printf("allocate memory for accel failed!!! \n");
+        }
+
+        procede = hal->report;
+
+#if ACCEL_CALAB_DONE
+        midx = pacclc->accelc_mid[0];
+        midy = pacclc->accelc_mid[1];
+        midz = pacclc->accelc_mid[2] ;
+        radx = pacclc->accelc_xradio;
+        rady = pacclc->accelc_yradio;
+        radz = pacclc->accelc_zradio;
+#endif
 
         while (1) {
             /* This function gets new data from the FIFO. The FIFO can contain
@@ -5438,61 +5541,118 @@ static char spi1[] = "/dev/spidev32766.0";
              * being filled with accel data. The more parameter is non-zero if
              * there are leftover packets in the FIFO.
              */
-            //usleep(100);
+
+#if GSENSOR_TIME_LOG
+            clock_gettime(CLOCK_REALTIME, &gyrotdif[0]);
+#endif
+
+            usleep(16000);
+            
+#if GSENSOR_TIME_LOG                
             clock_gettime(CLOCK_REALTIME, &gyrotime);
-            ret = mpu_read_fifo(gyro, accel, &gyrotdif[1], &sensors, &more);
+            d_ms = test_time_diff(&gyrotdif[0], &gyrotime, 1000000);
+            printf("    time sleep: %d ms\n", d_ms);
+#endif                
+
+#if GSENSOR_TIME_LOG
+            clock_gettime(CLOCK_REALTIME, &gyrotime);
+            //clock_gettime(CLOCK_REALTIME, &gyrotdif[0]);
+            d_ms = test_time_diff(&gyrotdif[1], &gyrotime, 1000);
+            printf("    time delay: %d us\n", d_ms);
+#endif
+
+            more = 0;
+            sensors = 0;
+            //memset(gybuf, 0, bufsize);
+            //memset(acbuf, 0, bufsize);
+            ret = mpu_read_fifo(gybuf, acbuf, &gyrotdif[1], &sensors, &more);
             if (ret) {
                 printf("warning!!! mpu_read_fifo ret %d \n", ret);
             }
-            
-            if (sensors & INV_XYZ_ACCEL && hal->report & PRINT_ACCEL) {
-                //printf("accel:[%.5hd, %.5hd, %.5hd] ms:%llu %d MPU\n", accel[0], accel[1], accel[2], time_get_ms(&gyrotime), acclsb);
-                //send_packet(PACKET_TYPE_ACCEL, accel);
-                if (midx == 0) {
-                    ret = calab_accel(pacclc, accel, acclsb);
-                    if (ret == 0x7) {
-                        midx = (pacclc->accelc_xmax.calab_avg + pacclc->accelc_xmin.calab_avg) /2;
-                        printf("Xmin: %f, Xmax: %f \n", pacclc->accelc_xmin.calab_avg, pacclc->accelc_xmax.calab_avg);
-                        midy = (pacclc->accelc_ymax.calab_avg + pacclc->accelc_ymin.calab_avg) /2;
-                        printf("Ymin: %f, Ymax: %f \n", pacclc->accelc_ymin.calab_avg, pacclc->accelc_ymax.calab_avg);
-                        midz = (pacclc->accelc_zmax.calab_avg + pacclc->accelc_zmin.calab_avg) /2;
-                        printf("Zmin: %f, Zmax: %f \n", pacclc->accelc_zmin.calab_avg, pacclc->accelc_zmax.calab_avg);
-                        printf("accel calab succeed: xmid = %hd, ymid = %hd, zmid = %hd (%lf, %lf, %lf)\n", midx, midy, midz, pacclc->accelc_xradio, pacclc->accelc_yradio, pacclc->accelc_zradio);
+
+            //printf("    more: %d\n", more);
+#if 1
+            accel = acbuf;
+            gyro = gybuf;
+            while (more) {
+                if ((sensors & INV_XYZ_ACCEL) && (procede& PRINT_ACCEL)) {
+                    //printf("accel:[%.5hd, %.5hd, %.5hd] ms:%llu %d MPU\n", accel[0], accel[1], accel[2], time_get_ms(&gyrotime), acclsb);
+                    //send_packet(PACKET_TYPE_ACCEL, accel);
+                    if (midx == 0) {
+                        ret = calab_accel(pacclc, accel, acclsb);
+                        if (ret == 0x7) {
+                            midx = (pacclc->accelc_xmax.calab_avg + pacclc->accelc_xmin.calab_avg) /2;
+                            pacclc->accelc_mid[0] = midx;
+
+                            midy = (pacclc->accelc_ymax.calab_avg + pacclc->accelc_ymin.calab_avg) /2;
+                            pacclc->accelc_mid[1] = midy;
+
+                            midz = (pacclc->accelc_zmax.calab_avg + pacclc->accelc_zmin.calab_avg) /2;
+                            pacclc->accelc_mid[2] = midz;
+
+                            radx = pacclc->accelc_xradio;
+                            rady = pacclc->accelc_yradio;
+                            radz = pacclc->accelc_zradio;
+
+                            printf("Ymin: %f, Ymax: %f \n", pacclc->accelc_ymin.calab_avg, pacclc->accelc_ymax.calab_avg);
+                            printf("Xmin: %f, Xmax: %f \n", pacclc->accelc_xmin.calab_avg, pacclc->accelc_xmax.calab_avg);
+                            printf("Zmin: %f, Zmax: %f \n", pacclc->accelc_zmin.calab_avg, pacclc->accelc_zmax.calab_avg);
+                            printf("accel calab succeed: xmid = %hd, ymid = %hd, zmid = %hd (%lf, %lf, %lf)\n", midx, midy, midz, pacclc->accelc_xradio, pacclc->accelc_yradio, pacclc->accelc_zradio);
+                        }
+                    } else {
+                        dx = accel[0]-midx;
+                        dy = accel[1]-midy;
+                        dz = accel[2]-midz;
+                
+                        dx = dx * radz;
+                        dy = dy * rady;
+                        dz = dz * radz;
+                
+                        dq = dx*dx+dy*dy+dz*dz;
+                
+                        dlsb = acclsb;
+                        
+                        dg = sqrt(dq);
+                        //printf("accel calab g(%.4lf) x = %.5lf, y = %.5lf, z = %.5lf g = %.1lf\n", dg/dlsb, pacclc->accelc_xradio, pacclc->accelc_yradio, pacclc->accelc_zradio, dg);
+                        //printf("g: %.4lf \n", dg);
+                
+                        dq = dg/dlsb;
+                        dg = 1;
+                        
+                        dq = calab_abs_lf(dg - dq);
+                        
+                        if (dq < 0.02) {
+                            //printf("[steady] g: %.4lf \n", dq);                        
+                        } else {
+                            printf("[move] g: %.4lf \n", dq);                        
+                        }
+                        
+                        //printf("accel calab x = %hd, y = %hd, z = %hd \n", accel[0], accel[1], accel[2]);
                     }
-                } else {
-                    dx = accel[0]-midx;
-                    dy = accel[1]-midy;
-                    dz = accel[2]-midz;
-
-                    dx = dx * pacclc->accelc_xradio;
-                    dy = dy * pacclc->accelc_yradio;
-                    dz = dz * pacclc->accelc_zradio;
-
-                    dq = dx*dx+dy*dy+dz*dz;
-
-                    dlsb = acclsb;
-                    
-                    dg = sqrt(dq);
-                    printf("accel calab g(%.4lf) x = %.5lf, y = %.5lf, z = %.5lf g = %.1lf\n", dg/dlsb, pacclc->accelc_xradio, pacclc->accelc_yradio, pacclc->accelc_zradio, dg);
-
-                    dq = dg/dlsb;
-                    dg = 1;
-                    
-                    dq = calab_abs_lf(dg - dq);
-                    
-                    if (dq < 0.01) {
-                    
-                    }
-                    
-                    //printf("accel calab x = %hd, y = %hd, z = %hd \n", accel[0], accel[1], accel[2]);
                 }
-            }
+                
+                if ((sensors & INV_XYZ_GYRO) && (procede & PRINT_GYRO)) {
+                    //printf("gyro:[%.5hd, %.5hd, %.5hd] \n");
+                    //send_packet(PACKET_TYPE_GYRO, gyro);
+                    if (mgyx == 0) {
+                        //ret = calab_gyro(pgyroc, gyro, gyrolsb);
+                    } else {
+                    }
+                }
 
-            if (sensors & INV_XYZ_GYRO && hal->report & PRINT_GYRO) {
-                //printf("gyro:[%.5hd, %.5hd, %.5hd] ms:%llu %.1f MPU\n", gyro[0], gyro[1], gyro[2], time_get_ms(&gyrotime), gyrolsb);
-                //send_packet(PACKET_TYPE_GYRO, gyro);
+                accel += 3;
+                gyro += 3;
+                more --;
             }
-            
+#endif
+
+#if GSENSOR_TIME_LOG
+            clock_gettime(CLOCK_REALTIME, &gyrotdif[1]);
+
+            d_ms = test_time_diff(&gyrotime, &gyrotdif[1], 1000);
+            printf("    time comsuming: %d us\n", d_ms);
+#endif
+
         }
 #else
         while (1) {
