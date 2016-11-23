@@ -31,7 +31,7 @@
 
 #define MIN_SECTOR_SIZE (512)
 
-#define PULL_LOW_AFTER_DATA (1)
+#define PULL_LOW_AFTER_DATA (0)
 
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
@@ -167,6 +167,7 @@ static int *totSalloc=0;
 #define OUT_BUFF_LEN  (64*1024)
 #define CROP_MAX_NUM_META (18)
 #define CROP_CALCU_DETAIL (0)
+#define CROP_CALCU_PROCESS (0)
 #define PI (double)(3.1415)
 
 #define SD_RDWT_USING_META (1)
@@ -2465,10 +2466,12 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt
     if (max > 20) max = 20;
 
     memcpy(ptn, pcrp36->crp36Pots, sizeof(double) * 40);
-
+    
+#if CROP_CALCU_PROCESS
     for (i=0; i < max; i++) {
         printf("[crp36] %d. %lf, %lf \n", i, ptn[i*2+0], ptn[i*2+1]);
     }
+#endif
 
     p1 = 0; 
     p2 = CROP_MAX_NUM_META+1;
@@ -2552,9 +2555,9 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt
     pcrp36->crp36Dn = dn;
     pcrp36->crp36Rt= rt;
     pcrp36->crp36Lf = lf;
-
+#if CROP_CALCU_PROCESS
     printf("[crp36] up = %d, dn = %d , lf = %d, rt = %d \n", up, dn, lf, rt);
-
+#endif
     return 0;
 }
 
@@ -23086,8 +23089,9 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
         msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs47", mrs->log);
-#endif
         usleep(210000);
+#endif
+
 
         return 2;
     }
@@ -23927,6 +23931,7 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                 msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
                 sprintf(mrs->log, "set RDY pin %d\n",bitset);
                 print_f(&mrs->plog, "fs55", mrs->log);
+                usleep(210000);
 #endif
 #if SPI_KTHREAD_USE
                 bitset = 0;
@@ -23934,7 +23939,6 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                 sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
                 print_f(&mrs->plog, "fs55", mrs->log);
 #endif
-                usleep(210000);
 
                 modersp->m = 48;
                 return 2;
@@ -24331,6 +24335,7 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs66", mrs->log);
+            usleep(210000);
 #endif
 #if SPI_KTHREAD_USE
             bitset = 0;
@@ -24338,7 +24343,6 @@ static int fs66(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
             print_f(&mrs->plog, "fs66", mrs->log);
 #endif
-            usleep(210000);
 
             modersp->r = 1;            
             return 1;
@@ -24524,8 +24528,8 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs69", mrs->log);
-#endif
             usleep(210000);
+#endif
 
             modersp->r = 1;            
             return 1;
@@ -24797,8 +24801,8 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs74", mrs->log);
-#endif
             usleep(210000);
+#endif
 
             modersp->m = 48;            
             return 2;
@@ -25158,8 +25162,8 @@ static int fs79(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs79", mrs->log);
-#endif
             usleep(210000);
+#endif
 
             modersp->m = 48;            
             return 2;
@@ -25687,8 +25691,8 @@ static int fs83(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs83", mrs->log);
-#endif
             usleep(210000);
+#endif
 
             modersp->m = 48;            
             return 2;
@@ -26076,8 +26080,8 @@ static int fs90(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs90", mrs->log);
-#endif
             usleep(210000);
+#endif
 
             modersp->m = 48;            
             return 2;
@@ -26831,8 +26835,8 @@ static int fs97(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs97", mrs->log);
-#endif
             usleep(210000);
+#endif
 
             modersp->m = 48;            
             return 2;
@@ -27494,8 +27498,8 @@ static int fs100(struct mainRes_s *mrs, struct modersp_s *modersp)
         msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs100", mrs->log);
-#endif
         usleep(210000);
+#endif
 
         modersp->r = 1;            
         return 1;
@@ -28009,8 +28013,8 @@ static int fs111(struct mainRes_s *mrs, struct modersp_s *modersp)
         msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs111", mrs->log);
-#endif
         usleep(210000);
+#endif
 
         return 2;
     }
@@ -29172,8 +29176,8 @@ static int fs117(struct mainRes_s *mrs, struct modersp_s *modersp)
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf(mrs->log, "set RDY pin %d\n",bitset);
             print_f(&mrs->plog, "fs74", mrs->log);
-#endif
             usleep(210000);
+#endif
 
             modersp->m = 48;            
             return 2;
@@ -29220,8 +29224,8 @@ static int fs119(struct mainRes_s *mrs, struct modersp_s *modersp)
         msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs119", mrs->log);
-#endif
         usleep(210000);
+#endif
 
         modersp->v |= 0x01;
     }
@@ -29237,8 +29241,8 @@ static int fs119(struct mainRes_s *mrs, struct modersp_s *modersp)
         msp_spi_conf(mrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
         sprintf(mrs->log, "set RDY pin %d\n",bitset);
         print_f(&mrs->plog, "fs119", mrs->log);
-#endif
         usleep(210000);
+#endif
 
         modersp->v |= 0x10;
     }
@@ -29886,7 +29890,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
 #define TIME_MEASURE (0)
-#define P2_TX_LOG (1)
+#define P2_TX_LOG (0)
 #define P2_CMD_LOG (0)
 #define P2_SIMPLE_LOG (1)
 static int p2(struct procRes_s *rs)
@@ -31239,7 +31243,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
-#define P3_TX_LOG  (1)
+#define P3_TX_LOG  (0)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -31676,7 +31680,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define P4_TX_LOG  (1)
+#define P4_TX_LOG  (0)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
@@ -33097,34 +33101,41 @@ static int p6(struct procRes_s *rs)
 
             /* first stage of cropping algorithm */            
             ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
+#if CROP_CALCU_PROCESS
             sprintf(rs->logs, " crop36 get boundry, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-
+#endif
             ret = 0;
             ret |= calcuCrossUpAph(pcp36);
+#if CROP_CALCU_PROCESS
             sprintf(rs->logs, " crop36 calcu cross up, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-            
+#endif
             ret |= calcuCrossDnAph(pcp36);
+#if CROP_CALCU_PROCESS
             sprintf(rs->logs, " crop36 calcu cross down, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-
+#endif
             if (ret) {
                 getRectPoint(pcp36);
             } else {
                 ret = calcuMostRtLf(pcp36);
                 if (ret == 0) {
                     ret = calcuCrossUpLine(pcp36);
+#if CROP_CALCU_PROCESS
                     sprintf(rs->logs, " crop36 calcu cross line up, ret = %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);
-
+#endif
                     ret = calcuCrossDnLine(pcp36);
+#if CROP_CALCU_PROCESS
                     sprintf(rs->logs, " crop36 calcu cross line down, ret = %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);
-
+#endif
                     ret = getCrop36RotatePoints(pcp36);
+#if CROP_CALCU_PROCESS
                     sprintf(rs->logs, " crop36 get rotate points, ret = %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);
+#endif
                 } else {
                     getRectPoint(pcp36);
                 }
@@ -33140,34 +33151,41 @@ static int p6(struct procRes_s *rs)
 
             /* first stage of cropping algorithm */            
             ret = aspCrp36GetBoundry(pcp36duo, idxL, idxR, CROP_MAX_NUM_META+2);
+#if CROP_CALCU_PROCESS
             sprintf(rs->logs, " duo crop36 get boundry, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-
+#endif
             ret = 0;
             ret |= calcuCrossUpAph(pcp36duo);
+#if CROP_CALCU_PROCESS
             sprintf(rs->logs, " duo crop36 calcu cross up, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-            
+#endif            
             ret |= calcuCrossDnAph(pcp36duo);
+#if CROP_CALCU_PROCESS
             sprintf(rs->logs, " duo crop36 calcu cross down, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-
+#endif
             if (ret) {
                 getRectPoint(pcp36duo);
             } else {
                 ret = calcuMostRtLf(pcp36duo);
                 if (ret == 0) {
                     ret = calcuCrossUpLine(pcp36duo);
+#if CROP_CALCU_PROCESS
                     sprintf(rs->logs, " duo crop36 calcu cross line up, ret = %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);
-
+#endif
                     ret = calcuCrossDnLine(pcp36duo);
+#if CROP_CALCU_PROCESS
                     sprintf(rs->logs, " duo crop36 calcu cross line down, ret = %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);
-
+#endif
                     ret = getCrop36RotatePoints(pcp36duo);
+#if CROP_CALCU_PROCESS
                     sprintf(rs->logs, " duo crop36 get rotate points, ret = %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);
+#endif
                 } else {
                     getRectPoint(pcp36duo);
                 }
@@ -35058,7 +35076,7 @@ static int p6(struct procRes_s *rs)
     return 0;
 }
 
-#define P7_TX_LOG (1)
+#define P7_TX_LOG (0)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
@@ -37712,7 +37730,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
     int len;
     char ch[1152];
     
-#if 0 /* remove log */
+#if 1 /* remove log */
     return 0;
 #endif
 
