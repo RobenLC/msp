@@ -1270,9 +1270,9 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
         pdst = &(pmeta->SCAN_IMAGE_LEN);
         
-        lsb2Msb(pdst, 0);
-        //lsb2Msb(pdst, scan_len);
-        //lsb2Msb(pdst, 5400);
+        //lsb2Msb(pdst, 0);
+        lsb2Msb(pdst, scan_len);
+        lsb2Msb(pdst, 5400);
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {
@@ -1406,8 +1406,8 @@ static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct 
         pdst = &(pmetaduo->SCAN_IMAGE_LEN);
         
         lsb2Msb(pdst, 0);
-        //lsb2Msb(pdst, scan_len);
-        //lsb2Msb(pdst, 5400);
+        lsb2Msb(pdst, scan_len);
+        lsb2Msb(pdst, 4800);
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {
