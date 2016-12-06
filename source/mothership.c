@@ -28221,6 +28221,9 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(syscmd, "udhcpc -i mlan0 -t 3 -n");
     ret = doSystemCmd(syscmd);
 
+    sprintf(syscmd, "ifconfig");
+    ret = doSystemCmd(syscmd);
+
     sprintf(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs108", mrs->log);
 
@@ -28309,6 +28312,9 @@ static int fs112(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "send notice to P6 for meta mass ready\n");
     print_f(&mrs->plog, "fs112", mrs->log);
 
+    //modersp->r = 1;
+    //return 1;
+    
     mrs_ipc_put(mrs, "c", 1, 7);
     modersp->m = modersp->m + 1;
     return 0;
@@ -33587,7 +33593,7 @@ static int p6(struct procRes_s *rs)
                     case ASPOP_IMG_LEN:
                         pdt = &pct[idx];
                         
-                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                        if (pdt->opStatus != ASPOP_STA_NONE) {
                             sendbuf[3] = 'H';
                             sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
@@ -33667,7 +33673,7 @@ static int p6(struct procRes_s *rs)
                     case ASPOP_IMG_LEN_DUO:
                         pdt = &pct[idx];
                         
-                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                        if (pdt->opStatus != ASPOP_STA_NONE) {
                             sendbuf[3] = 'h';
                             sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
@@ -33820,6 +33826,12 @@ static int p6(struct procRes_s *rs)
                 cof = cpx + 1;
 
                 ch = 0; ret = 0;
+
+                masUsed = pmass->massUsed;
+                masStart = pmass->massStart;
+
+                sprintf(rs->logs, "wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
+                print_f(rs->plogs, "P6", rs->logs);
                 
                 while (ch != 'd') {
                     ret = rs_ipc_get(rs, &ch, 1);
@@ -33838,13 +33850,7 @@ static int p6(struct procRes_s *rs)
                 }
 
                 cnt = 0;
-
-                masUsed = pmass->massUsed;
-                masStart = pmass->massStart;
                 
-                sprintf(rs->logs, "wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
-                print_f(rs->plogs, "P6", rs->logs);
-
                 while (!masUsed) {
                     usleep(500000);
                     msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
@@ -34070,6 +34076,12 @@ static int p6(struct procRes_s *rs)
                 cof = cpx + 1;
 
                 ch = 0; ret = 0;
+
+                masUsed = pmassduo->massUsed;
+                masStart = pmassduo->massStart;
+
+                sprintf(rs->logs, "duo wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
+                print_f(rs->plogs, "P6", rs->logs);
                 
                 while (ch != 'd') {
                     ret = rs_ipc_get(rs, &ch, 1);
@@ -34088,12 +34100,6 @@ static int p6(struct procRes_s *rs)
                 }
 
                 cnt = 0;
-
-                masUsed = pmassduo->massUsed;
-                masStart = pmassduo->massStart;
-                
-                sprintf(rs->logs, "duo wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
-                print_f(rs->plogs, "P6", rs->logs);
 
                 while (!masUsed) {
                     usleep(500000);
@@ -34422,7 +34428,7 @@ static int p6(struct procRes_s *rs)
                     case ASPOP_IMG_LEN:
                         pdt = &pct[idx];
                         
-                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                        if (pdt->opStatus != ASPOP_STA_NONE) {
                             sendbuf[3] = 'L';
                             sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
@@ -34550,6 +34556,12 @@ static int p6(struct procRes_s *rs)
 
                 ch = 0; ret = 0;
                 
+                masUsed = pmass->massUsed;
+                masStart = pmass->massStart;                
+                
+                sprintf(rs->logs, "wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
+                print_f(rs->plogs, "P6", rs->logs);
+                
                 while (ch != 'c') {
                     ret = rs_ipc_get(rs, &ch, 1);
                     if (ret > 0) {
@@ -34567,12 +34579,6 @@ static int p6(struct procRes_s *rs)
                 }
 
                 cnt = 0;
-
-                masUsed = pmass->massUsed;
-                masStart = pmass->massStart;
-                
-                sprintf(rs->logs, "wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
-                print_f(rs->plogs, "P6", rs->logs);
 
                 while (!masUsed) {
                     usleep(500000);
@@ -35058,7 +35064,7 @@ static int p6(struct procRes_s *rs)
                     case ASPOP_IMG_LEN:
                         pdt = &pct[idx];
                         
-                        if (pdt->opStatus == ASPOP_STA_UPD) {
+                        if (pdt->opStatus != ASPOP_STA_NONE) {
                             sendbuf[3] = 'L';
                             sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
@@ -36068,6 +36074,9 @@ static int p8(struct procRes_s *rs)
                 printf("\tInterface : <%s>\n",ifa->ifa_name );
                 printf("\t  Address : <%s>\n", s);
 #endif
+                sprintf(rs->logs, "_M_IP_%s_ ", s);
+                dbgShowTimeStamp(rs->logs, NULL, rs, 8, NULL);
+                
                 sprintf(sendbuf, "iface: %s addr: %s port: %d", rs->pnetIntfs, s, 8000);
 
             }
@@ -36136,7 +36145,10 @@ static int p8(struct procRes_s *rs)
 #endif
         freeaddrinfo(servinfo);
         close(sockfd);
-        
+
+        sprintf(rs->logs, "_A_IP_%s_ ", d);
+        dbgShowTimeStamp(rs->logs, NULL, rs, 8, NULL);
+
         memset(&clients, 0, sizeof(clients));
         clients.ai_family = AF_INET; // set to AF_INET to force IPv4
         clients.ai_socktype = SOCK_DGRAM;
