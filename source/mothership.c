@@ -23303,8 +23303,12 @@ static int fs44(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
+    struct sdParseBuff_s *pabuf=0;
     int bitset=0, ret;
+
     bitset = 0;
+    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    
     msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs45", mrs->log);
@@ -23313,8 +23317,18 @@ static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
     sprintf(mrs->log, "Start spi0 spidev thread, ret: 0x%x\n", ret);
-    print_f(&mrs->plog, "fs16", mrs->log);
+    print_f(&mrs->plog, "fs45", mrs->log);
 #endif
+
+    ring_buf_init(&mrs->dataRx);
+    pabuf->dirBuffUsed = 0;
+    modersp->v = 0;
+    
+    sprintf(mrs->log, "trigger spi0 \n");
+    print_f(&mrs->plog, "fs45", mrs->log);
+
+    mrs_ipc_put(mrs, "s", 1, 1);
+    //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
     modersp->m = modersp->m + 1;
     return 2;
@@ -23322,14 +23336,78 @@ static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf(mrs->log, "trigger spi0 \n");
-    print_f(&mrs->plog, "fs46", mrs->log);
+    struct sdParseBuff_s *pabuf=0;
+    int ret, bitset, loop=0, len, bufn, dstsz=0, totsz;
+    char ch;
+    char *src, *dst, *pt;
 
-    mrs_ipc_put(mrs, "s", 1, 1);
-    //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+    //sprintf(mrs->log, "%d\n", modersp->v);
+    //print_f(&mrs->plog, "fs46", mrs->log);
+    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    
+    ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    while (ret > 0) {
+        if (ch == 's') {
+            modersp->v += 1;
+        }
 
-    modersp->m = modersp->m + 1;
-    return 2;
+        if (ch == 'S') {
+            sprintf(mrs->log, "ch:%c, v:%d break\n", ch, modersp->v);
+            print_f(&mrs->plog, "fs46", mrs->log);
+
+            modersp->r |= 0x1;
+            break;
+        }
+        ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    }
+
+    if (modersp->r & 0x1) {
+        bufn = ring_buf_info_len(&mrs->dataRx);
+        sprintf(mrs->log, "%d end, bufn: %d, spirecv: %d\n", modersp->v, bufn, pabuf->dirBuffUsed);
+        print_f(&mrs->plog, "fs46", mrs->log);
+
+        dstsz = (bufn + 1) * SPI_TRUNK_SZ;
+        dst = aspMemalloc(dstsz, 10);
+        if (!dst) {
+            sprintf(mrs->log, "%d. len: %d\n", loop, len);
+            print_f(&mrs->plog, "fs46", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        memset(dst, 0, dstsz);
+        pabuf->dirBuffMax = dstsz;
+
+        totsz = 0;
+        pt = dst;
+        loop = modersp->v;
+        while (loop > 0) {
+            len = ring_buf_cons(&mrs->dataRx, &src);
+            if (len < 0) {
+                sprintf(mrs->log, "ERROR!!! get ring buff failed ret: %d\n", len);
+                print_f(&mrs->plog, "fs46", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+            
+            msync(src, len, MS_SYNC);
+
+            memcpy(pt, src, len);
+
+            totsz += len;
+            pt += len;
+            loop --;
+            
+            sprintf(mrs->log, "%d. len: %d, totsz:%d\n", loop, len, totsz);
+            print_f(&mrs->plog, "fs46", mrs->log);
+        }
+
+        //pabuf->dirBuffUsed = totsz;
+        pabuf->dirParseBuff = dst;
+        modersp->m = modersp->m + 1;
+        return 2;
+    }
+
+    return 0;
 }
 
 static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -25781,7 +25859,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             pftb->h = pclst;
             pftb->c = pftb->h;
 
-            memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffMax);            
+            //memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffMax);            
             pParBuf->dirBuffUsed = 0;
             pfat->fatStatus &= ~ASPFAT_STATUS_DFECHK;   
             aspMemFree(pfdirt, 0);         
@@ -25912,7 +25990,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         mrs->folder_dirt = pfdirt;
         pParBuf->dirBuffUsed = 0;
-        memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffMax);
+        //memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffMax);
     }
 
     return 1;
@@ -26246,7 +26324,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if ((!pftb->h) && (!pflnt->n)) {
             pParBuf->dirBuffUsed = secLen * 512;
-            memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffUsed);    
+            //memset(pParBuf->dirParseBuff, 0, pParBuf->dirBuffUsed);    
             modersp->r = 1;
         } else {
         
@@ -26283,9 +26361,10 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             pfat->fatStatus |= ASPFAT_STATUS_DFERD;
             pParBuf->dirBuffUsed = 0;
-            memset(pParBuf->dirParseBuff, 0, secLen * 512);
+            //memset(pParBuf->dirParseBuff, 0, secLen * 512);
         }
-    }else {
+    }
+    else {
         if (pftb->h) {
             sprintf(mrs->log, " BEGIN... \n");
             print_f(&mrs->plog, "fs88", mrs->log);
@@ -26309,10 +26388,14 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs89(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    int bitset, ret;
+    struct sdParseBuff_s *pabuf=0;
+    char *addr=0, *src=0;
+    int bitset, ret, maxsz, totsz=0, bufn=0, cpn=0, len=0;
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs89", mrs->log);
 
+    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    
 #if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
     bitset = 0;
     ret = msp_spi_conf(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_START_THREAD
@@ -26320,8 +26403,49 @@ static int fs89(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs89", mrs->log);
 #endif
 
-    mrs_ipc_put(mrs, "w", 1, 1);
+    ring_buf_init(&mrs->dataRx);
 
+    maxsz = pabuf->dirBuffMax;
+    src = pabuf->dirParseBuff;
+
+    sprintf(mrs->log, "buff size: %d\n", maxsz);
+    print_f(&mrs->plog, "fs89", mrs->log);
+
+    while (maxsz > 0) {
+        len = ring_buf_get(&mrs->dataRx, &addr);
+        if (len <= 0) {
+            sprintf(mrs->log, "ERROR!!! get ring buffer failed ret = %d\n", len);
+            print_f(&mrs->plog, "fs89", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        if (maxsz < len) {
+            len = maxsz;
+        }
+
+        memcpy(addr, src, len);
+
+        totsz += len;
+        src += len;
+        maxsz -= len;
+        cpn++;
+
+        ring_buf_prod(&mrs->dataRx);
+
+        sprintf(mrs->log, "%d. len:%d, totsz: %d\n", cpn, len, totsz);
+        print_f(&mrs->plog, "fs89", mrs->log);
+    }
+
+    ring_buf_set_last(&mrs->dataRx, len);
+    bufn = ring_buf_info_len(&mrs->dataRx);
+    
+    sprintf(mrs->log, "cpn: %d, bufn: %d\n", cpn, bufn);
+    print_f(&mrs->plog, "fs89", mrs->log);
+
+    mrs_ipc_put(mrs, "w", 1, 1);
+    modersp->v = 0;
+    
     modersp->m = modersp->m + 1;
     return 2;
 }
@@ -28345,8 +28469,10 @@ static int fs113(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs114(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
+    struct sdParseBuff_s *pabuf=0;
     int bitset=0, ret;
     bitset = 0;
+
     msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
     print_f(&mrs->plog, "fs114", mrs->log);
@@ -28358,6 +28484,19 @@ static int fs114(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs114", mrs->log);
 #endif
 
+    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    sprintf(mrs->log, "buff used: %d/%d, reset !!\n", pabuf->dirBuffUsed, pabuf->dirBuffMax);
+    print_f(&mrs->plog, "fs114", mrs->log);
+
+    pabuf->dirBuffUsed = 0;
+    ring_buf_init(&mrs->dataRx);
+    modersp->v = 0;
+
+    sprintf(mrs->log, "trigger spi0 \n");
+    print_f(&mrs->plog, "fs114", mrs->log);
+
+    mrs_ipc_put(mrs, "l", 1, 1);
+
     modersp->m = modersp->m + 1;
     return 2;
 }
@@ -28365,23 +28504,67 @@ static int fs114(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs115(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct sdParseBuff_s *pabuf=0;
+    int ret, bitset, loop=0, len, bufn, dstsz=0, totsz;
+    char ch;
+    char *src, *dst, *pt;
 
+    //sprintf(mrs->log, "%d\n", modersp->v);
+    //print_f(&mrs->plog, "fs115", mrs->log);
     pabuf = &mrs->aspFat.fatDirPool->parBuf;
-    sprintf(mrs->log, "buff used: %d/%d, reset !!\n", pabuf->dirBuffUsed, pabuf->dirBuffMax);
-    print_f(&mrs->plog, "fs115", mrs->log);
     
-    pabuf->dirBuffUsed = 0;
-    
-    sprintf(mrs->log, "trigger spi0 \n");
-    print_f(&mrs->plog, "fs115", mrs->log);
+    ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    while (ret > 0) {
+        if (ch == 'l') {
+            modersp->v += 1;
+        }
 
-    mrs_ipc_put(mrs, "l", 1, 1);
-    //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+        if (ch == 'L') {
+            sprintf(mrs->log, "ch:%c, v:%d break\n", ch, modersp->v);
+            print_f(&mrs->plog, "fs115", mrs->log);
 
-    //modersp->v = 45;
-    
-    modersp->m = modersp->m + 1;
-    return 2;
+            modersp->r |= 0x1;
+            break;
+        }
+        ret = mrs_ipc_get(mrs, &ch, 1, 1);
+    }
+
+    if (modersp->r & 0x1) {
+        bufn = ring_buf_info_len(&mrs->dataRx);
+        sprintf(mrs->log, "%d end, bufn: %d, spirecv: %d\n", modersp->v, bufn, pabuf->dirBuffUsed);
+        print_f(&mrs->plog, "fs115", mrs->log);
+
+        dstsz = bufn * SPI_TRUNK_SZ;
+        dst = aspMemalloc(dstsz, 10);
+        if (!dst) {
+            sprintf(mrs->log, "%d. len: %d\n", loop, len);
+            print_f(&mrs->plog, "fs115", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+
+        totsz = 0;
+        pt = dst;
+        loop = modersp->v;
+        while (loop > 0) {
+            len = ring_buf_cons(&mrs->dataRx, &src);
+
+            memcpy(pt, src, len);
+
+            totsz += len;
+            pt += len;
+            loop --;
+            
+            sprintf(mrs->log, "%d. len: %d, totsz:%d\n", loop, len, totsz);
+            print_f(&mrs->plog, "fs115", mrs->log);
+        }
+
+        //pabuf->dirBuffUsed = totsz;
+        pabuf->dirParseBuff = dst;
+        modersp->m = modersp->m + 1;
+        return 2;
+    }
+
+    return 0;    
 }
 
 static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -28442,9 +28625,10 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         bpp = bheader->aspbiCPP >> 16;
         oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
 
-        rawCpy = aspMemalloc(rawsz, 10);
         //rawCpy = mrs->bmpRotate.aspRotCpyBuff;
-        len = mrs->bmpRotate.aspRotBuffSize;
+        //len = mrs->bmpRotate.aspRotBuffSize;
+        rawCpy = aspMemalloc(rawsz, 10);
+        len = rawsz;
         if (len < rawsz) {
             sprintf(mrs->log, "ERROR!!! copy buffer is not enough!!! size %d, need %d !!!\n", len, rawsz);
             print_f(&mrs->plog, "fs116", mrs->log);
@@ -29467,6 +29651,7 @@ static int fs117(struct mainRes_s *mrs, struct modersp_s *modersp)
             usleep(210000);
 #endif
 
+            aspMemClear(aspMemAsign, asptotMalloc, 10);
             modersp->m = 48;            
             return 2;
         }
@@ -30698,10 +30883,14 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_0_ BEG");
                 tlast = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_S_");
 
-                addr = pabuf->dirParseBuff + pabuf->dirBuffUsed;
-                len = 0;
+                //addr = pabuf->dirParseBuff + pabuf->dirBuffUsed;
+                totsz = 0;
                 pi = 0;  
                 while (1) {
+                    len = 0;
+                    len = ring_buf_get(rs->pdataRx, &addr);
+                    
+                    if (len > 0) {
                     //msync(addr, SPI_TRUNK_SZ, MS_SYNC);     
                     //shmem_check(addr, len);
 #if SPI_KTHREAD_USE
@@ -30746,27 +30935,29 @@ static int p2(struct procRes_s *rs)
                         continue;
                     }
 
-                    if (opsz < 0) break;
-                    if (len > (maxLen -SPI_TRUNK_SZ)) break;
-                    
-                    addr += opsz;
-                    len += opsz;
+                    ring_buf_prod(rs->pdataRx);
+                    rs_ipc_put(rs, "s", 1);
+                    if (opsz < 0) {
+                        sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);    
+                        break;
+                    }
                     pi += 1;
-
+                    totsz += opsz;                    
+                    }
                 }
 
                 opsz = 0 - opsz;
                 if (opsz == 1) opsz = 0;
 
-                len += opsz;
+                totsz += opsz;
 
-                if (len != datLen) {
-                    sprintf(rs->logs, "total len: %d, actual len: %d\n", len, datLen);
+                if (totsz != datLen) {
+                    sprintf(rs->logs, "WARNNING!!! total len: %d, actual len: %d\n", totsz, datLen);
                     print_f(rs->plogs, "P2", rs->logs);
-                    len = datLen; 
                 }
 
-                sprintf(rs->logs, "_SPI_0_ END %d bytes ", len);
+                sprintf(rs->logs, "_SPI_0_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_E_");
 
                 fltime = (float)(tdiff - tlast);
@@ -30775,16 +30966,16 @@ static int p2(struct procRes_s *rs)
                 } else {
                     thrput = (float) totsz /fltime;
                 }
-
                 sprintf(rs->logs, "_SPI_0_ throughput: %.2f KB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
-                
-                //pabuf->dirBuffUsed += datLen;
-                pabuf->dirBuffUsed += len;
-                msync(pabuf->dirParseBuff, len, MS_SYNC);
+
+                ring_buf_set_last(rs->pdataRx, opsz);
+                rs_ipc_put(rs, "S", 1);
+                pabuf->dirBuffUsed += totsz;
+                //msync(pabuf->dirParseBuff, len, MS_SYNC);
                 rs_ipc_put(rs, "S", 1);
 
-                sprintf(rs->logs, "spi0 recv end - total len: %d\n", len);
+                sprintf(rs->logs, "spi0 recv end - totsz: %d\n", totsz);
                 print_f(rs->plogs, "P2", rs->logs);
             }
             else if (cmode == 8) {
@@ -31135,6 +31326,7 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_0_ END %d bytes ", len);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_E_");
 
+                totsz = len;
                 fltime = (float)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
@@ -31174,13 +31366,19 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_0_ BEG");
                 tlast = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_S_");
 
-                addr = pabuf->dirParseBuff;
-                msync(addr, psec->secPrClst*512, MS_SYNC);
+                //addr = pabuf->dirParseBuff;
+                //msync(addr, psec->secPrClst*512, MS_SYNC);
                 //shmem_dump(addr, psec->secPrClst*512);
                 
-                len = 0;
+                totsz = 0;
                 pi = 0;  
                 while (1) {
+                    len = 0;
+                    len = ring_buf_cons(rs->pdataRx, &addr);
+                    if (len < 0) {
+                        addr = rx_buff;
+                    }
+                    
 #if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                     while (opsz == 0) {
@@ -31223,17 +31421,16 @@ static int p2(struct procRes_s *rs)
 
                     if (opsz < 0) break;
                     
-                    addr += opsz;
-                    len += opsz;
+                    totsz += opsz;
                     pi += 1;
                 }
 
                 opsz = 0 - opsz;
                 if (opsz == 1) opsz = 0;
 
-                len += opsz;
+                totsz += opsz;
 
-                sprintf(rs->logs, "_SPI_0_ END %d bytes ", len);
+                sprintf(rs->logs, "_SPI_0_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_E_");
 
                 fltime = (float)(tdiff - tlast);
@@ -31246,15 +31443,15 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_0_ throughput: %.2f KB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
-                if (len != datLen) {
-                    sprintf(rs->logs, "total len: %d, actual len: %d\n", len, datLen);
+                if (totsz != datLen) {
+                    sprintf(rs->logs, "WARNNING!!!total len: %d, actual len: %d\n", totsz, datLen);
                     print_f(rs->plogs, "P2", rs->logs);
-                    len = datLen; 
+                    totsz = datLen; 
                 }
 
                 rs_ipc_put(rs, "W", 1);
 
-                sprintf(rs->logs, "spi0 recv end - total len: %d\n", len);
+                sprintf(rs->logs, "spi0 recv end - total len: %d\n", totsz);
                 print_f(rs->plogs, "P2", rs->logs);
             }
             else if (cmode == 13) {
@@ -31498,10 +31695,14 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "cmode: %d, ready for tx, maxLen:%d\n", cmode, maxLen);
                 print_f(rs->plogs, "P2", rs->logs);
 
-                addr = pabuf->dirParseBuff + pabuf->dirBuffUsed;
-                len = 0;
+                //addr = pabuf->dirParseBuff + pabuf->dirBuffUsed;
+                totsz = 0;
                 pi = 0;  
                 while (1) {
+                    len = 0;
+                    len = ring_buf_get(rs->pdataRx, &addr);
+                    
+                    if (len > 0) {
                     //msync(addr, SPI_TRUNK_SZ, MS_SYNC);     
                     //shmem_check(addr, len);
 #if SPI_KTHREAD_USE
@@ -31546,25 +31747,31 @@ static int p2(struct procRes_s *rs)
                         continue;
                     }
 
-                    if (opsz < 0) break;
-                    if (len > (maxLen -SPI_TRUNK_SZ)) break;
-                    
-                    addr += opsz;
-                    len += opsz;
+                    //msync(addr, len, MS_SYNC);
+                    ring_buf_prod(rs->pdataRx);
+                    rs_ipc_put(rs, "l", 1);
+                    if (opsz < 0) {
+                        sprintf(rs->logs, "opsz:%d break!\n", opsz);
+                        print_f(rs->plogs, "P2", rs->logs);    
+                        break;
+                    }
                     pi += 1;
-
+                    totsz += opsz;
+                    }
                 }
 
                 opsz = 0 - opsz;
                 if (opsz == 1) opsz = 0;
 
-                len += opsz;
-
-                pabuf->dirBuffUsed += len;
-                msync(pabuf->dirParseBuff, len, MS_SYNC);
+                totsz += opsz;
+                
+                ring_buf_set_last(rs->pdataRx, opsz);
+                rs_ipc_put(rs, "L", 1);
+                pabuf->dirBuffUsed += totsz;
+                //msync(pabuf->dirParseBuff, len, MS_SYNC);
                 rs_ipc_put(rs, "L", 1);
 
-                sprintf(rs->logs, "spi0 recv end - total len: %d\n", len);
+                sprintf(rs->logs, "spi0 recv end - totsz: %d\n", totsz);
                 print_f(rs->plogs, "P2", rs->logs);
             }
             else if (cmode == 17) {
@@ -31622,8 +31829,6 @@ static int p2(struct procRes_s *rs)
                             print_f(rs->plogs, "P2", rs->logs);
 #endif
                         }
-
-                        totsz += opsz;
                         
                         //msync(addr, len, MS_SYNC);
                         ring_buf_prod(rs->pcmdRx);    
@@ -31633,6 +31838,7 @@ static int p2(struct procRes_s *rs)
                             break;
                         }
                         rs_ipc_put(rs, "p", 1);
+                        totsz += opsz;
                         pi += 1;
                     }
                 }
@@ -38151,7 +38357,12 @@ int main(int argc, char *argv[])
     }
     pool->dirMax = DIR_POOL_SIZE;
     pool->dirUsed = 0;
-    
+
+#if 1
+    pool->parBuf.dirParseBuff = 0;
+    pool->parBuf.dirBuffUsed = 0;
+    pool->parBuf.dirBuffMax = 0;
+#else
     pool->parBuf.dirParseBuff = aspSalloc(16*1024*1024); // 16MB
     if (!pool->parBuf.dirParseBuff) {
         sprintf(pmrs->log, "alloc share memory for FAT dir parsing buffer FAIL!!!\n"); 
@@ -38163,6 +38374,7 @@ int main(int argc, char *argv[])
     }
     pool->parBuf.dirBuffMax = 16*1024*1024;
     pool->parBuf.dirBuffUsed = 0;
+#endif
 
     pmrs->aspFat.fatStatus = ASPFAT_STATUS_INIT;
 
