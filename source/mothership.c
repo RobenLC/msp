@@ -33,7 +33,7 @@
 
 #define MIN_SECTOR_SIZE (512)
 
-#define PULL_LOW_AFTER_DATA (0)
+#define PULL_LOW_AFTER_DATA (1)
 
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
@@ -153,7 +153,7 @@ static int *totSalloc=0;
 #define MSP_P_NUM (11) /* P0 ~ P8 */
 #define ASP_MEM_SLOT_NUM (1024)
 
-#define DIR_POOL_SIZE (20480)
+#define DIR_POOL_SIZE (1024)
 
 #define MAX_PDF_H  (900.0)
 #define MAX_PDF_W (1600.0)
@@ -6235,7 +6235,7 @@ static void* aspSalloc(int slen)
     
     tot = *totSalloc;
     tot += slen;
-    //printf("*******************  salloc size: %d / %d\n", slen, tot);
+    printf("*******************  salloc size: %d / %d\n", slen, tot);
     *totSalloc = tot;
     
     p = mmap(NULL, slen, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -24162,8 +24162,8 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
             if (!pftb->ftbFat1) {
                 secLen = p->opinfo;
                 val = secLen * 512;
-                //pftb->ftbFat1 = aspMemalloc(val);
-                pftb->ftbFat1 = aspSalloc(val);
+                pftb->ftbFat1 = aspMemalloc(val, 8);
+                //pftb->ftbFat1 = aspSalloc(val);
                 if (!pftb->ftbFat1) {
                     sprintf(mrs->log, "aspMemalloc for FAT table FAIL!! \n");
                     print_f(&mrs->plog, "fs55", mrs->log);
@@ -28442,8 +28442,8 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
         bpp = bheader->aspbiCPP >> 16;
         oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
 
-        //rawCpy = aspMemalloc(rawsz, 0);
-        rawCpy = mrs->bmpRotate.aspRotCpyBuff;
+        rawCpy = aspMemalloc(rawsz, 10);
+        //rawCpy = mrs->bmpRotate.aspRotCpyBuff;
         len = mrs->bmpRotate.aspRotBuffSize;
         if (len < rawsz) {
             sprintf(mrs->log, "ERROR!!! copy buffer is not enough!!! size %d, need %d !!!\n", len, rawsz);
@@ -38080,6 +38080,7 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "BITMAP", pmrs->log);
     }
 
+/*
     pmrs->bmpRotate.aspRotCpyBuff= aspSalloc(8*1024*1024);
     if (!pmrs->bmpRotate.aspRotCpyBuff) {
         sprintf(pmrs->log, "alloc share memory for BITMAP copy buffer FAIL!!! size = %d\n", 8*1024*1024); 
@@ -38091,6 +38092,7 @@ int main(int argc, char *argv[])
         sprintf(pmrs->log, "alloc share memory for BITMAP copy buffer DONE [0x%.8x]!!! size = %d\n", pmrs->bmpRotate.aspRotCpyBuff, pmrs->bmpRotate.aspRotBuffSize); 
         print_f(&pmrs->plog, "BITMAP", pmrs->log);
     }
+*/
 
     dbgShowTimeStamp("s8", pmrs, NULL, 2, NULL);
     
