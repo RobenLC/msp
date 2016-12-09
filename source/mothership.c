@@ -21,7 +21,7 @@
 #include <ifaddrs.h>
 #include <math.h>
 //main()
-#define MSP_VERSION "2016.11.30 LAST MODIFIED"
+#define MSP_VERSION "Wed Dec 7 17:14:18 2016 35ec22bbb7"
 
 #define SPI1_ENABLE (1) 
 
@@ -164,15 +164,18 @@ static int *totSalloc=0;
 #define SCANGO_CHECK (1)
 
 #define SAVE_CROP_MASS (0)
-#define MSP_SAVE_LOG (0)
+#define MSP_SAVE_LOG_TO_FILE (0)
 
 #define OUT_BUFF_LEN  (64*1024)
 #define CROP_MAX_NUM_META (18)
 #define CROP_CALCU_DETAIL (0)
 #define CROP_CALCU_PROCESS (0)
 
-#define LOG_FAT32 (0)
-#define LOG_DOT_PROGRESS (0)
+#define FAT_DIRPOOL_IDX_MAX   (56850)
+#define FAT_DIRPOO_ARY_MAX   (65535)
+
+#define LOG_FS_EN (0)
+#define LOG_DOT_PROG_EN (0)
 
 #define PI (double)(3.1415)
 
@@ -538,6 +541,7 @@ struct supdataBack_s{
 };
 
 struct directnFile_s{
+    uint32_t   dfindex;
     uint32_t   dftype;
     uint32_t   dfstats;
     char        dfLFN[256];
@@ -552,9 +556,12 @@ struct directnFile_s{
     uint32_t   dfclstnum;
     uint32_t   dflength;
     struct directnFile_s *pa;
+    uint32_t   dfpaid;
     struct directnFile_s *br;
+    uint32_t   dfbrid;
     struct directnFile_s *ch;   
-
+    uint32_t   dfchid;
+    
     struct adFATLinkList_s *fln;
 };
 
@@ -654,27 +661,34 @@ struct sdParseBuff_s{
 };
 
 struct sdDirPool_s{
-    struct sdParseBuff_s parBuf;
     int dirMax;
     int dirUsed;
-    struct directnFile_s   *dirPool;
+    struct directnFile_s   dirPool[FAT_DIRPOOL_IDX_MAX];
+};
+
+struct sdFatDir_s{
+    int dirFATMax;
+    int dirFATUsed;
+    int dirFATDirty;
+    struct sdDirPool_s      *fatDirPool[FAT_DIRPOO_ARY_MAX];
 };
 
 struct sdFAT_s{
     int fatStatus;
     int fatRetry;
-    struct sdbootsec_s   *fatBootsec;
-    struct sdFSinfo_s     *fatFSinfo;
-    struct sdFATable_s   *fatTable;
-    struct directnFile_s   *fatRootdir;
-    struct directnFile_s    *fatFileDnld;
-    struct directnFile_s    *fatFileUpld;
-    struct directnFile_s    *fatCurDir;
-    struct sdDirPool_s    *fatDirPool;
-    struct supdataBack_s *fatSupdata;
-    struct supdataBack_s *fatSupcur;
-    struct supdataBack_s *fatSupdataDuo;
-    struct supdataBack_s *fatSupcurDuo;
+    struct directnFile_s     fatFileDnld;
+    struct directnFile_s     fatFileUpld;
+    struct directnFile_s     fatCurDir;
+    struct directnFile_s     fatRootdir;
+    struct sdbootsec_s     *fatBootsec;
+    struct sdFSinfo_s        *fatFSinfo;
+    struct sdFATable_s      *fatTable;
+    struct sdFatDir_s         fatDirTr;
+    struct sdParseBuff_s  parBuf;
+    struct supdataBack_s    *fatSupdata;
+    struct supdataBack_s    *fatSupcur;
+    struct supdataBack_s    *fatSupdataDuo;
+    struct supdataBack_s    *fatSupcurDuo;
 };
 
 struct psdata_s {
@@ -1020,6 +1034,7 @@ struct procRes_s{
     int spifd;
     struct psdata_s *pstdata;
     struct sdFAT_s *psFat;
+    struct sdFatDir_s   *cpyfatDirTr;
     struct aspConfig_s *pcfgTable;
     struct pipe_s *ppipedn;
     struct pipe_s *ppipeup;
@@ -2129,7 +2144,7 @@ static int aspMemDebug(struct aspMemAsign_s *msa, int *memtot, int *shmemtot)
     return 0;
 }
 
-#define DEBUG_MEMALLOC_LOG (0)
+#define LOG_DEBUG_MEMALLOC (0)
 static void* aspMemalloc(uint32_t asz, int pidx) 
 {
     char mlog[256];
@@ -2141,14 +2156,14 @@ static void* aspMemalloc(uint32_t asz, int pidx)
 
     mlen = asz;
     rst = mlen % MIN_MEM_ALLOC_SIZE;
-#if DEBUG_MEMALLOC_LOG
+#if LOG_DEBUG_MEMALLOC
     sprintf(mlog, "malloc rst: %d, asz:%d, mlen: %d\n", rst, asz, mlen);
     print_f(mlogPool, "MEM", mlog);
 #endif
     if (rst != 0) {
         num = mlen / MIN_MEM_ALLOC_SIZE;
         mlen = (num + 1) * MIN_MEM_ALLOC_SIZE;
-#if DEBUG_MEMALLOC_LOG
+#if LOG_DEBUG_MEMALLOC
         sprintf(mlog, "malloc num: %d, mlen: %d\n", num, mlen);
         print_f(mlogPool, "MEM", mlog);
 #endif
@@ -2161,7 +2176,7 @@ static void* aspMemalloc(uint32_t asz, int pidx)
     
     for (mi = 0; mi < ASP_MEM_SLOT_NUM; mi++) {
         if (ms->aspMemAddr[mi] == 0) {
-#if DEBUG_MEMALLOC_LOG
+#if LOG_DEBUG_MEMALLOC
             sprintf(mlog, "malloc [%d] SIZE: %d\n", mi, mlen);
             print_f(mlogPool, "MEM", mlog);
 #endif
@@ -2177,7 +2192,7 @@ static void* aspMemalloc(uint32_t asz, int pidx)
 
             msync(ms, sizeof(struct aspMemAsign_s), MS_SYNC);
             msync(asptotMalloc, sizeof(int) * MSP_P_NUM, MS_SYNC);
-#if DEBUG_MEMALLOC_LOG
+#if LOG_DEBUG_MEMALLOC
             sprintf(mlog, "[%d ] ALLOC [%d] ADDR: 0x%.8x, SIZE: %d\n", pidx, mi, ms->aspMemAddr[mi], ms->aspMemSize[mi]);
             print_f(mlogPool, "MEM", mlog);
 #endif
@@ -2993,7 +3008,7 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen)
     return 0;
 }
 
-#define CROP_CROSUP_LOG (0)
+#define LOG_CROP_CROSUP (0)
 static int calcuCrossUpAph(struct aspCrop36_s *pcp36) 
 {
 #define UP_NUM 3
@@ -3020,7 +3035,7 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
 
         pru[j*2+0] = pn[Rc*2+0];
         pru[j*2+1] = pn[Rc*2+1];
-#if CROP_CROSUP_LOG
+#if LOG_CROP_CROSUP
         printf( "[csUP] %d. (LU) copy (%d), %lf,  %lf (RU) copy (%d), %lf,  %lf\n", j, Lc, round(plu[j*2+0]), round(plu[j*2+1]), Rc, round(pru[j*2+0]), round(pru[j*2+1]));    
 #endif
 
@@ -3033,11 +3048,11 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
 
     ret = calcuGroupLine(plu, vlu, &divLU, UP_NUM);
     if (ret == 0) {
-#if CROP_CROSUP_LOG
+#if LOG_CROP_CROSUP
         printf("[csUP] succeed to get group line vLU, divLU = %lf \n", divLU);    
 #endif
     } else {
-#if CROP_CROSUP_LOG
+#if LOG_CROP_CROSUP
         printf("[csUP] failed to get group line vLU, ret = %d \n", ret);    
 #endif
         return -2;
@@ -3045,11 +3060,11 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
 
     ret = calcuGroupLine(pru, vru, &divRU, UP_NUM);
     if (ret == 0) {
-#if CROP_CROSUP_LOG
+#if LOG_CROP_CROSUP
         printf("[csUP] succeed to get group line vRU, divRU = %lf\n", divRU);
 #endif
     } else {
-#if CROP_CROSUP_LOG
+#if LOG_CROP_CROSUP
         printf("[csUP] WARNNING!!! failed to get group line vRU, ret = %d \n", ret);    
 #endif
         return -3;
@@ -3059,11 +3074,11 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
 
     ret = getCross(vlu, vru, cosUp);
     if (ret == 0) {
-#if CROP_CROSUP_LOG
+#if LOG_CROP_CROSUP
         printf("[csUP ]succeed to get cross up = (%lf, %lf)\n", cosUp[0], cosUp[1]);
 #endif
     } else {
-#if CROP_CROSUP_LOG
+#if LOG_CROP_CROSUP
         printf("[csUP] WARNNING!!! failed to get cross up, ret = %d\n", ret);
 #endif
         return -4;
@@ -3074,7 +3089,7 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
     return 0;
 }
 
-#define CROP_RECT_LOG (0)
+#define LOG_CROP_RECT (0)
 static int getRectPoint(struct aspCrop36_s *pcp36) 
 {
     int ret=0, err=0;
@@ -3113,7 +3128,7 @@ static int getRectPoint(struct aspCrop36_s *pcp36)
         printf("[rect] Error!!! get rect cross RD failed!!!!\n");
         err++;
     }
-#if CROP_RECT_LOG
+#if LOG_CROP_RECT
     printf("[rect] get rect LU = (%lf, %lf) \n", pLU[0], pLU[1]);
     printf("[rect] get rect RU = (%lf, %lf) \n", pRU[0], pRU[1]);
     printf("[rect] get rect RD = (%lf, %lf) \n", pRD[0], pRD[1]);
@@ -3131,7 +3146,7 @@ static int getRectPoint(struct aspCrop36_s *pcp36)
     return 0;
 }
 
-#define CROP_CROSSUPLINE_LOG (0)
+#define LOG_CROP_CROSSUPLINE (0)
 static int calcuCrossUpLine(struct aspCrop36_s *pcp36) 
 {
     double angleCsUp;
@@ -3146,7 +3161,7 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
 
     csUp = pcp36->crp36CsUp;
     pn = pcp36->crp36Pots;
-#if CROP_CROSSUPLINE_LOG
+#if LOG_CROP_CROSSUPLINE
     printf( "[csULine] cross Down = (%lf, %lf)\n", round(csUp[0]), round(csUp[1]));
 #endif
     angleCsUp = getAngle(csUp, &pn[1*2], &pn[4*2]);
@@ -3155,12 +3170,12 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
     
     ret = getVectorFromP(cslineLU, &pn[1*2], csUp);
     if (ret != 0) {
-#if CROP_CROSSUPLINE_LOG
+#if LOG_CROP_CROSSUPLINE
         printf( "[csULine] get cslineLU vector fauled!!!\n"); 
 #endif
         err++;
     } else {
-#if CROP_CROSSUPLINE_LOG
+#if LOG_CROP_CROSSUPLINE
         printf( "[csULine] get cslineLU vector succeed!!!\n");
 #endif
         memcpy(pcp36->crp36CsLineLU, cslineLU, sizeof(double)*3);
@@ -3168,12 +3183,12 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
     
     ret = getVectorFromP(cslineRU, &pn[4*2], csUp);
     if (ret != 0) {
-#if CROP_CROSSUPLINE_LOG
+#if LOG_CROP_CROSSUPLINE
         printf( "[csULine] get cslineRU vector fauled!!!\n"); 
 #endif
         err++;
     } else {
-#if CROP_CROSSUPLINE_LOG
+#if LOG_CROP_CROSSUPLINE
         printf( "[csULine] get cslineRU vector succeed!!!\n");
 #endif
         memcpy(pcp36->crp36CsLineRU, cslineRU, sizeof(double)*3);
@@ -3182,7 +3197,7 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
     return err;
 }
 
-#define CROP_CROSSDNLINE_LOG (0)
+#define LOG_CROP_CROSSDNLINE (0)
 static int calcuCrossDnLine(struct aspCrop36_s *pcp36) 
 {
     double angleCsDn;
@@ -3197,7 +3212,7 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
 
     csDn = pcp36->crp36CsDn;
     pn = pcp36->crp36Pots;
-#if CROP_CROSSDNLINE_LOG
+#if LOG_CROP_CROSSDNLINE
     printf( "[csDLine] cross Down = (%lf, %lf) \n", round(csDn[0]), round(csDn[1]));
 #endif    
     angleCsDn = getAngle(csDn, &pn[1*2], &pn[4*2]);
@@ -3210,7 +3225,7 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
         printf( "[csDLine] get cslineLD vector fauled!!!\n"); 
         err++;
     } else {
-#if CROP_CROSSDNLINE_LOG
+#if LOG_CROP_CROSSDNLINE
         printf( "[csDLine] get cslineLD vector succeed!!!\n");
 #endif
         memcpy(pcp36->crp36CsLineLD, cslineLD, sizeof(double)*3);
@@ -3221,7 +3236,7 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
         printf( "[csDLine] get cslineRD vector fauled!!!\n"); 
         err++;
     } else {
-#if CROP_CROSSDNLINE_LOG
+#if LOG_CROP_CROSSDNLINE
         printf( "[csDLine] get cslineRD vector succeed!!!\n");
 #endif
         memcpy(pcp36->crp36CsLineRD, cslineRD, sizeof(double)*3);
@@ -3230,7 +3245,7 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
     return err;
 }
 
-#define CROP_MOSTRL_LOG (0)
+#define LOG_CROP_MOSTRL (0)
 static int calcuMostRtLf(struct aspCrop36_s *pcp36)
 {
     int mrtset=0, mlfset=0, csupset=0, csdnset=0;
@@ -3293,7 +3308,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
     }
     
     distDn = calcuDistance(csDn, rtpoint);
-#if CROP_MOSTRL_LOG
+#if LOG_CROP_MOSTRL
     printf("[RTLF] distance Up = %lf, distance Down = %lf, max distance = %lf\n", distUp, distDn, maxD);
 #endif    
     if ((distUp > maxD) && (distDn > maxD)) {
@@ -3405,7 +3420,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
     adn = pcp36->crp36AngleDn;
     alf = pcp36->crp36AngleLf;
     art = pcp36->crp36AngleRt;
-#if CROP_MOSTRL_LOG
+#if LOG_CROP_MOSTRL
     printf("[RTLF] angle Up = %lf, Dn = %lf, Lf = %lf, Rt = %lf \n", round(aup), round(adn), round(alf), round(art));
     
     printf("[RTLF] pos up(%d, %d), dn(%d, %d), lf(%d, %d), rt(%d, %d)\n", (int)round(up[0]), (int)round(up[1])
@@ -3414,7 +3429,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
     return 0;
 }
 
-#define CROP_CROSSDNAPH_LOG (0)
+#define LOG_CROP_CROSSDNAPH (0)
 static int calcuCrossDnAph(struct aspCrop36_s *pcp36) 
 {
 #define DN_NUM 5
@@ -3441,7 +3456,7 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
         prd[j*2+0] = pn[Rc*2+0];
         prd[j*2+1] = pn[Rc*2+1];
-#if CROP_CROSSDNAPH_LOG
+#if LOG_CROP_CROSSDNAPH
         printf( "[csDN] %d. (LD) copy (%d), %lf,  %lf (RD) copy (%d), %lf,  %lf \n", j, Lc, round(pld[j*2+0]), round(pld[j*2+1]), Rc, round(prd[j*2+0]), round(prd[j*2+1]));    
 #endif
     }
@@ -3453,11 +3468,11 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
     ret = calcuGroupLine(pld, vld, &divLD, DN_NUM);
     if (ret == 0) {
-#if CROP_CROSSDNAPH_LOG
+#if LOG_CROP_CROSSDNAPH
         printf("[csDN] succeed to get group line vLD, divLD = %lf \n", divLD);    
 #endif
     } else {
-#if CROP_CROSSDNAPH_LOG
+#if LOG_CROP_CROSSDNAPH
         printf("[csDN] failed to get group line vLD, ret = %d \n", ret);    
 #endif
         return -2;
@@ -3465,11 +3480,11 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
     ret = calcuGroupLine(prd, vrd, &divRD, DN_NUM);
     if (ret == 0) {
-#if CROP_CROSSDNAPH_LOG
+#if LOG_CROP_CROSSDNAPH
         printf("[csDN] succeed to get group line vRD, divRD = %lf \n", divRD);    
 #endif
     } else {
-#if CROP_CROSSDNAPH_LOG
+#if LOG_CROP_CROSSDNAPH
         printf("[csDN] failed to get group line vRD, ret = %d \n", ret);    
 #endif
         return -3;
@@ -3479,11 +3494,11 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
 
     ret = getCross(vld, vrd, csDown);
     if (ret == 0) {
-#if CROP_CROSSDNAPH_LOG
+#if LOG_CROP_CROSSDNAPH
         printf("[csDN] succeed to get cross down = (%lf, %lf)\n", csDown[0], csDown[1]);
 #endif
     } else {
-#if CROP_CROSSDNAPH_LOG
+#if LOG_CROP_CROSSDNAPH
         printf("[csDN] failed to get cross down, ret = %d\n", ret);
 #endif
         return -4;
@@ -3494,7 +3509,7 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
     return 0;
 }    
 
-#define CROP_ROT36_LOG (0)
+#define LOG_CROP_ROT36 (0)
 static int getCrop36RotatePoints(struct aspCrop36_s *pcp36) 
 {
     int ret=0;
@@ -3539,7 +3554,7 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
     }
     
     //solidFlag = 214;
-#if CROP_ROT36_LOG
+#if LOG_CROP_ROT36
     printf("[crp36] solidFlag (0x%x)\n", solidFlag);
 #endif    
     double csUp1[2];
@@ -3607,7 +3622,7 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
         if (ret != 0) {
             printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
         }
-#if CROP_ROT36_LOG
+#if LOG_CROP_ROT36
         printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
         printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
@@ -3629,7 +3644,7 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
             printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
         }            
 
-#if CROP_ROT36_LOG
+#if LOG_CROP_ROT36
         printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
         printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
@@ -3652,7 +3667,7 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
         if (ret != 0) {
             printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
         }            
-#if CROP_ROT36_LOG
+#if LOG_CROP_ROT36
         printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
         printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
@@ -3675,7 +3690,7 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
         if (ret != 0) {
             printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
         }
-#if CROP_ROT36_LOG
+#if LOG_CROP_ROT36
         printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
         printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
@@ -3705,7 +3720,7 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
             if (ret != 0) {
                 printf("[crp36] Error!!! get new most left failed!!!, ret: %d \n",ret);
             }
-#if CROP_ROT36_LOG
+#if LOG_CROP_ROT36
             printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
             printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
             printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
@@ -3753,7 +3768,7 @@ static int cpyPGrp(int start, int len, double *grp, double **cpgp, int max)
     return len;
 }
 
-#define CROP_FINDBASELINE_LOG (0)
+#define LOG_CROP_FINDBASELINE (0)
 static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
 {
 #define LINE_DIST  (32.0)
@@ -3770,7 +3785,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     
     ptLf = pcpex->crpexLfPots;
     ptRt = pcpex->crpexRtPots;
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
     printf("[find] findLine left start \n");    
 #endif
     tot = pcpex->crpexSize / 2;
@@ -3779,7 +3794,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     pcpex->crpexLfAbsUsed = 0;
     
     head = 0;                        
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
     printf("[find] line start  = [%d] , (%lf, %lf) total: %d\n", head, ptLf[head*2+0], ptLf[head*2+1], tot);    
 #endif
     pcpex->crpexLfAbs[cntLf] = 0;
@@ -3801,7 +3816,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         dist = calcuLineGroupDist(cgrp, vecTr, glen);
         
         if (dist > LINE_DIST) {
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
             printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1], dist);
 #endif
             head = i;
@@ -3817,7 +3832,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
         cgrp = 0;
     }
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
     printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf)\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1]);
 #endif
     head = i;
@@ -3826,13 +3841,13 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     
     cntLf ++;
     pcpex->crpexLfAbsUsed = cntLf;
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
     printf("findLine right start \n");    
 #endif
     head = 0;
     cntRt = 0;
     pcpex->crpexRtAbsUsed = 0;
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
     printf("line start  = [%d] , (%lf, %lf) \n", head, ptRt[head*2+0], ptRt[head*2+1]);    
 #endif
     pcpex->crpexRtAbs[cntRt] = 0;
@@ -3854,7 +3869,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         dist = calcuLineGroupDist(cgrp, vecTr, glen);
         
         if (dist > LINE_DIST) {
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
             printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1], dist);    
 #endif
             head = i;
@@ -3871,7 +3886,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         cgrp = 0;
     }
 
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
     printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf) \n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1]);    
 #endif
     head = i;
@@ -3883,14 +3898,14 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     
     for (i=0; i < cntLf; i++) {
         id = pcpex->crpexLfAbs[i];
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
         printf("%d. left abs = [%d]  =  (%lf, %lf) \n", i, id, ptLf[id*2+0], ptLf[id*2+1]);    
 #endif
     }
 
     for (i=0; i < cntRt; i++) {
         id = pcpex->crpexRtAbs[i];
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
         printf("%d. right abs = [%d]  =  (%lf, %lf) \n", i, id, ptRt[id*2+0], ptRt[id*2+1]);    
 #endif
     }
@@ -3908,7 +3923,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
     pc0[0] = -1;
     pc0[1] = -1;
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
     printf("absLsize : %d, absRsize: %d \n", absLsize, absRsize);
 #endif
     for (i=0; i < absLsize; i++) {
@@ -3974,13 +3989,13 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
     
     pcpex->crpexRtAbsCut = contR;
-#if CROP_FINDBASELINE_LOG
+#if LOG_CROP_FINDBASELINE
     printf("absLf cut : %d, absRt cut: %d \n", contL, contR);
 #endif
     return 0;
 }
 
-#define CROP_FINDPOINTS_LOG (0)
+#define LOG_CROP_FINDPOINTS (0)
 static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
 {
     int ret=0;
@@ -4007,7 +4022,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
     lfLinSize = pcpex->crpexLfAbsCut;
     rtLinSize = pcpex->crpexRtAbsCut;
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
     printf("LfCut: %d, RtCut: %d, lfused: %d, rtused: %d \n", lfLinSize, rtLinSize, lfused, rtused);
 #endif
     memset(Lfarr, 0, sizeof(double)*8);
@@ -4017,7 +4032,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         for (iL = 0; iL < lfused; iL++) {
             isrc = pcpex->crpexLfAbs[iL*2+0];
             idst = pcpex->crpexLfAbs[iL*2+1];
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
             printf("Lfabs1: %d, Lfabs2: %d \n", isrc, idst);
 #endif
             if (isrc < 0) continue;
@@ -4037,7 +4052,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         for (iR = 0; iR < rtused; iR++) {
             isrc = pcpex->crpexRtAbs[iR*2+0];
             idst = pcpex->crpexRtAbs[iR*2+1];
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
             printf("Rtabs1: %d, Rtabs2: %d \n", isrc, idst);
 #endif
             if (idst < 0) continue;                    
@@ -4057,7 +4072,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
     for (i=0; i < 2; i++) {
         for (j=0; j < 4; j++) {
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
             printf("%d-%d Lfcut: %lf \n", i, j, Lfarr[i*4+j]);
 #endif
         }
@@ -4065,7 +4080,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
     for (i=0; i < 2; i++) {
         for (j=0; j < 4; j++) {
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
             printf("%d-%d Rtcut: %lf \n", i, j, Rtarr[i*4+j]);
 #endif
         }
@@ -4168,7 +4183,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     
         }
         else {
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
             printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
 #endif
             if ((csUp) && (msLf) && (msRt) && (csDn)) {
@@ -4318,7 +4333,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
              }
         }
         else {
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
             printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
 #endif
             if ((csUp) && (msLf) && (msRt) && (csDn)){
@@ -4337,7 +4352,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         }
     }
     else {
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
         printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
 #endif
         if ((csUp) && (msLf) && (msRt) && (csDn)) {
@@ -4356,7 +4371,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     }
 
     if ((sup) && (sdn) && (slf) && (srt)) {
-#if CROP_FINDPOINTS_LOG
+#if LOG_CROP_FINDPOINTS
         printf("sup = (%lf, %lf), sdn = (%lf, %lf) \n", sup[0], sup[1], sdn[0], sdn[1]);
         printf("slf = (%lf, %lf), srt = (%lf, %lf) \n", slf[0], slf[1], srt[0], srt[1]);    
 #endif
@@ -4372,7 +4387,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     return 0;
 }
 
-#define CROP_CALCULINE_LOG (0)
+#define LOG_CROP_CALCULINE (0)
 static int calcuLine(struct aspCropExtra_s *pcpex) 
 {
 #define MIN_LINE  10
@@ -4403,7 +4418,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     ptRt = pcpex->crpexRtPots;
     
     tot = pcpex->crpexSize / 2;
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
     printf("msLf (%lf, %lf) rt (%lf, %lf) \n", lf[0], lf[1], rt[0], rt[1]);
     printf("up (%lf, %lf) dn (%lf, %lf) \n", up[0], up[1], dn[0], dn[1]);
 #endif
@@ -4463,7 +4478,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     if ((rtEndDn >= 0) && (rtStrDn >= 0)) {
         szrd = rtEndDn - rtStrDn + 1;
     }
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
     printf("(size) szlu = %d, szld = %d, szru = %d, szrd = %d\n", szlu, szld, szru, szrd);    
 #endif
     memset(pcpex->crpexLinLU, 0, sizeof(double)*3);
@@ -4492,7 +4507,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     pcpex->crpexGrpRDLen = -1;
     
     if (szlu > MIN_LINE) {
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
         printf("(LU) copy , start idx = %d, end idx = %d, size = %d\n", lfStrUp, lfEndUp, szlu);
 #endif
         pGrp = &pcpex->crpexLfPots[lfStrUp*2];
@@ -4505,14 +4520,14 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             pcpex->crpexGrpLULen = szlu;
         } else {
             pcpex->crpexLinLUDiv = (int) abs(ret);
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
             printf("(LU) ret (%d), divLU (%lf)\n", ret, divLU); 
 #endif
         }
     }
 
     if (szld > MIN_LINE) {
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
         printf("(LD) copy , start idx = %d, end idx = %d, size = %d\n", lfStrDn, lfEndDn, szld);
 #endif
         pGrp = &pcpex->crpexLfPots[lfStrDn*2];
@@ -4525,14 +4540,14 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             pcpex->crpexGrpLDLen = szld;
         } else {
             pcpex->crpexLinLDDiv = (int) abs(ret);
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
             printf("(LD) ret (%d), divLD (%lf)\n", ret, divLD);
 #endif
         }
     }
 
     if (szru > MIN_LINE) {
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
         printf("(RU) copy , start idx = %d, end idx = %d, size = %d\n", rtStrUp, rtEndUp, szru);    
 #endif
         pGrp = &pcpex->crpexRtPots[rtStrUp*2];
@@ -4545,14 +4560,14 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             pcpex->crpexGrpRULen = szru;
         } else {
             pcpex->crpexLinRUDiv = (int) abs(ret);
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
             printf("(RU) ret (%d), divRU (%lf)\n", ret, divRU);
 #endif
         }
     }
     
     if (szrd > MIN_LINE) {
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
         printf("(RD) copy , start idx = %d, end idx = %d, size = %d\n", rtStrDn, rtEndDn, szrd);    
 #endif
         pGrp = &pcpex->crpexRtPots[rtStrDn*2];
@@ -4565,7 +4580,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
             pcpex->crpexGrpRDLen = szrd;
         } else {
             pcpex->crpexLinRDDiv = (int) abs(ret);
-#if CROP_CALCULINE_LOG
+#if LOG_CROP_CALCULINE
             printf("(RD) ret (%d), divRD (%lf)\n",  ret, divRD);
 #endif
         }
@@ -4820,7 +4835,7 @@ static int setRotateP4(struct aspCrop36_s *pcp36, double *rotateP4)
     return 0;
 }
 
-#define CROP_FINDLINE_LOG (0)
+#define LOG_CROP_FINDLINE (0)
 static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 {
 #define ACCEPT_OFFSET (2000.0)
@@ -4868,7 +4883,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     vLDDiv = pcpex->crpexLinLDDiv;
     vRUDiv = pcpex->crpexLinRUDiv;
     vRDDiv = pcpex->crpexLinRDDiv;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
     printf("line LU str:%d len:%d div:%lf \n", gpLUstr, gpLUlen, vLUDiv);
     printf("line LD str:%d len:%d div:%lf \n", gpLDstr, gpLDlen, vLDDiv);
     printf("line RU str:%d len:%d div:%lf \n", gpRUstr, gpRUlen, vRUDiv);
@@ -5021,7 +5036,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     double divGpRU= gpRUlen / vRUDiv;
     double divGpRD= gpRDlen / vRDDiv;
     
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
     printf("compare div LU:%lf(%d/%lf), LD:%lf(%d/%lf), RU:%lf(%d/%lf), RD:%lf(%d/%lf) \n", 
             divGpLU, gpLUlen, vLUDiv, 
             divGpLD, gpLDlen, vLDDiv, 
@@ -5035,28 +5050,28 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     maxDiv = aspMax(divGpRD, maxDiv);
     
     if (maxDiv == divGpLU) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
         printf("[LU] compare min div = %lf\n", maxDiv);
 #endif
         if (gpLUstr >= 0) {
             vLU = linLU;
         }
     } else if (maxDiv == divGpLD) {
-#if CROP_FINDLINE_LOG    
+#if LOG_CROP_FINDLINE    
         printf("[LD] compare min div = %lf\n", maxDiv);
 #endif
         if (gpLDstr >= 0) {
             vLD = linLD;
         }
     } else if (maxDiv == divGpRU) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
         printf("[RU] compare min div = %lf\n", maxDiv);
 #endif
         if (gpRUstr >= 0) {
             vRU = linRU;
         }
     } else if (maxDiv == divGpRD) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
         printf("[RD] compare min div = %lf\n", maxDiv);        
 #endif
         if (gpRDstr >= 0) {
@@ -5097,7 +5112,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     while ((vLU == 0) || (vLD == 0) || (vRU == 0) || (vRD == 0)) {
         
         if (vLU == 0) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vLU == null\n");
 #endif
             if ((vLD != 0) && (vRU != 0)) {
@@ -5121,7 +5136,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             if ((vLD != 0)  || (vRU != 0)) {
                 distN = calcuLineGroupDist(pGrpLU, vLUn, gpLUlen);
                 distV = calcuLineGroupDist(pGrpLU, vLUv, gpLUlen);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vLU compare uv distN=%lf, distV=%lf\n", distN, distV);
 #endif
                 if (distN < distV) {
@@ -5134,13 +5149,13 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         
                 distU2L = calcuVectorDistancePoint(vLUs, sup);
                 distL2U = calcuVectorDistancePoint(vLUs, slf);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vLU distU2L=%lf, distL2U=%lf\n", distU2L, distL2U);        
 #endif
                 if (distU2L > ACCEPT_OFFSET || distL2U > ACCEPT_OFFSET) {
                     gpLUstr = -1;
                     vLU = 0;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                     printf("vLU set to NULL\n");
 #endif
                 }
@@ -5148,25 +5163,25 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         
         }
         else {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vLU != null\n");
 #endif
             distU2L = calcuVectorDistancePoint(vLU, sup);
             distL2U = calcuVectorDistancePoint(vLU, slf);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vLU distU2L=%lf, distL2U=%lf\n", distU2L, distL2U);
 #endif
             if (distU2L > ACCEPT_OFFSET || distL2U > ACCEPT_OFFSET) {
                 gpLUstr = -1;
                 vLU = 0;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vLU set to NULL\n");
 #endif
             }
         }
         
         if (vLD == 0) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vLD == null\n");
 #endif
             if ((vLU != 0) && (vRD != 0)) {
@@ -5190,7 +5205,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             if ((vLU != 0) || (vRD != 0)) {
                 distN = calcuLineGroupDist(pGrpLD, vLDn, gpLDlen);
                 distV = calcuLineGroupDist(pGrpLD, vLDv, gpLDlen);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vLD compare uv distN=%lf, distV=%lf\n", distN, distV);
 #endif
                 if (distN < distV) {
@@ -5204,38 +5219,38 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             
                 distD2L = calcuVectorDistancePoint(vLDs, sdn);
                 distL2D = calcuVectorDistancePoint(vLDs, slf);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vLD distD2L=%lf, distL2D=%lf\n", distD2L, distL2D);        
 #endif
                 if (distD2L > ACCEPT_OFFSET || distL2D > ACCEPT_OFFSET) {
                     gpLDstr = -1;
                     vLD = 0;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                     printf("vLD set to NULL\n");
 #endif
                 }
             }
         }
         else {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vLD != null\n");
 #endif
             distD2L = calcuVectorDistancePoint(vLD, sdn);
             distL2D = calcuVectorDistancePoint(vLD, slf);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vLD distD2L=%lf, distL2D=%lf\n", distD2L, distL2D);
 #endif
             if (distD2L > ACCEPT_OFFSET || distL2D > ACCEPT_OFFSET) {
                 gpLDstr = -1;
                 vLD = 0;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vLD set to NULL\n");
 #endif
             }
         }
         
         if (vRU == 0) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vRU == null\n");
 #endif
             if ((vRD != 0) && (vLU != 0)) {
@@ -5258,7 +5273,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             if ((vRD != 0) || (vLU != 0)) {        
                 distN = calcuLineGroupDist(pGrpRU, vRUn, gpRUlen);
                 distV = calcuLineGroupDist(pGrpRU, vRUv, gpRUlen);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vRU compare uv distN=%lf, distV=%lf\n", distN, distV);
 #endif
                 if (distN < distV) {
@@ -5272,38 +5287,38 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         
                 distU2R = calcuVectorDistancePoint(vRUs, sup);
                 distR2U = calcuVectorDistancePoint(vRUs, srt);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vRU distU2R=%lf, distR2U=%lf\n", distU2R, distR2U);
 #endif
                 if (distU2R > ACCEPT_OFFSET || distR2U > ACCEPT_OFFSET) {
                     gpRUstr = -1;
                     vRU = 0;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                     printf("vRU set to NULL\n");
 #endif
                 }
             }
         }
         else {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vRU != null\n");
 #endif
             distU2R = calcuVectorDistancePoint(vRU, sup);
             distR2U = calcuVectorDistancePoint(vRU, srt);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vRU distU2R=%lf, distR2U=%lf\n", distU2R, distR2U);
 #endif
             if (distU2R > ACCEPT_OFFSET || distR2U > ACCEPT_OFFSET) {
                 gpRUstr = -1;
                 vRU = 0;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vRU set to NULL\n");
 #endif
             }
         }
         
         if (vRD == 0) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vRD == null\n");
 #endif
             if ((vRU != 0) && (vLD != 0)) {
@@ -5326,7 +5341,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             if ((vRU != 0) || (vLD != 0)) {
                 distN = calcuLineGroupDist(pGrpRD, vRDn, gpRDlen);
                 distV = calcuLineGroupDist(pGrpRD, vRDv, gpRDlen);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vRD compare uv distN=%lf, distV=%lf\n", distN, distV);
 #endif
                 if (distN < distV) {
@@ -5340,31 +5355,31 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         
                 distD2R = calcuVectorDistancePoint(vRDs, sdn);
                 distR2D = calcuVectorDistancePoint(vRDs, srt);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vRD distD2R=%lf, distR2D=%lf\n", distD2R, distR2D);
 #endif
                 if (distD2R > ACCEPT_OFFSET || distR2D > ACCEPT_OFFSET) {
                     gpRDstr = -1;
                     vRD = 0;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                     printf("vRD set to NULL\n");
 #endif
                 }
             }
         }
         else {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vRD != null\n");
 #endif
             distD2R = calcuVectorDistancePoint(vRD, sdn);
             distR2D = calcuVectorDistancePoint(vRD, srt);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("vRD distD2R=%lf, distR2D=%lf\n", distD2R, distR2D);
 #endif
             if (distD2R > ACCEPT_OFFSET || distR2D > ACCEPT_OFFSET) {
                 gpRDstr = -1;
                 vRD = 0;
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
                 printf("vRD set to NULL\n");
 #endif
             }
@@ -5375,7 +5390,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (vLU) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
         printf("vLU = %lf, %lf, %lf \n", vLU[0], vLU[1], vLU[2]);
 #endif
         memcpy(pcpex->crpexLinLU, vLU, sizeof(double)*3);   
@@ -5385,7 +5400,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (vLD) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
         printf("vLD = %lf, %lf, %lf \n", vLD[0], vLD[1], vLD[2]);
 #endif
         memcpy(pcpex->crpexLinLD, vLD, sizeof(double)*3);   
@@ -5395,7 +5410,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (vRU) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
         printf("vRU = %lf, %lf, %lf \n", vRU[0], vRU[1], vRU[2]);
 #endif
         memcpy(pcpex->crpexLinRU, vRU, sizeof(double)*3);   
@@ -5405,7 +5420,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (vRD) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
         printf("vRD = %lf, %lf, %lf \n", vRD[0], vRD[1], vRD[2]);
 #endif
         memcpy(pcpex->crpexLinRD, vRD, sizeof(double)*3);   
@@ -5421,7 +5436,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             dist = calcuDistance(slf, plf);
             
             memcpy(pcpex->crpCropLf, plf, sizeof(double)*2);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("old msLf = (%lf, %lf), new msLf = (%lf, %lf) \n", round(slf[0]), round(slf[1]), round(plf[0]), round(plf[1]));
 #endif
         }
@@ -5435,7 +5450,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             } else {
                 memcpy(pcpex->crpCropUp, sup, sizeof(double)*2);
             }
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("old csUp = (%lf, %lf), new csUp = (%lf, %lf), dist=%lf\n", round(sup[0]), round(sup[1]), round(pup[0]), round(pup[1]), dist);
 #endif
         }
@@ -5446,7 +5461,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             dist = calcuDistance(srt, prt);
 
             memcpy(pcpex->crpCropRt, prt, sizeof(double)*2);
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("old msRt = (%lf, %lf), new msRt = (%lf, %lf)\n", round(srt[0]), round(srt[1]), round(prt[0]), round(prt[1]));
 #endif
         }
@@ -5460,7 +5475,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             } else {
                 memcpy(pcpex->crpCropDn, sdn, sizeof(double)*2);
             }
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("old csDn = (%lf, %lf), new csDn = (%lf, %lf), dist=%lf\n", round(sdn[0]), round(sdn[1]), round(pdn[0]), round(pdn[1]), dist);
 #endif
         }            
@@ -5478,25 +5493,25 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     
         ret = getRotateP1(pcp36, rlf);
         if (!ret) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("rotateP1 = (%lf, %lf) \n", rlf[0], rlf[1]);
 #endif
         }
         ret = getRotateP2(pcp36, rup);
         if (!ret) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("rotateP2 = (%lf, %lf) \n", rup[0], rup[1]);
 #endif
         }
         ret = getRotateP3(pcp36, rrt);
         if (!ret) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("rotateP3 = (%lf, %lf) \n", rrt[0], rrt[1]);
 #endif
         }
         ret = getRotateP4(pcp36, rdn);
         if (!ret) {
-#if CROP_FINDLINE_LOG
+#if LOG_CROP_FINDLINE
             printf("rotateP4 = (%lf, %lf) \n", rdn[0], rdn[1]);
 #endif
         }
@@ -5505,7 +5520,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     return 0;
 }
 
-#define CROP_TOPOFFSET_LOG (0)
+#define LOG_CROP_TOPOFFSET (0)
 static int topPositive(struct aspCropExtra_s *pcpex) 
 {
     double vecRU[3], vecLU[3], vecRD[3], vecLD[3];
@@ -5549,7 +5564,7 @@ static int topPositive(struct aspCropExtra_s *pcpex)
 
         getParallelVectorFromV(vecRUsf, rightsf, vecRU);
         getCross(vecRUsf, vecRD, rtsf);            
-#if CROP_TOPOFFSET_LOG
+#if LOG_CROP_TOPOFFSET
         printf("right shift from (%lf, %lf) to (%lf, %lf) \n", round(right[0]), round(right[1]), round(rtsf[0]), round(rtsf[1]));
 #endif
     }   
@@ -5570,7 +5585,7 @@ static int topPositive(struct aspCropExtra_s *pcpex)
 
         getParallelVectorFromV(vecLUsf, leftsf, vecLU);
         getCross(vecLUsf, vecLD, lfsf);            
-#if CROP_TOPOFFSET_LOG
+#if LOG_CROP_TOPOFFSET
         printf("left shift from (%lf, %lf) to (%lf, %lf)\n", round(left[0]), round(left[1]), round(lfsf[0]), round(lfsf[1]));
 #endif
     }
@@ -5591,7 +5606,7 @@ static int topPositive(struct aspCropExtra_s *pcpex)
     getCross(vecRUsf, vecLUsf, topsf);
     getCross(vecRDsf, vecLDsf, dnsf);
 
-#if CROP_TOPOFFSET_LOG
+#if LOG_CROP_TOPOFFSET
     printf("END top shift from (%lf, %lf) to (%lf, %lf)\n", round(top[0]), round(top[1]), round(topsf[0]), round(topsf[1]));
     printf("END left shift from (%lf, %lf) to (%lf, %lf)\n", round(left[0]), round(left[1]), round(lfsf[0]), round(lfsf[1]));
     printf("END right shift from (%lf, %lf) to (%lf, %lf)\n", round(right[0]), round(right[1]), round(rtsf[0]), round(rtsf[1]));
@@ -6244,7 +6259,7 @@ static void* aspSalloc(int slen)
 
 static void debugPrintBootSec(struct sdbootsec_s *psec)
 {
-#if LOG_FAT32
+#if LOG_FS_EN
             /* 0  Jump command */
     printf("[0x%x]: /* 0  Jump command */ \n", psec->secJpcmd);
             /* 3  system id */
@@ -6326,7 +6341,7 @@ struct directnFile_s{
 };
 #endif
 
-#if LOG_FAT32
+#if LOG_FS_EN
     printf("==========================================\n");
     printf("  [%x] type \n", pf->dftype);
     printf("  [%x] status \n", pf->dfstats);
@@ -6599,6 +6614,218 @@ static struct aspInfoSplit_s *asp_freeInfo(struct aspInfoSplit_s *info)
     return nex;
 }
 
+static int aspFSms2rs(struct directnFile_s **rsd, struct directnFile_s *msd, struct sdFatDir_s *pfatdir)
+{
+    int pid, fid;
+    
+    pid = (msd->dfindex >> 16) - 1;
+    fid = msd->dfindex & 0xffff;
+
+    printf("[FSV] ms2rs 1:%d 2:%d \n", pid, fid);
+
+    if (pid > pfatdir->dirFATMax) {
+        printf("[FSV] ERROR!!! pid: %d > max: %d \n", pid, pfatdir->dirFATMax);
+        return -1;
+    }
+
+    if (!pfatdir->fatDirPool[pid]) {
+        printf("[FSV] ERROR!!! pid: %d pool == null \n", pid);
+        return -2;
+    }
+    
+    if (fid > pfatdir->fatDirPool[pid]->dirMax) {
+        printf("[FSV] ERROR!!! fid: %d > max: %d \n", fid, pfatdir->fatDirPool[pid]->dirMax);
+        return -3;
+    }
+    
+    *rsd = &pfatdir->fatDirPool[pid]->dirPool[fid];
+
+    return 0;
+}
+
+static int aspFScpDir(struct directnFile_s *dstd, struct directnFile_s *srcd)
+{
+    memcpy(dstd, srcd, sizeof(struct directnFile_s));
+
+    return 0;
+}
+
+static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, struct procRes_s *rs)
+{
+    int ret=0, bufn=0, loop=0, len=0;
+    int used=0, idt=0, maxsz=0, totsz=0;
+    int drsz=0, idr=0;
+    int ipa=0, ibr=0, ich=0, icur=0;
+    struct sdDirPool_s *rsdir=0, **msdir=0;
+    struct directnFile_s *dir=0, *dpa=0, *dch=0, *dbr=0;
+    char *pr=0, *pt=0, *addrs=0, ch=0;
+    if (!dsttr) return -1;
+    if (!srctr) return -2;
+
+    msync(srctr, sizeof(struct sdFatDir_s), MS_SYNC);
+
+    maxsz = srctr->dirFATMax;
+    used = srctr->dirFATUsed;
+    icur = rs->psFat->fatCurDir.dfindex;
+
+    if (used > maxsz) {
+        used = maxsz;
+    }
+
+    if (!srctr->dirFATDirty) {
+        return -5;
+    }
+
+    msdir = aspMalloc(sizeof(struct sdDirPool_s*)*used, 6);
+    if (!msdir) {
+        sprintf(rs->logs, "ERROR!!!failed to allocate memory for msdir !!!\n", ch);
+        print_f(rs->plogs, "P6", rs->logs);    
+        return -6;
+    }
+
+    for (idt = 0; idt < used; idt++) {
+        msdir[idt] = (struct sdDirPool_s *)aspMalloc(sizeof(struct sdDirPool_s), 6);
+        if (!msdir[idt]) {
+            sprintf(rs->logs, "ERROR!!!failed to allocate memory for msdir !!!\n", ch);
+            print_f(rs->plogs, "P6", rs->logs);    
+            return -7;
+        }
+        
+    }
+    
+    for (idt = 0; idt < used; idt++) {
+        ret = rs_ipc_get(rs, &ch, 1);
+        if (ret > 0) {
+            if (ch == 'd') {
+                bufn = ring_buf_info_len(rs->pdataRx);
+                sprintf(rs->logs, "succeed to get ch = %c, bufn = %d\n", ch, bufn);
+                print_f(rs->plogs, "P6", rs->logs);    
+
+                pt = (char *)msdir[idt]->dirPool;
+                loop = bufn;
+                totsz = 0;
+                while (loop > 0) {
+                    len = ring_buf_cons(rs->pdataRx, &addrs);
+                    if (len < 0) {
+                        sprintf(rs->logs, "ERROR!!! get ring buff failed ret: %d\n", len);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+            
+                    msync(addrs, len, MS_SYNC);
+
+                    totsz += len;
+
+                    if (totsz > sizeof(struct sdDirPool_s)) {
+                        sprintf(rs->logs, "ERROR!!! get ring buff out of buff range totsz: %d, range: %d\n", totsz, sizeof(struct sdDirPool_s));
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        memcpy(pt, addrs, len);
+                    }
+                    
+                    pt += len;
+                    loop --;
+
+                    sprintf(rs->logs, "%d. len: %d, totsz:%d\n", loop, len, totsz);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+
+                msdir[idt]->dirMax = FAT_DIRPOOL_IDX_MAX;
+                len = sizeof(struct directnFile_s);
+                msdir[idt]->dirUsed = totsz / len;
+
+                sprintf(rs->logs, "%d. dir info: max = %d, used = %d = %d / %d\n", idt, msdir[idt]->dirMax, msdir[idt]->dirUsed, totsz, len);
+                print_f(rs->plogs, "P6", rs->logs);    
+
+                rs_ipc_put(rs, "D", 1);
+            }
+            else {
+                sprintf(rs->logs, "warnning!! ch == %c \n", ch);
+                print_f(rs->plogs, "P6", rs->logs);                
+            }
+        } else {
+            sprintf(rs->logs, "failed to get ch ret: \n", ret);
+            print_f(rs->plogs, "P6", rs->logs);    
+        }
+    }
+
+    for (idt = 0; idt < used; idt++) {
+        //msdir = srctr->fatDirPool[idt];
+        rsdir = dsttr->fatDirPool[idt];
+
+        if (!msdir[idt]) {
+            return -3;
+        }
+
+        if (!rsdir) {
+            return -4;
+        }
+
+        drsz = msdir[idt]->dirUsed;
+
+        pt = (char *)rsdir->dirPool;
+        pr = (char *)msdir[idt]->dirPool;
+
+        memcpy(pt, pr, sizeof(struct directnFile_s) * drsz);
+
+        for (idr=0; idr < drsz; idr++) {
+            dpa=0; 
+            dbr=0; 
+            dch=0;
+            dir = &rsdir->dirPool[idr];
+            if (dir) {
+                if (dir->pa) {
+                    ipa = dir->dfpaid;
+                    dpa = &rsdir->dirPool[ipa&0xffff];
+                    if (dpa->dfindex != ipa) {
+                        sprintf(rs->logs, "WARNING!!! the pa id is different!!! (%d / %d)\n", ipa, dpa->dfindex);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                }
+                if (dir->br) {
+                    ibr = dir->dfbrid;
+                    dbr = &rsdir->dirPool[ibr&0xffff];
+                    if (dbr->dfindex != ibr) {
+                        sprintf(rs->logs, "WARNING!!! the br id is different!!! (%d / %d)\n", ibr, dbr->dfindex);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                }
+                if (dir->ch) {
+                    ich = dir->dfchid;
+                    dch = &rsdir->dirPool[ich&0xffff];
+                    if (dch->dfindex != ich) {
+                        sprintf(rs->logs, "WARNING!!! the br id is different!!! (%d / %d)\n", ich, dch->dfindex);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                }
+
+                dir->pa = dpa;
+                dir->br = dbr;
+                dir->ch = dch;
+                
+                if (dir->dftype & ASPFS_TYPE_ROOT) {
+                    aspFScpDir(&rs->psFat->fatRootdir, dir);
+                    if (!icur) {
+                        aspFScpDir(&rs->psFat->fatCurDir, dir);
+                    }
+                }
+                
+                if (icur == dir->dfindex) {
+                    aspFScpDir(&rs->psFat->fatCurDir, dir);
+                }
+                
+            }
+            else {
+                sprintf(rs->logs, "WARNING!!! failed to get dir \n");
+                print_f(rs->plogs, "P6", rs->logs);    
+            }
+        }
+    }
+
+    srctr->dirFATDirty = 0;
+    
+    return 0;
+}
+
 static int aspNameCpyfromName(char *name, char *dst, int offset, int len, int jump)
 {
     char ch=0;
@@ -6639,7 +6866,7 @@ static int aspCompirseSFN(uint8_t *pc, struct directnFile_s *pf, uint8_t *sfn)
     raw = pc;
 
     memset(raw, 0, 32);
-#if LOG_FAT32
+#if LOG_FS_EN
     printf("  Compirse SFN: ");
     printf("  [%x] type \n", pf->dftype);
     printf("  [%x] status \n", pf->dfstats);
@@ -6813,12 +7040,12 @@ static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
     memset(tmSFN, 0x20, 16);
     ret = aspFindDot(fs->dfSFN, strlen(fs->dfSFN));
     if (ret < 0) {
-#if LOG_FAT32
+#if LOG_FS_EN
         printf("  SFN do not have dot, ret: %d\n", ret);
 #endif
         aspNameCpyfromName(fs->dfSFN, tmSFN, 0, strlen(fs->dfSFN), 1);
     } else {
-#if LOG_FAT32
+#if LOG_FS_EN
         printf("  SFN have dot, at [%d]\n", ret);
 #endif
         aspNameCpyfromName(fs->dfSFN, tmSFN, 0, ret, 1);
@@ -6826,14 +7053,14 @@ static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
     }
 
     chksum = aspFSchecksum(tmSFN);
-#if LOG_FAT32
+#if LOG_FS_EN
     printf("  tmSFN: [%s], chksum: 0x%.2x\n", tmSFN, chksum);
 #endif
     p = pc;
     if (fs->dflen) {
         len = aspCompirseLFN(p, fs->dfLFN, chksum, fs->dflen+1);
         if (len > 0) {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  LFN get, len: %d\n", len);
 #endif
             shmem_dump(p, len);
@@ -6845,7 +7072,7 @@ static int aspCompirseDEF(uint8_t *pc, struct directnFile_s *fs)
 
     len = aspCompirseSFN(p, fs, tmSFN);
     if (len > 0) {
-#if LOG_FAT32
+#if LOG_FS_EN
         printf("  SFN get, len: %d\n", len);
 #endif
         shmem_dump(p, len);
@@ -7150,7 +7377,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         ret = aspNameCpyfromRaw(raw, pstN, 0, 11, 1);
         if (ret != 11) {
             memset(fs, 0x00, sizeof(struct directnFile_s));
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("\n  ERROR!!short name [%s] copy error ret:%d \n", pstN, ret);
 #endif
             goto fsparseEnd;
@@ -7159,31 +7386,28 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         idx = (fs->dfstats >> 8) & 0xf;
         if (idx) {
             sum = aspFSchecksum((uint8_t*)raw);
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
 #endif
             if (sum != (fs->dfstats >> 16) & 0xff) {
                 ret = -11;
                 memset(fs, 0x00, sizeof(struct directnFile_s));
-#if LOG_FAT32
+#if LOG_FS_EN
                 printf("WARNING!!! checksum error: 0x%x / 0x%x [%s]\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
 #endif
                 goto fsparseEnd;
             } else {
-#if LOG_FAT32
+#if LOG_FS_EN
                 printf("CONGING!!! checksum match: 0x%x / 0x%x [%s]\n\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
 #endif
             }
         } else {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("\nSHORT file name parsing... [len:%d][%s]\n", fs->dflen, pstN);
 #endif
         }
 
         cnt = aspFSspaceCount(pstN+8, 3);
-#if LOG_FAT32
-        printf("rm space count : %d [%s] - 1\n", cnt, pstN);
-#endif
         if (cnt < 3) {
             memset(pstN, 0, 12);
             ret = aspNameCpyfromRaw(raw, pstN, 0, 8, 1);
@@ -7193,14 +7417,14 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
                 goto fsparseEnd;
             }
             ret = aspFSspaceCount(pstN, 8);
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("[%s]short name space count:%d \n", pstN, ret);
 #endif
             n = strlen(pstN) - ret;
             pstN += n;
             *pstN = '.';
             pstN += 1;
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("[%s]short name space n:%d \n", pstN, n);
 #endif
             ret = aspNameCpyfromRaw(raw, pstN, 8, 3, 1);
@@ -7209,18 +7433,18 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
                 //printf("short name copy error ret:%d \n", ret);
                 goto fsparseEnd;
             }
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("[%s]short name space tail \n", pstN);
 #endif
             pstN = fs->dfSFN;
             ret = aspFSrmspace(pstN, 12);
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("[%s]short name space result, cnt: %d\n", fs->dfSFN, ret);
 #endif
         }
         else {
+#if LOG_FS_EN
             cnt = aspFSrmspace(pstN, 8);
-#if LOG_FAT32
             printf("rm space count : %d [%s] - 2\n", cnt, pstN);
 #endif
         }
@@ -7405,7 +7629,8 @@ static int aspFS_createFATRoot(struct sdFAT_s *pfat)
     strncpy(r->dfLFN, dir, r->dflen);
     */
     
-    pfat->fatRootdir = r;
+    //pfat->fatRootdir = r;
+    aspFScpDir(&pfat->fatRootdir, r);
 
     return 0;
 }
@@ -7428,11 +7653,11 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
     }
 
     if (root->dflen) {
-#if LOG_FAT32
+#if LOG_FS_EN
         printf("[R]open directory [%s] - %d\n", root->dfLFN, root->dfclstnum);
 #endif
     } else {
-#if LOG_FAT32
+#if LOG_FS_EN
         printf("[R]open directory [%s] - %d\n", root->dfSFN, root->dfclstnum);
 #endif
     }
@@ -7453,7 +7678,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
 
     cnt = 0;
     ret = aspRawParseDir(dkbuf, dfs, max);
-#if LOG_FAT32
+#if LOG_FS_EN
     printf("[R]raw parsing cnt: %d \n", ret);
 #endif
     while (max > 0) {
@@ -7491,7 +7716,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
         //printf("[%d] ret: %d, last:%d \n", cnt, ret, max);
     }
 
-#if LOG_FAT32
+#if LOG_FS_EN
     printf("[R]raw parsing end: %d \n", ret);
 #endif
 
@@ -7506,18 +7731,23 @@ static int aspFS_insertFATChild(struct directnFile_s *parent, struct directnFile
     struct directnFile_s *brt = 0;
 
     r->pa = parent;
+    r->dfpaid = parent->dfindex;
     r->br = 0;
     r->ch = 0;
 
     if (parent->ch == 0) {
         parent->ch = r;
+        parent->dfchid = r->dfindex;
     } else {
         brt = parent->ch;
         if (brt->br == 0) {
             brt->br = r;
+            brt->dfbrid = r->dfindex;
         } else {
             r->br = brt->br;
+            r->dfbrid = brt->br->dfindex;
             brt->br = r;
+            brt->dfbrid = r->dfindex;
         }
     }
 
@@ -7541,6 +7771,7 @@ static int mspFS_insertFATChildDir(struct sdFAT_s *pfat, struct directnFile_s *p
     memset(c, 0, sizeof(struct directnFile_s));
 
     c->pa = parent;
+    c->dfpaid = parent->dfindex;
     c->br = 0;
     c->ch = 0;
     c->dftype = ASPFS_TYPE_DIR;
@@ -7551,13 +7782,17 @@ static int mspFS_insertFATChildDir(struct sdFAT_s *pfat, struct directnFile_s *p
     
     if (parent->ch == 0) {
         parent->ch = c;
+        parent->dfchid = c->dfindex;
     } else {
         brt = parent->ch;
         if (brt->br == 0) {
             brt->br = c;
+            brt->dfbrid = c->dfindex;
         } else {
             c->br = brt->br;
+            c->dfbrid = brt->br->dfindex;
             brt->br = c;
+            brt->dfbrid = c->dfindex;
         }
     }
 
@@ -7639,11 +7874,11 @@ static int mspSD_updLocalFAT(struct adFATLinkList_s *list, uint8_t *fat, uint32_
     while (cur) {
         val = mspSD_getNextFreeFAT(cur->ftStart, fat, max);
         if (val) {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  [FS] Warning!!! FAT should be zero val = 0x%x \n", val);
 #endif
         } else {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  [FS] start FAT is zero idx: %d len: %d\n", cur->ftStart, cur->ftLen);
 #endif
         }
@@ -7654,12 +7889,12 @@ static int mspSD_updLocalFAT(struct adFATLinkList_s *list, uint8_t *fat, uint32_
         cur = cur->n;
         if (cur) {
             mspSD_WriteFAT(pre->ftStart+pre->ftLen-1, cur->ftStart, fat, max);
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  [FS] CONT last idx: %d, next start: %d\n", pre->ftStart+pre->ftLen-1, cur->ftStart);
 #endif
         } else {
             mspSD_WriteFAT(pre->ftStart+pre->ftLen-1, 0x0fffffff, fat, max);
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  [FS] END last idx: %d, next start: %d\n", pre->ftStart+pre->ftLen-1);
 #endif
         }
@@ -7683,7 +7918,7 @@ static int mspSD_rangeFATLinkList(struct adFATLinkList_s *list, int *start, int 
     while (cur) {
         bgn = cur->ftStart;
         end = bgn + cur->ftLen;
-#if LOG_FAT32
+#if LOG_FS_EN
         printf("  range: [%d + %d = %d]\n", bgn, cur->ftLen, end);
 #endif
         if (lob < 0) {
@@ -7703,7 +7938,7 @@ static int mspSD_rangeFATLinkList(struct adFATLinkList_s *list, int *start, int 
         }
         
         cur = cur->n;
-#if LOG_FAT32
+#if LOG_FS_EN
         printf("  range: [lob:%d, upb:%d]\n", lob, upb);
 #endif
     }
@@ -7779,24 +8014,24 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
 
     lstr = cur; 
     llen = 1;
-#if LOG_FAT32
+#if LOG_FS_EN
     printf("  start %d, %d\n", lstr, llen);
 #endif
     
     nxt = mspSD_getNextFAT(cur, fat, max);
     while (nxt) {
         if (nxt == 0x0ffffff8) {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  empty %d, %d\n", lstr, llen);
 #endif
             break;
         } else if (nxt == 0x0fffffff) {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  end %d, %d\n", lstr, llen);
 #endif
             break;
         } else if (nxt == 0xffffffff) {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  error %d, %d\n", lstr, llen);
 #endif
             return -1;
@@ -7879,7 +8114,7 @@ static int mspSD_getFreeFATList(struct adFATLinkList_s **head, uint32_t idx, uin
     lstr = cur; 
     llen = 0;
     
-#if LOG_FAT32
+#if LOG_FS_EN
     printf("  start %d, %d\n", lstr, llen);
 #endif
 
@@ -7887,18 +8122,18 @@ static int mspSD_getFreeFATList(struct adFATLinkList_s **head, uint32_t idx, uin
         nxt = mspSD_getNextFreeFAT(cur, fat, max);
 
         if (nxt == 0x0ffffff8) {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf(" search start ...\n");
 #endif
         } else if (nxt == 0xffffffff) {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf(" just start ... \n");
 #endif
         } else if (nxt == 0x0fffffff) {
             ocp++;
             //printf("  [%d] ocp %d\n", cur, ocp);
         } else if (nxt == 0xffffffff) {
-#if LOG_FAT32
+#if LOG_FS_EN
             printf("  [%d] error %d, %d\n", cur, lstr, llen);
 #endif
             return -1;
@@ -7916,7 +8151,7 @@ static int mspSD_getFreeFATList(struct adFATLinkList_s **head, uint32_t idx, uin
                     ls->ftLen = llen;
                     ret = mspSD_createFATLinkList(&ls->n);
                     if (ret) return ret;
-#if LOG_FAT32
+#if LOG_FS_EN
                     printf(" free sector, start:%d len:%d \n", lstr, llen);
 #endif
                     lstr = 0;
@@ -7938,7 +8173,7 @@ static int mspSD_getFreeFATList(struct adFATLinkList_s **head, uint32_t idx, uin
         ls->ftStart = lstr;
         ls->ftLen = llen;
     }
-#if LOG_FAT32
+#if LOG_FS_EN
     printf(" total free cluster %d, total used cluster %d \n", fri, ocp);
 #endif
     return 0;
@@ -8032,16 +8267,63 @@ static int mspSD_allocFreeFATList(struct adFATLinkList_s **head, uint32_t length
     return 0;
 }
 
+static int mspFS_preSetPool(struct sdDirPool_s *pool, uint32_t lv)
+{
+    int id=0;
+    pool->dirMax = FAT_DIRPOOL_IDX_MAX;
+    for (id = 0; id < FAT_DIRPOOL_IDX_MAX; id++) {
+        pool->dirPool[id].dfindex = id | (lv << 16);
+    }
+    return 0;
+}
+
 static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
 {
     char mlog[256];
-    struct sdDirPool_s *pool;
-    
-    pool = psFat->fatDirPool;
+    int cid=0, lv=0;
+    struct sdFatDir_s  *pfatDir=0;
+    struct sdDirPool_s *pool=0;
+
+    pfatDir = &psFat->fatDirTr;
+
+    if (pfatDir->dirFATUsed == 0) {
+        cid = pfatDir->dirFATUsed;
+        pool = aspMalloc(sizeof(struct sdDirPool_s), 8);
+        if (!pool) {
+            *dir = 0;
+            return -1;
+        }
+        memset(pool, 0, sizeof(struct sdDirPool_s));
+        
+        mspFS_preSetPool(pool, cid+1);
+        pfatDir->fatDirPool[cid] = pool;
+        
+        pfatDir->dirFATUsed += 1;
+    } else if (pfatDir->dirFATUsed > 0) {
+        if (pfatDir->dirFATUsed > pfatDir->dirFATMax) {
+            *dir = 0;
+            return -2;
+        }
+        cid = pfatDir->dirFATUsed - 1;    
+        pool = pfatDir->fatDirPool[cid];
+    } else {
+        *dir = 0;
+        return -3;
+    }
 
     if (pool->dirUsed >= pool->dirMax) {
-        *dir = 0;
-        return -1;
+        cid = pfatDir->dirFATUsed;
+        pool = aspMalloc(sizeof(struct sdDirPool_s), 8);
+        if (!pool) {
+            *dir = 0;
+            return -4;
+        }
+        memset(pool, 0, sizeof(struct sdDirPool_s));
+        
+        mspFS_preSetPool(pool, cid+1);
+        pfatDir->fatDirPool[cid] = pool;
+        
+        pfatDir->dirFATUsed += 1;
     }
 
     *dir = &pool->dirPool[pool->dirUsed];
@@ -8050,7 +8332,9 @@ static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
     //sprintf(mlog, "Pool [%d] used\n", pool->dirUsed);
     //print_f(mlogPool, "FS", mlog);
 
-    return 0;
+    pfatDir->dirFATDirty = 1;
+
+    return (*dir)->dfindex;
 }
 
 static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, char *dir)
@@ -8089,6 +8373,7 @@ static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, 
     }
 
     c->pa = r;
+    c->dfpaid = r->dfindex;
     c->br = 0;
     c->ch = 0;
     c->dftype = ASPFS_TYPE_DIR;
@@ -8100,6 +8385,7 @@ static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, 
     r->pa = 0;
     r->br = 0;
     r->ch = c;
+    r->dfchid = c->dfindex;
     r->dftype = ASPFS_TYPE_ROOT;
     r->dfattrib = 0;
     r->dfstats = 0;
@@ -8194,6 +8480,7 @@ static int mspFS_insertChildDir(struct sdFAT_s *psFat, struct directnFile_s *par
     }
 
     c->pa = r;
+    c->dfpaid = r->dfindex;
     c->br = 0;
     c->ch = 0;
     c->dftype = ASPFS_TYPE_DIR;
@@ -8203,8 +8490,10 @@ static int mspFS_insertChildDir(struct sdFAT_s *psFat, struct directnFile_s *par
     strcpy(c->dfLFN, "..");
 
     r->pa = parent;
+    r->dfpaid = parent->dfindex;
     r->br = 0;
     r->ch = c;
+    r->dfchid = c->dfindex;
     r->dfattrib = 0;
     r->dfstats = 0;
     r->dftype = ASPFS_TYPE_DIR;
@@ -8217,13 +8506,17 @@ static int mspFS_insertChildDir(struct sdFAT_s *psFat, struct directnFile_s *par
 
     if (parent->ch == 0) {
         parent->ch = r;
+        parent->dfchid = r->dfindex;
     } else {
         brt = parent->ch;
         if (brt->br == 0) {
             brt->br = r;
+            brt->dfbrid = r->dfindex;
         } else {
             r->br = brt->br;
+            r->dfbrid = brt->br->dfindex;
             brt->br = r;
+            brt->dfbrid = r->dfindex;
         }
     }
 
@@ -8243,6 +8536,7 @@ static int mspFS_insertChildFile(struct sdFAT_s *psFat, struct directnFile_s *pa
     if (!r) return (-2);
 
     r->pa = parent;
+    r->dfpaid = parent->dfindex;
     r->br = 0;
     r->ch = 0;
     r->dfattrib = 0;
@@ -8257,13 +8551,17 @@ static int mspFS_insertChildFile(struct sdFAT_s *psFat, struct directnFile_s *pa
 
     if (parent->ch == 0) {
         parent->ch = r;
+        parent->dfchid = r->dfindex;
     } else {
         brt = parent->ch;
         if (brt->br == 0) {
             brt->br = r;
+            brt->dfbrid = r->dfindex;
         } else {
             r->br = brt->br;
+            r->dfbrid = brt->br->dfindex;
             brt->br = r;
+            brt->dfbrid = r->dfindex;
         }
     }
  
@@ -17744,7 +18042,7 @@ static int stmetasd_103(struct psdata_s *data)
             dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
 
             data->result = emb_result(data->result, NEXT);
-            sprintf(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            sprintf(rs->logs, "op_103: result: %x, goto %d\n", data->result, ch); 
             print_f(rs->plogs, "GOSD", rs->logs);  
             break;
         case WAIT:
@@ -17774,27 +18072,21 @@ static int stmetasd_104(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData_s * pmeta;
     struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
     rlt = abs_result(data->result); 
-    pmeta = rs->pmetaout;
-    t = &rs->pmch->tmp;
-    sprintf(rs->logs, "op_00 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "MTSD", rs->logs);  
+    sprintf(rs->logs, "op_104 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "UPSD", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            t->opcode = OP_META_DAT;
-            t->data = ASPMETA_CROP_300DPI;
-            aspMetaClear(0, rs, ASPMETA_OUTPUT);
-            aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-            dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+            ch = 125;
 
-            data->result = emb_result(data->result, NEXT);
-            sprintf(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "MTSD", rs->logs);  
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf(rs->logs, "op_104: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "UPSD", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -18574,7 +18866,7 @@ static int ring_buf_info_len(struct shmem_s *pp)
     return dist;
 }
 
-#define DUAL_STREAM_RING_LOG (0)
+#define LOG_DUAL_STREAM_RING (0)
 static int ring_buf_init(struct shmem_s *pp)
 {
     pp->r->lead.run = 0;
@@ -18759,7 +19051,7 @@ static int ring_buf_prod_dual(struct shmem_s *pp, int sel)
         }
     }
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
-#if DUAL_STREAM_RING_LOG
+#if LOG_DUAL_STREAM_RING
     sprintf(str, "prod %d %d, %d %d\n", pp->r->lead.run, pp->r->lead.seq, pp->r->dual.run, pp->r->dual.seq);
     print_f(mlogPool, "ring", str);
 #endif
@@ -18801,7 +19093,7 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
     } else {
         dist = leadn - folwn;
     }
-#if DUAL_STREAM_RING_LOG
+#if LOG_DUAL_STREAM_RING
     sprintf(str, "cons d: %d %d/%d/%d \n", dist, leadn, dualn, folwn);
     print_f(mlogPool, "ring", str);
 #endif
@@ -19076,6 +19368,17 @@ static int pn_end(struct procRes_s *rs)
 static int p6_init(struct procRes_s *rs)
 {
     int ret;
+
+    rs->cpyfatDirTr = aspMemalloc(sizeof(struct sdFatDir_s), 8);
+    if (!rs->cpyfatDirTr) {
+        sprintf(rs->logs, "ERROR!!! allocate memory for fat dir failed!!!\n");
+        print_f(rs->plogs, "P6_INIT", rs->logs);
+
+        return -1;
+    }
+
+    memset(rs->cpyfatDirTr, 0, sizeof(struct sdFatDir_s));
+    
     ret = pn_init(rs);
     return ret;
 }
@@ -19276,7 +19579,7 @@ end:
     return ret;
 }
 
-#define FUNC_PROCEDURE_LOG (0)
+#define LOG_FUNC_PROCEDURE (0)
 static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
 {
     char ch=0, param=0, *rlt=0;
@@ -19293,7 +19596,7 @@ static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
     if (!rlt) {ret = -4; goto end;}
     if (!rsp) {ret = -5; goto end;}
     
-#if FUNC_PROCEDURE_LOG
+#if LOG_FUNC_PROCEDURE
     sprintf(mrs->log, "cmdfunc_upd2host opc:0x%x, dat:0x%x\n", pkt->opcode, pkt->data); 
     print_f(&mrs->plog, "DBG", mrs->log);
 #endif
@@ -19311,7 +19614,7 @@ static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
         ret = (n * 10) -2; /* -32 */
         goto end;
     }
-#if FUNC_PROCEDURE_LOG
+#if LOG_FUNC_PROCEDURE
     sprintf(mrs->log, "1.wt get %c\n", *rlt); 
     print_f(&mrs->plog, "DBG", mrs->log);
 #endif
@@ -19335,7 +19638,7 @@ static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
     sprintf(mrs->log, "result:"); 
     print_dbg(&mrs->plog, mrs->log, n);
 
-#if FUNC_PROCEDURE_LOG
+#if LOG_FUNC_PROCEDURE
     sprintf(mrs->log, "2.wt get 0x%x\n", *rlt); 
     print_f(&mrs->plog, "DBG", mrs->log);
 #endif
@@ -19347,7 +19650,7 @@ static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
 
     dt16 = pkg_info(&mrs->mchine.get);
     abs_info(pkt, dt16);
-#if FUNC_PROCEDURE_LOG
+#if LOG_FUNC_PROCEDURE
     sprintf(mrs->log, "3.wt get pkt op:0x%x, data:0x%x\n", pkt->opcode, pkt->data); 
     print_f(&mrs->plog, "DBG", mrs->log);
 #endif
@@ -20201,6 +20504,70 @@ end:
     return 0;
 }
 
+static int cmdfunc_upsd_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0, ch=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf(mrs->log, "cmdfunc_upsd_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_RAW;
+    pkt->data = 0;
+
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    sprintf(mrs->log, "=====_UPLOAD_SD_ BEG=====");
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+    
+    n = cmdfunc_upd2host(mrs, '2', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if (rsp != 0x2) {
+         sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -1;
+    }
+
+    sprintf(mrs->log, "cmdfunc_upsd_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "UPSD_NG,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "UPSD_OK,%d,%d", ret, brk);
+    }
+
+    sprintf(mrs->log, "=====_UPLOAD_SD_ END=====");
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
 static int cmdfunc_gosd_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0, ch=0;
@@ -21314,7 +21681,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 31
+#define CMD_SIZE 32
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -21327,7 +21694,7 @@ static int dbg(struct mainRes_s *mrs)
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
                                 , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}
-                                , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}};
+                                , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}, {31, "upsd", cmdfunc_upsd_opcode}};
 
     p0_init(mrs);
 
@@ -23307,7 +23674,7 @@ static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
     int bitset=0, ret;
 
     bitset = 0;
-    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    pabuf = &mrs->aspFat.parBuf;
     
     msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 8, __u32), &bitset);   //SPI_IOC_WR_DATA_MODE
     sprintf(mrs->log, "spi0 Set data mode: %d\n", bitset);
@@ -23343,7 +23710,7 @@ static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     //sprintf(mrs->log, "%d\n", modersp->v);
     //print_f(&mrs->plog, "fs46", mrs->log);
-    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    pabuf = &mrs->aspFat.parBuf;
     
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     while (ret > 0) {
@@ -23422,7 +23789,7 @@ static int fs47(struct mainRes_s *mrs, struct modersp_s *modersp)
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((ret > 0) && (ch == 'S')){
         clock_gettime(CLOCK_REALTIME, &mrs->time[1]);
-        pabuf = &mrs->aspFat.fatDirPool->parBuf;
+        pabuf = &mrs->aspFat.parBuf;
         sprintf(mrs->log, "spi 0 end, buff used: %d\n", pabuf->dirBuffUsed);
         print_f(&mrs->plog, "fs47", mrs->log);
         
@@ -23532,7 +23899,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
 
     if (pParBuf->dirBuffUsed) {
         sprintf(mrs->log, "parsing, buff  size:%d\n", pParBuf->dirBuffUsed);
@@ -23718,7 +24085,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
 
@@ -23738,15 +24105,15 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         ret = aspFS_createFATRoot(pfat);
         if (ret == 0) {
-            aspFS_insertFATChilds(pfat, pfat->fatRootdir, pr, pParBuf->dirBuffUsed);
+            aspFS_insertFATChilds(pfat, &pfat->fatRootdir, pr, pParBuf->dirBuffUsed);
         }
 
-        if (pfat->fatRootdir->ch->dfSFN) {
+        if (pfat->fatRootdir.ch->dfSFN) {
             pfat->fatStatus |= ASPFAT_STATUS_ROOT_DIR;
         }
         
 
-        curDir = pfat->fatRootdir;
+        curDir = &pfat->fatRootdir;
         br= curDir->ch;
 
 #if 0 /* do folder parsing anyway */
@@ -23872,7 +24239,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
     
@@ -24092,7 +24459,7 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
     pfat = &mrs->aspFat;
     pftb = pfat->fatTable;
     psec = pfat->fatBootsec;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
 
     if (pftb->ftbFat1) {
         sprintf(mrs->log, "get FAT table, addr:0x%.8x, len:%d\n", pftb->ftbFat1, pftb->ftbLen);
@@ -24310,23 +24677,25 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs56", mrs->log);
 
     pfat = &mrs->aspFat;
-    curDir = pfat->fatRootdir;
+    curDir = &pfat->fatRootdir;
 
     if (!(pfat->fatStatus & ASPFAT_STATUS_BOOT)) {
         mspFS_listDetail(curDir, 4);
         //mspFS_list(curDir, 4);
         pfat->fatStatus |= ASPFAT_STATUS_BOOT;
         
-        pfat->fatCurDir = pfat->fatRootdir;
+        //pfat->fatCurDir = pfat->fatRootdir;
+        aspFScpDir(&pfat->fatCurDir, &pfat->fatRootdir);
     } else {
         //aspMemClear(aspMemAsign, asptotMalloc, 10);
         
-        if(pfat->fatCurDir) {
-            curDir = pfat->fatCurDir;
+        if(pfat->fatCurDir.dfindex) {
+            curDir = &pfat->fatCurDir;
             mspFS_folderList(curDir, 4);            
         } else {
-            pfat->fatCurDir = pfat->fatRootdir;
-            curDir = pfat->fatCurDir;
+            //pfat->fatCurDir = pfat->fatRootdir;
+            aspFScpDir(&pfat->fatCurDir, &pfat->fatRootdir);            
+            curDir = &pfat->fatCurDir;
             mspFS_folderList(curDir, 4);            
         }
     }
@@ -24911,19 +25280,21 @@ static int fs70(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
 
-    sprintf(mrs->log, "download file: %s \n", pfat->fatFileDnld->dfSFN);
+    sprintf(mrs->log, "download file: %s \n", pfat->fatFileDnld.dfSFN);
     print_f(&mrs->plog, "fs70", mrs->log);
 
-    if (!pfat->fatFileDnld) {
+    if (!pfat->fatFileDnld.dfindex) {
         modersp->r = 2;
         return 1;
     }
    
-    curDir = pfat->fatFileDnld;
+    //curDir = pfat->fatFileDnld;
+    aspFSms2rs(&curDir, &pfat->fatFileDnld, &pfat->fatDirTr);
+    //aspFScpDir(curDir, &pfat->fatFileDnld);
     if (!pftb->h) {
         pflsh = 0;
 
@@ -24979,11 +25350,12 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
 
-    curDir = pfat->fatFileDnld;
+    //curDir = pfat->fatFileDnld;
+    aspFSms2rs(&curDir, &pfat->fatFileDnld, &pfat->fatDirTr);
     if (!curDir) {
         sprintf(mrs->log, "get SD cur failed\n");
         print_f(&mrs->plog, "fs71", mrs->log);
@@ -25059,7 +25431,10 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
     }else {
         pftb->h = 0;
         pfat->fatStatus &= ~ASPFAT_STATUS_SDRD;    
-        pfat->fatFileDnld = 0;
+        
+        //pfat->fatFileDnld = 0;
+        memset(&pfat->fatFileDnld, 0, sizeof(struct directnFile_s));
+        
         modersp->r = 1;
     }
 
@@ -25168,7 +25543,7 @@ static int fs74(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    int val=0, i=0, ret=0;
+    int val=0, i=0, ret=0, dirid=0;
     char *pr=0;
     uint32_t secStr=0, secLen=0, clstByte=0, clstLen=0, freeClst=0, usedClst=0, totClst=0;
     struct aspConfig_s *pct=0;
@@ -25187,7 +25562,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
     clstByte = psec->secSize * psec->secPrClst;
@@ -25207,15 +25582,19 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
     
-    if (!pfat->fatFileUpld) {
+    if (!pfat->fatFileUpld.dfindex) {
         modersp->r = 0xed;
         return 1;
-    }    
+    } else {
+        dirid = pfat->fatFileUpld.dfindex;
+    }
 
-    sprintf(mrs->log, "upload file: %s \n", pfat->fatFileUpld->dfSFN);
+    sprintf(mrs->log, "upload file: %s \n", pfat->fatFileUpld.dfSFN);
     print_f(&mrs->plog, "fs75", mrs->log);
    
-    curDir = pfat->fatFileUpld;
+    //curDir = &pfat->fatFileUpld;
+    aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+    
     if (!pftb->h) {
         pflsh = 0;
 
@@ -25330,11 +25709,13 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
 
-    curDir = pfat->fatFileUpld;
+    //curDir = &pfat->fatFileUpld;
+    aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+    
     if (!curDir) {
         sprintf(mrs->log, "get SD cur failed\n");
         print_f(&mrs->plog, "fs76", mrs->log);
@@ -25342,6 +25723,8 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 0xed;
         return 1;
     }
+
+    aspFScpDir(curDir, &pfat->fatFileUpld);
 
     sprintf(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
     print_f(&mrs->plog, "fs76", mrs->log);
@@ -25551,13 +25934,14 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
     sprintf(mrs->log, "FAT table upload to SD\n");
     print_f(&mrs->plog, "fs80", mrs->log);
 
-    curDir = pfat->fatFileUpld;
+    //curDir = pfat->fatFileUpld;
+    //aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
     if (pftb->c) {
         pflnt = pftb->c;
 
@@ -25676,20 +26060,22 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
     
-    sprintf(mrs->log, "DFE read from SD (%s)\n", pfat->fatFileUpld->dfSFN);
+    sprintf(mrs->log, "DFE read from SD (%s)\n", pfat->fatFileUpld.dfSFN);
     print_f(&mrs->plog, "fs81", mrs->log);
 
-    curDir = pfat->fatFileUpld;
+    //curDir = pfat->fatFileUpld;
+    aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
     if (!curDir) {
         sprintf(mrs->log, "DFE read from SD\n");
         print_f(&mrs->plog, "fs81", mrs->log);
         modersp->r = 0xed;
         return 1;
     }
+    aspFScpDir(curDir, &pfat->fatFileUpld);
     
     if (mrs->folder_dirt) {
         pfdirt = mrs->folder_dirt;
@@ -26162,15 +26548,17 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
     
     sprintf(mrs->log, "DFE upload to SD\n");
     print_f(&mrs->plog, "fs88", mrs->log);
 
-    curDir = pfat->fatFileUpld;
-
+    //curDir = pfat->fatFileUpld;
+    aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+    aspFScpDir(curDir, &pfat->fatFileUpld);
+    
     if (pParBuf->dirBuffUsed) {
         pfat->fatStatus &= ~ASPFAT_STATUS_DFERD;
         if (!pftb->c) {
@@ -26375,7 +26763,10 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs88", mrs->log);
 
             pfat->fatStatus &= ~ASPFAT_STATUS_DFEWT;    
-            pfat->fatFileUpld = 0;
+            
+            //pfat->fatFileUpld = 0;
+            memset(&pfat->fatFileUpld, 0, sizeof(struct directnFile_s));
+
             curDir->dfstats = ASPFS_STATUS_EN;
             mrs->folder_dirt = 0;
             //curDir->dfstats = ASPFS_STATUS_EN;
@@ -26394,7 +26785,7 @@ static int fs89(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0\n");
     print_f(&mrs->plog, "fs89", mrs->log);
 
-    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    pabuf = &mrs->aspFat.parBuf;
     
 #if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
     bitset = 0;
@@ -26642,14 +27033,14 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    if (!pfat->fatCurDir) {
+    if (!pfat->fatCurDir.dfindex) {
         sprintf(mrs->log, "Error!! current folder is null \n");
         print_f(&mrs->plog, "fs93", mrs->log);
         modersp->r = 0xed;
         return 1;
     }
 
-    fscur = pfat->fatCurDir;
+    fscur = &pfat->fatCurDir;
 
     secStr = 0;
     secLen = 0;
@@ -26802,7 +27193,10 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
     pftb->c = pftb->h;
 
     aspFS_insertFATChild(fscur, upld);
-    pfat->fatFileUpld = upld;
+    
+    //pfat->fatFileUpld = upld;
+    aspFScpDir(&pfat->fatFileUpld, upld);
+    
     debugPrintDir(upld);
     mspFS_folderList(upld->pa, 4);
 
@@ -26835,11 +27229,13 @@ static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
     pfat = &mrs->aspFat;
-    pParBuf = &pfat->fatDirPool->parBuf;
+    pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
 
-    curDir = pfat->fatFileUpld;
+    //curDir = &pfat->fatFileUpld;
+    aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+
     if (!curDir) {
         sprintf(mrs->log, "get SD cur failed\n");
         print_f(&mrs->plog, "fs94", mrs->log);
@@ -26847,7 +27243,8 @@ static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 0xed;
         return 1;
     }
-
+    aspFScpDir(curDir, &pfat->fatFileUpld);
+    
     sprintf(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
     print_f(&mrs->plog, "fs94", mrs->log);
 
@@ -27296,13 +27693,15 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    if (!pfat->fatCurDir) {
+    if (!pfat->fatCurDir.dfindex) {
         sprintf(mrs->log, "Error!! current folder is null \n");
         print_f(&mrs->plog, "fs98", mrs->log);
         modersp->r = 2;
         return 1;
     }
-    fscur = pfat->fatCurDir;
+    
+    //fscur = &pfat->fatCurDir;
+    aspFSms2rs(&fscur, &pfat->fatCurDir, &pfat->fatDirTr);
 
     sh = pfat->fatSupdata;
     if (!sh) {
@@ -27759,7 +28158,10 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     upld->dflength = datLen;
 
     aspFS_insertFATChild(fscur, upld);
-    pfat->fatFileUpld = upld;
+    
+    //pfat->fatFileUpld = upld;
+    aspFScpDir(&pfat->fatFileUpld, upld);
+
     debugPrintDir(upld);
     mspFS_folderList(upld->pa, 4);
 
@@ -28484,7 +28886,7 @@ static int fs114(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs114", mrs->log);
 #endif
 
-    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    pabuf = &mrs->aspFat.parBuf;
     sprintf(mrs->log, "buff used: %d/%d, reset !!\n", pabuf->dirBuffUsed, pabuf->dirBuffMax);
     print_f(&mrs->plog, "fs114", mrs->log);
 
@@ -28510,7 +28912,7 @@ static int fs115(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     //sprintf(mrs->log, "%d\n", modersp->v);
     //print_f(&mrs->plog, "fs115", mrs->log);
-    pabuf = &mrs->aspFat.fatDirPool->parBuf;
+    pabuf = &mrs->aspFat.parBuf;
     
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     while (ret > 0) {
@@ -28599,7 +29001,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
     ret = mrs_ipc_get(mrs, &ch, 1, 1);
     if ((ret > 0) && (ch == 'L')){
         
-        pabuf = &mrs->aspFat.fatDirPool->parBuf;
+        pabuf = &mrs->aspFat.parBuf;
         totsz = pabuf->dirBuffUsed;
         srcbuf = pabuf->dirParseBuff;
         
@@ -29902,9 +30304,100 @@ static int fs124(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf(mrs->log, "empty !!!\n");
-    print_f(&mrs->plog, "fs125", mrs->log);
+    struct sdFatDir_s *pfatdir=0;
+    struct sdDirPool_s *pdirpool=0;
+    int dirused=0, idd=0, maxsz=0, len=0, usedsz=0, totsz=0, txsz=0;
+    int cpn=0, bufn=0;
+    char *src=0, *addrd=0;
+    char ch=0;
+    
+    pfatdir = &mrs->aspFat.fatDirTr;
+    msync(pfatdir, sizeof(struct sdFatDir_s), MS_SYNC);
 
+    if (!pfatdir->dirFATDirty) {
+        modersp->r = 1;
+        return 1;
+    }
+
+    dirused = pfatdir->dirFATUsed;
+    if (dirused > pfatdir->dirFATMax) {
+        dirused = pfatdir->dirFATMax;
+    }
+
+   
+    for (idd = 0; idd < dirused; idd++) {
+        pdirpool = pfatdir->fatDirPool[idd];
+        if (!pdirpool) {
+            sprintf(mrs->log, "ERROR!!! dir pool == NULL !!!\n");
+            print_f(&mrs->plog, "fs125", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        ring_buf_init(&mrs->dataRx);    
+
+        cpn = 0;
+        totsz = 0;
+        src = (char *)pdirpool->dirPool;
+        usedsz = pdirpool->dirUsed;
+        maxsz = pdirpool->dirMax;
+        if (usedsz > maxsz) {
+            sprintf(mrs->log, "WARNING!!! plan to send data, size: %d > max: %d\n", usedsz, maxsz);
+            print_f(&mrs->plog, "fs125", mrs->log);
+            usedsz = maxsz;
+        }
+
+        txsz = usedsz * sizeof(struct directnFile_s);
+        sprintf(mrs->log, "plan to send data, size: %d (%dx) \n", txsz, usedsz, sizeof(struct directnFile_s));
+        print_f(&mrs->plog, "fs125", mrs->log);
+
+        while (txsz > 0) {
+            len = ring_buf_get(&mrs->dataRx, &addrd);
+            if (len <= 0) {
+                sprintf(mrs->log, "ERROR!!! get ring buffer failed ret = %d\n", len);
+                print_f(&mrs->plog, "fs125", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+        
+            if (txsz < len) {
+                len = txsz;
+            }
+
+            memcpy(addrd, src, len);
+
+            totsz += len;
+            src += len;
+            txsz -= len;
+            cpn++;
+
+            ring_buf_prod(&mrs->dataRx);
+
+            sprintf(mrs->log, "%d. len:%d, totsz: %d\n", cpn, len, totsz);
+            print_f(&mrs->plog, "fs125", mrs->log);
+        }
+
+        ring_buf_set_last(&mrs->dataRx, len);
+        bufn = ring_buf_info_len(&mrs->dataRx);
+
+        sprintf(mrs->log, "cpn: %d, bufn: %d\n", cpn, bufn);
+        print_f(&mrs->plog, "fs125", mrs->log);
+
+        mrs_ipc_put(mrs, "d", 1, 7);
+
+        len = mrs_ipc_get(mrs, &ch, 1, 7);
+        while (len <= 0) {
+            usleep(1000);
+            len = mrs_ipc_get(mrs, &ch, 1, 7);    
+        }
+
+        if (ch != 'D') {
+            sprintf(mrs->log, "WARNING!!! get reponse from p7 is %c, not D\n", ch);
+            print_f(&mrs->plog, "fs125", mrs->log);
+        }
+
+    }
+    
+    modersp->r = 1;
     return 1;
 }
 
@@ -29940,7 +30433,7 @@ static int fs129(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 1;
 }
 
-#define P0_LOG (0)
+#define LOG_P0_EN (0)
 static int p0(struct mainRes_s *mrs)
 {
 #define PS_NUM 130
@@ -30017,7 +30510,7 @@ static int p0(struct mainRes_s *mrs)
         //print_f(&mrs->plog, "P0", mrs->log);
         len = mrs_ipc_get(mrs, &ch, 1, 0);
         if (len > 0) {
-#if P0_LOG
+#if LOG_P0_EN
             sprintf(mrs->log, "modesw.m:%d ch:%d\n", modesw->m, ch);
             print_f(&mrs->plog, "P0", mrs->log);
 #endif
@@ -30059,7 +30552,7 @@ static int p0(struct mainRes_s *mrs)
         }
 
         if (modesw->m == -1) {
-#if P0_LOG
+#if LOG_P0_EN
             sprintf(mrs->log, "pmode:%d rsp:%d - end\n", tmp, modesw->r);
             print_f(&mrs->plog, "P0", mrs->log);
 #endif
@@ -30086,7 +30579,7 @@ static int p0(struct mainRes_s *mrs)
     return 0;
 }
 
-#define P1_LOG (0)
+#define LOG_P1_EN (0)
 static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 {
     uint32_t px, pi;
@@ -30135,7 +30628,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //print_f(rs->plogs, "P1", rs->logs);
 
 //     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q', 'r', 'y', 'z'};
-//       a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, y, z, 1
+//       a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, y, z, 1, 2
         cmd = '\0';
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
@@ -30226,6 +30719,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == '1') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, MTSDV, PSWT);
+                } else if (cmd == '2') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, MTSDV, PSRLT);
                 }
 
 
@@ -30241,7 +30737,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                     logcnt = 0;
                     break;
                 }
-            } else { /* command to interrupt state machine here */
+            }
+            else { /* command to interrupt state machine here */
                 if (cmd == 'r') {
                     cmdt = cmd;
                     stdata->result = emb_result(stdata->result, BREAK);
@@ -30262,7 +30759,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         ret = rs_ipc_get(rs, &ch, 1);
         
         if ((ret > 0) && (ch != '$')) {
-#if P1_LOG
+#if LOG_P1_EN
             sprintf(rs->logs, "rsp, ret:%d ch:0x%.2x\n", ret, ch);
             print_f(rs->plogs, "P1", rs->logs);
 #endif
@@ -30319,7 +30816,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
             print_f(rs->plogs, "P1", rs->logs);
 */
             if ((pi >= SMAX) || (px >= PSMAX)) {
-#if P1_LOG
+#if LOG_P1_EN
                 sprintf(rs->logs, "<%c,0x%x,done>\n", cmdt, ch);
                 print_f(rs->plogs, "P1", rs->logs);
 #endif
@@ -30372,10 +30869,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define MSP_P4_SAVE_DAT (0)
 #define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
-#define TIME_MEASURE (0)
-#define P2_TX_LOG (1)
-#define P2_CMD_LOG (0)
-#define P2_SIMPLE_LOG (0)
+
+#define LOG_TIME_MEASURE_EN (0)
+#define LOG_P2_TX_EN (1)
+#define LOG_P2_CMD_EN (0)
+#define LOG_P2_SIMPLE_EN (0)
 static int p2(struct procRes_s *rs)
 {
     FILE *fp=0;
@@ -30436,7 +30934,7 @@ static int p2(struct procRes_s *rs)
             //sprintf(rs->logs, "recv ch: %c\n", ch);
             //print_f(rs->plogs, "P2", rs->logs);
             
-#if LOG_DOT_PROGRESS
+#if LOG_DOT_PROG_EN
             printf("2%c", ch);
 #endif
             aspMemClear(aspMemAsign, asptotMalloc, 2);
@@ -30534,7 +31032,7 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_OP_0x%.2x_0x%.2x_ BEG", tx8[0], tx8[1]);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 4, "_O_T_");
 
-#if P2_CMD_LOG
+#if LOG_P2_CMD_EN
                 sprintf(rs->logs, "send 0x%.2x 0x%.2x \n", tx8[0], tx8[1]);
                 print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -30561,12 +31059,12 @@ static int p2(struct procRes_s *rs)
                 dbgShowTimeStamp(rs->logs, NULL, rs, 4, "_O_R_");                
 
                 
-#if P2_CMD_LOG
+#if LOG_P2_CMD_EN
                 sprintf(rs->logs, "recv 0x%.2x 0x%.2x len=%d\n", rx8[0], rx8[1], len);
                 print_f(rs->plogs, "P2", rs->logs);
 #endif
 
-#if P2_SIMPLE_LOG
+#if LOG_P2_SIMPLE_EN
                 sprintf(rs->logs, "tx 0x%.2x 0x%.2x rx 0x%.2x 0x%.2x \n",  tx8[0], tx8[1], rx8[0], rx8[1]);
                 print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -30623,7 +31121,7 @@ static int p2(struct procRes_s *rs)
                     //memset(addr, 0x55, len);
                     //msync(addr, len, MS_SYNC);                    
                     //shmem_check(addr, len);
-#if  TIME_MEASURE
+#if  LOG_TIME_MEASURE_EN
                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
 #endif
 #if SPI_KTHREAD_USE
@@ -30664,12 +31162,12 @@ static int p2(struct procRes_s *rs)
                     fflush(rs->fdat_s[1]);
 #endif
                     //printf("0 spi %d\n", opsz);
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                     sprintf(rs->logs, "r %d / %d\n", opsz, len);
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
                     msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);                    
-#if TIME_MEASURE 
+#if LOG_TIME_MEASURE_EN 
                     clock_gettime(CLOCK_REALTIME, &tnow);
 
                     tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
@@ -30792,7 +31290,7 @@ static int p2(struct procRes_s *rs)
 #endif
 
                             //usleep(10000);
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                             sprintf(rs->logs, "r %d/%d - %d\n", opsz, totsz, pi);
                             print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -30869,7 +31367,7 @@ static int p2(struct procRes_s *rs)
                 datLen = secLen * 512;
                 minLen = 16 * 512;
 
-                pabuf = &rs->psFat->fatDirPool->parBuf;
+                pabuf = &rs->psFat->parBuf;
                 maxLen = pabuf->dirBuffMax;
                 
                 sprintf(rs->logs, "cmode: %d, ready for rx %d/%d, secStr:%d, secLen:%d, maxLen:%d\n", cmode, datLen, minLen, secStr, secLen, maxLen);
@@ -30924,7 +31422,7 @@ static int p2(struct procRes_s *rs)
                     }
 #endif
 
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                     sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -31128,7 +31626,7 @@ static int p2(struct procRes_s *rs)
                         //shmem_dump(addr, 128);
                     }
 
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                     sprintf(rs->logs, "u t %d\n", len);
                     print_f(rs->plogs, "P2", rs->logs);          
 #endif
@@ -31300,7 +31798,7 @@ static int p2(struct procRes_s *rs)
                     }
 #endif
 
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                     sprintf(rs->logs, "r (%d)\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -31355,7 +31853,7 @@ static int p2(struct procRes_s *rs)
                 datLen = secLen * 512;
                 minLen = 16 * 512;
 
-                pabuf = &rs->psFat->fatDirPool->parBuf;
+                pabuf = &rs->psFat->parBuf;
                 sprintf(rs->logs, "cmode: %d, ready for rx %d/%d\n", cmode, datLen, minLen);
                 print_f(rs->plogs, "P2", rs->logs);
 /*
@@ -31409,7 +31907,7 @@ static int p2(struct procRes_s *rs)
                     }
 #endif
 
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                     sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -31499,7 +31997,7 @@ static int p2(struct procRes_s *rs)
 #endif
 
                             //usleep(10000);
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                             sprintf(rs->logs, "spi0 recv %d\n", opsz);
                             print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -31559,7 +32057,7 @@ static int p2(struct procRes_s *rs)
                     }
 
                     //usleep(10000);
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                     sprintf(rs->logs, "spi0 recv %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -31653,7 +32151,7 @@ static int p2(struct procRes_s *rs)
 #endif
 
                             //usleep(10000);
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                             sprintf(rs->logs, "r %d - %d\n", opsz, pi);
                             print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -31689,7 +32187,7 @@ static int p2(struct procRes_s *rs)
 
             }
             else if (cmode == 16) {
-                pabuf = &rs->psFat->fatDirPool->parBuf;
+                pabuf = &rs->psFat->parBuf;
                 maxLen = pabuf->dirBuffMax;
                 
                 sprintf(rs->logs, "cmode: %d, ready for tx, maxLen:%d\n", cmode, maxLen);
@@ -31736,7 +32234,7 @@ static int p2(struct procRes_s *rs)
                     }
 #endif
 
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                     sprintf(rs->logs, "r %d\n", opsz);
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -31824,7 +32322,7 @@ static int p2(struct procRes_s *rs)
 #endif
 
                             //usleep(10000);
-#if P2_TX_LOG
+#if LOG_P2_TX_EN
                             sprintf(rs->logs, "r %d - %d\n", opsz, pi);
                             print_f(rs->plogs, "P2", rs->logs);
 #endif
@@ -31875,7 +32373,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
-#define P3_TX_LOG  (1)
+#define LOG_P3_TX_EN  (1)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -31927,7 +32425,7 @@ static int p3(struct procRes_s *rs)
         if (ret > 0) {
             //sprintf(rs->logs, "recv ch: %c\n", ch);
             //print_f(rs->plogs, "P3", rs->logs);
-#if LOG_DOT_PROGRESS
+#if LOG_DOT_PROG_EN
             printf("3%c", ch);
 #endif
             aspMemClear(aspMemAsign, asptotMalloc, 3);
@@ -32012,7 +32510,7 @@ static int p3(struct procRes_s *rs)
                     len = ring_buf_get_dual(rs->pdataRx, &addr, pi);
                     memset(addr, 0xaa, len);
                     msync(addr, len, MS_SYNC);
-#if TIME_MEASURE
+#if LOG_TIME_MEASURE_EN
                     clock_gettime(CLOCK_REALTIME, rs->tm[1]);
 #endif
 #if SPI1_ENABLE
@@ -32068,13 +32566,13 @@ static int p3(struct procRes_s *rs)
                         fin = NULL;
                 }
 #endif
-#if P3_TX_LOG
+#if LOG_P3_TX_EN
                     sprintf(rs->logs, "r %d / %d\n", opsz, len);
                     print_f(rs->plogs, "P3", rs->logs);
 #endif
                     msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
 
-#if TIME_MEASURE
+#if LOG_TIME_MEASURE_EN
                     clock_gettime(CLOCK_REALTIME, &tnow);
                     if (opsz == 0) {
                         //sprintf(rs->logs, "opsz:%d\n", opsz);
@@ -32203,7 +32701,7 @@ static int p3(struct procRes_s *rs)
                             }
 #endif
 
-#if P3_TX_LOG
+#if LOG_P3_TX_EN
                             sprintf(rs->logs, "r %d/%d - %d\n", opsz, totsz, pi);
                             print_f(rs->plogs, "P3", rs->logs);
 #endif
@@ -32284,7 +32782,7 @@ static int p3(struct procRes_s *rs)
                     }
 
                     //usleep(10000);
-#if P3_TX_LOG
+#if LOG_P3_TX_EN
                     sprintf(rs->logs, "spi1 recv %d\n", opsz);
                     print_f(rs->plogs, "P3", rs->logs);
 #endif
@@ -32336,7 +32834,7 @@ static int p3(struct procRes_s *rs)
     return 0;
 }
 
-#define P4_TX_LOG  (1)
+#define LOG_P4_TX_EN  (1)
 static int p4(struct procRes_s *rs)
 {
     float flsize, fltime;
@@ -32446,7 +32944,7 @@ static int p4(struct procRes_s *rs)
             sprintf(rs->logs, "%c ret:%d \n", ch, ret);
             print_f(rs->plogs, "P4", rs->logs);
 
-#if LOG_DOT_PROGRESS
+#if LOG_DOT_PROG_EN
             printf("4%c", ch);
 #endif
 
@@ -32518,7 +33016,7 @@ static int p4(struct procRes_s *rs)
 #endif
                             totsz += len;
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
-#if P4_TX_LOG
+#if LOG_P4_TX_EN
                             sprintf(rs->logs, "t %d -%d \n", opsz, pi);
                             print_f(rs->plogs, "P4", rs->logs);         
 #endif
@@ -32705,7 +33203,7 @@ static int p4(struct procRes_s *rs)
                         pi++;
                     
                         /* send data to wifi socket */
-#if P4_TX_LOG
+#if LOG_P4_TX_EN
                         sprintf(rs->logs, " %d -%d \n", len, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
 #endif
@@ -33293,11 +33791,12 @@ static int atFindIdx(char *str, char ch)
     return (-3);
 }
 
-#define P6_RX_LOG    (0)
-#define P6_UTC_LOG  (0)
-#define P6_PARA_LOG  (0)
-#define P6_CROP_LOG    (0)
 #define P6_SEND_BUFF_SIZE (4096)
+
+#define LOG_P6_RX_EN    (0)
+#define LOG_P6_UTC_EN  (0)
+#define LOG_P6_PARA_EN  (0)
+#define LOG_P6_CROP_EN    (0)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
@@ -33342,6 +33841,7 @@ static int p6(struct procRes_s *rs)
     struct aspCropExtra_s *pcpex, *pcpexduo;
     double rotlf[2], rotup[2], rotrt[2], rotdn[2];
 
+    struct sdFatDir_s *rsfatdir=0, *msfatdir=0;
     int idxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
     int idxR[] = {5, 8, 10, 12, 14, 16, 18, 3};    
 
@@ -33364,6 +33864,10 @@ static int p6(struct procRes_s *rs)
     print_f(rs->plogs, "P6", rs->logs);
 
     p6_init(rs);
+
+    rsfatdir = rs->cpyfatDirTr;
+    msfatdir = &rs->psFat->fatDirTr;
+
 /*
     while (!rs->psFat->fatRootdir);    
     fscur = rs->psFat->fatRootdir;
@@ -33456,7 +33960,7 @@ static int p6(struct procRes_s *rs)
         ln = atFindIdx(&recvbuf[hd], '\0');
         
         opcode = recvbuf[hd+1]; param = recvbuf[be-1];
-#if P6_RX_LOG
+#if LOG_P6_RX_EN
         sprintf(rs->logs, "opcode:[0x%x]arg[0x%x]\n", opcode, param);
         print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -33465,7 +33969,7 @@ static int p6(struct procRes_s *rs)
             goto socketEnd;
         }
 
-#if P6_RX_LOG
+#if LOG_P6_RX_EN
         sprintf(rs->logs, "[P6] receive len[%d]contentStr[%s]hd[%d]be[%d]ed[%d]ln[%d]\n", n, &recvbuf[be], hd, be, ed, ln);
         print_f(rs->plogs, "P6", rs->logs);
 
@@ -33757,7 +34261,7 @@ static int p6(struct procRes_s *rs)
                         cpn = (idx - ASPOP_CROP_01) + 1;
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                             sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
@@ -33784,7 +34288,7 @@ static int p6(struct procRes_s *rs)
                         cpn = idx - ASPOP_CROP_01;
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                             sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
@@ -33837,7 +34341,7 @@ static int p6(struct procRes_s *rs)
                         cpn = (idx - ASPOP_CROP_01_DUO) + 1;
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                             sprintf(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
@@ -33864,7 +34368,7 @@ static int p6(struct procRes_s *rs)
                         cpn = idx - ASPOP_CROP_01_DUO;
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                             sprintf(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
@@ -34090,7 +34594,7 @@ static int p6(struct procRes_s *rs)
                     pcpex->crpexRtPots[cpx*2+0] = cxn;
                     pcpex->crpexRtPots[cpx*2+1] = cy;
                     
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
                 }
@@ -34340,7 +34844,7 @@ static int p6(struct procRes_s *rs)
                     pcpexduo->crpexRtPots[cpx*2+0] = cxn;
                     pcpexduo->crpexRtPots[cpx*2+1] = cy;
                     
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
 
@@ -34584,7 +35088,7 @@ static int p6(struct procRes_s *rs)
                         cpn = (idx - ASPOP_CROP_01) + 1;
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                             sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
@@ -34615,7 +35119,7 @@ static int p6(struct procRes_s *rs)
                         cpn = idx - ASPOP_CROP_01;
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                             sprintf(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
@@ -34830,7 +35334,7 @@ static int p6(struct procRes_s *rs)
                     pcpex->crpexRtPots[cpx*2+0] = cxn;
                     pcpex->crpexRtPots[cpx*2+1] = cy;
                     
-#if P6_CROP_LOG
+#if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
                     sendbuf[3] = 'M';
@@ -35038,7 +35542,7 @@ static int p6(struct procRes_s *rs)
                     for (i = 0; i < len; i++) {
                         nexinfo = asp_getInfo(strinfo, i);
                         if (nexinfo) {
-#if P6_PARA_LOG
+#if LOG_P6_PARA_EN
                             sprintf(rs->logs, "%d.[%s]\n", i, nexinfo->infoStr);
                             print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -35068,7 +35572,7 @@ static int p6(struct procRes_s *rs)
                                     pdt->opValue = cd;
                                     pdt->opStatus |= ASPOP_STA_CON;
 
-#if P6_PARA_LOG
+#if LOG_P6_PARA_EN
                                     sprintf(rs->logs, "get 0x%.2x = 0x%.2x (%d)\n", op, cd, fg);
                                     print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -35302,14 +35806,14 @@ static int p6(struct procRes_s *rs)
             ret = asp_strsplit(&strinfo, folder, n);
             n = 0;
             if (ret > 0) {
-#if P6_UTC_LOG
+#if LOG_P6_UTC_EN
                 sprintf(rs->logs, "split str found, ret:%d\n", ret);
                 print_f(rs->plogs, "P6", rs->logs);
 #endif
                 for (i = 0; i < ret; i++) {
                     nexinfo = asp_getInfo(strinfo, i);
                     if (nexinfo) {
-#if P6_UTC_LOG
+#if LOG_P6_UTC_EN
                         sprintf(rs->logs, "%d.[%s]\n", i, nexinfo->infoStr);
                         print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -35342,7 +35846,7 @@ static int p6(struct procRes_s *rs)
                     nexinfo = asp_getInfo(strinfo, i);
                     if (nexinfo) {
                         adata[i] = atoi(nexinfo->infoStr);
-#if P6_RX_LOG
+#if LOG_P6_RX_EN
                         sprintf(rs->logs, "%d.%s = %d\n", 2+i, nexinfo->infoStr, adata[i]);
                         print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -35355,7 +35859,7 @@ static int p6(struct procRes_s *rs)
                     nexinfo = asp_getInfo(strinfo, i+3);
                     if (nexinfo) {
                         atime[i] = atoi(nexinfo->infoStr);
-#if P6_RX_LOG
+#if LOG_P6_RX_EN
                         sprintf(rs->logs, "%d.%s = %d\n", 5+i, nexinfo->infoStr, atime[i]);
                         print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -35369,19 +35873,19 @@ static int p6(struct procRes_s *rs)
 
                 sprintf(syscmd, "date -s %s", curTime);
                 ret = system(syscmd);
-#if P6_UTC_LOG
+#if LOG_P6_UTC_EN
                 sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
                 print_f(rs->plogs, "P6", rs->logs);
 #endif
                 sprintf(syscmd, "hwclock -w");
                 ret = system(syscmd);
-#if P6_UTC_LOG
+#if LOG_P6_UTC_EN
                 sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
                 print_f(rs->plogs, "P6", rs->logs);
 #endif
                 sprintf(syscmd, "date");
                 ret = system(syscmd);
-#if P6_UTC_LOG
+#if LOG_P6_UTC_EN
                 sprintf(rs->logs, "system command:[%s] ret:%d \n", syscmd, ret);
                 print_f(rs->plogs, "P6", rs->logs);
 
@@ -35393,7 +35897,7 @@ static int p6(struct procRes_s *rs)
                 time_t timep;
 
                 time(&timep);
-#if P6_UTC_LOG
+#if LOG_P6_UTC_EN
                 sprintf(rs->logs, "get current %s in C \n", ctime(&timep));
                 print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -35425,7 +35929,7 @@ static int p6(struct procRes_s *rs)
             goto socketEnd;
         }
 
-        if  (!rs->psFat->fatRootdir) {
+        if  (!rs->psFat->fatRootdir.dfindex) {
             sendbuf[3] = 'E';
             sendbuf[5+1] = '\n';
             sendbuf[5+2] = '\0';
@@ -35440,15 +35944,17 @@ static int p6(struct procRes_s *rs)
 
 
         if (!fscur) {
-            fscur = rs->psFat->fatRootdir;
-            pfat->fatCurDir = fscur;
+            fscur = &rs->psFat->fatRootdir;
+            
+            //pfat->fatCurDir = fscur;
+            aspFScpDir(&pfat->fatCurDir, fscur);
         }
 
         if (opcode == 0x10) { /* get current path */
         
             //ret = mspFS_folderJump(&nxtf, fscur, folder);
             //ret = mspFS_FolderSearch(&nxtf, rs->psFat->fatRootdir, folder);
-            ret = mspFS_Search(&nxtf, rs->psFat->fatRootdir, folder, ASPFS_TYPE_DIR);
+            ret = mspFS_Search(&nxtf, &rs->psFat->fatRootdir, folder, ASPFS_TYPE_DIR);
             if (ret) {
                 sprintf(rs->logs, "jump folder:[%s] failed, ret:%d - \n", folder, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -35497,9 +36003,13 @@ static int p6(struct procRes_s *rs)
             print_f(rs->plogs, "P6", rs->logs);
         }
         else if (opcode == 0x12) { /* download file */
+            ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
+            sprintf(rs->logs, "handle opcode: 0x%x, ret = %d\n", opcode, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
             n = 0;
             //ret = mspFS_FileSearch(&dnld, rs->psFat->fatRootdir, folder);
-            ret = mspFS_Search(&dnld, rs->psFat->fatRootdir, folder, ASPFS_TYPE_FILE);
+            ret = mspFS_Search(&dnld, &rs->psFat->fatRootdir, folder, ASPFS_TYPE_FILE);
             if (ret) {
                 sprintf(rs->logs, "search file failed ret=%d\n", ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -35517,13 +36027,14 @@ static int p6(struct procRes_s *rs)
                 sprintf(rs->logs, "start sector:%d sector len:%d, clstStr:%d, size:%d\n", secStr, secLen, dnld->dfclstnum, dnld->dflength);
                 print_f(rs->plogs, "P6", rs->logs);
 
-                if (pfat->fatFileDnld) {
+                if (pfat->fatFileDnld.dfindex) {
                     sprintf(rs->logs, "SD read file to APP (pendding) status:0x%.8x\n", pfat->fatStatus);
                     print_f(rs->plogs, "P6", rs->logs);
                     sendbuf[3] = 'P'; /* pendding */
                 } else {
                     if (dnld->dflength) {
-                        pfat->fatFileDnld = dnld;
+                        //pfat->fatFileDnld = dnld;
+                        aspFScpDir(&pfat->fatFileDnld, dnld);
                         pftb->h = 0;
                         sendbuf[3] = 'D';
                     } else {
@@ -35547,10 +36058,14 @@ static int p6(struct procRes_s *rs)
             
         } 
         else if (opcode == 0x11) { /* folder list */
+            ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
+            sprintf(rs->logs, "handle opcode: 0x%x, ret = %d\n", opcode, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
             nxtf = 0;
             //ret = mspFS_folderJump(&nxtf, fscur, folder);
             //ret = mspFS_FolderSearch(&nxtf, rs->psFat->fatRootdir, folder);
-            ret = mspFS_Search(&nxtf, rs->psFat->fatRootdir, folder, ASPFS_TYPE_DIR);
+            ret = mspFS_Search(&nxtf, &rs->psFat->fatRootdir, folder, ASPFS_TYPE_DIR);
             if (ret) {
                 sprintf(rs->logs, "jump folder:[%s] failed, ret:%d - 2\n", folder, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -35612,15 +36127,18 @@ static int p6(struct procRes_s *rs)
             }
 
             if (cnt == 0) {
-                fscur = rs->psFat->fatRootdir;
+                fscur = &rs->psFat->fatRootdir;
             }
 
-            pfat->fatCurDir = fscur;
+            //pfat->fatCurDir = fscur;
+            aspFScpDir(&pfat->fatCurDir, fscur);
 
         }
         else if (opcode == 0x13) { /* upload file */
-            sprintf(rs->logs, "handle opcode: 0x%x\n", opcode);
+            ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
+            sprintf(rs->logs, "handle opcode: 0x%x, ret = %d\n", opcode, ret);
             print_f(rs->plogs, "P6", rs->logs);
+
 
             ret = asp_strsplit(&strinfo, folder, n);
             n = 0;
@@ -35652,7 +36170,7 @@ static int p6(struct procRes_s *rs)
                 }
             
                 //ret = mspFS_FileSearch(&dnld, rs->psFat->fatRootdir, nexinfo->infoStr);
-                ret = mspFS_Search(&upld, rs->psFat->fatRootdir, nexinfo->infoStr, ASPFS_TYPE_FILE);
+                ret = mspFS_Search(&upld, &rs->psFat->fatRootdir, nexinfo->infoStr, ASPFS_TYPE_FILE);
                 if (ret) {
                     sprintf(rs->logs, "search upload file[%s], not found ret=%d\n", nexinfo->infoStr, ret);
                     print_f(rs->plogs, "P6", rs->logs);
@@ -35712,7 +36230,7 @@ static int p6(struct procRes_s *rs)
                     print_f(rs->plogs, "P6", rs->logs);
                 } else if (cnt > pftb->ftbMng.ftfreeClst) {
                     sendbuf[3] = 'F';
-                } else if (pfat->fatFileUpld) {
+                } else if (pfat->fatFileUpld.dfindex) {
                     sendbuf[3] = 'P';
                 } else {
                     mspFS_allocDir(pfat, &upld);
@@ -35833,7 +36351,9 @@ static int p6(struct procRes_s *rs)
 */                        
                         aspFS_insertFATChild(fscur, upld);
 
-                        pfat->fatFileUpld = upld;
+                        //pfat->fatFileUpld = upld;
+                        //memcpy(&pfat->fatFileUpld, upld, sizeof(struct directnFile_s));
+                        aspFScpDir(&pfat->fatFileUpld, upld);
                         
                         debugPrintDir(upld);
                     }
@@ -35889,7 +36409,7 @@ static int p6(struct procRes_s *rs)
     return 0;
 }
 
-#define P7_TX_LOG (1)
+#define LOG_P7_TX_EN (1)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
@@ -35971,7 +36491,7 @@ static int p7(struct procRes_s *rs)
 
             ret = rs_ipc_get(rs, &ch, 1);
 
-#if LOG_DOT_PROGRESS
+#if LOG_DOT_PROG_EN
             printf("7%c", ch);
 #endif
 
@@ -36013,7 +36533,7 @@ static int p7(struct procRes_s *rs)
                             #else
                             num = len;
                             #endif
-#if P7_TX_LOG
+#if LOG_P7_TX_EN
                             sprintf(rs->logs, "tx %d - %d \n", num, tx);
                             print_f(rs->plogs, "P7", rs->logs);         
 #endif
@@ -36092,7 +36612,7 @@ static int p7(struct procRes_s *rs)
                     
                         msync(addr, len, MS_SYNC);
                         /* send data to wifi socket */
-#if P7_TX_LOG
+#if LOG_P7_TX_EN
                         sprintf(rs->logs, " %d -%d \n", len, tx);
                         print_f(rs->plogs, "P7", rs->logs);         
 #endif
@@ -36210,7 +36730,7 @@ int get_in_port(struct sockaddr *sa){
     return ntohs(((struct sockaddr_in6*)sa)->sin6_port);
 }
 
-#define LOG_P8 (0)
+#define LOG_P8_EN (0)
 static int p8(struct procRes_s *rs)
 {
 #define RECVLEN 1024
@@ -36276,7 +36796,7 @@ static int p8(struct procRes_s *rs)
                     //exit(EXIT_FAILURE);
                     continue;
                 }
-#if LOG_P8
+#if LOG_P8_EN
                 printf("\tInterface : <%s>\n",ifa->ifa_name );
                 printf("\t  Address : <%s>\n", s);
 #endif
@@ -36322,7 +36842,7 @@ static int p8(struct procRes_s *rs)
             continue;
         }
 
-#if LOG_P8
+#if LOG_P8_EN
         printf("listener: waiting to recvfrom...\n");
 #endif
         memset(recvbuf, 0, RECVLEN);
@@ -36341,12 +36861,12 @@ static int p8(struct procRes_s *rs)
         memset(port, 0, 8);
 
         sprintf(port, "%d", get_in_port((struct sockaddr *)&their_addr));
-#if LOG_P8
+#if LOG_P8_EN
         printf("listener: got packet from %s : %s\n", d, port);
         printf("listener: packet is %d bytes long\n", n);	
 #endif
         recvbuf[n] = '\0';	
-#if LOG_P8
+#if LOG_P8_EN
         printf("listener: packet contains \"%s\"\n", recvbuf);	
 #endif
         freeaddrinfo(servinfo);
@@ -36383,7 +36903,7 @@ static int p8(struct procRes_s *rs)
         sendbuf[n] = '\0';
         saddr = (struct sockaddr_in *)c->ai_addr;
 
-#if LOG_P8
+#if LOG_P8_EN
         printf("listener: sendto packet contains \"%s\", size: %d, addr: %s \n", sendbuf, n, inet_ntop(AF_INET, &(saddr->sin_addr), d, INET_ADDRSTRLEN));	
 #endif
 
@@ -36490,6 +37010,8 @@ int main(int argc, char *argv[])
     int arg[8];
     uint32_t bitset;
     char syscmd[256] = "ls -al";
+    
+    printf("\n        ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
 
     aspMemAsign = (struct aspMemAsign_s *)mmap(NULL, sizeof(struct aspMemAsign_s) * MSP_P_NUM, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     memset(aspMemAsign, 0, sizeof(struct aspMemAsign_s) * MSP_P_NUM);
@@ -36537,8 +37059,8 @@ int main(int argc, char *argv[])
         if (ix > 7) break;
     }
 
-    sprintf(pmrs->log, "version: %s", MSP_VERSION);    
-    dbgShowTimeStamp(pmrs->log, pmrs, NULL, 4, NULL);
+    //sprintf(pmrs->log, "\n\n            ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
+    //dbgShowTimeStamp(pmrs->log, pmrs, NULL, 4, NULL);
 
     pmrs->mspconfig &= ~0x7;
     switch (arg[1]) {
@@ -38333,6 +38855,10 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "FAT", pmrs->log);
     }
 
+    sprintf(pmrs->log, "size of struct dir is %d \n", sizeof(struct directnFile_s)); 
+    print_f(&pmrs->plog, "FAT", pmrs->log);
+
+/*
     pmrs->aspFat.fatDirPool = (struct sdDirPool_s *)aspSalloc(sizeof(struct sdDirPool_s));
     if (!pmrs->aspFat.fatDirPool) {
         sprintf(pmrs->log, "alloc share memory for FAT dir pool FAIL!!!\n", pmrs->aspFat.fatDirPool); 
@@ -38357,11 +38883,13 @@ int main(int argc, char *argv[])
     }
     pool->dirMax = DIR_POOL_SIZE;
     pool->dirUsed = 0;
+*/
 
 #if 1
-    pool->parBuf.dirParseBuff = 0;
-    pool->parBuf.dirBuffUsed = 0;
-    pool->parBuf.dirBuffMax = 0;
+    pmrs->aspFat.fatDirTr.dirFATMax = FAT_DIRPOO_ARY_MAX;
+    pmrs->aspFat.parBuf.dirParseBuff = 0;
+    pmrs->aspFat.parBuf.dirBuffUsed = 0;
+    pmrs->aspFat.parBuf.dirBuffMax = 0;
 #else
     pool->parBuf.dirParseBuff = aspSalloc(16*1024*1024); // 16MB
     if (!pool->parBuf.dirParseBuff) {
@@ -38634,7 +39162,7 @@ static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs)
     msync(plog->pool, plog->len, MS_SYNC);
     mrs_ipc_put(mrs, plog->pool, plog->len, 5);
     
-#if !MSP_SAVE_LOG
+#if !MSP_SAVE_LOG_TO_FILE
     plog->cur = plog->pool;
     plog->len = 0;
 #endif
@@ -38665,7 +39193,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 
     printf("%s",ch);
 
-#if MSP_SAVE_LOG
+#if MSP_SAVE_LOG_TO_FILE
     if (!plog) return (-2);
     
     msync(plog, sizeof(struct logPool_s), MS_SYNC);
@@ -38685,7 +39213,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 
 static int printf_flush(struct logPool_s *plog, FILE *f) 
 {
-#if MSP_SAVE_LOG
+#if MSP_SAVE_LOG_TO_FILE
     msync(plog, sizeof(struct logPool_s), MS_SYNC);
     if (plog->cur == plog->pool) return (-1);
     if (plog->len > plog->max) return (-2);
@@ -38840,6 +39368,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pstdata = &mrs->stdata;
     rs->pcfgTable = mrs->configTable;
     rs->psFat = &mrs->aspFat;
+    rs->cpyfatDirTr = 0;
     rs->pnetIntfs = mrs->netIntfs;
     rs->pwifconf = &mrs->wifconf;
     rs->pmetaout = mrs->metaout;
