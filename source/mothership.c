@@ -174,7 +174,7 @@ static int *totSalloc=0;
 #define FAT_DIRPOOL_IDX_MAX   (56850)
 #define FAT_DIRPOO_ARY_MAX   (65535)
 
-#define LOG_FS_EN (0)
+#define LOG_FS_EN (1)
 #define LOG_DOT_PROG_EN (0)
 
 #define PI (double)(3.1415)
@@ -541,7 +541,6 @@ struct supdataBack_s{
 };
 
 struct directnFile_s{
-    uint32_t   dfindex;
     uint32_t   dftype;
     uint32_t   dfstats;
     char        dfLFN[256];
@@ -563,6 +562,7 @@ struct directnFile_s{
     uint32_t   dfchid;
     
     struct adFATLinkList_s *fln;
+    uint32_t   dfindex;
 };
 
 struct folderQueue_s{
@@ -671,6 +671,8 @@ struct sdFatDir_s{
     int dirFATUsed;
     int dirFATDirty;
     struct sdDirPool_s      *fatDirPool[FAT_DIRPOO_ARY_MAX];
+    struct directnFile_s     *dirCur;
+    struct directnFile_s     *dirRoot;
 };
 
 struct sdFAT_s{
@@ -1261,6 +1263,7 @@ static double calcuLineGroupDist(double *pGrp, double *vecTr, int gpLen);
 static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen);
 static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
+static int mspFS_folderList(struct directnFile_s *root, int depth);
 
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
 {
@@ -6341,7 +6344,7 @@ struct directnFile_s{
 };
 #endif
 
-#if LOG_FS_EN
+#if 1
     printf("==========================================\n");
     printf("  [%x] type \n", pf->dftype);
     printf("  [%x] status \n", pf->dfstats);
@@ -6355,6 +6358,10 @@ struct directnFile_s{
     printf("  [%.2d:%.2d:%.2d] Y:M:D recorded date \n", ((pf->dfrecodate >> 16) & 0xff) + 1980, (pf->dfrecodate >> 8) & 0xff, (pf->dfrecodate >> 0) & 0xff);
     printf("  [%d] cluster number \n", pf->dfclstnum);
     printf("  [%d] file length \n", pf->dflength);
+    printf("  [0x%x] self id \n", pf->dfindex);
+    printf("  [0x%x] parent id \n", pf->dfpaid);
+    printf("  [0x%x] bother id \n", pf->dfbrid);
+    printf("  [0x%x] child id \n", pf->dfchid);
     printf("==========================================\n");
 #endif
 }
@@ -6618,28 +6625,45 @@ static int aspFSms2rs(struct directnFile_s **rsd, struct directnFile_s *msd, str
 {
     int pid, fid;
     
-    pid = (msd->dfindex >> 16) - 1;
+    pid = msd->dfindex >> 16;
     fid = msd->dfindex & 0xffff;
 
     printf("[FSV] ms2rs 1:%d 2:%d \n", pid, fid);
 
-    if (pid > pfatdir->dirFATMax) {
-        printf("[FSV] ERROR!!! pid: %d > max: %d \n", pid, pfatdir->dirFATMax);
+    if (!pid) {
+        printf("[FSV] ERROR!!! pid: %d \n", pid);
         return -1;
     }
 
-    if (!pfatdir->fatDirPool[pid]) {
-        printf("[FSV] ERROR!!! pid: %d pool == null \n", pid);
+    if (pid > pfatdir->dirFATMax) {
+        printf("[FSV] ERROR!!! pid: %d > max: %d \n", pid, pfatdir->dirFATMax);
         return -2;
     }
-    
-    if (fid > pfatdir->fatDirPool[pid]->dirMax) {
-        printf("[FSV] ERROR!!! fid: %d > max: %d \n", fid, pfatdir->fatDirPool[pid]->dirMax);
+
+    if (pid > pfatdir->dirFATUsed) {
+        printf("[FSV] ERROR!!! pid: %d > used: %d \n", pid, pfatdir->dirFATUsed);
         return -3;
     }
-    
-    *rsd = &pfatdir->fatDirPool[pid]->dirPool[fid];
 
+    if (!pfatdir->fatDirPool[pid - 1]) {
+        printf("[FSV] ERROR!!! pid: %d pool == null \n", pid);
+        return -4;
+    }
+
+    if (fid >= pfatdir->fatDirPool[pid-1]->dirUsed) {
+        printf("[FSV] ERROR!!! fid: %d > used: %d \n", fid, pfatdir->fatDirPool[pid]->dirUsed);
+        return -5;
+    }
+    
+    if (fid >= pfatdir->fatDirPool[pid-1]->dirMax) {
+        printf("[FSV] ERROR!!! fid: %d > max: %d \n", fid, pfatdir->fatDirPool[pid]->dirMax);
+        return -6;
+    }
+    
+    *rsd = &pfatdir->fatDirPool[pid - 1]->dirPool[fid];
+
+    printf("[FSV] file name: [%s]\n", pfatdir->fatDirPool[pid - 1]->dirPool[fid].dfSFN);
+    
     return 0;
 }
 
@@ -6650,13 +6674,195 @@ static int aspFScpDir(struct directnFile_s *dstd, struct directnFile_s *srcd)
     return 0;
 }
 
+static int aspFScpDirTr(struct directnFile_s *dstd, struct directnFile_s *srcd, struct sdFatDir_s *dsttr)
+{  
+    char logbuf[256];
+    struct sdDirPool_s *slecdir=0;
+    struct directnFile_s *dir=0, *dpa=0, *dch=0, *dbr=0, *msroot=0, *curDir=0;
+    int ipa=0, ibr=0, ich=0, icur=0, iroot=0, ipol=0, idir=0;
+    
+    memcpy(dstd, srcd, sizeof(struct directnFile_s));
+    
+    dpa=0; 
+    dbr=0; 
+    dch=0;
+
+    dir = dstd;
+
+    sprintf(logbuf, "filename: [%s] info: \n", dir->dfSFN);
+    print_f(mlogPool, "CPDIR", logbuf);    
+
+    debugPrintDir(dir);
+    if (dir->pa) {
+        ipa = dir->dfpaid;
+        ipol = ipa >> 16;
+        idir = ipa & 0xffff;
+
+        if (ipol > dsttr->dirFATUsed) {
+            sprintf(logbuf, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
+            print_f(mlogPool, "CPDIR", logbuf);    
+            return -1;
+        }
+
+        slecdir = dsttr->fatDirPool[ipol - 1];
+
+        if (idir > slecdir->dirUsed) {
+            sprintf(logbuf, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
+            print_f(mlogPool, "CPDIR", logbuf);    
+            return -2;
+        }
+
+        dpa = &slecdir->dirPool[idir];
+        if (dpa->dfindex != ipa) {
+            sprintf(logbuf, "WARNING!!! the pa id is different!!! (%d / %d)\n", ipa, dpa->dfindex);
+            print_f(mlogPool, "CPDIR", logbuf);    
+        }
+    }
+
+    if (dir->br) {
+        ibr = dir->dfbrid;
+        ipol = ibr >> 16;
+        idir = ibr & 0xffff;
+
+        if (ipol > dsttr->dirFATUsed) {
+            sprintf(logbuf, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
+            print_f(mlogPool, "CPDIR", logbuf);    
+            return -7;
+        }
+
+        slecdir = dsttr->fatDirPool[ipol - 1];
+
+        if (idir > slecdir->dirUsed) {
+            sprintf(logbuf, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
+            print_f(mlogPool, "CPDIR", logbuf);    
+            return -8;
+        }
+
+        dbr = &slecdir->dirPool[idir];
+        if (dbr->dfindex != ibr) {
+            sprintf(logbuf, "WARNING!!! the br id is different!!! (%d / %d)\n", ibr, dbr->dfindex);
+            print_f(mlogPool, "CPDIR", logbuf);    
+        }
+    }
+
+    if (dir->ch) {
+        ich = dir->dfchid;
+        ipol = ich >> 16;
+        idir = ich & 0xffff;
+
+        if (ipol > dsttr->dirFATUsed) {
+            sprintf(logbuf, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
+            print_f(mlogPool, "CPDIR", logbuf);    
+            return -9;
+        }
+
+        slecdir = dsttr->fatDirPool[ipol - 1];
+
+        if (idir > slecdir->dirUsed) {
+            sprintf(logbuf, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
+            print_f(mlogPool, "CPDIR", logbuf);    
+            return -10;
+        }                    
+
+        dch = &slecdir->dirPool[idir];
+        if (dch->dfindex != ich) {
+            sprintf(logbuf, "WARNING!!! the br id is different!!! (%d / %d)\n", ich, dch->dfindex);
+            print_f(mlogPool, "CPDIR", logbuf);    
+        }
+    }
+
+    if (dpa) {
+        sprintf(logbuf, "pa:[%s] \n", dpa->dfSFN);
+        print_f(mlogPool, "CPDIR", logbuf);    
+    }
+
+    if (dbr) {
+        sprintf(logbuf, "br:[%s] \n", dbr->dfSFN);
+        print_f(mlogPool, "CPDIR", logbuf);    
+    }
+
+    if (dch) {
+        sprintf(logbuf, "ch:[%s] \n", dch->dfSFN);
+        print_f(mlogPool, "CPDIR", logbuf);    
+    }
+
+    dir->pa = dpa;
+    dir->br = dbr;
+    dir->ch = dch;
+
+    if (dir->dftype == ASPFS_TYPE_ROOT) {
+        sprintf(logbuf, "rootdir:[%s] \n", dir->dfSFN);
+        print_f(mlogPool, "CPDIR", logbuf);    
+
+        dsttr->dirRoot = dir;
+        if (!dsttr->dirCur) {
+            dsttr->dirCur = dir;
+            sprintf(logbuf, "curdir: [%s] \n", dir->dfSFN);
+            print_f(mlogPool, "CPDIR", logbuf);    
+        }
+    }
+                                
+    return 0;
+}
+
+static int mspFS_preSetPool(struct sdDirPool_s *pool, uint32_t lv)
+{
+    int id=0;
+    pool->dirMax = FAT_DIRPOOL_IDX_MAX;
+    for (id = 0; id < FAT_DIRPOOL_IDX_MAX; id++) {
+        pool->dirPool[id].dfindex = id | (lv << 16);
+    }
+    return 0;
+}
+
+static int mspFS_allocDirRs(struct sdFatDir_s *dsttr, int usedindx)
+{
+    int cid=0;
+    struct sdFatDir_s  *pfatDir=0;
+    struct sdDirPool_s *pool=0;
+
+    if (!dsttr) return -1;
+    if (!usedindx) return -2;
+
+    pfatDir = dsttr;
+
+    if (usedindx > pfatDir->dirFATMax) {
+        return -3;
+    }
+    
+    if (pfatDir->dirFATUsed < usedindx) {
+        pfatDir->dirFATUsed = usedindx;
+    }
+
+    cid = usedindx - 1;
+
+    if (!pfatDir->fatDirPool[cid]) {
+        pool = aspMalloc(sizeof(struct sdDirPool_s), 8);
+        if (!pool) {
+            return -3;
+        }
+        pfatDir->fatDirPool[cid] = pool;
+    } else {
+        pool = pfatDir->fatDirPool[cid];        
+    }
+    
+    memset(pool, 0, sizeof(struct sdDirPool_s));
+
+    mspFS_preSetPool(pool, usedindx);
+
+    pfatDir->dirFATDirty = 1;
+
+    return 0;
+}
+
 static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, struct procRes_s *rs)
 {
     int ret=0, bufn=0, loop=0, len=0;
     int used=0, idt=0, maxsz=0, totsz=0;
-    int drsz=0, idr=0;
-    int ipa=0, ibr=0, ich=0, icur=0;
+    int drsz=0, idr=0, ipol=0, idir=0;
+    int ipa=0, ibr=0, ich=0, icur=0, iroot=0;
     struct sdDirPool_s *rsdir=0, **msdir=0;
+    struct sdDirPool_s *slecdir=0;
     struct directnFile_s *dir=0, *dpa=0, *dch=0, *dbr=0;
     char *pr=0, *pt=0, *addrs=0, ch=0;
     if (!dsttr) return -1;
@@ -6667,19 +6873,20 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
     maxsz = srctr->dirFATMax;
     used = srctr->dirFATUsed;
     icur = rs->psFat->fatCurDir.dfindex;
+    iroot = rs->psFat->fatRootdir.dfindex;
 
     if (used > maxsz) {
         used = maxsz;
     }
 
     if (!srctr->dirFATDirty) {
-        return -5;
+        return 1;
     }
 
     msdir = aspMalloc(sizeof(struct sdDirPool_s*)*used, 6);
     if (!msdir) {
         sprintf(rs->logs, "ERROR!!!failed to allocate memory for msdir !!!\n", ch);
-        print_f(rs->plogs, "P6", rs->logs);    
+        print_f(rs->plogs, "CPFAT", rs->logs);    
         return -6;
     }
 
@@ -6687,7 +6894,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
         msdir[idt] = (struct sdDirPool_s *)aspMalloc(sizeof(struct sdDirPool_s), 6);
         if (!msdir[idt]) {
             sprintf(rs->logs, "ERROR!!!failed to allocate memory for msdir !!!\n", ch);
-            print_f(rs->plogs, "P6", rs->logs);    
+            print_f(rs->plogs, "CPFAT", rs->logs);    
             return -7;
         }
         
@@ -6699,7 +6906,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
             if (ch == 'd') {
                 bufn = ring_buf_info_len(rs->pdataRx);
                 sprintf(rs->logs, "succeed to get ch = %c, bufn = %d\n", ch, bufn);
-                print_f(rs->plogs, "P6", rs->logs);    
+                print_f(rs->plogs, "CPFAT", rs->logs);    
 
                 pt = (char *)msdir[idt]->dirPool;
                 loop = bufn;
@@ -6708,7 +6915,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                     len = ring_buf_cons(rs->pdataRx, &addrs);
                     if (len < 0) {
                         sprintf(rs->logs, "ERROR!!! get ring buff failed ret: %d\n", len);
-                        print_f(rs->plogs, "P6", rs->logs);    
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
                     }
             
                     msync(addrs, len, MS_SYNC);
@@ -6717,7 +6924,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
 
                     if (totsz > sizeof(struct sdDirPool_s)) {
                         sprintf(rs->logs, "ERROR!!! get ring buff out of buff range totsz: %d, range: %d\n", totsz, sizeof(struct sdDirPool_s));
-                        print_f(rs->plogs, "P6", rs->logs);    
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
                     } else {
                         memcpy(pt, addrs, len);
                     }
@@ -6726,7 +6933,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                     loop --;
 
                     sprintf(rs->logs, "%d. len: %d, totsz:%d\n", loop, len, totsz);
-                    print_f(rs->plogs, "P6", rs->logs);    
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
                 }
 
                 msdir[idt]->dirMax = FAT_DIRPOOL_IDX_MAX;
@@ -6734,22 +6941,32 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                 msdir[idt]->dirUsed = totsz / len;
 
                 sprintf(rs->logs, "%d. dir info: max = %d, used = %d = %d / %d\n", idt, msdir[idt]->dirMax, msdir[idt]->dirUsed, totsz, len);
-                print_f(rs->plogs, "P6", rs->logs);    
+                print_f(rs->plogs, "CPFAT", rs->logs);    
 
                 rs_ipc_put(rs, "D", 1);
             }
             else {
                 sprintf(rs->logs, "warnning!! ch == %c \n", ch);
-                print_f(rs->plogs, "P6", rs->logs);                
+                print_f(rs->plogs, "CPFAT", rs->logs);                
             }
         } else {
             sprintf(rs->logs, "failed to get ch ret: \n", ret);
-            print_f(rs->plogs, "P6", rs->logs);    
+            print_f(rs->plogs, "CPFAT", rs->logs);    
+        }
+    }
+
+    for (idt = 0; idt < used; idt++) {
+        ret = mspFS_allocDirRs(dsttr, idt+1);
+        if (ret < 0) {
+            sprintf(rs->logs, "failed to allocate dir for rs ret: %d, idx: %d\n", ret, idt);
+            print_f(rs->plogs, "CPFAT", rs->logs);    
+            return -5;
         }
     }
 
     for (idt = 0; idt < used; idt++) {
         //msdir = srctr->fatDirPool[idt];
+
         rsdir = dsttr->fatDirPool[idt];
 
         if (!msdir[idt]) {
@@ -6765,6 +6982,8 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
         pt = (char *)rsdir->dirPool;
         pr = (char *)msdir[idt]->dirPool;
 
+        rsdir->dirUsed = drsz;
+        rsdir->dirMax = FAT_DIRPOOL_IDX_MAX;        
         memcpy(pt, pr, sizeof(struct directnFile_s) * drsz);
 
         for (idr=0; idr < drsz; idr++) {
@@ -6773,52 +6992,148 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
             dch=0;
             dir = &rsdir->dirPool[idr];
             if (dir) {
+                sprintf(rs->logs, "filename: [%s] info: \n", dir->dfSFN);
+                print_f(rs->plogs, "CPFAT", rs->logs);    
+                
+                debugPrintDir(dir);
+                
                 if (dir->pa) {
                     ipa = dir->dfpaid;
-                    dpa = &rsdir->dirPool[ipa&0xffff];
+                    ipol = ipa >> 16;
+                    idir = ipa & 0xffff;
+
+                    if (ipol > dsttr->dirFATUsed) {
+                        sprintf(rs->logs, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
+                        return -5;
+                    }
+
+                    slecdir = dsttr->fatDirPool[ipol - 1];
+
+                    if (idir > slecdir->dirUsed) {
+                        sprintf(rs->logs, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
+                        return -6;
+                    }
+                    
+                    dpa = &slecdir->dirPool[idir];
                     if (dpa->dfindex != ipa) {
                         sprintf(rs->logs, "WARNING!!! the pa id is different!!! (%d / %d)\n", ipa, dpa->dfindex);
-                        print_f(rs->plogs, "P6", rs->logs);    
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
                     }
+                    
                 }
                 if (dir->br) {
                     ibr = dir->dfbrid;
-                    dbr = &rsdir->dirPool[ibr&0xffff];
+
+                    ipol = ibr >> 16;
+                    idir = ibr & 0xffff;
+
+                    if (ipol > dsttr->dirFATUsed) {
+                        sprintf(rs->logs, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
+                        return -7;
+                    }
+
+                    slecdir = dsttr->fatDirPool[ipol - 1];
+
+                    if (idir > slecdir->dirUsed) {
+                        sprintf(rs->logs, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
+                        return -8;
+                    }
+                    
+                    dbr = &slecdir->dirPool[idir];
                     if (dbr->dfindex != ibr) {
                         sprintf(rs->logs, "WARNING!!! the br id is different!!! (%d / %d)\n", ibr, dbr->dfindex);
-                        print_f(rs->plogs, "P6", rs->logs);    
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
                     }
                 }
                 if (dir->ch) {
                     ich = dir->dfchid;
-                    dch = &rsdir->dirPool[ich&0xffff];
+
+                    ipol = ich >> 16;
+                    idir = ich & 0xffff;
+
+                    if (ipol > dsttr->dirFATUsed) {
+                        sprintf(rs->logs, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
+                        return -9;
+                    }
+
+                    slecdir = dsttr->fatDirPool[ipol - 1];
+
+                    if (idir > slecdir->dirUsed) {
+                        sprintf(rs->logs, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
+                        return -10;
+                    }
+                    
+                    dch = &slecdir->dirPool[idir];
                     if (dch->dfindex != ich) {
                         sprintf(rs->logs, "WARNING!!! the br id is different!!! (%d / %d)\n", ich, dch->dfindex);
-                        print_f(rs->plogs, "P6", rs->logs);    
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
                     }
+                }
+
+                if (dpa) {
+                    sprintf(rs->logs, "pa:[%s] \n", dpa->dfSFN);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+                }
+                if (dbr) {
+                    sprintf(rs->logs, "br:[%s] \n", dbr->dfSFN);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+                }
+                if (dch) {
+                    sprintf(rs->logs, "ch:[%s] \n", dch->dfSFN);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
                 }
 
                 dir->pa = dpa;
                 dir->br = dbr;
                 dir->ch = dch;
                 
-                if (dir->dftype & ASPFS_TYPE_ROOT) {
-                    aspFScpDir(&rs->psFat->fatRootdir, dir);
-                    if (!icur) {
-                        aspFScpDir(&rs->psFat->fatCurDir, dir);
+                if (dir->dftype == ASPFS_TYPE_ROOT) {
+                    sprintf(rs->logs, "rootdir:[%s] \n", dir->dfSFN);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+
+                    dsttr->dirRoot = dir;
+                    if (!dsttr->dirCur) {
+                        dsttr->dirCur = dir;
+                        sprintf(rs->logs, "curdir: [%s] \n", dir->dfSFN);
+                        print_f(rs->plogs, "CPFAT", rs->logs);    
                     }
                 }
-                
-                if (icur == dir->dfindex) {
-                    aspFScpDir(&rs->psFat->fatCurDir, dir);
-                }
-                
+                                
             }
             else {
                 sprintf(rs->logs, "WARNING!!! failed to get dir \n");
-                print_f(rs->plogs, "P6", rs->logs);    
+                print_f(rs->plogs, "CPFAT", rs->logs);    
             }
         }
+    }
+
+
+    if (dsttr->dirCur) {
+        if(!icur) {
+            aspFScpDir(&rs->psFat->fatCurDir, dsttr->dirCur);
+            mspFS_folderList(&rs->psFat->fatCurDir, 4);            
+        }
+        sprintf(rs->logs, "current folder: [%s] \n", rs->psFat->fatCurDir.dfSFN);
+        print_f(rs->plogs, "CPFAT", rs->logs);    
+    } else {
+        sprintf(rs->logs, "ERROR!!! didn't get cur dir \n");
+        print_f(rs->plogs, "CPFAT", rs->logs);    
+    }
+
+    if (dsttr->dirRoot) {
+        if (dsttr->dirRoot->dfindex != iroot) {
+            sprintf(rs->logs, "ERROR!!! didn't get root dir, iroot: %d\n", iroot, dsttr->dirRoot->dfindex);
+            print_f(rs->plogs, "CPFAT", rs->logs);    
+        }
+    } else {
+        sprintf(rs->logs, "ERROR!!! didn't get root dir point = null \n");
+        print_f(rs->plogs, "CPFAT", rs->logs);    
     }
 
     srctr->dirFATDirty = 0;
@@ -7361,8 +7676,10 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
     if (fs->dfstats == ASPFS_STATUS_EN) return 0;
 
     ld = *raw;
-
-
+    
+#if LOG_FS_EN
+    shmem_dump(raw, 32);
+#endif
 
     if ((ld == 0xe5) || (ld == 0x05)) {
         ret = -4;
@@ -7376,7 +7693,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         pstN = fs->dfSFN;
         ret = aspNameCpyfromRaw(raw, pstN, 0, 11, 1);
         if (ret != 11) {
-            memset(fs, 0x00, sizeof(struct directnFile_s));
+            //memset(fs, 0x00, sizeof(struct directnFile_s));
 #if LOG_FS_EN
             printf("\n  ERROR!!short name [%s] copy error ret:%d \n", pstN, ret);
 #endif
@@ -7391,7 +7708,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 #endif
             if (sum != (fs->dfstats >> 16) & 0xff) {
                 ret = -11;
-                memset(fs, 0x00, sizeof(struct directnFile_s));
+                //memset(fs, 0x00, sizeof(struct directnFile_s));
 #if LOG_FS_EN
                 printf("WARNING!!! checksum error: 0x%x / 0x%x [%s]\n", sum, (fs->dfstats >> 16) & 0xff, pstN);
 #endif
@@ -7412,7 +7729,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
             memset(pstN, 0, 12);
             ret = aspNameCpyfromRaw(raw, pstN, 0, 8, 1);
             if (ret != 8) {
-                memset(fs, 0x00, sizeof(struct directnFile_s));
+                //memset(fs, 0x00, sizeof(struct directnFile_s));
                 //printf("short name copy error ret:%d \n", ret);
                 goto fsparseEnd;
             }
@@ -7429,7 +7746,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 #endif
             ret = aspNameCpyfromRaw(raw, pstN, 8, 3, 1);
             if (ret != 3) {
-                memset(fs, 0x00, sizeof(struct directnFile_s));
+                //memset(fs, 0x00, sizeof(struct directnFile_s));
                 //printf("short name copy error ret:%d \n", ret);
                 goto fsparseEnd;
             }
@@ -7487,7 +7804,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         }
 
         if (ret) {
-            memset(fs, 0x00, sizeof(struct directnFile_s));
+            //memset(fs, 0x00, sizeof(struct directnFile_s));
         }
         
         goto fsparseEnd;
@@ -7611,7 +7928,7 @@ static int aspFS_createFATRoot(struct sdFAT_s *pfat)
     if (!r) {
         return (-1);
     }
-    memset(r, 0, sizeof(struct directnFile_s));
+    //memset(r, 0, sizeof(struct directnFile_s));
 
     r->pa = 0;
     r->br = 0;
@@ -7630,7 +7947,8 @@ static int aspFS_createFATRoot(struct sdFAT_s *pfat)
     */
     
     //pfat->fatRootdir = r;
-    aspFScpDir(&pfat->fatRootdir, r);
+    pfat->fatDirTr.dirRoot = r;
+    //aspFScpDir(&pfat->fatRootdir, r);
 
     return 0;
 }
@@ -7674,8 +7992,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
         ret = -3;
         goto insertEnd;
     }
-    memset(dfs, 0, sizeof(struct directnFile_s));
-
+    //memset(dfs, 0, sizeof(struct directnFile_s));
     cnt = 0;
     ret = aspRawParseDir(dkbuf, dfs, max);
 #if LOG_FS_EN
@@ -7691,7 +8008,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
             if (strcmp(dfs->dfSFN, ".") == 0 || 
                 strcmp(dfs->dfSFN, "..") == 0 ) {
                 
-                memset(dfs, 0, sizeof(struct directnFile_s));
+                //memset(dfs, 0, sizeof(struct directnFile_s));
                 
             } else {
             
@@ -7703,7 +8020,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
                     ret = -3;
                     goto insertEnd;
                 }
-                memset(dfs, 0, sizeof(struct directnFile_s));
+                //memset(dfs, 0, sizeof(struct directnFile_s));
             }
         }
 
@@ -7768,7 +8085,7 @@ static int mspFS_insertFATChildDir(struct sdFAT_s *pfat, struct directnFile_s *p
     if (!c) {
         return (-1);
     }
-    memset(c, 0, sizeof(struct directnFile_s));
+    //memset(c, 0, sizeof(struct directnFile_s));
 
     c->pa = parent;
     c->dfpaid = parent->dfindex;
@@ -8267,16 +8584,6 @@ static int mspSD_allocFreeFATList(struct adFATLinkList_s **head, uint32_t length
     return 0;
 }
 
-static int mspFS_preSetPool(struct sdDirPool_s *pool, uint32_t lv)
-{
-    int id=0;
-    pool->dirMax = FAT_DIRPOOL_IDX_MAX;
-    for (id = 0; id < FAT_DIRPOOL_IDX_MAX; id++) {
-        pool->dirPool[id].dfindex = id | (lv << 16);
-    }
-    return 0;
-}
-
 static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
 {
     char mlog[256];
@@ -8329,12 +8636,12 @@ static int mspFS_allocDir(struct sdFAT_s *psFat, struct directnFile_s **dir)
     *dir = &pool->dirPool[pool->dirUsed];
     pool->dirUsed += 1;
     
-    //sprintf(mlog, "Pool [%d] used\n", pool->dirUsed);
-    //print_f(mlogPool, "FS", mlog);
+    sprintf(mlog, "Pool [%d] used, findex:0x%x\n", pool->dirUsed, (*dir)->dfindex);
+    print_f(mlogPool, "FS", mlog);
 
     pfatDir->dirFATDirty = 1;
 
-    return (*dir)->dfindex;
+    return 0;
 }
 
 static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, char *dir)
@@ -19378,6 +19685,8 @@ static int p6_init(struct procRes_s *rs)
     }
 
     memset(rs->cpyfatDirTr, 0, sizeof(struct sdFatDir_s));
+
+    rs->cpyfatDirTr->dirFATMax = FAT_DIRPOO_ARY_MAX;
     
     ret = pn_init(rs);
     return ret;
@@ -19868,14 +20177,14 @@ static int cmdfunc_go_opcode(int argc, char *argv[])
     print_f(&mrs->plog, "DBG", mrs->log);
 end:
 
+    sprintf(mrs->log, "=====[_DOUBLE_SCAN_] END=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
     if (brk | ret) {
         sprintf(mrs->log, "E,%d,%d", ret, brk);
     } else {
         sprintf(mrs->log, "D,%d,%d", ret, brk);
     }
-
-    sprintf(mrs->log, "=====[_DOUBLE_SCAN_] END=====");     
-    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
@@ -20317,14 +20626,14 @@ static int cmdfunc_wfisd_opcode(int argc, char *argv[])
     print_f(&mrs->plog, "DBG", mrs->log);
 end:
 
+    sprintf(mrs->log, "=====_SINGLE_SCAN_SD_ END=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
     if (brk | ret) {
         sprintf(mrs->log, "E,%d,%d", ret, brk);
     } else {
         sprintf(mrs->log, "D,%d,%d", ret, brk);
     }
-
-    sprintf(mrs->log, "=====_SINGLE_SCAN_SD_ END=====");     
-    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
@@ -20543,7 +20852,7 @@ static int cmdfunc_upsd_opcode(int argc, char *argv[])
         goto end;
     }
         
-    if (rsp != 0x2) {
+    if (rsp != 0x1) {
          sprintf(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
          ret = -1;
@@ -20553,14 +20862,14 @@ static int cmdfunc_upsd_opcode(int argc, char *argv[])
     print_f(&mrs->plog, "DBG", mrs->log);
 end:
 
+    sprintf(mrs->log, "=====_UPLOAD_SD_ END=====");
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
     if (brk | ret) {
         sprintf(mrs->log, "UPSD_NG,%d,%d", ret, brk);
     } else {
         sprintf(mrs->log, "UPSD_OK,%d,%d", ret, brk);
     }
-
-    sprintf(mrs->log, "=====_UPLOAD_SD_ END=====");
-    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
@@ -20617,14 +20926,14 @@ static int cmdfunc_gosd_opcode(int argc, char *argv[])
     print_f(&mrs->plog, "DBG", mrs->log);
 end:
 
+    sprintf(mrs->log, "=====_DOUBLE_SCAN_SD_ END=====");
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
     if (brk | ret) {
         sprintf(mrs->log, "GOSD_NG,%d,%d", ret, brk);
     } else {
         sprintf(mrs->log, "GOSD_OK,%d,%d", ret, brk);
     }
-
-    sprintf(mrs->log, "=====_DOUBLE_SCAN_SD_ END=====");
-    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
@@ -21203,14 +21512,14 @@ static int cmdfunc_single_opcode(int argc, char *argv[])
     
 end:
 
+    sprintf(mrs->log, "=====_SINGLE_SCAN_ END=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
     if (brk | ret) {
         sprintf(mrs->log, "E,%d,%d", ret, brk);
     } else {
         sprintf(mrs->log, "D,%d,%d", ret, brk);
     }
-
-    sprintf(mrs->log, "=====_SINGLE_SCAN_ END=====");     
-    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
     
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
@@ -24075,7 +24384,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct sdParseBuff_s *pParBuf=0;
     struct info16Bit_s *p=0, *c=0;
-    struct directnFile_s *curDir=0, *ch=0, *br=0;
+    struct directnFile_s *curDir=0, *ch=0, *br=0, *rootdir=0;
     struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
     struct sdFATable_s   *pftb=0;
@@ -24088,7 +24397,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
     pParBuf = &pfat->parBuf;
     psec = pfat->fatBootsec;
     pftb = pfat->fatTable;
-
+    
     if (pftb->c) {
         pflnt = pftb->c;
         pftb->c = pflnt->n;
@@ -24105,15 +24414,15 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         ret = aspFS_createFATRoot(pfat);
         if (ret == 0) {
-            aspFS_insertFATChilds(pfat, &pfat->fatRootdir, pr, pParBuf->dirBuffUsed);
+            rootdir = pfat->fatDirTr.dirRoot;
+            aspFS_insertFATChilds(pfat, rootdir, pr, pParBuf->dirBuffUsed);
         }
 
-        if (pfat->fatRootdir.ch->dfSFN) {
+        if (rootdir->ch->dftype) {
             pfat->fatStatus |= ASPFAT_STATUS_ROOT_DIR;
-        }
-        
+        }        
 
-        curDir = &pfat->fatRootdir;
+        curDir = rootdir;
         br= curDir->ch;
 
 #if 0 /* do folder parsing anyway */
@@ -24152,6 +24461,10 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         pParBuf->dirBuffUsed = 0;
         mrs->folder_dirt = pfhead;
+
+        if (rootdir) {
+            aspFScpDir(&pfat->fatRootdir, rootdir);
+        }
         
         modersp->r = 1;
     }else {
@@ -24677,7 +24990,7 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs56", mrs->log);
 
     pfat = &mrs->aspFat;
-    curDir = &pfat->fatRootdir;
+    curDir = pfat->fatDirTr.dirRoot;
 
     if (!(pfat->fatStatus & ASPFAT_STATUS_BOOT)) {
         mspFS_listDetail(curDir, 4);
@@ -24685,17 +24998,17 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
         pfat->fatStatus |= ASPFAT_STATUS_BOOT;
         
         //pfat->fatCurDir = pfat->fatRootdir;
-        aspFScpDir(&pfat->fatCurDir, &pfat->fatRootdir);
+        //aspFScpDir(&pfat->fatCurDir, &pfat->fatRootdir);
     } else {
         //aspMemClear(aspMemAsign, asptotMalloc, 10);
         
-        if(pfat->fatCurDir.dfindex) {
-            curDir = &pfat->fatCurDir;
+        if(pfat->fatDirTr.dirCur) {
+            curDir = pfat->fatDirTr.dirCur;
             mspFS_folderList(curDir, 4);            
         } else {
             //pfat->fatCurDir = pfat->fatRootdir;
-            aspFScpDir(&pfat->fatCurDir, &pfat->fatRootdir);            
-            curDir = &pfat->fatCurDir;
+            //aspFScpDir(&pfat->fatCurDir, &pfat->fatRootdir);            
+            curDir = pfat->fatDirTr.dirRoot;
             mspFS_folderList(curDir, 4);            
         }
     }
@@ -25594,6 +25907,36 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
    
     //curDir = &pfat->fatFileUpld;
     aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+    if (!curDir) {
+        sprintf(mrs->log, "get SD cur failed\n");
+        print_f(&mrs->plog, "fs75", mrs->log);
+
+        modersp->r = 0xed;
+        return 1;
+    }
+
+    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+        ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+        if (ret < 0) {
+            sprintf(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
+            print_f(&mrs->plog, "fs75", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        if (curDir->pa) {
+            aspFS_insertFATChild(curDir->pa, curDir);
+            sprintf(mrs->log, "insert [%s] into [%s] \n", curDir->dfSFN, curDir->pa->dfSFN);
+            print_f(&mrs->plog, "fs75", mrs->log);
+        } else {
+            sprintf(mrs->log, "WARNNING: [%s] didn't have parent \n", curDir->dfSFN);
+            print_f(&mrs->plog, "fs75", mrs->log);
+        }
+    } else {
+        sprintf(mrs->log, "get upd dir succeed: [%s] <== [%s]\n", curDir->dfSFN, pfat->fatFileUpld.dfSFN);
+        print_f(&mrs->plog, "fs75", mrs->log);
+    }
+
     
     if (!pftb->h) {
         pflsh = 0;
@@ -25724,7 +26067,29 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    aspFScpDir(curDir, &pfat->fatFileUpld);
+    //aspFScpDir(curDir, &pfat->fatFileUpld);
+    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+        ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+        if (ret < 0) {
+            sprintf(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
+            print_f(&mrs->plog, "fs76", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        if (curDir->pa) {
+            aspFS_insertFATChild(curDir->pa, curDir);
+            sprintf(mrs->log, "insert [%s] into [%s] \n", curDir->dfSFN, curDir->pa->dfSFN);
+            print_f(&mrs->plog, "fs76", mrs->log);
+        } else {
+            sprintf(mrs->log, "WARNNING: [%s] didn't have parent \n", curDir->dfSFN);
+            print_f(&mrs->plog, "fs76", mrs->log);
+        }
+    } else {
+        sprintf(mrs->log, "get upd dir succeed: [%s] <== [%s]\n", curDir->dfSFN, pfat->fatFileUpld.dfSFN);
+        print_f(&mrs->plog, "fs76", mrs->log);
+    }
+
 
     sprintf(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
     print_f(&mrs->plog, "fs76", mrs->log);
@@ -26075,7 +26440,30 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 0xed;
         return 1;
     }
-    aspFScpDir(curDir, &pfat->fatFileUpld);
+    //aspFScpDir(curDir, &pfat->fatFileUpld);
+    
+    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+        ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+        if (ret < 0) {
+            sprintf(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
+            print_f(&mrs->plog, "fs81", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        if (curDir->pa) {
+            aspFS_insertFATChild(curDir->pa, curDir);
+            sprintf(mrs->log, "insert [%s] into [%s] \n", curDir->dfSFN, curDir->pa->dfSFN);
+            print_f(&mrs->plog, "fs81", mrs->log);
+        } else {
+            sprintf(mrs->log, "WARNNING: [%s] didn't have parent \n", curDir->dfSFN);
+            print_f(&mrs->plog, "fs81", mrs->log);
+        }
+    } else {
+        sprintf(mrs->log, "get upd dir succeed: [%s] <== [%s]\n", curDir->dfSFN, pfat->fatFileUpld.dfSFN);
+        print_f(&mrs->plog, "fs81", mrs->log);
+    }
+
     
     if (mrs->folder_dirt) {
         pfdirt = mrs->folder_dirt;
@@ -26556,9 +26944,39 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs88", mrs->log);
 
     //curDir = pfat->fatFileUpld;
-    aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
-    aspFScpDir(curDir, &pfat->fatFileUpld);
+    ret = aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+    if (!curDir) {
+        sprintf(mrs->log, "get upld dir failed ret: %d\n", ret);
+        print_f(&mrs->plog, "fs88", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    }
     
+    
+    //aspFScpDir(curDir, &pfat->fatFileUpld);
+    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+        ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+        if (ret < 0) {
+            sprintf(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
+            print_f(&mrs->plog, "fs88", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        if (curDir->pa) {
+            aspFS_insertFATChild(curDir->pa, curDir);
+            sprintf(mrs->log, "insert [%s] into [%s] \n", curDir->dfSFN, curDir->pa->dfSFN);
+            print_f(&mrs->plog, "fs88", mrs->log);
+        } else {
+            sprintf(mrs->log, "WARNNING: [%s] didn't have parent \n", curDir->dfSFN);
+            print_f(&mrs->plog, "fs88", mrs->log);
+        }
+    } else {
+        sprintf(mrs->log, "get upd dir succeed: [%s] <== [%s]\n", curDir->dfSFN, pfat->fatFileUpld.dfSFN);
+        print_f(&mrs->plog, "fs88", mrs->log);
+    }
+
+
     if (pParBuf->dirBuffUsed) {
         pfat->fatStatus &= ~ASPFAT_STATUS_DFERD;
         if (!pftb->c) {
@@ -27040,7 +27458,16 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    fscur = &pfat->fatCurDir;
+    ret = aspFSms2rs(&fscur, &pfat->fatCurDir, &pfat->fatDirTr);
+    if (!fscur) {
+        sprintf(mrs->log, "Error!! get current folder failed, ret: %d \n", ret);
+        print_f(&mrs->plog, "fs93", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    } else {
+        sprintf(mrs->log, "get current folder [%s] \n", fscur->dfSFN);
+        print_f(&mrs->plog, "fs93", mrs->log);
+    }
 
     secStr = 0;
     secLen = 0;
@@ -27133,7 +27560,7 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    memset(upld, 0, sizeof(struct directnFile_s));
+    //memset(upld, 0, sizeof(struct directnFile_s));
     upld->dftype = ASPFS_TYPE_FILE;
     upld->dfstats = ASPFS_STATUS_DIS;
     //upld->dfstats = ASPFS_STATUS_EN;
@@ -27243,7 +27670,29 @@ static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp)
         modersp->r = 0xed;
         return 1;
     }
-    aspFScpDir(curDir, &pfat->fatFileUpld);
+    
+    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+        ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+        if (ret < 0) {
+            sprintf(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
+            print_f(&mrs->plog, "fs94", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+        
+        if (curDir->pa) {
+            aspFS_insertFATChild(curDir->pa, curDir);
+            sprintf(mrs->log, "insert [%s] into [%s] \n", curDir->dfSFN, curDir->pa->dfSFN);
+            print_f(&mrs->plog, "fs94", mrs->log);
+        } else {
+            sprintf(mrs->log, "WARNNING: [%s] didn't have parent \n", curDir->dfSFN);
+            print_f(&mrs->plog, "fs94", mrs->log);
+        }
+    } else {
+        sprintf(mrs->log, "get upd dir succeed: [%s] <== [%s]\n", curDir->dfSFN, pfat->fatFileUpld.dfSFN);
+        print_f(&mrs->plog, "fs94", mrs->log);
+    }
+
     
     sprintf(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
     print_f(&mrs->plog, "fs94", mrs->log);
@@ -27702,6 +28151,15 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     //fscur = &pfat->fatCurDir;
     aspFSms2rs(&fscur, &pfat->fatCurDir, &pfat->fatDirTr);
+    if (!fscur) {
+        sprintf(mrs->log, "Error!! get current folder failed, ret: %d \n", ret);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        modersp->r = 0xed;
+        return 1;
+    } else {
+        sprintf(mrs->log, "get current folder [%s] \n", fscur->dfSFN);
+        print_f(&mrs->plog, "fs98", mrs->log);
+    }
 
     sh = pfat->fatSupdata;
     if (!sh) {
@@ -27762,7 +28220,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     }
 
-    memset(upld, 0, sizeof(struct directnFile_s));
+    //memset(upld, 0, sizeof(struct directnFile_s));
     upld->dftype = ASPFS_TYPE_FILE;
     upld->dfstats = ASPFS_STATUS_DIS;
     //upld->dfstats = ASPFS_STATUS_EN;
@@ -30313,6 +30771,10 @@ static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pfatdir = &mrs->aspFat.fatDirTr;
     msync(pfatdir, sizeof(struct sdFatDir_s), MS_SYNC);
+    
+#if 1 /* debug */
+    pfatdir->dirFATDirty = 1;
+#endif
 
     if (!pfatdir->dirFATDirty) {
         modersp->r = 1;
@@ -30347,7 +30809,7 @@ static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
 
         txsz = usedsz * sizeof(struct directnFile_s);
-        sprintf(mrs->log, "plan to send data, size: %d (%dx) \n", txsz, usedsz, sizeof(struct directnFile_s));
+        sprintf(mrs->log, "plan to send data, size: %d (%d x %d) \n", txsz, usedsz, sizeof(struct directnFile_s));
         print_f(&mrs->plog, "fs125", mrs->log);
 
         while (txsz > 0) {
@@ -33793,7 +34255,7 @@ static int atFindIdx(char *str, char ch)
 
 #define P6_SEND_BUFF_SIZE (4096)
 
-#define LOG_P6_RX_EN    (0)
+#define LOG_P6_RX_EN    (1)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
 #define LOG_P6_CROP_EN    (0)
@@ -35929,24 +36391,29 @@ static int p6(struct procRes_s *rs)
             goto socketEnd;
         }
 
-        if  (!rs->psFat->fatRootdir.dfindex) {
-            sendbuf[3] = 'E';
-            sendbuf[5+1] = '\n';
-            sendbuf[5+2] = '\0';
-            ret = write(rs->psocket_at->connfd, sendbuf, 5+3);
-            sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);    
-
-            sprintf(rs->logs, "error!! get opcode = 0x%x\n", opcode);
+        if  (rs->cpyfatDirTr) {
+            ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
+            sprintf(rs->logs, "copy fat dir, opcode = 0x%.2x, ret = %d\n", opcode, ret);
             print_f(rs->plogs, "P6", rs->logs);
-            goto socketEnd;
+
+            if (ret < 0) {
+                sendbuf[3] = 'E';
+                sendbuf[5+1] = '\n';
+                sendbuf[5+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);    
+
+                sprintf(rs->logs, "error!! get opcode = 0x%x\n", opcode);
+                print_f(rs->plogs, "P6", rs->logs);
+                goto socketEnd;
+            }
         }
 
 
         if (!fscur) {
-            fscur = &rs->psFat->fatRootdir;
+            fscur = rs->cpyfatDirTr->dirCur;
             
-            //pfat->fatCurDir = fscur;
             aspFScpDir(&pfat->fatCurDir, fscur);
         }
 
@@ -35954,9 +36421,9 @@ static int p6(struct procRes_s *rs)
         
             //ret = mspFS_folderJump(&nxtf, fscur, folder);
             //ret = mspFS_FolderSearch(&nxtf, rs->psFat->fatRootdir, folder);
-            ret = mspFS_Search(&nxtf, &rs->psFat->fatRootdir, folder, ASPFS_TYPE_DIR);
+            ret = mspFS_Search(&nxtf, rs->cpyfatDirTr->dirRoot, folder, ASPFS_TYPE_DIR);
             if (ret) {
-                sprintf(rs->logs, "jump folder:[%s] failed, ret:%d - \n", folder, ret);
+                sprintf(rs->logs, "jump folder:[%s] failed, ret:%d \n", folder, ret);
                 print_f(rs->plogs, "P6", rs->logs);
             } else {
                 fscur = nxtf;
@@ -36009,7 +36476,7 @@ static int p6(struct procRes_s *rs)
 
             n = 0;
             //ret = mspFS_FileSearch(&dnld, rs->psFat->fatRootdir, folder);
-            ret = mspFS_Search(&dnld, &rs->psFat->fatRootdir, folder, ASPFS_TYPE_FILE);
+            ret = mspFS_Search(&dnld, rs->cpyfatDirTr->dirRoot, folder, ASPFS_TYPE_FILE);
             if (ret) {
                 sprintf(rs->logs, "search file failed ret=%d\n", ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -36065,7 +36532,7 @@ static int p6(struct procRes_s *rs)
             nxtf = 0;
             //ret = mspFS_folderJump(&nxtf, fscur, folder);
             //ret = mspFS_FolderSearch(&nxtf, rs->psFat->fatRootdir, folder);
-            ret = mspFS_Search(&nxtf, &rs->psFat->fatRootdir, folder, ASPFS_TYPE_DIR);
+            ret = mspFS_Search(&nxtf, rs->cpyfatDirTr->dirRoot, folder, ASPFS_TYPE_DIR);
             if (ret) {
                 sprintf(rs->logs, "jump folder:[%s] failed, ret:%d - 2\n", folder, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -36073,7 +36540,7 @@ static int p6(struct procRes_s *rs)
             }
 
             if (nxtf) {
-                sprintf(rs->logs, "jump folder:[%s] done, ret:%d, get next folder: 0x%x\n", folder, ret, nxtf);
+                sprintf(rs->logs, "jump folder:[%s] done, ret:%d, get next folder: [%s]\n", folder, ret, nxtf->dfSFN);
                 print_f(rs->plogs, "P6", rs->logs);
                 fscur = nxtf;
             } else {
@@ -36092,6 +36559,7 @@ static int p6(struct procRes_s *rs)
             }
 
             brt = fscur->ch;
+            debugPrintDir(brt);
 
             while (brt) {
                 while ((brt->dfstats != ASPFS_STATUS_EN) || (strcmp(brt->dfSFN, ".") == 0) 
@@ -36127,7 +36595,7 @@ static int p6(struct procRes_s *rs)
             }
 
             if (cnt == 0) {
-                fscur = &rs->psFat->fatRootdir;
+                fscur = rs->cpyfatDirTr->dirRoot;
             }
 
             //pfat->fatCurDir = fscur;
@@ -36170,7 +36638,7 @@ static int p6(struct procRes_s *rs)
                 }
             
                 //ret = mspFS_FileSearch(&dnld, rs->psFat->fatRootdir, nexinfo->infoStr);
-                ret = mspFS_Search(&upld, &rs->psFat->fatRootdir, nexinfo->infoStr, ASPFS_TYPE_FILE);
+                ret = mspFS_Search(&upld, rs->cpyfatDirTr->dirRoot, nexinfo->infoStr, ASPFS_TYPE_FILE);
                 if (ret) {
                     sprintf(rs->logs, "search upload file[%s], not found ret=%d\n", nexinfo->infoStr, ret);
                     print_f(rs->plogs, "P6", rs->logs);
@@ -36237,7 +36705,7 @@ static int p6(struct procRes_s *rs)
                     if (!upld) {
                         sendbuf[3] = 'F';
                     } else {
-                        memset(upld, 0, sizeof(struct directnFile_s));
+                        //memset(upld, 0, sizeof(struct directnFile_s));
                         upld->dftype = ASPFS_TYPE_FILE;
                         upld->dfstats = ASPFS_STATUS_DIS;
                         upld->dfattrib = ASPFS_ATTR_ARCHIVE;
