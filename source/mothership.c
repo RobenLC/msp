@@ -21,7 +21,7 @@
 #include <ifaddrs.h>
 #include <math.h>
 //main()
-#define MSP_VERSION "Wed Dec 7 17:14:18 2016 35ec22bbb7"
+#define MSP_VERSION "Fri Dec 16 14:16:10 2016 0c674b186c"
 
 #define SPI1_ENABLE (1) 
 
@@ -998,7 +998,6 @@ struct mainRes_s{
     struct pipe_s pipeup[10];
     // data mode share memory
     struct shmem_s dataRx;
-    struct shmem_s dataTx; /* we don't have data mode Tx, so use it as cmdRx for spi1 */
     // command mode share memory
     struct shmem_s cmdRx; /* cmdRx for spi0 */
     struct shmem_s cmdTx;
@@ -1053,7 +1052,6 @@ struct procRes_s{
     struct pipe_s *ppipedn;
     struct pipe_s *ppipeup;
     struct shmem_s *pdataRx;
-    struct shmem_s *pdataTx;
     struct shmem_s *pcmdRx;
     struct shmem_s *pcmdTx;
     struct spi_ioc_transfer *rspioc1;
@@ -19875,7 +19873,6 @@ static int p0_end(struct mainRes_s *mrs)
 
     fclose(mrs->fs);
     munmap(mrs->dataRx.pp[0], 1024*SPI_TRUNK_SZ);
-    munmap(mrs->dataTx.pp[0], 256*SPI_TRUNK_SZ);
     munmap(mrs->cmdRx.pp[0], 256*SPI_TRUNK_SZ);
     munmap(mrs->cmdTx.pp[0], 256*SPI_TRUNK_SZ);
     return 0;
@@ -25260,7 +25257,7 @@ static int fs64(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "trigger spi0 \n");
     print_f(&mrs->plog, "fs64", mrs->log);
 
-    ring_buf_init(&mrs->dataTx);
+    ring_buf_init(&mrs->dataRx);
     
 #if SUP_FILE
     f = find_save(supDst, supPath);
@@ -25314,7 +25311,7 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     while (sh) {
     
-        len = ring_buf_get(&mrs->dataTx, &addr);
+        len = ring_buf_get(&mrs->dataRx, &addr);
         if (len <= 0) {
             //sprintf(mrs->log, "WARNING, len:%d \n", len);
             //print_f(&mrs->plog, "fs65", mrs->log);
@@ -25345,7 +25342,7 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
 #endif
 
             memcpy(addr, sh->supdataBuff, len);
-            ring_buf_prod(&mrs->dataTx);
+            ring_buf_prod(&mrs->dataRx);
             mrs_ipc_put(mrs, "k", 1, 1);
             modersp->c += 1;
             modersp->v += len;
@@ -25366,7 +25363,7 @@ static int fs65(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         return 0;
     } else {
-        ring_buf_set_last(&mrs->dataTx, len);
+        ring_buf_set_last(&mrs->dataRx, len);
         
         mrs_ipc_put(mrs, "K", 1, 1);    
         sprintf(mrs->log, "tx done:%d total:%d last:%d\n", modersp->c, modersp->v, len);
@@ -32087,7 +32084,7 @@ static int p2(struct procRes_s *rs)
             else if (cmode == 8) {
                 pi = 0;
                 while (1) {
-                    len = ring_buf_cons(rs->pdataTx, &addr);
+                    len = ring_buf_cons(rs->pdataRx, &addr);
                     if (len >= 0) {
                         msync(addr, len, MS_SYNC);
                         if (len != 0) {
@@ -32138,7 +32135,7 @@ static int p2(struct procRes_s *rs)
                     }
 
 
-                    len = ring_buf_cons(rs->pdataTx, &addr);
+                    len = ring_buf_cons(rs->pdataRx, &addr);
 
                     //sprintf(rs->logs, "t %d\n", len);
                     //print_f(rs->plogs, "P2", rs->logs);          
@@ -38363,25 +38360,6 @@ int main(int argc, char *argv[])
     sprintf(pmrs->log, "tdiff:%d \n", tdiff);
     print_f(&pmrs->plog, "time_diff", pmrs->log);
 
-    /* data mode tx to spi */
-    clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    pmrs->dataTx.pp = memory_init(&pmrs->dataTx.slotn, DATA_TX_SIZE*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
-    if (!pmrs->dataTx.pp) goto end;
-    pmrs->dataTx.r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
-    pmrs->dataTx.totsz = DATA_TX_SIZE*SPI_TRUNK_SZ;
-    pmrs->dataTx.chksz = SPI_TRUNK_SZ;
-    pmrs->dataTx.svdist = 12;
-    //sprintf(pmrs->log, "totsz:%d pp:0x%.8x\n", pmrs->dataTx.totsz, pmrs->dataTx.pp);
-    //print_f(&pmrs->plog, "minit_result", pmrs->log);
-    //for (ix = 0; ix < pmrs->dataTx.slotn; ix++) {
-    //    sprintf(pmrs->log, "[%d] 0x%.8x\n", ix, pmrs->dataTx.pp[ix]);
-    //    print_f(&pmrs->plog, "shminit_result", pmrs->log);
-    //}
-    clock_gettime(CLOCK_REALTIME, &pmrs->time[1]);
-    tdiff = time_diff(&pmrs->time[0], &pmrs->time[1], 1000);
-    sprintf(pmrs->log, "tdiff:%d \n", tdiff);
-    print_f(&pmrs->plog, "time_diff", pmrs->log);
-
     /* cmd mode rx from spi */
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
     pmrs->cmdRx.pp = memory_init(&pmrs->cmdRx.slotn, CMD_RX_SIZE*SPI_TRUNK_SZ, SPI_TRUNK_SZ); // 4MB
@@ -40248,7 +40226,6 @@ int main(int argc, char *argv[])
     ring_buf_init(&pmrs->dataRx);
     pmrs->dataRx.r->folw.seq = 1;
     pmrs->dataRx.r->psudo.seq = 1;
-    ring_buf_init(&pmrs->dataTx);
     ring_buf_init(&pmrs->cmdRx);
     ring_buf_init(&pmrs->cmdTx);
 
@@ -40523,7 +40500,6 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pcmdRx = &mrs->cmdRx;
     rs->pcmdTx = &mrs->cmdTx;
     rs->pdataRx = &mrs->dataRx;
-    rs->pdataTx = &mrs->dataTx;
     rs->fs_s = mrs->fs;
     rs->flog_s = mrs->flog;
     rs->tm[0] = &mrs->time[0];
