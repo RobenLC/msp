@@ -150,6 +150,10 @@ static int *totSalloc=0;
 #define SPI_KTHREAD_DLY    (0)
 #define SPI_TRUNK_FULL_FIX (0)
 
+/* socket */
+#define SOCKET_NON_BLOCK_RX  (1)
+#define SOCKET_NON_BLOCK_TX  (1)
+
 #define MSP_P_NUM (11) /* P0 ~ P8 */
 #define ASP_MEM_SLOT_NUM (1024)
 
@@ -175,7 +179,7 @@ static int *totSalloc=0;
 #define FAT_DIRPOO_ARY_MAX   (65535)
 
 #define LOG_FS_EN (1)
-#define LOG_DOT_PROG_EN (0)
+#define LOG_DOT_PROG_EN (1)
 
 #define PI (double)(3.1415)
 
@@ -33425,7 +33429,10 @@ static int p4(struct procRes_s *rs)
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
     float thrput;
-
+    fd_set rfds;
+    struct timeval tv;
+    int socketfailed=0, expectSz=0;
+    
     pfat = rs->psFat;
     pftb = pfat->fatTable;
     sprintf(rs->logs, "p4\n");
@@ -33499,6 +33506,12 @@ static int p4(struct procRes_s *rs)
             cltport = ntohs(rs->psocket_t->clint_addr.sin_port);
             sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_t->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P4", rs->logs);
+
+#if SOCKET_NON_BLOCK_RX
+            fcntl(rs->psocket_t->connfd, F_SETFL, O_NONBLOCK);
+
+            socketfailed = 0;
+#endif
 
             aspMemClear(aspMemAsign, asptotMalloc, 4);
         }
@@ -33587,11 +33600,42 @@ static int p4(struct procRes_s *rs)
                         //sprintf(rs->logs, " %d -%d \n", len, pi);
                         //print_f(rs->plogs, "P4", rs->logs);         
                         if (len != 0) {
+#if SOCKET_NON_BLOCK_TX
+                            expectSz = len;
+                            while (expectSz > 0) {
+                                FD_ZERO(&rfds);
+                                FD_SET(rs->psocket_t->connfd, &rfds);
+
+                                tv.tv_sec = 5;
+                                tv.tv_usec = 0;
+
+                                if (!socketfailed) {
+                                    ret = select(rs->psocket_t->connfd+1, NULL, &rfds, NULL, &tv);
+                                    if (ret == -1) {
+                                        perror("select()");
+                                    } else if (ret) {
+                                        opsz = write(rs->psocket_t->connfd, addr, expectSz);
+#if LOG_P4_TX_EN
+                                        sprintf(rs->logs, "nonblock send %d / %d \n", opsz, expectSz);
+                                        print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                                    } else {
+                                        socketfailed = 1;
+                                    }
+                                } else {
+                                    opsz = len;
+                                }
+
+                                expectSz -= opsz;
+                                addr += opsz;
+                            }
+#else
 #if 1 /* debug */
                             opsz = write(rs->psocket_t->connfd, addr, len);
 #else
                             opsz = len;
 #endif
+#endif  //#if SOCKET_NON_BLOCK_RX
                             totsz += len;
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, opsz);
 #if LOG_P4_TX_EN
@@ -33669,11 +33713,60 @@ static int p4(struct procRes_s *rs)
                     len = ring_buf_get(rs->pcmdTx, &addr);
                 }
                 acuhk = 0;
+#if SOCKET_NON_BLOCK_RX 
+                FD_ZERO(&rfds);
+                FD_SET(rs->psocket_t->connfd, &rfds);
+
+                tv.tv_sec = 5;
+                tv.tv_usec = 0;
+
+                if (!socketfailed) {
+                    ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                    if (ret == -1) {
+                        perror("select()");
+                    } else if (ret) {
+                        opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                        sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                        print_f(rs->plogs, "P4", rs->logs);         
+#endif
+
+                    } else {
+                        socketfailed = 1;
+                    }
+                } else {
+                    opsz = len;
+                }
+#else
                 opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                 while (opsz <= 0) {
                     //sprintf(rs->logs, "[wait] socket receive %d/%d bytes from %d\n", px, opsz, len, rs->psocket_t->connfd);
                     //print_f(rs->plogs, "P4", rs->logs);
+#if SOCKET_NON_BLOCK_RX
+                    FD_ZERO(&rfds);
+                    FD_SET(rs->psocket_t->connfd, &rfds);
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    if (!socketfailed) {
+                        ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                        if (ret == -1) {
+                            perror("select()");
+                        } else if (ret) {
+                            opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                            sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                            print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                        } else {
+                            socketfailed = 1;
+                        }
+                    } else {
+                        opsz = len;
+                    }
+#else
                     opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                 }
 
                 addr += opsz;
@@ -33682,10 +33775,56 @@ static int p4(struct procRes_s *rs)
                     len = len - opsz;
 
                     errtor = 0;
+#if SOCKET_NON_BLOCK_RX 
+                    FD_ZERO(&rfds);
+                    FD_SET(rs->psocket_t->connfd, &rfds);
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    if (!socketfailed) {
+                        ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                        if (ret == -1) {
+                            perror("select()");
+                        } else if (ret) {
+                            opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                            sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                            print_f(rs->plogs, "P4", rs->logs);         
+#endif             
+                        } else {
+                            socketfailed = 1;
+                        }
+                    } else {
+                        opsz = len;
+                    }
+#else
                     opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                     while (opsz <= 0) {
                         if (errtor > 3) break;
+#if SOCKET_NON_BLOCK_RX 
+                        FD_ZERO(&rfds);
+                        FD_SET(rs->psocket_t->connfd, &rfds);
+                        tv.tv_sec = 5;
+                        tv.tv_usec = 0;
+                        if (!socketfailed) {
+                            ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                            if (ret == -1) {
+                                perror("select()");
+                            } else if (ret) {
+                                opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                                sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                                print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                            } else {
+                                socketfailed = 1;
+                            }
+                        } else {
+                            opsz = len;
+                        }
+#else
                         opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                         errtor ++;
                     }
 
@@ -33711,10 +33850,57 @@ static int p4(struct procRes_s *rs)
                     acuhk = 0;
 
                     errtor = 0;
+#if SOCKET_NON_BLOCK_RX 
+                    FD_ZERO(&rfds);
+                    FD_SET(rs->psocket_t->connfd, &rfds);
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    if (!socketfailed) {
+                        ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                        if (ret == -1) {
+                            perror("select()");
+                        } else if (ret) {
+                            opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                            sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                            print_f(rs->plogs, "P4", rs->logs);         
+#endif
+
+                        } else {
+                            socketfailed = 1;
+                        }
+                    } else {
+                        opsz = len;
+                    }
+#else
                     opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                     while (opsz <= 0) {
                         if (errtor > 3) break;
+#if SOCKET_NON_BLOCK_RX 
+                        FD_ZERO(&rfds);
+                        FD_SET(rs->psocket_t->connfd, &rfds);
+                        tv.tv_sec = 5;
+                        tv.tv_usec = 0;
+                        if (!socketfailed) {
+                            ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                            if (ret == -1) {
+                                perror("select()");
+                            } else if (ret) {
+                                opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                                sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                                print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                            } else {
+                                socketfailed = 1;
+                            }
+                        } else {
+                            opsz = len;
+                        }
+#else
                         opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                         errtor ++;
                     }
 
@@ -33724,10 +33910,56 @@ static int p4(struct procRes_s *rs)
                         len = len - opsz;
 
                         errtor = 0;
+#if SOCKET_NON_BLOCK_RX 
+                        FD_ZERO(&rfds);
+                        FD_SET(rs->psocket_t->connfd, &rfds);
+                        tv.tv_sec = 5;
+                        tv.tv_usec = 0;
+                        if (!socketfailed) {
+                            ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                            if (ret == -1) {
+                                perror("select()");
+                            } else if (ret) {
+                                opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                                sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                                print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                            } else {
+                                socketfailed = 1;
+                            }
+                        } else {
+                            opsz = len;
+                        }
+#else
                         opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                         while (opsz <= 0) {
                             if (errtor > 3) break;
+#if SOCKET_NON_BLOCK_RX 
+                            FD_ZERO(&rfds);
+                            FD_SET(rs->psocket_t->connfd, &rfds);
+                            tv.tv_sec = 5;
+                            tv.tv_usec = 0;
+                            if (!socketfailed) {
+                                ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                                if (ret == -1) {
+                                    perror("select()");
+                                } else if (ret) {
+                                    opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                                    sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                                    print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                                } else {
+                                    socketfailed = 1;
+                                }
+                            } else {
+                                opsz = len;
+                            }
+#else
                             opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                             errtor ++;
                         }
 
@@ -33787,11 +34019,43 @@ static int p4(struct procRes_s *rs)
 #endif
                         if (len != 0) {
                             msync(addr, len, MS_SYNC);
+
+#if SOCKET_NON_BLOCK_TX
+                            expectSz = len;
+                            while (expectSz > 0) {
+                                FD_ZERO(&rfds);
+                                FD_SET(rs->psocket_t->connfd, &rfds);
+                                tv.tv_sec = 5;
+                                tv.tv_usec = 0;
+
+                                if (!socketfailed) {
+                                    ret = select(rs->psocket_t->connfd+1, NULL, &rfds, NULL, &tv);
+                                    if (ret == -1) {
+                                        perror("select()");
+                                    } else if (ret) {
+                                        opsz = write(rs->psocket_t->connfd, addr, expectSz);
+#if LOG_P4_TX_EN
+                                        sprintf(rs->logs, "nonblock send %d / %d \n", opsz, expectSz);
+                                        print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                                    } else {
+                                        socketfailed = 1;
+                                    }
+                                } else {
+                                    opsz = len;
+                                }
+
+                                expectSz -= opsz;
+                                addr += opsz;
+                            }
+#else
                             #if 1 /*debug*/
                             opsz = write(rs->psocket_t->connfd, addr, len);
                             #else
                             opsz = len;
                             #endif
+#endif // #if SOCKET_NON_BLOCK_RX
+
                             //sprintf(rs->logs, "tx %d -%d \n", opsz, pi);
                             //print_f(rs->plogs, "P4", rs->logs);      
 #if MSP_P4_SAVE_DAT
@@ -33907,12 +34171,58 @@ static int p4(struct procRes_s *rs)
                 acuhk = 0;
 
                 rs_ipc_put(rs, "h", 1);
+#if SOCKET_NON_BLOCK_RX 
+                FD_ZERO(&rfds);
+                FD_SET(rs->psocket_t->connfd, &rfds);
+                tv.tv_sec = 5;
+                tv.tv_usec = 0;
+                if (!socketfailed) {
+                    ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                    if (ret == -1) {
+                        perror("select()");
+                    } else if (ret) {
+                        opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                        sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                        print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                    } else {
+                        socketfailed = 1;
+                    }
+                } else {
+                    opsz = len;
+                }
+#else
                 opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                 while (opsz <= 0) {
                     rs_ipc_put(rs, "h", 1);
                     sprintf(rs->logs, "[wait] %d\n", opsz);
                     print_f(rs->plogs, "P4", rs->logs);
+#if SOCKET_NON_BLOCK_RX 
+                    FD_ZERO(&rfds);
+                    FD_SET(rs->psocket_t->connfd, &rfds);
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    if (!socketfailed) {
+                        ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                        if (ret == -1) {
+                            perror("select()");
+                        } else if (ret) {
+                            opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                            sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                            print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                        } else {
+                            socketfailed = 1;
+                        }
+                    } else {
+                        opsz = len;
+                    }
+#else
                     opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                 }
 
                 addr += opsz;
@@ -33922,10 +34232,56 @@ static int p4(struct procRes_s *rs)
                     len = len - opsz;
 
                     errtor = 0;
+#if SOCKET_NON_BLOCK_RX 
+                    FD_ZERO(&rfds);
+                    FD_SET(rs->psocket_t->connfd, &rfds);
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    if (!socketfailed) {
+                        ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                        if (ret == -1) {
+                            perror("select()");
+                        } else if (ret) {
+                            opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                            sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                            print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                        } else {
+                            socketfailed = 1;
+                        }
+                    } else {
+                        opsz = len;
+                    }
+#else
                     opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                     while (opsz <= 0) {
                         if (errtor > 3) break;
+#if SOCKET_NON_BLOCK_RX 
+                        FD_ZERO(&rfds);
+                        FD_SET(rs->psocket_t->connfd, &rfds);
+                        tv.tv_sec = 5;
+                        tv.tv_usec = 0;
+                        if (!socketfailed) {
+                            ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                            if (ret == -1) {
+                                perror("select()");
+                            } else if (ret) {
+                                opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                                sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                                print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                            } else {
+                                socketfailed = 1;
+                            }
+                        } else {
+                            opsz = len;
+                        }
+#else
                         opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                         errtor ++;
                     }
 
@@ -33976,14 +34332,60 @@ static int p4(struct procRes_s *rs)
                     pre = addr;
 
                     errtor = 0;
+#if SOCKET_NON_BLOCK_RX 
+                    FD_ZERO(&rfds);
+                    FD_SET(rs->psocket_t->connfd, &rfds);
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    if (!socketfailed) {
+                        ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                        if (ret == -1) {
+                            perror("select()");
+                        } else if (ret) {
+                            opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                            sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                            print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                        } else {
+                            socketfailed = 1;
+                        }
+                    } else {
+                        opsz = len;
+                    }
+#else
                     opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                     while (opsz <= 0) {
                         rs_ipc_put(rs, "h", 1);
                         sprintf(rs->logs, "[wait] %d\n", opsz);
                         print_f(rs->plogs, "P4", rs->logs);
 
                         if (errtor > 3) break;
+#if SOCKET_NON_BLOCK_RX 
+                        FD_ZERO(&rfds);
+                        FD_SET(rs->psocket_t->connfd, &rfds);
+                        tv.tv_sec = 5;
+                        tv.tv_usec = 0;
+                        if (!socketfailed) {
+                            ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                            if (ret == -1) {
+                                perror("select()");
+                            } else if (ret) {
+                                opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                                sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                                print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                            } else {
+                                socketfailed = 1;
+                            }
+                        } else {
+                            opsz = len;
+                        }
+#else
                         opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                         errtor ++;
                     }
 
@@ -33995,14 +34397,60 @@ static int p4(struct procRes_s *rs)
                         len = len - opsz;
 
                         errtor = 0;
+#if SOCKET_NON_BLOCK_RX 
+                        FD_ZERO(&rfds);
+                        FD_SET(rs->psocket_t->connfd, &rfds);
+                        tv.tv_sec = 5;
+                        tv.tv_usec = 0;
+                        if (!socketfailed) {
+                            ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                            if (ret == -1) {
+                                perror("select()");
+                            } else if (ret) {
+                                opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                                sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                                print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                            } else {
+                                socketfailed = 1;
+                            }
+                        } else {
+                            opsz = len;
+                        }
+#else
                         opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                         while (opsz <= 0) {
                             rs_ipc_put(rs, "h", 1);
                             sprintf(rs->logs, "[wait] %d\n", opsz);
                             print_f(rs->plogs, "P4", rs->logs);
 
                             if (errtor > 3) break;
+#if SOCKET_NON_BLOCK_RX 
+                            FD_ZERO(&rfds);
+                            FD_SET(rs->psocket_t->connfd, &rfds);
+                            tv.tv_sec = 5;
+                            tv.tv_usec = 0;
+                            if (!socketfailed) {
+                                ret = select(rs->psocket_t->connfd+1, &rfds, NULL, NULL, &tv);
+                                if (ret == -1) {
+                                    perror("select()");
+                                } else if (ret) {
+                                    opsz = read(rs->psocket_t->connfd, addr, len);
+#if LOG_P4_TX_EN
+                                    sprintf(rs->logs, "nonblock read %d / %d \n", opsz, len);
+                                    print_f(rs->plogs, "P4", rs->logs);         
+#endif
+                                } else {
+                                    socketfailed = 1;
+                                }
+                            } else {
+                                opsz = len;
+                            }
+#else
                             opsz = read(rs->psocket_t->connfd, addr, len);
+#endif
                             errtor ++;
                         }
 
@@ -34117,7 +34565,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         sprintf(rs->logs, "p5 get socket ret: %d", rs->psocket_r->listenfd);
         error_handle(rs->logs, 3302);
     }
-
+    
     memset(&rs->psocket_r->serv_addr, '0', sizeof(struct sockaddr_in));
 
     rs->psocket_r->serv_addr.sin_family = AF_INET;
@@ -34152,13 +34600,12 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     sprintf(rs->logs, "get boot result: [%s], ret: %d\n", sendbuf, n);
     print_f(rs->plogs, "P5", rs->logs);
 #endif
-
     while (1) {
         //printf("#");
         //sprintf(rs->logs, "#\n");
         //print_f(rs->plogs, "P5", rs->logs);
         ret = -1;
-        
+                
         len = sizeof(struct sockaddr_in);
         memset(&rs->psocket_r->clint_addr, 0, len);
         rs->psocket_r->connfd = accept(rs->psocket_r->listenfd, (struct sockaddr*)&rs->psocket_r->clint_addr, &len);
@@ -37006,7 +37453,10 @@ static int p7(struct procRes_s *rs)
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
     struct info16Bit_s *p=0, *c=0;
     float thrput, fltime;
-    
+    fd_set rfds;
+    struct timeval tv;
+    int socketfailed=0, expectSz=0;
+
     pfat = rs->psFat;
     pftb = pfat->fatTable;
 
@@ -37066,6 +37516,11 @@ static int p7(struct procRes_s *rs)
             sprintf(rs->logs, "get connection id: %d [%s:%d]\n", rs->psocket_n->connfd, cltaddr, cltport);
             print_f(rs->plogs, "P7", rs->logs);
 
+#if SOCKET_NON_BLOCK_RX
+            fcntl(rs->psocket_n->connfd, F_SETFL, O_NONBLOCK);
+
+            socketfailed = 0;
+#endif
             aspMemClear(aspMemAsign, asptotMalloc, 7);
         }
 #else
@@ -37113,11 +37568,40 @@ static int p7(struct procRes_s *rs)
                         //sprintf(rs->logs, " %d -%d \n", len, tx);
                         //print_f(rs->plogs, "P7", rs->logs);         
                         if (len != 0) {
+#if SOCKET_NON_BLOCK_TX 
+                            expectSz = len;
+                            while (expectSz > 0) {
+                                FD_ZERO(&rfds);
+                                FD_SET(rs->psocket_n->connfd, &rfds);
+                                tv.tv_sec = 5;
+                                tv.tv_usec = 0;
+                                if (!socketfailed) {
+                                    ret = select(rs->psocket_n->connfd+1, NULL, &rfds, NULL, &tv);
+                                    if (ret == -1) {
+                                        perror("select()");
+                                    } else if (ret) {
+                                        num = write(rs->psocket_n->connfd, addr, expectSz);
+#if LOG_P7_TX_EN
+                                        sprintf(rs->logs, "nonblock send %d / %d \n", num, expectSz);
+                                        print_f(rs->plogs, "P7", rs->logs);         
+#endif
+                                    } else {
+                                        socketfailed = 1;
+                                    }
+                                } else {
+                                    num = len;
+                                }
+                                expectSz -= num;
+                                addr += num;
+                            }
+#else
                             #if 1 /* debug */
                             num = write(rs->psocket_n->connfd, addr, len);
                             #else
                             num = len;
                             #endif
+#endif
+
 #if LOG_P7_TX_EN
                             sprintf(rs->logs, "tx %d - %d \n", num, tx);
                             print_f(rs->plogs, "P7", rs->logs);         
@@ -37202,10 +37686,38 @@ static int p7(struct procRes_s *rs)
                         print_f(rs->plogs, "P7", rs->logs);         
 #endif
                         if (len != 0) {
-#if 1 /* debug */
-                            num = write(rs->psocket_n->connfd, addr, len);
+#if SOCKET_NON_BLOCK_TX 
+                            expectSz = len;
+                            while (expectSz > 0) {
+                                FD_ZERO(&rfds);
+                                FD_SET(rs->psocket_n->connfd, &rfds);
+                                tv.tv_sec = 5;
+                                tv.tv_usec = 0;
+                                if (!socketfailed) {
+                                    ret = select(rs->psocket_n->connfd+1, NULL, &rfds, NULL, &tv);
+                                    if (ret == -1) {
+                                        perror("select()");
+                                    } else if (ret) {
+                                        num = write(rs->psocket_n->connfd, addr, expectSz);
+#if LOG_P7_TX_EN
+                                        sprintf(rs->logs, "nonblock send %d / %d \n", num, expectSz);
+                                        print_f(rs->plogs, "P7", rs->logs);         
+#endif
+                                    } else {
+                                        socketfailed = 1;
+                                    }
+                                } else {
+                                    num = len;
+                                }
+                                expectSz -= num;
+                                addr += num;
+                            }
 #else
+                            #if 1 /* debug */
+                            num = write(rs->psocket_n->connfd, addr, len);
+                            #else
                             num = len;
+                            #endif
 #endif
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, num);
                             //sprintf(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_n->connfd, num, tx);
@@ -37258,7 +37770,36 @@ static int p7(struct procRes_s *rs)
 
                 memset(chbuf, 0, 32);
                 sprintf(chbuf, "%d\0", datLen);
+#if SOCKET_NON_BLOCK_TX 
+                len = strlen(chbuf);
+                expectSz = len;
+                while (expectSz > 0) {
+                    FD_ZERO(&rfds);
+                    FD_SET(rs->psocket_n->connfd, &rfds);
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    if (!socketfailed) {
+                        ret = select(rs->psocket_n->connfd+1, NULL, &rfds, NULL, &tv);
+                        if (ret == -1) {
+                            perror("select()");
+                        } else if (ret) {
+                            num = write(rs->psocket_n->connfd, chbuf, expectSz);
+#if LOG_P7_TX_EN
+                            sprintf(rs->logs, "nonblock send %d / %d \n", num, expectSz);
+                            print_f(rs->plogs, "P7", rs->logs);         
+#endif
+                        } else {
+                            socketfailed = 1;
+                        }
+                    } else {
+                        num = len;
+                    }
+                    expectSz -= num;
+                    addr += num;
+                }
+#else
                 ret = write(rs->psocket_n->connfd, chbuf, strlen(chbuf));
+#endif
                 sprintf(rs->logs, "get %c socket tx [%s], ret:%d\n", ch, chbuf, ret);
                 print_f(rs->plogs, "P7", rs->logs);       
                 
@@ -37274,7 +37815,36 @@ static int p7(struct procRes_s *rs)
                 if (!pftb->c) {
                     memset(chbuf, 0, 32);
                     sprintf(chbuf, "%c\0", ch);
+#if SOCKET_NON_BLOCK_TX 
+                len = strlen(chbuf);
+                expectSz = len;
+                while (expectSz > 0) {
+                    FD_ZERO(&rfds);
+                    FD_SET(rs->psocket_n->connfd, &rfds);
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    if (!socketfailed) {
+                        ret = select(rs->psocket_n->connfd+1, NULL, &rfds, NULL, &tv);
+                        if (ret == -1) {
+                            perror("select()");
+                        } else if (ret) {
+                            num = write(rs->psocket_n->connfd, chbuf, expectSz);
+#if LOG_P7_TX_EN
+                            sprintf(rs->logs, "nonblock send %d / %d \n", num, expectSz);
+                            print_f(rs->plogs, "P7", rs->logs);         
+#endif
+                        } else {
+                            socketfailed = 1;
+                        }
+                    } else {
+                        num = len;
+                    }
+                    expectSz -= num;
+                    addr += num;
+                }
+#else
                     ret = write(rs->psocket_n->connfd, chbuf, strlen(chbuf));
+#endif
                     sprintf(rs->logs, "send %c to APP to notice the end, ret:%d\n", ch, ret);
                     print_f(rs->plogs, "P7", rs->logs);       
                 
