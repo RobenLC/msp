@@ -439,6 +439,14 @@ typedef enum {
 } fileFormat_e;
 
 typedef enum {
+    COLOR_MODE_NONE=0,
+    COLOR_MODE_COLOR,
+    COLOR_MODE_GRAY,
+    COLOR_MODE_GRAY_DETAIL,
+    COLOR_MODE_BLACKWHITE,
+} colorMode_e;
+
+typedef enum {
     RESOLUTION_NONE=0,
     RESOLUTION_1200,
     RESOLUTION_600,
@@ -5819,7 +5827,7 @@ static int pdfHead(char *ppdf, int max, int inSize, int *inData)
     double d1=0, d2=0;
     char tch[128], *dst = 0;
     int tlen = 0, tot = 0, n=0;
-    int hi, wh, mh, mw;
+    int hi, wh, mh, mw, cm;
     
 
     if (ppdf == 0) return -1;
@@ -5836,7 +5844,8 @@ static int pdfHead(char *ppdf, int max, int inSize, int *inData)
     wh = inData[1];
     mh = inData[2];
     mw = inData[3];
-
+    cm = inData[4]; /*color mode*/
+    
     d1 = mh;
     d2 = hi;
     hscale = d1 / d2;
@@ -6023,7 +6032,20 @@ static int pdfHead(char *ppdf, int max, int inSize, int *inData)
     if (n < 0) return -3;
     tot += n;
 
-    sprintf(tch, "/ColorSpace /DeviceRGB\n");
+    switch (cm) {
+        case COLOR_MODE_GRAY:
+        case COLOR_MODE_GRAY_DETAIL:
+        case COLOR_MODE_BLACKWHITE:
+            sprintf(tch, "/ColorSpace /DeviceGray\n");
+            break;
+        case COLOR_MODE_COLOR:
+            sprintf(tch, "/ColorSpace /DeviceRGB\n");
+            break;
+        default:
+            sprintf(tch, "/ColorSpace /DeviceRGB\n");
+            printf("WARNNING!!! color mode config out of range (0x%x) \n", cm);
+            break;
+    }
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -6509,9 +6531,9 @@ static int cfgTableGetChk(struct aspConfig_s *table, int idx, uint32_t *rval, ui
     p = &table[idx];
     if (!p) return -2;
 
-    if (p->opStatus != stat) return -3;
-
     *rval = p->opValue;
+    
+    if (p->opStatus != stat) return -3;
 
     return 0;
 }
@@ -6910,7 +6932,6 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
             print_f(rs->plogs, "CPFAT", rs->logs);    
             return -7;
         }
-        
     }
     
     for (idt = 0; idt < used; idt++) {
@@ -28477,12 +28498,17 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs98", mrs->log);
         }
 
+        ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
+        sprintf(mrs->log, "user defined color mode: %d, ret:%d\n", val, ret);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
         memset(pdfParam, 0, 9*4);
         
         pdfParam[0] = hi;
         pdfParam[1] = wh;
         pdfParam[2] = mh;
         pdfParam[3] = mw;
+        pdfParam[4] = val;
         ret = pdfHead(sb->supdataBuff, SPI_TRUNK_SZ, 9, pdfParam);
         
         sb->supdataUse = 0;
