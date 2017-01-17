@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Dec 22 14:19:09 2016 7ae38520bf ring buffer 8MB msync before kthread probe disable swap sprintf replace"
+#define MSP_VERSION "\n Thu Dec 22 14:19:09 2016 7ae38520bf ring buffer 8MB \n msync before kthread probe disable swap sprintf replace \n kernel separate spi and wifi \n throughput using MB spi first time measure"
 
 #define SPI1_ENABLE (1) 
 
@@ -37,6 +37,7 @@
 #define LOG_ALL_DISABLE (0)
 
 #define MIN_SECTOR_SIZE (512)
+#define RING_BUFF_NUM (256)
 
 #define PULL_LOW_AFTER_DATA (0)
 
@@ -1362,7 +1363,7 @@ static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *
     }
 
     clock_gettime(CLOCK_REALTIME, &cur);    
-    tdiff = time_diff(zot, &cur, 1000000);
+    tdiff = time_diff(zot, &cur, 1000);
     if (logconf == 0) {
         pstring = str;
     } else if (logconf & 0x1) {
@@ -19236,6 +19237,7 @@ static int ring_buf_info_len(struct shmem_s *pp)
 #define LOG_DUAL_STREAM_RING (0)
 static int ring_buf_init(struct shmem_s *pp)
 {
+    int idx=0;
     pp->r->lead.run = 0;
     pp->r->lead.seq = 0;
     pp->r->dual.run = 0;
@@ -19251,6 +19253,11 @@ static int ring_buf_init(struct shmem_s *pp)
     pp->lastflg = 0;
     pp->lastsz = 0;
     pp->dualsz = 0;
+
+    for (idx=0; idx <RING_BUFF_NUM; idx++) {
+        memset(pp->pp[idx], 0x00, SPI_TRUNK_SZ);
+        msync(pp->pp[idx], SPI_TRUNK_SZ, MS_SYNC);
+    }
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return 0;
@@ -19678,7 +19685,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
     tr->rx_buf = (unsigned long)rx_buff;
     tr->len = pksz;
     tr->delay_usecs = 0;
-    tr->speed_hz = 1000000;
+    tr->speed_hz = 40000000;
     tr->bits_per_word = 8;
 //    tr->rx_nbits = 0;
 //    tr->tx_nbits = 0;
@@ -31500,8 +31507,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 #define IN_SAVE (0)
 
 #define LOG_TIME_MEASURE_EN (0)
-#define LOG_P2_TX_EN (0)
-#define LOG_P2_CMD_EN (0)
+#define LOG_P2_TX_EN (1)
+#define LOG_P2_CMD_EN (1)
 #define LOG_P2_SIMPLE_EN (0)
 static int p2(struct procRes_s *rs)
 {
@@ -31527,7 +31534,7 @@ static int p2(struct procRes_s *rs)
     struct sdbootsec_s   *psec=0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaData_s *pmeta;
-    float thrput, fltime;
+    double thrput, fltime;
     
     pmeta = rs->pmetain;
 
@@ -31868,6 +31875,9 @@ static int p2(struct procRes_s *rs)
                 sprintf_f(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
 
+                sprintf(rs->logs, "_SPI_0_ BEG");
+                tlast = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_S_");
+
                 pi = 0;  
                 while (1) {
                     len = 0;
@@ -31894,10 +31904,6 @@ static int p2(struct procRes_s *rs)
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
-                            if (totsz == 0) {
-                                sprintf(rs->logs, "_SPI_0_ BEG");
-                                tlast = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_S_");
-                            }
 
                             totsz += opsz;
 
@@ -31974,14 +31980,14 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_0_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_E_");           
 
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
 
-                sprintf(rs->logs, "_SPI_0_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");                
                 
                 ring_buf_set_last(rs->pcmdRx, opsz);
@@ -32087,13 +32093,13 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_0_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_E_");
 
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
-                sprintf(rs->logs, "_SPI_0_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
 
                 ring_buf_set_last(rs->pdataRx, opsz);
@@ -32316,14 +32322,14 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_0_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_E_");
 
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
 
-                sprintf(rs->logs, "_SPI_0_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
                 while (ch != 'U') {
@@ -32454,14 +32460,14 @@ static int p2(struct procRes_s *rs)
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_E_");
 
                 totsz = len;
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
 
-                sprintf(rs->logs, "_SPI_0_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
                 if (len != datLen) {
@@ -32561,14 +32567,14 @@ static int p2(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_0_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_E_");
 
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
 
-                sprintf(rs->logs, "_SPI_0_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
                 if (totsz != datLen) {
@@ -33003,7 +33009,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P3_TX_EN  (0)
+#define LOG_P3_TX_EN  (1)
 static int p3(struct procRes_s *rs)
 {
 #if IN_SAVE
@@ -33023,7 +33029,7 @@ static int p3(struct procRes_s *rs)
     char *addr, *laddr;
     uint32_t fformat=0;
     struct aspMetaData_s *pmetaduo;
-    float thrput, fltime;
+    double thrput, fltime;
     
     pmetaduo = rs->pmetainduo;
     pct = rs->pcfgTable;
@@ -33286,6 +33292,8 @@ static int p3(struct procRes_s *rs)
 
                 pi = 0;  
 
+                tlast = dbgShowTimeStamp("_SPI_1_ BEG", NULL, rs, 8, "_S1_S_");
+
                 while (1) {
                     len = 0;
                     len = ring_buf_get(rs->pcmdTx, &addr);
@@ -33309,9 +33317,6 @@ static int p3(struct procRes_s *rs)
 #else // #if SPI_KTHREAD_USE
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
-                            if (totsz == 0) {
-                                tlast = dbgShowTimeStamp("_SPI_1_ BEG", NULL, rs, 8, "_S1_S_");
-                            }
 
                             totsz += opsz;
                             
@@ -33373,14 +33378,14 @@ static int p3(struct procRes_s *rs)
                 sprintf(rs->logs, "_SPI_1_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S1_E_");
 
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
 
-                sprintf(rs->logs, "_SPI_1_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_SPI_1_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");                
 
                 ring_buf_set_last(rs->pcmdTx, opsz);
@@ -33486,10 +33491,10 @@ static int socket_nonblock_set (int sfd)
     return 0;
 }
 
-#define LOG_P4_TX_EN  (0)
+#define LOG_P4_TX_EN  (1)
 static int p4(struct procRes_s *rs)
 {
-    float flsize, fltime;
+    double flsize, fltime;
     int px, pi, ret=0, len=0, opsz, totsz, tdiff, tlast;
     int cmode, acuhk, errtor=0, cltport=0;
     char ch, str[128];
@@ -33498,7 +33503,7 @@ static int p4(struct procRes_s *rs)
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
-    float thrput;
+    double thrput;
     fd_set rfds;
     struct timeval tv;
     int socketfailed=0, expectSz=0;
@@ -34333,6 +34338,9 @@ static int p4(struct procRes_s *rs)
                 clock_gettime(CLOCK_REALTIME, &rs->tdf[0]);
                 totsz = 0;
                 pi = 0;
+
+                tlast = dbgShowTimeStamp("_WIFI_0_ BEG",  NULL, rs, 8, "_F_S_");
+
                 while (1) {
                     len = ring_buf_cons(rs->pcmdRx, &addr);
 
@@ -34419,11 +34427,7 @@ static int p4(struct procRes_s *rs)
 #if MSP_P4_SAVE_DAT
                             fwrite(addr, 1, len, rs->fdat_s[0]);
                             fflush(rs->fdat_s[0]);
-#endif
-                            if (totsz == 0) {
-                                tlast = dbgShowTimeStamp("_WIFI_0_ BEG",  NULL, rs, 8, "_F_S_");
-                            }
-                            
+#endif                            
                             totsz += opsz;
                         } else {
                             sprintf_f(rs->logs, "len:%d \n", len);
@@ -34462,14 +34466,14 @@ static int p4(struct procRes_s *rs)
                 sprintf(rs->logs, "_WIFI_0_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_F_E_");
 
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
 
-                sprintf(rs->logs, "_WIFI_0_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_WIFI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
                 rs_ipc_put(rs, "N", 1);
@@ -35031,13 +35035,13 @@ static int p4(struct procRes_s *rs)
                 sprintf(rs->logs, "_WIFI_0_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_F_E_");
 
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
-                sprintf(rs->logs, "_WIFI_0_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_WIFI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
                 ring_buf_set_last(rs->pcmdTx, acuhk);
@@ -37988,7 +37992,7 @@ static int p6(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P7_TX_EN (0)
+#define LOG_P7_TX_EN (1)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
@@ -37999,7 +38003,7 @@ static int p7(struct procRes_s *rs)
     struct sdFATable_s   *pftb=0;
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
     struct info16Bit_s *p=0, *c=0;
-    float thrput, fltime;
+    double thrput, fltime;
     fd_set rfds;
     struct timeval tv;
     int socketfailed=0, expectSz=0;
@@ -38137,6 +38141,7 @@ static int p7(struct procRes_s *rs)
                     break;
                 }
 #endif
+                tlast = dbgShowTimeStamp("_WIFI_1_ BEG",  NULL, rs, 8, "_F1_S_");
 
                 while (1) {
                     len = ring_buf_cons(rs->pcmdTx, &addr);
@@ -38216,9 +38221,6 @@ static int p7(struct procRes_s *rs)
 #endif
                         }
 
-                        if (totsz == 0) {
-                            tlast = dbgShowTimeStamp("_WIFI_1_ BEG",  NULL, rs, 8, "_F1_S_");
-                        }
                         totsz += len;
                         
                         rs_ipc_put(rs, "n", 1);
@@ -38243,14 +38245,14 @@ static int p7(struct procRes_s *rs)
                 sprintf(rs->logs, "_WIFI_1_ END %d bytes ", totsz);
                 tdiff = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_F1_E_");
 
-                fltime = (float)(tdiff - tlast);
+                fltime = (double)(tdiff - tlast);
                 if (fltime == 0) {
                     thrput = 0;
                 } else {
-                    thrput = (float) totsz /fltime;
+                    thrput = (double) totsz /fltime;
                 }
 
-                sprintf(rs->logs, "_WIFI_1_ throughput: %.2f KB/sec ", thrput);
+                sprintf(rs->logs, "_WIFI_1_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
 
                 rs_ipc_put(rs, "N", 1);
@@ -38872,10 +38874,10 @@ static int p8(struct procRes_s *rs)
     return 0;
 }
 
-#define DATA_RX_SIZE 256
-#define DATA_TX_SIZE 256
-#define CMD_RX_SIZE 256
-#define CMD_TX_SIZE 256
+#define DATA_RX_SIZE RING_BUFF_NUM
+#define DATA_TX_SIZE RING_BUFF_NUM
+#define CMD_RX_SIZE RING_BUFF_NUM
+#define CMD_TX_SIZE RING_BUFF_NUM
 int main(int argc, char *argv[])
 {
 //static char spi1[] = "/dev/spidev32766.0"; 
