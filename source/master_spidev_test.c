@@ -142,9 +142,13 @@ struct accelc_info_s {
 struct gyroc_info_s {
     int gyroc_status;
     int gyroc_sdycnt;
+    short   gyroc_mid[4];
     struct calab_data_s gyroc_zerox;
+    struct calab_data_s gyroc_tmpx;
     struct calab_data_s gyroc_zeroy;
+    struct calab_data_s gyroc_tmpy;
     struct calab_data_s gyroc_zeroz;
+    struct calab_data_s gyroc_tmpz;
 };
 
 /* Hardware registers needed by driver. */
@@ -4103,7 +4107,7 @@ static int gyro_init(void)
     st->chip_cfg.dmp_loaded = 0;
     st->chip_cfg.dmp_sample_rate = 0;
 
-    if (mpu_set_gyro_fsr(250))
+    if (mpu_set_gyro_fsr(1000))
         return -1;
     if (mpu_set_accel_fsr(2))
         return -1;
@@ -4571,21 +4575,85 @@ static int calab_accel(struct accelc_info_s *pacc, short *dacc, unsigned int lsb
 
 static int calab_gyro(struct gyroc_info_s *pgyc, short *dgyo, float lsb)
 {
-#define GYRO_MAX 32768
     int ret=0;
     int grx=0, gry=0, grz=0;
-    float flsbthd;
+    float flsbthd=0;
+    struct calab_data_s *pgyt;
+    
+    flsbthd = lsb / 5.0;
 
-    flsbthd = GYRO_MAX / lsb;
-    flsbthd = flsbthd / 100.0;
+    //printf("calab gyro\n");
 
-    grx = dgyo[0];
-    ret = calab_find_steady(&pgyc->gyroc_zerox, grx, (int)lsb);
-    if (ret > 0) {
+/*
+    if ((pgyc->gyroc_status & 0x7) == 0x7) {
+        return 0x7;
+    }
+*/
 
+    ret = 0;
+    if (!(pgyc->gyroc_status & 0x1)) {
+        grx = dgyo[0];
+        ret = calab_find_steady(&pgyc->gyroc_tmpx, grx, (int)lsb);
     }
 
-    return 0;
+    if (ret > 0) {
+        pgyt = &pgyc->gyroc_tmpx;
+
+        if (pgyt->calab_div < flsbthd) {
+            printf("gyro x avg: %f, div = %f < %f \n", pgyt->calab_avg, pgyt->calab_div, flsbthd);
+            pgyc->gyroc_status |= 0x1;
+
+            memcpy(&pgyc->gyroc_zerox, pgyt, sizeof(struct calab_data_s));
+        } else {
+            printf("gyro x avg: %f, div = %f > %f \n", pgyt->calab_avg, pgyt->calab_div, flsbthd);
+        }
+        
+        memset(pgyt, 0, sizeof(struct calab_data_s));
+    }
+
+    ret = 0;
+    if (!(pgyc->gyroc_status & 0x2)) {
+        gry = dgyo[1];
+        ret = calab_find_steady(&pgyc->gyroc_tmpy, gry, (int)lsb);
+    }
+
+    if (ret > 0) {
+        pgyt = &pgyc->gyroc_tmpy;
+
+        if (pgyt->calab_div < flsbthd) {
+            printf("gyro y avg: %f, div = %f < %f \n", pgyt->calab_avg, pgyt->calab_div, flsbthd);
+            pgyc->gyroc_status |= 0x2;
+
+            memcpy(&pgyc->gyroc_zeroy, pgyt, sizeof(struct calab_data_s));
+        } else {
+            printf("gyro y avg: %f, div = %f > %f \n", pgyt->calab_avg, pgyt->calab_div, flsbthd);
+        }
+
+        memset(pgyt, 0, sizeof(struct calab_data_s));
+    }
+
+    ret = 0;
+    if (!(pgyc->gyroc_status & 0x4)) {
+        grz = dgyo[2];
+        ret = calab_find_steady(&pgyc->gyroc_tmpz, grz, (int)lsb);
+    }
+
+    if (ret > 0) {
+        pgyt = &pgyc->gyroc_tmpz;
+
+        if (pgyt->calab_div < flsbthd) {
+            printf("gyro z avg: %f, div = %f < %f \n", pgyt->calab_avg, pgyt->calab_div, flsbthd);
+            pgyc->gyroc_status |= 0x4;
+
+            memcpy(&pgyc->gyroc_zeroz, pgyt, sizeof(struct calab_data_s));
+        } else {
+            printf("gyro z avg: %f, div = %f > %f \n", pgyt->calab_avg, pgyt->calab_div, flsbthd);
+        }
+
+        memset(pgyt, 0, sizeof(struct calab_data_s));
+    }
+    
+    return pgyc->gyroc_status;
 }
 
 static int dmp_gyro_shift(short xr, short yr, short zr, float lsb)
@@ -5353,7 +5421,7 @@ static char spi1[] = "/dev/spidev32766.0";
         /* Initialize HAL state variables. */
         memset(hal, 0, sizeof(hal));
         hal->sensors = ACCEL_ON | GYRO_ON;
-        hal->report = PRINT_ACCEL;
+        hal->report = PRINT_ACCEL | PRINT_GYRO;
 
         //run_self_test();
 
@@ -5506,11 +5574,14 @@ static char spi1[] = "/dev/spidev32766.0";
         short mgyx=0, mgyy=0, mgyz=0;
         double dx, dy, dz, dq, dg, dlsb;
         double radx=0, rady=0, radz=0;
+        double gdx=0, gdy=0, gdz=0;
+        double dist=0, gv=980.665, cuv=0, dt=0.001, dgs=0;
 
-        uint32_t procede=0;
+        uint32_t procede=0, steady_count=0;
 
         int d_ms=0, more=0;
 
+        dgs = gyrolsb;
         bufsize = 1024;
         gybuf = malloc(bufsize);
         if (!gybuf) {
@@ -5620,11 +5691,73 @@ static char spi1[] = "/dev/spidev32766.0";
                         dg = 1;
                         
                         dq = calab_abs_lf(dg - dq);
+
                         
-                        if (dq < 0.02) {
-                            //printf("[steady] g: %.4lf \n", dq);                        
-                        } else {
-                            printf("[move] g: %.4lf \n", dq);                        
+                        if ((dq < 0.02) && (cuv == 0)) {
+                            if (dq < 0.01) {
+                                gdx = dx;
+                                gdy = dy;
+                                gdz = dz;
+
+                                steady_count++;
+
+                                if (steady_count > 20) {
+                                    cuv = 0;
+                                    //steady_count = 0;
+                                    //printf("[steady] \n");  
+                                }
+
+                                //printf("[steady] g = (%.2lf, %.2lf, %.2lf) \n", gdx, gdy, gdz);  
+                            } else {
+
+                                if (dist > 0) {
+                                    printf("[down] dist = %.4lf \n", dist);  
+                                }
+
+                                if (cuv == 0) {
+                                    dist = 0;
+                                }
+                            }
+
+                            if (steady_count > 20) {
+                                ret = calab_gyro(pgyroc, gyro, gyrolsb);
+                                if (ret == 0x7) {
+                                    pgyroc->gyroc_mid[0] = (short)pgyroc->gyroc_zerox.calab_avg;
+                                    pgyroc->gyroc_mid[1] = (short)pgyroc->gyroc_zeroy.calab_avg;
+                                    pgyroc->gyroc_mid[2] = (short)pgyroc->gyroc_zeroz.calab_avg;
+                                    printf("gyro calibration done!!!(%.2f, %.2f, %.2f) \n", pgyroc->gyroc_zerox.calab_avg, pgyroc->gyroc_zeroy.calab_avg, pgyroc->gyroc_zeroz.calab_avg);
+                                    printf("gyro calibration done!!!(%hd, %hd, %hd) \n", pgyroc->gyroc_mid[0], pgyroc->gyroc_mid[1], pgyroc->gyroc_mid[2]);
+                                    pgyroc->gyroc_status = 0;
+                                } else {
+                                    //printf("calab gyro ret: %d\n", ret);
+                                }
+                            }
+                        }
+                        else {
+                            if (dq < 0.02) {
+                                steady_count++;
+                            } else {
+                                steady_count = 0;
+                            }
+
+                            dx = dx - gdx;
+                            dy = dy - gdy;
+                            dz = dz - gdz;
+
+                            dq = dq * gv;
+
+                            dist += 0.5 * dq * dt * dt + cuv * dt;
+
+                            cuv = cuv + dq * dt;
+
+                            if (steady_count > 20) {
+                                cuv = 0;
+                                steady_count = 0;
+                            }
+
+                            //printf("[move] g: %.4lf (%.2lf, %.2lf, %.2lf) \n", dq, dx, dy, dz);
+                            //printf("[move] d: %.4lf v: %.4lf, a: %.4lf\n", dist, cuv, dq);
+                            //printf("[move] v: %.4lf\n", cuv);
                         }
                         
                         //printf("accel calab x = %hd, y = %hd, z = %hd \n", accel[0], accel[1], accel[2]);
@@ -5634,9 +5767,23 @@ static char spi1[] = "/dev/spidev32766.0";
                 if ((sensors & INV_XYZ_GYRO) && (procede & PRINT_GYRO)) {
                     //printf("gyro:[%.5hd, %.5hd, %.5hd] \n");
                     //send_packet(PACKET_TYPE_GYRO, gyro);
-                    if (mgyx == 0) {
-                        //ret = calab_gyro(pgyroc, gyro, gyrolsb);
-                    } else {
+                    mgyx = pgyroc->gyroc_mid[0];
+                    mgyy = pgyroc->gyroc_mid[1];
+                    mgyz = pgyroc->gyroc_mid[2];
+
+                    if (mgyx != 0) {
+                        dx = gyro[0]-mgyx;
+                        dy = gyro[1]-mgyy;
+                        dz = gyro[2]-mgyz;
+
+                        //printf("gyro:[%.5hd, %.5hd, %.5hd] \n");
+                        //printf("[gyro] %.2lf, %.2lf, %.2lf \n", dx, dy, dz);
+                        
+                        dx = dx / dgs;
+                        dy = dy / dgs;
+                        dz = dz / dgs;
+
+                        printf("[gyro] %.3lf, %.3lf, %.3lf \n", dx, dy, dz);
                     }
                 }
 
