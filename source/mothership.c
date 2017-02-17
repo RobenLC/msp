@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "\n Thu Dec 22 14:19:09 2016 7ae38520bf ring buffer 8MB \n msync before kthread probe disable swap sprintf replace \n kernel separate spi and wifi \n throughput using MB spi first time measure"
+#define MSP_VERSION " Tue Jan 17 10:04:28 2017 535f952143 fix drop line issue"
 
 #define SPI1_ENABLE (1) 
 
@@ -37,7 +37,7 @@
 #define LOG_ALL_DISABLE (0)
 
 #define MIN_SECTOR_SIZE (512)
-#define RING_BUFF_NUM (256)
+#define RING_BUFF_NUM (64)
 
 #define PULL_LOW_AFTER_DATA (0)
 
@@ -168,7 +168,7 @@ static int *totSalloc=0;
 #define DBG_WIFI_REAL (1)
 
 #define MSP_P_NUM (11) /* P0 ~ P8 */
-#define ASP_MEM_SLOT_NUM (1024)
+#define ASP_MEM_SLOT_NUM (4096)
 
 #define DIR_POOL_SIZE (1024)
 
@@ -1043,6 +1043,7 @@ struct mainRes_s{
     struct aspCrop36_s *crop32Duo;
     struct aspCropExtra_s *cropexDuo;
     struct bitmapHeader_s bmpheader;
+    struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
     char netIntfs[16];
     char *dbglog;
@@ -1107,6 +1108,7 @@ struct procRes_s{
     struct aspCrop36_s *pcrop32duo;
     struct aspCropExtra_s *pcropexduo;
     struct bitmapHeader_s *pbheader;
+    struct bitmapHeader_s *pbheaderDuo;
     struct bitmapRotate_s *pbrotate;
     struct logPool_s *plogs;
     char *pnetIntfs;
@@ -1396,6 +1398,88 @@ static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *
     printf("\n[%s] %.2d:%.2d:%.2d\n", str, p->tm_hour, p->tm_min, p->tm_sec); 
 #endif
     return tdiff;
+}
+
+static int bitmapColorTableSetup(char *p)
+{
+    int i=0;
+    char val=0, *dst=0;
+    if (!p) return -1;
+
+    dst = p;
+
+    for (i = 0; i < 256; i++) {
+        dst[i*4+0] = val;
+        dst[i*4+1] = val;
+        dst[i*4+2] = val;
+        dst[i*4+3] = 0;
+
+        val++;
+    }
+
+    return 0;
+}
+
+static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen) 
+{
+    int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
+    float resH=0, resV=0, ratio=39.27, fval=0;
+
+    if (!w) return -1;
+    if (!h) return -2;
+    if (!dpi) return -3;
+    if (!flen) return -4;
+    memset(ph, 0, sizeof(struct bitmapHeader_s));
+
+    if (clr == 8) {
+        numclrp = 256;
+        rawoffset = 1078;
+        calcuraw = w * h;
+    }
+    else if (clr == 24) {
+        numclrp = 0;
+        rawoffset = 54;
+        calcuraw = w * h * 3;
+    } else {
+        printf("[BMP] reset header ERROR!!! color bits is %d \n", clr);
+        return -5;
+    }
+
+    if (calcuraw != flen) {
+        printf("[BMP] ERROR!!! raw size %d is wrong, should be %d x %d = %d \n", flen, w, h, calcuraw);
+        if (flen > calcuraw) {
+            rawsize = calcuraw;
+        } else {
+            rawsize = flen;
+        }
+    } else {
+        rawsize = calcuraw;
+    }
+
+    totsize = rawsize + rawoffset;
+    
+    fval = dpi;
+    resH = fval * ratio;
+    fval = dpi;
+    resV = fval * ratio;
+    
+    ph->aspbmpMagic[2] = 'B';
+    ph->aspbmpMagic[3] = 'M';       
+    ph->aspbhSize = totsize; // file total size
+    ph->aspbhRawoffset = rawoffset; // header size include color table 54 + 1024 = 1078
+    ph->aspbiSize = 40;
+    ph->aspbiWidth = w; // W
+    ph->aspbiHeight = h; // H
+    ph->aspbiCPP = 1;
+    ph->aspbiCPP |= clr << 16;  // 8 or 24
+    ph->aspbiCompMethd = 0;
+    ph->aspbiRawSize = rawsize; // size of raw
+    ph->aspbiResoluH = (int)resH; // dpi x 39.27
+    ph->aspbiResoluV = (int)resV; // dpi x 39.27
+    ph->aspbiNumCinCP = numclrp;  // 24bit is 0, 8bit is 256
+    ph->aspbiNumImpColor = 0;
+
+    return 0;
 }
 
 static dbgBitmapHeader(struct bitmapHeader_s *ph, int len) 
@@ -2220,7 +2304,7 @@ static void* aspMemalloc(uint32_t asz, int pidx)
 #endif
             addr = malloc(mlen);
             
-            if (!addr) return 0;
+            if (!addr) break;
             
             ms->aspMemSize[mi] = mlen;
             ms->aspMemAddr[mi] = (uint32_t)addr;
@@ -2238,9 +2322,11 @@ static void* aspMemalloc(uint32_t asz, int pidx)
         }
     }
 
-    
+    if (!addr) {
+        printf("[MEM] ERROR!!! out of memory slot, the max number of slot is %d \n", ASP_MEM_SLOT_NUM);
+    }
 
-    return 0;
+    return addr;
 }
 
 static int aspMemFree(void *dval, int pidx)
@@ -28267,11 +28353,12 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     char *fnameSave = 0;
     char fnameSave_jpg[16] = "asp%.5d.jpg";
     char fnameSave_pdf[16] = "asp%.5d.pdf";
+    char fnameSave_bmp[16] = "asp%.5d.bmp";
     char fnameSave_tif[16] = "asp%.5d.tif";
     char srhName[16];
     int ret=0, cnt=0, hi=0, wh=0, mh=0, mw=0;
     uint32_t secStr=0, secLen=0, clstByte, clstLen=0, clstStr=0;
-    uint32_t freeClst=0, usedClst=0, totClst=0, val=0;
+    uint32_t freeClst=0, usedClst=0, totClst=0, val=0, tmp=0;
     int datLen=0, imgLen=0;
     uint32_t fformat=0;
     struct sdbootsec_s   *psec=0;
@@ -28282,6 +28369,9 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct directnFile_s *upld=0, *fscur=0, *fssrh=0;
     struct supdataBack_s *s=0, *sc=0, *sh=0, *se=0, *sb=0;
     struct aspConfig_s *pct=0;
+    char *ph=0, len=0;
+    struct bitmapHeader_s *bheader;
+    int clr=0, w=0, h=0, dpi=0;
     
     uint32_t adata[3], atime[3];
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
@@ -28370,6 +28460,11 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     } else if (fformat == FILE_FORMAT_PDF) {
         fnameSave = fnameSave_pdf;
         sprintf_f(mrs->log, "file format : PDF(%d) name type:[%s]\n", fformat, fnameSave);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+    } else if (fformat == FILE_FORMAT_RAW) {
+        fnameSave = fnameSave_bmp;
+        sprintf_f(mrs->log, "file format : RAW(%d) name type:[%s]\n", fformat, fnameSave);
         print_f(&mrs->plog, "fs98", mrs->log);
 
     } else if (fformat == FILE_FORMAT_TIFF_I) {
@@ -28611,6 +28706,141 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
 */        
         se->supdataTot += ret;
         datLen += ret;
+    }
+    else if (fformat == FILE_FORMAT_RAW) {
+        s = sh;
+        if (!s) {
+            sprintf_f(mrs->log, "Error!!! the first trunk is not exist!!!\n\n");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+
+        ph = &mrs->bmpheader.aspbmpMagic[2];
+        len = sizeof(struct bitmapHeader_s) - 2;
+        memcpy(ph, s->supdataBuff, len);
+
+        bheader = &mrs->bmpheader;
+        
+        clr=0;
+        w=0;
+        h=0;
+        dpi=0;
+        
+        dbgBitmapHeader(bheader, len);
+
+        /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
+        ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+        sprintf_f(mrs->log, "user defined color mode: %d, ret:%d\n", tmp, ret);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        switch (tmp) {
+            case COLOR_MODE_COLOR:
+                clr = 24;
+                break;
+            case COLOR_MODE_GRAY:
+            case COLOR_MODE_GRAY_DETAIL:
+            case COLOR_MODE_BLACKWHITE:
+                clr = 8;
+                break;
+            default:
+                clr = 24;
+                break;
+        }
+
+        ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+        sprintf_f(mrs->log, "user defined image length: %d, ret:%d\n", h, ret);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        if (ret) {
+            //val = 0;
+        }
+        ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+        sprintf_f(mrs->log, "user defined width high: %d, ret:%d\n", val, ret);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+        ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+        w = val << 8 | tmp;
+        sprintf_f(mrs->log, "user defined width low: %d, ret:%d, w = %d\n", tmp, ret, w);
+        print_f(&mrs->plog, "fs98", mrs->log);
+
+        ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+        sprintf_f(mrs->log, "user defined resulution: %d, ret:%d\n", tmp, ret);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        switch (tmp) {
+            case RESOLUTION_1200:
+                dpi = 1200;
+                break;
+            case RESOLUTION_600:
+                dpi = 600;
+                break;
+            case RESOLUTION_300:
+                dpi = 300;
+                break;
+            case RESOLUTION_200:
+                dpi = 200;
+                break;
+            case RESOLUTION_150:
+                dpi = 150;
+                break;
+            default:
+                dpi = 300;
+                break;
+        }
+        
+        //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+
+        /*
+        shmem_dump(sb->supdataBuff, sb->supdataTot);
+        sprintf_f(mrs->log, "dump PDF head - end\n");
+        print_f(&mrs->plog, "fs98", mrs->log);
+        */
+        sb = sh;
+        if (clr == 8) {
+            sb->supdataUse = 1078;
+        } else if (clr == 24) {
+            sb->supdataUse = 54;            
+        } else {
+            printf("[fs98] ERROR!!! color bits is %d \n", clr);
+        }
+
+        /* calculate sector start and sector length of file */            
+        sc = sh;
+        imgLen = aspCalcSupLen(sc);
+        if (datLen < 0) {
+            sprintf_f(mrs->log, "Error!!! calculate support buffer length failed !!!\n\n");
+            print_f(&mrs->plog, "fs98", mrs->log);
+            modersp->r = 0xed;
+            return 1;
+        }
+
+        datLen = imgLen + sc->supdataUse;
+
+        sprintf_f(mrs->log, "bitmap info color: %d, w: %d, h: %d, dpi: %d, imglen: %d, use: %d\n", clr, w, h, dpi, imgLen, sc->supdataUse);
+        print_f(&mrs->plog, "fs98", mrs->log);
+        
+#if 1 /* for test */
+        if (clr == 8) {
+            bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, imgLen);
+        } else {
+            bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, imgLen);
+        }
+#else
+        bitmapHeaderSetup(bheader, clr, w, h, dpi, imgLen);
+#endif
+        ph = &mrs->bmpheader.aspbmpMagic[2];
+        len = sizeof(struct bitmapHeader_s) - 2;
+        memcpy(sc->supdataBuff, ph, len);
+
+        sc->supdataUse -= len;
+        if (sc->supdataUse > 0) {
+            bitmapColorTableSetup(sc->supdataBuff+len);
+            sc->supdataUse -= 1024;
+        }
+        
+        if (!sc->supdataUse) {
+            printf("[fs98] Error!!! the bitmap header len is wrong %d \n", sc->supdataUse);
+        } 
+        
+        sc->supdataUse = 0;
     }
     else if (fformat == FILE_FORMAT_TIFF_I) {
         s = sh->n;
@@ -39135,7 +39365,8 @@ int main(int argc, char *argv[])
     FILE *fprm=0;
     struct aspConfig_s* ctb = 0;
     int parmLen=0, parmTotz=0, readLen=0;
-
+    struct modersp_s tmpModersp;
+    
     parmTotz = ASPOP_CODE_MAX*sizeof(struct aspConfig_s);
     
     fprm = fopen(paramFilePath, "r");
@@ -40410,6 +40641,8 @@ int main(int argc, char *argv[])
             default: break;
             }
         }
+
+        fs109(pmrs, &tmpModersp);
     }
     
     #if 0 /* debug print */
@@ -40520,7 +40753,6 @@ int main(int argc, char *argv[])
     int isLaunch = 0;
     char s[INET6_ADDRSTRLEN];
     struct ifaddrs *ifaddr, *ifa;
-    struct modersp_s tmpModersp;
 
     ctb = &pmrs->configTable[ASPOP_AP_MODE];
     if (ctb->opCode != OP_AP_MODEN) {        
@@ -41265,6 +41497,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pcropexduo= mrs->cropexDuo;
 
     rs->pbheader = &mrs->bmpheader;
+    rs->pbheaderDuo = &mrs->bmpheaderDuo;
     rs->pbrotate = &mrs->bmpRotate;
 
     return 0;
