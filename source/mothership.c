@@ -58,6 +58,7 @@ static int *totSalloc=0;
 //static char netIntfs[16] = "uap0";
     
 /* flow operation */
+#define OP_NONE          0x0     
 #define OP_PON            0x1                
 #define OP_QRY            0x2
 #define OP_RDY            0x3                
@@ -363,6 +364,7 @@ typedef enum {
     ASPOP_XCROP_GAT,
     ASPOP_XCROP_LINSTR,
     ASPOP_XCROP_LINREC,
+    ASPOP_RAW_SIZE,
     ASPOP_CROP_01_DUO,
     ASPOP_CROP_02_DUO, 
     ASPOP_CROP_03_DUO,
@@ -385,6 +387,7 @@ typedef enum {
     ASPOP_XCROP_GAT_DUO,
     ASPOP_XCROP_LINSTR_DUO,
     ASPOP_XCROP_LINREC_DUO,
+    ASPOP_RAW_SIZE_DUO,
     ASPOP_CODE_MAX, /* 119 */
 } aspOpCode_e;
 
@@ -1091,7 +1094,7 @@ struct procRes_s{
     // time measurement
     struct timespec *tm[2];
     struct timespec tdf[2];
-    char logs[1024];
+    char logs[4096];
     struct socket_s *psocket_r;
     struct socket_s *psocket_t;
     struct socket_s *psocket_at;
@@ -1302,6 +1305,31 @@ static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
 
+static int bin2hex(char *dst, char *src, int size)
+{
+    char hexmap[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+    char ch=0;
+    int i=0, lw, hi;
+    if (!dst) return -1;
+    if (!src) return -2;
+    if (!size) return -3;
+    //printf("[B2H] start size: %d\n", size);
+    
+    for (i=0; i < size; i++) {
+        ch = src[i];
+        lw = ch & 0xf;
+        hi = ch >> 4;
+        
+        dst[i*2+1] = hexmap[lw];
+        dst[i*2+0] = hexmap[hi];
+
+        //printf("[b2h] %d. 0x%.2x, [%c-%c] \n", i, ch, dst[i*2+0], dst[i*2+1]);
+    }
+    //printf("[B2H] end idx: %d \n", i);
+
+    return 0;
+}
+
 static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
 {
     uint32_t org=0;
@@ -1446,7 +1474,7 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     }
 
     if (calcuraw != flen) {
-        printf("[BMP] ERROR!!! raw size %d is wrong, should be %d x %d = %d \n", flen, w, h, calcuraw);
+        printf("[BMP] ERROR!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
         if (flen > calcuraw) {
             rawsize = calcuraw;
         } else {
@@ -19279,7 +19307,7 @@ static int shmem_dump(char *src, int size)
         print_f(mlogPool, NULL, str);
 
         if (!((inc+1) % 16)) {
-            sprintf_f(str, "\n");
+            sprintf_f(str, " %d \n", inc+1);
             print_f(mlogPool, NULL, str);
         }
         inc++;
@@ -32217,6 +32245,7 @@ static int p2(struct procRes_s *rs)
                     thrput = (double) totsz /fltime;
                 }
 
+                cfgTableSet(pct, ASPOP_RAW_SIZE, totsz);
                 sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");                
                 
@@ -32329,6 +32358,8 @@ static int p2(struct procRes_s *rs)
                 } else {
                     thrput = (double) totsz /fltime;
                 }
+                
+                cfgTableSet(pct, ASPOP_RAW_SIZE, totsz);
                 sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
 
@@ -32559,6 +32590,7 @@ static int p2(struct procRes_s *rs)
                     thrput = (double) totsz /fltime;
                 }
 
+                cfgTableSet(pct, ASPOP_RAW_SIZE, totsz);
                 sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
@@ -32696,7 +32728,8 @@ static int p2(struct procRes_s *rs)
                 } else {
                     thrput = (double) totsz /fltime;
                 }
-
+                
+                cfgTableSet(pct, ASPOP_RAW_SIZE, totsz);
                 sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
@@ -32804,6 +32837,7 @@ static int p2(struct procRes_s *rs)
                     thrput = (double) totsz /fltime;
                 }
 
+                cfgTableSet(pct, ASPOP_RAW_SIZE, totsz);
                 sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
                 
@@ -33615,6 +33649,7 @@ static int p3(struct procRes_s *rs)
                     thrput = (double) totsz /fltime;
                 }
 
+                cfgTableSet(pct, ASPOP_RAW_SIZE_DUO, totsz);
                 sprintf(rs->logs, "_SPI_1_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");                
 
@@ -35651,6 +35686,12 @@ static int p6(struct procRes_s *rs)
     int idxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
     int idxR[] = {5, 8, 10, 12, 14, 16, 18, 3};    
 
+    char *ph=0;
+    struct bitmapHeader_s *bheader;
+    int clr=0, w=0, h=0, dpi=0, hlen=0, datlen=0, orglen=0;
+    uint32_t tmp=0, val=0;
+    char *hbuff=0;
+    
     pct = rs->pcfgTable;
     pfat = rs->psFat;
     pftb = pfat->fatTable;
@@ -35911,7 +35952,159 @@ static int p6(struct procRes_s *rs)
             print_f(rs->plogs, "P6", rs->logs);
             
             pdt->opStatus = ASPOP_STA_APP;
+
+            /* send back bmp header */
+
+            ph = &rs->pbheader->aspbmpMagic[2];
+            len = sizeof(struct bitmapHeader_s) - 2;
+            bheader = rs->pbheader;
+            clr=0;w=0;h=0;dpi=0;
+
+            //dbgBitmapHeader(bheader, len);
+
+            /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
+            ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            switch (tmp) {
+                case COLOR_MODE_COLOR:
+                    clr = 24;
+                    break;
+                case COLOR_MODE_GRAY:
+                case COLOR_MODE_GRAY_DETAIL:
+                case COLOR_MODE_BLACKWHITE:
+                    clr = 8;
+                    break;
+                default:
+                    clr = 24;
+                    break;
+            }
+
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            if (ret) {
+                //val = 0;
+            }
+            ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+            w = val << 8 | tmp;
+            sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d\n", tmp, ret, w);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            switch (tmp) {
+            case RESOLUTION_1200:
+                dpi = 1200;
+                break;
+            case RESOLUTION_600:
+                dpi = 600;
+                break;
+            case RESOLUTION_300:
+                dpi = 300;
+                break;
+            case RESOLUTION_200:
+                dpi = 200;
+                break;
+            case RESOLUTION_150:
+                dpi = 150;
+                break;
+            default:
+                dpi = 300;
+                break;
+            }
+        
+            //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+
+            hbuff = aspMemalloc(1078, 6);
+            if (!hbuff) {
+                goto socketEnd;
+            }
+
+            if (clr == 8) {
+                hlen = 1078;
+            } else if (clr == 24) {
+                hlen = 54;            
+            } else {
+                printf("[P6] ERROR!!! color bits is %d \n", clr);
+                goto socketEnd;
+            }
+
+            orglen = hlen;
+
+            ret = cfgTableGetChk(pct, ASPOP_RAW_SIZE, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "scan raw data size: %d, ret:%d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
             
+            /* calculate sector start and sector length of file */            
+
+            datlen = val + hlen;
+
+            sprintf_f(rs->logs, "bitmap info color: %d, w: %d, h: %d, dpi: %d, imglen: %d, use: %d\n", clr, w, h, dpi, val, hlen);
+            print_f(rs->plogs, "P6", rs->logs);
+        
+#if 1 /* for test */
+            if (clr == 8) {
+                bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, val);
+            } else {
+                bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, val);
+            }
+#else
+            bitmapHeaderSetup(bheader, clr, w, h, dpi, imgLen);
+#endif
+            ph = &rs->pbheader->aspbmpMagic[2];
+            len = sizeof(struct bitmapHeader_s) - 2;
+            memcpy(hbuff, ph, len);
+
+            hlen -= len;
+            if (hlen > 0) {
+                bitmapColorTableSetup(hbuff+len);
+                hlen -= 1024;
+            }
+        
+            if (hlen) {
+                printf("[fs98] Error!!! the bitmap header len is wrong %d orginal is %d\n", hlen, orglen);
+                hlen = 0;
+            } 
+            
+            sendbuf[3] = 'L';
+
+            sprintf(rs->logs, "%d,\n\r", orglen*2);
+            n = strlen(rs->logs);
+            if (n > (P6_SEND_BUFF_SIZE - 32)) n = P6_SEND_BUFF_SIZE - 32;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'B';
+
+            bin2hex(&sendbuf[5], hbuff, orglen);
+            //memcpy(&sendbuf[5], hbuff, orglen);
+            //memset(&sendbuf[5], 0x95, P6_SEND_BUFF_SIZE - 5);
+
+            n = orglen * 2;
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+
+            //shmem_dump(sendbuf, P6_SEND_BUFF_SIZE);
+                        
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
+        
             goto socketEnd;
         }
         
@@ -39858,6 +40051,199 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_16;
                 ctb->opBitlen = 16;
                 break;
+            case ASPOP_RAW_SIZE: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_01_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_02_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_03_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_04_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_05_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_06_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_07_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_08_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_09_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_10_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_11_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_12_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_13_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_14_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_15_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_16_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_17_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_18_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_IMG_LEN_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_IMG_LEN;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_XCROP_GAT_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_XCROP_LINSTR_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_XCROP_LINREC_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_16;
+                ctb->opBitlen = 16;
+                break;
+            case ASPOP_RAW_SIZE_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            default: break;
             }
         }
         #endif
@@ -40637,6 +41023,198 @@ int main(int argc, char *argv[])
                 ctb->opValue = 0x0;
                 ctb->opMask = ASPOP_MASK_16;
                 ctb->opBitlen = 16;
+                break;
+            case ASPOP_RAW_SIZE: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_01_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_02_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_03_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_04_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_05_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_06_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_07_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_08_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_09_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_10_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_11_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_12_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_13_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_01;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_14_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_02;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_15_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_03;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_16_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_04;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_17_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_05;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_CROP_18_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_CROP_06;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_IMG_LEN_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_IMG_LEN;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_XCROP_GAT_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_XCROP_LINSTR_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_XCROP_LINREC_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE; /* set to ASPOP_STA_SCAN from scanner*/
+                ctb->opCode = OP_META_DAT;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_16;
+                ctb->opBitlen = 16;
+                break;
+            case ASPOP_RAW_SIZE_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
                 break;
             default: break;
             }
