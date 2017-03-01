@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Tue Jan 17 10:04:28 2017 535f952143 fix drop line issue"
+#define MSP_VERSION " Mon Feb 20 17:46:33 2017 535f952143 [MSP] support BITMAP file format, debug off, with width tag"
 
 #define SPI1_ENABLE (1) 
 
@@ -471,6 +471,25 @@ typedef enum {
     RESOLUTION_200, 
     RESOLUTION_150, 
 } resolution_e;
+
+typedef enum {
+    DEFAULTWIDTH_NONE=0,
+    DEFAULTWIDTH_1 = 1,//7000,
+    DEFAULTWIDTH_2 = 2,//5184,
+    DEFAULTWIDTH_3 = 3,//5120,
+    DEFAULTWIDTH_4 = 4,//4856,
+    DEFAULTWIDTH_5 = 5,//4320,
+    DEFAULTWIDTH_FROM_NUM,
+} defaultWidthTag_e;
+
+typedef enum {
+    DEFAULTWIDTH_VALNON=0,
+    DEFAULTWIDTH_VAL1 = 7000,
+    DEFAULTWIDTH_VAL2 = 5184,
+    DEFAULTWIDTH_VAL3 = 5120,
+    DEFAULTWIDTH_VAL4 = 4856,
+    DEFAULTWIDTH_VAL5 = 4320,
+} defaultWidthValue_e;
 
 typedef enum {
     SDSTATS_ERROR=0,
@@ -1304,6 +1323,36 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen);
 static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
+
+static int scanWidthConvert(int tag)
+{
+    int val=0;
+    switch (tag) {
+    case DEFAULTWIDTH_NONE:
+        val -1;
+        break;
+    case DEFAULTWIDTH_1:
+        val = DEFAULTWIDTH_VAL1;
+        break;
+    case DEFAULTWIDTH_2:
+        val = DEFAULTWIDTH_VAL2;
+        break;
+    case DEFAULTWIDTH_3:
+        val = DEFAULTWIDTH_VAL3;
+        break;
+    case DEFAULTWIDTH_4:
+        val = DEFAULTWIDTH_VAL4;
+        break;
+    case DEFAULTWIDTH_5:
+        val = DEFAULTWIDTH_VAL5;
+        break;
+    default:
+        val = tag;
+        break;
+    }
+
+    return val;
+}
 
 static int bin2hex(char *dst, char *src, int size)
 {
@@ -28399,7 +28448,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct aspConfig_s *pct=0;
     char *ph=0, len=0;
     struct bitmapHeader_s *bheader;
-    int clr=0, w=0, h=0, dpi=0;
+    int clr=0, w=0, h=0, dpi=0, t=0;
     
     uint32_t adata[3], atime[3];
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
@@ -28786,8 +28835,9 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs98", mrs->log);
 
         ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
-        w = val << 8 | tmp;
-        sprintf_f(mrs->log, "user defined width low: %d, ret:%d, w = %d\n", tmp, ret, w);
+        t = val << 8 | tmp;
+        w = scanWidthConvert(t);
+        sprintf_f(mrs->log, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
         print_f(&mrs->plog, "fs98", mrs->log);
 
         ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
@@ -28845,7 +28895,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf_f(mrs->log, "bitmap info color: %d, w: %d, h: %d, dpi: %d, imglen: %d, use: %d\n", clr, w, h, dpi, imgLen, sc->supdataUse);
         print_f(&mrs->plog, "fs98", mrs->log);
         
-#if 1 /* for test */
+#if 0 /* for test */
         if (clr == 8) {
             bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, imgLen);
         } else {
@@ -35688,7 +35738,7 @@ static int p6(struct procRes_s *rs)
 
     char *ph=0;
     struct bitmapHeader_s *bheader;
-    int clr=0, w=0, h=0, dpi=0, hlen=0, datlen=0, orglen=0;
+    int clr=0, w=0, h=0, dpi=0, hlen=0, datlen=0, orglen=0, t=0;
     uint32_t tmp=0, val=0;
     char *hbuff=0;
     
@@ -35991,8 +36041,9 @@ static int p6(struct procRes_s *rs)
             print_f(rs->plogs, "P6", rs->logs);
 
             ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
-            w = val << 8 | tmp;
-            sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d\n", tmp, ret, w);
+            t = val << 8 | tmp;
+            w = scanWidthConvert(t);
+            sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
             print_f(rs->plogs, "P6", rs->logs);
 
             ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
@@ -36048,14 +36099,14 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "bitmap info color: %d, w: %d, h: %d, dpi: %d, imglen: %d, use: %d\n", clr, w, h, dpi, val, hlen);
             print_f(rs->plogs, "P6", rs->logs);
         
-#if 1 /* for test */
+#if 0 /* for test */
             if (clr == 8) {
                 bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, val);
             } else {
                 bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, val);
             }
 #else
-            bitmapHeaderSetup(bheader, clr, w, h, dpi, imgLen);
+            bitmapHeaderSetup(bheader, clr, w, h, dpi, val);
 #endif
             ph = &rs->pbheader->aspbmpMagic[2];
             len = sizeof(struct bitmapHeader_s) - 2;
