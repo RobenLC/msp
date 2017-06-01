@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Mon Feb 20 17:46:33 2017 535f952143 [MSP] support BITMAP file format, debug off, with width tag"
+#define MSP_VERSION " Mon Feb 20 17:46:33 2017 535f952143 [MSP] support BITMAP file format, debug off, with width tag, draw duo crop line, crop adapt for dpi 200/150 fix"
 
 #define SPI1_ENABLE (1) 
 
@@ -28899,7 +28899,8 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (clr == 8) {
             bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, imgLen);
         } else {
-            bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, imgLen);
+            //bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, imgLen);
+            bitmapHeaderSetup(bheader, 24, 2160, 3456, 600, imgLen);
         }
 #else
         bitmapHeaderSetup(bheader, clr, w, h, dpi, imgLen);
@@ -35999,11 +36000,17 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
             sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            
+            print_f(rs->plogs, "P6", rs->logs);            
             pdt->opStatus = ASPOP_STA_APP;
 
             /* send back bmp header */
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            if (tmp != FILE_FORMAT_RAW) {
+                goto socketEnd;
+            }
 
             ph = &rs->pbheader->aspbmpMagic[2];
             len = sizeof(struct bitmapHeader_s) - 2;
@@ -36103,7 +36110,8 @@ static int p6(struct procRes_s *rs)
             if (clr == 8) {
                 bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, val);
             } else {
-                bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, val);
+                //bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, val);
+                bitmapHeaderSetup(bheader, 24, 2160, 3496, 600, val);
             }
 #else
             bitmapHeaderSetup(bheader, clr, w, h, dpi, val);
@@ -36187,6 +36195,30 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "handle opcode: 0x%x(CROP duo)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
+            ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+            switch (tmp) {
+            case RESOLUTION_1200:
+                dpi = 1200;
+                break;
+            case RESOLUTION_600:
+                dpi = 600;
+                break;
+            case RESOLUTION_300:
+                dpi = 300;
+                break;
+            case RESOLUTION_200:
+                dpi = 200;
+                break;
+            case RESOLUTION_150:
+                dpi = 150;
+                break;
+            default:
+                dpi = 300;
+                break;
+            }
+            sprintf_f(rs->logs, "user defined resulution: %d(%d dpi), ret:%d\n", tmp, dpi, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             cnt = 0;
             while (1) {
                 num = 0;
@@ -36316,7 +36348,12 @@ static int p6(struct procRes_s *rs)
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
 
-                            pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            val = pdt->opValue >> 16;
+                            if (dpi < 300) {
+                                val = (val * dpi) / 300;
+                            }
+
+                            pcp36->crp36Pots[cpn*2+0] = val;
                             pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
 
                             pdt->opStatus = ASPOP_STA_APP;
@@ -36343,7 +36380,12 @@ static int p6(struct procRes_s *rs)
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
 
-                            pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            val = pdt->opValue >> 16;
+                            if (dpi < 300) {
+                                val = (val * dpi) / 300;
+                            }
+
+                            pcp36->crp36Pots[cpn*2+0] = val;
                             pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
 
                             pdt->opStatus = ASPOP_STA_APP;
@@ -36395,8 +36437,12 @@ static int p6(struct procRes_s *rs)
                             sprintf_f(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
+                            val = pdt->opValue >> 16;
+                            if (dpi < 300) {
+                                val = (val * dpi) / 300;
+                            }
 
-                            pcp36duo->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36duo->crp36Pots[cpn*2+0] = val;
                             pcp36duo->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
 
                             pdt->opStatus = ASPOP_STA_APP;
@@ -36422,8 +36468,12 @@ static int p6(struct procRes_s *rs)
                             sprintf_f(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
+                            val = pdt->opValue >> 16;
+                            if (dpi < 300) {
+                                val = (val * dpi) / 300;
+                            }
 
-                            pcp36duo->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36duo->crp36Pots[cpn*2+0] = val;
                             pcp36duo->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
 
                             pdt->opStatus = ASPOP_STA_APP;
@@ -36630,12 +36680,34 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "%d \n\r", masRecd); 
                 print_f(rs->plogs, "P6", rs->logs);
 
+                sendbuf[3] = 'T';
+                sprintf(rs->logs, "%d \n\r", masRecd); 
+                print_f(rs->plogs, "P6", rs->logs);
+
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+#if 1 /* do NOT send mass pos */
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+#endif
+
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
                     ptBuf++;
                     cxn = *ptBuf;
                     ptBuf++;
+
+                    if (dpi < 300) {
+                        cxm = (cxm * dpi) / 300;
+                        cxn = (cxn * dpi) / 300;
+                    }
+
                     sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
 
                     cpx = i + cof;
@@ -36646,6 +36718,18 @@ static int p6(struct procRes_s *rs)
                     
 #if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
+#endif
+                    sendbuf[3] = 'M';
+                    n = strlen(rs->logs);
+                    memcpy(&sendbuf[5], rs->logs, n);
+
+                    sendbuf[5+n] = 0xfb;
+                    sendbuf[5+n+1] = '\n';
+                    sendbuf[5+n+2] = '\0';
+#if 1 /* do NOT send mass pos */
+                    ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                    sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
+                    //print_f(rs->plogs, "P6", rs->logs);
 #endif
                 }
 
@@ -36880,12 +36964,33 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "duo %d \n\r", masRecd); 
                 print_f(rs->plogs, "P6", rs->logs);
 
+                sendbuf[3] = 't';
+                sprintf(rs->logs, "%d \n\r", masRecd); 
+                print_f(rs->plogs, "P6", rs->logs);
+
+                n = strlen(rs->logs);
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+#if 1 /* do NOT send mass pos */
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+#endif
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
                     ptBuf++;
                     cxn = *ptBuf;
                     ptBuf++;
+
+                    if (dpi < 300) {
+                        cxm = (cxm * dpi) / 300;
+                        cxn = (cxn * dpi) / 300;
+                    }
+
                     sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
 
                     cpx = i + cof;
@@ -36897,7 +37002,18 @@ static int p6(struct procRes_s *rs)
 #if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
+                    sendbuf[3] = 'm';
+                    n = strlen(rs->logs);
+                    memcpy(&sendbuf[5], rs->logs, n);
 
+                    sendbuf[5+n] = 0xfb;
+                    sendbuf[5+n+1] = '\n';
+                    sendbuf[5+n+2] = '\0';
+#if 1 /* do NOT send mass pos */
+                    ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                    sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
+                    //print_f(rs->plogs, "P6", rs->logs);
+#endif
                 }
 
                 cpx = masRecd + cof;
@@ -37068,6 +37184,30 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
+            ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+            switch (tmp) {
+            case RESOLUTION_1200:
+                dpi = 1200;
+                break;
+            case RESOLUTION_600:
+                dpi = 600;
+                break;
+            case RESOLUTION_300:
+                dpi = 300;
+                break;
+            case RESOLUTION_200:
+                dpi = 200;
+                break;
+            case RESOLUTION_150:
+                dpi = 150;
+                break;
+            default:
+                dpi = 300;
+                break;
+            }
+            sprintf_f(rs->logs, "user defined resulution: %d(%d dpi), ret:%d\n", tmp, dpi, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             cnt = 0;
             while (1) {
                 num = 0;
@@ -37144,10 +37284,15 @@ static int p6(struct procRes_s *rs)
 #endif
                             sendbuf[3] = 'C';
 
-                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            val = pdt->opValue >> 16;
+                            if (dpi < 300) {
+                                val = (val * dpi) / 300;
+                            }
+
+                            sprintf(rs->logs, "%d,%d,", val, pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
 
-                            pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36->crp36Pots[cpn*2+0] = val;
                             pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
 
                             pdt->opStatus = ASPOP_STA_APP;
@@ -37175,10 +37320,15 @@ static int p6(struct procRes_s *rs)
 #endif
                             sendbuf[3] = 'C';
 
-                            sprintf(rs->logs, "%d,%d,", pdt->opValue >> 16, pdt->opValue & 0xffff);
+                            val = pdt->opValue >> 16;
+                            if (dpi < 300) {
+                                val = (val * dpi) / 300;
+                            }
+
+                            sprintf(rs->logs, "%d,%d,", val, pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
 
-                            pcp36->crp36Pots[cpn*2+0] = pdt->opValue >> 16;
+                            pcp36->crp36Pots[cpn*2+0] = val;
                             pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
 
                             pdt->opStatus = ASPOP_STA_APP;
@@ -37366,9 +37516,10 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n] = 0xfb;
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
-#if 0 /* do NOT send mass pos */
+#if 1 /* do NOT send mass pos */
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                 sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
 #endif
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
@@ -37376,6 +37527,12 @@ static int p6(struct procRes_s *rs)
                     ptBuf++;
                     cxn = *ptBuf;
                     ptBuf++;
+
+                    if (dpi < 300) {
+                        cxm = (cxm * dpi) / 300;
+                        cxn = (cxn * dpi) / 300;
+                    }
+                    
                     sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
 
                     cpx = i + cof;
@@ -37394,9 +37551,9 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n] = 0xfb;
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
-#if 0 /* do NOT send mass pos */
+#if 1 /* do NOT send mass pos */
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                    //sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
+                    sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
                     //print_f(rs->plogs, "P6", rs->logs);
 #endif
                 }
