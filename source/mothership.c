@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Mon Feb 20 17:46:33 2017 535f952143 [MSP] support BITMAP file format, debug off, with width tag, draw duo crop line, crop adapt for dpi 200/150 fix"
+#define MSP_VERSION " Thu Jun 1 13:26:15 2017 5b363e3bce [MSP] crop adapt for dpi 200/150, print mass crop points, reverse y for raw v3, fix algo issue"
 
 #define SPI1_ENABLE (1) 
 
@@ -1523,7 +1523,7 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     }
 
     if (calcuraw != flen) {
-        printf("[BMP] ERROR!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
+        printf("[BMP] WARNNING!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
         if (flen > calcuraw) {
             rawsize = calcuraw;
         } else {
@@ -35739,8 +35739,8 @@ static int p6(struct procRes_s *rs)
 
     char *ph=0;
     struct bitmapHeader_s *bheader;
-    int clr=0, w=0, h=0, dpi=0, hlen=0, datlen=0, orglen=0, t=0;
-    uint32_t tmp=0, val=0;
+    int clr=0, w=0, h=0, dpi=0, hlen=0, datlen=0, orglen=0, t=0, vhi=0, crpMx=0;
+    uint32_t tmp=0, val=0, ffrmt=0;
     char *hbuff=0;
     
     pct = rs->pcfgTable;
@@ -36130,6 +36130,8 @@ static int p6(struct procRes_s *rs)
                 printf("[fs98] Error!!! the bitmap header len is wrong %d orginal is %d\n", hlen, orglen);
                 hlen = 0;
             } 
+
+            dbgBitmapHeader(bheader, len);
             
             sendbuf[3] = 'L';
 
@@ -36195,6 +36197,17 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "handle opcode: 0x%x(CROP duo)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            if (ret) {
+                //val = 0;
+            }
+            
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
             switch (tmp) {
             case RESOLUTION_1200:
@@ -36329,6 +36342,12 @@ static int p6(struct procRes_s *rs)
 
             memset(pcp36duo, 0, sizeof(struct aspCrop36_s));
             memset(pcpexduo, 0, sizeof(struct aspCropExtra_s));
+#if 1
+            pdt = &pct[ASPOP_CROP_02];
+            crpMx = pdt->opValue & 0xffff;
+#else
+            crpMx = h;
+#endif
 
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
                 idx = ASPOP_CROP_01 + i;
@@ -36347,14 +36366,29 @@ static int p6(struct procRes_s *rs)
                             sprintf_f(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
+                            sendbuf[3] = 'C';
 
                             val = pdt->opValue >> 16;
                             if (dpi < 300) {
                                 val = (val * dpi) / 300;
                             }
 
+                            if (ffrmt == FILE_FORMAT_RAW) {
+                                vhi = pdt->opValue & 0xffff;
+                                if (crpMx < vhi) {
+                                    vhi = 0xffff;
+                                } else {
+                                    vhi = crpMx - vhi;
+                                }
+                            } else {
+                                vhi = pdt->opValue & 0xffff;
+                            }
+
+                            sprintf(rs->logs, "%d,%d,", val, vhi);
+                            n = strlen(rs->logs);
+                            
                             pcp36->crp36Pots[cpn*2+0] = val;
-                            pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+                            pcp36->crp36Pots[cpn*2+1] = vhi;
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -36379,14 +36413,29 @@ static int p6(struct procRes_s *rs)
                             sprintf_f(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
-
+                            sendbuf[3] = 'C';
+                            
                             val = pdt->opValue >> 16;
                             if (dpi < 300) {
                                 val = (val * dpi) / 300;
                             }
 
+                            if (ffrmt == FILE_FORMAT_RAW) {
+                                vhi = pdt->opValue & 0xffff;
+                                if (crpMx < vhi) {
+                                    vhi = 0xffff;
+                                } else {
+                                    vhi = crpMx - vhi;
+                                }
+                            } else {
+                                vhi = pdt->opValue & 0xffff;
+                            }
+
+                            sprintf(rs->logs, "%d,%d,", val, vhi);
+                            n = strlen(rs->logs);
+                            
                             pcp36->crp36Pots[cpn*2+0] = val;
-                            pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+                            pcp36->crp36Pots[cpn*2+1] = vhi;
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -36419,6 +36468,12 @@ static int p6(struct procRes_s *rs)
                 //sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 //print_f(rs->plogs, "P6", rs->logs);
             }
+#if 1
+            pdt = &pct[ASPOP_CROP_02_DUO];
+            crpMx = pdt->opValue & 0xffff;
+#else
+            crpMx = h;
+#endif
 
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
                 idx = ASPOP_CROP_01_DUO+ i;
@@ -36437,13 +36492,29 @@ static int p6(struct procRes_s *rs)
                             sprintf_f(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
+                            sendbuf[3] = 'c';
+                            
                             val = pdt->opValue >> 16;
                             if (dpi < 300) {
                                 val = (val * dpi) / 300;
                             }
 
+                            if (ffrmt == FILE_FORMAT_RAW) {
+                                vhi = pdt->opValue & 0xffff;
+                                if (crpMx < vhi) {
+                                    vhi = 0xffff;
+                                } else {
+                                    vhi = crpMx - vhi;
+                                }
+                            } else {
+                                vhi = pdt->opValue & 0xffff;
+                            }
+
+                            sprintf(rs->logs, "%d,%d,", val, vhi);
+                            n = strlen(rs->logs);
+                            
                             pcp36duo->crp36Pots[cpn*2+0] = val;
-                            pcp36duo->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+                            pcp36duo->crp36Pots[cpn*2+1] = vhi;
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -36468,13 +36539,29 @@ static int p6(struct procRes_s *rs)
                             sprintf_f(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
+                            sendbuf[3] = 'c';
+                            
                             val = pdt->opValue >> 16;
                             if (dpi < 300) {
                                 val = (val * dpi) / 300;
                             }
 
+                            if (ffrmt == FILE_FORMAT_RAW) {
+                                vhi = pdt->opValue & 0xffff;
+                                if (crpMx < vhi) {
+                                    vhi = 0xffff;
+                                } else {
+                                    vhi = crpMx - vhi;
+                                }
+                            } else {
+                                vhi = pdt->opValue & 0xffff;
+                            }
+
+                            sprintf(rs->logs, "%d,%d,", val, vhi);
+                            n = strlen(rs->logs);
+
                             pcp36duo->crp36Pots[cpn*2+0] = val;
-                            pcp36duo->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+                            pcp36duo->crp36Pots[cpn*2+1] = vhi;
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -36488,21 +36575,30 @@ static int p6(struct procRes_s *rs)
                             sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
                             n = strlen(rs->logs);
 
-                            if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
+                            //if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
+                            
+                            //memcpy(&sendbuf[5], rs->logs, n);
 
-                            memcpy(&sendbuf[5], rs->logs, n);
-
-                            sendbuf[5+n] = 0xfb;
-                            sendbuf[5+n+1] = '\n';
-                            sendbuf[5+n+2] = '\0';
-                            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);        
+                            //sendbuf[5+n] = 0xfb;
+                            //sendbuf[5+n+1] = '\n';
+                            //sendbuf[5+n+2] = '\0';
+                            //ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);        
                         }
 
                         break;
                     default:
                         break;
                 }
-                                
+
+                if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
+                
+                memcpy(&sendbuf[5], rs->logs, n);
+
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                
                 //sendbuf[5+n] = '\0';                
                 //sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 //print_f(rs->plogs, "P6", rs->logs);
@@ -36609,29 +36705,72 @@ static int p6(struct procRes_s *rs)
             }
             
             if (pmass->massRecd) {
-                cpx = 0;
-                cpn = 6;
-                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                cpn = 5;
-                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                if (ffrmt == FILE_FORMAT_RAW) {
+                    cpx = 0;
+                    cpn = 2;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 3;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
 
-                cpx = 1;
-                cpn = 7;
-                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                cpn = 8;
-                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx = 1;
+                    cpn = 17;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 18;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
 
-                cpx = 2;
-                cpn = 9;
-                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                cpn = 10;
-                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx = 2;
+                    cpn = 15;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 16;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                    cpx = 3;
+                    cpn = 13;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 14;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                    cpx = 4;
+                    cpn = 11;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 12;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                }
+                else {
+                    cpx = 0;
+                    cpn = 6;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 5;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                    cpx = 1;
+                    cpn = 7;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 8;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                    cpx = 2;
+                    cpn = 9;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 10;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                }
 
                 cof = cpx + 1;
 
@@ -36692,8 +36831,15 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+2] = '\0';
 #if 1 /* do NOT send mass pos */
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                print_f(rs->plogs, "P6", rs->logs);
+                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                //print_f(rs->plogs, "P6", rs->logs);
+#endif
+
+#if 1
+                pdt = &pct[ASPOP_CROP_02];
+                crpMx = pdt->opValue & 0xffff;
+#else
+                crpMx = h;
 #endif
 
                 for (i = 0; i < masRecd; i++) {
@@ -36708,13 +36854,24 @@ static int p6(struct procRes_s *rs)
                         cxn = (cxn * dpi) / 300;
                     }
 
-                    sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
+                    if (ffrmt == FILE_FORMAT_RAW) {
+                        vhi = crpMx - cy;
+                    } else {
+                        vhi = cy;
+                    }
 
-                    cpx = i + cof;
+                    sprintf(rs->logs, "%d,%d,%d,\n\r", vhi, cxm, cxn); 
+
+                    if (ffrmt == FILE_FORMAT_RAW) {
+                        cpx = (masRecd - i - 1) + cof;
+                    } else {
+                        cpx = i + cof;
+                    }
+
                     pcpex->crpexLfPots[cpx*2+0] = cxm;
-                    pcpex->crpexLfPots[cpx*2+1] = cy;
+                    pcpex->crpexLfPots[cpx*2+1] = vhi;
                     pcpex->crpexRtPots[cpx*2+0] = cxn;
-                    pcpex->crpexRtPots[cpx*2+1] = cy;
+                    pcpex->crpexRtPots[cpx*2+1] = vhi;
                     
 #if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
@@ -36728,7 +36885,9 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+2] = '\0';
 #if 1 /* do NOT send mass pos */
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                    sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
+                    sendbuf[5+n] = '\0';
+                    sendbuf[5+n+1] = '\0';
+                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", i, &sendbuf[5], ret);
                     //print_f(rs->plogs, "P6", rs->logs);
 #endif
                 }
@@ -36736,56 +36895,88 @@ static int p6(struct procRes_s *rs)
                 cpx = masRecd + cof;
                 cls =  masRecd + cof - 1;
 
-                cpn = 11;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 12;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
+                if (ffrmt == FILE_FORMAT_RAW) {
+                    cpn = 9;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 10;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+                    
+                    cpn = 7;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 8;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+                    
+                    cpn = 5;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 6;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
                 }
+                else {
+                    cpn = 11;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 12;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
 
-                cpn = 13;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 14;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
+                    cpn = 13;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 14;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+
+                    cpn = 15;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 16;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+
+                    cpn = 17;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 18;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+
+                    cpn = 2;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 3;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
                 }
-
-                cpn = 15;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 16;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
-
-                cpn = 17;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 18;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
-
-                cpn = 2;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 3;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
-
                 
                 pcpex->crpexSize = cpx*2;
                 
@@ -36893,29 +37084,72 @@ static int p6(struct procRes_s *rs)
             }
 
             if (pmassduo->massRecd) {
-                cpx = 0;
-                cpn = 6;
-                pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                cpn = 5;
-                pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                if (ffrmt == FILE_FORMAT_RAW) {
+                    cpx = 0;
+                    cpn = 2;
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 3;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
 
-                cpx = 1;
-                cpn = 7;
-                pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                cpn = 8;
-                pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpx = 1;
+                    cpn = 17;
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 18;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
 
-                cpx = 2;
-                cpn = 9;
-                pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                cpn = 10;
-                pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpx = 2;
+                    cpn = 15;
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 16;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+
+                    cpx = 3;
+                    cpn = 13;
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 14;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+
+                    cpx = 4;
+                    cpn = 11;
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 12;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                }
+                else {
+                    cpx = 0;
+                    cpn = 6;
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 5;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+
+                    cpx = 1;
+                    cpn = 7;
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 8;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+
+                    cpx = 2;
+                    cpn = 9;
+                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                    cpn = 10;
+                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                }
 
                 cof = cpx + 1;
 
@@ -36976,9 +37210,17 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+2] = '\0';
 #if 1 /* do NOT send mass pos */
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                print_f(rs->plogs, "P6", rs->logs);
+                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                //print_f(rs->plogs, "P6", rs->logs);
 #endif
+
+#if 1
+                pdt = &pct[ASPOP_CROP_02];
+                crpMx = pdt->opValue & 0xffff;
+#else
+                crpMx = h;
+#endif
+
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
@@ -36991,13 +37233,24 @@ static int p6(struct procRes_s *rs)
                         cxn = (cxn * dpi) / 300;
                     }
 
-                    sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
+                     if (ffrmt == FILE_FORMAT_RAW) {
+                        vhi = crpMx - cy;
+                    } else {
+                        vhi = cy;
+                    }
 
-                    cpx = i + cof;
+                    sprintf(rs->logs, "%d,%d,%d,\n\r", vhi, cxm, cxn); 
+
+                    if (ffrmt == FILE_FORMAT_RAW) {
+                        cpx = (masRecd - i - 1) + cof;
+                    } else {
+                        cpx = i + cof;
+                    }
+
                     pcpexduo->crpexLfPots[cpx*2+0] = cxm;
-                    pcpexduo->crpexLfPots[cpx*2+1] = cy;
+                    pcpexduo->crpexLfPots[cpx*2+1] = vhi;
                     pcpexduo->crpexRtPots[cpx*2+0] = cxn;
-                    pcpexduo->crpexRtPots[cpx*2+1] = cy;
+                    pcpexduo->crpexRtPots[cpx*2+1] = vhi;
                     
 #if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
@@ -37011,7 +37264,9 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+2] = '\0';
 #if 1 /* do NOT send mass pos */
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                    sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
+                    sendbuf[5+n] = '\0';
+                    sendbuf[5+n+1] = '\0';
+                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", i, &sendbuf[5], ret);
                     //print_f(rs->plogs, "P6", rs->logs);
 #endif
                 }
@@ -37019,56 +37274,88 @@ static int p6(struct procRes_s *rs)
                 cpx = masRecd + cof;
                 cls =  masRecd + cof - 1;
 
-                cpn = 11;
-                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
-                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpn = 12;
-                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpx += 1;
+                if (ffrmt == FILE_FORMAT_RAW) {
+                    cpn = 9;
+                    if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                        pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpn = 10;
+                        pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+                    
+                    cpn = 7;
+                    if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                        pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpn = 8;
+                        pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+                    
+                    cpn = 5;
+                    if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                        pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpn = 6;
+                        pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
                 }
+                else {
+                    cpn = 11;
+                    if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                        pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpn = 12;
+                        pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
 
-                cpn = 13;
-                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
-                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpn = 14;
-                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpx += 1;
+                    cpn = 13;
+                    if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                        pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpn = 14;
+                        pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+
+                    cpn = 15;
+                    if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                        pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpn = 16;
+                        pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+
+                    cpn = 17;
+                    if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                        pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpn = 18;
+                        pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+
+                    cpn = 2;
+                    if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
+                        pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpn = 3;
+                        pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
+                        pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
                 }
-
-                cpn = 15;
-                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
-                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpn = 16;
-                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
-
-                cpn = 17;
-                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
-                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpn = 18;
-                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
-
-                cpn = 2;
-                if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
-                    pcpexduo->crpexLfPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexLfPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpn = 3;
-                    pcpexduo->crpexRtPots[cpx*2+0] = pcp36duo->crp36Pots[cpn*2+0];
-                    pcpexduo->crpexRtPots[cpx*2+1] = pcp36duo->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
-
                 
                 pcpexduo->crpexSize = cpx*2;
                 
@@ -37183,7 +37470,18 @@ static int p6(struct procRes_s *rs)
         if (opcode == 0x19) { /* send CROP info (new)*/
             sprintf_f(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
-
+            
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            if (ret) {
+                //val = 0;
+            }
+            
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
             switch (tmp) {
             case RESOLUTION_1200:
@@ -37263,7 +37561,12 @@ static int p6(struct procRes_s *rs)
             /* initial cropping config */
             memset(pcp36, 0, sizeof(struct aspCrop36_s));
             memset(pcpex, 0, sizeof(struct aspCropExtra_s));
-
+#if 1
+            pdt = &pct[ASPOP_CROP_02];
+            crpMx = pdt->opValue & 0xffff;
+#else
+            crpMx = h;
+#endif
 
             for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
                 idx = ASPOP_CROP_01 + i;
@@ -37289,11 +37592,22 @@ static int p6(struct procRes_s *rs)
                                 val = (val * dpi) / 300;
                             }
 
-                            sprintf(rs->logs, "%d,%d,", val, pdt->opValue & 0xffff);
+                            if (ffrmt == FILE_FORMAT_RAW) {
+                                vhi = pdt->opValue & 0xffff;
+                                if (crpMx < vhi) {
+                                    vhi = 0xffff;
+                                } else {
+                                    vhi = crpMx - vhi;
+                                }
+                            } else {
+                                vhi = pdt->opValue & 0xffff;
+                            }
+                            
+                            sprintf(rs->logs, "%d,%d,", val, vhi);
                             n = strlen(rs->logs);
 
                             pcp36->crp36Pots[cpn*2+0] = val;
-                            pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+                            pcp36->crp36Pots[cpn*2+1] = vhi;
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -37325,11 +37639,22 @@ static int p6(struct procRes_s *rs)
                                 val = (val * dpi) / 300;
                             }
 
-                            sprintf(rs->logs, "%d,%d,", val, pdt->opValue & 0xffff);
+                            if (ffrmt == FILE_FORMAT_RAW) {
+                                vhi = pdt->opValue & 0xffff;
+                                if (crpMx < vhi) {
+                                    vhi = 0xffff;
+                                } else {
+                                    vhi = crpMx - vhi;
+                                }
+                            } else {
+                                vhi = pdt->opValue & 0xffff;
+                            }
+                            
+                            sprintf(rs->logs, "%d,%d,", val, vhi);
                             n = strlen(rs->logs);
 
                             pcp36->crp36Pots[cpn*2+0] = val;
-                            pcp36->crp36Pots[cpn*2+1] = pdt->opValue & 0xffff;
+                            pcp36->crp36Pots[cpn*2+1] = vhi;
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -37438,29 +37763,72 @@ static int p6(struct procRes_s *rs)
 
 #if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
-                cpx = 0;
-                cpn = 6;
-                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                cpn = 5;
-                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                if (ffrmt == FILE_FORMAT_RAW) {
+                    cpx = 0;
+                    cpn = 2;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 3;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
 
-                cpx = 1;
-                cpn = 7;
-                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                cpn = 8;
-                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx = 1;
+                    cpn = 17;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 18;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
 
-                cpx = 2;
-                cpn = 9;
-                pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                cpn = 10;
-                pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpx = 2;
+                    cpn = 15;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 16;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                    cpx = 3;
+                    cpn = 13;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 14;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                    cpx = 4;
+                    cpn = 11;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 12;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                }
+                else {
+                    cpx = 0;
+                    cpn = 6;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 5;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                    cpx = 1;
+                    cpn = 7;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 8;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+
+                    cpx = 2;
+                    cpn = 9;
+                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                    cpn = 10;
+                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                }
 
                 cof = cpx + 1;
 
@@ -37518,9 +37886,17 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+2] = '\0';
 #if 1 /* do NOT send mass pos */
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                print_f(rs->plogs, "P6", rs->logs);
+                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                //print_f(rs->plogs, "P6", rs->logs);
 #endif
+
+#if 1
+                pdt = &pct[ASPOP_CROP_02];
+                crpMx = pdt->opValue & 0xffff;
+#else
+                crpMx = h;
+#endif
+
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
@@ -37532,14 +37908,25 @@ static int p6(struct procRes_s *rs)
                         cxm = (cxm * dpi) / 300;
                         cxn = (cxn * dpi) / 300;
                     }
-                    
-                    sprintf(rs->logs, "%d,%d,%d,\n\r", cy, cxm, cxn); 
 
-                    cpx = i + cof;
+                    if (ffrmt == FILE_FORMAT_RAW) {
+                        vhi = crpMx - cy;
+                    } else {
+                        vhi = cy;
+                    }
+
+                    sprintf(rs->logs, "%d,%d,%d,\n\r", vhi, cxm, cxn); 
+                    
+                    if (ffrmt == FILE_FORMAT_RAW) {
+                        cpx = (masRecd - i - 1) + cof;
+                    } else {
+                        cpx = i + cof;
+                    }
+                    
                     pcpex->crpexLfPots[cpx*2+0] = cxm;
-                    pcpex->crpexLfPots[cpx*2+1] = cy;
+                    pcpex->crpexLfPots[cpx*2+1] = vhi;
                     pcpex->crpexRtPots[cpx*2+0] = cxn;
-                    pcpex->crpexRtPots[cpx*2+1] = cy;
+                    pcpex->crpexRtPots[cpx*2+1] = vhi;
                     
 #if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
@@ -37553,7 +37940,9 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+2] = '\0';
 #if 1 /* do NOT send mass pos */
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                    sprintf(rs->logs, "socket send, len:%d from %d, ret:%d\n", 5+n+3, rs->psocket_at->connfd, ret);
+                    sendbuf[5+n] = '\0';
+                    sendbuf[5+n+1] = '\0';
+                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
                     //print_f(rs->plogs, "P6", rs->logs);
 #endif
                 }
@@ -37561,54 +37950,87 @@ static int p6(struct procRes_s *rs)
                 cpx = masRecd + cof;
                 cls =  masRecd + cof - 1;
 
-                cpn = 11;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 12;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
+                if (ffrmt == FILE_FORMAT_RAW) {
+                    cpn = 9;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 10;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+                    
+                    cpn = 7;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 8;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
+                    
+                    cpn = 5;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 6;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
                 }
+                else {
+                    cpn = 11;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 12;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
 
-                cpn = 13;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 14;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
+                    cpn = 13;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 14;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
 
-                cpn = 15;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 16;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
+                    cpn = 15;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 16;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
 
-                cpn = 17;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 18;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
-                }
+                    cpn = 17;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 18;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
 
-                cpn = 2;
-                if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
-                    pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpn = 3;
-                    pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
-                    pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
-                    cpx += 1;
+                    cpn = 2;
+                    if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
+                        pcpex->crpexLfPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexLfPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpn = 3;
+                        pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
+                        pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
+                        cpx += 1;
+                    }
                 }
 
                 
@@ -37616,7 +38038,7 @@ static int p6(struct procRes_s *rs)
                 
                 msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
 
-                #if 0
+                #if 0 /* debug print all crop points */
                 sprintf_f(rs->logs, "total extra points size: %d \n", cpx);
                 print_f(rs->plogs, "P6", rs->logs);
                 
