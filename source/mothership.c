@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Tue Jun 13 11:19:35 2017 ecb1639f79 [MSP] reverse y for raw v3, fix algo issue print mass points, fix cropping issue"
+#define MSP_VERSION " Tue Jun 13 11:19:35 2017 ecb1639f79 [MSP] reverse y for raw v3, fix algo issue print mass points, fix cropping issue, select ratio, algo test, =0.5"
 
 #define SPI1_ENABLE (1) 
 
@@ -219,6 +219,9 @@ static int *totSalloc=0;
 #define LOG_CROP_FINDLINE (0)
 #define LOG_CROP_TOPOFFSET (0)
 #endif
+#define CROP_SELEC_RATIO (40.0)
+#define CROP_SELEC_HEAD (10)
+#define CROP_SELEC_TAIL (10)
 
 #define FAT_DIRPOOL_IDX_MAX   (56850)
 #define FAT_DIRPOO_ARY_MAX   (65535)
@@ -3214,12 +3217,12 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen)
     }
 
 #if CROP_CALCU_DETAIL
-    printf("[Gline] min idx = %d, min avg = %d, head = %d, tail = %d \n", minIdx, (int)minDist, avList[minIdx*2+0], avList[minIdx*2+1]);    
+    printf("[Gline] min idx = %d, min avg = %d, head = %d, tail = %d limit: %lf\n", minIdx, (int)minDist, avList[minIdx*2+0], avList[minIdx*2+1], (1.333  * (double) len));    
 #endif
 
     div[0] = minDist;
     
-    if (minDist > (0.666  * (double) len)) {
+    if (minDist > (1.333  * (double) len)) {
         return (0 - (int)round(minDist));
     }
 
@@ -4031,7 +4034,7 @@ static int cpyPGrp(int start, int len, double *grp, double **cpgp, int max)
 
 static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
 {
-#define LINE_DIST  (32.0)
+#define CROP_LINE_DIST  (32.0)
     int i=0, tot=0, ret=0, head=0, glen=0, id=0;
     int cntLf=0, cntRt=0, contL=0, contR=0;
     double *p1, *p2;
@@ -4075,7 +4078,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
         dist = calcuLineGroupDist(cgrp, vecTr, glen);
         
-        if (dist > LINE_DIST) {
+        if (dist > CROP_LINE_DIST) {
 #if LOG_CROP_FINDBASELINE
             printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1], dist);
 #endif
@@ -4128,7 +4131,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
         dist = calcuLineGroupDist(cgrp, vecTr, glen);
         
-        if (dist > LINE_DIST) {
+        if (dist > CROP_LINE_DIST) {
 #if LOG_CROP_FINDBASELINE
             printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1], dist);    
 #endif
@@ -4351,13 +4354,13 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     }
 
     if ((cropflag & (0x1 << 8)) && (cropflag & (0x8 << 8))) {
-        if ((lfLinSize != 1) || (rtLinSize != 1)) {
+        if ((lfLinSize > 2) || (rtLinSize > 2)) {
             return 3;
         }
      }
 
     if ((cropflag & (0x2 << 8)) && (cropflag & (0x4 << 8))) {
-        if ((lfLinSize != 1) || (rtLinSize != 1)) {
+        if ((lfLinSize > 2) || (rtLinSize > 2)) {
             return 4;
         }
      }
@@ -4823,7 +4826,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
 static int calcuLine(struct aspCropExtra_s *pcpex) 
 {
-#define MIN_LINE  10
+#define CROP_MIN_LINE  5
     int i=0, j=0, ret=0;
     int lfStrUp=-1, lfEndUp=-1, rtStrUp=-1, rtEndUp=-1;
     int lfStrDn=-1, lfEndDn=-1, rtStrDn=-1, rtEndDn=-1;
@@ -4939,7 +4942,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
     pcpex->crpexGrpRULen = -1;
     pcpex->crpexGrpRDLen = -1;
     
-    if (szlu > MIN_LINE) {
+    if (szlu > CROP_MIN_LINE) {
 #if LOG_CROP_CALCULINE
         printf("(LU) copy , start idx = %d, end idx = %d, size = %d\n", lfStrUp, lfEndUp, szlu);
 #endif
@@ -4959,7 +4962,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
         }
     }
 
-    if (szld > MIN_LINE) {
+    if (szld > CROP_MIN_LINE) {
 #if LOG_CROP_CALCULINE
         printf("(LD) copy , start idx = %d, end idx = %d, size = %d\n", lfStrDn, lfEndDn, szld);
 #endif
@@ -4979,7 +4982,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
         }
     }
 
-    if (szru > MIN_LINE) {
+    if (szru > CROP_MIN_LINE) {
 #if LOG_CROP_CALCULINE
         printf("(RU) copy , start idx = %d, end idx = %d, size = %d\n", rtStrUp, rtEndUp, szru);    
 #endif
@@ -4999,7 +5002,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
         }
     }
     
-    if (szrd > MIN_LINE) {
+    if (szrd > CROP_MIN_LINE) {
 #if LOG_CROP_CALCULINE
         printf("(RD) copy , start idx = %d, end idx = %d, size = %d\n", rtStrDn, rtEndDn, szrd);    
 #endif
@@ -5271,6 +5274,8 @@ static int setRotateP4(struct aspCrop36_s *pcp36, double *rotateP4)
 static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 {
 #define ACCEPT_OFFSET (1000.0)
+#define ACCEPT_FINAL_OFFSET_RADIO (0.1)
+#define ACCEPT_COMPU_OFFSET_RADIO (0.5)
 
     double *vLU=0, *vLD=0, *vRU=0, *vRD=0;
     double linLU[3], linLD[3], linRU[3], linRD[3];
@@ -5289,6 +5294,26 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     int gpLUlen, gpLDlen, gpRUlen, gpRDlen;
     int gpLUstr, gpLDstr, gpRUstr, gpRDstr;
     int ret, i=0;
+    double high=0.0, width=0.0, acptOff_h=0.0, acptOff_v=0.0, acpFn_h=0.0, acpFn_v=0.0;
+    double ttline[3], bbline[3], llline[3], rrline[3];
+    
+    high = pcp36->crp36Dn - pcp36->crp36Up;
+    width = pcp36->crp36Rt - pcp36->crp36Lf;
+
+    memcpy(ttline, pcp36->crp36LineTop, sizeof(double)*3);
+    memcpy(bbline, pcp36->crp36LineBotn, sizeof(double)*3);
+    memcpy(llline, pcp36->crp36LineLeft, sizeof(double)*3);
+    memcpy(rrline, pcp36->crp36LineRight, sizeof(double)*3);
+    
+    acptOff_h = ACCEPT_COMPU_OFFSET_RADIO * width;
+    acptOff_v = ACCEPT_COMPU_OFFSET_RADIO * high;
+    
+    acpFn_h = ACCEPT_FINAL_OFFSET_RADIO * width;
+    acpFn_v = ACCEPT_FINAL_OFFSET_RADIO * high;
+
+#if LOG_CROP_FINDLINE
+    printf("accept offset for compu v:%lf, h:%lf for final: v:%lf, h:%lf \n", acptOff_v, acptOff_h, acpFn_v, acpFn_h);
+#endif
 
     memcpy(ptn, pcp36->crp36Pots, sizeof(double)*40);
     memcpy(sup, pcpex->crpexCrosUp, sizeof(double)*2);
@@ -5584,7 +5609,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #if LOG_CROP_FINDLINE
                 printf("vLU distU2L=%lf, distL2U=%lf\n", distU2L, distL2U);        
 #endif
-                if (distU2L > ACCEPT_OFFSET || distL2U > ACCEPT_OFFSET) {
+                if (distU2L > acptOff_v || distL2U > acptOff_h) {
                     gpLUstr = -1;
                     vLU = 0;
 #if LOG_CROP_FINDLINE
@@ -5603,7 +5628,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #if LOG_CROP_FINDLINE
             printf("vLU distU2L=%lf, distL2U=%lf\n", distU2L, distL2U);
 #endif
-            if (distU2L > ACCEPT_OFFSET || distL2U > ACCEPT_OFFSET) {
+            if (distU2L > acptOff_v || distL2U > acptOff_h) {
                 gpLUstr = -1;
                 vLU = 0;
 #if LOG_CROP_FINDLINE
@@ -5654,7 +5679,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #if LOG_CROP_FINDLINE
                 printf("vLD distD2L=%lf, distL2D=%lf\n", distD2L, distL2D);        
 #endif
-                if (distD2L > ACCEPT_OFFSET || distL2D > ACCEPT_OFFSET) {
+                if (distD2L > acptOff_v || distL2D > acptOff_h) {
                     gpLDstr = -1;
                     vLD = 0;
 #if LOG_CROP_FINDLINE
@@ -5672,7 +5697,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #if LOG_CROP_FINDLINE
             printf("vLD distD2L=%lf, distL2D=%lf\n", distD2L, distL2D);
 #endif
-            if (distD2L > ACCEPT_OFFSET || distL2D > ACCEPT_OFFSET) {
+            if (distD2L > acptOff_v || distL2D > acptOff_h) {
                 gpLDstr = -1;
                 vLD = 0;
 #if LOG_CROP_FINDLINE
@@ -5722,7 +5747,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #if LOG_CROP_FINDLINE
                 printf("vRU distU2R=%lf, distR2U=%lf\n", distU2R, distR2U);
 #endif
-                if (distU2R > ACCEPT_OFFSET || distR2U > ACCEPT_OFFSET) {
+                if (distU2R > acptOff_v || distR2U > acptOff_h) {
                     gpRUstr = -1;
                     vRU = 0;
 #if LOG_CROP_FINDLINE
@@ -5740,7 +5765,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #if LOG_CROP_FINDLINE
             printf("vRU distU2R=%lf, distR2U=%lf\n", distU2R, distR2U);
 #endif
-            if (distU2R > ACCEPT_OFFSET || distR2U > ACCEPT_OFFSET) {
+            if (distU2R > acptOff_v || distR2U > acptOff_h) {
                 gpRUstr = -1;
                 vRU = 0;
 #if LOG_CROP_FINDLINE
@@ -5790,7 +5815,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #if LOG_CROP_FINDLINE
                 printf("vRD distD2R=%lf, distR2D=%lf\n", distD2R, distR2D);
 #endif
-                if (distD2R > ACCEPT_OFFSET || distR2D > ACCEPT_OFFSET) {
+                if (distD2R > acptOff_v || distR2D > acptOff_h) {
                     gpRDstr = -1;
                     vRD = 0;
 #if LOG_CROP_FINDLINE
@@ -5808,7 +5833,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #if LOG_CROP_FINDLINE
             printf("vRD distD2R=%lf, distR2D=%lf\n", distD2R, distR2D);
 #endif
-            if (distD2R > ACCEPT_OFFSET || distR2D > ACCEPT_OFFSET) {
+            if (distD2R > acptOff_v || distR2D > acptOff_h) {
                 gpRDstr = -1;
                 vRD = 0;
 #if LOG_CROP_FINDLINE
@@ -5861,13 +5886,18 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         pcpex->crpexGrpRDStr = -1;
     }
 
+#if LOG_CROP_FINDLINE
+    printf("accept offset for final v: %lf, h:%lf \n", acpFn_v, acpFn_h);
+#endif
+
     if ((vLU != 0) && (vLD != 0) && (vRU != 0) && (vRD != 0)) {
         ret = getCross(vLU, vLD, plf);
         if (ret == 0) {
             double dist=0;
-            dist = calcuDistance(slf, plf);
-
-            if (dist < ACCEPT_OFFSET) {
+            //dist = calcuDistance(slf, plf);
+            dist = calcuVectorDistancePoint(llline, plf);
+            
+            if (dist < acpFn_h) {
                 memcpy(pcpex->crpCropLf, plf, sizeof(double)*2);
             } else {
                 memcpy(pcpex->crpCropLf, slf, sizeof(double)*2);
@@ -5881,8 +5911,10 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         ret = getCross(vLU, vRU, pup);
         if (ret == 0) {
             double dist=0;
-            dist = calcuDistance(sup, pup);
-            if (dist < ACCEPT_OFFSET) {
+            //dist = calcuDistance(sup, pup);
+            dist = calcuVectorDistancePoint(ttline, pup);
+            
+            if (dist < acpFn_v) {
                 memcpy(pcpex->crpCropUp, pup, sizeof(double)*2);
             } else {
                 memcpy(pcpex->crpCropUp, sup, sizeof(double)*2);
@@ -5895,9 +5927,10 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         ret = getCross(vRU, vRD, prt);
         if (ret == 0) {
             double dist = 0;
-            dist = calcuDistance(srt, prt);
-
-            if (dist < ACCEPT_OFFSET) {
+            //dist = calcuDistance(srt, prt);
+            dist = calcuVectorDistancePoint(rrline, prt);
+            
+            if (dist < acpFn_h) {
                 memcpy(pcpex->crpCropRt, prt, sizeof(double)*2);
             } else {
                 memcpy(pcpex->crpCropRt, srt, sizeof(double)*2);
@@ -5910,8 +5943,10 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         ret = getCross(vLD, vRD, pdn);
         if (ret == 0) {
             double dist = 0;
-            dist = calcuDistance(sdn, pdn);
-            if (dist < ACCEPT_OFFSET) {
+            //dist = calcuDistance(sdn, pdn);
+            dist = calcuVectorDistancePoint(bbline, pdn);
+            
+            if (dist < acpFn_v) {
                 memcpy(pcpex->crpCropDn, pdn, sizeof(double)*2);
             } else {
                 memcpy(pcpex->crpCropDn, sdn, sizeof(double)*2);
@@ -5921,6 +5956,16 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #endif
         }            
 
+        getVectorFromP(vLUv, pcpex->crpCropUp, pcpex->crpCropLf);
+        getVectorFromP(vLDv, pcpex->crpCropDn, pcpex->crpCropLf);
+        getVectorFromP(vRUv, pcpex->crpCropUp, pcpex->crpCropRt);
+        getVectorFromP(vRDv, pcpex->crpCropDn, pcpex->crpCropRt);
+
+        memcpy(pcpex->crpexLinLU, vLUv, sizeof(double)*3);
+        memcpy(pcpex->crpexLinLD, vLDv, sizeof(double)*3);
+        memcpy(pcpex->crpexLinRU, vRUv, sizeof(double)*3);
+        memcpy(pcpex->crpexLinRD, vRDv, sizeof(double)*3);
+        
         //Log.e(TAG, "group get cross, up= ("+Math.round(pup[0])+", "+Math.round(pup[1])+"), down = ("+Math.round(pdn[0])+", "+Math.round(pdn[1])+"), left = ("+Math.round(plf[0])+", "+Math.round(plf[1])+"), right = "+Math.round(prt[0])+", "+Math.round(prt[1])+")");    
 
         ret = topPositive(pcpex);
@@ -5997,6 +6042,10 @@ static int topPositive(struct aspCropExtra_s *pcpex)
 
     getCross(vecRUsf, vecRD, rtsf);
     getCross(vecLUsf, vecLD, lfsf);
+
+#if LOG_CROP_TOPOFFSET
+        printf("get shift cross left (%lf, %lf) right (%lf, %lf) \n", round(lfsf[0]), round(lfsf[1]), round(rtsf[0]), round(rtsf[1]));
+#endif
 
     while (rtsf[1] < 0.0) {
         rightsf[0] = rtsf[0];
@@ -35959,7 +36008,7 @@ static int p6(struct procRes_s *rs)
 
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int masUsed=0, masRecd=0, masStart=0;
-    int gap=0, cy=0, cxm=0, cxn=0;
+    int gap=0, cy=0, cxm=0, cxn=0, linecnt=0, plancnt=0;
     unsigned short *ptBuf;
 
     struct aspInfoSplit_s *strinfo=0, *nexinfo=0;
@@ -35971,6 +36020,8 @@ static int p6(struct procRes_s *rs)
     struct aspCrop36_s *pcp36, *pcp36duo;
     struct aspCropExtra_s *pcpex, *pcpexduo;
     double rotlf[2], rotup[2], rotrt[2], rotdn[2];
+    double selecPic = 0.0, selecBase = 100.0, selecRatio = 0.0, selecCur = 0, selecMax = 0;
+    int ipic=0, icur=0;
 
     struct sdFatDir_s *rsfatdir=0, *msfatdir=0;
     int idxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
@@ -37081,12 +37132,49 @@ static int p6(struct procRes_s *rs)
                 crpMx = h;
 #endif
 
+                linecnt = 0;
+                plancnt = masRecd;
+
+#ifdef CROP_SELEC_RATIO
+                selecRatio = CROP_SELEC_RATIO / 100.0;
+                selecCur = 0.0;
+                selecPic = 0.0;
+                selecMax = (double) masRecd * selecRatio;
+                plancnt = (int) selecMax;
+#endif
+
+                sprintf(rs->logs, "select ratio: %lf, line max: %d\n", selecRatio, plancnt); 
+                print_f(rs->plogs, "P6", rs->logs);
+                
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
                     ptBuf++;
                     cxn = *ptBuf;
                     ptBuf++;
+
+#ifdef CROP_SELEC_RATIO
+                    if ((i > CROP_SELEC_HEAD) && (i < (masRecd - CROP_SELEC_TAIL))) {
+                        selecBase = i;
+                        selecCur = selecBase * selecRatio;
+                    
+                        ipic = (int)(selecPic);
+                        icur = (int)(selecCur);
+
+                        sprintf(rs->logs, "%d,(%d, %d)\n", i, icur, ipic); 
+                        print_f(rs->plogs, "P6", rs->logs);
+                    
+                        if (icur > ipic) {
+                            selecPic = selecCur;
+                            sprintf(rs->logs, "%d,%d,%d (pick!!!)\n", i, cxm, cxn); 
+                            print_f(rs->plogs, "P6", rs->logs);
+                        } else {
+                            sprintf(rs->logs, "%d,%d,%d (skip!!!)\n", i, cxm, cxn); 
+                            print_f(rs->plogs, "P6", rs->logs);
+                            continue;
+                        }
+                    }
+#endif                    
 
                     if (dpi < 300) {
                         cxm = (cxm * dpi) / 300;
@@ -37102,10 +37190,12 @@ static int p6(struct procRes_s *rs)
                     sprintf(rs->logs, "%d,%d,%d,\n\r", vhi, cxm, cxn); 
 
                     if (ffrmt == FILE_FORMAT_RAW) {
-                        cpx = (masRecd - i - 1) + cof;
+                        cpx = (plancnt - linecnt - 1) + cof;
                     } else {
-                        cpx = i + cof;
+                        cpx = linecnt + cof;
                     }
+
+                    linecnt ++;
 
                     pcpex->crpexLfPots[cpx*2+0] = cxm;
                     pcpex->crpexLfPots[cpx*2+1] = vhi;
@@ -37131,7 +37221,7 @@ static int p6(struct procRes_s *rs)
 #endif
                 }
 
-                cpx = masRecd + cof;
+                cpx = linecnt + cof;
                 cls =  masRecd + cof - 1;
 
                 if (ffrmt == FILE_FORMAT_RAW) {
@@ -37464,12 +37554,49 @@ static int p6(struct procRes_s *rs)
                 crpMx = h;
 #endif
 
+                linecnt = 0;
+                plancnt = masRecd;
+
+#ifdef CROP_SELEC_RATIO
+                selecRatio = CROP_SELEC_RATIO / 100.0;
+                selecCur = 0.0;
+                selecPic = 0.0;
+                selecMax = (double) masRecd * selecRatio;
+                plancnt = (int) selecMax;
+#endif
+
+                sprintf(rs->logs, "select ratio: %lf, line max: %d\n", selecRatio, plancnt); 
+                print_f(rs->plogs, "P6", rs->logs);
+                
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
                     ptBuf++;
                     cxn = *ptBuf;
                     ptBuf++;
+                    
+#ifdef CROP_SELEC_RATIO
+                    if ((i > CROP_SELEC_HEAD) && (i < (masRecd - CROP_SELEC_TAIL))) {
+                        selecBase = i;
+                        selecCur = selecBase * selecRatio;
+                    
+                        ipic = (int)(selecPic);
+                        icur = (int)(selecCur);
+
+                        sprintf(rs->logs, "%d,(%d, %d)\n", i, icur, ipic); 
+                        print_f(rs->plogs, "P6", rs->logs);
+                    
+                        if (icur > ipic) {
+                            selecPic = selecCur;
+                            sprintf(rs->logs, "%d,%d,%d (pick!!!)\n", i, cxm, cxn); 
+                            print_f(rs->plogs, "P6", rs->logs);
+                        } else {
+                            sprintf(rs->logs, "%d,%d,%d (skip!!!)\n", i, cxm, cxn); 
+                            print_f(rs->plogs, "P6", rs->logs);
+                            continue;
+                        }
+                    }
+#endif
 
                     if (dpi < 300) {
                         cxm = (cxm * dpi) / 300;
@@ -37485,10 +37612,12 @@ static int p6(struct procRes_s *rs)
                     sprintf(rs->logs, "%d,%d,%d,\n\r", vhi, cxm, cxn); 
 
                     if (ffrmt == FILE_FORMAT_RAW) {
-                        cpx = (masRecd - i - 1) + cof;
+                        cpx = (plancnt - linecnt - 1) + cof;
                     } else {
-                        cpx = i + cof;
+                        cpx = linecnt + cof;
                     }
+
+                    linecnt ++;
 
                     pcpexduo->crpexLfPots[cpx*2+0] = cxm;
                     pcpexduo->crpexLfPots[cpx*2+1] = vhi;
@@ -37514,7 +37643,7 @@ static int p6(struct procRes_s *rs)
 #endif
                 }
 
-                cpx = masRecd + cof;
+                cpx = linecnt + cof;
                 cls =  masRecd + cof - 1;
 
                 if (ffrmt == FILE_FORMAT_RAW) {
@@ -37930,8 +38059,8 @@ static int p6(struct procRes_s *rs)
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                 
                 sendbuf[5+n] = '\0';                
-                sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
-                print_f(rs->plogs, "P6", rs->logs);
+                //sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
+                //print_f(rs->plogs, "P6", rs->logs);
             }
 
             cpn = 0;
@@ -38144,12 +38273,49 @@ static int p6(struct procRes_s *rs)
                 crpMx = h;
 #endif
 
+                linecnt = 0;
+                plancnt = masRecd;
+
+#ifdef CROP_SELEC_RATIO
+                selecRatio = CROP_SELEC_RATIO / 100.0;
+                selecCur = 0.0;
+                selecPic = 0.0;
+                selecMax = (double) masRecd * selecRatio;
+                plancnt = (int) selecMax;
+#endif
+
+                sprintf(rs->logs, "select ratio: %lf, line max: %d\n", selecRatio, plancnt); 
+                print_f(rs->plogs, "P6", rs->logs);
+                    
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
                     cxm = *ptBuf;
                     ptBuf++;
                     cxn = *ptBuf;
                     ptBuf++;
+                    
+#ifdef CROP_SELEC_RATIO
+                    if ((i > CROP_SELEC_HEAD) && (i < (masRecd - CROP_SELEC_TAIL))) {
+                        selecBase = i;
+                        selecCur = selecBase * selecRatio;
+                    
+                        ipic = (int)(selecPic);
+                        icur = (int)(selecCur);
+
+                        //sprintf(rs->logs, "%d,(%d, %d)\n", i, icur, ipic); 
+                        //print_f(rs->plogs, "P6", rs->logs);
+                    
+                        if (icur > ipic) {
+                            selecPic = selecCur;
+                            //sprintf(rs->logs, "%d,%d,%d (pick!!!)\n", i, cxm, cxn); 
+                            //print_f(rs->plogs, "P6", rs->logs);
+                        } else {
+                            sprintf(rs->logs, "%d,%d,%d (skip!!!)\n", i, cxm, cxn); 
+                            print_f(rs->plogs, "P6", rs->logs);
+                            continue;
+                        }
+                    }
+#endif
 
                     if (dpi < 300) {
                         cxm = (cxm * dpi) / 300;
@@ -38165,10 +38331,12 @@ static int p6(struct procRes_s *rs)
                     sprintf(rs->logs, "%d,%d,%d,\n\r", vhi, cxm, cxn); 
                     
                     if (ffrmt == FILE_FORMAT_RAW) {
-                        cpx = (masRecd - i - 1) + cof;
+                        cpx = (plancnt - linecnt - 1) + cof;
                     } else {
-                        cpx = i + cof;
+                        cpx = linecnt + cof;
                     }
+
+                    linecnt ++;
                     
                     pcpex->crpexLfPots[cpx*2+0] = cxm;
                     pcpex->crpexLfPots[cpx*2+1] = vhi;
@@ -38189,12 +38357,12 @@ static int p6(struct procRes_s *rs)
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                     sendbuf[5+n] = '\0';
                     sendbuf[5+n+1] = '\0';
-                    sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
-                    print_f(rs->plogs, "P6", rs->logs);
+                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
+                    //print_f(rs->plogs, "P6", rs->logs);
 #endif
                 }
 
-                cpx = masRecd + cof;
+                cpx = linecnt + cof;
                 cls =  masRecd + cof - 1;
 
                 if (ffrmt == FILE_FORMAT_RAW) {
