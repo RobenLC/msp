@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Tue Jun 13 11:19:35 2017 ecb1639f79 [MSP] reverse y for raw v3, fix algo issue print mass points, fix cropping issue, select ratio, algo test, =0.5"
+#define MSP_VERSION " Tue Jun 13 11:19:35 2017 ecb1639f79 [MSP] reverse y for raw v3, fix algo issue print mass points, fix cropping issue, select ratio, algo test, =0.5, send M no F point"
 
 #define SPI1_ENABLE (1) 
 
@@ -219,9 +219,10 @@ static int *totSalloc=0;
 #define LOG_CROP_FINDLINE (0)
 #define LOG_CROP_TOPOFFSET (0)
 #endif
-#define CROP_SELEC_RATIO (40.0)
+#define CROP_SELEC_RATIO (100.0)
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
+#define CROP_MIGRATE_TO_APP (1)
 
 #define FAT_DIRPOOL_IDX_MAX   (56850)
 #define FAT_DIRPOO_ARY_MAX   (65535)
@@ -1357,6 +1358,61 @@ static int calcuGroupLine(double *pGrp, double *vecTr, double *div, int gpLen);
 static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
+
+static int aspSortD(double * pdb, int size)
+{
+    int srtg[1024];
+    double srtf[1024][2];
+    int is=0, in=0, ix=0, id=0;
+    double tmdb;
+
+    if (size > 1024) {
+        return -1;
+    }
+
+    for (is = 0; is < 1024; is++) {
+        srtg[is] = is;
+    }
+
+    for (is = 0; is < size; is++) {
+        srtf[is][0] = pdb[is*2+0];
+        srtf[is][1] = pdb[is*2+1];
+    }
+
+    is = 1;
+    while (is < size) {
+
+        in = srtg[is];
+        tmdb = srtf[in][1];
+
+        //printf("[SORT] %d. %d[%lf] \n", is, in, tmdb);
+        
+        for (ix=0; ix < is; ix++) {
+            id = srtg[ix];
+            if (tmdb < srtf[id][1]) {
+               srtg[ix] = in;
+               in = id;
+               tmdb = srtf[id][1];
+
+               //printf("[SORT]     %d. %d[%lf] \n", is, in, tmdb);
+            }        
+        }
+        srtg[is] = in;
+
+        is++;
+    }
+
+    for (is = 0; is < size; is++) {
+        id = srtg[is];
+        pdb[is*2+0] = srtf[id][0];
+        pdb[is*2+1] = srtf[id][1];
+
+        //printf("[SORT] %d. %d[%lf, %lf] \n", is, id, srtf[id][0], srtf[id][1]);
+    }
+    
+
+    return 0;
+}
 
 static int scanWidthConvert(int tag)
 {
@@ -36902,6 +36958,7 @@ static int p6(struct procRes_s *rs)
             pcp36->crp36Pots[cpn*2+0] = 1100;
             pcp36->crp36Pots[cpn*2+1] = 0;
 
+#if !CROP_MIGRATE_TO_APP
             /* first stage of cropping algorithm */            
             ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
 #if CROP_CALCU_PROCESS
@@ -36943,6 +37000,7 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36);
                 }
             }
+#endif
 
             cpn = 0;
             pcp36duo->crp36Pots[cpn*2+0] = 100;
@@ -36952,6 +37010,7 @@ static int p6(struct procRes_s *rs)
             pcp36duo->crp36Pots[cpn*2+0] = 1100;
             pcp36duo->crp36Pots[cpn*2+1] = 0;
 
+#if !CROP_MIGRATE_TO_APP
             /* first stage of cropping algorithm */            
             ret = aspCrp36GetBoundry(pcp36duo, idxL, idxR, CROP_MAX_NUM_META+2);
 #if CROP_CALCU_PROCESS
@@ -36993,6 +37052,7 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36duo);
                 }
             }
+#endif
             
             if (pmass->massRecd) {
                 if (ffrmt == FILE_FORMAT_RAW) {
@@ -37205,6 +37265,7 @@ static int p6(struct procRes_s *rs)
 #if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
+#if 0
                     sendbuf[3] = 'M';
                     n = strlen(rs->logs);
                     memcpy(&sendbuf[5], rs->logs, n);
@@ -37212,7 +37273,7 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n] = 0xfb;
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
-#if 1 /* do NOT send mass pos */
+
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                     sendbuf[5+n] = '\0';
                     sendbuf[5+n+1] = '\0';
@@ -37310,17 +37371,39 @@ static int p6(struct procRes_s *rs)
                 pcpex->crpexSize = cpx*2;
                 
                 msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-
-                #if 0
+                
                 sprintf_f(rs->logs, "total extra points size: %d \n", cpx);
                 print_f(rs->plogs, "P6", rs->logs);
+
+                aspSortD(pcpex->crpexLfPots, cpx); /* max sort = 1024 */
+                aspSortD(pcpex->crpexRtPots, cpx); /* max sort = 1024 */
                 
                 for (i = 0; i < cpx; i++) {
                     sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
                               , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
+
+#if CROP_MIGRATE_TO_APP
+                    vhi = (int)pcpex->crpexLfPots[i*2+1];
+                    cxm = (int)pcpex->crpexLfPots[i*2+0];
+                    cxn = (int)pcpex->crpexRtPots[i*2+0];
+                
+                    sprintf(rs->logs, "%d,%d,%d,\r", vhi, cxm, cxn); 
+
+                    sendbuf[3] = 'M';
+                    n = strlen(rs->logs);
+                    memcpy(&sendbuf[5], rs->logs, n);
+
+                    sendbuf[5+n] = 0xfb;
+                    sendbuf[5+n+1] = '\n';
+                    sendbuf[5+n+2] = '\0';
+                    ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                    sendbuf[5+n] = '\0';
+                    sendbuf[5+n+1] = '\0';
+                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
+                    //print_f(rs->plogs, "P6", rs->logs);
+#endif
                 }
-                #endif
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
@@ -37329,6 +37412,7 @@ static int p6(struct procRes_s *rs)
 
             } 
 
+#if !CROP_MIGRATE_TO_APP
             /* second stage of cropping algorithm */
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
             findLine(pcp36, pcpex);
@@ -37367,7 +37451,8 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-            
+#endif
+
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf_f(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pots[i*2+0], pcp36->crp36Pots[i*2+1]);
@@ -37386,6 +37471,7 @@ static int p6(struct procRes_s *rs)
             }
 #endif     
 
+#if !CROP_MIGRATE_TO_APP
             for (i = 0; i < 4; i++) { /* send the cropping result to APP */
                 sendbuf[3] = 'F';
 
@@ -37415,6 +37501,7 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
             }
+#endif
 
             if (pmassduo->massRecd) {
                 if (ffrmt == FILE_FORMAT_RAW) {
@@ -37627,6 +37714,8 @@ static int p6(struct procRes_s *rs)
 #if LOG_P6_CROP_EN
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
+
+#if 0
                     sendbuf[3] = 'm';
                     n = strlen(rs->logs);
                     memcpy(&sendbuf[5], rs->logs, n);
@@ -37640,6 +37729,7 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+1] = '\0';
                     //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", i, &sendbuf[5], ret);
                     //print_f(rs->plogs, "P6", rs->logs);
+#endif
 #endif
                 }
 
@@ -37733,16 +37823,49 @@ static int p6(struct procRes_s *rs)
                 
                 msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
 
-                #if 0
                 sprintf_f(rs->logs, "total extra points size: %d \n", cpx);
                 print_f(rs->plogs, "P6", rs->logs);
+
+                
+                for (i = 0; i < cpx; i++) {
+                    sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
+                              , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+
+                }
+                
+                sprintf_f(rs->logs, "total extra points size: %d \n", cpx);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                aspSortD(pcpexduo->crpexLfPots, cpx); /* max sort = 1024 */
+                aspSortD(pcpexduo->crpexRtPots, cpx); /* max sort = 1024 */
                 
                 for (i = 0; i < cpx; i++) {
                     sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
                               , pcpexduo->crpexLfPots[i*2+0], pcpexduo->crpexLfPots[i*2+1], pcpexduo->crpexRtPots[i*2+0], pcpexduo->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
+
+#if CROP_MIGRATE_TO_APP
+                    vhi = (int)pcpexduo->crpexLfPots[i*2+1];
+                    cxm = (int)pcpexduo->crpexLfPots[i*2+0];
+                    cxn = (int)pcpexduo->crpexRtPots[i*2+0];
+                
+                    sprintf(rs->logs, "%d,%d,%d,\r", vhi, cxm, cxn); 
+
+                    sendbuf[3] = 'm';
+                    n = strlen(rs->logs);
+                    memcpy(&sendbuf[5], rs->logs, n);
+
+                    sendbuf[5+n] = 0xfb;
+                    sendbuf[5+n+1] = '\n';
+                    sendbuf[5+n+2] = '\0';
+                    ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                    sendbuf[5+n] = '\0';
+                    sendbuf[5+n+1] = '\0';
+                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
+                    //print_f(rs->plogs, "P6", rs->logs);
+#endif
                 }
-                #endif
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
@@ -37750,7 +37873,7 @@ static int p6(struct procRes_s *rs)
                 pmassduo->massUsed = 0;
 
             } 
-
+#if !CROP_MIGRATE_TO_APP
             /* second stage of cropping algorithm */
             msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
             findLine(pcp36duo, pcpexduo);
@@ -37789,7 +37912,8 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "duo get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-            
+#endif
+
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf_f(rs->logs, "%d. %lf, %lf \n", i, pcp36duo->crp36Pots[i*2+0], pcp36duo->crp36Pots[i*2+1]);
@@ -37807,7 +37931,7 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
             }
 #endif     
-
+#if !CROP_MIGRATE_TO_APP
             for (i = 0; i < 4; i++) { /* send the cropping result to APP */
                 sendbuf[3] = 'f';
 
@@ -37837,7 +37961,8 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
             }          
-            
+#endif
+
             rs_ipc_put(rs, "D", 1);
 
             goto socketEnd;
@@ -38048,7 +38173,7 @@ static int p6(struct procRes_s *rs)
                     default:
                         break;
                 }
-                
+#if CROP_MIGRATE_TO_APP
                 if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
                 
                 memcpy(&sendbuf[5], rs->logs, n);
@@ -38061,6 +38186,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n] = '\0';                
                 //sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 //print_f(rs->plogs, "P6", rs->logs);
+#endif
             }
 
             cpn = 0;
@@ -38070,7 +38196,7 @@ static int p6(struct procRes_s *rs)
             cpn = CROP_MAX_NUM_META+1;
             pcp36->crp36Pots[cpn*2+0] = 1100;
             pcp36->crp36Pots[cpn*2+1] = 0;
-
+#if !CROP_MIGRATE_TO_APP
             /* first stage of cropping algorithm */            
             ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
             sprintf_f(rs->logs, " crop36 get boundry, ret = %d\n", ret);
@@ -38105,6 +38231,8 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36);
                 }
             }
+#endif
+
 #if 0 /* move behind the cropping stage 2 complete */
             for (i = 0; i < 4; i++) { /* send the cropping result to APP */
                 sendbuf[3] = 'F';
@@ -38284,11 +38412,10 @@ static int p6(struct procRes_s *rs)
                 plancnt = (int) selecMax;
 #endif
 
-                sprintf(rs->logs, "select ratio: %lf, line max: %d\n", selecRatio, plancnt); 
+                sprintf(rs->logs, "start line:%d, gap: %d, select ratio: %lf, line max: %d\n", cy, gap, selecRatio, plancnt); 
                 print_f(rs->plogs, "P6", rs->logs);
                     
                 for (i = 0; i < masRecd; i++) {
-                    cy += gap;
                     cxm = *ptBuf;
                     ptBuf++;
                     cxn = *ptBuf;
@@ -38329,6 +38456,9 @@ static int p6(struct procRes_s *rs)
                     }
 
                     sprintf(rs->logs, "%d,%d,%d,\n\r", vhi, cxm, cxn); 
+#if LOG_P6_CROP_EN
+                    print_f(rs->plogs, "P6", rs->logs);
+#endif
                     
                     if (ffrmt == FILE_FORMAT_RAW) {
                         cpx = (plancnt - linecnt - 1) + cof;
@@ -38342,10 +38472,10 @@ static int p6(struct procRes_s *rs)
                     pcpex->crpexLfPots[cpx*2+1] = vhi;
                     pcpex->crpexRtPots[cpx*2+0] = cxn;
                     pcpex->crpexRtPots[cpx*2+1] = vhi;
+
+                    cy += gap;
                     
-#if LOG_P6_CROP_EN
-                    print_f(rs->plogs, "P6", rs->logs);
-#endif
+#if 0
                     sendbuf[3] = 'M';
                     n = strlen(rs->logs);
                     memcpy(&sendbuf[5], rs->logs, n);
@@ -38359,6 +38489,7 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+1] = '\0';
                     //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
                     //print_f(rs->plogs, "P6", rs->logs);
+#endif
 #endif
                 }
 
@@ -38453,16 +38584,38 @@ static int p6(struct procRes_s *rs)
                 
                 msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
 
-                #if 1 /* debug print all crop points */
                 sprintf_f(rs->logs, "total extra points size: %d \n", cpx);
                 print_f(rs->plogs, "P6", rs->logs);
+
+                aspSortD(pcpex->crpexLfPots, cpx); /* max sort = 1024 */
+                aspSortD(pcpex->crpexRtPots, cpx); /* max sort = 1024 */
                 
                 for (i = 0; i < cpx; i++) {
                     sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
                               , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
+                    
+#if CROP_MIGRATE_TO_APP
+                    vhi = (int)pcpex->crpexLfPots[i*2+1];
+                    cxm = (int)pcpex->crpexLfPots[i*2+0];
+                    cxn = (int)pcpex->crpexRtPots[i*2+0];
+                
+                    sprintf(rs->logs, "%d,%d,%d,\r", vhi, cxm, cxn); 
+
+                    sendbuf[3] = 'M';
+                    n = strlen(rs->logs);
+                    memcpy(&sendbuf[5], rs->logs, n);
+
+                    sendbuf[5+n] = 0xfb;
+                    sendbuf[5+n+1] = '\n';
+                    sendbuf[5+n+2] = '\0';
+                    ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                    sendbuf[5+n] = '\0';
+                    sendbuf[5+n+1] = '\0';
+                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
+                    //print_f(rs->plogs, "P6", rs->logs);
+#endif
                 }
-                #endif
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
@@ -38479,6 +38632,7 @@ static int p6(struct procRes_s *rs)
             } 
 #endif
 
+#if !CROP_MIGRATE_TO_APP
             /* second stage of cropping algorithm */
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
             findLine(pcp36, pcpex);
@@ -38522,7 +38676,8 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-            
+#endif
+
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf_f(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pots[i*2+0], pcp36->crp36Pots[i*2+1]);
@@ -38533,14 +38688,13 @@ static int p6(struct procRes_s *rs)
             for (i = 0; i < pcpex->crpexSize; i++) {
                 sprintf_f(rs->logs, "L%d. %lf, %lf \n", i, pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1]);
                 print_f(rs->plogs, "P6", rs->logs);
-            }
-
-            for (i = 0; i < pcpex->crpexSize; i++) {
                 sprintf_f(rs->logs, "R%d. %lf, %lf \n", i, pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
+            
 #endif     
 
+#if !CROP_MIGRATE_TO_APP
             for (i = 0; i < 4; i++) { /* send the cropping result to APP */
                 sendbuf[3] = 'F';
 
@@ -38570,7 +38724,8 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-            
+#endif
+
             rs_ipc_put(rs, "C", 1);
 
             goto socketEnd;
