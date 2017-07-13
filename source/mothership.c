@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Tue Jun 13 11:19:35 2017 ecb1639f79 [MSP] reverse y for raw v3, fix algo issue print mass points, fix cropping issue, select ratio, algo test, =0.5, send M no F point"
+#define MSP_VERSION " Tue Jun 13 11:19:35 2017 ecb1639f79 [MSP] reverse y for raw v3, fix algo issue print mass points, send M no F"
 
 #define SPI1_ENABLE (1) 
 
@@ -592,6 +592,7 @@ typedef enum {
     ASPMETA_CROP_300DPI_DUO = 6,
     ASPMETA_CROP_600DPI_DUO = 7,
     ASPMETA_SD = 8,
+    ASPMETA_OCR = 9,
 } aspMetaParam_e;
 
 typedef enum {
@@ -35999,8 +36000,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
 
         sendbuf[7+n] = '\0';
         //printf("[P5] END send len[%d]content[\n\n%s\n\n]len[%d]\n", n, &sendbuf[7], n);
-        //sprintf_f(rs->logs, "END send len[%d]hd[%d]be[%d]ed[%d]ln[%d]fg[%d]\n", n, hd, be, ed, ln, fg);
-        //print_f(rs->plogs, "P5", rs->logs);
+        sprintf_f(rs->logs, "END send len[%d]content[\n\n%s\n\n]len[%d]\n", n, &sendbuf[7], n);
+        print_f(rs->plogs, "P5", rs->logs);
 
         close(rs->psocket_r->connfd);
         rs->psocket_r->connfd = 0;
@@ -36809,11 +36810,12 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n] = 0xfb;
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
-                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);        
-                                
-                sendbuf[5+n] = '\0';                
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);                                        
+#if LOG_P6_CROP_EN
+                sendbuf[5+n] = '\0'; 
                 sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
+#endif
             }
 #if 1
             pdt = &pct[ASPOP_CROP_02_DUO];
@@ -36945,10 +36947,11 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                
+#if LOG_P6_CROP_EN
                 sendbuf[5+n] = '\0';                
                 sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
+#endif
             }
 
             cpn = 0;
@@ -37399,10 +37402,12 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+#if LOG_P6_CROP_EN
                     sendbuf[5+n] = '\0';
                     sendbuf[5+n+1] = '\0';
-                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
-                    //print_f(rs->plogs, "P6", rs->logs);
+                    sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+#endif
 #endif
                 }
                 
@@ -37861,10 +37866,12 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+#if LOG_P6_CROP_EN
                     sendbuf[5+n] = '\0';
                     sendbuf[5+n+1] = '\0';
-                    //sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
-                    //print_f(rs->plogs, "P6", rs->logs);
+                    sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
+                    print_f(rs->plogs, "P6", rs->logs);
+#endif
 #endif
                 }
                 
@@ -38185,8 +38192,10 @@ static int p6(struct procRes_s *rs)
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                 
                 sendbuf[5+n] = '\0';                
-                //sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
-                //print_f(rs->plogs, "P6", rs->logs);
+#if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
+                print_f(rs->plogs, "P6", rs->logs);
+#endif
 #endif
             }
 
@@ -38592,10 +38601,11 @@ static int p6(struct procRes_s *rs)
                 aspSortD(pcpex->crpexRtPots, cpx); /* max sort = 1024 */
                 
                 for (i = 0; i < cpx; i++) {
+#if LOG_P6_CROP_EN
                     sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
                               , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
-                    
+#endif
 #if CROP_MIGRATE_TO_APP
                     vhi = (int)pcpex->crpexLfPots[i*2+1];
                     cxm = (int)pcpex->crpexLfPots[i*2+0];
