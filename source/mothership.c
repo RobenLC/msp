@@ -231,6 +231,8 @@ static int *totSalloc=0;
 #define LOG_FS_EN (0)
 #define LOG_DOT_PROG_EN (0)
 
+#define ANSP0_RECOVER (0)
+
 #define PI (CFLOAT)(3.1415)
 
 #define SD_RDWT_USING_META (1)
@@ -276,6 +278,8 @@ typedef enum {
     METAT, // 14
     MDUOU, // 15
     MTSDV, // 16
+    OCRW, // 17
+    OCRX, // 18
     SMAX,
 }state_e;
 
@@ -10166,6 +10170,187 @@ static uint32_t next_MDUOU(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+        
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = clr_bk(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = clr_fw(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static uint32_t next_OCRX(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf_f(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf_f(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSWT;
+                evt = OCRW; 
+                break;
+            case PSACT:
+                //sprintf_f(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSWT:
+                //sprintf_f(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSRLT:
+                //sprintf_f(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSTSM:
+                //sprintf_f(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSMAX;
+                break;
+            default:
+                //sprintf_f(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = clr_bk(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = clr_fw(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else {
+        next = PSMAX;
+    }
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
+static uint32_t next_OCRW(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf_f(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf_f(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSACT;
+                break;
+            case PSACT:
+                //sprintf_f(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                evt = OCRX;
+                break;
+            case PSWT:
+                //sprintf_f(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSRLT;
+                break;
+            case PSRLT:
+                //sprintf_f(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSTSM;
+                break;
+            case PSTSM:
+                //sprintf_f(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSRLT;
+                evt = SINJ; 
+                break;
+            default:
+                //sprintf_f(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10241,7 +10426,8 @@ static uint32_t next_MTSDV(struct psdata_s *data)
             case PSTSM:
                 //sprintf_f(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSMAX;
+                next = PSSET;
+                evt = OCRW;
                 break;
             default:
                 //sprintf_f(str, "default\n"); 
@@ -10249,6 +10435,11 @@ static uint32_t next_MTSDV(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10333,6 +10524,11 @@ static uint32_t next_METAT(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10416,6 +10612,11 @@ static uint32_t next_SAVPARM(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10505,6 +10706,11 @@ static uint32_t next_VECTORS(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10587,6 +10793,11 @@ static uint32_t next_CROPR(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10708,6 +10919,11 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+        
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10810,6 +11026,11 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10896,6 +11117,11 @@ static uint32_t next_SDAO(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -10979,6 +11205,11 @@ static uint32_t next_SDAN(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11063,6 +11294,11 @@ static uint32_t next_SDAM(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11145,6 +11381,11 @@ static uint32_t next_SDAL(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11228,6 +11469,11 @@ static uint32_t next_SAVK(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11299,13 +11545,12 @@ static uint32_t next_SINJ(struct psdata_s *data)
             case PSRLT:
                 //sprintf_f(str, "PSRLT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSTSM;
                 break;
             case PSTSM:
                 //sprintf_f(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
                 next = PSMAX;
-                evt = SINJ; 
                 break;
             default:
                 //sprintf_f(str, "default\n"); 
@@ -11313,6 +11558,11 @@ static uint32_t next_SINJ(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11396,6 +11646,11 @@ static uint32_t next_SUPI(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11499,6 +11754,11 @@ static uint32_t next_FAT32H(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11582,6 +11842,11 @@ static uint32_t next_FAT32G(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11665,6 +11930,11 @@ static uint32_t next_registerE(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11748,6 +12018,11 @@ static uint32_t next_registerF(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11838,6 +12113,11 @@ static uint32_t next_doubleC(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -11936,6 +12216,11 @@ static uint32_t next_doubleD(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -12022,6 +12307,11 @@ static int next_spy(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -12106,6 +12396,11 @@ static uint32_t next_bullet(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -12188,6 +12483,11 @@ static int next_laser(struct psdata_s *data)
                 next = PSSET;
                 break;
         }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
     }
     else if (rlt == BREAK) {
         tmpRlt = emb_result(tmpRlt, WAIT);
@@ -12395,6 +12695,16 @@ static int ps_next(struct psdata_s *data)
             break;
         case MTSDV:
             ret = next_MTSDV(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case OCRW:
+            ret = next_OCRW(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case OCRX:
+            ret = next_OCRX(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -14749,29 +15059,32 @@ static int stupd_38(struct psdata_s *data)
 
 static int stupd_39(struct psdata_s *data)
 { 
-    char str[128], ch = 0; 
+    char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    
+    struct info16Bit_s *p=0, *c=0, *t=0;
+
     rs = data->rs;
     rlt = abs_result(data->result); 
-
     //sprintf_f(rs->logs, "op_39 rlt:0x%x \n", rlt); 
-    //print_f(rs->plogs, "UPD", rs->logs);  
+    //print_f(rs->plogs, "OCR", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
+            aspMetaClear(0, rs, ASPMETA_INPUT);
+            
+            ch = 110;
+
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             //sprintf_f(rs->logs, "op_39: result: %x, goto %d\n", data->result, ch); 
-            //print_f(rs->plogs, "UPD", rs->logs);  
+            //print_f(rs->plogs, "OCR", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -14794,26 +15107,44 @@ static int stupd_40(struct psdata_s *data)
     char str[128], ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
+    struct aspMetaMass_s *pmass;
     
     rs = data->rs;
     rlt = abs_result(data->result); 
-
+    pmass = rs->pmetaMass;
+    
     //sprintf_f(rs->logs, "op_40 rlt:0x%x \n", rlt); 
-    //print_f(rs->plogs, "UPD", rs->logs);  
+    //print_f(rs->plogs, "OCR", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 0; 
+            sprintf_f(rs->logs, "op_40: dump meta input (used:%d) \n", pmass->massUsed); 
+            print_f(rs->plogs, "OCR", rs->logs);  
+
+            memset(str, 0, 128);
+            shmem_dump(pmass->masspt, pmass->massUsed);
+            bin2hex(str, pmass->masspt, 32);
+
+            sprintf_f(rs->logs, "op_40: bin to hex :\n [%s]\n", str); 
+            print_f(rs->plogs, "OCR", rs->logs);  
+            
+#if 0
+            data->result = emb_result(data->result, NEXT);            
+#else     
+            ch = 112; 
+            
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
+#endif
+
             //sprintf_f(rs->logs, "op_40: result: %x, goto %d\n", data->result, ch); 
-            //print_f(rs->plogs, "UPD", rs->logs);  
+            //print_f(rs->plogs, "OCR", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
                 data->result = emb_result(data->result, NEXT);
             } else if (data->ansp0 == 2) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -17856,7 +18187,7 @@ static int stsparam_88(struct psdata_s *data)
             sprintf_f(rs->logs, "dump meta output\n"); 
             print_f(rs->plogs, "SPM", rs->logs);  
             //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
-            dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
+            //dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
             
             ch = 110; 
 
@@ -18992,27 +19323,505 @@ static int stmetasd_105(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct aspMetaData_s * pmeta;
+    
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+
+    //sprintf_f(rs->logs, "op_105 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 25; 
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf_f(rs->logs, "op_105: result: %x, goto %d\n", data->result, ch); 
+            //print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrw_106(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
     struct info16Bit_s *p=0, *c=0, *t=0;
 
     rs = data->rs;
     rlt = abs_result(data->result); 
-    pmeta = rs->pmetaout;
-    t = &rs->pmch->tmp;
-    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "MTSD", rs->logs);  
+    c = &rs->pmch->cur;
+    p = &rs->pmch->get;
+    
+    //sprintf_f(rs->logs, "op_106 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "OCR", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            t->opcode = OP_META_DAT;
-            t->data = ASPMETA_CROP_300DPI;
-            aspMetaClear(0, rs, ASPMETA_OUTPUT);
-            aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-            dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
 
-            data->result = emb_result(data->result, NEXT);
+            //c->opcode = OP_META_DAT;
+            //c->data = ASPMETA_SD;
+            
+            c->opcode = OP_SINGLE;
+            c->data = SINSCAN_WIFI_ONLY;
+                
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            //aspMetaClear(0, rs, ASPMETA_OUTPUT);
+            //aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
+            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+
+            ch = 41; 
+            rs_ipc_put(data->rs, &ch, 1);                
+
+            data->result = emb_result(data->result, WAIT);
+            //sprintf_f(rs->logs, "op_106: result: %x, goto %d\n", data->result, ch); 
+            //print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrw_107(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    //sprintf_f(rs->logs, "op_107 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 67;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf_f(rs->logs, "op_107: result: %x, goto %d\n", data->result, ch); 
+            //print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrw_108(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    c = &rs->pmch->cur;
+    p = &rs->pmch->get;
+    
+    //sprintf_f(rs->logs, "op_108 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            //c->opcode = OP_META_DAT;
+            //c->data = ASPMETA_SD;
+            
+            c->opcode = OP_META_DAT;
+            c->data = ASPMETA_SCAN_COMPLETE;
+                
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            //aspMetaClear(0, rs, ASPMETA_OUTPUT);
+            //aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
+            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+
+            ch = 41; 
+            rs_ipc_put(data->rs, &ch, 1);                
+
+            data->result = emb_result(data->result, WAIT);
+            //sprintf_f(rs->logs, "op_108: result: %x, goto %d\n", data->result, ch); 
+            //print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrw_109(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    //sprintf_f(rs->logs, "op_109 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            aspMetaClear(0, rs, ASPMETA_INPUT);
+            
+            ch = 110;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf_f(rs->logs, "op_109: result: %x, goto %d\n", data->result, ch); 
+            //print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrw_110(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    int act = 0;
+    struct procRes_s *rs;
+    struct info16Bit_s *p=0, *c=0, *t=0;
+    struct aspMetaData_s *pmetaIn;
+    
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    pmetaIn = rs->pmetain;
+    c = &rs->pmch->cur;
+    p = &rs->pmch->get;
+
+    //sprintf_f(rs->logs, "op_110 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
+            //act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
+
+            //sprintf_f(rs->logs, "op_110 act: 0x%x \n", act); 
+            //print_f(rs->plogs, "OCR", rs->logs);  
+            
+            c->opcode = OP_META_DAT;
+            
+#if 0  /* for test */
+            c->data = ASPMETA_CROP_300DPI;
+#else
+            c->data = ASPMETA_OCR;
+#endif
+                
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            //aspMetaClear(0, rs, ASPMETA_OUTPUT);
+            //aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
+            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+
+            ch = 41; 
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf_f(rs->logs, "op_110: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrx_111(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    //sprintf_f(rs->logs, "op_111 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 48;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            //sprintf_f(rs->logs, "op_111: result: %x, goto %d\n", data->result, ch); 
+            //print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrx_112(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 00;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
             sprintf_f(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "MTSD", rs->logs);  
+            print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrx_113(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 00;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf_f(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrx_114(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 00;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf_f(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "OCR", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stocrx_115(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "OCR", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 00;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf_f(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "OCR", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -19045,8 +19854,8 @@ static int stspy_01(struct psdata_s *data)
     uint32_t rlt;
     rlt = abs_result(data->result); 
 
-    //sprintf_f(str, "op_01 - rlt:0x%x \n", rlt); 
-    //print_f(mlogPool, "spy", str); 
+    sprintf_f(str, "op_01 - rlt:0x%x \n", rlt); 
+    print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
@@ -21389,6 +22198,71 @@ end:
     return 0;
 }
 
+static int cmdfunc_ocr_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0, ch=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_ocr_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_RAW;
+    pkt->data = 0;
+
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+//    sprintf(mrs->log, "=====_UPLOAD_SD_ BEG=====");
+//    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+    
+    n = cmdfunc_upd2host(mrs, '3', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if (rsp != 0x1) {
+         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -1;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_ocr_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+//    sprintf(mrs->log, "=====_UPLOAD_SD_ END=====");
+//    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
+    if (brk | ret) {
+        sprintf(mrs->log, "OCR_NG,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "OCR_OK,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_upsd_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0, ch=0;
@@ -21453,6 +22327,7 @@ end:
 
     return ret;
 }
+
 static int cmdfunc_gosd_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0, ch=0;
@@ -22566,7 +23441,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 32
+#define CMD_SIZE 33
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -22579,7 +23454,8 @@ static int dbg(struct mainRes_s *mrs)
                                 , {16, "op2", cmdfunc_op2_opcode}, {17, "op3", cmdfunc_op3_opcode}, {18, "op4", cmdfunc_op4_opcode}, {19, "op5", cmdfunc_op5_opcode}
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
                                 , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}
-                                , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}, {31, "upsd", cmdfunc_upsd_opcode}};
+                                , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}, {31, "upsd", cmdfunc_upsd_opcode}
+                                , {32, "ocr", cmdfunc_ocr_opcode}};
 
     p0_init(mrs);
 
@@ -31890,7 +32766,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {streg_11, streg_12, streg_13, streg_14, streg_15}, // REGE
                             {streg_16, streg_17, stfat_18, stfat_19, stfat_20}, // REGF
                             {stfat_21, stfat_22, stfat_23, stfat_24, stfat_25}, // FATG
-                            {stfat_26, stfat_27, stfat_28, stfat_29, stfat_30}, // FATH
+                            {stfat_26, stfat_27, stfat_28, stfat_29, stfat_30}, //FATH
                             {stsup_31, stsup_32, stsup_33, stsup_34, stsup_35}, // SUPI
                             {stsin_36, stdow_37, stupd_38, stupd_39, stupd_40}, // SINJ
                             {stsav_41, stsda_42, stsda_43, stsda_44, stsda_45}, // SAVK
@@ -31905,7 +32781,9 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stsparam_86, stsparam_87, stsparam_88, stcropmeta_89, stcropmeta_90}, //SAVPARM
                             {stcropmeta_91, stcropmeta_92, stcropmeta_93, stcropmeta_94, stmetaduo_95}, //METAT
                             {stmetaduo_96, stmetaduo_97, stmetaduo_98, stmetaduo_99, stmetasd_100},  //MDUOU
-                            {stmetasd_101, stmetasd_102, stmetasd_103, stmetasd_104, stmetasd_105}}; //MTSDV
+                            {stmetasd_101, stmetasd_102, stmetasd_103, stmetasd_104, stmetasd_105}, //MTSDV
+                            {stocrw_106, stocrw_107, stocrw_108, stocrw_109, stocrw_110}, //OCRW
+                            {stocrx_111, stocrx_112, stocrx_113, stocrx_114, stocrx_115}}; //OCRX
                             
 
     p1_init(rs);
@@ -31919,7 +32797,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //print_f(rs->plogs, "P1", rs->logs);
 
 //     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q', 'r', 'y', 'z'};
-//       a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, y, z, 1, 2
+//       a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, y, z, 1, 2, 3
         cmd = '\0';
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
@@ -32013,8 +32891,10 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == '2') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, MTSDV, PSRLT);
+                } else if (cmd == '3') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, MTSDV, PSTSM);
                 }
-
 
 
                 if (cmdt != '\0') {
@@ -35897,16 +36777,18 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         }
 
 #if SCANGO_CHECK 
-        rs_ipc_put(rcmd, "scango", 6);
-        ch = 0; ret = 0;
-        ret = rs_ipc_get(rcmd, &ch, 1024);
-        if ((ret == 1) && (ch == 'Z')) {
-            ret = rs_ipc_get(rcmd, addr, 1024);
-            addr[ret] = '\0';
-            sprintf_f(rs->logs, "get response [\n\n%s\n] len:%d\n", addr, ret);
-            print_f(rs->plogs, "P5", rs->logs);
-        } else {
-            opcode = OP_ERROR; 
+        if (strcmp("meta", msg) == 0) {
+            rs_ipc_put(rcmd, "scango", 6);
+            ch = 0; ret = 0;
+            ret = rs_ipc_get(rcmd, &ch, 1024);
+            if ((ret == 1) && (ch == 'Z')) {
+                ret = rs_ipc_get(rcmd, addr, 1024);
+                addr[ret] = '\0';
+                sprintf_f(rs->logs, "get response [\n\n%s\n] len:%d\n", addr, ret);
+                print_f(rs->plogs, "P5", rs->logs);
+            } else {
+                opcode = OP_ERROR; 
+            }
         }
 #endif
         
@@ -36242,6 +37124,80 @@ static int p6(struct procRes_s *rs)
         sendbuf[4] = 0xfc;
         
         sendbuf[3] = 'F';
+
+        if (opcode == 0x24) { /* send OCR hex*/
+            sprintf_f(rs->logs, "handle opcode: 0x%x(OCR hex)\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ch = 0;
+
+            while (ch != 'c') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'c') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            
+            sendbuf[3] = 'O';
+
+            msync(pmass->masspt, pmass->massMax, MS_SYNC);
+
+            hbuff = pmass->masspt;
+            bin2hex(&sendbuf[5], hbuff, 16);
+            //memcpy(&sendbuf[5], hbuff, orglen);
+            //memset(&sendbuf[5], 0x95, P6_SEND_BUFF_SIZE - 5);
+
+            n = 16 * 2;
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+
+            //shmem_dump(sendbuf, P6_SEND_BUFF_SIZE);
+                        
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+
+            sendbuf[5+n] = '\0';            
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, &sendbuf[5], rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            hbuff += 16;
+            bin2hex(&sendbuf[5], hbuff, 16);
+            //memcpy(&sendbuf[5], hbuff, orglen);
+            //memset(&sendbuf[5], 0x95, P6_SEND_BUFF_SIZE - 5);
+
+            n = 16 * 2;
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+
+            //shmem_dump(sendbuf, P6_SEND_BUFF_SIZE);
+                        
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+
+            sendbuf[5+n] = '\0';            
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, &sendbuf[5], rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);        
+
+            pmass->massRecd = 0;
+            pmass->massUsed = 0;
+
+            msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
+            
+            rs_ipc_put(rs, "C", 1);
+            
+            goto socketEnd;
+        }
 
         if (opcode == 0x23) { /* send duo img length*/
             sprintf_f(rs->logs, "handle opcode: 0x%x(imglen)\n", opcode);
