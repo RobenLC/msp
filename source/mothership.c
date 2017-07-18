@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Tue Jun 13 11:19:35 2017 ecb1639f79 [MSP] reverse y for raw v3, fix algo issue print mass points, send M no F"
+#define MSP_VERSION " Fri Jul 14 16:04:56 2017 939af83947 [OCR] test OCR meta"
 
 #define SPI1_ENABLE (1) 
 
@@ -231,7 +231,7 @@ static int *totSalloc=0;
 #define LOG_FS_EN (0)
 #define LOG_DOT_PROG_EN (0)
 
-#define ANSP0_RECOVER (0)
+#define ANSP0_RECOVER (1)
 
 #define PI (CFLOAT)(3.1415)
 
@@ -32994,7 +32994,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 if (((cmdt != '\0') && (cmdt != 'w')) && (px == PSMAX)) {
                     er = cmdt;
                     rs_ipc_put(rcmd, &er, 1);
-                    er = ch;
+                    er = stdata->ansp0;
                     rs_ipc_put(rcmd, &er, 1);
 
                     sprintf(str, "<%c,0x%x,done>", cmdt, ch);
@@ -33011,10 +33011,13 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 }
 
                 cmdt = '\0'; 
+                stdata->ansp0 = 0;
                 //stdata.result = emb_stanPro(0, STINIT, SPY, PSSET);
                 continue;
             }
 
+            stdata->ansp0 = 0;
+            
             //sprintf_f(rs->logs, "comdt:%c ch:0x%x evt:0x%.8x\n", cmdt, ch, stdata.result);
             //print_f(rs->plogs, "P1", rs->logs);
         }
