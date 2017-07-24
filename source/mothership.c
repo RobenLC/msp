@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Fri Jul 14 16:04:56 2017 939af83947 [OCR] test OCR meta p6 simplify"
+#define MSP_VERSION " Fri Jul 14 16:04:56 2017 939af83947 [OCR] test OCR meta p6 p5 simplify"
 
 #define SPI1_ENABLE (1) 
 
@@ -219,7 +219,7 @@ static int *totSalloc=0;
 #define LOG_CROP_FINDLINE (0)
 #define LOG_CROP_TOPOFFSET (0)
 #endif
-#define CROP_SELEC_RATIO (100.0)
+//#define CROP_SELEC_RATIO (100.0)
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
 #define CROP_MIGRATE_TO_APP (1)
@@ -36635,6 +36635,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     char ch, *recvbuf, *addr, *sendbuf, *cltaddr;
     char opcode=0, param=0, flag = 0;
     char msg[256] = "boot";
+    char tgr[8] = "tgr";
     sprintf_f(rs->logs, "p5\n");
     print_f(rs->plogs, "P5", rs->logs);
 
@@ -36804,14 +36805,22 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             }
         }
 #endif
-        
-        if (opcode == OP_ERROR) {
-            num = -1;
-        }
-        else if (opcode != OP_MSG) {
-            num = 0;
-        }
 
+        switch (opcode) {
+            case OP_ERROR:
+                num = -1;
+                break;
+            case OP_MSG:
+                break;
+            case OP_SINGLE:
+            case OP_DOUBLE:
+                //num = 0;
+                break;
+            default:
+                num = 0;
+                break;
+        }
+        
         //sprintf_f(rs->logs, "num [%d] ch [%c] \n",num, ch);
         //print_f(rs->plogs, "P5", rs->logs);
 
@@ -36826,7 +36835,51 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             //ret = write(rs->psocket_r->connfd, msg, n);
             //sprintf_f(rs->logs, "get msg from app [%s] size:%d\n", msg, num);
             //print_f(rs->plogs, "P5", rs->logs);
-            rs_ipc_put(rcmd, msg, num);
+            if ((opcode == OP_SINGLE) || (opcode == OP_DOUBLE)) {
+                tgr[0] = 't';
+                tgr[1] = 'g';
+                tgr[2] = 'r';
+
+                rs_ipc_put(rcmd, tgr, 3);
+
+                ch = 0; ret = 0;
+                ret = rs_ipc_get(rcmd, &ch, 1);
+
+                if (ch == 'o') {
+                    if (flag & 0x04) { /* 0xaa = write, 0xad = read */
+                        tgr[0] = 0xad; 
+                    } else {
+                        tgr[0] = 0xaa; 
+                    }
+                    tgr[1] = opcode;
+                    tgr[2] = '/';
+                    tgr[3] = param;
+                    tgr[4] = 0xa5;
+                    rs_ipc_put(rcmd, tgr, 5);
+                }
+
+                ch = 0; ret = 0;
+                ret = rs_ipc_get(rcmd, &ch, 1);
+
+                if (ch != 'p') {
+                    opcode = OP_ERROR; 
+                    ret = rs_ipc_get(rcmd, &ch, 1);
+                    param = ch;
+                } else {
+                    ret = rs_ipc_get(rcmd, &ch, 1);
+                    param = ch;
+
+                    ret = rs_ipc_get(rcmd, addr, 1024);
+                    addr[ret] = '\0';
+                    sprintf_f(rs->logs, "TGR response [\n\n%s\n] len:%d\n", addr, ret);
+                    print_f(rs->plogs, "P5", rs->logs);
+
+                    rs_ipc_put(rcmd, msg, num);
+                }        
+            }
+            else {
+                rs_ipc_put(rcmd, msg, num);
+            }
         } else {
             if ((opcode == OP_SINGLE) || (opcode == OP_DOUBLE)) {
                 msg[0] = 't';
@@ -36929,7 +36982,7 @@ static int atFindIdx(char *str, char ch)
 #define LOG_P6_RX_EN    (0)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
-#define LOG_P6_CROP_EN    (0)
+#define LOG_P6_CROP_EN    (1)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
@@ -38260,7 +38313,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if LOG_P6_CROP_EN
+#if 0
                 sendbuf[5+n] = '\0';                
                 sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -38538,16 +38591,16 @@ static int p6(struct procRes_s *rs)
                         ipic = (int)(selecPic);
                         icur = (int)(selecCur);
 
-                        sprintf(rs->logs, "%d,(%d, %d)\n", i, icur, ipic); 
-                        print_f(rs->plogs, "P6", rs->logs);
+                        //sprintf(rs->logs, "%d,(%d, %d)\n", i, icur, ipic); 
+                        //print_f(rs->plogs, "P6", rs->logs);
                     
                         if (icur > ipic) {
                             selecPic = selecCur;
-                            sprintf(rs->logs, "%d,%d,%d (pick!!!)\n", i, cxm, cxn); 
-                            print_f(rs->plogs, "P6", rs->logs);
+                            //sprintf(rs->logs, "%d,%d,%d (pick!!!)\n", i, cxm, cxn); 
+                            //print_f(rs->plogs, "P6", rs->logs);
                         } else {
-                            sprintf(rs->logs, "%d,%d,%d (skip!!!)\n", i, cxm, cxn); 
-                            print_f(rs->plogs, "P6", rs->logs);
+                            //sprintf(rs->logs, "%d,%d,%d (skip!!!)\n", i, cxm, cxn); 
+                            //print_f(rs->plogs, "P6", rs->logs);
                             continue;
                         }
                     }
@@ -38696,10 +38749,11 @@ static int p6(struct procRes_s *rs)
                 aspSortD(pcpex->crpexRtPots, cpx); /* max sort = 1024 */
                 
                 for (i = 0; i < cpx; i++) {
-                    sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
+#if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "duo %d. L%lf, %lf R%lf, %lf \n", i
                               , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
-
+#endif
 #if CROP_MIGRATE_TO_APP
                     vhi = (int)pcpex->crpexLfPots[i*2+1];
                     cxm = (int)pcpex->crpexLfPots[i*2+0];
@@ -38715,7 +38769,7 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if LOG_P6_CROP_EN
+#if 0
                     sendbuf[5+n] = '\0';
                     sendbuf[5+n+1] = '\0';
                     sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
@@ -38989,16 +39043,16 @@ static int p6(struct procRes_s *rs)
                         ipic = (int)(selecPic);
                         icur = (int)(selecCur);
 
-                        sprintf(rs->logs, "%d,(%d, %d)\n", i, icur, ipic); 
-                        print_f(rs->plogs, "P6", rs->logs);
+                        //sprintf(rs->logs, "%d,(%d, %d)\n", i, icur, ipic); 
+                        //print_f(rs->plogs, "P6", rs->logs);
                     
                         if (icur > ipic) {
                             selecPic = selecCur;
-                            sprintf(rs->logs, "%d,%d,%d (pick!!!)\n", i, cxm, cxn); 
-                            print_f(rs->plogs, "P6", rs->logs);
+                            //sprintf(rs->logs, "%d,%d,%d (pick!!!)\n", i, cxm, cxn); 
+                            //print_f(rs->plogs, "P6", rs->logs);
                         } else {
-                            sprintf(rs->logs, "%d,%d,%d (skip!!!)\n", i, cxm, cxn); 
-                            print_f(rs->plogs, "P6", rs->logs);
+                            //sprintf(rs->logs, "%d,%d,%d (skip!!!)\n", i, cxm, cxn); 
+                            //print_f(rs->plogs, "P6", rs->logs);
                             continue;
                         }
                     }
@@ -39144,14 +39198,6 @@ static int p6(struct procRes_s *rs)
 
                 sprintf_f(rs->logs, "total extra points size: %d \n", cpx);
                 print_f(rs->plogs, "P6", rs->logs);
-
-                
-                for (i = 0; i < cpx; i++) {
-                    sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
-                              , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
-                    print_f(rs->plogs, "P6", rs->logs);
-
-                }
                 
                 sprintf_f(rs->logs, "total extra points size: %d \n", cpx);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -39160,10 +39206,11 @@ static int p6(struct procRes_s *rs)
                 aspSortD(pcpexduo->crpexRtPots, cpx); /* max sort = 1024 */
                 
                 for (i = 0; i < cpx; i++) {
-                    sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
+#if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, " duo %d. L%lf, %lf R%lf, %lf \n", i
                               , pcpexduo->crpexLfPots[i*2+0], pcpexduo->crpexLfPots[i*2+1], pcpexduo->crpexRtPots[i*2+0], pcpexduo->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
-
+#endif
 #if CROP_MIGRATE_TO_APP
                     vhi = (int)pcpexduo->crpexLfPots[i*2+1];
                     cxm = (int)pcpexduo->crpexLfPots[i*2+0];
@@ -39179,7 +39226,7 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if LOG_P6_CROP_EN
+#if 0
                     sendbuf[5+n] = '\0';
                     sendbuf[5+n+1] = '\0';
                     sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
