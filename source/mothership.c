@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION " Fri Jul 14 16:04:56 2017 939af83947 [OCR] test OCR meta p6 p5 simplify"
+#define MSP_VERSION "Mon Jul 24 16:14:28 2017 5e30f14bda [MULTI] simplify p5"
 
 #define SPI1_ENABLE (1) 
 
@@ -21277,7 +21277,7 @@ end:
     return ret;
 }
 
-#define LOG_FUNC_PROCEDURE (0)
+#define LOG_FUNC_PROCEDURE (1)
 static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
 {
     char ch=0, param=0, *rlt=0;
@@ -22163,6 +22163,8 @@ static int cmdfunc_tgr_opcode(int argc, char *argv[])
         print_f(&mrs->plog, "DBG", mrs->log);
     }
 
+    msync(mrs->configTable, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
+    
     param = ctb->opValue;
 
 end:
@@ -22200,6 +22202,152 @@ end:
     print_f(&mrs->plog, "DBG", mrs->log);
     
     return 0;
+}
+
+static int cmdfunc_mdouble_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0, ch=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_mdouble_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_DUAL_STRM;
+
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    sprintf(mrs->log, "=====[_DOUBLE_SCAN_] BEG=====");
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+    
+    n = cmdfunc_upd2host(mrs, 'n', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -1;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_mdouble_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+end:
+
+    sprintf(mrs->log, "=====[_DOUBLE_SCAN_] END=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
+    if (brk | ret) {
+        ch = 'e';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        ch = 'd';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_msingle_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0, ch=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_msingle_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_SINGLE;
+    pkt->data = SINSCAN_WIFI_ONLY;
+
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    sprintf(mrs->log, "=====_SINGLE_SCAN_ BEG=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+    
+    n = cmdfunc_upd2host(mrs, 's', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) && (rsp != 0x1)) {
+         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -1;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_msingle_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    sprintf(mrs->log, "=====_SINGLE_SCAN_ END=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
+    if (brk | ret) {
+        ch = 'e';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        ch = 'd';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+    
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+
+    printf_dbgflush(&mrs->plog, mrs);
+
+    printf_flush(&mrs->plog, mrs->flog);    
+    
+    return ret;
 }
 
 static int cmdfunc_ocr_opcode(int argc, char *argv[])
@@ -23445,7 +23593,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 33
+#define CMD_SIZE 35
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -23459,7 +23607,7 @@ static int dbg(struct mainRes_s *mrs)
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
                                 , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}
                                 , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}, {31, "upsd", cmdfunc_upsd_opcode}
-                                , {32, "ocr", cmdfunc_ocr_opcode}};
+                                , {32, "ocr", cmdfunc_ocr_opcode}, {33, "msingle", cmdfunc_msingle_opcode}, {34, "mdouble", cmdfunc_mdouble_opcode}};
 
     p0_init(mrs);
 
@@ -25246,8 +25394,10 @@ static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         sprintf_f(mrs->log, "%d end\n", modersp->v);
         print_f(&mrs->plog, "fs35", mrs->log);
-        modersp->m = modersp->m + 1;
-        return 2;
+        //modersp->m = modersp->m + 1;
+        //return 2;
+        modersp->r = 1;
+        return 1;
     }
 
     return 0; 
@@ -25313,8 +25463,17 @@ static int fs37(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs37", mrs->log);
 #endif
 
-        modersp->r = 1;
-        return 1;
+        if (modersp->d) {
+            modersp->m = modersp->d;
+            modersp->d = 0;
+            return 2;
+        } else {
+            modersp->r = 1;
+            return 1;
+        }
+
+        //modersp->r = 1;
+        //return 1;
     }
 
     return 0;
@@ -27020,8 +27179,17 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             ring_buf_init(&mrs->cmdRx);
 
-            modersp->r = 1;            
-            return 1;
+            if (modersp->d) {
+                modersp->m = modersp->d;
+                modersp->d = 0;
+                return 2;
+            } else {
+                modersp->r = 1;
+                return 1;
+            }
+            
+            //modersp->r = 1;            
+            //return 1;
         }
         len = mrs_ipc_get(mrs, &ch, 1, 3);
     }
@@ -31011,8 +31179,10 @@ static int fs112(struct mainRes_s *mrs, struct modersp_s *modersp)
     //return 1;
     
     mrs_ipc_put(mrs, "c", 1, 7);
-    modersp->m = modersp->m + 1;
-    return 0;
+    //modersp->m = modersp->m + 1;
+    modersp->d = modersp->m + 1;
+    modersp->m = 69;
+    return 2;
 }
 
 static int fs113(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -31024,18 +31194,21 @@ static int fs113(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     len = mrs_ipc_get(mrs, &ch, 1, 7);
     if ((len > 0) && (ch == 'C')) {
-        modersp->m = 69;
-        return 2;
+        //modersp->m = 69;
+        //return 2;
         
-        //modersp->r = 1;
-        //return 1;
+        modersp->r = 1;
+        return 1;
     }
     
     if ((len > 0) && (ch != 'C')) {
-            sprintf_f(mrs->log, "FAIL!!send notice to P6 again!\n");
+            //sprintf_f(mrs->log, "FAIL!!send notice to P6 again!\n");
+            sprintf_f(mrs->log, "P6 response BREAK loop\n");
             print_f(&mrs->plog, "fs113", mrs->log);
-            modersp->m = modersp->m - 1;        
-            return 2;
+            //modersp->m = modersp->m - 1;        
+            //return 2;
+            modersp->r = 2;
+            return 1;
     }
 
     return 0; 
@@ -32304,14 +32477,17 @@ static int fs119(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs120(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    //sprintf_f(mrs->log, "send notice to P6 for meta mass ready\n");
-    //print_f(&mrs->plog, "fs120", mrs->log);
+    sprintf_f(mrs->log, "send notice to P6 for meta mass ready\n");
+    print_f(&mrs->plog, "fs120", mrs->log);
 
     mrs_ipc_put(mrs, "d", 1, 7);
     mrs_ipc_put(mrs, "d", 1, 7);
 
-    modersp->m = modersp->m + 1;
-    return 0;
+    //modersp->m = modersp->m + 1;
+    modersp->d = modersp->m + 1;
+    modersp->m = 36;
+    
+    return 2;
 }
 
 static int fs121(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -32328,10 +32504,11 @@ static int fs121(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
     
     if ((len > 0) && (ch != 'D')) {
-            sprintf_f(mrs->log, "FAIL!!send notice to P6 again!\n");
+            sprintf_f(mrs->log, "P6 response BREAK loop\n");
             print_f(&mrs->plog, "fs121", mrs->log);
-            modersp->m = modersp->m - 1;        
-            return 2;
+
+            modersp->r = 2;
+            return 1;
     }
 
     return 0; 
@@ -36874,7 +37051,47 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                     sprintf_f(rs->logs, "TGR response [\n\n%s\n] len:%d\n", addr, ret);
                     print_f(rs->plogs, "P5", rs->logs);
 
-                    rs_ipc_put(rcmd, msg, num);
+                    if ((strcmp("msingle", msg) == 0) || (strcmp("mdouble", msg) == 0)) {
+                        while (1) {
+                            rs_ipc_put(rcmd, msg, num);
+
+                            ch = 0; ret = 0;
+                            ret = rs_ipc_get(rcmd, &ch, 1);
+                            if (ch == 'e') {
+                                break;
+                            }
+                            
+                            memset(sendbuf, 0, OUT_BUFF_LEN);
+
+                            sendbuf[0] = 0xfe;
+                            sendbuf[1] = ((opcode & 0x80) ? 1:0) + 1;
+                            sendbuf[2] = opcode & 0x7f;
+                            sendbuf[3] = 0xfd;
+                            //sendbuf[3] = 'P';//0x0;
+                            sendbuf[6] = 0xfc;
+
+                            n = rs_ipc_get(rcmd, &sendbuf[7], OUT_BUFF_LEN);
+                            sendbuf[4] = ((param & 0x80) ? 1:0) + 1;
+                            sendbuf[5] = param & 0x7f;
+
+                            sendbuf[7+n] = '\n';
+                            sendbuf[7+n+1] = 0xfb;
+                            sendbuf[7+n+2] = '\0';
+
+                            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d, opcode:%d, [%x][%x][%x][%x]\n", 7+n+3, &sendbuf[7], rs->psocket_r->connfd, ret, opcode, sendbuf[1], sendbuf[2], sendbuf[4], sendbuf[5]);
+                            //print_f(rs->plogs, "P5", rs->logs);
+                            //printf("[p5]:%s\n", &sendbuf[7]);
+
+                            ret = write(rs->psocket_r->connfd, sendbuf, 7+n+3);
+
+                            sendbuf[7+n] = '\0';
+                            sprintf_f(rs->logs, "NEXT send len[%d]content[\n\n%s\n\n]len[%d]\n", n, &sendbuf[7], n);
+                            print_f(rs->plogs, "P5", rs->logs);
+                        }
+                    }
+                    else {
+                        rs_ipc_put(rcmd, msg, num);
+                    }
                 }        
             }
             else {
@@ -36982,7 +37199,7 @@ static int atFindIdx(char *str, char ch)
 #define LOG_P6_RX_EN    (0)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
-#define LOG_P6_CROP_EN    (1)
+#define LOG_P6_CROP_EN    (0)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
