@@ -428,7 +428,8 @@ typedef enum {
     ASPOP_XCROP_LINSTR_DUO,
     ASPOP_XCROP_LINREC_DUO,
     ASPOP_RAW_SIZE_DUO,
-    ASPOP_CODE_MAX, /* 119 */
+    ASPOP_MULTI_LOOP,
+    ASPOP_CODE_MAX, /* 121 */
 } aspOpCode_e;
 
 typedef enum {
@@ -2189,6 +2190,8 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         val = msb2lsb(pt);
         linRec = val >> 16;
 
+        act |= ASPMETA_FUNC_CROP;
+        
         if (linRec) {
             pmass->massGap = linGap;
             pmass->massStart = linStart;
@@ -2197,8 +2200,6 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
             cfgTableSet(pct, ASPOP_XCROP_GAT, linGap);
             cfgTableSet(pct, ASPOP_XCROP_LINSTR, linStart);
             cfgTableSet(pct, ASPOP_XCROP_LINREC, linRec);
-
-            act |= ASPMETA_FUNC_CROP;
             
         } else {
             pmass->massGap = 0;
@@ -2292,6 +2293,8 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
         val = msb2lsb(pt);
         linRec = val >> 16;
 
+        act |= ASPMETA_FUNC_CROP;
+            
         if (linRec) {
             pmassDuo->massGap = linGap;
             pmassDuo->massStart = linStart;
@@ -2300,8 +2303,6 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
             cfgTableSet(pct, ASPOP_XCROP_GAT_DUO, linGap);
             cfgTableSet(pct, ASPOP_XCROP_LINSTR_DUO, linStart);
             cfgTableSet(pct, ASPOP_XCROP_LINREC_DUO, linRec);
-
-            act |= ASPMETA_FUNC_CROP;
             
         } else {
             pmassDuo->massGap = 0;
@@ -18159,9 +18160,10 @@ static int stsparam_88(struct psdata_s *data)
     struct procRes_s *rs;
     struct aspMetaData_s *pmetaIn, *pmetaOut;
     struct aspMetaMass_s *pmass;
+    struct aspConfig_s *pct=0;
 #if SAVE_CROP_MASS
     int ret=0;
-    struct aspConfig_s *pct=0, *pdt=0;
+    struct aspConfig_s *pdt=0;
 
     FILE *f=0;
     char supPath[128] = "/mnt/mmc2/crop/g%d_s%d_c%d_%.4d%.2d%.2d-%.2d%.2d%.2d.bin";
@@ -18169,9 +18171,10 @@ static int stsparam_88(struct psdata_s *data)
     char supPathCp1[512];
     char supDst[128];
     int slen=0, dlen=0;
-
-    pct = data->rs->pcfgTable;
 #endif
+    uint32_t val = 0;
+    
+    pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
     pmetaIn = rs->pmetain;
@@ -18259,11 +18262,9 @@ static int stsparam_88(struct psdata_s *data)
                             print_f(rs->plogs, "SPM", rs->logs);  
                         }
                     }
-                    
 #endif
                     //mem_dump((char *)pmass->masspt, pmass->massUsed);
                     
-
                     //data->result = emb_result(data->result, FWORD);                
                     data->result = emb_result(data->result, NEXT);                
                     //pmass->massRecd = 0;
@@ -18274,11 +18275,21 @@ static int stsparam_88(struct psdata_s *data)
                     act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
 
                     if ((act > 0) && (act & ASPMETA_FUNC_CROP)) {
-                        data->bkofw = emb_bk(data->bkofw, METAT, PSSET);
-                        data->result = emb_result(data->result, BKWRD);
+                    
+                        cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
 
-                        sprintf_f(rs->logs, "act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
-                        print_f(rs->plogs, "SPM", rs->logs);  
+                        if (val > 0) {
+                            data->bkofw = emb_bk(data->bkofw, METAT, PSSET);
+                            data->result = emb_result(data->result, BKWRD);
+
+                            sprintf_f(rs->logs, "act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
+                            print_f(rs->plogs, "SPM", rs->logs);  
+                        } else {
+                            sprintf_f(rs->logs, "record line = 0 go next \n"); 
+                            print_f(rs->plogs, "SPM", rs->logs);  
+
+                            data->result = emb_result(data->result, NEXT);
+                        }
                     } else {
                         //data->result = emb_result(data->result, NEXT);
                         data->result = emb_result(data->result, FWORD);
@@ -18767,9 +18778,10 @@ static int stmetaduo_97(struct psdata_s *data)
     struct aspMetaData_s *pmetaInduo;
     struct aspMetaMass_s *pmass;
     struct aspMetaMass_s *pmassduo;
+    struct aspConfig_s *pct=0;
 #if SAVE_CROP_MASS
     int ret=0;
-    struct aspConfig_s *pct=0, *pdt=0;
+    struct aspConfig_s *pdt=0;
 
     FILE *f=0;
     char supPath[128] = "/mnt/mmc2/crop/g%d_s%d_c%d_%.4d%.2d%.2d-%.2d%.2d%.2d.bin";
@@ -18777,9 +18789,10 @@ static int stmetaduo_97(struct psdata_s *data)
     char supPathCp1[512];
     char supDst[128];
     int slen=0, dlen=0;
+#endif
+    uint32_t val = 0;
 
     pct = data->rs->pcfgTable;
-#endif
     rs = data->rs;
     rlt = abs_result(data->result); 
     pmetaIn = rs->pmetain;
@@ -18886,15 +18899,22 @@ static int stmetaduo_97(struct psdata_s *data)
                     aspMetaReleaseDuo(msb2lsb(&pmetaInduo->FUNC_BITS), 0, rs);
                     
                     if ((act > 0) && (act & ASPMETA_FUNC_CROP)) {
-                        data->bkofw = emb_bk(data->bkofw, METAT, PSTSM);
-                        data->result = emb_result(data->result, BKWRD);
+                        cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
 
-                        sprintf_f(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
-                        print_f(rs->plogs, "MDUO", rs->logs);  
+                        if (val > 0) {
+                            data->bkofw = emb_bk(data->bkofw, METAT, PSTSM);
+                            data->result = emb_result(data->result, BKWRD);
+
+                            sprintf_f(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
+                            print_f(rs->plogs, "MDUO", rs->logs);  
                         
-                        sprintf_f(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d (duo)\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd); 
-                        print_f(rs->plogs, "MDUO", rs->logs);  
-
+                            sprintf_f(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d (duo)\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd); 
+                            print_f(rs->plogs, "MDUO", rs->logs);  
+                        } else {
+                            data->result = emb_result(data->result, NEXT);
+                            sprintf_f(rs->logs, "record line == 0, go next \n"); 
+                            print_f(rs->plogs, "MDUO", rs->logs);  
+                        }
                     } else {
                         //data->result = emb_result(data->result, NEXT);
                         data->result = emb_result(data->result, FWORD);
@@ -22210,6 +22230,7 @@ static int cmdfunc_mdouble_opcode(int argc, char *argv[])
     int ret=0, ix=0, n=0, brk=0;
     struct aspWaitRlt_s *pwt;
     struct info16Bit_s *pkt;
+    struct aspConfig_s* ctb = 0;
     struct mainRes_s *mrs=0;
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
@@ -22231,7 +22252,11 @@ static int cmdfunc_mdouble_opcode(int argc, char *argv[])
     /* set data for update to scanner */
     pkt->opcode = OP_SINGLE;
     pkt->data = SINSCAN_DUAL_STRM;
-
+    
+    /* refresh status */
+    ctb = &mrs->configTable[ASPOP_SCAN_DOUBLE];
+    ctb->opStatus |= ASPOP_STA_WR;
+    
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
     sprintf(mrs->log, "=====[_DOUBLE_SCAN_] BEG=====");
@@ -22243,7 +22268,7 @@ static int cmdfunc_mdouble_opcode(int argc, char *argv[])
         goto end;
     }
         
-    if ((n) && (rsp != 0x1)) {
+    if ((n) || (rsp != 0x1)) {
          sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
          ret = -1;
@@ -22314,7 +22339,7 @@ static int cmdfunc_msingle_opcode(int argc, char *argv[])
         goto end;
     }
         
-    if ((n) && (rsp != 0x1)) {
+    if ((n) || (rsp != 0x1)) {
          sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
          ret = -1;
@@ -37483,7 +37508,7 @@ static int p6(struct procRes_s *rs)
         }
 
         if (opcode == 0x23) { /* send duo img length*/
-            sprintf_f(rs->logs, "handle opcode: 0x%x(imglen)\n", opcode);
+            sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (imglen)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
 
             /* first page */
@@ -37773,13 +37798,17 @@ static int p6(struct procRes_s *rs)
                 pmassduo->massUsed = 0;
             }
 
-            rs_ipc_put(rs, "D", 1);
+            if (param == 'E') {
+                rs_ipc_put(rs, "E", 1);
+            } else {
+                rs_ipc_put(rs, "D", 1);
+            }
             
             goto socketEnd;
         }
         
         if (opcode == 0x22) { /* send img length*/
-            sprintf_f(rs->logs, "handle opcode: 0x%x(imglen)\n", opcode);
+            sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (imglen)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
                 
             pdt = &pct[ASPOP_IMG_LEN];
@@ -38095,8 +38124,12 @@ static int p6(struct procRes_s *rs)
                 pmass->massUsed = 0;
             }
 
-            rs_ipc_put(rs, "C", 1);
-            
+            if (param == 'E') {
+                rs_ipc_put(rs, "E", 1);
+            } else {
+                rs_ipc_put(rs, "C", 1);
+            }
+
             goto socketEnd;
         }
         
@@ -38125,7 +38158,7 @@ static int p6(struct procRes_s *rs)
         }
         
         if (opcode == 0x20) { /* send CROP info (duo)*/
-            sprintf_f(rs->logs, "handle opcode: 0x%x(CROP duo)\n", opcode);
+            sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (CROP duo)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
 
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
@@ -39548,13 +39581,17 @@ static int p6(struct procRes_s *rs)
             }          
 #endif
 
-            rs_ipc_put(rs, "D", 1);
+            if (param == 'E') {
+                rs_ipc_put(rs, "E", 1);
+            } else {
+                rs_ipc_put(rs, "D", 1);
+            }
 
             goto socketEnd;
         }
         
         if (opcode == 0x19) { /* send CROP info (new)*/
-            sprintf_f(rs->logs, "handle opcode: 0x%x(CROP new)\n", opcode);
+            sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (CROP new)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
             
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
@@ -40475,7 +40512,11 @@ static int p6(struct procRes_s *rs)
             }
 #endif
 
-            rs_ipc_put(rs, "C", 1);
+            if (param == 'E') {
+                rs_ipc_put(rs, "E", 1);
+            } else {
+                rs_ipc_put(rs, "C", 1);
+            }
 
             goto socketEnd;
         }
