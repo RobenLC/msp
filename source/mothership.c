@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Mon Jul 24 16:14:28 2017 5e30f14bda [MULTI] simplify p5"
+#define MSP_VERSION "Tue Aug 1 17:12:10 2017 fd96daccd6 [MULTI] meta transfer for new multiple scan, image length == 0 break double BMP fix01"
 
 #define SPI1_ENABLE (1) 
 
@@ -37278,7 +37278,7 @@ static int p6(struct procRes_s *rs)
     char *ph=0;
     struct bitmapHeader_s *bheader;
     int clr=0, w=0, h=0, dpi=0, hlen=0, datlen=0, orglen=0, t=0, vhi=0, crpMx=0;
-    uint32_t tmp=0, val=0, ffrmt=0;
+    uint32_t tmp=0, val=0, ffrmt=0, scanlen=0;
     char *hbuff=0;
     
     pct = rs->pcfgTable;
@@ -37577,6 +37577,330 @@ static int p6(struct procRes_s *rs)
             
             pdt->opStatus = ASPOP_STA_APP;            
 
+            /* send back bmp header */
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
+            if (tmp == FILE_FORMAT_RAW) {
+                ph = &rs->pbheader->aspbmpMagic[2];
+                len = sizeof(struct bitmapHeader_s) - 2;
+                bheader = rs->pbheader;
+                clr=0;w=0;h=0;dpi=0;
+                
+                //dbgBitmapHeader(bheader, len);
+                
+                /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                switch (tmp) {
+                    case COLOR_MODE_COLOR:
+                        clr = 24;
+                        break;
+                    case COLOR_MODE_GRAY:
+                    case COLOR_MODE_GRAY_DETAIL:
+                    case COLOR_MODE_BLACKWHITE:
+                        clr = 8;
+                        break;
+                    default:
+                        clr = 24;
+                        break;
+                }
+
+                h = 0;
+                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                if (ret) {
+                    //val = 0;
+                }
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                t = val << 8 | tmp;
+                w = scanWidthConvert(t);
+                sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                switch (tmp) {
+                case RESOLUTION_1200:
+                    dpi = 1200;
+                    break;
+                case RESOLUTION_600:
+                    dpi = 600;
+                    break;
+                case RESOLUTION_300:
+                    dpi = 300;
+                    break;
+                case RESOLUTION_200:
+                    dpi = 200;
+                    break;
+                case RESOLUTION_150:
+                    dpi = 150;
+                    break;
+                default:
+                    dpi = 300;
+                    break;
+                }
+                
+                //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+                
+                hbuff = aspMemalloc(1078, 6);
+                if (!hbuff) {
+                    goto socketEnd;
+                }
+                
+                if (clr == 8) {
+                    hlen = 1078;
+                } else if (clr == 24) {
+                    hlen = 54;            
+                } else {
+                    printf("[P6] ERROR!!! color bits is %d \n", clr);
+                    goto socketEnd;
+                }
+                
+                orglen = hlen;
+                
+                ret = cfgTableGetChk(pct, ASPOP_RAW_SIZE, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "scan raw data size: %d, ret:%d\n", val, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                /* calculate sector start and sector length of file */            
+                
+                datlen = val + hlen;
+                
+                sprintf_f(rs->logs, "bitmap info color: %d, w: %d, h: %d, dpi: %d, imglen: %d, use: %d\n", clr, w, h, dpi, val, hlen);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+#if 0 /* for test */
+                if (clr == 8) {
+                    bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, val);
+                } else {
+                    //bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, val);
+                    bitmapHeaderSetup(bheader, 24, 2160, 3496, 600, val);
+                }
+#else           
+                bitmapHeaderSetup(bheader, clr, w, h, dpi, val);
+#endif          
+                ph = &rs->pbheader->aspbmpMagic[2];
+                len = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(hbuff, ph, len);
+                
+                hlen -= len;
+                if (hlen > 0) {
+                    bitmapColorTableSetup(hbuff+len);
+                    hlen -= 1024;
+                }
+                
+                if (hlen) {
+                    printf("[fs98] Error!!! the bitmap header len is wrong %d orginal is %d\n", hlen, orglen);
+                    hlen = 0;
+                } 
+                
+                dbgBitmapHeader(bheader, len);
+                
+                sendbuf[3] = 'L';
+                
+                sprintf(rs->logs, "%d,\n\r", orglen*2);
+                n = strlen(rs->logs);
+                if (n > (P6_SEND_BUFF_SIZE - 32)) n = P6_SEND_BUFF_SIZE - 32;
+                
+                memcpy(&sendbuf[5], rs->logs, n);
+                
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                sendbuf[3] = 'B';
+                
+                bin2hex(&sendbuf[5], hbuff, orglen);
+                //memcpy(&sendbuf[5], hbuff, orglen);
+                //memset(&sendbuf[5], 0x95, P6_SEND_BUFF_SIZE - 5);
+                
+                n = orglen * 2;
+                
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                
+                //shmem_dump(sendbuf, P6_SEND_BUFF_SIZE);
+                            
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                //print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            /* send back bmp header */
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            if (tmp == FILE_FORMAT_RAW) { /* second page */
+                ph = &rs->pbheaderDuo->aspbmpMagic[2];
+                len = sizeof(struct bitmapHeader_s) - 2;
+                bheader = rs->pbheaderDuo;
+                clr=0;w=0;h=0;dpi=0;
+                
+                //dbgBitmapHeader(bheader, len);
+                
+                /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                switch (tmp) {
+                    case COLOR_MODE_COLOR:
+                        clr = 24;
+                        break;
+                    case COLOR_MODE_GRAY:
+                    case COLOR_MODE_GRAY_DETAIL:
+                    case COLOR_MODE_BLACKWHITE:
+                        clr = 8;
+                        break;
+                    default:
+                        clr = 24;
+                        break;
+                }
+
+                h = 0;
+                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &h, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined image length: %d, ret:%d duo\n", h, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                if (ret) {
+                    //val = 0;
+                }
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                t = val << 8 | tmp;
+                w = scanWidthConvert(t);
+                sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                switch (tmp) {
+                case RESOLUTION_1200:
+                    dpi = 1200;
+                    break;
+                case RESOLUTION_600:
+                    dpi = 600;
+                    break;
+                case RESOLUTION_300:
+                    dpi = 300;
+                    break;
+                case RESOLUTION_200:
+                    dpi = 200;
+                    break;
+                case RESOLUTION_150:
+                    dpi = 150;
+                    break;
+                default:
+                    dpi = 300;
+                    break;
+                }
+                
+                //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+                
+                hbuff = aspMemalloc(1078, 6);
+                if (!hbuff) {
+                    goto socketEnd;
+                }
+                
+                if (clr == 8) {
+                    hlen = 1078;
+                } else if (clr == 24) {
+                    hlen = 54;            
+                } else {
+                    printf("[P6] ERROR!!! color bits is %d \n", clr);
+                    goto socketEnd;
+                }
+                
+                orglen = hlen;
+                
+                ret = cfgTableGetChk(pct, ASPOP_RAW_SIZE_DUO, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "scan raw data size: %d, ret:%d duo\n", val, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                /* calculate sector start and sector length of file */            
+                
+                datlen = val + hlen;
+                
+                sprintf_f(rs->logs, "bitmap info color: %d, w: %d, h: %d, dpi: %d, imglen: %d, use: %d duo\n", clr, w, h, dpi, val, hlen);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+#if 0 /* for test */
+                if (clr == 8) {
+                    bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, val);
+                } else {
+                    //bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, val);
+                    bitmapHeaderSetup(bheader, 24, 2160, 3496, 600, val);
+                }
+#else           
+                bitmapHeaderSetup(bheader, clr, w, h, dpi, val);
+#endif          
+                ph = &rs->pbheaderDuo->aspbmpMagic[2];
+                len = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(hbuff, ph, len);
+                
+                hlen -= len;
+                if (hlen > 0) {
+                    bitmapColorTableSetup(hbuff+len);
+                    hlen -= 1024;
+                }
+                
+                if (hlen) {
+                    printf("[fs98] Error!!! the bitmap header len is wrong %d orginal is %d\n", hlen, orglen);
+                    hlen = 0;
+                } 
+                
+                dbgBitmapHeader(bheader, len);
+                
+                sendbuf[3] = 'l';
+                
+                sprintf(rs->logs, "%d,\n\r", orglen*2);
+                n = strlen(rs->logs);
+                if (n > (P6_SEND_BUFF_SIZE - 32)) n = P6_SEND_BUFF_SIZE - 32;
+                
+                memcpy(&sendbuf[5], rs->logs, n);
+                
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d duo\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                sendbuf[3] = 'b';
+                
+                bin2hex(&sendbuf[5], hbuff, orglen);
+                //memcpy(&sendbuf[5], hbuff, orglen);
+                //memset(&sendbuf[5], 0x95, P6_SEND_BUFF_SIZE - 5);
+                
+                n = orglen * 2;
+                
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                
+                //shmem_dump(sendbuf, P6_SEND_BUFF_SIZE);
+                            
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                //print_f(rs->plogs, "P6", rs->logs);
+            }
+            
             while (1) {
                 num = 0;
                 for (i = 0; i < (CROP_MAX_NUM_META+1); i++) {
@@ -37798,7 +38122,15 @@ static int p6(struct procRes_s *rs)
                 pmassduo->massUsed = 0;
             }
 
-            if (param == 'E') {
+            h = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            if (ret) {
+                //val = 0;
+            }
+
+            if ((param == 'E') || (h == 0)) {
                 rs_ipc_put(rs, "E", 1);
             } else {
                 rs_ipc_put(rs, "D", 1);
@@ -37825,7 +38157,7 @@ static int p6(struct procRes_s *rs)
 
                 cnt ++;
             }
-            
+                
             sendbuf[3] = 'H';
 
             sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
@@ -37872,7 +38204,8 @@ static int p6(struct procRes_s *rs)
                         clr = 24;
                         break;
                 }
-                
+
+                h = 0;
                 ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -38124,7 +38457,7 @@ static int p6(struct procRes_s *rs)
                 pmass->massUsed = 0;
             }
 
-            if (param == 'E') {
+            if ((param == 'E') || (h == 0)) {
                 rs_ipc_put(rs, "E", 1);
             } else {
                 rs_ipc_put(rs, "C", 1);
@@ -38161,13 +38494,6 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (CROP duo)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
 
-            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            if (ret) {
-                //val = 0;
-            }
-            
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
             print_f(rs->plogs, "P6", rs->logs);
@@ -38298,6 +38624,338 @@ static int p6(struct procRes_s *rs)
 */
                 usleep(500000);
                 cnt ++;
+            }
+
+            /* send back bmp header */
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
+            if (tmp == FILE_FORMAT_RAW) {
+                ph = &rs->pbheader->aspbmpMagic[2];
+                len = sizeof(struct bitmapHeader_s) - 2;
+                bheader = rs->pbheader;
+                clr=0;w=0;h=0;dpi=0;
+                
+                //dbgBitmapHeader(bheader, len);
+                
+                /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                switch (tmp) {
+                    case COLOR_MODE_COLOR:
+                        clr = 24;
+                        break;
+                    case COLOR_MODE_GRAY:
+                    case COLOR_MODE_GRAY_DETAIL:
+                    case COLOR_MODE_BLACKWHITE:
+                        clr = 8;
+                        break;
+                    default:
+                        clr = 24;
+                        break;
+                }
+
+                h = 0;
+                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                if (ret) {
+                    //val = 0;
+                }
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                t = val << 8 | tmp;
+                w = scanWidthConvert(t);
+                sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                switch (tmp) {
+                case RESOLUTION_1200:
+                    dpi = 1200;
+                    break;
+                case RESOLUTION_600:
+                    dpi = 600;
+                    break;
+                case RESOLUTION_300:
+                    dpi = 300;
+                    break;
+                case RESOLUTION_200:
+                    dpi = 200;
+                    break;
+                case RESOLUTION_150:
+                    dpi = 150;
+                    break;
+                default:
+                    dpi = 300;
+                    break;
+                }
+                
+                //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+                
+                hbuff = aspMemalloc(1078, 6);
+                if (!hbuff) {
+                    goto socketEnd;
+                }
+                
+                if (clr == 8) {
+                    hlen = 1078;
+                } else if (clr == 24) {
+                    hlen = 54;            
+                } else {
+                    printf("[P6] ERROR!!! color bits is %d \n", clr);
+                    goto socketEnd;
+                }
+                
+                orglen = hlen;
+                
+                ret = cfgTableGetChk(pct, ASPOP_RAW_SIZE, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "scan raw data size: %d, ret:%d\n", val, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                /* calculate sector start and sector length of file */            
+                
+                datlen = val + hlen;
+                
+                sprintf_f(rs->logs, "bitmap info color: %d, w: %d, h: %d, dpi: %d, imglen: %d, use: %d\n", clr, w, h, dpi, val, hlen);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+#if 0 /* for test */
+                if (clr == 8) {
+                    bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, val);
+                } else {
+                    //bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, val);
+                    bitmapHeaderSetup(bheader, 24, 2160, 3496, 600, val);
+                }
+#else           
+                bitmapHeaderSetup(bheader, clr, w, h, dpi, val);
+#endif          
+                ph = &rs->pbheader->aspbmpMagic[2];
+                len = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(hbuff, ph, len);
+                
+                hlen -= len;
+                if (hlen > 0) {
+                    bitmapColorTableSetup(hbuff+len);
+                    hlen -= 1024;
+                }
+                
+                if (hlen) {
+                    printf("[fs98] Error!!! the bitmap header len is wrong %d orginal is %d\n", hlen, orglen);
+                    hlen = 0;
+                } 
+                
+                dbgBitmapHeader(bheader, len);
+                
+                sendbuf[3] = 'L';
+                
+                sprintf(rs->logs, "%d,\n\r", orglen*2);
+                n = strlen(rs->logs);
+                if (n > (P6_SEND_BUFF_SIZE - 32)) n = P6_SEND_BUFF_SIZE - 32;
+                
+                memcpy(&sendbuf[5], rs->logs, n);
+                
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                sendbuf[3] = 'B';
+                
+                bin2hex(&sendbuf[5], hbuff, orglen);
+                //memcpy(&sendbuf[5], hbuff, orglen);
+                //memset(&sendbuf[5], 0x95, P6_SEND_BUFF_SIZE - 5);
+                
+                n = orglen * 2;
+                
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                
+                //shmem_dump(sendbuf, P6_SEND_BUFF_SIZE);
+                            
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                //print_f(rs->plogs, "P6", rs->logs);
+            }
+
+            /* send back bmp header */
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            if (tmp == FILE_FORMAT_RAW) { /* second page */
+                ph = &rs->pbheaderDuo->aspbmpMagic[2];
+                len = sizeof(struct bitmapHeader_s) - 2;
+                bheader = rs->pbheaderDuo;
+                clr=0;w=0;h=0;dpi=0;
+                
+                //dbgBitmapHeader(bheader, len);
+                
+                /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                switch (tmp) {
+                    case COLOR_MODE_COLOR:
+                        clr = 24;
+                        break;
+                    case COLOR_MODE_GRAY:
+                    case COLOR_MODE_GRAY_DETAIL:
+                    case COLOR_MODE_BLACKWHITE:
+                        clr = 8;
+                        break;
+                    default:
+                        clr = 24;
+                        break;
+                }
+
+                h = 0;
+                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &h, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined image length: %d, ret:%d duo\n", h, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                if (ret) {
+                    //val = 0;
+                }
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                t = val << 8 | tmp;
+                w = scanWidthConvert(t);
+                sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                switch (tmp) {
+                case RESOLUTION_1200:
+                    dpi = 1200;
+                    break;
+                case RESOLUTION_600:
+                    dpi = 600;
+                    break;
+                case RESOLUTION_300:
+                    dpi = 300;
+                    break;
+                case RESOLUTION_200:
+                    dpi = 200;
+                    break;
+                case RESOLUTION_150:
+                    dpi = 150;
+                    break;
+                default:
+                    dpi = 300;
+                    break;
+                }
+                
+                //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+                
+                hbuff = aspMemalloc(1078, 6);
+                if (!hbuff) {
+                    goto socketEnd;
+                }
+                
+                if (clr == 8) {
+                    hlen = 1078;
+                } else if (clr == 24) {
+                    hlen = 54;            
+                } else {
+                    printf("[P6] ERROR!!! color bits is %d \n", clr);
+                    goto socketEnd;
+                }
+                
+                orglen = hlen;
+                
+                ret = cfgTableGetChk(pct, ASPOP_RAW_SIZE_DUO, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "scan raw data size: %d, ret:%d duo\n", val, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                /* calculate sector start and sector length of file */            
+                
+                datlen = val + hlen;
+                
+                sprintf_f(rs->logs, "bitmap info color: %d, w: %d, h: %d, dpi: %d, imglen: %d, use: %d duo\n", clr, w, h, dpi, val, hlen);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+#if 0 /* for test */
+                if (clr == 8) {
+                    bitmapHeaderSetup(bheader, 8, 5184, 6524, 300, val);
+                } else {
+                    //bitmapHeaderSetup(bheader, 24, 2304, 3456, 600, val);
+                    bitmapHeaderSetup(bheader, 24, 2160, 3496, 600, val);
+                }
+#else           
+                bitmapHeaderSetup(bheader, clr, w, h, dpi, val);
+#endif          
+                ph = &rs->pbheaderDuo->aspbmpMagic[2];
+                len = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(hbuff, ph, len);
+                
+                hlen -= len;
+                if (hlen > 0) {
+                    bitmapColorTableSetup(hbuff+len);
+                    hlen -= 1024;
+                }
+                
+                if (hlen) {
+                    printf("[fs98] Error!!! the bitmap header len is wrong %d orginal is %d\n", hlen, orglen);
+                    hlen = 0;
+                } 
+                
+                dbgBitmapHeader(bheader, len);
+                
+                sendbuf[3] = 'l';
+                
+                sprintf(rs->logs, "%d,\n\r", orglen*2);
+                n = strlen(rs->logs);
+                if (n > (P6_SEND_BUFF_SIZE - 32)) n = P6_SEND_BUFF_SIZE - 32;
+                
+                memcpy(&sendbuf[5], rs->logs, n);
+                
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d duo\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                sendbuf[3] = 'b';
+                
+                bin2hex(&sendbuf[5], hbuff, orglen);
+                //memcpy(&sendbuf[5], hbuff, orglen);
+                //memset(&sendbuf[5], 0x95, P6_SEND_BUFF_SIZE - 5);
+                
+                n = orglen * 2;
+                
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                
+                //shmem_dump(sendbuf, P6_SEND_BUFF_SIZE);
+                            
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                //print_f(rs->plogs, "P6", rs->logs);
+            }
+            
+            h = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            if (ret) {
+                //val = 0;
             }
             
             /* initial cropping config */
@@ -39581,7 +40239,7 @@ static int p6(struct procRes_s *rs)
             }          
 #endif
 
-            if (param == 'E') {
+            if ((param == 'E') || (h == 0)) {
                 rs_ipc_put(rs, "E", 1);
             } else {
                 rs_ipc_put(rs, "D", 1);
@@ -39593,42 +40251,7 @@ static int p6(struct procRes_s *rs)
         if (opcode == 0x19) { /* send CROP info (new)*/
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (CROP new)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
-            
-            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            if (ret) {
-                //val = 0;
-            }
-            
-            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
-            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            
-            ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-            switch (tmp) {
-            case RESOLUTION_1200:
-                dpi = 1200;
-                break;
-            case RESOLUTION_600:
-                dpi = 600;
-                break;
-            case RESOLUTION_300:
-                dpi = 300;
-                break;
-            case RESOLUTION_200:
-                dpi = 200;
-                break;
-            case RESOLUTION_150:
-                dpi = 150;
-                break;
-            default:
-                dpi = 300;
-                break;
-            }
-            sprintf_f(rs->logs, "user defined resulution: %d(%d dpi), ret:%d\n", tmp, dpi, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            
+     
             cnt = 0;
             while (1) {
                 num = 0;
@@ -39687,11 +40310,19 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
+            h = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            if (ret) {
+                //val = 0;
+            }
+                
             if (tmp == FILE_FORMAT_RAW) {
                 ph = &rs->pbheader->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
                 bheader = rs->pbheader;
-                clr=0;w=0;h=0;dpi=0;
+                clr=0;w=0;dpi=0;
                 
                 //dbgBitmapHeader(bheader, len);
                 
@@ -39713,12 +40344,6 @@ static int p6(struct procRes_s *rs)
                         break;
                 }
                 
-                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
-                print_f(rs->plogs, "P6", rs->logs);
-                if (ret) {
-                    //val = 0;
-                }
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -39727,11 +40352,8 @@ static int p6(struct procRes_s *rs)
                 t = val << 8 | tmp;
                 w = scanWidthConvert(t);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
-                print_f(rs->plogs, "P6", rs->logs);
-                
+                print_f(rs->plogs, "P6", rs->logs);                
                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
-                print_f(rs->plogs, "P6", rs->logs);
                 switch (tmp) {
                 case RESOLUTION_1200:
                     dpi = 1200;
@@ -39752,6 +40374,8 @@ static int p6(struct procRes_s *rs)
                     dpi = 300;
                     break;
                 }
+                sprintf_f(rs->logs, "user defined resulution: %d(dpi: %d), ret:%d\n", tmp, dpi, ret);
+                print_f(rs->plogs, "P6", rs->logs);
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
                 
@@ -40512,7 +41136,7 @@ static int p6(struct procRes_s *rs)
             }
 #endif
 
-            if (param == 'E') {
+            if ((param == 'E') || (h == 0)) {
                 rs_ipc_put(rs, "E", 1);
             } else {
                 rs_ipc_put(rs, "C", 1);
