@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Tue Aug 1 17:12:10 2017 fd96daccd6 [MULTI] meta transfer for new multiple scan, image length == 0 break double BMP fix01"
+#define MSP_VERSION "Aug 10 11:28:58 2017 f56c9aa163 [MULTI] enable image length == 0 break mechanism, reclinefix, addpro, memdump, fs113 log, recordline fixed, used fixed"
 
 #define SPI1_ENABLE (1) 
 
@@ -2205,6 +2205,10 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
             pmass->massGap = 0;
             pmass->massStart = 0;
             pmass->massRecd = 0;
+
+            cfgTableSet(pct, ASPOP_XCROP_GAT, 0);
+            cfgTableSet(pct, ASPOP_XCROP_LINSTR, 0);
+            cfgTableSet(pct, ASPOP_XCROP_LINREC, 0);
         }
     }
 
@@ -2308,6 +2312,10 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
             pmassDuo->massGap = 0;
             pmassDuo->massStart = 0;
             pmassDuo->massRecd = 0;
+
+            cfgTableSet(pct, ASPOP_XCROP_GAT_DUO, 0);
+            cfgTableSet(pct, ASPOP_XCROP_LINSTR_DUO, 0);
+            cfgTableSet(pct, ASPOP_XCROP_LINREC_DUO, 0);
         }
     }
 
@@ -18156,7 +18164,7 @@ static int stsparam_88(struct psdata_s *data)
 { 
     int act=0;
     char ch = 0; 
-    uint32_t rlt;
+    uint32_t rlt, chk=0;
     struct procRes_s *rs;
     struct aspMetaData_s *pmetaIn, *pmetaOut;
     struct aspMetaMass_s *pmass;
@@ -18164,7 +18172,7 @@ static int stsparam_88(struct psdata_s *data)
 #if SAVE_CROP_MASS
     int ret=0;
     struct aspConfig_s *pdt=0;
-
+    
     FILE *f=0;
     char supPath[128] = "/mnt/mmc2/crop/g%d_s%d_c%d_%.4d%.2d%.2d-%.2d%.2d%.2d.bin";
     char tail[32] = "_%d.bin\0";
@@ -18173,6 +18181,7 @@ static int stsparam_88(struct psdata_s *data)
     int slen=0, dlen=0;
 #endif
     uint32_t val = 0;
+    struct info16Bit_s *p=0, *c=0, *t=0;
     
     pct = data->rs->pcfgTable;
     rs = data->rs;
@@ -18180,6 +18189,9 @@ static int stsparam_88(struct psdata_s *data)
     pmetaIn = rs->pmetain;
     pmetaOut= rs->pmetaout;
     pmass = rs->pmetaMass;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+    t = &rs->pmch->tmp;
     //sprintf_f(rs->logs, "op_88 rlt:0x%x \n", rlt); 
     //print_f(rs->plogs, "SPM", rs->logs);  
 
@@ -18203,10 +18215,13 @@ static int stsparam_88(struct psdata_s *data)
             if (data->ansp0 == 1) {
                 msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
                 
-                sprintf_f(rs->logs, "op_88: dump meta input (used:%d recd:%d) \n", pmass->massUsed, pmass->massRecd); 
+                sprintf_f(rs->logs, "op_88: dump meta input (used:%d recd:%d) (op:0x%.2x, dt:0x%.2x)\n", pmass->massUsed, pmass->massRecd, t->opcode, t->data); 
                 print_f(rs->plogs, "SPM", rs->logs);  
 
-                if (pmass->massRecd > 0) {
+                if (t->opcode != OP_META_DAT) {
+                    data->ansp0 = 0xed;
+                    data->result = emb_result(data->result, EVTMAX);
+                } else if (pmass->massRecd > 0) {
                     sprintf_f(rs->logs, "dump meta mass: (gap:%d, linStart:%d, linRecd:%d)\n", pmass->massGap, pmass->massStart, pmass->massRecd); 
                     print_f(rs->plogs, "SPM", rs->logs);  
 #if SAVE_CROP_MASS
@@ -18269,30 +18284,66 @@ static int stsparam_88(struct psdata_s *data)
                     data->result = emb_result(data->result, NEXT);                
                     //pmass->massRecd = 0;
                     //pmass->massUsed = 0;
-                } else {
+                }
+                else {
                     //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
                     dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
                     act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
 
-                    if ((act > 0) && (act & ASPMETA_FUNC_CROP)) {
-                    
-                        cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
+                    switch(t->data) {
+                        case ASPMETA_POWON_INIT:
+                            data->result = emb_result(data->result, FWORD);
+                            break;
+                        case ASPMETA_SCAN_GO:
+                            data->ansp0 = 0xed;
+                            data->result = emb_result(data->result, EVTMAX);
+                            break;
+                        case ASPMETA_SCAN_COMPLETE:
+                        case ASPMETA_CROP_300DPI:
+                        case ASPMETA_CROP_600DPI:
+                            if (act < 0) {
+                                cfgTableSet(pct, ASPOP_IMG_LEN, 0);
+                                
+                                sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!\n"); 
+                                print_f(rs->plogs, "SPM", rs->logs);  
 
-                        if (val > 0) {
-                            data->bkofw = emb_bk(data->bkofw, METAT, PSSET);
-                            data->result = emb_result(data->result, BKWRD);
+                                data->result = emb_result(data->result, NEXT);                            
 
-                            sprintf_f(rs->logs, "act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
-                            print_f(rs->plogs, "SPM", rs->logs);  
-                        } else {
-                            sprintf_f(rs->logs, "record line = 0 go next \n"); 
-                            print_f(rs->plogs, "SPM", rs->logs);  
+                                shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
+                            }
+                            else if (act & ASPMETA_FUNC_CROP) {
+                                cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
 
-                            data->result = emb_result(data->result, NEXT);
-                        }
-                    } else {
-                        //data->result = emb_result(data->result, NEXT);
-                        data->result = emb_result(data->result, FWORD);
+                                if (val > 0) {
+                                    data->bkofw = emb_bk(data->bkofw, METAT, PSSET);
+                                    data->result = emb_result(data->result, BKWRD);
+
+                                    sprintf_f(rs->logs, "act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
+                                    print_f(rs->plogs, "SPM", rs->logs);  
+                                } else {
+                                    sprintf_f(rs->logs, "record line = 0 go next \n"); 
+                                    print_f(rs->plogs, "SPM", rs->logs);  
+
+                                    data->result = emb_result(data->result, NEXT);
+                                }
+                            } else {
+                                //data->result = emb_result(data->result, NEXT);
+                                data->result = emb_result(data->result, FWORD);
+                            }
+                            break;
+                        case ASPMETA_SD:
+                            data->result = emb_result(data->result, FWORD);
+                            break;
+                        case ASPMETA_OCR:
+                            data->result = emb_result(data->result, FWORD);
+                            break;
+                        case ASPMETA_SCAN_COMPLE_DUO:
+                        case ASPMETA_CROP_300DPI_DUO:
+                        case ASPMETA_CROP_600DPI_DUO:
+                        default:
+                            data->ansp0 = 0xed;
+                            data->result = emb_result(data->result, EVTMAX);
+                            break;
                     }
                 }
 
@@ -18791,7 +18842,8 @@ static int stmetaduo_97(struct psdata_s *data)
     int slen=0, dlen=0;
 #endif
     uint32_t val = 0;
-
+    struct info16Bit_s *p=0, *c=0, *t=0;
+    
     pct = data->rs->pcfgTable;
     rs = data->rs;
     rlt = abs_result(data->result); 
@@ -18801,6 +18853,10 @@ static int stmetaduo_97(struct psdata_s *data)
 
     pmass = rs->pmetaMass;
     pmassduo = rs->pmetaMassduo;
+    p = &rs->pmch->get;
+    c = &rs->pmch->cur;
+    t = &rs->pmch->tmp;
+
     //sprintf_f(rs->logs, "op_88 rlt:0x%x \n", rlt); 
     //print_f(rs->plogs, "SPM", rs->logs);  
 
@@ -18821,12 +18877,16 @@ static int stmetaduo_97(struct psdata_s *data)
             print_f(rs->plogs, "MDUO", rs->logs);  
             break;
         case WAIT:
+        
             if (data->ansp0 == 1) {
                 msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
-                sprintf_f(rs->logs, "op_97: dump meta input (used:%d recd:%d) \n", pmass->massUsed, pmass->massRecd); 
+                sprintf_f(rs->logs, "op_97: dump meta input (used:%d recd:%d)  (op:0x%.2x, dt:0x%.2x)\n", pmass->massUsed, pmass->massRecd, t->opcode, t->opcode); 
                 print_f(rs->plogs, "MDUO", rs->logs);  
-
-                if (pmass->massRecd > 0) {
+                
+                if (t->opcode != OP_META_DAT) {
+                    data->ansp0 = 0xed;
+                    data->result = emb_result(data->result, EVTMAX);
+                } else if (pmass->massRecd > 0) {
                     sprintf_f(rs->logs, "op_97: dump meta mass: (gap:%d, linStart:%d, linRecd:%d)\n", pmass->massGap, pmass->massStart, pmass->massRecd); 
                     print_f(rs->plogs, "MDUO", rs->logs);  
 #if SAVE_CROP_MASS
@@ -18897,27 +18957,63 @@ static int stmetaduo_97(struct psdata_s *data)
                     dbgMeta(msb2lsb(&pmetaInduo->FUNC_BITS), pmetaInduo);
                     act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
                     aspMetaReleaseDuo(msb2lsb(&pmetaInduo->FUNC_BITS), 0, rs);
-                    
-                    if ((act > 0) && (act & ASPMETA_FUNC_CROP)) {
-                        cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
 
-                        if (val > 0) {
-                            data->bkofw = emb_bk(data->bkofw, METAT, PSTSM);
-                            data->result = emb_result(data->result, BKWRD);
+                    switch(t->data) {
+                        case ASPMETA_POWON_INIT:
+                            data->result = emb_result(data->result, FWORD);
+                            break;
+                        case ASPMETA_SCAN_GO:
+                            data->ansp0 = 0xed;
+                            data->result = emb_result(data->result, EVTMAX);
+                            break;
+                        case ASPMETA_SD:
+                            data->result = emb_result(data->result, FWORD);
+                            break;
+                        case ASPMETA_OCR:
+                            data->result = emb_result(data->result, FWORD);
+                            break;
+                        case ASPMETA_SCAN_COMPLE_DUO:
+                        case ASPMETA_CROP_300DPI_DUO:
+                        case ASPMETA_CROP_600DPI_DUO:
+                            if (act < 0) {
+                                cfgTableSet(pct, ASPOP_IMG_LEN, 0);
+                                
+                                sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!\n"); 
+                                print_f(rs->plogs, "MDUO", rs->logs);  
 
-                            sprintf_f(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
-                            print_f(rs->plogs, "MDUO", rs->logs);  
-                        
-                            sprintf_f(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d (duo)\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd); 
-                            print_f(rs->plogs, "MDUO", rs->logs);  
-                        } else {
-                            data->result = emb_result(data->result, NEXT);
-                            sprintf_f(rs->logs, "record line == 0, go next \n"); 
-                            print_f(rs->plogs, "MDUO", rs->logs);  
-                        }
-                    } else {
-                        //data->result = emb_result(data->result, NEXT);
-                        data->result = emb_result(data->result, FWORD);
+                                data->result = emb_result(data->result, NEXT);
+
+                                shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
+                            }
+                            else if (act & ASPMETA_FUNC_CROP) {
+                                cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
+
+                                if (val > 0) {
+                                    data->bkofw = emb_bk(data->bkofw, METAT, PSTSM);
+                                    data->result = emb_result(data->result, BKWRD);
+
+                                    sprintf_f(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
+                                    print_f(rs->plogs, "MDUO", rs->logs);  
+
+                                    sprintf_f(rs->logs, "op_97: act:0x%x, metamass gap:%d, start:%d, record:%d (duo)\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd); 
+                                    print_f(rs->plogs, "MDUO", rs->logs);  
+                                } else {
+                                    data->result = emb_result(data->result, NEXT);
+                                    sprintf_f(rs->logs, "record line == 0, go next \n"); 
+                                    print_f(rs->plogs, "MDUO", rs->logs);  
+                                }
+                            } else {
+                                //data->result = emb_result(data->result, NEXT);
+                                data->result = emb_result(data->result, FWORD);
+                            }
+                            break;
+                        case ASPMETA_SCAN_COMPLETE:
+                        case ASPMETA_CROP_300DPI:
+                        case ASPMETA_CROP_600DPI:
+                        default:
+                            data->ansp0 = 0xed;
+                            data->result = emb_result(data->result, EVTMAX);
+                            break;
                     }
                 }
 
@@ -22269,7 +22365,7 @@ static int cmdfunc_mdouble_opcode(int argc, char *argv[])
     }
         
     if ((n) || (rsp != 0x1)) {
-         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         sprintf_f(mrs->log, "break loop!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
          ret = -1;
     }
@@ -22340,7 +22436,7 @@ static int cmdfunc_msingle_opcode(int argc, char *argv[])
     }
         
     if ((n) || (rsp != 0x1)) {
-         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         sprintf_f(mrs->log, "break loop!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
          ret = -1;
     }
@@ -31218,24 +31314,36 @@ static int fs113(struct mainRes_s *mrs, struct modersp_s *modersp)
     //print_f(&mrs->plog, "fs113", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 7);
-    if ((len > 0) && (ch == 'C')) {
+
+    if (len > 0) {
+        sprintf_f(mrs->log, "check P6 getting the notice, len = %d, ch = 0x%.2x\n", len, ch);
+        print_f(&mrs->plog, "fs113", mrs->log);
+  
+        len = 0;
+        len = mrs_ipc_get(mrs, &ch, 1, 7);
+        while (len > 0) {
+            sprintf_f(mrs->log, "check P6 getting the notice, len = %d, ch = 0x%.2x\n", len, ch);
+            print_f(&mrs->plog, "fs113", mrs->log);
+
+            len = mrs_ipc_get(mrs, &ch, 1, 7);        
+        }
+        
         //modersp->m = 69;
         //return 2;
-        
-        modersp->r = 1;
-        return 1;
-    }
-    
-    if ((len > 0) && (ch != 'C')) {
+        if (ch == 'C') {
+            modersp->r = 1;
+            return 1;
+        } else {
             //sprintf_f(mrs->log, "FAIL!!send notice to P6 again!\n");
-            sprintf_f(mrs->log, "P6 response BREAK loop\n");
+            sprintf_f(mrs->log, "P6 response BREAK loop ch = %c \n", ch);
             print_f(&mrs->plog, "fs113", mrs->log);
             //modersp->m = modersp->m - 1;        
             //return 2;
             modersp->r = 2;
             return 1;
+        }
     }
-
+    
     return 0; 
 }
 
@@ -32523,19 +32631,31 @@ static int fs121(struct mainRes_s *mrs, struct modersp_s *modersp)
     //print_f(&mrs->plog, "fs121", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 7);
-    if ((len > 0) && (ch == 'D')) {
-        modersp->r = 1;
-        return 1;
-    }
-    
-    if ((len > 0) && (ch != 'D')) {
-            sprintf_f(mrs->log, "P6 response BREAK loop\n");
+    if (len > 0) {
+        sprintf_f(mrs->log, "check P6 getting the notice, len = %d, ch = 0x%.2x\n", len, ch);
+        print_f(&mrs->plog, "fs121", mrs->log);
+
+        len = 0;
+        len = mrs_ipc_get(mrs, &ch, 1, 7);
+        while (len > 0) {
+            sprintf_f(mrs->log, "check P6 getting the notice, len = %d, ch = 0x%.2x\n", len, ch);
+            print_f(&mrs->plog, "fs121", mrs->log);
+
+            len = mrs_ipc_get(mrs, &ch, 1, 7);        
+        }
+
+        if (ch == 'D') {
+            modersp->r = 1;
+            return 1;
+        } else {
+            sprintf_f(mrs->log, "P6 response BREAK loop ch = %c \n", ch);
             print_f(&mrs->plog, "fs121", mrs->log);
 
             modersp->r = 2;
             return 1;
+        }
     }
-
+    
     return 0; 
 }
 
@@ -37277,7 +37397,7 @@ static int p6(struct procRes_s *rs)
 
     char *ph=0;
     struct bitmapHeader_s *bheader;
-    int clr=0, w=0, h=0, dpi=0, hlen=0, datlen=0, orglen=0, t=0, vhi=0, crpMx=0;
+    int clr=0, w=0, h=0, hduo=0, dpi=0, hlen=0, datlen=0, orglen=0, t=0, vhi=0, crpMx=0;
     uint32_t tmp=0, val=0, ffrmt=0, scanlen=0;
     char *hbuff=0;
     
@@ -37581,12 +37701,18 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
-            
+
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            h = val;
+
             if (tmp == FILE_FORMAT_RAW) {
                 ph = &rs->pbheader->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
                 bheader = rs->pbheader;
-                clr=0;w=0;h=0;dpi=0;
+                clr=0;w=0;dpi=0;
                 
                 //dbgBitmapHeader(bheader, len);
                 
@@ -37608,13 +37734,6 @@ static int p6(struct procRes_s *rs)
                         break;
                 }
 
-                h = 0;
-                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
-                print_f(rs->plogs, "P6", rs->logs);
-                if (ret) {
-                    //val = 0;
-                }
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -37743,12 +37862,12 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
-
+            
             if (tmp == FILE_FORMAT_RAW) { /* second page */
                 ph = &rs->pbheaderDuo->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
                 bheader = rs->pbheaderDuo;
-                clr=0;w=0;h=0;dpi=0;
+                clr=0;w=0;dpi=0;
                 
                 //dbgBitmapHeader(bheader, len);
                 
@@ -37770,13 +37889,12 @@ static int p6(struct procRes_s *rs)
                         break;
                 }
 
-                h = 0;
-                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &h, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "user defined image length: %d, ret:%d duo\n", h, ret);
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "duo user defined image length: %d, ret:%d duo\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
-                if (ret) {
-                    //val = 0;
-                }
+                hduo = val;
+
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -37848,7 +37966,7 @@ static int p6(struct procRes_s *rs)
                     bitmapHeaderSetup(bheader, 24, 2160, 3496, 600, val);
                 }
 #else           
-                bitmapHeaderSetup(bheader, clr, w, h, dpi, val);
+                bitmapHeaderSetup(bheader, clr, w, hduo, dpi, val);
 #endif          
                 ph = &rs->pbheaderDuo->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
@@ -37984,25 +38102,43 @@ static int p6(struct procRes_s *rs)
                 }
             }
 
-            msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
-                        
-            if (pmass->massRecd) {
-                ch = 0;
-                while (ch != 'd') {
-                    ret = rs_ipc_get(rs, &ch, 1);
-                    if (ret > 0) {
-                        if (ch == 'd') {
-                            sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        } else {
-                            sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        }
+            ch = 0;
+            while (ch != 'd') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'd') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
                     } else {
-                        sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
+                } else {
+                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
                 }
+            }
+
+            ch = 0;
+            while (ch != 'd') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'd') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+
+            msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
+            
+            if (pmass->massRecd) {
 
                 memset(pmass->masspt, 0, pmass->massMax);
                 msync(pmass->masspt, pmass->massMax, MS_SYNC);
@@ -38098,22 +38234,6 @@ static int p6(struct procRes_s *rs)
             msync(pmassduo, sizeof(struct aspMetaMass_s), MS_SYNC);
             
             if (pmassduo->massRecd) {
-                ch = 0;
-                while (ch != 'd') {
-                    ret = rs_ipc_get(rs, &ch, 1);
-                    if (ret > 0) {
-                        if (ch == 'd') {
-                            sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        } else {
-                            sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        }
-                    } else {
-                        sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    }
-                }
 
                 memset(pmassduo->masspt, 0, pmassduo->massMax);
                 msync(pmassduo->masspt, pmassduo->massMax, MS_SYNC);
@@ -38122,18 +38242,23 @@ static int p6(struct procRes_s *rs)
                 pmassduo->massUsed = 0;
             }
 
-            h = 0;
-            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
-            if (ret) {
-                //val = 0;
-            }
+            h = val;
 
+            sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue);
+            print_f(rs->plogs, "P6", rs->logs); 
+            
             if ((param == 'E') || (h == 0)) {
                 rs_ipc_put(rs, "E", 1);
+                sprintf_f(rs->logs, "return \"E\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
             } else {
                 rs_ipc_put(rs, "D", 1);
+                sprintf_f(rs->logs, "return \"D\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
             }
             
             goto socketEnd;
@@ -38179,11 +38304,17 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            h = val;
+
             if (tmp == FILE_FORMAT_RAW) {
                 ph = &rs->pbheader->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
                 bheader = rs->pbheader;
-                clr=0;w=0;h=0;dpi=0;
+                clr=0;w=0;dpi=0;
                 
                 //dbgBitmapHeader(bheader, len);
                 
@@ -38205,13 +38336,6 @@ static int p6(struct procRes_s *rs)
                         break;
                 }
 
-                h = 0;
-                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
-                print_f(rs->plogs, "P6", rs->logs);
-                if (ret) {
-                    //val = 0;
-                }
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -38420,26 +38544,26 @@ static int p6(struct procRes_s *rs)
                 }
             }
 
+            ch = 0;
+            while (ch != 'c') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'c') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
             
             if (pmass->massRecd) {
-                ch = 0;
-                while (ch != 'c') {
-                    ret = rs_ipc_get(rs, &ch, 1);
-                    if (ret > 0) {
-                        if (ch == 'c') {
-                            sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        } else {
-                            sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        }
-                    } else {
-                        sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    }
-                }
-
                 masUsed = pmass->massUsed;
                 
                 while (!masUsed) {
@@ -38457,10 +38581,17 @@ static int p6(struct procRes_s *rs)
                 pmass->massUsed = 0;
             }
 
+            sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue);
+            print_f(rs->plogs, "P6", rs->logs); 
+            
             if ((param == 'E') || (h == 0)) {
                 rs_ipc_put(rs, "E", 1);
+                sprintf_f(rs->logs, "return \"E\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
             } else {
                 rs_ipc_put(rs, "C", 1);
+                sprintf_f(rs->logs, "return \"C\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
             }
 
             goto socketEnd;
@@ -38630,12 +38761,18 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
-            
+
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            h = val;
+                
             if (tmp == FILE_FORMAT_RAW) {
                 ph = &rs->pbheader->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
                 bheader = rs->pbheader;
-                clr=0;w=0;h=0;dpi=0;
+                clr=0;w=0;dpi=0;
                 
                 //dbgBitmapHeader(bheader, len);
                 
@@ -38657,13 +38794,6 @@ static int p6(struct procRes_s *rs)
                         break;
                 }
 
-                h = 0;
-                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
-                print_f(rs->plogs, "P6", rs->logs);
-                if (ret) {
-                    //val = 0;
-                }
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -38797,7 +38927,7 @@ static int p6(struct procRes_s *rs)
                 ph = &rs->pbheaderDuo->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
                 bheader = rs->pbheaderDuo;
-                clr=0;w=0;h=0;dpi=0;
+                clr=0;w=0;dpi=0;
                 
                 //dbgBitmapHeader(bheader, len);
                 
@@ -38819,13 +38949,12 @@ static int p6(struct procRes_s *rs)
                         break;
                 }
 
-                h = 0;
-                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &h, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "user defined image length: %d, ret:%d duo\n", h, ret);
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "user defined image length: %d, ret:%d duo\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
-                if (ret) {
-                    //val = 0;
-                }
+                hduo = val;
+                
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -38897,7 +39026,7 @@ static int p6(struct procRes_s *rs)
                     bitmapHeaderSetup(bheader, 24, 2160, 3496, 600, val);
                 }
 #else           
-                bitmapHeaderSetup(bheader, clr, w, h, dpi, val);
+                bitmapHeaderSetup(bheader, clr, w, hduo, dpi, val);
 #endif          
                 ph = &rs->pbheaderDuo->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
@@ -38948,14 +39077,6 @@ static int p6(struct procRes_s *rs)
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
                 //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
                 //print_f(rs->plogs, "P6", rs->logs);
-            }
-            
-            h = 0;
-            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            if (ret) {
-                //val = 0;
             }
             
             /* initial cropping config */
@@ -39221,7 +39342,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if 0
+#if LOG_P6_CROP_EN
                 sendbuf[5+n] = '\0';                
                 sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -39331,6 +39452,7 @@ static int p6(struct procRes_s *rs)
                 }
             }
 #endif
+            msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
             
             if (pmass->massRecd) {
                 if (ffrmt == FILE_FORMAT_RAW) {
@@ -39402,29 +39524,13 @@ static int p6(struct procRes_s *rs)
 
                 cof = cpx + 1;
 
-                ch = 0; ret = 0;
+                ret = 0;
 
                 masUsed = pmass->massUsed;
                 masStart = pmass->massStart;
 
                 sprintf_f(rs->logs, "wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
                 print_f(rs->plogs, "P6", rs->logs);
-
-                while (ch != 'd') {
-                    ret = rs_ipc_get(rs, &ch, 1);
-                    if (ret > 0) {
-                        if (ch == 'd') {
-                            sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        } else {
-                            sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        }
-                    } else {
-                        sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    }
-                }
 
                 cnt = 0;
                 
@@ -39540,7 +39646,7 @@ static int p6(struct procRes_s *rs)
                     pcpex->crpexRtPots[cpx*2+0] = cxn;
                     pcpex->crpexRtPots[cpx*2+1] = vhi;
                     
-#if LOG_P6_CROP_EN
+#if 0
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
 #if 0
@@ -39688,8 +39794,8 @@ static int p6(struct procRes_s *rs)
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
-                pmass->massRecd = 0;
-                pmass->massUsed = 0;
+                //pmass->massRecd = 0; /* move to the end of transmitting */ 
+                //pmass->massUsed = 0;
 
             } 
 
@@ -39854,29 +39960,13 @@ static int p6(struct procRes_s *rs)
 
                 cof = cpx + 1;
 
-                ch = 0; ret = 0;
+                ret = 0;
 
                 masUsed = pmassduo->massUsed;
                 masStart = pmassduo->massStart;
 
                 sprintf_f(rs->logs, "duo wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
                 print_f(rs->plogs, "P6", rs->logs);
-
-                while (ch != 'd') {
-                    ret = rs_ipc_get(rs, &ch, 1);
-                    if (ret > 0) {
-                        if (ch == 'd') {
-                            sprintf_f(rs->logs, "duo succeed to get ch == %c\n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        } else {
-                            sprintf_f(rs->logs, "duo wrong!! ch == %c \n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        }
-                    } else {
-                        sprintf_f(rs->logs, "duo failed to get ch ret: \n", ret);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    }
-                }
 
                 cnt = 0;
 
@@ -39992,7 +40082,7 @@ static int p6(struct procRes_s *rs)
                     pcpexduo->crpexRtPots[cpx*2+0] = cxn;
                     pcpexduo->crpexRtPots[cpx*2+1] = vhi;
                     
-#if LOG_P6_CROP_EN
+#if 0
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
 
@@ -40145,8 +40235,8 @@ static int p6(struct procRes_s *rs)
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
-                pmassduo->massRecd = 0;
-                pmassduo->massUsed = 0;
+                //pmassduo->massRecd = 0; /* move to the end of transmitting */
+                //pmassduo->massUsed = 0;
 
             } 
 #if !CROP_MIGRATE_TO_APP
@@ -40238,11 +40328,64 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
             }          
 #endif
+                
+            ch = 0; 
+            while (ch != 'd') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'd') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
 
+            ch = 0; 
+            while (ch != 'd') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'd') {
+                        sprintf_f(rs->logs, "duo succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "duo wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "duo failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+
+            if (pmass->massRecd) {
+                sprintf_f(rs->logs, "reset Record line and used buffer size, recd: %d, used: %d, duo recd: %d, used: %d\n", 
+                pmass->massRecd, pmass->massUsed, pmassduo->massRecd, pmassduo->massUsed);
+                print_f(rs->plogs, "P6", rs->logs);    
+            
+                pmass->massRecd = 0;
+                pmass->massUsed = 0;
+
+                pmassduo->massRecd = 0;
+                pmassduo->massUsed = 0;
+            }
+
+            sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue);
+            print_f(rs->plogs, "P6", rs->logs); 
+            
             if ((param == 'E') || (h == 0)) {
                 rs_ipc_put(rs, "E", 1);
+                sprintf_f(rs->logs, "return \"E\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
             } else {
                 rs_ipc_put(rs, "D", 1);
+                sprintf_f(rs->logs, "return \"D\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
             }
 
             goto socketEnd;
@@ -40251,7 +40394,31 @@ static int p6(struct procRes_s *rs)
         if (opcode == 0x19) { /* send CROP info (new)*/
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (CROP new)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
-     
+
+            ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+            switch (tmp) {
+            case RESOLUTION_1200:
+                dpi = 1200;
+                break;
+            case RESOLUTION_600:
+                dpi = 600;
+                break;
+            case RESOLUTION_300:
+                dpi = 300;
+                break;
+            case RESOLUTION_200:
+                dpi = 200;
+                break;
+            case RESOLUTION_150:
+                dpi = 150;
+                break;
+            default:
+                dpi = 300;
+                break;
+            }
+            sprintf_f(rs->logs, "user defined resulution: %d(dpi: %d), ret:%d\n", tmp, dpi, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             cnt = 0;
             while (1) {
                 num = 0;
@@ -40309,20 +40476,18 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
-
-            h = 0;
-            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &h, ASPOP_STA_APP);    
-            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", h, ret);
+                
+            val=0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
-            if (ret) {
-                //val = 0;
-            }
+            h = val;
                 
             if (tmp == FILE_FORMAT_RAW) {
                 ph = &rs->pbheader->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
                 bheader = rs->pbheader;
-                clr=0;w=0;dpi=0;
+                clr=0;w=0;
                 
                 //dbgBitmapHeader(bheader, len);
                 
@@ -40353,29 +40518,6 @@ static int p6(struct procRes_s *rs)
                 w = scanWidthConvert(t);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);                
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    dpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    dpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    dpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    dpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    dpi = 150;
-                    break;
-                default:
-                    dpi = 300;
-                    break;
-                }
-                sprintf_f(rs->logs, "user defined resulution: %d(dpi: %d), ret:%d\n", tmp, dpi, ret);
-                print_f(rs->plogs, "P6", rs->logs);
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
                 
@@ -40591,7 +40733,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if 0
+#if LOG_P6_CROP_EN
                 sendbuf[5+n] = '\0';         
                 sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -40674,7 +40816,8 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
             }
 #endif
-
+            msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
+            
 #if 1  /* skip for debug, anable later */
             if (pmass->massRecd) {
                 if (ffrmt == FILE_FORMAT_RAW) {
@@ -40746,7 +40889,7 @@ static int p6(struct procRes_s *rs)
 
                 cof = cpx + 1;
 
-                ch = 0; ret = 0;
+                ret = 0;
                 
                 masUsed = pmass->massUsed;
                 masStart = pmass->massStart;                
@@ -40754,24 +40897,9 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "wait meta mass (used:%d, start:%d) %d\n", masUsed, masStart, cnt); 
                 print_f(rs->plogs, "P6", rs->logs);
 
-                while (ch != 'c') {
-                    ret = rs_ipc_get(rs, &ch, 1);
-                    if (ret > 0) {
-                        if (ch == 'c') {
-                            sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        } else {
-                            sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
-                            print_f(rs->plogs, "P6", rs->logs);    
-                        }
-                    } else {
-                        sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    }
-                }
-
                 cnt = 0;
 
+                masUsed = pmass->massUsed;
                 while (!masUsed) {
                     usleep(500000);
                     msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
@@ -41036,8 +41164,8 @@ static int p6(struct procRes_s *rs)
                     usleep(100000);
                 }
 #endif                
-                pmass->massRecd = 0;
-                pmass->massUsed = 0;
+                //pmass->massRecd = 0; /* move to the end of transmitting */
+                //pmass->massUsed = 0;
 
             } 
 #endif
@@ -41136,10 +41264,43 @@ static int p6(struct procRes_s *rs)
             }
 #endif
 
+            ch = 0;
+            while (ch != 'c') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'c') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            
+            if (pmass->massRecd) {
+                sprintf_f(rs->logs, "reset Record line and used buffer size, recd: %d, used: %d\n", 
+                pmass->massRecd, pmass->massUsed);
+                print_f(rs->plogs, "P6", rs->logs);    
+                    
+                pmass->massRecd = 0;
+                pmass->massUsed = 0;
+            }
+
+            sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue);
+            print_f(rs->plogs, "P6", rs->logs);    
+
             if ((param == 'E') || (h == 0)) {
                 rs_ipc_put(rs, "E", 1);
+                sprintf_f(rs->logs, "return \"E\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
             } else {
                 rs_ipc_put(rs, "C", 1);
+                sprintf_f(rs->logs, "return \"C\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
             }
 
             goto socketEnd;
