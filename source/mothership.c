@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Aug 10 11:28:58 2017 f56c9aa163 [MULTI] enable image length == 0 break mechanism, reclinefix, addpro, memdump, fs113 log, recordline fixed, used fixed"
+#define MSP_VERSION "Aug 10 11:28:58 2017 f56c9aa163 [MULTI] enable image length == 0 break mechanism, reclinefix, addpro, memdump, fs113 log, recordline fixed, used fixed, bypass fat32 zero"
 
 #define SPI1_ENABLE (1) 
 
@@ -228,7 +228,7 @@ static int *totSalloc=0;
 #define FAT_DIRPOOL_IDX_MAX   (56850)
 #define FAT_DIRPOO_ARY_MAX   (65535)
 
-#define LOG_FS_EN (0)
+#define LOG_FS_EN (1)
 #define LOG_DOT_PROG_EN (0)
 
 #define ANSP0_RECOVER (1)
@@ -8263,9 +8263,18 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         //memset(fs, 0x00, sizeof(struct directnFile_s));
         goto fsparseEnd;
     } else if (ld == 0x00) {
-        //memset(fs, 0x00, sizeof(struct directnFile_s));
-        //return 0;
-        goto fsparseEnd;
+        for (n=1; n < 32; n++) {
+            if (raw[n] != 0) {
+                break;
+            }
+        }
+
+        if (n == 32) {
+            memset(fs, 0x00, sizeof(struct directnFile_s));
+            return (-4);
+        } else {
+            goto fsparseEnd;
+        }
     } else if ((fs->dfstats & 0xff) == ASPFS_STATUS_DIS) {
         pstN = fs->dfSFN;
         ret = aspNameCpyfromRaw(raw, pstN, 0, 11, 1);
@@ -8385,15 +8394,19 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         }
         
         goto fsparseEnd;
-    } else if ((ld & 0xf0) == 0x40) {
+    }
+    else if ((ld & 0xf0) == 0x40) {
         nd = raw[32];
         if (nd != ((ld & 0xf) - 1) || (nd == 0)) {
             //memset(fs, 0x00, sizeof(struct directnFile_s));
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
         }
-        //printf("\n LONG file name parsing...[0x%.2x] \n", ld);
-    
+        
+#if LOG_FS_EN
+        printf("\n LONG file name parsing...[0x%.2x] \n", ld);
+#endif
+
         ret = 0;
         if (raw[11] != 0x0f) {
             ret = -5;
@@ -8429,11 +8442,17 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
-        //printf("LONG file name parsing... go to next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
+        
+#if LOG_FS_EN
+        printf("LONG file name parsing... go to next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
+#endif
         return ret;
     }
     else if ((fs->dfstats & 0xff) == ASPFS_STATUS_ING) {
-        //printf("LONG file name parsing... the next \n");
+    
+#if LOG_FS_EN
+        printf("LONG file name parsing... the next \n");
+#endif
         ret = 0;
         idx = (fs->dfstats >> 8) & 0xf;
         if (ld != (idx - 1)) {
@@ -8473,10 +8492,12 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         plnN += fs->dflen;
         cnt = aspLnameAbs(raw, plnN);
         fs->dflen += cnt;
-        //printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
-
+#if LOG_FS_EN
+        printf("LONG file name parsing... go to the next's next ret:%d len:%d cnt:%d\n", ret, fs->dflen, cnt);
+#endif
         return ret;
-    }else {
+    }
+    else {
             //memset(fs, 0x00, sizeof(struct directnFile_s));
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
@@ -8606,8 +8627,10 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
         cnt++;
         
         ret = aspRawParseDir(dkbuf, dfs, max);
-        if (!ret) break;
-        //printf("[%d] ret: %d, last:%d \n", cnt, ret, max);
+        if (ret <= 0) break;
+#if LOG_FS_EN
+        printf("[R] cnt:%d ret: %d, last:%d \n", cnt, ret, max);
+#endif
     }
 
 #if LOG_FS_EN
@@ -20607,8 +20630,6 @@ static uint32_t shmem_check(char *src, int size)
 {
 #define CHK_LEN (2048)
     uint32_t tag = 0;
-
-    return;
 
     tag = (uint32_t)src;
 
