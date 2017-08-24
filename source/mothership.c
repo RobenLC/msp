@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Aug 10 11:28:58 2017 f56c9aa163 [MULTI] enable image length == 0 break mechanism, reclinefix, addpro, memdump, fs113 log, recordline fixed, used fixed, bypass fat32 zero"
+#define MSP_VERSION "Thu Aug 17 13:43:07 2017 8934ebf7f7 [FAT32] fix zero zoom parsing issue, mocr, handscan"
 
 #define SPI1_ENABLE (1) 
 
@@ -66,7 +66,11 @@ static int *totSalloc=0;
 #define OP_DOUBLE      0x5
 #define OP_ACTION       0x6
 #define OP_FIH             0x7
-#define OP_RAW           0x8
+#define OP_RAW            0x8
+#define OP_MSINGLE     0x9
+#define OP_MDOUBLE     0xa
+#define OP_HANDSCAN  0xb
+#define OP_NOTESCAN  0xc
 
 /* SD read write operation */               
 #define OP_SDRD            0x20
@@ -143,6 +147,9 @@ static int *totSalloc=0;
 #define OP_FUNCTEST_14              0x7E
 #define OP_FUNCTEST_15              0x7F
 
+#define OP_BLEEDTHROU_ADJUST 0x81
+#define OP_BLACKWHITE_THSHLD 0x82
+
 /* debug */
 
 #define OP_SAVE              0x80
@@ -187,6 +194,7 @@ static int *totSalloc=0;
 #define OUT_BUFF_LEN  (64*1024)
 #define CROP_MAX_NUM_META (18)
 
+#define CHECK_SOCKET_STATUS (0)
 //#define DEBUG_CROP_ENABLE 
 #ifdef DEBUG_CROP_ENABLE
 #define CROP_CALCU_DETAIL (0)
@@ -228,7 +236,7 @@ static int *totSalloc=0;
 #define FAT_DIRPOOL_IDX_MAX   (56850)
 #define FAT_DIRPOO_ARY_MAX   (65535)
 
-#define LOG_FS_EN (1)
+#define LOG_FS_EN (0)
 #define LOG_DOT_PROG_EN (0)
 
 #define ANSP0_RECOVER (1)
@@ -376,6 +384,8 @@ typedef enum {
     ASPOP_FUNTEST_13,
     ASPOP_FUNTEST_14,
     ASPOP_FUNTEST_15,
+    ASPOP_BLEEDTHROU_ADJUST,
+    ASPOP_BLACKWHITE_THSHLD,
     ASPOP_CROP_01,
     ASPOP_CROP_02, /* 70 */
     ASPOP_CROP_03,
@@ -467,9 +477,20 @@ typedef enum {
 typedef enum {
     DOUSCAN_NONE=0,
     DOUSCAN_WIFI_ONLY,
+    DOUSCAN_SD_ONLY,
     DOUSCAN_WIFI_SD,
-    DOUSCAN_WHIT_BLNC,
 } doubleScan_e;
+
+typedef enum {
+    NOTESCAN_NONE=0,
+    NOTESCAN_OPTION_01,
+    NOTESCAN_OPTION_02,
+    NOTESCAN_OPTION_03,
+    NOTESCAN_OPTION_04,
+    NOTESCAN_OPTION_05,
+    NOTESCAN_OPTION_06,
+    NOTESCAN_OPTION_07,
+} noteScan_e;
 
 typedef enum {
     SUPBACK_NONE=0,
@@ -886,27 +907,29 @@ struct aspMetaData_s{
   unsigned char  WIDTH_ADJUST_L;          //0x38
   unsigned char  SCAN_LENGTH_H;           //0x39
   unsigned char  SCAN_LENGTH_L;           //0x3a
-  unsigned char  INTERNAL_IMG;            //0x3b
-  unsigned char  AFE_IC_SELEC;            //0x3c
+  unsigned char  INTERNAL_IMG;             //0x3b
+  unsigned char  AFE_IC_SELEC;             //0x3c
   unsigned char  EXTNAL_PULSE;            //0x3d
   unsigned char  SUP_WRITEBK;             //0x3e
-  unsigned char  OP_FUNC_00;              //0x70
-  unsigned char  OP_FUNC_01;              //0x71
-  unsigned char  OP_FUNC_02;              //0x72
-  unsigned char  OP_FUNC_03;              //0x73
-  unsigned char  OP_FUNC_04;              //0x74
-  unsigned char  OP_FUNC_05;              //0x75
-  unsigned char  OP_FUNC_06;              //0x76
-  unsigned char  OP_FUNC_07;              //0x77
-  unsigned char  OP_FUNC_08;              //0x78
-  unsigned char  OP_FUNC_09;              //0x79
-  unsigned char  OP_FUNC_10;              //0x7A
-  unsigned char  OP_FUNC_11;              //0x7B
-  unsigned char  OP_FUNC_12;              //0x7C
-  unsigned char  OP_FUNC_13;              //0x7D
-  unsigned char  OP_FUNC_14;              //0x7E
-  unsigned char  OP_FUNC_15;              //0x7F  
-  unsigned char  OP_RESERVE[28];          // byte[64]
+  unsigned char  OP_FUNC_00;               //0x70
+  unsigned char  OP_FUNC_01;               //0x71
+  unsigned char  OP_FUNC_02;               //0x72
+  unsigned char  OP_FUNC_03;               //0x73
+  unsigned char  OP_FUNC_04;               //0x74
+  unsigned char  OP_FUNC_05;               //0x75
+  unsigned char  OP_FUNC_06;               //0x76
+  unsigned char  OP_FUNC_07;               //0x77
+  unsigned char  OP_FUNC_08;               //0x78
+  unsigned char  OP_FUNC_09;               //0x79
+  unsigned char  OP_FUNC_10;               //0x7A
+  unsigned char  OP_FUNC_11;               //0x7B
+  unsigned char  OP_FUNC_12;               //0x7C
+  unsigned char  OP_FUNC_13;               //0x7D
+  unsigned char  OP_FUNC_14;               //0x7E
+  unsigned char  OP_FUNC_15;               //0x7F  
+  unsigned char  BLEEDTHROU_ADJUST; //0x81
+  unsigned char  BLACKWHITE_THSHLD; //0x82  
+  unsigned char  OP_RESERVE[26];          // byte[64]
   
   /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
   struct intMbs_s CROP_POS_1;        //byte[68]
@@ -1803,6 +1826,10 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta)
         print_f(mlogPool, "META", mlog);
         sprintf_f(mlog, "OP_FUNC_15: 0x%.2x      \n",pmeta->OP_FUNC_15      );     //0x7F  
         print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "BLEEDTHROU_ADJUST: 0x%.2x      \n",pmeta->BLEEDTHROU_ADJUST);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "BLACKWHITE_THSHLD: 0x%.2x      \n",pmeta->BLACKWHITE_THSHLD);
+        print_f(mlogPool, "META", mlog);
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
@@ -2032,7 +2059,32 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
                  break;
             }
         }
+
+        opSt = OP_BLEEDTHROU_ADJUST;
+        opEd = OP_BLACKWHITE_THSHLD;
+
+        istr = ASPOP_BLEEDTHROU_ADJUST;
+        iend = ASPOP_BLACKWHITE_THSHLD;
         
+        pvdst = &pmeta->BLEEDTHROU_ADJUST;
+        pvend = &pmeta->BLACKWHITE_THSHLD;
+
+        for (idx = istr; idx <= iend; idx++) {
+            if ((pct[idx].opStatus & ASPOP_STA_CON) && (pct[idx].opCode == opSt)) {
+                *pvdst = pct[idx].opValue & 0xff;
+                printf("[meta] 0x%.2x = 0x%.2x (0x%.2x)\n", pct[idx].opCode, pct[idx].opValue, pct[idx].opStatus);
+
+                pvdst++;
+                opSt++;
+            }
+
+            if (pvend < pvdst) {
+                 break;
+            }
+            if (opEd < opSt) {
+                 break;
+            }
+        }
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
@@ -2150,10 +2202,14 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         pmeta = mrs->metain;
         pct = mrs->configTable;
         pmass = &mrs->metaMass;
+
+        //printf("[aspMetaRelease] from mrs!!funcbits: 0x%x \n", funcbits);
     } else {
         pmeta = rs->pmetain;
         pct = rs->pcfgTable;
         pmass = rs->pmetaMass;
+        
+        //printf("[aspMetaRelease] from rs!!funcbits: 0x%x \n", funcbits);
     }
     
     msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
@@ -12784,9 +12840,16 @@ static int stdob_01(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+        
+#if CHECK_SOCKET_STATUS
             ch = 25; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
+#else
+            data->ansp0 = 1;
+            data->result = emb_result(data->result, NEXT);
+#endif
+
             sprintf_f(rs->logs, "op_01: result: %x, goto %d\n", data->result, ch); 
             print_f(rs->plogs, "DOB", rs->logs);  
             break;
@@ -12827,9 +12890,16 @@ static int stdob_02(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+        
+#if CHECK_SOCKET_STATUS
             ch = 27; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
+#else
+            data->ansp0 = 1;
+            data->result = emb_result(data->result, NEXT);
+#endif
+
             sprintf_f(rs->logs, "op_02: result: %x, goto %d\n", data->result, ch); 
             print_f(rs->plogs, "DOB", rs->logs);  
             break;
@@ -12894,7 +12964,7 @@ static int stdob_03(struct psdata_s *data)
                 switch(pdt->opValue) {
                     case DOUSCAN_WIFI_ONLY:
                     case DOUSCAN_WIFI_SD:
-                    //case DOUSCAN_WHIT_BLNC:
+                    //case DOUSCAN_SD_ONLY:
 
                         ch = 41; 
                         c->opcode =  pdt->opCode;
@@ -13150,11 +13220,11 @@ static int stdob_08(struct psdata_s *data)
                     data->bkofw = emb_fw(data->bkofw, DOUBLED, PSACT);
                     sprintf_f(rs->logs, "op_08: DOUSCAN_WIFI_SD go to next!!\n"); 
                     print_f(rs->plogs, "DOB", rs->logs);  
-                } else if (pdt->opValue == DOUSCAN_WHIT_BLNC) {
+                } else if (pdt->opValue == DOUSCAN_SD_ONLY) {
                     pdt->opStatus = ASPOP_STA_UPD;
                     data->ansp0 = 3;
                     data->result = emb_result(data->result, NEXT);
-                    sprintf_f(rs->logs, "op_08: DOUSCAN_WHIT_BLNC go to next!!\n"); 
+                    sprintf_f(rs->logs, "op_08: DOUSCAN_SD_ONLY go to next!!\n"); 
                     print_f(rs->plogs, "DOB", rs->logs);  
                 } else {
                     sprintf_f(rs->logs, "WARNING!!! op_74, opValue is unexpected val:%x\n", pdt->opValue);
@@ -14799,9 +14869,16 @@ static int stsup_33(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+        
+#if CHECK_SOCKET_STATUS
             ch = 25; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
+#else
+            data->ansp0 = 1;
+            data->result = emb_result(data->result, NEXT);
+#endif
+
             //sprintf_f(rs->logs, "op_33: result: %x, goto %d\n", data->result, ch); 
             //print_f(rs->plogs, "SIG", rs->logs);  
             break;
@@ -14832,7 +14909,7 @@ static int stsup_34(struct psdata_s *data)
     char str[128], ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct info16Bit_s *p=0, *c=0;
+    struct info16Bit_s *p=0, *c=0, *t=0;
     struct aspConfig_s *pct=0, *pdt=0;
 
     pct = data->rs->pcfgTable;
@@ -14841,6 +14918,7 @@ static int stsup_34(struct psdata_s *data)
     
     p = &rs->pmch->get;
     c = &rs->pmch->cur;
+    t = &rs->pmch->tmp;
 
     //sprintf_f(rs->logs, "op_34 rlt:0x%x \n", rlt); 
     //print_f(rs->plogs, "SIG", rs->logs);  
@@ -14848,7 +14926,8 @@ static int stsup_34(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = &pct[ASPOP_SCAN_SINGLE];
-            if (pdt->opCode != OP_SINGLE) {
+            if ((pdt->opCode != OP_SINGLE) && (pdt->opCode != OP_MSINGLE)
+                && (pdt->opCode != OP_HANDSCAN)) {
                 sprintf_f(rs->logs, "op34, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "SIG", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -14866,7 +14945,17 @@ static int stsup_34(struct psdata_s *data)
                     //case SINSCAN_DUAL_STRM: /*not going here*/
                     //case SINSCAN_DUAL_SD:
                         ch = 41; 
-                        c->opcode =  pdt->opCode;
+/*
+                        if (pdt->opCode != t->opcode) {
+                            c->opcode =  t->opcode;
+
+                            sprintf_f(rs->logs, "op34 WARNING!!! use temp opcode:%x \n", t->opcode); 
+                            print_f(rs->plogs, "SIG", rs->logs);  
+                            
+                        } else {
+                            c->opcode =  pdt->opCode;
+                        }
+*/
                         c->data = pdt->opValue;
                         memset(p, 0, sizeof(struct info16Bit_s));
 
@@ -15154,7 +15243,7 @@ static int stupd_40(struct psdata_s *data)
             print_f(rs->plogs, "OCR", rs->logs);  
 
             memset(str, 0, 128);
-            shmem_dump(pmass->masspt, pmass->massUsed);
+            shmem_dump(pmass->masspt, 32);
             bin2hex(str, pmass->masspt, 32);
 
             sprintf_f(rs->logs, "op_40: bin to hex :\n [%s]\n", str); 
@@ -16719,7 +16808,8 @@ static int stwtbak_66(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = &pct[ASPOP_SCAN_SINGLE];
-            if (pdt->opCode != OP_SINGLE) {
+            if ((pdt->opCode != OP_SINGLE) && (pdt->opCode != OP_MSINGLE)
+                && (pdt->opCode != OP_HANDSCAN)) {
                 sprintf_f(rs->logs, "op66, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -16797,7 +16887,8 @@ static int stwtbak_67(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = &pct[ASPOP_SCAN_SINGLE];
-            if (pdt->opCode != OP_SINGLE) {
+            if ((pdt->opCode != OP_SINGLE) && (pdt->opCode != OP_MSINGLE)
+                && (pdt->opCode != OP_HANDSCAN)) {
                 sprintf_f(rs->logs, "op67, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -17106,11 +17197,11 @@ static int stwtbak_72(struct psdata_s *data)
         case STINIT:
             pdt = &pct[ASPOP_SUP_SAVE];
             if (pdt->opCode != OP_SUPBACK) {
-                sprintf_f(rs->logs, "op_72, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
+                sprintf_f(rs->logs, "op_72, OP_SUPBACK opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else if (!(pdt->opStatus & ASPOP_STA_CON)) {
-                sprintf_f(rs->logs, "op_72, OP_SINGLE status is wrong val:%x\n", pdt->opStatus); 
+                sprintf_f(rs->logs, "op_72, OP_SUPBACK status is wrong val:%x\n", pdt->opStatus); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else {
@@ -17181,7 +17272,8 @@ static int stwtbak_73(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = &pct[ASPOP_SCAN_SINGLE];
-            if (pdt->opCode != OP_SINGLE) {
+            if ((pdt->opCode != OP_SINGLE) && (pdt->opCode != OP_MSINGLE)
+                && (pdt->opCode != OP_HANDSCAN)) {
                 sprintf_f(rs->logs, "op_73, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -17268,7 +17360,8 @@ static int stwtbak_74(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = &pct[ASPOP_SCAN_SINGLE];
-            if (pdt->opCode != OP_SINGLE) {
+            if ((pdt->opCode != OP_SINGLE) && (pdt->opCode != OP_MSINGLE)
+                && (pdt->opCode != OP_HANDSCAN)) {
                 sprintf_f(rs->logs, "op_74, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "WTBAK", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -18325,7 +18418,7 @@ static int stsparam_88(struct psdata_s *data)
                         case ASPMETA_CROP_300DPI:
                         case ASPMETA_CROP_600DPI:
                             if (act < 0) {
-                                cfgTableSet(pct, ASPOP_IMG_LEN, 0);
+                                //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
                                 
                                 sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!\n"); 
                                 print_f(rs->plogs, "SPM", rs->logs);  
@@ -18999,7 +19092,7 @@ static int stmetaduo_97(struct psdata_s *data)
                         case ASPMETA_CROP_300DPI_DUO:
                         case ASPMETA_CROP_600DPI_DUO:
                             if (act < 0) {
-                                cfgTableSet(pct, ASPOP_IMG_LEN, 0);
+                                //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
                                 
                                 sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!\n"); 
                                 print_f(rs->plogs, "MDUO", rs->logs);  
@@ -19475,9 +19568,16 @@ static int stmetasd_105(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+        
+#if CHECK_SOCKET_STATUS
             ch = 25; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
+#else
+            data->ansp0 = 1;
+            data->result = emb_result(data->result, NEXT);
+#endif
+
             //sprintf_f(rs->logs, "op_105: result: %x, goto %d\n", data->result, ch); 
             //print_f(rs->plogs, "OCR", rs->logs);  
             break;
@@ -19509,36 +19609,60 @@ static int stocrw_106(struct psdata_s *data)
     uint32_t rlt;
     struct procRes_s *rs;
     struct info16Bit_s *p=0, *c=0, *t=0;
-
+    struct aspConfig_s *pct=0, *pdt=0;
+    
     rs = data->rs;
     rlt = abs_result(data->result); 
     c = &rs->pmch->cur;
     p = &rs->pmch->get;
+    pct = data->rs->pcfgTable;
     
-    //sprintf_f(rs->logs, "op_106 rlt:0x%x \n", rlt); 
+    //sprintf_f(rs->logs, "op106 rlt:0x%x \n", rlt); 
     //print_f(rs->plogs, "OCR", rs->logs);  
 
     switch (rlt) {
         case STINIT:
+            pdt = &pct[ASPOP_SCAN_SINGLE];
+            if (pdt->opCode != OP_NOTESCAN) {
+                sprintf_f(rs->logs, "op106, OP_NOTESCAN opcode is wrong val:%x\n", pdt->opCode); 
+                print_f(rs->plogs, "OCR", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (!(pdt->opStatus & ASPOP_STA_WR)) {
+                sprintf_f(rs->logs, "op106, OP_NOTESCAN status is wrong val:%x\n", pdt->opStatus); 
+                print_f(rs->plogs, "OCR", rs->logs);  
+                data->result = emb_result(data->result, EVTMAX);
+            } else {
+                switch(pdt->opValue) {
+                    case NOTESCAN_OPTION_01:
+                    case NOTESCAN_OPTION_02:
+                    case NOTESCAN_OPTION_03:
+                    case NOTESCAN_OPTION_04:
+                    case NOTESCAN_OPTION_05:
+                    case NOTESCAN_OPTION_06:
+                    case NOTESCAN_OPTION_07:
 
-            //c->opcode = OP_META_DAT;
-            //c->data = ASPMETA_SD;
-            
-            c->opcode = OP_SINGLE;
-            c->data = SINSCAN_WIFI_ONLY;
-                
-            memset(p, 0, sizeof(struct info16Bit_s));
+                        ch = 41; 
+                        
+                        c->opcode = pdt->opCode;
+                        c->data = pdt->opValue;
+                        memset(p, 0, sizeof(struct info16Bit_s));
 
+                        rs_ipc_put(data->rs, &ch, 1);
+                        data->result = emb_result(data->result, WAIT);
+                        //sprintf_f(rs->logs, "op106: result: %x, goto %d\n", data->result, ch); 
+                        //print_f(rs->plogs, "OCR", rs->logs);  
+                        break;
+                    default:
+                        sprintf_f(rs->logs, "ERROR!!! op106, opValue is unexpected val:%x\n", pdt->opValue);
+                        print_f(rs->plogs, "OCR", rs->logs);  
+                        data->result = emb_result(data->result, EVTMAX);
+                        break;
+                }
+            }
+                           
             //aspMetaClear(0, rs, ASPMETA_OUTPUT);
             //aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
             //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
-
-            ch = 41; 
-            rs_ipc_put(data->rs, &ch, 1);                
-
-            data->result = emb_result(data->result, WAIT);
-            //sprintf_f(rs->logs, "op_106: result: %x, goto %d\n", data->result, ch); 
-            //print_f(rs->plogs, "OCR", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -19730,7 +19854,7 @@ static int stocrw_110(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
-            //act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
+            act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
 
             //sprintf_f(rs->logs, "op_110 act: 0x%x \n", act); 
             //print_f(rs->plogs, "OCR", rs->logs);  
@@ -20194,9 +20318,14 @@ static int stbullet_01(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+#if CHECK_SOCKET_STATUS
             ch = 10; 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
+#else
+            data->ansp0 = 1;
+            data->result = emb_result(data->result, NEXT);
+#endif
             //sprintf_f(str, "op_01: result: %x\n", data->result); 
             //print_f(mlogPool, "bullet", str);  
 
@@ -20228,12 +20357,13 @@ static int stbullet_02(struct psdata_s *data)
     uint32_t rlt;
     char str[128], ch = 0; 
     struct aspConfig_s *pct=0, *pdt=0;
-    struct info16Bit_s *p=0, *t=0;
+    struct info16Bit_s *p=0, *t=0, *c=0;
     struct procRes_s *rs;
 
     rs = data->rs;
     p = &rs->pmch->get;
     t = &rs->pmch->tmp;
+    c = &rs->pmch->cur;
     pct = data->rs->pcfgTable;
     rlt = abs_result(data->result); 
     //sprintf_f(str, "op_02: rlt: %.8x result: %.8x ans:%d\n", rlt, data->result, data->ansp0); 
@@ -20242,7 +20372,8 @@ static int stbullet_02(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = &pct[ASPOP_SCAN_SINGLE];
-            if (pdt->opCode != OP_SINGLE) {
+            if ((pdt->opCode != OP_SINGLE) && (pdt->opCode != OP_MSINGLE)
+                && (pdt->opCode != OP_HANDSCAN)) {
                 sprintf_f(rs->logs, "op02, OP_SINGLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "SIG", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
@@ -20251,7 +20382,18 @@ static int stbullet_02(struct psdata_s *data)
                 print_f(rs->plogs, "SIG", rs->logs);  
 
                         ch = 12; 
-                        t->opcode =  OP_SINGLE;;
+/*
+                        if (pdt->opCode != t->opcode) {
+                            c->opcode =  t->opcode;
+
+                            sprintf_f(rs->logs, "op_02 WARNING!!! use temp opcode:%x \n", t->opcode); 
+                            print_f(rs->plogs, "SIG", rs->logs);  
+                            
+                        } else {
+                            c->opcode =  pdt->opCode;
+                        }
+*/
+                        t->opcode =  pdt->opCode;;
                         t->data = SINSCAN_DUAL_STRM;
                         memset(p, 0, sizeof(struct info16Bit_s));
 
@@ -21725,6 +21867,7 @@ static int cmdfunc_act_opcode(int argc, char *argv[])
     int ret=0, ix=0, n=0, brk=0;
     struct aspWaitRlt_s *pwt;
     struct info16Bit_s *pkt;
+    struct aspConfig_s* ctb = 0;
     struct mainRes_s *mrs=0;
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
@@ -21742,10 +21885,13 @@ static int cmdfunc_act_opcode(int argc, char *argv[])
     pwt->wtChan = 6;
     pwt->wtMs = 300;
 
+    ctb = &mrs->configTable[ASPOP_ACTION];
+    
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_ACTION;
-    pkt->data = ACTION_OPTION_01;
+    pkt->opcode = ctb->opCode;
+    pkt->data = ctb->opValue;
+    
     n = cmdfunc_upd2host(mrs, 't', &rsp);
     if ((n == -32) || (n == -33)) {
         brk = 1;
@@ -22230,9 +22376,14 @@ static int cmdfunc_tgr_opcode(int argc, char *argv[])
     int n=0, ix=0, ret=0;
     char ch=0, opcode[5], param=0;
     uint32_t tg=0, cd=0;
+    struct aspConfig_s *ctb = 0, *pct = 0;
     struct mainRes_s *mrs=0;
+    
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
+
+    pct = mrs->configTable;
+    
     sprintf_f(mrs->log, "cmdfunc_tgr_opcode argc:%d\n", argc); 
     print_f(&mrs->plog, "DBG", mrs->log);
     /* get opcode and parameter */
@@ -22260,13 +22411,34 @@ static int cmdfunc_tgr_opcode(int argc, char *argv[])
     if (opcode[2] != '/') {ret = -5; goto end;}
 
     tg = opcode[1];
-    struct aspConfig_s* ctb = 0;
+/*
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
-        ctb = &mrs->configTable[ix];
+        ctb = pct[ix];
         if (tg == ctb->opCode) {
             break;
         }
         ctb = 0;
+    }
+*/
+    switch (tg) {
+        case OP_SINGLE:
+        case OP_MSINGLE:
+        case OP_HANDSCAN:
+        case OP_NOTESCAN:
+            ctb = &pct[ASPOP_SCAN_SINGLE];
+            ctb->opCode = tg;
+            break;
+        case OP_DOUBLE:
+        case OP_MDOUBLE:
+            ctb = &pct[ASPOP_SCAN_DOUBLE];
+            ctb->opCode = tg;
+            break;
+        case OP_ACTION:
+            ctb = &pct[ASPOP_ACTION];
+            break;
+        default:
+            ctb = 0;
+            break;
     }
 
     if (!ctb) {
@@ -22300,7 +22472,7 @@ static int cmdfunc_tgr_opcode(int argc, char *argv[])
         print_f(&mrs->plog, "DBG", mrs->log);
     }
 
-    msync(mrs->configTable, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
+    msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
     
     param = ctb->opValue;
 
@@ -22367,7 +22539,7 @@ static int cmdfunc_mdouble_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_SINGLE;
+    pkt->opcode = OP_MDOUBLE;
     pkt->data = SINSCAN_DUAL_STRM;
     
     /* refresh status */
@@ -22423,6 +22595,7 @@ static int cmdfunc_msingle_opcode(int argc, char *argv[])
     int ret=0, ix=0, n=0, brk=0;
     struct aspWaitRlt_s *pwt;
     struct info16Bit_s *pkt;
+    struct aspConfig_s* ctb = 0;
     struct mainRes_s *mrs=0;
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
@@ -22442,8 +22615,12 @@ static int cmdfunc_msingle_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    pkt->opcode = OP_SINGLE;
+    pkt->opcode = OP_MSINGLE;
     pkt->data = SINSCAN_WIFI_ONLY;
+
+    /* refresh status */
+    ctb = &mrs->configTable[ASPOP_SCAN_SINGLE];
+    ctb->opStatus |= ASPOP_STA_WR;
 
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
@@ -22492,12 +22669,94 @@ end:
     return ret;
 }
 
+static int cmdfunc_mocr_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0, ch=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct aspConfig_s* ctb = 0;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_mocr_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_NOTESCAN;
+    pkt->data = NOTESCAN_OPTION_01;
+
+    /* refresh status */
+    ctb = &mrs->configTable[ASPOP_SCAN_SINGLE];
+    ctb->opStatus |= ASPOP_STA_WR;
+    ctb->opCode = OP_NOTESCAN;
+
+    clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    sprintf(mrs->log, "=====_SINGLE_SCAN_ BEG=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+    
+    n = cmdfunc_upd2host(mrs, '3', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) || (rsp != 0x1)) {
+         sprintf_f(mrs->log, "break loop!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -1;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_msingle_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    sprintf(mrs->log, "=====_SINGLE_SCAN_ END=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
+    if (brk | ret) {
+        ch = 'e';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        sprintf(mrs->log, "E,%d,%d", ret, brk);
+    } else {
+        ch = 'd';
+        mrs_ipc_put(mrs, &ch, 1, 5);
+
+        sprintf(mrs->log, "D,%d,%d", ret, brk);
+    }
+    
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+
+    printf_dbgflush(&mrs->plog, mrs);
+
+    printf_flush(&mrs->plog, mrs->flog);    
+    
+    return ret;
+}
+
 static int cmdfunc_ocr_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0, ch=0;
     int ret=0, ix=0, n=0, brk=0;
     struct aspWaitRlt_s *pwt;
     struct info16Bit_s *pkt;
+    struct aspConfig_s* ctb = 0;
     struct mainRes_s *mrs=0;
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
@@ -22516,14 +22775,19 @@ static int cmdfunc_ocr_opcode(int argc, char *argv[])
     pwt->wtMs = 300;
 
     n = 0; rsp = 0;
+
     /* set data for update to scanner */
-    pkt->opcode = OP_RAW;
-    pkt->data = 0;
+    pkt->opcode = OP_NOTESCAN;
+    pkt->data = SINSCAN_WIFI_ONLY;
+
+    /* refresh status */
+    ctb = &mrs->configTable[ASPOP_SCAN_SINGLE];
+    ctb->opStatus |= ASPOP_STA_WR;
 
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
 
-//    sprintf(mrs->log, "=====_UPLOAD_SD_ BEG=====");
-//    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+    sprintf(mrs->log, "=====_SINGLE_SCAN_ BEG=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
     
     n = cmdfunc_upd2host(mrs, '3', &rsp);
     if ((n == -32) || (n == -33)) {
@@ -22541,8 +22805,8 @@ static int cmdfunc_ocr_opcode(int argc, char *argv[])
     print_f(&mrs->plog, "DBG", mrs->log);
 end:
 
-//    sprintf(mrs->log, "=====_UPLOAD_SD_ END=====");
-//    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+    sprintf(mrs->log, "=====_SINGLE_SCAN_ END=====");     
+    dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
 
     if (brk | ret) {
         sprintf(mrs->log, "OCR_NG,%d,%d", ret, brk);
@@ -22553,7 +22817,8 @@ end:
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
     printf_dbgflush(&mrs->plog, mrs);
-
+    printf_flush(&mrs->plog, mrs->flog);    
+    
     return ret;
 }
 
@@ -23735,7 +24000,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 35
+#define CMD_SIZE 36
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -23749,7 +24014,7 @@ static int dbg(struct mainRes_s *mrs)
                                 , {20, "sdon", cmdfunc_sdon_opcode}, {21, "wfisd", cmdfunc_wfisd_opcode}, {22, "dulsd", cmdfunc_dulsd_opcode}, {23, "tgr", cmdfunc_tgr_opcode}
                                 , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}
                                 , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}, {31, "upsd", cmdfunc_upsd_opcode}
-                                , {32, "ocr", cmdfunc_ocr_opcode}, {33, "msingle", cmdfunc_msingle_opcode}, {34, "mdouble", cmdfunc_mdouble_opcode}};
+                                , {32, "ocr", cmdfunc_ocr_opcode}, {33, "msingle", cmdfunc_msingle_opcode}, {34, "mdouble", cmdfunc_mdouble_opcode}, {35, "mocr", cmdfunc_mocr_opcode}};
 
     p0_init(mrs);
 
@@ -24478,8 +24743,12 @@ static int fs17(struct mainRes_s *mrs, struct modersp_s *modersp)
     usleep(100);
     mrs_ipc_put(mrs, "d", 1, 1);
     //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
-
+#if CHECK_SOCKET_STATUS
     modersp->m = modersp->m + 1;
+#else
+    modersp->d = modersp->m + 1;
+    modersp->m = 25;
+#endif
     modersp->v = 0;
     modersp->c = 0;
     return 2;
@@ -24910,7 +25179,7 @@ static int fs25(struct mainRes_s *mrs, struct modersp_s *modersp)
                 aspMemClear(aspMemAsign, asptotMalloc, 10);
                 break;
             case DOUSCAN_WIFI_SD:
-                //case DOUSCAN_WHIT_BLNC:  
+                //case DOUSCAN_SD_ONLY:  
                 break;       
             default:
                 sprintf_f(mrs->log, "WARNING: unexpected ASPOP_SCAN_DOUBLE table val: 0x%x \n", val_d);
@@ -24940,9 +25209,20 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs26", mrs->log);
 
         if (ch == 'R') {
+#if CHECK_SOCKET_STATUS
             modersp->r = 1;
             //modersp->m = modersp->m + 1;
             return 1;
+#else
+            if (modersp->d) {
+                modersp->m = modersp->d;
+                modersp->d = 0;
+                return 0;
+            } else {
+                modersp->r = 1;
+                return 1;
+            }
+#endif
         } else if (ch == 'r') {
             error_handle("socket error", 3421);
             modersp->r = 2;
@@ -24984,7 +25264,7 @@ static int fs27(struct mainRes_s *mrs, struct modersp_s *modersp)
             aspMemClear(aspMemAsign, asptotMalloc, 10);
             break;
         case DOUSCAN_WIFI_SD:
-        //case DOUSCAN_WHIT_BLNC:
+        //case DOUSCAN_SD_ONLY:
             break;       
         default:
             sprintf_f(mrs->log, "WARNING: unexpected ASPOP_SCAN_DOUBLE table val: 0x%x \n", val);
@@ -25013,8 +25293,13 @@ static int fs28(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs28", mrs->log);
 
         if (ch == 'R') {
+#if CHECK_SOCKET_STATUS
             modersp->r = 1;
             return 1;
+#else
+            modersp->m = 25;
+            return 0;
+#endif
         } else if (ch == 'r') {
             error_handle("socket error", 3463);
             modersp->r = 2;
@@ -25170,8 +25455,12 @@ static int fs34(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs34", mrs->log);
     
     mrs_ipc_put(mrs, "n", 1, 1);
-
+#if CHECK_SOCKET_STATUS
     modersp->m = modersp->m + 1;
+#else
+    modersp->d = modersp->m + 1;
+    modersp->m = 27;
+#endif
     modersp->v = 0;
     modersp->c = 0;
     return 2;
@@ -27163,9 +27452,13 @@ static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
     mrs_ipc_put(mrs, "n", 1, 1);
     
     //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
-
+#if CHECK_SOCKET_STATUS
     modersp->v = 0;
     modersp->m = modersp->m + 1;
+#else
+    modersp->d = modersp->m + 1;
+    modersp->m = 25;
+#endif
     return 2;
 }
 static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp) 
@@ -37157,6 +37450,11 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                 break;
             case OP_SINGLE:
             case OP_DOUBLE:
+            case OP_MSINGLE:
+            case OP_MDOUBLE:
+            case OP_HANDSCAN:
+            case OP_NOTESCAN:
+            case OP_ACTION:
                 //num = 0;
                 break;
             default:
@@ -37178,7 +37476,9 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             //ret = write(rs->psocket_r->connfd, msg, n);
             //sprintf_f(rs->logs, "get msg from app [%s] size:%d\n", msg, num);
             //print_f(rs->plogs, "P5", rs->logs);
-            if ((opcode == OP_SINGLE) || (opcode == OP_DOUBLE)) {
+            if ((opcode == OP_SINGLE) || (opcode == OP_DOUBLE) || (opcode == OP_HANDSCAN)
+                || (opcode == OP_MSINGLE) || (opcode == OP_MDOUBLE) || (opcode == OP_ACTION)
+                || (opcode == OP_NOTESCAN)) {
                 tgr[0] = 't';
                 tgr[1] = 'g';
                 tgr[2] = 'r';
@@ -37217,7 +37517,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
                     sprintf_f(rs->logs, "TGR response [\n\n%s\n] len:%d\n", addr, ret);
                     print_f(rs->plogs, "P5", rs->logs);
 
-                    if ((strcmp("msingle", msg) == 0) || (strcmp("mdouble", msg) == 0)) {
+                    if ((strcmp("msingle", msg) == 0) || (strcmp("mdouble", msg) == 0) 
+                        || (strcmp("mocr", msg) == 0)) {
                         while (1) {
                             rs_ipc_put(rcmd, msg, num);
 
@@ -37263,7 +37564,8 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             else {
                 rs_ipc_put(rcmd, msg, num);
             }
-        } else {
+        }
+        else {
             if ((opcode == OP_SINGLE) || (opcode == OP_DOUBLE)) {
                 msg[0] = 't';
                 msg[1] = 'g';
@@ -37575,11 +37877,54 @@ static int p6(struct procRes_s *rs)
         sendbuf[3] = 'F';
 
         if (opcode == 0x24) { /* send OCR hex*/
-            sprintf_f(rs->logs, "handle opcode: 0x%x(OCR hex)\n", opcode);
+            sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (OCR hex)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
 
+            pdt = &pct[ASPOP_IMG_LEN];
+            
+            cnt = 0;
+            while (pdt->opStatus != ASPOP_STA_UPD) {
+                usleep(2000);
+
+                if (((cnt+1) % 500) == 0) {
+                    sprintf_f(rs->logs, "wait img len cnt: %d - 1\n", cnt);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+
+                msync(pdt, sizeof(struct aspConfig_s), MS_SYNC);
+
+                cnt ++;
+            }
+
+            sendbuf[3] = 'H';
+
+            sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
             ch = 0;
 
+            pdt->opStatus = ASPOP_STA_APP;
+
+            msync(&pct[ASPOP_IMG_LEN], sizeof(struct aspConfig_s), MS_SYNC);
+
+            val=0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            h = val;
+            
+            sprintf_f(rs->logs, "img len: opc: 0x%x, val: %d(%d), status: 0x%x \n", pdt->opCode, h, pdt->opValue, pdt->opStatus);
+            print_f(rs->plogs, "P6", rs->logs);    
+            
             while (ch != 'c') {
                 ret = rs_ipc_get(rs, &ch, 1);
                 if (ret > 0) {
@@ -37640,10 +37985,21 @@ static int p6(struct procRes_s *rs)
 
             pmass->massRecd = 0;
             pmass->massUsed = 0;
-
+            
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
             
-            rs_ipc_put(rs, "C", 1);
+            sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pdt->opValue);
+            print_f(rs->plogs, "P6", rs->logs); 
+            
+            if ((param == 'E') || (h == 0)) {
+                rs_ipc_put(rs, "E", 1);
+                sprintf_f(rs->logs, "return \"E\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
+            } else {
+                rs_ipc_put(rs, "C", 1);
+                sprintf_f(rs->logs, "return \"C\" \n");
+                print_f(rs->plogs, "P6", rs->logs);    
+            }
             
             goto socketEnd;
         }
@@ -44600,6 +44956,22 @@ int main(int argc, char *argv[])
             case ASPOP_FUNTEST_15: 
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_FUNCTEST_15;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_BLEEDTHROU_ADJUST: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_BLEEDTHROU_ADJUST;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_BLACKWHITE_THSHLD:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_BLACKWHITE_THSHLD;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
                 ctb->opMask = ASPOP_MASK_8;
