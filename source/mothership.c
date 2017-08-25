@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Aug 17 13:43:07 2017 8934ebf7f7 [FAT32] fix zero zoom parsing issue, mocr, handscan"
+#define MSP_VERSION "Thu Aug 24 09:57:31 2017 3400e2ac26 [APPUI] new opcode for handscan and OCR(notescan) and disable CHECK_SOCKET"
 
 #define SPI1_ENABLE (1) 
 
@@ -7511,6 +7511,9 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
     icur = rs->psFat->fatCurDir.dfindex;
     iroot = rs->psFat->fatRootdir.dfindex;
 
+    sprintf_f(rs->logs, "used index: %d\n", used);
+    print_f(rs->plogs, "CPFAT", rs->logs);    
+
     if (used > maxsz) {
         used = maxsz;
     }
@@ -7534,6 +7537,9 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
             return -7;
         }
     }
+
+    sprintf_f(rs->logs, "pool used: %d \n", used);
+    print_f(rs->plogs, "CPFAT", rs->logs);    
     
     for (idt = 0; idt < used; idt++) {
         ret = rs_ipc_get(rs, &ch, 1);
@@ -7621,22 +7627,71 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
         rsdir->dirUsed = drsz;
         rsdir->dirMax = FAT_DIRPOOL_IDX_MAX;        
         memcpy(pt, pr, sizeof(struct directnFile_s) * drsz);
-
+#if LOG_FS_EN
+        sprintf_f(rs->logs, "dir size: %d print start \n", drsz);
+        print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
         for (idr=0; idr < drsz; idr++) {
             dpa=0; 
             dbr=0; 
             dch=0;
             dir = &rsdir->dirPool[idr];
-            if (dir) {
-                debugPrintDir(dir);
-                sprintf_f(rs->logs, "filename: [%s] info: \n", dir->dfSFN);
+            
+#if LOG_FS_EN
+            sprintf_f(rs->logs, "dir %d. addr:0x%.8x, status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n", idr, dir, dir->dfstats, 
+                dir->dfindex, dir->dfpaid, dir->dfbrid, dir->dfchid,dir->dfSFN);
+            print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
+
+            /* pa info */
+#if LOG_FS_EN
+            sprintf_f(rs->logs, "    pa addr: 0x%.8x \n", dir->pa);
+            print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
+
+            if (dir->pa) {
+                dpa = dir->pa;
+                sprintf_f(rs->logs, "    pa status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
+                    dpa->dfstats, dpa->dfindex, dpa->dfpaid, dpa->dfbrid, dpa->dfchid, dpa->dfSFN);
                 print_f(rs->plogs, "CPFAT", rs->logs);    
-                
+            }
+#if LOG_FS_EN
+            /* br info */
+            sprintf_f(rs->logs, "    br addr: 0x%.8x \n", dir->br);
+            print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
+            if (dir->br) {
+                dbr = dir->br;
+                sprintf_f(rs->logs, "    br status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
+                    dbr->dfstats, dbr->dfindex, dbr->dfpaid, dbr->dfbrid, dbr->dfchid, dbr->dfSFN);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+            }
+#if LOG_FS_EN
+            /* ch info */
+            sprintf_f(rs->logs, "    ch addr: 0x%.8x \n", dir->ch);
+            print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
+            if (dir->ch) {
+                dch = dir->ch;
+                sprintf_f(rs->logs, "    ch status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
+                    dch->dfstats, dch->dfindex, dch->dfpaid, dch->dfbrid, dch->dfchid, dch->dfSFN);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+            }
+            
+            if (dir->dfstats == ASPFS_STATUS_EN) {
+                //debugPrintDir(dir);
+#if LOG_FS_EN
+                sprintf_f(rs->logs, "****** filename: [%s] ******\n", dir->dfSFN);
+                print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                 if (dir->pa) {
                     ipa = dir->dfpaid;
                     ipol = ipa >> 16;
                     idir = ipa & 0xffff;
-
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    pa 0x%.8x = %d, %d\n", ipa, ipol, idir);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                     if (ipol > dsttr->dirFATUsed) {
                         sprintf_f(rs->logs, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
                         print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -7644,6 +7699,13 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                     }
 
                     slecdir = dsttr->fatDirPool[ipol - 1];
+                    if (!slecdir) {
+                        return -5;
+                    }
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    pa pool max: %d, used: %d\n", slecdir->dirMax, slecdir->dirUsed);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
 
                     if (idir > slecdir->dirUsed) {
                         sprintf_f(rs->logs, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
@@ -7652,6 +7714,13 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                     }
                     
                     dpa = &slecdir->dirPool[idir];
+                    if (!dpa) {
+                        return -6;
+                    }
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    pa status: 0x%.8x \n", dpa->dfstats);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                     if (dpa->dfindex != ipa) {
                         sprintf_f(rs->logs, "WARNING!!! the pa id is different!!! (%d / %d)\n", ipa, dpa->dfindex);
                         print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -7663,7 +7732,10 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
 
                     ipol = ibr >> 16;
                     idir = ibr & 0xffff;
-
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    br 0x%.8x = %d, %d\n", ibr, ipol, idir);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                     if (ipol > dsttr->dirFATUsed) {
                         sprintf_f(rs->logs, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
                         print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -7671,7 +7743,13 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                     }
 
                     slecdir = dsttr->fatDirPool[ipol - 1];
-
+                    if (!slecdir) {
+                        return -7;
+                    }
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    br pool max: %d, used: %d\n", slecdir->dirMax, slecdir->dirUsed);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                     if (idir > slecdir->dirUsed) {
                         sprintf_f(rs->logs, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
                         print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -7679,6 +7757,13 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                     }
                     
                     dbr = &slecdir->dirPool[idir];
+                    if (!dbr) {
+                        return -6;
+                    }
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    br status: 0x%.8x \n", dbr->dfstats);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                     if (dbr->dfindex != ibr) {
                         sprintf_f(rs->logs, "WARNING!!! the br id is different!!! (%d / %d)\n", ibr, dbr->dfindex);
                         print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -7689,7 +7774,10 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
 
                     ipol = ich >> 16;
                     idir = ich & 0xffff;
-
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    ch 0x%.8x = %d, %d\n", ich, ipol, idir);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                     if (ipol > dsttr->dirFATUsed) {
                         sprintf_f(rs->logs, "ERROR!!! the dir pool id is overflow, id: %d, used: %d\n", ipol, dsttr->dirFATUsed);
                         print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -7697,7 +7785,13 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                     }
 
                     slecdir = dsttr->fatDirPool[ipol - 1];
-
+                    if (!slecdir) {
+                        return -9;
+                    }
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    ch pool max: %d, used: %d\n", slecdir->dirMax, slecdir->dirUsed);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                     if (idir > slecdir->dirUsed) {
                         sprintf_f(rs->logs, "ERROR!!! the dir id is overflow, id: %d, used: %d\n", idir, slecdir->dirUsed);
                         print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -7705,24 +7799,45 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                     }
                     
                     dch = &slecdir->dirPool[idir];
+                    if (!dch) {
+                        return -6;
+                    }
+#if LOG_FS_EN
+                    sprintf_f(rs->logs, "    ch status: 0x%.8x \n", dch->dfstats);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
                     if (dch->dfindex != ich) {
                         sprintf_f(rs->logs, "WARNING!!! the br id is different!!! (%d / %d)\n", ich, dch->dfindex);
                         print_f(rs->plogs, "CPFAT", rs->logs);    
                     }
                 }
-
+#if LOG_FS_EN
+                sprintf_f(rs->logs, "    dpa: 0x%.8x, dbr: 0x%.8x, dch: 0x%.8x \n", dpa, dbr, dch);
+                print_f(rs->plogs, "CPFAT", rs->logs);    
+                
                 if (dpa) {
-                    sprintf_f(rs->logs, "pa:[%s] \n", dpa->dfSFN);
+                    sprintf_f(rs->logs, "    pa:[%s] status: 0x%.8x \n", dpa->dfSFN, dpa->dfstats);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+                } else {
+                    sprintf_f(rs->logs, "    pa addr:[0x%.8x]\n", dpa);
                     print_f(rs->plogs, "CPFAT", rs->logs);    
                 }
                 if (dbr) {
-                    sprintf_f(rs->logs, "br:[%s] \n", dbr->dfSFN);
+                    sprintf_f(rs->logs, "    br:[%s] status: 0x%.8x \n", dbr->dfSFN, dbr->dfstats);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+                } else {
+                    sprintf_f(rs->logs, "    br addr:[0x%.8x]\n", dbr);
                     print_f(rs->plogs, "CPFAT", rs->logs);    
                 }
+
                 if (dch) {
-                    sprintf_f(rs->logs, "ch:[%s] \n", dch->dfSFN);
+                    sprintf_f(rs->logs, "    ch:[%s] status: 0x%.8x \n", dch->dfSFN, dch->dfstats);
+                    print_f(rs->plogs, "CPFAT", rs->logs);    
+                } else {
+                    sprintf_f(rs->logs, "    ch addr:[0x%.8x]\n", dch);
                     print_f(rs->plogs, "CPFAT", rs->logs);    
                 }
+#endif
 
                 dir->pa = dpa;
                 dir->br = dbr;
@@ -7745,7 +7860,12 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                 sprintf_f(rs->logs, "WARNING!!! failed to get dir \n");
                 print_f(rs->plogs, "CPFAT", rs->logs);    
             }
+
         }
+#if LOG_FS_EN
+        sprintf_f(rs->logs, "dir size: %d print end \n", drsz);
+        print_f(rs->plogs, "CPFAT", rs->logs);    
+#endif
     }
 
 
@@ -8296,7 +8416,7 @@ static int aspLnameAbs(char *raw, char *dst)
 
 static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 {
-    //printf("[%.2x][%d] - [%.6x] \n", *raw, last, fs->dfstats);
+    //printf("[PAR][%d] - [%.6x] - S\n", last, fs->dfstats);
     uint32_t tmp32=0;
     uint8_t sum=0;
     int leN=0, cnt=0, idx=0, ret = 0, n = 0;
@@ -8304,7 +8424,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
     char ld=0, nd=0;
     if (!raw) return (-1);
     if (!fs) return (-2);
-    if (last < 32) return (-3); 
+    if (last < 32) return last; 
 
     if (fs->dfstats == ASPFS_STATUS_EN) return 0;
 
@@ -8327,7 +8447,8 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 
         if (n == 32) {
             memset(fs, 0x00, sizeof(struct directnFile_s));
-            return (-4);
+            //return (-5);
+            return last;
         } else {
             goto fsparseEnd;
         }
@@ -8402,8 +8523,8 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 #endif
         }
         else {
-#if LOG_FS_EN
             cnt = aspFSrmspace(pstN, 8);
+#if LOG_FS_EN
             printf("rm space count : %d [%s] - 2\n", cnt, pstN);
 #endif
         }
@@ -8561,6 +8682,8 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 
 fsparseEnd:
 
+    //printf("[PAR][%d] - [%.6x] - E \n", last, fs->dfstats);
+    
     if (last == 32) {
         return 32;
     } else if (last > 32) {
@@ -8650,20 +8773,22 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
     cnt = 0;
     ret = aspRawParseDir(dkbuf, dfs, max);
 #if LOG_FS_EN
-    printf("[R]raw parsing cnt: %d \n", ret);
+    printf("[R]raw parsing cnt: %d / %d \n", ret, max);
 #endif
     while (max > 0) {
         if (dfs->dfstats) {
-            //printf("[R]short name: %s \n", dfs->dfSFN);
+#if LOG_FS_EN
+            printf("[R]short name: %s \n", dfs->dfSFN);
+#endif
+            //dfs->dfstats = 0;
             if (dfs->dflen > 0) {
                 //printf("[R]long name: %s, len:%d \n", dfs->dfLFN, dfs->dflen);
             }
 
-            if (strcmp(dfs->dfSFN, ".") == 0 || 
-                strcmp(dfs->dfSFN, "..") == 0 ) {
-                
+            if (strcmp(dfs->dfSFN, ".") == 0) {
                 //memset(dfs, 0, sizeof(struct directnFile_s));
-                
+            } else if (strcmp(dfs->dfSFN, "..") == 0 ) {            
+                //memset(dfs, 0, sizeof(struct directnFile_s));
             } else {
             
                 //debugPrintDir(dfs);
@@ -26422,7 +26547,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    int val=0, i=0, ret=0;
+    int val=0, i=0, ret=0, err=0;
     char *pr=0;
     uint32_t secStr=0, secLen=0;
     struct aspConfig_s *pct=0;
@@ -26461,7 +26586,9 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         ret = aspFS_createFATRoot(pfat);
         if (ret == 0) {
             rootdir = pfat->fatDirTr.dirRoot;
-            aspFS_insertFATChilds(pfat, rootdir, pr, pParBuf->dirBuffUsed);
+            err = aspFS_insertFATChilds(pfat, rootdir, pr, pParBuf->dirBuffUsed);
+            sprintf_f(mrs->log, "parsing resut:  %d \n", err);
+            print_f(&mrs->plog, "fs51", mrs->log);
         }
 
         if (rootdir->ch->dftype) {
@@ -26513,6 +26640,10 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
         
         modersp->r = 1;
+
+        if (err < 0) {
+            modersp->r = 0xed;
+        }
     }else {
 
         if (!pftb->h) {
@@ -27049,9 +27180,11 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
             //pfat->fatCurDir = pfat->fatRootdir;
             aspFScpDir(&pfat->fatCurDir, pfat->fatDirTr.dirRoot);            
             pfat->fatDirTr.dirCur = pfat->fatDirTr.dirRoot;
-            mspFS_folderList(pfat->fatDirTr.dirRoot, 4);            
+            //mspFS_folderList(pfat->fatDirTr.dirRoot, 4);            
+            mspFS_list(pfat->fatDirTr.dirRoot, 4);            
         } else {
-            mspFS_folderList(pfat->fatDirTr.dirCur, 4);            
+            //mspFS_folderList(pfat->fatDirTr.dirCur, 4);            
+            mspFS_list(pfat->fatDirTr.dirRoot, 4);            
         }
 
     }
@@ -33115,9 +33248,10 @@ static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFatDir_s *pfatdir=0;
     struct sdDirPool_s *pdirpool=0;
     int dirused=0, idd=0, maxsz=0, len=0, usedsz=0, totsz=0, txsz=0;
-    int cpn=0, bufn=0;
+    int cpn=0, bufn=0, in=0;
     char *src=0, *addrd=0;
     char ch=0;
+    struct directnFile_s* dir, *dpa, *dbr, *dch; 
     
     pfatdir = &mrs->aspFat.fatDirTr;
     msync(pfatdir, sizeof(struct sdFatDir_s), MS_SYNC);
@@ -33161,6 +33295,48 @@ static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
         txsz = usedsz * sizeof(struct directnFile_s);
         sprintf_f(mrs->log, "plan to send data, size: %d (%d x %d) \n", txsz, usedsz, sizeof(struct directnFile_s));
         print_f(&mrs->plog, "fs125", mrs->log);
+        
+#if LOG_FS_EN
+        /* debug print */
+        for (in = 0; in < usedsz; in++) {
+            dir = &pdirpool->dirPool[in];
+            sprintf_f(mrs->log, "dir %d. addr:0x%.8x, status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n", in, dir, 
+            dir->dfstats, dir->dfindex, dir->dfpaid, dir->dfbrid, dir->dfchid, dir->dfSFN);
+            print_f(&mrs->plog, "fs125", mrs->log);
+
+            /* pa info */
+            sprintf_f(mrs->log, "    pa addr: 0x%.8x \n", dir->pa);
+            print_f(&mrs->plog, "fs125", mrs->log);
+            
+            if (dir->pa) {
+                dpa = dir->pa;
+                sprintf_f(mrs->log, "    pa status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
+                    dpa->dfstats, dpa->dfindex, dpa->dfpaid, dpa->dfbrid, dpa->dfchid, dpa->dfSFN);
+                print_f(&mrs->plog, "fs125", mrs->log);
+            }
+            /* br info */
+            sprintf_f(mrs->log, "    br addr: 0x%.8x \n", dir->br);
+            print_f(&mrs->plog, "fs125", mrs->log);
+            
+            if (dir->br) {
+                dbr = dir->br;
+                sprintf_f(mrs->log, "    br status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
+                    dbr->dfstats, dbr->dfindex, dbr->dfpaid, dbr->dfbrid, dbr->dfchid, dbr->dfSFN);
+                print_f(&mrs->plog, "fs125", mrs->log);
+            }
+            /* ch info */
+            sprintf_f(mrs->log, "    ch addr: 0x%.8x \n", dir->ch);
+            print_f(&mrs->plog, "fs125", mrs->log);
+            
+            if (dir->ch) {
+                dch = dir->ch;
+                sprintf_f(mrs->log, "    ch status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
+                    dch->dfstats, dch->dfindex, dch->dfpaid, dch->dfbrid, dch->dfchid, dch->dfSFN);
+                print_f(&mrs->plog, "fs125", mrs->log);
+            }
+
+        }
+#endif
 
         while (txsz > 0) {
             len = ring_buf_get(&mrs->dataRx, &addrd);
@@ -37839,7 +38015,7 @@ static int p6(struct procRes_s *rs)
         ln = atFindIdx(&recvbuf[hd], '\0');
         
         opcode = recvbuf[hd+1]; param = recvbuf[be-1];
-#if LOG_P6_RX_EN
+#if 1
         sprintf_f(rs->logs, "opcode:[0x%x]arg[0x%x]\n", opcode, param);
         print_f(rs->plogs, "P6", rs->logs);
 #endif
@@ -42168,10 +42344,12 @@ static int p6(struct procRes_s *rs)
             print_f(rs->plogs, "P6", rs->logs);
         }
         else if (opcode == 0x12) { /* download file */
-            ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
-            sprintf_f(rs->logs, "handle opcode: 0x%x, ret = %d\n", opcode, ret);
+            sprintf_f(rs->logs, "handle opcode: 0x%x \n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
-
+            ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
+            sprintf_f(rs->logs, "copy fat ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             n = 0;
             //ret = mspFS_FileSearch(&dnld, rs->psFat->fatRootdir, folder);
             ret = mspFS_Search(&dnld, rs->cpyfatDirTr->dirRoot, folder, ASPFS_TYPE_FILE);
@@ -42223,10 +42401,12 @@ static int p6(struct procRes_s *rs)
             
         } 
         else if (opcode == 0x11) { /* folder list */
-            ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
-            sprintf_f(rs->logs, "handle opcode: 0x%x, ret = %d\n", opcode, ret);
+            sprintf_f(rs->logs, "handle opcode: 0x%x \n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
-
+            ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
+            sprintf_f(rs->logs, "copy fat ret: %d \n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             nxtf = 0;
             //ret = mspFS_folderJump(&nxtf, fscur, folder);
             //ret = mspFS_FolderSearch(&nxtf, rs->psFat->fatRootdir, folder);
@@ -42257,7 +42437,7 @@ static int p6(struct procRes_s *rs)
             }
 
             brt = fscur->ch;
-            debugPrintDir(brt);
+            //debugPrintDir(brt);
 
             while (brt) {
                 while ((brt->dfstats != ASPFS_STATUS_EN) || (strcmp(brt->dfSFN, ".") == 0) 
@@ -42301,8 +42481,11 @@ static int p6(struct procRes_s *rs)
 
         }
         else if (opcode == 0x13) { /* upload file */
+            sprintf_f(rs->logs, "handle opcode: 0x%x\n", opcode);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             ret = aspFScpFatDir(rsfatdir, msfatdir, rs);
-            sprintf_f(rs->logs, "handle opcode: 0x%x, ret = %d\n", opcode, ret);
+            sprintf_f(rs->logs, "copy fat ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
 
 
