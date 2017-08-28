@@ -149,7 +149,12 @@ static int *totSalloc=0;
 
 #define OP_BLEEDTHROU_ADJUST 0x81
 #define OP_BLACKWHITE_THSHLD 0x82
-
+#define OP_SD_CLK_RATE_16        0x83    
+#define OP_PAPER_SIZE                 0x84  
+#define OP_JPGRATE_ENG_17        0x85  
+#define OP_FUNCTEST_18              0x86  
+#define OP_FUNCTEST_19              0x87  
+#define OP_FUNCTEST_20              0x88 
 /* debug */
 
 #define OP_SAVE              0x80
@@ -386,6 +391,12 @@ typedef enum {
     ASPOP_FUNTEST_15,
     ASPOP_BLEEDTHROU_ADJUST,
     ASPOP_BLACKWHITE_THSHLD,
+    ASPOP_SD_CLK_RATE_16,
+    ASPOP_PAPER_SIZE,
+    ASPOP_JPGRATE_ENG_17,
+    ASPOP_FUNCTEST_18,
+    ASPOP_FUNCTEST_19,
+    ASPOP_FUNCTEST_20,
     ASPOP_CROP_01,
     ASPOP_CROP_02, /* 70 */
     ASPOP_CROP_03,
@@ -929,7 +940,13 @@ struct aspMetaData_s{
   unsigned char  OP_FUNC_15;               //0x7F  
   unsigned char  BLEEDTHROU_ADJUST; //0x81
   unsigned char  BLACKWHITE_THSHLD; //0x82  
-  unsigned char  OP_RESERVE[26];          // byte[64]
+  unsigned char  SD_CLK_RATE_16;        //0x83    
+  unsigned char  PAPER_SIZE;                //0x84  
+  unsigned char  JPGRATE_ENG_17;       //0x85  
+  unsigned char  OP_FUNC_18;               //0x86  
+  unsigned char  OP_FUNC_19;               //0x87  
+  unsigned char  OP_FUNC_20;               //0x88  
+  unsigned char  OP_RESERVE[20];          // byte[64]
   
   /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
   struct intMbs_s CROP_POS_1;        //byte[68]
@@ -13077,8 +13094,8 @@ static int stdob_03(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = &pct[ASPOP_SCAN_DOUBLE];
-            if (pdt->opCode != OP_DOUBLE) {
-                sprintf_f(rs->logs, "op_03, OP_DOUBLE opcode is wrong val:%x\n", pdt->opCode); 
+            if ((pdt->opCode != OP_DOUBLE) && (pdt->opCode != OP_MDOUBLE)) {
+                sprintf_f(rs->logs, "op_03, OP_DOUBLE opcode is wrong val:0x%x\n", pdt->opCode); 
                 print_f(rs->plogs, "DOB", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else if (!(pdt->opStatus & ASPOP_STA_WR)) {
@@ -44265,6 +44282,70 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
+            case ASPOP_BLEEDTHROU_ADJUST: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_BLEEDTHROU_ADJUST;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_BLACKWHITE_THSHLD:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_BLACKWHITE_THSHLD;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SD_CLK_RATE_16: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SD_CLK_RATE_16;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_PAPER_SIZE:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_PAPER_SIZE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_JPGRATE_ENG_17: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_JPGRATE_ENG_17;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNCTEST_18:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_18;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNCTEST_19: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_19;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNCTEST_20:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_20;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
             case ASPOP_CROP_01: 
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_CROP_01;
@@ -45155,6 +45236,54 @@ int main(int argc, char *argv[])
             case ASPOP_BLACKWHITE_THSHLD:
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_BLACKWHITE_THSHLD;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SD_CLK_RATE_16: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SD_CLK_RATE_16;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_PAPER_SIZE:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_PAPER_SIZE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_JPGRATE_ENG_17: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_JPGRATE_ENG_17;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNCTEST_18:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_18;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNCTEST_19: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_19;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNCTEST_20:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_20;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
                 ctb->opMask = ASPOP_MASK_8;
