@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Aug 24 09:57:31 2017 3400e2ac26 [APPUI] new opcode for handscan and OCR(notescan) and disable CHECK_SOCKET"
+#define MSP_VERSION "Wed Aug 30 09:27:50 2017 ab4c81c1b9 [CROP] YLines_Recorded 0, 1, >1 determine no crop, 18 p, full p"
 
 #define SPI1_ENABLE (1) 
 
@@ -241,7 +241,7 @@ static int *totSalloc=0;
 #define FAT_DIRPOOL_IDX_MAX   (56850)
 #define FAT_DIRPOO_ARY_MAX   (65535)
 
-#define LOG_FS_EN (0)
+#define LOG_FS_EN (1)
 #define LOG_DOT_PROG_EN (0)
 
 #define ANSP0_RECOVER (1)
@@ -1846,6 +1846,18 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta)
         sprintf_f(mlog, "BLEEDTHROU_ADJUST: 0x%.2x      \n",pmeta->BLEEDTHROU_ADJUST);
         print_f(mlogPool, "META", mlog);
         sprintf_f(mlog, "BLACKWHITE_THSHLD: 0x%.2x      \n",pmeta->BLACKWHITE_THSHLD);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SD_CLK_RATE_16: 0x%.2x      \n",pmeta->SD_CLK_RATE_16);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "PAPER_SIZE: 0x%.2x      \n",pmeta->PAPER_SIZE);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "JPGRATE_ENG_17: 0x%.2x      \n",pmeta->JPGRATE_ENG_17);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_18: 0x%.2x      \n",pmeta->OP_FUNC_18);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_19: 0x%.2x      \n",pmeta->OP_FUNC_19);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_20: 0x%.2x      \n",pmeta->OP_FUNC_20);
         print_f(mlogPool, "META", mlog);
     }
     
@@ -15078,6 +15090,10 @@ static int stsup_34(struct psdata_s *data)
                 print_f(rs->plogs, "SIG", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
             } else {
+
+                sprintf_f(rs->logs, "op34 opcode:%x value:%x\n", pdt->opCode, pdt->opValue); 
+                print_f(rs->plogs, "SIG", rs->logs);  
+
                 switch(pdt->opValue) {
                     case SINSCAN_WIFI_ONLY:
                     //case SINSCAN_SD_ONLY:
@@ -15098,6 +15114,7 @@ static int stsup_34(struct psdata_s *data)
                             c->opcode =  pdt->opCode;
                         }
 */
+                        c->opcode =  pdt->opCode;
                         c->data = pdt->opValue;
                         memset(p, 0, sizeof(struct info16Bit_s));
 
@@ -26085,7 +26102,7 @@ static int fs41(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct info16Bit_s *p;
     p = &mrs->mchine.cur;
-    //sprintf_f(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    //sprintf_f(mrs->log, "set %d 0x%.2x 0x%.2x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
     //print_f(&mrs->plog, "fs41", mrs->log);
 
     mrs->mchine.seqcnt += 1;
@@ -26608,7 +26625,16 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs51", mrs->log);
         }
 
-        if (rootdir->ch->dftype) {
+        if (rootdir->ch) {
+            sprintf_f(mrs->log, "boot dir's first ch SFN:  [%s] \n", rootdir->ch->dfSFN);
+            print_f(&mrs->plog, "fs51", mrs->log);
+        } else {
+            sprintf_f(mrs->log, "boot dir's no first ch SFN, boot SFN:  [%s] \n", rootdir->dfSFN);
+            print_f(&mrs->plog, "fs51", mrs->log);
+        }
+
+        //if (rootdir->ch->dftype) {
+        if (!err) {
             pfat->fatStatus |= ASPFAT_STATUS_ROOT_DIR;
         }        
 
@@ -42488,6 +42514,26 @@ static int p6(struct procRes_s *rs)
             }
 
             if (cnt == 0) {
+                n = strlen("_EMPTY_");
+                memcpy(&sendbuf[5], "_EMPTY_", n);
+
+                sendbuf[3] = 'E';
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                /* send twice with different type to confirm and back compatible */
+                sendbuf[3] = 'F';
+                sendbuf[5+n] = 0xfb;
+                sendbuf[5+n+1] = '\n';
+                sendbuf[5+n+2] = '\0';
+                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+                print_f(rs->plogs, "P6", rs->logs);
+                    
                 fscur = rs->cpyfatDirTr->dirRoot;
             }
 
