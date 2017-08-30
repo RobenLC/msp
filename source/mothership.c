@@ -2078,13 +2078,13 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         }
 
         opSt = OP_BLEEDTHROU_ADJUST;
-        opEd = OP_BLACKWHITE_THSHLD;
+        opEd = OP_FUNCTEST_20;
 
         istr = ASPOP_BLEEDTHROU_ADJUST;
-        iend = ASPOP_BLACKWHITE_THSHLD;
+        iend = ASPOP_FUNCTEST_20;
         
         pvdst = &pmeta->BLEEDTHROU_ADJUST;
-        pvend = &pmeta->BLACKWHITE_THSHLD;
+        pvend = &pmeta->OP_FUNC_20;
 
         for (idx = istr; idx <= iend; idx++) {
             if ((pct[idx].opStatus & ASPOP_STA_CON) && (pct[idx].opCode == opSt)) {
@@ -18479,7 +18479,7 @@ static int stsparam_88(struct psdata_s *data)
                 if (t->opcode != OP_META_DAT) {
                     data->ansp0 = 0xed;
                     data->result = emb_result(data->result, EVTMAX);
-                } else if (pmass->massRecd > 0) {
+                } else if (pmass->massRecd > 1) {
                     sprintf_f(rs->logs, "dump meta mass: (gap:%d, linStart:%d, linRecd:%d)\n", pmass->massGap, pmass->massStart, pmass->massRecd); 
                     print_f(rs->plogs, "SPM", rs->logs);  
 #if SAVE_CROP_MASS
@@ -19144,7 +19144,7 @@ static int stmetaduo_97(struct psdata_s *data)
                 if (t->opcode != OP_META_DAT) {
                     data->ansp0 = 0xed;
                     data->result = emb_result(data->result, EVTMAX);
-                } else if (pmass->massRecd > 0) {
+                } else if (pmass->massRecd > 1) {
                     sprintf_f(rs->logs, "op_97: dump meta mass: (gap:%d, linStart:%d, linRecd:%d)\n", pmass->massGap, pmass->massStart, pmass->massRecd); 
                     print_f(rs->plogs, "MDUO", rs->logs);  
 #if SAVE_CROP_MASS
@@ -39133,7 +39133,7 @@ static int p6(struct procRes_s *rs)
             
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
             
-            if (pmass->massRecd) {
+            if (pmass->massRecd > 1) {
                 masUsed = pmass->massUsed;
                 
                 while (!masUsed) {
@@ -39146,10 +39146,10 @@ static int p6(struct procRes_s *rs)
 
                 memset(pmass->masspt, 0, pmass->massMax);
                 msync(pmass->masspt, pmass->massMax, MS_SYNC);
-
-                pmass->massRecd = 0;
-                pmass->massUsed = 0;
             }
+
+            pmass->massRecd = 0;
+            pmass->massUsed = 0;
 
             sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue);
             print_f(rs->plogs, "P6", rs->logs); 
@@ -40023,8 +40023,28 @@ static int p6(struct procRes_s *rs)
             }
 #endif
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
-            
-            if (pmass->massRecd) {
+
+            masRecd = pmass->massRecd;
+
+            sprintf_f(rs->logs, "%d \n\r", masRecd); 
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'T';
+            sprintf(rs->logs, "%d \n\r", masRecd); 
+            print_f(rs->plogs, "P6", rs->logs);
+
+            n = strlen(rs->logs);
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
+                
+            if (pmass->massRecd > 1) {
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpx = 0;
                     cpn = 2;
@@ -40112,32 +40132,11 @@ static int p6(struct procRes_s *rs)
                     print_f(rs->plogs, "P6", rs->logs);
                 }
 
-                masRecd = pmass->massRecd;
-
                 msync(pmass->masspt, masUsed, MS_SYNC);
                 ptBuf = (unsigned short *)pmass->masspt;
                 
                 cy = masStart;
                 gap = pmass->massGap;
-
-                sprintf_f(rs->logs, "%d \n\r", masRecd); 
-                print_f(rs->plogs, "P6", rs->logs);
-
-                sendbuf[3] = 'T';
-                sprintf(rs->logs, "%d \n\r", masRecd); 
-                print_f(rs->plogs, "P6", rs->logs);
-
-                n = strlen(rs->logs);
-                memcpy(&sendbuf[5], rs->logs, n);
-
-                sendbuf[5+n] = 0xfb;
-                sendbuf[5+n+1] = '\n';
-                sendbuf[5+n+2] = '\0';
-#if 1 /* do NOT send mass pos */
-                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                //print_f(rs->plogs, "P6", rs->logs);
-#endif
 
 #if 1
                 pdt = &pct[ASPOP_CROP_02];
@@ -40460,7 +40459,28 @@ static int p6(struct procRes_s *rs)
             }
 #endif
 
-            if (pmassduo->massRecd) {
+            msync(pmassduo, sizeof(struct aspMetaMass_s), MS_SYNC);
+
+            masRecd = pmassduo->massRecd;
+            sprintf_f(rs->logs, "duo %d \n\r", masRecd); 
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 't';
+            sprintf(rs->logs, "%d \n\r", masRecd); 
+            print_f(rs->plogs, "P6", rs->logs);
+
+            n = strlen(rs->logs);
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
+
+            if (pmassduo->massRecd > 1) {
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpx = 0;
                     cpn = 2;
@@ -40548,32 +40568,11 @@ static int p6(struct procRes_s *rs)
                     print_f(rs->plogs, "P6", rs->logs);
                 }
 
-                masRecd = pmassduo->massRecd;
-
                 msync(pmassduo->masspt, masUsed, MS_SYNC);
                 ptBuf = (unsigned short *)pmassduo->masspt;
                 
                 cy = masStart;
                 gap = pmassduo->massGap;
-
-                sprintf_f(rs->logs, "duo %d \n\r", masRecd); 
-                print_f(rs->plogs, "P6", rs->logs);
-
-                sendbuf[3] = 't';
-                sprintf(rs->logs, "%d \n\r", masRecd); 
-                print_f(rs->plogs, "P6", rs->logs);
-
-                n = strlen(rs->logs);
-                memcpy(&sendbuf[5], rs->logs, n);
-
-                sendbuf[5+n] = 0xfb;
-                sendbuf[5+n+1] = '\n';
-                sendbuf[5+n+2] = '\0';
-#if 1 /* do NOT send mass pos */
-                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                //print_f(rs->plogs, "P6", rs->logs);
-#endif
 
 #if 1
                 pdt = &pct[ASPOP_CROP_02];
@@ -41387,9 +41386,26 @@ static int p6(struct procRes_s *rs)
             }
 #endif
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
-            
+
+            masRecd = pmass->massRecd;
+
+            sendbuf[3] = 'T';
+            sprintf(rs->logs, "%d \n\r", masRecd); 
+            print_f(rs->plogs, "P6", rs->logs);
+
+            n = strlen(rs->logs);
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
+
 #if 1  /* skip for debug, anable later */
-            if (pmass->massRecd) {
+            if (pmass->massRecd > 1) {
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpx = 0;
                     cpn = 2;
@@ -41478,29 +41494,11 @@ static int p6(struct procRes_s *rs)
                     print_f(rs->plogs, "P6", rs->logs);
                 }
 
-                masRecd = pmass->massRecd;
-
                 msync(pmass->masspt, masUsed, MS_SYNC);
                 ptBuf = (unsigned short *)pmass->masspt;
                 
                 cy = masStart;
                 gap = pmass->massGap;
-
-                sendbuf[3] = 'T';
-                sprintf(rs->logs, "%d \n\r", masRecd); 
-                print_f(rs->plogs, "P6", rs->logs);
-
-                n = strlen(rs->logs);
-                memcpy(&sendbuf[5], rs->logs, n);
-
-                sendbuf[5+n] = 0xfb;
-                sendbuf[5+n+1] = '\n';
-                sendbuf[5+n+2] = '\0';
-#if 1 /* do NOT send mass pos */
-                ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-                //print_f(rs->plogs, "P6", rs->logs);
-#endif
 
 #if 1
                 pdt = &pct[ASPOP_CROP_02];
@@ -43999,7 +43997,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_ACTION;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_3;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_SDFAT_RD: 
@@ -44734,7 +44732,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_ACTION;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_3;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_RESOLUTION:
