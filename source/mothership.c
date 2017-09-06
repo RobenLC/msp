@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Wed Aug 30 09:27:50 2017 ab4c81c1b9 [CROP] YLines_Recorded 0, 1, >1 determine no crop, 18 p, full p"
+#define MSP_VERSION "Wed Aug 30 17:50:14 2017 c38888a276 [FAT] special case for empty SD card"
 
 #define SPI1_ENABLE (1) 
 
@@ -241,7 +241,7 @@ static int *totSalloc=0;
 #define FAT_DIRPOOL_IDX_MAX   (56850)
 #define FAT_DIRPOO_ARY_MAX   (65535)
 
-#define LOG_FS_EN (1)
+#define LOG_FS_EN (0)
 #define LOG_DOT_PROG_EN (0)
 
 #define ANSP0_RECOVER (1)
@@ -7101,6 +7101,20 @@ static uint32_t aspRawCompose(char * raw, int size)
     return val;
 }
 
+static uint32_t aspRawReverse(char * raw, int size, uint32_t val)
+{
+    int sh[4] = {0, 8, 16, 24};
+    int i = 0;
+    uint8_t tmp = 0;
+
+    while(i < size) {
+        tmp = (val >> sh[i]) & 0xff;
+        raw[i] = tmp;
+        i++;
+        //printf("0x%.2x \n", tmp);
+    }
+    return 0;
+}
 
 static uint32_t cfgValueOffset(uint32_t val, int offset)
 {
@@ -8815,8 +8829,10 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
             }
 
             if (strcmp(dfs->dfSFN, ".") == 0) {
+                dfs->dfstats = 0;
                 //memset(dfs, 0, sizeof(struct directnFile_s));
-            } else if (strcmp(dfs->dfSFN, "..") == 0 ) {            
+            } else if (strcmp(dfs->dfSFN, "..") == 0 ) {
+                dfs->dfstats = 0;
                 //memset(dfs, 0, sizeof(struct directnFile_s));
             } else {
             
@@ -26404,7 +26420,10 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct sdParseBuff_s *pParBuf=0;
     struct info16Bit_s *p=0, *c=0;
-
+    //char fatRev[512];
+    char *fatRev=0;
+    fatRev = aspMemalloc(1024, 10);
+    
     sprintf_f(mrs->log, "parsing boot sector \n");
     print_f(&mrs->plog, "fs50", mrs->log);
 
@@ -26490,6 +26509,90 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
         psec->secWhroot = psec->secWhfat + psec->secPrfat * 2;
 
         pParBuf->dirBuffUsed = 0;
+        
+#if 0 /* test reverse fat */
+        /* 0  Jump command */
+        memset(fatRev, 0, 512);
+        
+        shmem_dump(fatRev, 512);
+        
+        /*
+        for (i=0; i < 512; i++) {
+            fatRev[i] = 0;
+        }
+        */
+        //msync(fatRev, 512, MS_SYNC);
+        
+        aspRawReverse(&fatRev[0], 4, psec->secJpcmd);
+        
+        /* 3  system id */
+        for (i = 0; i < 8; i++) {
+            fatRev[3+i] = psec->secSysid[i];
+        }
+        /* 11 sector size */ 
+        aspRawReverse(&fatRev[11], 2, psec->secSize);
+        
+        /* 13 sector per cluster */
+        fatRev[13] = psec->secPrClst;
+
+        /* 14 reserved sector count*/
+        aspRawReverse(&fatRev[14], 2, psec->secResv);
+        
+        /* 16 number of FATs */
+        fatRev[16] = psec->secNfat;
+        /* 17 skip, number of root dir entries */
+        /* 19 skip, total sectors */
+        /* 21 medium id */
+        fatRev[21] = psec->secIDm;
+        /* 22 skip, sector per FAT */
+        /* 24 sector per track */
+        aspRawReverse(&fatRev[24], 2, psec->secPrtrk);
+        
+        /* 26 number of sides */
+        aspRawReverse(&fatRev[26], 2, psec->secNsid);
+
+        /* 28 number of hidded sectors */
+        aspRawReverse(&fatRev[28], 4, psec->secNhid);
+        
+        /* 32 total sectors */
+        aspRawReverse(&fatRev[32], 4, psec->secTotal);
+        /* 36 sectors per FAT */
+        aspRawReverse(&fatRev[36], 4, psec->secPrfat);
+        /* 40 extension flag */
+        aspRawReverse(&fatRev[40], 2, psec->secExtf);
+        /* 42 FS version */
+        aspRawReverse(&fatRev[42], 2, psec->secVers);
+        /* 44 root cluster */
+        aspRawReverse(&fatRev[44], 4, psec->secRtclst);
+        /* 48 FS info */
+        aspRawReverse(&fatRev[48], 2, psec->secFSif);
+        /* 50 backup boot sector */ 
+        aspRawReverse(&fatRev[50], 2, psec->secBkbt);
+        
+        /* 64 physical disk number */
+        fatRev[64] = psec->secPhdk;
+        /* 66 extended boot record signature */
+        fatRev[66] = psec->secExtbt;
+        /* 67 volume ID number */
+        
+        aspRawReverse(&fatRev[67], 4, psec->secVoid);
+        
+        /* 71 to 81 volume label */
+        for (i = 0; i < 11; i++) {
+             fatRev[71+i] = psec->secVola[i];
+        }
+         
+        /* 82 to 89 file system type */
+        for (i = 0; i < 8; i++) {
+            fatRev[82+i] = psec->secFtyp[i];
+        }
+        
+        /* 510 signature word */
+        aspRawReverse(&fatRev[510], 2, psec->secSign);
+
+        shmem_dump(fatRev, 512);
+        shmem_dump(pr, 512);
+#endif
 
         if (psec->secSize == 512) {
             pfat->fatStatus |= ASPFAT_STATUS_BOOT_SEC;
@@ -38132,17 +38235,6 @@ static int p6(struct procRes_s *rs)
             ch = 0;
 
             pdt->opStatus = ASPOP_STA_APP;
-
-            msync(&pct[ASPOP_IMG_LEN], sizeof(struct aspConfig_s), MS_SYNC);
-
-            val=0;
-            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
-            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            h = val;
-            
-            sprintf_f(rs->logs, "img len: opc: 0x%x, val: %d(%d), status: 0x%x \n", pdt->opCode, h, pdt->opValue, pdt->opStatus);
-            print_f(rs->plogs, "P6", rs->logs);    
             
             while (ch != 'c') {
                 ret = rs_ipc_get(rs, &ch, 1);
@@ -38159,6 +38251,17 @@ static int p6(struct procRes_s *rs)
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
+
+            msync(&pct[ASPOP_IMG_LEN], sizeof(struct aspConfig_s), MS_SYNC);
+            
+            sprintf_f(rs->logs, "img len: opc: 0x%x, val: %d(%d), status: 0x%x \n", pdt->opCode, h, pdt->opValue, pdt->opStatus);
+            print_f(rs->plogs, "P6", rs->logs);    
+            
+            val=0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            h = val;
             
             sendbuf[3] = 'O';
 
@@ -38900,6 +39003,24 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
+
+            ch = 0;
+            while (ch != 'c') {
+                ret = rs_ipc_get(rs, &ch, 1);
+                if (ret > 0) {
+                    if (ch == 'c') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
@@ -39137,23 +39258,6 @@ static int p6(struct procRes_s *rs)
                         break;
                     default:
                         break;
-                }
-            }
-
-            ch = 0;
-            while (ch != 'c') {
-                ret = rs_ipc_get(rs, &ch, 1);
-                if (ret > 0) {
-                    if (ch == 'c') {
-                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    } else {
-                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
-                        print_f(rs->plogs, "P6", rs->logs);    
-                    }
-                } else {
-                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
             
