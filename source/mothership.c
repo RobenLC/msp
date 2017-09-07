@@ -37986,7 +37986,7 @@ static int atFindIdx(char *str, char ch)
 
 #define P6_SEND_BUFF_SIZE (4096)
 
-#define LOG_P6_RX_EN    (0)
+#define LOG_P6_RX_EN    (1)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
 #define LOG_P6_CROP_EN    (0)
@@ -38171,11 +38171,11 @@ static int p6(struct procRes_s *rs)
         }
 
 #if LOG_P6_RX_EN
-        sprintf_f(rs->logs, "[P6] receive len[%d]contentStr[%s]hd[%d]be[%d]ed[%d]ln[%d]\n", n, &recvbuf[be], hd, be, ed, ln);
-        print_f(rs->plogs, "P6", rs->logs);
-
-        //sprintf_f(rs->logs, "opcode:[0x%x]arg[0x%x]\n", recvbuf[hd+1], recvbuf[be-1]);
+        //sprintf_f(rs->logs, "[P6] receive len[%d]contentStr[%s]hd[%d]be[%d]ed[%d]ln[%d]\n", n, &recvbuf[be], hd, be, ed, ln);
         //print_f(rs->plogs, "P6", rs->logs);
+
+        sprintf_f(rs->logs, "opcode:[0x%x]arg[0x%x]\n", recvbuf[hd+1], recvbuf[be-1]);
+        print_f(rs->plogs, "P6", rs->logs);
 #endif
         n = ed - be - 1;
         sprintf_f(rs->logs, "n = %d \n", n);
@@ -43367,6 +43367,34 @@ static int p7(struct procRes_s *rs)
                 memset(chbuf, 0, 32);
                 sprintf_f(chbuf, "%d\0", datLen);
 #if SOCKET_NON_BLOCK_TX 
+#if SOCKET_EPOLL_EN
+                len = strlen(chbuf);
+                expectSz = len;
+                while (expectSz > 0) {
+                    if (!socketfailed) {
+                        nfds = epoll_wait (epollfd, events, MAX_EVENTS, 5000);
+                        if (nfds < 0) {
+                            perror("epoll_wait");
+                            sprintf_f(rs->logs, "nonblock send %d / %d failed, errno: %d\n", num, expectSz, errno);
+                            print_f(rs->plogs, "P7", rs->logs);         
+                            break;
+                        } else if (nfds == 0) {
+                            socketfailed = 1;
+                        } else {
+                            num = write(consfd, chbuf, expectSz);
+#if LOG_P7_TX_EN
+                            sprintf_f(rs->logs, "epoll nonblock send %d / %d, n: %d\n", num, expectSz, nfds);
+                            print_f(rs->plogs, "P7", rs->logs);         
+#endif
+                        }
+                    } else {
+                        num = len;
+                    }
+
+                    expectSz -= num;
+                    addr += num;
+                }
+#else // #if SOCKET_EPOLL_EN
                 len = strlen(chbuf);
                 expectSz = len;
                 while (expectSz > 0) {
@@ -43393,38 +43421,10 @@ static int p7(struct procRes_s *rs)
                     expectSz -= num;
                     addr += num;
                 }
-
-#if SOCKET_EPOLL_EN
-                len = strlen(chbuf);
-                expectSz = len;
-                while (expectSz > 0) {
-                    if (!socketfailed) {
-                        nfds = epoll_wait (epollfd, events, MAX_EVENTS, 5000);
-                        if (nfds < 0) {
-                            perror("epoll_wait");
-                            sprintf_f(rs->logs, "nonblock send %d / %d failed, errno: %d\n", num, expectSz, errno);
-                            print_f(rs->plogs, "P7", rs->logs);         
-                            break;
-                        } else if (nfds == 0) {
-                            socketfailed = 1;
-                        } else {
-                            num = write(consfd, addr, expectSz);
-#if LOG_P7_TX_EN
-                            sprintf_f(rs->logs, "epoll nonblock send %d / %d, n: %d\n", num, expectSz, nfds);
-                            print_f(rs->plogs, "P7", rs->logs);         
-#endif
-                        }
-                    } else {
-                        num = len;
-                    }
-
-                    expectSz -= num;
-                    addr += num;
-                }
-#endif
-#else
+#endif // #if SOCKET_EPOLL_EN
+#else //#if SOCKET_NON_BLOCK_TX 
                 ret = write(rs->psocket_n->connfd, chbuf, strlen(chbuf));
-#endif
+#endif // #if SOCKET_NON_BLOCK_TX 
                 sprintf_f(rs->logs, "get %c socket tx [%s], ret:%d\n", ch, chbuf, ret);
                 print_f(rs->plogs, "P7", rs->logs);       
                 
@@ -43455,7 +43455,7 @@ static int p7(struct procRes_s *rs)
                         } else if (nfds == 0) {
                             socketfailed = 1;
                         } else {
-                            num = write(consfd, addr, expectSz);
+                            num = write(consfd, chbuf, expectSz);
 #if LOG_P7_TX_EN
                             sprintf_f(rs->logs, "epoll nonblock send %d / %d, n: %d\n", num, expectSz, nfds);
                             print_f(rs->plogs, "P7", rs->logs);         
