@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Wed Aug 30 17:50:14 2017 c38888a276 [FAT] special case for empty SD card"
+#define MSP_VERSION "Thu Sep 7 10:47:45 2017 bfa9c8cbf2 [FAT] fix error of upload file"
 
 #define SPI1_ENABLE (1) 
 
@@ -7668,8 +7668,10 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
         pr = (char *)msdir[idt]->dirPool;
 
         rsdir->dirUsed = drsz;
-        rsdir->dirMax = FAT_DIRPOOL_IDX_MAX;        
+        rsdir->dirMax = FAT_DIRPOOL_IDX_MAX;  
+        
         memcpy(pt, pr, sizeof(struct directnFile_s) * drsz);
+        
 #if LOG_FS_EN
         sprintf_f(rs->logs, "dir size: %d print start \n", drsz);
         print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -7681,9 +7683,15 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
             dir = &rsdir->dirPool[idr];
             
 #if LOG_FS_EN
-            sprintf_f(rs->logs, "dir %d. addr:0x%.8x, status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n", idr, dir, dir->dfstats, 
-                dir->dfindex, dir->dfpaid, dir->dfbrid, dir->dfchid,dir->dfSFN);
-            print_f(rs->plogs, "CPFAT", rs->logs);    
+            if (dir->dflen > 0) {
+                sprintf_f(rs->logs, "dir %d. addr:0x%.8x, status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n", idr, dir, dir->dfstats, 
+                    dir->dfindex, dir->dfpaid, dir->dfbrid, dir->dfchid,dir->dfSFN, dir->dfLFN, dir->dflen);
+                print_f(rs->plogs, "CPFAT", rs->logs);    
+            } else {
+                sprintf_f(rs->logs, "dir %d. addr:0x%.8x, status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n", idr, dir, dir->dfstats, 
+                    dir->dfindex, dir->dfpaid, dir->dfbrid, dir->dfchid,dir->dfSFN);
+                print_f(rs->plogs, "CPFAT", rs->logs);    
+            }
 #endif
 
             /* pa info */
@@ -7691,36 +7699,43 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
             sprintf_f(rs->logs, "    pa addr: 0x%.8x \n", dir->pa);
             print_f(rs->plogs, "CPFAT", rs->logs);    
 #endif
-
+#if 0
             if (dir->pa) {
                 dpa = dir->pa;
                 sprintf_f(rs->logs, "    pa status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
                     dpa->dfstats, dpa->dfindex, dpa->dfpaid, dpa->dfbrid, dpa->dfchid, dpa->dfSFN);
                 print_f(rs->plogs, "CPFAT", rs->logs);    
             }
+#endif
+
 #if LOG_FS_EN
             /* br info */
             sprintf_f(rs->logs, "    br addr: 0x%.8x \n", dir->br);
             print_f(rs->plogs, "CPFAT", rs->logs);    
 #endif
+#if 0
             if (dir->br) {
                 dbr = dir->br;
                 sprintf_f(rs->logs, "    br status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
                     dbr->dfstats, dbr->dfindex, dbr->dfpaid, dbr->dfbrid, dbr->dfchid, dbr->dfSFN);
                     print_f(rs->plogs, "CPFAT", rs->logs);    
             }
+#endif
+
 #if LOG_FS_EN
             /* ch info */
             sprintf_f(rs->logs, "    ch addr: 0x%.8x \n", dir->ch);
             print_f(rs->plogs, "CPFAT", rs->logs);    
 #endif
+#if 0
             if (dir->ch) {
                 dch = dir->ch;
                 sprintf_f(rs->logs, "    ch status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
                     dch->dfstats, dch->dfindex, dch->dfpaid, dch->dfbrid, dch->dfchid, dch->dfSFN);
                     print_f(rs->plogs, "CPFAT", rs->logs);    
             }
-            
+#endif
+
             if (dir->dfstats == ASPFS_STATUS_EN) {
                 //debugPrintDir(dir);
 #if LOG_FS_EN
@@ -7812,6 +7827,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                         print_f(rs->plogs, "CPFAT", rs->logs);    
                     }
                 }
+                
                 if (dir->ch) {
                     ich = dir->dfchid;
 
@@ -7854,6 +7870,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                         print_f(rs->plogs, "CPFAT", rs->logs);    
                     }
                 }
+
 #if LOG_FS_EN
                 sprintf_f(rs->logs, "    dpa: 0x%.8x, dbr: 0x%.8x, dch: 0x%.8x \n", dpa, dbr, dch);
                 print_f(rs->plogs, "CPFAT", rs->logs);    
@@ -18605,14 +18622,14 @@ static int stsparam_88(struct psdata_s *data)
                             else if (act & ASPMETA_FUNC_CROP) {
                                 cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
 
-                                if (val > 0) {
+                                if (val > 1) {
                                     data->bkofw = emb_bk(data->bkofw, METAT, PSSET);
                                     data->result = emb_result(data->result, BKWRD);
 
                                     sprintf_f(rs->logs, "act:0x%x, metamass gap:%d, start:%d, record:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd); 
                                     print_f(rs->plogs, "SPM", rs->logs);  
                                 } else {
-                                    sprintf_f(rs->logs, "record line = 0 go next \n"); 
+                                    sprintf_f(rs->logs, "record line > 1 go next \n"); 
                                     print_f(rs->plogs, "SPM", rs->logs);  
 
                                     data->result = emb_result(data->result, NEXT);
@@ -19279,7 +19296,7 @@ static int stmetaduo_97(struct psdata_s *data)
                             else if (act & ASPMETA_FUNC_CROP) {
                                 cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
 
-                                if (val > 0) {
+                                if (val > 1) {
                                     data->bkofw = emb_bk(data->bkofw, METAT, PSTSM);
                                     data->result = emb_result(data->result, BKWRD);
 
@@ -19290,7 +19307,7 @@ static int stmetaduo_97(struct psdata_s *data)
                                     print_f(rs->plogs, "MDUO", rs->logs);  
                                 } else {
                                     data->result = emb_result(data->result, NEXT);
-                                    sprintf_f(rs->logs, "record line == 0, go next \n"); 
+                                    sprintf_f(rs->logs, "record line > 1, go next \n"); 
                                     print_f(rs->plogs, "MDUO", rs->logs);  
                                 }
                             } else {
@@ -33446,9 +33463,15 @@ static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
         /* debug print */
         for (in = 0; in < usedsz; in++) {
             dir = &pdirpool->dirPool[in];
-            sprintf_f(mrs->log, "dir %d. addr:0x%.8x, status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n", in, dir, 
-            dir->dfstats, dir->dfindex, dir->dfpaid, dir->dfbrid, dir->dfchid, dir->dfSFN);
-            print_f(&mrs->plog, "fs125", mrs->log);
+            if (dir->dflen > 0) {
+                sprintf_f(mrs->log, "dir %d. addr:0x%.8x, status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s] LFN[%s](%d)\n", in, dir, 
+                    dir->dfstats, dir->dfindex, dir->dfpaid, dir->dfbrid, dir->dfchid, dir->dfSFN, dir->dfLFN, dir->dflen);
+                print_f(&mrs->plog, "fs125", mrs->log);
+            } else {
+                sprintf_f(mrs->log, "dir %d. addr:0x%.8x, status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n", in, dir, 
+                    dir->dfstats, dir->dfindex, dir->dfpaid, dir->dfbrid, dir->dfchid, dir->dfSFN);
+                print_f(&mrs->plog, "fs125", mrs->log);
+            }
 
             /* pa info */
             sprintf_f(mrs->log, "    pa addr: 0x%.8x \n", dir->pa);
@@ -42587,7 +42610,7 @@ static int p6(struct procRes_s *rs)
             while (brt) {
                 while ((brt->dfstats != ASPFS_STATUS_EN) || (strcmp(brt->dfSFN, ".") == 0) 
                        || (brt->dfattrib & ASPFS_ATTR_HIDDEN) || (brt->dfattrib & ASPFS_ATTR_SYSTEM)) {
-                    sprintf_f(rs->logs, "file status[0x%.8x] name[%s] type[0x%.8x] \n", brt->dfstats, brt->dfSFN, brt->dftype);
+                    sprintf_f(rs->logs, "file status[0x%.8x] name[%c] type[0x%.8x] \n", brt->dfstats, brt->dfSFN[0], brt->dftype);
                     print_f(rs->plogs, "P6", rs->logs);
                     brt = brt->br;           
                 }
