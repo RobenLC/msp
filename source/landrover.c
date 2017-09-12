@@ -23,7 +23,7 @@
 #define SPI_MODE_1		(0|SPI_CPHA)
 #define SPI_MODE_2		(SPI_CPOL|0)
 #define SPI_MODE_3		(SPI_CPOL|SPI_CPHA)
-#define SPI_SPEED    10000000
+#define SPI_SPEED    20000000
 
 #define OP_MAX 0xff
 #define OP_NONE 0x00
@@ -35,8 +35,13 @@
 #define OP_SINGLE       0x4
 #define OP_DOUBLE       0x5
 #define OP_ACTION       0x6
-#define OP_FIH          0x7
-#define OP_RAW          0x8
+#define OP_FIH             0x7
+#define OP_RAW           0x8
+#define OP_MSINGLE    0x9
+#define OP_MDOUBLE    0xa
+#define OP_HANDSCAN  0xb
+#define OP_NOTESCAN  0xc
+
 /* SD read write operation */               
 #define OP_SDRD          0x20
 #define OP_SDWT          0x21
@@ -110,6 +115,9 @@
 #define OP_FUNCTEST_13              0x7D
 #define OP_FUNCTEST_14              0x7E
 #define OP_FUNCTEST_15              0x7F
+
+#define OP_BLEEDTHROU_ADJUST 0x81
+#define OP_BLACKWHITE_THSHLD 0x82
 
 #define DATA_END_PULL_LOW_DELAY 10000
 
@@ -373,9 +381,20 @@ typedef enum {
 typedef enum {
     DOUSCAN_NONE=0,
     DOUSCAN_WIFI_ONLY,
+    DOUSCAN_SD_ONLY,
     DOUSCAN_WIFI_SD,
-    DOUSCAN_WHIT_BLNC,
 } doubleScan_e;
+
+typedef enum {
+    NOTESCAN_NONE=0,
+    NOTESCAN_OPTION_01,
+    NOTESCAN_OPTION_02,
+    NOTESCAN_OPTION_03,
+    NOTESCAN_OPTION_04,
+    NOTESCAN_OPTION_05,
+    NOTESCAN_OPTION_06,
+    NOTESCAN_OPTION_07,
+} noteScan_e;
 
 typedef enum {
     FILE_FORMAT_NONE=0,
@@ -428,6 +447,7 @@ typedef enum {
     ASPMETA_CROP_300DPI_DUO = 6,
     ASPMETA_CROP_600DPI_DUO = 7,
     ASPMETA_SD = 8,
+    ASPMETA_OCR = 9,
 } aspMetaParam_e;
 
 typedef enum {
@@ -508,6 +528,8 @@ typedef enum {
     ASPOP_FUNTEST_13,
     ASPOP_FUNTEST_14,
     ASPOP_FUNTEST_15,
+    ASPOP_BLEEDTHROU_ADJUST,
+    ASPOP_BLACKWHITE_THSHLD,
     ASPOP_CROP_01,
     ASPOP_CROP_02, /* 70 */
     ASPOP_CROP_03,
@@ -771,8 +793,10 @@ struct aspMetaData_s{
   unsigned char  OP_FUNC_13;              //0x7D
   unsigned char  OP_FUNC_14;              //0x7E
   unsigned char  OP_FUNC_15;              //0x7F  
-  unsigned char  OP_RESERVE[28];          // byte[64]
-  
+  unsigned char  BLEEDTHROU_ADJUST; //0x81
+  unsigned char  BLACKWHITE_THSHLD; //0x82  
+  unsigned char  OP_RESERVE[26];          // byte[64]
+
   /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
   struct intMbs_s CROP_POS_1;        //byte[68]
   struct intMbs_s CROP_POS_2;        //byte[72]
@@ -1353,7 +1377,36 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
                  break;
             }
         }
-    
+
+        opSt = OP_BLEEDTHROU_ADJUST;
+        opEd = OP_BLACKWHITE_THSHLD;
+
+        istr = ASPOP_BLEEDTHROU_ADJUST;
+        iend = ASPOP_BLACKWHITE_THSHLD;
+        
+        pvdst = &pmeta->BLEEDTHROU_ADJUST;
+        pvend = &pmeta->BLACKWHITE_THSHLD;
+
+        for (idx = istr; idx <= iend; idx++) {
+            if (pct[idx].opCode == opSt) {
+            
+                //*pvdst = pct[idx].opValue & 0xff;
+                pct[idx].opValue = *pvdst & 0xff;
+                pct[idx].opStatus = ASPOP_STA_CON;
+                printf("[meta] 0x%.2x = 0x%.2x (0x%.2x)\n", pct[idx].opCode, pct[idx].opValue, pct[idx].opStatus);
+
+                pvdst++;
+                opSt++;
+            }
+
+            if (pvend < pvdst) {
+                 break;
+            }
+            if (opEd < opSt) {
+                 break;
+            }
+        }
+        
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
@@ -1452,8 +1505,9 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     struct aspMetaData_s *pmeta;
     struct cropCoord_s *pCrop;
     struct aspMetaMass_s *mass;
-    char *pvdst=0, *pvend=0;
-    
+    char *pvdst=0, *pvend=0, *pch=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+
     if ((!mrs) && (!rs)) return -1;
     
     if (mrs) {
@@ -1461,11 +1515,13 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         pCrop = &(mrs->cropCoord);
         scan_len = mrs->scan_length;
         mass = &(mrs->metaMass);
+        pct = mrs->configTable;
     } else {
         pmeta = rs->pmetaout;
         pCrop = rs->pcropCoord;
         scan_len = *(rs->pscnlen);
         mass = rs->pmetaMass;
+        pct = rs->pcfgTable;
     }
 
     msync(pCrop, 18 * sizeof(struct cropCoord_s), MS_SYNC);
@@ -1514,19 +1570,41 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         pmeta->YLine_Gap = (xparm >> 24) & 0xff;
         pmeta->Start_YLine_No = (xparm >> 16) & 0xff;
 
-        pdst = (struct intMbs_s *)&(pmeta->YLines_Recorded);
+        pch = (char *)&(pmeta->YLines_Recorded);
+
+        val = xparm & 0xffff;
+
+/*        
+        if (((mass->massIdx + 1) % 7) != 0) {
+            val = (xparm & 0xffff) << 16;
+        } else {
+            val = 0;
+        }
+*/
         
-        val = (xparm & 0xffff) << 16;
+        if (((mass->massIdx + 1) % 4) == 0) {
+            val = 1;
+        }
+            
+        printf("######### index: [%d] val: %d !!! #########\n", mass->massIdx, val);
         
-        lsb2Msb(pdst, val);        
+        ret = val;
+
+        pch[0] = val >> 8;
+        pch[1] = val & 0xff;
+        
+        //lsb2Msb(pdst, val);        
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
         pdst = &(pmeta->SCAN_IMAGE_LEN);
+        scan_len = pct[ASPOP_IMG_LEN].opValue;
         
         //lsb2Msb(pdst, 0);
-        //lsb2Msb(pdst, scan_len);
-        lsb2Msb(pdst, 3496); //5400 //3496
+        lsb2Msb(pdst, scan_len);
+        //lsb2Msb(pdst, 3496); //5400 //3496
+
+        ret = scan_len;
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {
@@ -1558,7 +1636,7 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     
     msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     
-    return 0;
+    return ret;
 }
 
 static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
@@ -1571,7 +1649,8 @@ static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct 
                                             0x080700ce, 0x080700ce, 0x080700ce, 0x080700ce, 0x080700ce, 
                                             0x080700ce, 0x080700ce, 0x080700a2, 0x080700f6, 0x080f00bc, 
                                             0x080700fe, 0x1007004a, 0x1007003b, 0x10070039, 0x100f0045, 
-                                            0x10070048, 0x10070035, 0x10070043, 0x10070044, 0x100f0043};
+                                            0x10070048, 0x10070035, 0x10070043, 0x10070044, 0x100f0043,
+                                            0x2008003d, 0x2008003d, 0x2008003e, 0x2008003d, 0x2010003c};
 #elif (CROP_SAMPLE_SIZE == 4)
     uint32_t xposParm[4] = {0x080300ef, 0x080b0098, 0x08070094, 0x080700a0};
 #else 
@@ -1586,7 +1665,8 @@ static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct 
     struct aspMetaData_s *pmetaduo;
     struct cropCoord_s *pCropDuo;
     struct aspMetaMass_s *mass, *massduo;
-    char *pvdst=0, *pvend=0;
+    char *pvdst=0, *pvend=0, *pch=0;
+    struct aspConfig_s *pct=0, *pdt=0;
     
     if ((!mrs) && (!rs)) return -1;
     
@@ -1596,12 +1676,14 @@ static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct 
         scan_len = mrs->scan_length;
         mass = &(mrs->metaMass);
         massduo = &(mrs->metaMassDuo);
+        pct = mrs->configTable;
     } else {
         pmetaduo = rs->pmetaoutduo;
         pCropDuo = rs->pcropCoordDuo;
         scan_len = *(rs->pscnlen);
         mass = rs->pmetaMass;
         massduo = rs->pmetaMassduo;
+        pct = rs->pcfgTable;
     }
 
     msync(pCropDuo, 18 * sizeof(struct cropCoord_s), MS_SYNC);
@@ -1650,18 +1732,29 @@ static int aspMetaBuildDuo(unsigned int funcbits, struct mainRes_s *mrs, struct 
         pmetaduo->YLine_Gap = (xparm >> 24) & 0xff;
         pmetaduo->Start_YLine_No = (xparm >> 16) & 0xff;
 
-        pdst = (struct intMbs_s *)&(pmetaduo->YLines_Recorded);
-        val = (xparm & 0xffff) << 16;
+        pch = (char *)&(pmetaduo->YLines_Recorded);
+
+        val = xparm & 0xffff;
+
+        if (((mass->massIdx + 1) % 4) == 0) {
+            val = 1;
+        }
+
+        ret = val;
         
-        lsb2Msb(pdst, val);        
+        pch[0] = val >> 8;
+        pch[1] = val & 0xff;        
+        
+        //lsb2Msb(pdst, val);        
     }
 
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
         pdst = &(pmetaduo->SCAN_IMAGE_LEN);
+        scan_len = pct[ASPOP_IMG_LEN_DUO].opValue;
         
-        lsb2Msb(pdst, 0);
+        //lsb2Msb(pdst, 0);
         lsb2Msb(pdst, scan_len);
-        lsb2Msb(pdst, 4800);
+        //lsb2Msb(pdst, 4800);
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {
@@ -1740,6 +1833,8 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta)
         printf("[meta]OP_FUNC_13: 0x%.2x      \n",pmeta->OP_FUNC_13      );     //0x7D
         printf("[meta]OP_FUNC_14: 0x%.2x      \n",pmeta->OP_FUNC_14      );     //0x7E
         printf("[meta]OP_FUNC_15: 0x%.2x      \n",pmeta->OP_FUNC_15      );     //0x7F  
+        printf("[meta]BLEEDTHROU_ADJUST: 0x%.2x      \n",pmeta->BLEEDTHROU_ADJUST);
+        printf("[meta]BLACKWHITE_THSHLD: 0x%.2x      \n",pmeta->BLACKWHITE_THSHLD);
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
@@ -2287,11 +2382,33 @@ static int next_spy(struct psdata_s *data)
                 t->opcode = tmpAns & 0xff;
                 t->data = (tmpAns >> 8) & 0xff;
                 switch (tmpAns & 0xff) {
-                case OP_SINGLE: /* currently support */              
+                case OP_NOTESCAN:
+                    switch ((tmpAns >> 8) & 0xff) {
+                        case NOTESCAN_OPTION_01:
+                        case NOTESCAN_OPTION_02:
+                        case NOTESCAN_OPTION_03:
+                        case NOTESCAN_OPTION_04:
+                        case NOTESCAN_OPTION_05:
+                        case NOTESCAN_OPTION_06:
+                        case NOTESCAN_OPTION_07:
+                            t->opcode = tmpAns & 0xff;
+                            t->data = (tmpAns >> 8) & 0xff;
+                            next = PSTSM;
+                            evt = AUTO_C;
+                            break;
+                        default:
+                            next = PSSET; /* get and repeat value */
+                            evt = AUTO_A;
+                            break;
+                    }
+                    break;
+                case OP_SINGLE: /* currently support */         
+                case OP_MSINGLE:
+                case OP_HANDSCAN:
                     switch ((tmpAns >> 8) & 0xff) {
                         case SINSCAN_DUAL_STRM:
                         case SINSCAN_DUAL_SD:
-                            t->opcode = OP_SINGLE;
+                            t->opcode = tmpAns & 0xff;
                             t->data = (tmpAns >> 8) & 0xff;
                             #if 1
                             next = PSSET; 
@@ -2302,19 +2419,19 @@ static int next_spy(struct psdata_s *data)
                             #endif
                             break;
                         case SINSCAN_WIFI_ONLY:
-                            t->opcode = OP_SINGLE;
+                            t->opcode = tmpAns & 0xff;
                             t->data = SINSCAN_WIFI_ONLY;
                             next = PSTSM;
                             evt = AUTO_C;
                             break;
                         case SINSCAN_SD_ONLY:
-                            t->opcode = OP_SINGLE;
+                            t->opcode = tmpAns & 0xff;
                             t->data = SINSCAN_SD_ONLY;
                             next = PSTSM;
                             evt = AUTO_C;
                             break;
                         case SINSCAN_WIFI_SD:
-                            t->opcode = OP_SINGLE;
+                            t->opcode = tmpAns & 0xff;
                             t->data = SINSCAN_WIFI_SD;
                             next = PSTSM;
                             evt = AUTO_C;
@@ -2324,6 +2441,7 @@ static int next_spy(struct psdata_s *data)
                     }
                     break;
                 case OP_DOUBLE: 
+                case OP_MDOUBLE:
                     switch ((tmpAns >> 8) & 0xff) {
                         case DOUSCAN_WIFI_ONLY:
                         case DOUSCAN_WIFI_SD:
@@ -3634,6 +3752,9 @@ static int stspy_05(struct psdata_s *data)
                 
                 switch (data->ansp0 & 0xff) {
                     case OP_SINGLE: /* currently support */
+                    case OP_MSINGLE:
+                    case OP_HANDSCAN:
+                    case OP_NOTESCAN:
                     case OP_SDRD:
                     case OP_SDWT:
                     case OP_STSEC_00:
@@ -3681,6 +3802,7 @@ static int stspy_05(struct psdata_s *data)
 
                     case OP_SUPBACK:
                     case OP_DOUBLE:
+                    case OP_MDOUBLE:
                     case OP_SAVE:
                     case OP_FUNCTEST_00:
                     case OP_FUNCTEST_01:
@@ -6105,13 +6227,17 @@ static int stauto_38(struct psdata_s *data)
                         pmass->massStart = 12;
                         pmass->massGap = 8;
                         aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
-                        //if (pdt->opValue != FILE_FORMAT_RAW) {
-                            pmass->massRecd = pmass->massUsed / 4;
-                            aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
-                        //}
+
+                        pmass->massRecd = pmass->massUsed / 4;
+                        ret = aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
+                        if ((ret == 0) || (ret == 1)) {
+                            pmass->massIdx += 1;
+                        }
+
                         aspMetaBuild(ASPMETA_FUNC_IMGLEN, 0, rs);
                         break;
                     case ASPMETA_CROP_300DPI:
+                    case ASPMETA_OCR:
                         pmass->massStart = 12;
                         pmass->massGap = 8;
                         //pmass->massIdx = 9;
@@ -6135,21 +6261,25 @@ static int stauto_38(struct psdata_s *data)
                         pmass->massStart = 12;
                         pmass->massGap = 8;
                         aspMetaBuild(ASPMETA_FUNC_NONE, 0, rs);
-                        //if (pdt->opValue != FILE_FORMAT_RAW) {
-                            pmass->massRecd = pmass->massUsed / 4;
-                            aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
-                        //}
+                        
+                        pmass->massRecd = pmass->massUsed / 4;
+                        ret = aspMetaBuild(ASPMETA_FUNC_CROP, 0, rs);
+ 
                         aspMetaBuild(ASPMETA_FUNC_IMGLEN, 0, rs);
 
                         pmassDuo->massIdx = pmass->massIdx + 1;
                         pmassDuo->massStart = 12;
                         pmassDuo->massGap = 8;
                         aspMetaBuildDuo(ASPMETA_FUNC_NONE, 0, rs);
-                        //if (pdt->opValue != FILE_FORMAT_RAW) {
-                            pmassDuo->massRecd = pmassDuo->massUsed / 4;
-                            aspMetaBuildDuo(ASPMETA_FUNC_CROP, 0, rs);
-                        //}
+                        pmassDuo->massRecd = pmassDuo->massUsed / 4;
+                        aspMetaBuildDuo(ASPMETA_FUNC_CROP, 0, rs);
+
                         aspMetaBuildDuo(ASPMETA_FUNC_IMGLEN, 0, rs);
+
+                        if ((ret == 0) ||(ret == 1)) {
+                            pmass->massIdx += 1;
+                        }
+
                         break;
                     case ASPMETA_CROP_300DPI_DUO:
                         pmass->massStart = 12;
@@ -6197,6 +6327,7 @@ static int stauto_38(struct psdata_s *data)
                         break;
                     case ASPMETA_CROP_300DPI:
                     case ASPMETA_CROP_600DPI:
+                    case ASPMETA_OCR:
                         sprintf(str, "meta func bits: 0x%.2x, go wait !!! \n", pmetaOut->FUNC_BITS);  
                         print_f(mlogPool, "auto_38", str);  
 
@@ -7471,8 +7602,12 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         print_f(&mrs->plog, "fs10", mrs->log);
 
         switch (p->opcode) {
-        case OP_SINGLE: /* currently support */              
+        case OP_SINGLE: /* currently support */       
+        case OP_MSINGLE:
+        case OP_HANDSCAN:
+        case OP_NOTESCAN:
         case OP_DOUBLE: 
+        case OP_MDOUBLE:
         case OP_SDRD:                                       
         case OP_SDWT:                                       
         case OP_SDAT:                                     
@@ -8161,14 +8296,14 @@ static int fs30(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(mrs->log, "Set spi%d RDY pin: %d, finished!! \n", 0, bitset);
     print_f(&mrs->plog, "fs30", mrs->log);
 
-    usleep(DATA_END_PULL_LOW_DELAY);
-
-    bitset = 0;
-    ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
-    sprintf(mrs->log, "Get spi%d RDY pin: %d \n", 0, bitset);
-    print_f(&mrs->plog, "fs30", mrs->log);
+    //bitset = 0;
+    //ioctl(mrs->sfm[0], _IOR(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_RD_CTL_PIN
+    //sprintf(mrs->log, "Get spi%d RDY pin: %d \n", 0, bitset);
+    //print_f(&mrs->plog, "fs30", mrs->log);
 
     //usleep(60000);
+
+    usleep(DATA_END_PULL_LOW_DELAY);
 
     bitset = 1;
     ioctl(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
@@ -8332,7 +8467,18 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
     //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
     //char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
-    char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
+    //char diskname[128] = "/mnt/mmc2/mingssd.bin";
+    //char diskname[128] = "/mnt/mmc2/16g_ghost.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_beformat_rmmore.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_32k_format.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_64k_format.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01_rm.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01.bin";
+    char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
+    //char diskname[128] = "/mnt/mmc2/64G_empty.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
+    //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
     struct aspMetaData_s *pmeta;
@@ -8921,7 +9067,8 @@ static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf(mrs->log, "get 0x%.2x 0x%.2x \n", p->opcode, p->data);
         print_f(&mrs->plog, "fs54", mrs->log);
 
-        if ((p->opcode == OP_DOUBLE) && ((p->data == DOUSCAN_WIFI_ONLY) || (p->data == DOUSCAN_WIFI_SD))) {
+        if (((p->opcode == OP_DOUBLE) || (p->opcode == OP_MDOUBLE)) && 
+            ((p->data == DOUSCAN_WIFI_ONLY) || (p->data == DOUSCAN_WIFI_SD))) {
             modersp->r = 1;
             return 1;
         } else {
@@ -9086,7 +9233,18 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
     //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
     //char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
-    char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
+    //char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
+    //char diskname[128] = "/mnt/mmc2/mingssd.bin";
+    //char diskname[128] = "/mnt/mmc2/16g_ghost.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_beformat_rmmore.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_32k_format.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_64k_format.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01_rm.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01.bin";
+    char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
+    //char diskname[128] = "/mnt/mmc2/64G_empty.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
+    //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -10209,9 +10367,22 @@ static int p2(struct procRes_s *rs)
             } else if (popt_fformat == FILE_FORMAT_RAW) {
                 if (popt_colorMode == COLOR_MODE_COLOR) {
 #if CROP_SAMPLE_SIZE                    
+                    if (rs->pmetaMass->massIdx > 18) {
+                        rs->pmetaMass->massIdx -= 18;
+                    }
+
                     rs->pmetaMass->massIdx = 18+(rs->pmetaMass->massIdx % 12); // for debug
 
                     idx = rs->pmetaMass->massIdx;
+
+                    if (((idx+1) % 7) == 0) {
+                        pct[ASPOP_IMG_LEN].opValue = 0;
+                        pct[ASPOP_IMG_LEN_DUO].opValue = 0;
+                    } else {
+                        pct[ASPOP_IMG_LEN].opValue = 3496;
+                        pct[ASPOP_IMG_LEN_DUO].opValue = 3496;
+                    }
+                    
                     sprintf(filename, cropfileRaw, (idx%CROP_SAMPLE_SIZE));
                     sprintf(filenameDuo, cropfileRaw, ((idx+1)%CROP_SAMPLE_SIZE));
 #else
@@ -10222,13 +10393,22 @@ static int p2(struct procRes_s *rs)
                 }
             } else {
 #if CROP_SAMPLE_SIZE
-                #define SAMPLE_MIN 0
+                #define SAMPLE_MIN 4
                 if (rs->pmetaMass->massIdx > SAMPLE_MIN) {
                     rs->pmetaMass->massIdx -= SAMPLE_MIN;
                 }
                 rs->pmetaMass->massIdx = SAMPLE_MIN + (rs->pmetaMass->massIdx % (CROP_SAMPLE_SIZE - SAMPLE_MIN)); // for debug
                 
                 idx = rs->pmetaMass->massIdx;
+
+                if (((idx+1) % 7) == 0) {
+                    pct[ASPOP_IMG_LEN].opValue = 0;
+                    pct[ASPOP_IMG_LEN_DUO].opValue = 0;
+                } else {
+                    pct[ASPOP_IMG_LEN].opValue = 1105;
+                    pct[ASPOP_IMG_LEN_DUO].opValue = 1905;
+                }
+                
                 //idx = testTarget[curTarget % TEST_TRG_SIZE];
                 rs->pmetaMass->massIdx = idx;
                 curTarget += 1;
@@ -12020,7 +12200,18 @@ int main(int argc, char *argv[])
 //char diskname[128] = "/mnt/mmc2/empty_256.dsk";
 //char diskname[128] = "/mnt/mmc2/folder_256.dsk";
 //char diskname[128] = "/mnt/mmc2/disk_LFN_64.bin";
-char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
+//char diskname[128] = "/mnt/mmc2/disk_onefolder.bin";
+//char diskname[128] = "/mnt/mmc2/mingssd.bin";
+//char diskname[128] = "/mnt/mmc2/16g_ghost.bin";
+//char diskname[128] = "/mnt/mmc2/32g_beformat_rmmore.bin";
+//char diskname[128] = "/mnt/mmc2/32g_32k_format.bin";
+//char diskname[128] = "/mnt/mmc2/32g_64k_format.bin";
+//char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01_rm.bin";
+//char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01.bin";
+char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
+//char diskname[128] = "/mnt/mmc2/64G_empty.bin";
+//char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
+//char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 
@@ -12925,7 +13116,23 @@ static char spi0[] = "/dev/spidev32765.0";
             ctb->opMask = ASPOP_MASK_8;
             ctb->opBitlen = 8;
             break;
-        case ASPOP_CROP_01: 
+        case ASPOP_BLEEDTHROU_ADJUST: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_BLEEDTHROU_ADJUST;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_BLACKWHITE_THSHLD: 
+            ctb->opStatus = ASPOP_STA_NONE;
+            ctb->opCode = OP_BLACKWHITE_THSHLD;
+            ctb->opType = ASPOP_TYPE_VALUE;
+            ctb->opValue = 0xff;
+            ctb->opMask = ASPOP_MASK_8;
+            ctb->opBitlen = 8;
+            break;
+        case ASPOP_CROP_01: 
             ctb->opStatus = ASPOP_STA_NONE;
             ctb->opCode = OP_CROP_01;
             ctb->opType = ASPOP_TYPE_VALUE;
