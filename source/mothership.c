@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Sep 7 10:47:45 2017 bfa9c8cbf2 [FAT] fix error of upload file"
+#define MSP_VERSION "Fri Sep 8 16:08:44 20177 145fb1f20d [CROP] fix flow error when yline_recorder == 1"
 
 #define SPI1_ENABLE (1) 
 
@@ -1759,6 +1759,7 @@ static dbgBitmapHeader(struct bitmapHeader_s *ph, int len)
 static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta) 
 {
     char mlog[256];
+    char *pch=0;
     
     msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     sprintf_f(mlog, "********************************************\n");
@@ -1904,7 +1905,8 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta)
         print_f(mlogPool, "META", mlog);
         sprintf_f(mlog, "Start_YLine_No: %d      \n",pmeta->Start_YLine_No); 
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "YLines_Recorded: %d      \n",msb2lsb((struct intMbs_s*)&pmeta->YLines_Recorded) >> 16); 
+        pch = (char *)&pmeta->YLines_Recorded;
+        sprintf_f(mlog, "YLines_Recorded: %d      \n",(pch[0] << 8) | pch[1]); 
         print_f(mlogPool, "META", mlog);
     }
 
@@ -2224,6 +2226,7 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     unsigned char linGap, linStart;
     unsigned short linRec;
     unsigned int val;
+    char *pch=0;
 
     if ((!mrs) && (!rs)) return -1;
     
@@ -2271,9 +2274,10 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         linGap = pmeta->YLine_Gap;
         linStart = pmeta->Start_YLine_No;
         
-        pt = (struct intMbs_s *)&(pmeta->YLines_Recorded);
-        val = msb2lsb(pt);
-        linRec = val >> 16;
+        pch = (char *)&(pmeta->YLines_Recorded);
+        
+        val = pch[0] << 8 | pch[1];
+        linRec = val;
 
         act |= ASPMETA_FUNC_CROP;
         
@@ -2335,6 +2339,7 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
     unsigned char linGap, linStart;
     unsigned short linRec;
     unsigned int val;
+    char *pch=0;
 
     if ((!mrs) && (!rs)) return -1;
     
@@ -2378,9 +2383,10 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
         linGap = pmetaDuo->YLine_Gap;
         linStart = pmetaDuo->Start_YLine_No;
         
-        pt = (struct intMbs_s *)&(pmetaDuo->YLines_Recorded);
-        val = msb2lsb(pt);
-        linRec = val >> 16;
+        pch = (char *)&(pmetaDuo->YLines_Recorded);
+        
+        val = pch[0] << 8 | pch[1];
+        linRec = val;
 
         act |= ASPMETA_FUNC_CROP;
             
@@ -7694,46 +7700,16 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
             }
 #endif
 
-            /* pa info */
 #if LOG_FS_EN
+            /* pa info */
             sprintf_f(rs->logs, "    pa addr: 0x%.8x \n", dir->pa);
             print_f(rs->plogs, "CPFAT", rs->logs);    
-#endif
-#if 0
-            if (dir->pa) {
-                dpa = dir->pa;
-                sprintf_f(rs->logs, "    pa status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
-                    dpa->dfstats, dpa->dfindex, dpa->dfpaid, dpa->dfbrid, dpa->dfchid, dpa->dfSFN);
-                print_f(rs->plogs, "CPFAT", rs->logs);    
-            }
-#endif
-
-#if LOG_FS_EN
             /* br info */
             sprintf_f(rs->logs, "    br addr: 0x%.8x \n", dir->br);
             print_f(rs->plogs, "CPFAT", rs->logs);    
-#endif
-#if 0
-            if (dir->br) {
-                dbr = dir->br;
-                sprintf_f(rs->logs, "    br status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
-                    dbr->dfstats, dbr->dfindex, dbr->dfpaid, dbr->dfbrid, dbr->dfchid, dbr->dfSFN);
-                    print_f(rs->plogs, "CPFAT", rs->logs);    
-            }
-#endif
-
-#if LOG_FS_EN
             /* ch info */
             sprintf_f(rs->logs, "    ch addr: 0x%.8x \n", dir->ch);
             print_f(rs->plogs, "CPFAT", rs->logs);    
-#endif
-#if 0
-            if (dir->ch) {
-                dch = dir->ch;
-                sprintf_f(rs->logs, "    ch status: 0x%x <0x%.8x,0x%.8x,0x%.8x,0x%.8x> SFN[%s]\n",
-                    dch->dfstats, dch->dfindex, dch->dfpaid, dch->dfbrid, dch->dfchid, dch->dfSFN);
-                    print_f(rs->plogs, "CPFAT", rs->logs);    
-            }
 #endif
 
             if (dir->dfstats == ASPFS_STATUS_EN) {
@@ -18594,7 +18570,7 @@ static int stsparam_88(struct psdata_s *data)
                     //pmass->massUsed = 0;
                 }
                 else {
-                    //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
+                    shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
                     dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
                     act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
 
@@ -18621,6 +18597,9 @@ static int stsparam_88(struct psdata_s *data)
                             }
                             else if (act & ASPMETA_FUNC_CROP) {
                                 cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
+
+                                sprintf_f(rs->logs, "Yline_recorder: %d!!\n", val); 
+                                print_f(rs->plogs, "SPM", rs->logs);  
 
                                 if (val > 1) {
                                     data->bkofw = emb_bk(data->bkofw, METAT, PSSET);
@@ -42608,11 +42587,14 @@ static int p6(struct procRes_s *rs)
             //debugPrintDir(brt);
 
             while (brt) {
-                while ((brt->dfstats != ASPFS_STATUS_EN) || (strcmp(brt->dfSFN, ".") == 0) 
-                       || (brt->dfattrib & ASPFS_ATTR_HIDDEN) || (brt->dfattrib & ASPFS_ATTR_SYSTEM)) {
-                    sprintf_f(rs->logs, "file status[0x%.8x] name[%c] type[0x%.8x] \n", brt->dfstats, brt->dfSFN[0], brt->dftype);
+                if ((brt->dfstats != ASPFS_STATUS_EN) || (strcmp(brt->dfSFN, ".") == 0) 
+                       || (brt->dfattrib & ASPFS_ATTR_HIDDEN) 
+                       || (brt->dfattrib & ASPFS_ATTR_SYSTEM) 
+                       || (brt->dfattrib & ASPFS_ATTR_VOLUME_ID)) {
+                    sprintf_f(rs->logs, "file status[0x%.8x] name[%c] type[0x%.8x] attrib[0x%.8x]\n", brt->dfstats, brt->dfSFN[0], brt->dftype, brt->dfattrib);
                     print_f(rs->plogs, "P6", rs->logs);
-                    brt = brt->br;           
+                    brt = brt->br; 
+                    continue;
                 }
 
                 if (brt->dflen) {
