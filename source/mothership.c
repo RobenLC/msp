@@ -10450,6 +10450,12 @@ static uint32_t next_MDUOU(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+    
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -10538,6 +10544,12 @@ static uint32_t next_OCRX(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+    
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -10627,6 +10639,12 @@ static uint32_t next_OCRW(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+    
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -10716,6 +10734,12 @@ static uint32_t next_MTSDV(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -10805,6 +10829,12 @@ static uint32_t next_METAT(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -10893,6 +10923,12 @@ static uint32_t next_SAVPARM(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -10987,6 +11023,12 @@ static uint32_t next_VECTORS(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11074,6 +11116,12 @@ static uint32_t next_CROPR(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11200,6 +11248,12 @@ static uint32_t next_WTBAKQ(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11307,6 +11361,12 @@ static uint32_t next_WTBAKP(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11398,6 +11458,12 @@ static uint32_t next_SDAO(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11486,6 +11552,12 @@ static uint32_t next_SDAN(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11575,6 +11647,12 @@ static uint32_t next_SDAM(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11662,6 +11740,12 @@ static uint32_t next_SDAL(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11750,6 +11834,12 @@ static uint32_t next_SAVK(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11839,6 +11929,12 @@ static uint32_t next_SINJ(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -11927,6 +12023,12 @@ static uint32_t next_SUPI(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12035,6 +12137,12 @@ static uint32_t next_FAT32H(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12123,6 +12231,12 @@ static uint32_t next_FAT32G(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12211,6 +12325,12 @@ static uint32_t next_registerE(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12299,6 +12419,12 @@ static uint32_t next_registerF(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12394,6 +12520,12 @@ static uint32_t next_doubleC(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12497,6 +12629,12 @@ static uint32_t next_doubleD(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12588,6 +12726,12 @@ static int next_spy(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12677,6 +12821,12 @@ static uint32_t next_bullet(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
@@ -12764,6 +12914,12 @@ static int next_laser(struct psdata_s *data)
     } else {
         next = PSMAX;
     }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+
     tmpRlt = emb_event(tmpRlt, evt);
     return emb_process(tmpRlt, next);
 }
