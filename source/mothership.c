@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Fri Sep 8 16:08:44 20177 145fb1f20d [CROP] fix flow error when yline_recorder == 1"
+#define MSP_VERSION "Thu Sep 14 16:08:29 2017 7aad103520 [FAT] new command fatfmt to format SD card"
 
 #define SPI1_ENABLE (1) 
 
@@ -238,8 +238,8 @@ static int *totSalloc=0;
 #define CROP_MIGRATE_TO_APP (1)
 #define CFLOAT double
 
-#define FAT_DIRPOOL_IDX_MAX   (56850)
-#define FAT_DIRPOO_ARY_MAX   (65535)
+#define FAT_DIRPOOL_IDX_MAX   (65535)
+#define FAT_DIRPOO_ARY_MAX   (4095)
 
 #define LOG_FS_EN (0)
 #define LOG_DOT_PROG_EN (0)
@@ -2539,6 +2539,7 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
     return act;
 }
 
+#define LOG_DEBUG_MEMALLOC (0)
 static int aspMemClear(struct aspMemAsign_s *msa, int *memtot, int pidx)
 {
     char mlog[256];
@@ -2573,9 +2574,10 @@ static int aspMemClear(struct aspMemAsign_s *msa, int *memtot, int pidx)
 
             ms->aspMemAddr[mi] = 0;
             ms->aspMemSize[mi] = 0;
-            
-            //sprintf_f(mlog, "[%d] FREE [%d] ADDR: 0x%.8x, SIZE: %d, TOTAL: %d\n", pidx, mi, ad32, asz, tot);
-            //print_f(mlogPool, "MEM", mlog);
+            #if LOG_DEBUG_MEMALLOC
+            sprintf_f(mlog, "[%d] FREE [%d] ADDR: 0x%.8x, SIZE: %d, TOTAL: %d\n", pidx, mi, ad32, asz, tot);
+            print_f(mlogPool, "MEM", mlog);
+            #endif
         }
     }
     
@@ -2597,6 +2599,7 @@ static int aspMemDebug(struct aspMemAsign_s *msa, int *memtot, int *shmemtot)
     if (memtot == 0) return -2;
     if (shmemtot == 0) return -3;
 
+#if LOG_DEBUG_MEMALLOC
     stot = *shmemtot;
 
     sprintf_f(mlog, "********************************************%d\n", level);
@@ -2636,11 +2639,11 @@ static int aspMemDebug(struct aspMemAsign_s *msa, int *memtot, int *shmemtot)
 
     sprintf_f(mlog, "********************************************%d\n", level);
     print_f(mlogPool, "MEM", mlog);
+#endif
 
     return 0;
 }
 
-#define LOG_DEBUG_MEMALLOC (0)
 static void* aspMemalloc(uint32_t asz, int pidx) 
 {
     char mlog[256];
@@ -8559,6 +8562,8 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
     int leN=0, cnt=0, idx=0, ret = 0, n = 0;
     char *plnN=0, *pstN=0, *nxraw=0;
     char ld=0, nd=0;
+    uint32_t lf=0;
+
     if (!raw) return (-1);
     if (!fs) return (-2);
     if (last < 32) return last; 
@@ -8710,8 +8715,12 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         goto fsparseEnd;
     }
     else if ((ld & 0xf0) == 0x40) {
-        nd = raw[32];
-        if ((nd != ((ld & 0xf) - 1) || (nd == 0)) && (ld != 0x41)) {
+        nd = raw[32]; 
+        lf = raw[11] | (raw[12] << 8) | (raw[27] << 16) | (raw[26] << 24);
+#if LOG_FS_EN        
+        printf("\n before LONG file name parsing...[0x%.2x] [0x%.8x] \n", nd, lf);
+#endif
+        if ((nd != ((ld & 0xf) - 1)) || (nd == 0) || ((ld == 0x41) && (lf != 0xf))) {
             //memset(fs, 0x00, sizeof(struct directnFile_s));
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
@@ -24569,7 +24578,7 @@ static int dbg(struct mainRes_s *mrs)
                 loglen = 0;
                 memset(cmd, 0, 256);
 
-                //aspMemDebug(aspMemAsign, asptotMalloc, totSalloc);
+                aspMemDebug(aspMemAsign, asptotMalloc, totSalloc);
             } else {
                 mrs_ipc_put(mrs, "?", 1, 5); 
                 continue;
@@ -28612,7 +28621,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs75", mrs->log);
         }
     } else {
-        sprintf_f(mrs->log, "get upd dir succeed: [%s] <== [%s]\n", curDir->dfSFN, pfat->fatFileUpld.dfSFN);
+        sprintf_f(mrs->log, "get upd dir succeed: [%s](0x%.8x) <== [%s](0x%.8x)\n", curDir->dfSFN, curDir->dfindex, pfat->fatFileUpld.dfSFN, pfat->fatFileUpld.dfindex);
         print_f(&mrs->plog, "fs75", mrs->log);
     }
 
