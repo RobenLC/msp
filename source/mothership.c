@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Sep 14 16:08:29 2017 7aad103520 [FAT] new command fatfmt to format SD card"
+#define MSP_VERSION "Thu Sep 14 16:08:29 2017 7aad103520 [FAT] new command fatfmt to format SD card 0x41"
 
 #define SPI1_ENABLE (1) 
 
@@ -241,7 +241,7 @@ static int *totSalloc=0;
 #define FAT_DIRPOOL_IDX_MAX   (65535)
 #define FAT_DIRPOO_ARY_MAX   (4095)
 
-#define LOG_FS_EN (1)
+#define LOG_FS_EN (0)
 #define LOG_DOT_PROG_EN (0)
 
 #define ANSP0_RECOVER (1)
@@ -667,8 +667,8 @@ struct directnFile_s{
     uint32_t   dfstats;
     char        dfLFN[256];
     char        dfSFN[12];
-    int           dflen;
-    uint32_t   dfattrib;
+    uint16_t   dflen;
+    uint16_t   dfattrib;
     uint32_t   dfcretime;
     uint32_t   dfcredate;
     uint32_t   dflstacdate;
@@ -711,6 +711,9 @@ typedef enum {
     ASPFAT_STATUS_DFECHK = 0x800,
     ASPFAT_STATUS_DFERD = 0x1000,
     ASPFAT_STATUS_SDWBK = 0x2000,
+    ASPFAT_STATUS_FMTBSEC = 0x4000,
+    ASPFAT_STATUS_FMTFAT = 0x8000,
+    ASPFAT_STATUS_FMTROOT = 0x10000,
 } aspFatStatus_e;
 
 
@@ -1414,38 +1417,6 @@ static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
 
-#if accent
-struct sdbootsec_s{
-    int secSt;              // status of boot sector 
-    int secJpcmd;      // jump command to the boot program
-    char secSysid[8];
-    int secSize;          // 512
-    int secPrClst;       // 4 8 16 32 64
-    int secResv;        // M 
-    int secNfat;         // should be 2
-    int secTotal;        // total sectors
-    int secIDm;         // must be 0xF8
-    int secPrfat;         // sectors per FAT
-    int secPrtrk;         // sectors per track
-    int secNsid;          // number of sides
-    int secNhid;          // number of hidden sectors
-    int secExtf;           // extension flag, specify the status of FAT mirroring
-    int secVers;          // File system version
-    int secRtclst;        // indicate the cluster number of root dir
-    int secFSif;           // indicate the sector number of FS info, will be 1 normally
-    int secBkbt;          // indicate the offset sector number of backup boot sector
-    int secPhdk;         // pyhsical disk number, should be 0x80
-    int secExtbt;        // extended boot record signature, should be 0x29
-    int secVoid;          // volume ID number
-    char secVola[12]; // volume label
-    char secFtyp[12];   // file system type in ascii
-    int secSign;          // shall be 0x55 (BP510) and 0xAA (BP511)
-    int secWhfat;        // indicate the sector of fat table
-    int secWhroot;      // indicate the sector of root dir
-    int secBoffset;
-};
-#endif
-
 static int aspFatFormat(struct sdFatFormat_s *pffmt)
 {
     float totSector=0, hidnSector=0, sectorPerCls=0;
@@ -1471,6 +1442,7 @@ static int aspFatFormat(struct sdFatFormat_s *pffmt)
 
     memset(pbootsec, 0, sizeof(struct sdbootsec_s));
 
+    pbootsec->secSt = 0;
     pbootsec->secJpcmd = 0x429058eb;
     sprintf(pbootsec->secSysid, "MSDOS");
     pbootsec->secSize = 512;                             // 512
@@ -1493,7 +1465,7 @@ static int aspFatFormat(struct sdFatFormat_s *pffmt)
     pbootsec->secVoid = (uint32_t)pbootsec;       // volume ID number
 
     sprintf(pbootsec->secVola, "ASPDISK"); // volume label
-    sprintf(pbootsec->secFtyp, "FAT32  ");   // file system type in ascii
+    sprintf(pbootsec->secFtyp, "FAT32   ");   // file system type in ascii
 
     pbootsec->secSign = 0xaa55;          // shall be 0x55 (BP510) and 0xAA (BP511)
 
@@ -1502,7 +1474,7 @@ static int aspFatFormat(struct sdFatFormat_s *pffmt)
 
     pbootsec->secBoffset;
 
-    pbootsec->secSt = 1;
+    pbootsec->secSt = 0;
     
     return 0;
 }
@@ -8735,7 +8707,14 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 #if LOG_FS_EN        
         printf("\n before LONG file name parsing...[0x%.2x] [0x%.2x] [0x%.8x] \n", ld, nd, lf);
 #endif
-        if ((nd != ((ld & 0xf) - 1)) || (nd == 0) && (!(ld == 0x41) && (lf == 0xf))) {
+
+        if (ld == 0x41) {
+            if (lf != 0xf) {
+                fs->dfstats = ASPFS_STATUS_DIS;
+                return aspRawParseDir(raw, fs, last);
+            }
+        }
+        else if ((nd != ((ld & 0xf) - 1)) || (nd == 0)) {
             //memset(fs, 0x00, sizeof(struct directnFile_s));
             fs->dfstats = ASPFS_STATUS_DIS;
             return aspRawParseDir(raw, fs, last);
@@ -12161,7 +12140,7 @@ static uint32_t next_SUPI(struct psdata_s *data)
     return emb_process(tmpRlt, next);
 }
 
-static uint32_t next_FAT32H(struct psdata_s *data)
+static uint32_t next_FATH(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
@@ -12275,7 +12254,7 @@ static uint32_t next_FAT32H(struct psdata_s *data)
     return emb_process(tmpRlt, next);
 }
 
-static uint32_t next_FAT32G(struct psdata_s *data)
+static uint32_t next_FATG(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
@@ -13149,12 +13128,12 @@ static int ps_next(struct psdata_s *data)
             if (evt) nxtst = evt; /* long jump */
             break;
         case FATG:
-            ret = next_FAT32G(data);
+            ret = next_FATG(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
         case FATH:
-            ret = next_FAT32H(data);
+            ret = next_FATH(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -15014,6 +14993,12 @@ static int stfat_29(struct psdata_s *data)
                     ch = 45;
                 } else if (pFat->fatStatus & ASPFAT_STATUS_DFEWT) {
                     ch = 89;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_FMTBSEC) {
+                    ch = 128;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_FMTFAT) {
+                    ch = 131;
+                } else if (pFat->fatStatus & ASPFAT_STATUS_FMTROOT) {
+                    ch = 00;
                 } else if ((c->opinfo == pFat->fatBootsec.secWhfat) && 
                     (p->opinfo == pFat->fatBootsec.secPrfat)) {
                     ch = 54; 
@@ -15158,6 +15143,27 @@ static int stfat_30(struct psdata_s *data)
                 print_f(rs->plogs, "FAT", rs->logs);  
 
                 ch = 88; /* APP->MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_FMTBSEC)) {
+                sprintf_f(rs->logs, "APP write DFE to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 127; /* MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_FMTFAT)) {
+                sprintf_f(rs->logs, "APP write DFE to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 130; /* MSP->LOV */
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if ((pFat->fatStatus & ASPFAT_STATUS_FMTROOT)) {
+                sprintf_f(rs->logs, "APP write DFE to SD status:0x%.8x \n", pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 00; /* MSP->LOV */
                 rs_ipc_put(data->rs, &ch, 1);
                 data->result = emb_result(data->result, WAIT);
             } else {
@@ -23267,7 +23273,7 @@ static int cmdfunc_fatfmt_opcode(int argc, char *argv[])
         goto end;
     }
         
-    if ((n) || (rsp != 0x1)) {
+    if ((n) || (rsp != 0x4)) {
          sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
          ret = -5;
@@ -26812,7 +26818,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         pr = pParBuf->dirParseBuff;
         
-        //shmem_dump(pr, 512);
+        shmem_dump(pr, 512);
         
         psec = &pfat->fatBootsec;
         memset(psec, 0, sizeof(struct sdbootsec_s));
@@ -27475,6 +27481,8 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
     if (pftb->ftbFat1) {
         sprintf_f(mrs->log, "get FAT table, addr:0x%.8x, len:%d\n", pftb->ftbFat1, pftb->ftbLen);
         print_f(&mrs->plog, "fs53", mrs->log);
+
+        shmem_dump(pftb->ftbFat1, 512);
         
 #if FAT_FILE
         //ret = file_save_get(&f, fatPath);
@@ -27482,6 +27490,7 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
         f = fopen(fatPath, "w+");
 
         if (f) {
+            msync(pftb->ftbFat1, pftb->ftbLen, MS_SYNC);
             fwrite(pftb->ftbFat1, 1, pftb->ftbLen, f);
             fflush(f);
             fclose(f);
@@ -27595,7 +27604,7 @@ static int fs54(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int val=0, pi=0, ret=0, len=0, bitset=0;
-    char *pr=0, ch=0, *addr=0;
+    char *pr=0, ch=0, *addr=0, wtlen=0;
     uint32_t secStr=0, secLen=0;
     
     struct sdbootsec_s   *psec=0;
@@ -27633,6 +27642,7 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                 pftb->ftbLen = 0;
             }
         
+            wtlen = 0;
             modersp->v += 1;
             len = ring_buf_cons(&mrs->cmdRx, &addr);
             if (len >= 0) {
@@ -27641,10 +27651,12 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
                 /* send data to wifi socket */
                 if (len != 0) {
                     pr = pftb->ftbFat1 + pftb->ftbLen;
+                    //pr = pftb->ftbFat1 + wtlen;
                     memcpy(pr, addr, len);
+                    //wtlen += len;
                     pftb->ftbLen += len;
-                    //sprintf_f(mrs->log, "%d get fat len:%d, total:%d\n", pi, len, pftb->ftbLen);
-                    //print_f(&mrs->plog, "fs55", mrs->log);
+                    sprintf_f(mrs->log, "%d get fat len:%d, total:%d\n", pi, len, pftb->ftbLen);
+                    print_f(&mrs->plog, "fs55", mrs->log);
                 }
             } else {
                 sprintf_f(mrs->log, "end, len:%d\n", len);
@@ -28817,7 +28829,8 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     //aspFScpDir(curDir, &pfat->fatFileUpld);
-    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+    //if (curDir->dflength != pfat->fatFileUpld.dflength) {
+    if (strcmp(curDir->dfSFN, pfat->fatFileUpld.dfSFN) != 0) {
         ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
         if (ret < 0) {
             sprintf_f(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
@@ -29212,7 +29225,8 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
     //aspFScpDir(curDir, &pfat->fatFileUpld);
     
-    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+    //if (curDir->dflength != pfat->fatFileUpld.dflength) {
+    if (strcmp(curDir->dfSFN, pfat->fatFileUpld.dfSFN) != 0) {
         ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
         if (ret < 0) {
             sprintf_f(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
@@ -29743,9 +29757,9 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
     
-    
     //aspFScpDir(curDir, &pfat->fatFileUpld);
-    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+    //if (curDir->dflength != pfat->fatFileUpld.dflength) {
+    if (strcmp(curDir->dfSFN, pfat->fatFileUpld.dfSFN) != 0) {
         ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
         if (ret < 0) {
             sprintf_f(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
@@ -30482,7 +30496,8 @@ static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
     
-    if (curDir->dflength != pfat->fatFileUpld.dflength) {
+    //if (curDir->dflength != pfat->fatFileUpld.dflength) {
+    if (strcmp(curDir->dfSFN, pfat->fatFileUpld.dfSFN) != 0) {
         ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
         if (ret < 0) {
             sprintf_f(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
@@ -33948,18 +33963,284 @@ static int fs126(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs126", mrs->log);
     
     debugPrintBootSec(pfBootsec);
+  
+    pFat->fatStatus |= ASPFAT_STATUS_FMTBSEC | ASPFAT_STATUS_FMTFAT;
+    
+    modersp->r = 1;
+    return 1;
+}
 
+static int fs127(struct mainRes_s *mrs, struct modersp_s *modersp) 
+{
+    uint32_t secStr=0, secLen=0, fstsec=0, lstsec, val=0;
+    struct info16Bit_s *p=0, *c=0;
+    struct aspConfig_s *pct=0;
+    struct sdFAT_s *pFat=0;
+    struct sdFatFormat_s *pfatFmt=0;
+    struct sdbootsec_s *pfBootsec=0;
+
+    pFat = &mrs->aspFat;
+    pfatFmt = &pFat->fatFormat;
+    pfBootsec = &pfatFmt->fmtBootsec;
+
+    pct = mrs->configTable;
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;    
+
+    sprintf_f(mrs->log, "prepare address to format FAT\n");
+    print_f(&mrs->plog, "fs127", mrs->log);
+
+    //curDir = pfat->fatFileUpld;
+    //aspFSms2rs(&curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
+
+    if (pfBootsec->secSt == 0) {
+    secStr = 0;
+    secLen = pfBootsec->secWhroot + pfBootsec->secPrClst;
+
+    c->opinfo = secStr;
+    p->opinfo = secLen;
+
+    sprintf_f(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
+    print_f(&mrs->plog, "fs127", mrs->log);
+
+    if (secLen < 16) secLen = 16;
+
+    cfgTableSet(pct, ASPOP_SDFAT_WT, 1);
+
+    val = cfgValueOffset(secStr, 24);
+    cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+    val = cfgValueOffset(secStr, 16);
+    cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+    val = cfgValueOffset(secStr, 8);
+    cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+    val = cfgValueOffset(secStr, 0);
+    cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+    val = cfgValueOffset(secLen, 24);
+    cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+    val = cfgValueOffset(secLen, 16);
+    cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+    val = cfgValueOffset(secLen, 8);
+    cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+    val = cfgValueOffset(secLen, 0);
+    cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+    cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+
+    modersp->r = 3; /*3 is for SDWT*/            
+    }else {
+        pFat->fatStatus &= ~ASPFAT_STATUS_FMTBSEC;
+        modersp->r = 1; /*3 is for SDWT*/            
+    }
+
+    return 1;
+}
+
+static int fs128(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int ret=0, clrsz=0, i=0, len=0, totsz=0, cpn=0, bufn=0;
+    char *fatRev=0, *bsector2=0, *ftable1=0, *ftable2=0, *rootsec=0;
+    char fatinit[12] = {0xf8, 0xff, 0xff, 0x0f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f};
+    char diskstr[32] = {0x41, 0x53, 0x50, 0x44, 0x49, 0x53, 0x4b, 0x20, 0x20, 0x20, 0x20, 0x28, 0x00, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    char *addr=0;
+    struct sdFAT_s *pFat=0;
+    struct sdFatFormat_s *pfatFmt=0;
+    struct sdbootsec_s *pfBootsec=0;
+    sprintf_f(mrs->log, "clear and write the FAT!!!\n");
+    print_f(&mrs->plog, "fs128", mrs->log);
+
+    pFat = &mrs->aspFat;
+    pfatFmt = &pFat->fatFormat;
+    pfBootsec = &pfatFmt->fmtBootsec;
+    
+    clrsz = (pfBootsec->secWhroot + pfBootsec->secPrClst + 1) * 512;
+
+    fatRev = aspMemalloc(clrsz, 10);
+    
+    memset(fatRev, 0, clrsz);
+
+    bsector2 = fatRev + 512*6;
+    ftable1 = fatRev + pfBootsec->secResv * 512;
+    ftable2 = ftable1 + pfBootsec->secPrfat * 512;
+    rootsec = fatRev + pfBootsec->secWhroot *512;
+    
+    /* 0  Jump command */        
+    aspRawReverse(&fatRev[0], 4, pfBootsec->secJpcmd);
+        
+    /* 3  system id */
+    for (i = 0; i < 8; i++) {
+        fatRev[3+i] = pfBootsec->secSysid[i];
+    }
+    /* 11 sector size */ 
+    aspRawReverse(&fatRev[11], 2, pfBootsec->secSize);
+    
+    /* 13 sector per cluster */
+    fatRev[13] = pfBootsec->secPrClst;
+
+    /* 14 reserved sector count*/
+    aspRawReverse(&fatRev[14], 2, pfBootsec->secResv);
+    
+    /* 16 number of FATs */
+    fatRev[16] = pfBootsec->secNfat;
+    /* 17 skip, number of root dir entries */
+    /* 19 skip, total sectors */
+    /* 21 medium id */
+    fatRev[21] = pfBootsec->secIDm;
+    /* 22 skip, sector per FAT */
+    /* 24 sector per track */
+    aspRawReverse(&fatRev[24], 2, pfBootsec->secPrtrk);
+    
+    /* 26 number of sides */
+    aspRawReverse(&fatRev[26], 2, pfBootsec->secNsid);
+
+    /* 28 number of hidded sectors */
+    aspRawReverse(&fatRev[28], 4, pfBootsec->secNhid);
+    
+    /* 32 total sectors */
+    aspRawReverse(&fatRev[32], 4, pfBootsec->secTotal);
+    /* 36 sectors per FAT */
+    aspRawReverse(&fatRev[36], 4, pfBootsec->secPrfat);
+    /* 40 extension flag */
+    aspRawReverse(&fatRev[40], 2, pfBootsec->secExtf);
+    /* 42 FS version */
+    aspRawReverse(&fatRev[42], 2, pfBootsec->secVers);
+    /* 44 root cluster */
+    aspRawReverse(&fatRev[44], 4, pfBootsec->secRtclst);
+    /* 48 FS info */
+    aspRawReverse(&fatRev[48], 2, pfBootsec->secFSif);
+    /* 50 backup boot sector */ 
+    aspRawReverse(&fatRev[50], 2, pfBootsec->secBkbt);
+    
+    /* 64 physical disk number */
+    fatRev[64] = pfBootsec->secPhdk;
+    /* 66 extended boot record signature */
+    fatRev[66] = pfBootsec->secExtbt;
+    /* 67 volume ID number */
+    
+    aspRawReverse(&fatRev[67], 4, pfBootsec->secVoid);
+    
+    /* 71 to 81 volume label */
+    for (i = 0; i < 11; i++) {
+         fatRev[71+i] = pfBootsec->secVola[i];
+    }
+     
+    /* 82 to 89 file system type */
+    for (i = 0; i < 8; i++) {
+        fatRev[82+i] = pfBootsec->secFtyp[i];
+    }
+    
+    /* 510 signature word */
+    aspRawReverse(&fatRev[510], 2, pfBootsec->secSign);
+
+    memcpy(bsector2, fatRev, 512);
+    memcpy(ftable1, fatinit, 12);
+    memcpy(ftable2, fatinit, 12);
+    memcpy(rootsec, diskstr, 32);
+    
+    shmem_dump(fatRev, 32);
+    shmem_dump(bsector2, 32);
+    shmem_dump(ftable1, 32);
+    shmem_dump(ftable2, 32);
+    shmem_dump(rootsec, 32);
+    
+    ring_buf_init(&mrs->dataRx);
+
+    sprintf_f(mrs->log, "clear area size: %d, trigger spi0 !!\n", clrsz);
+    print_f(&mrs->plog, "fs128", mrs->log);
+    
+    while (clrsz > 0) {
+    
+        len = ring_buf_get(&mrs->dataRx, &addr);
+        if (len <= 0) {
+            //sprintf_f(mrs->log, "WARNNING!!! get ring buffer pendding ret = %d\n", len);
+            //print_f(&mrs->plog, "fs128", mrs->log);
+            usleep(1000);
+            continue;
+        }
+        
+        if (clrsz < len) {
+            len = clrsz;
+        }
+
+        memcpy(addr, fatRev, len);
+
+        totsz += len;
+        fatRev += len;
+        clrsz -= len;
+        cpn++;
+        
+        if (cpn == 10) {
+            mrs_ipc_put(mrs, "w", 1, 1);
+        }
+
+        ring_buf_prod(&mrs->dataRx);
+
+        sprintf_f(mrs->log, "%d. len:%d, totsz: %d\n", cpn, len, totsz);
+        print_f(&mrs->plog, "fs128", mrs->log);
+    }
+
+    ring_buf_set_last(&mrs->dataRx, len);
+    bufn = ring_buf_info_len(&mrs->dataRx);
+    
+    sprintf_f(mrs->log, "cpn: %d, bufn: %d\n", cpn, bufn);
+    print_f(&mrs->plog, "fs128", mrs->log);
+
+    modersp->v = 0;
+    
     modersp->m = modersp->m + 1;
+
+    pfBootsec->secSt = 1; /* flag */
     return 2;
 }
 
-static int fs127(struct mainRes_s *mrs, struct modersp_s *modersp)
+static int fs129(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int len=0, bitset=0, ret=0;
+    char ch=0;
+    struct info16Bit_s *p;
+
+    //sprintf_f(mrs->log, "wait spi0 tx end\n");
+    //print_f(&mrs->plog, "fs90", mrs->log);
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if (len > 0) {
+
+        sprintf_f(mrs->log, "ch: %c - end\n", ch);
+        print_f(&mrs->plog, "fs129", mrs->log);
+
+        if (ch == 'W') {
+
+#if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
+            bitset = 0;
+            ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
+            sprintf_f(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
+            print_f(&mrs->plog, "fs129", mrs->log);
+#endif
+#if PULL_LOW_AFTER_DATA
+            bitset = 0;
+            msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+            sprintf_f(mrs->log, "set RDY pin %d\n",bitset);
+            print_f(&mrs->plog, "fs129", mrs->log);
+            usleep(210000);
+#endif
+
+            modersp->m = 48;            
+            return 2;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
+static int fs130(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct sdFAT_s *pFat=0;
     pFat = &mrs->aspFat;
 
     sprintf_f(mrs->log, "reset FAT start!!!\n");
-    print_f(&mrs->plog, "fs127", mrs->log);
+    print_f(&mrs->plog, "fs130", mrs->log);
 
     memset(pFat, 0, sizeof(struct sdFAT_s));
 
@@ -33971,35 +34252,11 @@ static int fs127(struct mainRes_s *mrs, struct modersp_s *modersp)
     pFat->fatStatus = ASPFAT_STATUS_INIT;
 
     aspMemClear(aspMemAsign, asptotMalloc, 9);
-    
+
     sprintf_f(mrs->log, "reset FAT  done!!!\n");
-    print_f(&mrs->plog, "fs127", mrs->log);
-
-    modersp->r = 1;
-    return 1;
-}
-
-static int fs128(struct mainRes_s *mrs, struct modersp_s *modersp)
-{
-    sprintf_f(mrs->log, "empty !!!\n");
-    print_f(&mrs->plog, "fs128", mrs->log);
-
-    return 1;
-}
-
-static int fs129(struct mainRes_s *mrs, struct modersp_s *modersp)
-{
-    sprintf_f(mrs->log, "empty !!!\n");
-    print_f(&mrs->plog, "fs129", mrs->log);
-
-    return 1;
-}
-
-static int fs130(struct mainRes_s *mrs, struct modersp_s *modersp)
-{
-    sprintf_f(mrs->log, "empty !!!\n");
     print_f(&mrs->plog, "fs130", mrs->log);
 
+    modersp->r = 1;
     return 1;
 }
 
@@ -35484,18 +35741,26 @@ static int p2(struct procRes_s *rs)
 
                 //addr = pabuf->dirParseBuff;
                 //msync(addr, psec->secPrClst*512, MS_SYNC);
-                //shmem_dump(addr, psec->secPrClst*512);
                 
                 totsz = 0;
                 pi = 0;  
                 while (1) {
                     len = 0;
+                    opsz = 0;
                     len = ring_buf_cons(rs->pdataRx, &addr);
                     if (len < 0) {
-                        addr = rx_buff;
+                        //addr = rx_buff;
+                        sprintf_f(rs->logs, "get ring buffer empty ret: %d \n",len);
+                        print_f(rs->plogs, "P2", rs->logs);
+                        break;
                     }
                     
-                    msync(addr, SPI_TRUNK_SZ, MS_SYNC);                    
+                    msync(addr, SPI_TRUNK_SZ, MS_SYNC);    
+
+                    sprintf_f(rs->logs, "dump %.2d packet, len: %d \n", pi, len);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    //shmem_dump(addr, 32);
                     
 #if SPI_KTHREAD_USE & SPI_UPD_NO_KTHREAD
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
@@ -35595,7 +35860,6 @@ static int p2(struct procRes_s *rs)
 #endif
                                 continue;
                             }
-
 #else
                             opsz = mtx_data(rs->spifd, addr, NULL, len, tr);
 #endif
@@ -35612,7 +35876,6 @@ static int p2(struct procRes_s *rs)
                                     sprintf_f(rs->logs, "Error!!! spi send tx failed, return %d \n", opsz);
                                     print_f(rs->plogs, "P2", rs->logs);
                                 }
-
                             }
 #endif
 
@@ -35663,7 +35926,7 @@ static int p2(struct procRes_s *rs)
                 laddr = (char *)rs->pmetaMass->masspt;
                 
                 memcpy(laddr, addr, 512);
-                msync(laddr, 512, MS_SYNC);
+                msync(laddr, SPI_TRUNK_SZ, MS_SYNC);
 
                 sprintf(rs->logs, "_META_ BEG");
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_M_S_");
