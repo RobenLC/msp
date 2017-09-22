@@ -293,6 +293,7 @@ typedef enum {
     MTSDV, // 16
     OCRW, // 17
     FMTX, // 18
+    FMTY, // 19
     SMAX,
 }state_e;
 
@@ -1455,7 +1456,7 @@ static int aspFatFormat(struct sdFatFormat_s *pffmt)
     pbootsec->secTotal = (int)totSector;             // total sectors
     pbootsec->secIDm = 0xF8;                          // must be 0xF8
     pbootsec->secPrfat = (int)sf1;                      // sectors per FAT
-    pbootsec->secPrtrk = 32;                             // sectors per track
+    pbootsec->secPrtrk = 63;                             // sectors per track
     pbootsec->secNsid = 255;                            // number of sides
     pbootsec->secNhid = (int)hidnSector;            // number of hidden sectors
     pbootsec->secExtf = 0;                                // extension flag, specify the status of FAT mirroring
@@ -7009,7 +7010,7 @@ static void* aspSalloc(int slen)
 
 static void debugPrintInfoSec(struct sdFSinfo_s *pinfo)
 {
-#if 1 //LOG_FS_EN
+#if LOG_FS_EN
             /* lead ingnature, shall be 0x52 0x52 0x61 0x41 */
     printf("[0x%.8x]: /* lead ingnature, shall be 0x52 0x52 0x61 0x41 */ \n", pinfo->finLdsn);
             /* structure signature, shall be 0x72 0x72 0x41 0x61 */
@@ -7025,7 +7026,7 @@ static void debugPrintInfoSec(struct sdFSinfo_s *pinfo)
 
 static void debugPrintBootSec(struct sdbootsec_s *psec)
 {
-#if 1 //LOG_FS_EN
+#if LOG_FS_EN
             /* 0  Jump command */
     printf("[0x%x]: /* 0  Jump command */ \n", psec->secJpcmd);
             /* 3  system id */
@@ -7107,7 +7108,7 @@ struct directnFile_s{
 };
 #endif
 
-#if 1
+#if LOG_FS_EN
     printf("==========================================\n");
     printf("  [%x] type \n", pf->dftype);
     printf("  [%x] status \n", pf->dfstats);
@@ -7400,6 +7401,7 @@ static struct aspInfoSplit_s *asp_freeInfo(struct aspInfoSplit_s *info)
 
 static int aspFSms2rs(struct directnFile_s **rsd, struct directnFile_s *msd, struct sdFatDir_s *pfatdir)
 {
+    char logbuf[256];
     struct sdDirPool_s *pdirpool=0;
     int pid, fid;
     
@@ -7407,7 +7409,8 @@ static int aspFSms2rs(struct directnFile_s **rsd, struct directnFile_s *msd, str
     fid = msd->dfindex & 0xffff;
     msync(pfatdir, sizeof(struct sdFatDir_s), MS_SYNC);
 
-    printf("[FSV] ms2rs pid:%d %d \n", pid, fid);
+    sprintf_f(logbuf, "ms2rs pid:%d %d \n", pid, fid);
+    print_f(mlogPool, "M2R", logbuf);    
 
     if (!pid) {
         printf("[FSV] ERROR!!! pid: %d \n", pid);
@@ -7423,7 +7426,8 @@ static int aspFSms2rs(struct directnFile_s **rsd, struct directnFile_s *msd, str
         printf("[FSV] ERROR!!! pid: %d > used: %d \n", pid, pfatdir->dirFATUsed);
         return -3;
     } else {
-        printf("[FSV] pid: %d <= used: %d \n", pid, pfatdir->dirFATUsed);
+        sprintf_f(logbuf, "pid: %d <= used: %d \n", pid, pfatdir->dirFATUsed);
+        print_f(mlogPool, "M2R", logbuf);  
     }
 
     pdirpool = pfatdir->fatDirPool[pid - 1];
@@ -7431,7 +7435,8 @@ static int aspFSms2rs(struct directnFile_s **rsd, struct directnFile_s *msd, str
         printf("[FSV] ERROR!!! pdirpool == null \n");
         return -4;
     } else {
-        printf("[FSV] pdirpool max = %d\n", pdirpool->dirMax);
+        sprintf_f(logbuf, "pdirpool max = %d\n", pdirpool->dirMax);
+        print_f(mlogPool, "M2R", logbuf);  
     }
 /*
     if (fid > pdirpool->dirUsed) {
@@ -7448,7 +7453,8 @@ static int aspFSms2rs(struct directnFile_s **rsd, struct directnFile_s *msd, str
     
     *rsd = &pdirpool->dirPool[fid];
 
-    printf("[FSV] file name: [%s]\n", pdirpool->dirPool[fid].dfSFN);
+    sprintf_f(logbuf, "file name: [%s]\n", pdirpool->dirPool[fid].dfSFN);
+    print_f(mlogPool, "M2R", logbuf);  
     
     return 0;
 }
@@ -10591,6 +10597,100 @@ static uint32_t next_MDUOU(struct psdata_s *data)
     return emb_process(tmpRlt, next);
 }
 
+static uint32_t next_FMTY(struct psdata_s *data)
+{
+    int pro, rlt, next = 0;
+    uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
+    char str[256];
+    uint32_t bkf;
+    bkf = data->bkofw;
+    rlt = (data->result >> 16) & 0xff;
+    pro = data->result & 0xff;
+
+    //sprintf_f(str, "%d-%d\n", pro, rlt); 
+    //print_f(mlogPool, "bullet", str); 
+
+    tmpRlt = data->result;
+    if (rlt == WAIT) {
+        next = pro;
+    } else if (rlt == NEXT) {
+        /* reset pro */  
+        tmpAns = data->ansp0;
+        data->ansp0 = 0;
+        tmpRlt = emb_result(tmpRlt, STINIT);
+        switch (pro) {
+            case PSSET:
+                //sprintf_f(str, "PSSET\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSTSM;
+                evt = FATH; 
+                break;
+            case PSACT:
+                //sprintf_f(str, "PSACT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSWT:
+                //sprintf_f(str, "PSWT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSRLT:
+                //sprintf_f(str, "PSRLT\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSMAX;
+                break;
+            case PSTSM:
+                //sprintf_f(str, "PSTSM\n"); 
+                //print_f(mlogPool, "bullet", str);
+                next = PSMAX;
+                break;
+            default:
+                //sprintf_f(str, "default\n"); 
+                //print_f(mlogPool, "bullet", str); 
+                next = PSSET;
+                break;
+        }
+
+#if ANSP0_RECOVER
+        data->ansp0 = tmpAns;
+#endif
+
+    }
+    else if (rlt == BREAK) {
+        tmpRlt = emb_result(tmpRlt, WAIT);
+        next = pro;
+    } else if (rlt == BKWRD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = (bkf >> 16) & 0xff;
+            evt = (bkf >> 24) & 0xff;
+            data->bkofw = clr_bk(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else if (rlt == FWORD) {
+        if (bkf) {
+            tmpRlt = emb_result(tmpRlt, STINIT);
+            next = bkf & 0xff;
+            evt = (bkf >> 8) & 0xff;
+            data->bkofw = clr_fw(data->bkofw);
+        } else {
+            next = PSMAX;
+        }
+    } else {
+        next = PSMAX;
+    }
+
+    if (next == PSMAX) {
+        data->bkofw = clr_bk(data->bkofw);        
+        data->bkofw = clr_fw(data->bkofw);
+    }
+    
+    tmpRlt = emb_event(tmpRlt, evt);
+    return emb_process(tmpRlt, next);
+}
+
 static uint32_t next_FMTX(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
@@ -10628,17 +10728,20 @@ static uint32_t next_FMTX(struct psdata_s *data)
             case PSWT:
                 //sprintf_f(str, "PSWT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSTSM;
+                evt = FATH; 
                 break;
             case PSRLT:
                 //sprintf_f(str, "PSRLT\n"); 
                 //print_f(mlogPool, "bullet", str); 
-                next = PSMAX;
+                next = PSTSM;
+                evt = FATH; 
                 break;
             case PSTSM:
                 //sprintf_f(str, "PSTSM\n"); 
                 //print_f(mlogPool, "bullet", str);
-                next = PSMAX;
+                next = PSTSM;
+                evt = FATH; 
                 break;
             default:
                 //sprintf_f(str, "default\n"); 
@@ -13244,6 +13347,11 @@ static int ps_next(struct psdata_s *data)
             break;
         case FMTX:
             ret = next_FMTX(data);
+            evt = (ret >> 24) & 0xff;
+            if (evt) nxtst = evt; /* long jump */
+            break;
+        case FMTY:
+            ret = next_FMTY(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -20435,7 +20543,11 @@ static int stfmtx_112(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-
+    struct sdFAT_s *pFat=0;
+    struct sdFatFormat_s     *pfformat=0;
+    
+    pFat = data->rs->psFat;
+    pfformat = &pFat->fatFormat;
     rs = data->rs;
     rlt = abs_result(data->result); 
     sprintf_f(rs->logs, "op_112 rlt:0x%x \n", rlt); 
@@ -20443,6 +20555,12 @@ static int stfmtx_112(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
+
+            /* 32G */
+            pfformat->fmtTotSector = 62325760;
+            pfformat->fmtHidnSector = 2048;
+            pfformat->fmtSectorPerCls = 128;
+            
             ch = 126;
 
             rs_ipc_put(data->rs, &ch, 1);
@@ -20478,19 +20596,30 @@ static int stfmtx_113(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-
+    struct sdFAT_s *pFat=0;
+    struct sdFatFormat_s     *pfformat=0;
+    
+    pFat = data->rs->psFat;
+    pfformat = &pFat->fatFormat;
     rs = data->rs;
     rlt = abs_result(data->result); 
-    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    sprintf_f(rs->logs, "op_113 rlt:0x%x \n", rlt); 
     print_f(rs->plogs, "FMT", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 00;
+
+            /* 16G */
+            pfformat->fmtTotSector = 30881792;
+            pfformat->fmtHidnSector = 2048;
+            pfformat->fmtSectorPerCls = 128;
+            
+            ch = 126;
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            sprintf_f(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            
+            sprintf_f(rs->logs, "op_113: result: %x, goto %d\n", data->result, ch); 
             print_f(rs->plogs, "FMT", rs->logs);  
             break;
         case WAIT:
@@ -20516,6 +20645,154 @@ static int stfmtx_113(struct psdata_s *data)
 }
 
 static int stfmtx_114(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct sdFAT_s *pFat=0;
+    struct sdFatFormat_s     *pfformat=0;
+    
+    pFat = data->rs->psFat;
+    pfformat = &pFat->fatFormat;
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_114 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "FMT", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            /* 64G */
+            pfformat->fmtTotSector = 125925376;
+            pfformat->fmtHidnSector = 2048;
+            pfformat->fmtSectorPerCls = 128;
+            
+            ch = 126;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            
+            sprintf_f(rs->logs, "op_114: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "FMT", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfmtx_115(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+    struct sdFAT_s *pFat=0;
+    struct sdFatFormat_s     *pfformat=0;
+    
+    pFat = data->rs->psFat;
+    pfformat = &pFat->fatFormat;
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_115 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "FMT", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+
+            /* 128G */
+            pfformat->fmtTotSector = 243220480;
+            pfformat->fmtHidnSector = 2048;
+            pfformat->fmtSectorPerCls = 128;
+            
+            ch = 126;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            
+            sprintf_f(rs->logs, "op_115: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "FMT", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfmty_116(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_116 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "FMT", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 130;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf_f(rs->logs, "op_116: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "FMT", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfmty_117(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -20557,7 +20834,91 @@ static int stfmtx_114(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stfmtx_115(struct psdata_s *data)
+static int stfmty_118(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "FMT", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 00;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf_f(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "FMT", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfmty_119(struct psdata_s *data)
+{ 
+    char ch = 0; 
+    uint32_t rlt;
+    struct procRes_s *rs;
+
+    rs = data->rs;
+    rlt = abs_result(data->result); 
+    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
+    print_f(rs->plogs, "FMT", rs->logs);  
+
+    switch (rlt) {
+        case STINIT:
+            ch = 00;
+
+            rs_ipc_put(data->rs, &ch, 1);
+            data->result = emb_result(data->result, WAIT);
+            sprintf_f(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "FMT", rs->logs);  
+            break;
+        case WAIT:
+            if (data->ansp0 == 1) {
+                data->result = emb_result(data->result, NEXT);
+            } else if (data->ansp0 == 2) {
+                data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 0xed) {
+                data->result = emb_result(data->result, EVTMAX);
+            }
+            break;
+        case NEXT:
+            break;
+        case BREAK:
+            ch = 0x7f;
+            rs_ipc_put(data->rs, &ch, 1);
+            break;
+        default:
+            break;
+    }
+
+    return ps_next(data);
+}
+
+static int stfmty_120(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -23265,7 +23626,7 @@ end:
     return ret;
 }
 
-static int cmdfunc_fatfmt_opcode(int argc, char *argv[])
+static int cmdfunc_fmt128g_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
     int ret=0, ix=0, n=0, brk=0;
@@ -23274,7 +23635,178 @@ static int cmdfunc_fatfmt_opcode(int argc, char *argv[])
     struct mainRes_s *mrs=0;
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
-    sprintf_f(mrs->log, "cmdfunc_fatfmt_opcode argc:%d\n", argc); 
+    sprintf_f(mrs->log, "cmdfunc_fmt128g_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_RGRD;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, '7', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) || (rsp != 0x4)) {
+         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -5;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_fmt128g_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "FMT128G_NG,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "FMT128G_OK,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_fmt64g_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_fmt64g_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_RGRD;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, '6', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) || (rsp != 0x4)) {
+         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -5;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_fmt64g_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "FMT64G_NG,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "FMT64G_OK,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_fmt16g_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_fmt16g_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_RGRD;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, '5', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) || (rsp != 0x4)) {
+         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -5;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_fmt16g_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "FMT16G_NG,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "FMT16G_OK,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
+static int cmdfunc_fmt32g_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_fmt32g_opcode argc:%d\n", argc); 
     print_f(&mrs->plog, "DBG", mrs->log);
 
     pkt = &mrs->mchine.tmp;
@@ -23304,15 +23836,15 @@ static int cmdfunc_fatfmt_opcode(int argc, char *argv[])
          ret = -5;
     }
 
-    sprintf_f(mrs->log, "cmdfunc_fatfmt_opcode n = %d, rsp = %d\n", n, rsp); 
+    sprintf_f(mrs->log, "cmdfunc_fmt32g_opcode n = %d, rsp = %d\n", n, rsp); 
     print_f(&mrs->plog, "DBG", mrs->log);
     
 end:
 
     if (brk | ret) {
-        sprintf(mrs->log, "FATFMT_NG,%d,%d", ret, brk);
+        sprintf(mrs->log, "FMT32G_NG,%d,%d", ret, brk);
     } else {
-        sprintf(mrs->log, "FATFMT_OK,%d,%d", ret, brk);
+        sprintf(mrs->log, "FMT32G_OK,%d,%d", ret, brk);
     }
 
     n = strlen(mrs->log);
@@ -23988,6 +24520,63 @@ end:
     return ret;
 }
 
+static int cmdfunc_reboot_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_reboot_opcode argc:%d\n", argc); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_RGRD;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, '8', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) || (rsp != 0x4)) {
+         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -5;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_reboot_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(&mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    if (brk | ret) {
+        sprintf(mrs->log, "REBOOT_NG,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "REBOOT_OK,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(&mrs->plog, mrs->log, n);
+    printf_dbgflush(&mrs->plog, mrs);
+
+    return ret;
+}
+
 static int cmdfunc_boot_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
@@ -24572,7 +25161,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 37
+#define CMD_SIZE 41
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -24587,7 +25176,8 @@ static int dbg(struct mainRes_s *mrs)
                                 , {24, "crop", cmdfunc_crop_opcode}, {25, "vec", cmdfunc_vector_opcode}, {26, "apm", cmdfunc_apm_opcode}, {27, "meta", cmdfunc_meta_opcode}
                                 , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}, {31, "upsd", cmdfunc_upsd_opcode}
                                 , {32, "ocr", cmdfunc_ocr_opcode}, {33, "msingle", cmdfunc_msingle_opcode}, {34, "mdouble", cmdfunc_mdouble_opcode}, {35, "mocr", cmdfunc_mocr_opcode}
-                                , {36, "fatfmt", cmdfunc_fatfmt_opcode}};
+                                , {36, "fmt32g", cmdfunc_fmt32g_opcode}, {37, "fmt16g", cmdfunc_fmt16g_opcode}, {38, "fmt64g", cmdfunc_fmt64g_opcode}, {39, "fmt128g", cmdfunc_fmt128g_opcode}
+                                , {40, "reboot", cmdfunc_reboot_opcode}};
 
     p0_init(mrs);
 
@@ -33980,9 +34570,9 @@ static int fs126(struct mainRes_s *mrs, struct modersp_s *modersp)
     pfBootsec = &pfatFmt->fmtBootsec;
     pfInfosec = &pfatFmt->fmtInfosec;
     
-    pfatFmt->fmtTotSector = 62325760;
-    pfatFmt->fmtHidnSector = 8192;
-    pfatFmt->fmtSectorPerCls = 64;
+    //pfatFmt->fmtTotSector = 62325760;
+    //pfatFmt->fmtHidnSector = 8192;
+    //pfatFmt->fmtSectorPerCls = 64;
     
     ret = aspFatFormat(pfatFmt);
 
@@ -34516,7 +35106,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stmetaduo_96, stmetaduo_97, stmetaduo_98, stmetaduo_99, stmetasd_100},  //MDUOU
                             {stmetasd_101, stmetasd_102, stmetasd_103, stmetasd_104, stmetasd_105}, //MTSDV
                             {stocrw_106, stocrw_107, stocrw_108, stocrw_109, stocrw_110}, //OCRW
-                            {stocrx_111, stfmtx_112, stfmtx_113, stfmtx_114, stfmtx_115}}; //FMTX
+                            {stocrx_111, stfmtx_112, stfmtx_113, stfmtx_114, stfmtx_115}, //FMTX
+                            {stfmty_116, stfmty_117, stfmty_118, stfmty_119, stfmty_120}}; //FMTY
                             
 
     p1_init(rs);
@@ -34530,7 +35121,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //print_f(rs->plogs, "P1", rs->logs);
 
 //     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q', 'r', 'y', 'z'};
-//       a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, y, z, 1, 2, 3
+//       a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, y, z, 1, 2, 3, 4, 5, 6, 7
         cmd = '\0';
         ci = 0; 
         ci = rs_ipc_get(rcmd, &cmd, 1);
@@ -34630,6 +35221,18 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == '4') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, FMTX, PSACT);
+                } else if (cmd == '5') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, FMTX, PSWT);
+                } else if (cmd == '6') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, FMTX, PSRLT);
+                } else if (cmd == '7') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, FMTX, PSTSM);
+                } else if (cmd == '8') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, FMTY, PSSET);
                 }
 
 
