@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Sep 14 16:08:29 2017 7aad103520 [FAT] new command fatfmt to format SD card 0x41"
+#define MSP_VERSION "Fri Sep 22 13:45:30 2017 eff1175cf5 [FATFMT] able to format SD and reboot"
 
 #define SPI1_ENABLE (1) 
 
@@ -805,6 +805,7 @@ struct sdFatFormat_s{
     uint32_t fmtHidnSector;
     uint32_t fmtSectorPerCls;
     struct sdbootsec_s     fmtBootsec;
+    struct sdFSinfo_s       fmtInfosec;
 };
 
 struct sdFAT_s{
@@ -1421,6 +1422,7 @@ static int aspFatFormat(struct sdFatFormat_s *pffmt)
 {
     float totSector=0, hidnSector=0, sectorPerCls=0;
     struct sdbootsec_s *pbootsec=0;
+    struct sdFSinfo_s *pinfotsec=0;
     float szfat=0.0, sf0=0.0, nBU=0.0, rsc0=0.0, ssa=0.0;
     float maxcls0=0.0, maxcls1=0.0, sf1=0.0, rsc1=0.0;
 
@@ -1430,6 +1432,7 @@ static int aspFatFormat(struct sdFatFormat_s *pffmt)
     hidnSector = (float)pffmt->fmtHidnSector;
     sectorPerCls = (float)pffmt->fmtSectorPerCls;
     pbootsec = &pffmt->fmtBootsec;
+    pinfotsec = &pffmt->fmtInfosec;
 
     maxcls0 = (totSector / sectorPerCls) * 4.0;
     sf0 = ceil(maxcls0 / 512.0);
@@ -1475,6 +1478,12 @@ static int aspFatFormat(struct sdFatFormat_s *pffmt)
     pbootsec->secBoffset;
 
     pbootsec->secSt = 0;
+
+    pinfotsec->finLdsn = 0x41615252;
+    pinfotsec->finStsn = 0x61417272;
+    pinfotsec->finFreClst = maxcls1 - 1;
+    pinfotsec->finNxtFreClst = 3;
+    pinfotsec->finTrsn = 0xaa550000;
     
     return 0;
 }
@@ -6996,6 +7005,22 @@ static void* aspSalloc(int slen)
     
     p = mmap(NULL, slen, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     return p;
+}
+
+static void debugPrintInfoSec(struct sdFSinfo_s *pinfo)
+{
+#if 1 //LOG_FS_EN
+            /* lead ingnature, shall be 0x52 0x52 0x61 0x41 */
+    printf("[0x%.8x]: /* lead ingnature, shall be 0x52 0x52 0x61 0x41 */ \n", pinfo->finLdsn);
+            /* structure signature, shall be 0x72 0x72 0x41 0x61 */
+    printf("[0x%.8x]: /* structure signature, shall be 0x72 0x72 0x41 0x61 */\n", pinfo->finStsn);
+            /* free cluster count */
+    printf("[%d]: /* free cluster count */\n", pinfo->finFreClst);
+            /* next free cluster */
+    printf("[%d]: /* next free cluster */\n", pinfo->finNxtFreClst); 
+            /* shall be 0x00 0x00 0x55 0xaa */
+    printf("[0x%.8x]: /* shall be 0x00 0x00 0x55 0xaa */\n", pinfo->finTrsn); 
+#endif
 }
 
 static void debugPrintBootSec(struct sdbootsec_s *psec)
@@ -33946,12 +33971,14 @@ static int fs126(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pFat=0;
     struct sdFatFormat_s *pfatFmt=0;
     struct sdbootsec_s *pfBootsec=0;
+    struct sdFSinfo_s    *pfInfosec=0;
     sprintf_f(mrs->log, "building the fat boot sector!!!\n");
     print_f(&mrs->plog, "fs126", mrs->log);
 
     pFat = &mrs->aspFat;
     pfatFmt = &pFat->fatFormat;
     pfBootsec = &pfatFmt->fmtBootsec;
+    pfInfosec = &pfatFmt->fmtInfosec;
     
     pfatFmt->fmtTotSector = 62325760;
     pfatFmt->fmtHidnSector = 8192;
@@ -33963,7 +33990,8 @@ static int fs126(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs126", mrs->log);
     
     debugPrintBootSec(pfBootsec);
-  
+    debugPrintInfoSec(pfInfosec);
+
     pFat->fatStatus |= ASPFAT_STATUS_FMTBSEC | ASPFAT_STATUS_FMTFAT;
     
     modersp->r = 1;
@@ -34038,7 +34066,7 @@ static int fs127(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs128(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int ret=0, clrsz=0, i=0, len=0, totsz=0, cpn=0, bufn=0;
-    char *fatRev=0, *bsector2=0, *ftable1=0, *ftable2=0, *rootsec=0;
+    char *fatRev=0, *bsector2=0, *ftable1=0, *ftable2=0, *rootsec=0, *infoSec=0;
     char fatinit[12] = {0xf8, 0xff, 0xff, 0x0f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f};
     char diskstr[32] = {0x41, 0x53, 0x50, 0x44, 0x49, 0x53, 0x4b, 0x20, 0x20, 0x20, 0x20, 0x28, 0x00, 0x00, 0x00, 0x00,
                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -34046,12 +34074,14 @@ static int fs128(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pFat=0;
     struct sdFatFormat_s *pfatFmt=0;
     struct sdbootsec_s *pfBootsec=0;
+    struct sdFSinfo_s   *pfInfotsec=0;
     sprintf_f(mrs->log, "clear and write the FAT!!!\n");
     print_f(&mrs->plog, "fs128", mrs->log);
 
     pFat = &mrs->aspFat;
     pfatFmt = &pFat->fatFormat;
     pfBootsec = &pfatFmt->fmtBootsec;
+    pfInfotsec = &pfatFmt->fmtInfosec;
     
     clrsz = (pfBootsec->secWhroot + pfBootsec->secPrClst + 1) * 512;
 
@@ -34063,6 +34093,7 @@ static int fs128(struct mainRes_s *mrs, struct modersp_s *modersp)
     ftable1 = fatRev + pfBootsec->secResv * 512;
     ftable2 = ftable1 + pfBootsec->secPrfat * 512;
     rootsec = fatRev + pfBootsec->secWhroot *512;
+    infoSec = fatRev + 512;
     
     /* 0  Jump command */        
     aspRawReverse(&fatRev[0], 4, pfBootsec->secJpcmd);
@@ -34132,12 +34163,20 @@ static int fs128(struct mainRes_s *mrs, struct modersp_s *modersp)
     /* 510 signature word */
     aspRawReverse(&fatRev[510], 2, pfBootsec->secSign);
 
-    memcpy(bsector2, fatRev, 512);
+    aspRawReverse(&infoSec[0], 4, pfInfotsec->finLdsn);
+    aspRawReverse(&infoSec[484], 4, pfInfotsec->finStsn);
+    aspRawReverse(&infoSec[488], 4, pfInfotsec->finFreClst);
+    aspRawReverse(&infoSec[492], 4, pfInfotsec->finNxtFreClst);
+    aspRawReverse(&infoSec[508], 4, pfInfotsec->finTrsn);
+    
+    memcpy(bsector2, fatRev, 1024);
     memcpy(ftable1, fatinit, 12);
     memcpy(ftable2, fatinit, 12);
     memcpy(rootsec, diskstr, 32);
     
     shmem_dump(fatRev, 32);
+    shmem_dump(infoSec, 32);
+    shmem_dump(infoSec+(512-32), 32);
     shmem_dump(bsector2, 32);
     shmem_dump(ftable1, 32);
     shmem_dump(ftable2, 32);
