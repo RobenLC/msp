@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Fri Sep 22 13:45:30 2017 eff1175cf5 [FATFMT] able to format SD and reboot"
+#define MSP_VERSION "Fri Sep 22 16:39:05 2017 4d3fdd72ab [FATFMT] impl format command for 16G 32G 64G 128G, and reboot command"
 
 #define SPI1_ENABLE (1) 
 
@@ -71,6 +71,7 @@ static int *totSalloc=0;
 #define OP_MDOUBLE     0xa
 #define OP_HANDSCAN  0xb
 #define OP_NOTESCAN  0xc
+#define OP_POLL           0xd
 
 /* SD read write operation */               
 #define OP_SDRD            0x20
@@ -177,6 +178,8 @@ static int *totSalloc=0;
 #define MAX_EVENTS (32)
 #define EPOLLLT (0)
 #endif
+/* polling */
+#define POLL_MODE_EN (1)
 /* wifi debug */
 #define DBG_WIFI_REAL (1)
 
@@ -20797,20 +20800,30 @@ static int stfmty_117(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-
+    struct info16Bit_s *p=0, *c=0, *t=0;
+    
     rs = data->rs;
     rlt = abs_result(data->result); 
-    sprintf_f(rs->logs, "op_00 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "FMT", rs->logs);  
+    c = &rs->pmch->cur;
+    p = &rs->pmch->get;
+    //sprintf_f(rs->logs, "op_117 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "POLL", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 00;
+            c->opcode = OP_POLL;      
+            c->data = c->seqnum & 0xff;
+            
+            c->seqnum = c->seqnum + 1;    
+            
+            memset(p, 0, sizeof(struct info16Bit_s));
+
+            ch = 131;
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            sprintf_f(rs->logs, "op_00: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "FMT", rs->logs);  
+            sprintf_f(rs->logs, "op_117: result: %x, goto %d\n", data->result, ch); 
+            print_f(rs->plogs, "POLL", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -25472,7 +25485,7 @@ static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs01(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    sprintf_f(mrs->log, "check RDY high \n");
+    sprintf_f(mrs->log, "check RDY high ... \n");
     print_f(&mrs->plog, "fs01", mrs->log);
     mrs_ipc_put(mrs, "b", 1, 1);
     modersp->c = 0;
@@ -25499,10 +25512,13 @@ static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
                 return 1;
             }
         } else {
-            if (modersp->c < 1) { 
+            if (modersp->c < 10) { 
                 mrs_ipc_put(mrs, "b", 1, 1);
                 modersp->c += 1;
             } else {
+                sprintf_f(mrs->log, "RDY is low break!! \n");
+                print_f(&mrs->plog, "fs02", mrs->log);
+
                 modersp->c = 0;
                 modersp->r = 2;
                 return 1;
@@ -27137,7 +27153,14 @@ static int fs42(struct mainRes_s *mrs, struct modersp_s *modersp)
         p = &mrs->mchine.get;
         //sprintf_f(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
         //print_f(&mrs->plog, "fs42", mrs->log);
-
+        
+        if (ch == 'X') {
+            sprintf_f(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs42", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+        }
+        
         if (p->opcode == OP_QRY) {
             modersp->m = modersp->m + 1;
         } else {
@@ -27145,6 +27168,7 @@ static int fs42(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 1;
         }
     }
+    
     return 0; 
 }
 
@@ -27179,6 +27203,13 @@ static int fs44(struct mainRes_s *mrs, struct modersp_s *modersp)
         p = &mrs->mchine.get;
         //sprintf_f(mrs->log, "get 0x%.2x/0x%.2x 0x%.2x/0x%.2x\n", p->opcode, c->opcode, p->data, c->data);
         //print_f(&mrs->plog, "fs44", mrs->log);
+
+        if (ch == 'X') {
+            sprintf_f(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs44", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+        }
 
         if (p->opcode == c->opcode){
             modersp->r = 1;
@@ -34415,10 +34446,12 @@ static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
     pfatdir = &mrs->aspFat.fatDirTr;
     msync(pfatdir, sizeof(struct sdFatDir_s), MS_SYNC);
 
+/*
     if (!pfatdir->dirFATDirty) {
         modersp->r = 1;
         return 1;
     }
+*/
 
 #if 1 /* set to 1 to notice fat update */
     pfatdir->dirFATDirty |= 0x2;
@@ -34891,10 +34924,12 @@ static int fs130(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs131(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf_f(mrs->log, "empty !!!\n");
+    sprintf_f(mrs->log, "polling ...\n");
     print_f(&mrs->plog, "fs131", mrs->log);
 
-    return 1;
+    modersp->d = 41;
+    modersp->m = 1;
+    return 2;
 }
 
 static int fs132(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -35077,7 +35112,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     char ch, cmd, cmdt, str[128] = "good", er=0;
     char *addr;
     uint32_t evt;
-
+    struct timespec tidle[2];
+    int tdiff=0, tcur=0, tnxt=1;
+    clock_gettime(CLOCK_REALTIME, &tidle[0]);    
+    clock_gettime(CLOCK_REALTIME, &tidle[1]);    
+    
     sprintf_f(rs->logs, "p1\n");
     print_f(rs->plogs, "P1", rs->logs);
     struct psdata_s *stdata;
@@ -35122,12 +35161,19 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
 //     {'d', 'p', '=', 'n', 't', 'a', 'e', 'f', 'b', 's', 'h', 'u', 'v', 'c', 'k', 'g', 'i', 'j', 'm', 'o', 'q', 'r', 'y', 'z'};
 //       a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, y, z, 1, 2, 3, 4, 5, 6, 7
+
         cmd = '\0';
         ci = 0; 
-        ci = rs_ipc_get(rcmd, &cmd, 1);
+        if (cmdt != 'w') {
+            ci = rs_ipc_get(rcmd, &cmd, 1);
+        }
+
+        //sprintf_f(rs->logs, "0x%x %d\n", cmd, ci);
+        //print_f(rs->plogs, "P1", rs->logs);
+
         while (ci > 0) {
-            //sprintf_f(rs->logs, "%c\n", cmd);
-            //print_f(rs->plogs, "P1", rs->logs);
+            sprintf_f(rs->logs, "%c %d\n", cmd, ci);
+            print_f(rs->plogs, "P1", rs->logs);
 
             if (cmdt == '\0') {
                 if (cmd == 'd') {
@@ -35259,11 +35305,38 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
                     sprintf_f(rs->logs, "cmdt:%c, [%d,%d] 0x%.8x - 0\nBREAK\n", cmdt, pi, px, stdata->result);
                     print_f(rs->plogs, "P1", rs->logs);
+
+                    break;
                 }
             }
             ci = 0;
             ci = rs_ipc_get(rcmd, &cmd, 1);            
         }
+        
+#if POLL_MODE_EN
+        if (cmdt != '\0') {
+            clock_gettime(CLOCK_REALTIME, &tidle[tcur]);    
+        } else {
+            clock_gettime(CLOCK_REALTIME, &tidle[tnxt]);    
+
+            tdiff = time_diff(&tidle[tcur], &tidle[tnxt], 1000000);
+            //sprintf_f(rs->logs, "tdiff: %d ms - 1\n", tdiff);
+            //print_f(rs->plogs, "P1", rs->logs);
+ 
+            if (tdiff > 1000) {
+                //clock_gettime(CLOCK_REALTIME, &tidle[tcur]);    
+
+                tnxt = (tnxt + 1) % 2;
+                tcur = (tcur + 1) % 2;
+
+                sprintf_f(rs->logs, "tdiff: %d ms \n", tdiff);
+                print_f(rs->plogs, "P1", rs->logs);
+
+                cmdt = 'w';
+                stdata->result = emb_stanPro(0, STINIT, FMTY, PSACT);
+            }
+        }
+#endif //#if POLL_MODE_EN
 
         ret = 0; ch = '\0';
         ret = rs_ipc_get(rs, &ch, 1);
