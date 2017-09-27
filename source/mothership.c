@@ -179,7 +179,7 @@ static int *totSalloc=0;
 #define EPOLLLT (0)
 #endif
 /* polling */
-#define POLL_MODE_EN (1)
+#define POLL_MODE_EN (0)
 /* wifi debug */
 #define DBG_WIFI_REAL (1)
 
@@ -906,6 +906,7 @@ struct info16Bit_s{
 
 struct machineCtrl_s{
     uint32_t seqcnt;
+    struct info16Bit_s poll;
     struct info16Bit_s tmp;
     struct info16Bit_s cur;
     struct info16Bit_s get;
@@ -20800,23 +20801,23 @@ static int stfmty_117(struct psdata_s *data)
     char ch = 0; 
     uint32_t rlt;
     struct procRes_s *rs;
-    struct info16Bit_s *p=0, *c=0, *t=0;
+    struct info16Bit_s *p=0, *g=0;
     
     rs = data->rs;
     rlt = abs_result(data->result); 
-    c = &rs->pmch->cur;
-    p = &rs->pmch->get;
+    p = &rs->pmch->poll;
+    g = &rs->pmch->get;
     //sprintf_f(rs->logs, "op_117 rlt:0x%x \n", rlt); 
     //print_f(rs->plogs, "POLL", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            c->opcode = OP_POLL;      
-            c->data = c->seqnum & 0xff;
+            p->opcode = OP_POLL;      
+            p->data = p->seqnum & 0xff;
             
-            c->seqnum = c->seqnum + 1;    
+            p->seqnum = p->seqnum + 1;    
             
-            memset(p, 0, sizeof(struct info16Bit_s));
+            memset(g, 0, sizeof(struct info16Bit_s));
 
             ch = 131;
 
@@ -25463,6 +25464,11 @@ static int hd131(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd132(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd133(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 static int hd134(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd135(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd136(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd137(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd138(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
+static int hd139(struct mainRes_s *mrs, struct modersp_s *modersp){return 0;}
 
 static int fs00(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
@@ -34927,31 +34933,128 @@ static int fs131(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf_f(mrs->log, "polling ...\n");
     print_f(&mrs->plog, "fs131", mrs->log);
 
-    modersp->d = 41;
+    modersp->d = modersp->m + 1;
     modersp->m = 1;
     return 2;
 }
 
 static int fs132(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf_f(mrs->log, "empty !!!\n");
-    print_f(&mrs->plog, "fs132", mrs->log);
-
-    return 1;
+    struct info16Bit_s *p;
+    p = &mrs->mchine.cur;
+    //sprintf_f(mrs->log, "set %d 0x%.2x 0x%.2x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    //print_f(&mrs->plog, "fs132", mrs->log);
+    
+    mrs_ipc_put(mrs, "h", 1, 1);
+    modersp->m = modersp->m + 1;
+    return 0; 
 }
 
 static int fs133(struct mainRes_s *mrs, struct modersp_s *modersp)
-{
-    sprintf_f(mrs->log, "empty !!!\n");
-    print_f(&mrs->plog, "fs133", mrs->log);
+{ 
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *g;
 
-    return 1;
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'H')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        g = &mrs->mchine.get;
+        //sprintf_f(mrs->log, "get %d 0x%.1x 0x%.1x 0x%.2x \n", g->inout, g->seqnum, g->opcode, g->data);
+        //print_f(&mrs->plog, "fs133", mrs->log);
+        
+        if (ch == 'X') {
+            sprintf_f(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs133", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+        }
+        
+        if (g->opcode == OP_QRY) {
+            modersp->m = modersp->m + 1;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    
+    return 0; 
 }
 
 static int fs134(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
+    struct info16Bit_s *p;
+    p = &mrs->mchine.poll;
+    //sprintf_f(mrs->log, "set %d 0x%.1x 0x%.1x 0x%.2x \n", p->inout, p->seqnum, p->opcode, p->data);
+    //print_f(&mrs->plog, "fs134", mrs->log);
+    
+    mrs_ipc_put(mrs, "h", 1, 1);
+    modersp->m = modersp->m + 1;
+    return 0; 
+}
+
+static int fs135(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    int len=0;
+    char ch=0;
+    struct info16Bit_s *p, *g;
+
+    len = mrs_ipc_get(mrs, &ch, 1, 1);
+    if ((len > 0) && (ch == 'H')) {
+        msync(&mrs->mchine, sizeof(struct machineCtrl_s), MS_SYNC);
+
+        p = &mrs->mchine.poll;
+        g = &mrs->mchine.get;
+        //sprintf_f(mrs->log, "get 0x%.2x/0x%.2x 0x%.2x/0x%.2x\n", p->opcode, c->opcode, p->data, c->data);
+        //print_f(&mrs->plog, "fs135", mrs->log);
+
+        if (ch == 'X') {
+            sprintf_f(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs135", mrs->log);
+            modersp->m = modersp->m - 1;        
+            return 2;
+        }
+
+        if (p->opcode == g->opcode){
+            modersp->r = 1;
+            return 1;
+        } else {
+            modersp->r = 2;
+            return 1;
+        }
+    }
+    return 0; 
+}
+
+static int fs136(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
     sprintf_f(mrs->log, "empty !!!\n");
-    print_f(&mrs->plog, "fs134", mrs->log);
+    print_f(&mrs->plog, "fs136", mrs->log);
+
+    return 1;
+}
+
+static int fs137(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    sprintf_f(mrs->log, "empty !!!\n");
+    print_f(&mrs->plog, "fs137", mrs->log);
+
+    return 1;
+}
+
+static int fs138(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    sprintf_f(mrs->log, "empty !!!\n");
+    print_f(&mrs->plog, "fs138", mrs->log);
+
+    return 1;
+}
+
+static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
+{
+    sprintf_f(mrs->log, "empty !!!\n");
+    print_f(&mrs->plog, "fs139", mrs->log);
 
     return 1;
 }
@@ -34959,7 +35062,7 @@ static int fs134(struct mainRes_s *mrs, struct modersp_s *modersp)
 #define LOG_P0_EN (0)
 static int p0(struct mainRes_s *mrs)
 {
-#define PS_NUM 135
+#define PS_NUM 140
 
     int ret=0, len=0, tmp=0;
     char ch=0;
@@ -34996,7 +35099,8 @@ static int p0(struct mainRes_s *mrs)
                                  {115, fs115},{116, fs116},{117, fs117},{118, fs118},{119, fs119},
                                  {120, fs120},{121, fs121},{122, fs122},{123, fs123},{124, fs124},
                                  {125, fs125},{126, fs126},{127, fs127},{128, fs128},{129, fs129},
-                                 {130, fs130},{131, fs131},{132, fs132},{133, fs133},{134, fs134}};
+                                 {130, fs130},{131, fs131},{132, fs132},{133, fs133},{134, fs134},
+                                 {135, fs135},{136, fs136},{137, fs137},{138, fs138},{139, fs139}};
     struct fselec_s errHdle[PS_NUM] = {{ 0, hd00},{ 1, hd01},{ 2, hd02},{ 3, hd03},{ 4, hd04},
                                  { 5, hd05},{ 6, hd06},{ 7, hd07},{ 8, hd08},{ 9, hd09},
                                  {10, hd10},{11, hd11},{12, hd12},{13, hd13},{14, hd14},
@@ -35023,7 +35127,8 @@ static int p0(struct mainRes_s *mrs)
                                  {115, hd115},{116, hd116},{117, hd117},{118, hd118},{119, hd119},
                                  {120, hd120},{121, hd121},{122, hd122},{123, hd123},{124, hd124},
                                  {125, hd125},{126, hd126},{127, hd127},{128, hd128},{129, hd129},
-                                 {130, hd130},{131, hd131},{132, hd132},{133, hd133},{134, hd134}};
+                                 {130, hd130},{131, hd131},{132, hd132},{133, hd133},{134, hd134},
+                                 {135, hd135},{136, hd136},{137, hd137},{138, hd138},{139, hd139}};
     p0_init(mrs);
 
     modesw->m = -2;
@@ -35581,6 +35686,9 @@ static int p2(struct procRes_s *rs)
                 case 'a':
                     cmode = 17;
                     break;
+                case 'h':
+                    cmode = 18;
+                    break;
                 default:
                     break;
             }
@@ -35605,7 +35713,8 @@ static int p2(struct procRes_s *rs)
                     if (bitset == 0) break;
                 }
                 if (!bitset) rs_ipc_put(rs, "G", 1);
-            } else if (cmode == 2) {
+            }
+            else if (cmode == 2) {
                 //sprintf_f(rs->logs, "cmode: %d - 4\n", cmode);
                 //print_f(rs->plogs, "P2", rs->logs);
 
@@ -35654,7 +35763,8 @@ static int p2(struct procRes_s *rs)
                 sprintf_f(rs->logs, "tx 0x%.2x 0x%.2x rx 0x%.2x 0x%.2x \n",  tx8[0], tx8[1], rx8[0], rx8[1]);
                 print_f(rs->plogs, "P2", rs->logs);
 #endif
-            } else if (cmode == 4) {
+            }
+            else if (cmode == 4) {
                 //sprintf_f(rs->logs, "cmode: %d - 5\n", cmode);
                 //print_f(rs->plogs, "P2", rs->logs);
 
@@ -36955,6 +37065,53 @@ static int p2(struct procRes_s *rs)
                 sprintf_f(rs->logs, "spi0 recv end\n");
                 print_f(rs->plogs, "P2", rs->logs);
 
+            }
+            else if (cmode == 18) {
+                len = 0;
+                msync(rs->pmch, sizeof(struct machineCtrl_s), MS_SYNC);            
+                send16 = pkg_info(&rs->pmch->poll);
+                tx8[1] = send16 & 0xff;
+                tx8[0] = (send16 >> 8) & 0xff;      
+
+                sprintf(rs->logs, "_OP_0x%.2x_0x%.2x_ BEG", tx8[0], tx8[1]);
+                dbgShowTimeStamp(rs->logs, NULL, rs, 4, "_O_T_");
+
+#if LOG_P2_CMD_EN
+                sprintf_f(rs->logs, "send 0x%.2x 0x%.2x \n", tx8[0], tx8[1]);
+                print_f(rs->plogs, "P2", rs->logs);
+#endif
+                len = mtx_data(rs->spifd, rx8, tx8, 2, tr);
+
+                msync(rx8, 4, MS_SYNC);                    
+                
+                if (len > 0) {
+                    recv16 = rx8[1] | (rx8[0] << 8);
+                    abs_info(&rs->pmch->get, recv16);
+                    rs_ipc_put(rs, "H", 1);
+                } else {
+
+                    sprintf_f(rs->logs, "ch = X, len = %d\n", len);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    
+                    bitset = 0;
+                    msp_spi_conf(rs->spifd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+
+                    rs_ipc_put(rs, "X", 1);                
+                }
+
+                sprintf(rs->logs, "_OP_0x%.2x_0x%.2x_ END", rx8[0], rx8[1]);
+                dbgShowTimeStamp(rs->logs, NULL, rs, 4, "_O_R_");                
+
+                
+#if LOG_P2_CMD_EN
+                sprintf_f(rs->logs, "recv 0x%.2x 0x%.2x len=%d\n", rx8[0], rx8[1], len);
+                print_f(rs->plogs, "P2", rs->logs);
+#endif
+
+#if LOG_P2_SIMPLE_EN
+                sprintf_f(rs->logs, "tx 0x%.2x 0x%.2x rx 0x%.2x 0x%.2x \n",  tx8[0], tx8[1], rx8[0], rx8[1]);
+                print_f(rs->plogs, "P2", rs->logs);
+#endif
             }
             else {
                 sprintf_f(rs->logs, "cmode: %d \n", cmode);
