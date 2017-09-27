@@ -41,6 +41,7 @@
 #define OP_MDOUBLE    0xa
 #define OP_HANDSCAN  0xb
 #define OP_NOTESCAN  0xc
+#define OP_POLL           0xd
 
 /* SD read write operation */               
 #define OP_SDRD          0x20
@@ -2382,6 +2383,12 @@ static int next_spy(struct psdata_s *data)
                 t->opcode = tmpAns & 0xff;
                 t->data = (tmpAns >> 8) & 0xff;
                 switch (tmpAns & 0xff) {
+                case OP_POLL:
+                    //t->opcode = tmpAns & 0xff;
+                    //t->data = (tmpAns >> 8) & 0xff;
+                    next = PSSET; /* get and repeat value */
+                    evt = AUTO_A;
+                    break;
                 case OP_NOTESCAN:
                     switch ((tmpAns >> 8) & 0xff) {
                         case NOTESCAN_OPTION_01:
@@ -3755,6 +3762,7 @@ static int stspy_05(struct psdata_s *data)
                     case OP_MSINGLE:
                     case OP_HANDSCAN:
                     case OP_NOTESCAN:
+                    case OP_POLL:
                     case OP_SDRD:
                     case OP_SDWT:
                     case OP_STSEC_00:
@@ -7606,6 +7614,7 @@ static int fs10(struct mainRes_s *mrs, struct modersp_s *modersp)
         case OP_MSINGLE:
         case OP_HANDSCAN:
         case OP_NOTESCAN:
+        case OP_POLL:
         case OP_DOUBLE: 
         case OP_MDOUBLE:
         case OP_SDRD:                                       
@@ -8475,10 +8484,12 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/mnt/mmc2/32g_64k_format.bin";
     //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01_rm.bin";
     //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01.bin";
-    char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
+    //char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
     //char diskname[128] = "/mnt/mmc2/64G_empty.bin";
     //char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
     //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_and.bin";
+    char diskname[128] = "/mnt/mmc2/32g_win.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
     struct aspMetaData_s *pmeta;
@@ -9241,10 +9252,12 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/mnt/mmc2/32g_64k_format.bin";
     //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01_rm.bin";
     //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01.bin";
-    char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
+    //char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
     //char diskname[128] = "/mnt/mmc2/64G_empty.bin";
     //char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
     //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_and.bin";
+    char diskname[128] = "/mnt/mmc2/32g_win.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -10405,8 +10418,8 @@ static int p2(struct procRes_s *rs)
                     pct[ASPOP_IMG_LEN].opValue = 0;
                     pct[ASPOP_IMG_LEN_DUO].opValue = 0;
                 } else {
-                    pct[ASPOP_IMG_LEN].opValue = 1105;
-                    pct[ASPOP_IMG_LEN_DUO].opValue = 1905;
+                    pct[ASPOP_IMG_LEN].opValue = 3496;
+                    pct[ASPOP_IMG_LEN_DUO].opValue = 3496;
                 }
                 
                 //idx = testTarget[curTarget % TEST_TRG_SIZE];
@@ -12208,10 +12221,12 @@ int main(int argc, char *argv[])
 //char diskname[128] = "/mnt/mmc2/32g_64k_format.bin";
 //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01_rm.bin";
 //char diskname[128] = "/mnt/mmc2/32g_64k_format_add_01.bin";
-char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
+//char diskname[128] = "/mnt/mmc2/64G_2pics.bin";
 //char diskname[128] = "/mnt/mmc2/64G_empty.bin";
 //char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
 //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
+//char diskname[128] = "/mnt/mmc2/32g_and.bin";
+char diskname[128] = "/mnt/mmc2/32g_win.bin";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 
