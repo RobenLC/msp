@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Fri Sep 22 16:39:05 2017 4d3fdd72ab [FATFMT] impl format command for 16G 32G 64G 128G, and reboot command"
+#define MSP_VERSION "Fri Sep 22 16:39:05 2017 4d3fdd72ab [FATFMT] impl format command for 16G 32G 64G 128G, and reboot command new mk, sd offset, reset spi on OP_FIH failure typo remove, enable reset and sent"
 
 #define SPI1_ENABLE (1) 
 
@@ -7030,7 +7030,7 @@ static void debugPrintInfoSec(struct sdFSinfo_s *pinfo)
 
 static void debugPrintBootSec(struct sdbootsec_s *psec)
 {
-#if LOG_FS_EN
+#if 1//LOG_FS_EN
             /* 0  Jump command */
     printf("[0x%x]: /* 0  Jump command */ \n", psec->secJpcmd);
             /* 3  system id */
@@ -22183,7 +22183,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
 
     ret = msp_spi_conf(fd, SPI_IOC_MESSAGE(1), tr);
     if (ret < 0) {
-        //printf("spi error code: %d \n", ret);
+        printf("spi error code: %d \n", ret);
     }
     
     return ret;
@@ -26224,6 +26224,39 @@ static int fs22(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->m = modersp->m - 1;        
             return 2;
     }
+    
+    if ((len > 0) && (ch == 'R')) {
+            int fd0=0, fdr=0;
+
+            fdr = mrs->sfm[0];
+            
+            sprintf_f(mrs->log, "FAIL!!reset spi _0_!\n");
+            print_f(&mrs->plog, "fs22", mrs->log);
+
+            close(fdr);
+            
+#if SPIDEV_SWITCH
+            fd0 = open(spidev_1, O_RDWR);
+#else
+            fd0 = open(spidev_0, O_RDWR);
+#endif
+
+            if (fd0 <= 0) {
+                sprintf_f(mrs->log, "can't open device[%s]\n", spidev_0); 
+                print_f(&mrs->plog, "fs22", mrs->log);
+            } else {
+                sprintf_f(mrs->log, "open device[%s] id: %d \n", spidev_0, fd0); 
+                print_f(&mrs->plog, "fs22", mrs->log);
+            }
+
+            mrs->sfm[0] = fd0;
+
+            sprintf_f(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs22", mrs->log);
+            
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
 
     return 0; 
 }
@@ -27432,6 +27465,39 @@ static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 2;
     }
 
+    if ((len > 0) && (ch == 'R')) {
+            int fd0=0, fdr=0;
+
+            fdr = mrs->sfm[0];
+            
+            sprintf_f(mrs->log, "FAIL!!reset spi _0_!\n");
+            print_f(&mrs->plog, "fs49", mrs->log);
+
+            close(fdr);
+            
+#if SPIDEV_SWITCH
+            fd0 = open(spidev_1, O_RDWR);
+#else
+            fd0 = open(spidev_0, O_RDWR);
+#endif
+
+            if (fd0 <= 0) {
+                sprintf_f(mrs->log, "can't open device[%s]\n", spidev_0); 
+                print_f(&mrs->plog, "fs49", mrs->log);
+            } else {
+                sprintf_f(mrs->log, "open device[%s] id: %d \n", spidev_0, fd0); 
+                print_f(&mrs->plog, "fs49", mrs->log);
+            }
+
+            mrs->sfm[0] = fd0;
+
+            sprintf_f(mrs->log, "FAIL!!send command again!\n");
+            print_f(&mrs->plog, "fs49", mrs->log);
+            
+            modersp->m = modersp->m - 1;        
+            return 2;
+    }
+    
     return 0; 
 }
 
@@ -27473,8 +27539,8 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
         shmem_dump(pr, 512);
         
         psec = &pfat->fatBootsec;
-        memset(psec, 0, sizeof(struct sdbootsec_s));
-        msync(psec, sizeof(struct sdbootsec_s), MS_SYNC);
+        //memset(psec, 0, sizeof(struct sdbootsec_s));
+        //msync(psec, sizeof(struct sdbootsec_s), MS_SYNC);
         
         /* 0  Jump command */
         psec->secJpcmd = pr[0] | (pr[1] << SF1) | (pr[2] << SF2) | (pr[3] << SF3);
@@ -27670,6 +27736,9 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
                 psec->secBoffset = 8192;
             }
 #else
+            memset(psec, 0, sizeof(struct sdbootsec_s));
+            msync(psec, sizeof(struct sdbootsec_s), MS_SYNC);
+
             if (pfat->fatRetry > 2) {
                 psec->secBoffset = 8192;
             }
@@ -35738,7 +35807,28 @@ static int p2(struct procRes_s *rs)
                 if (len > 0) {
                     recv16 = rx8[1] | (rx8[0] << 8);
                     abs_info(&rs->pmch->get, recv16);
+#if 0
+                    sprintf_f(rs->logs, "op tx 0x%.2x rx 0x%.2x \n", tx8[0], rx8[0]);
+                    print_f(rs->plogs, "P2", rs->logs);
+
                     rs_ipc_put(rs, "C", 1);
+#else
+                    if (tx8[0] == OP_FIH) {
+                        if (rx8[0] != tx8[0]) {
+                            sprintf_f(rs->logs, "ch = R, len = %d\n", len);
+                            print_f(rs->plogs, "P2", rs->logs);
+
+                            bitset = 0;
+                            msp_spi_conf(rs->spifd, _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+                            
+                            rs_ipc_put(rs, "R", 1);     
+                        } else {
+                            rs_ipc_put(rs, "C", 1);
+                        }
+                    } else {
+                        rs_ipc_put(rs, "C", 1);
+                    }
+#endif
                 } else {
 
                     sprintf_f(rs->logs, "ch = X, len = %d\n", len);
@@ -39199,7 +39289,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     int px, pi, size, opsz, acusz, len, acu;
     int ret, n, num, hd, be, ed, ln, fg, cltport=0;
     char ch, *recvbuf, *addr, *sendbuf, *cltaddr;
-    char opcode=0, param=0, flag = 0;
+    unsigned char opcode=0, param=0, flag = 0;
     char msg[256] = "boot";
     char tgr[8] = "tgr";
     sprintf_f(rs->logs, "p5\n");
@@ -47857,7 +47947,18 @@ int main(int argc, char *argv[])
     pmrs->aspFat.fatStatus = ASPFAT_STATUS_INIT;
 
     dbgShowTimeStamp("s9", pmrs, NULL, 2, NULL);
-    
+
+    sprintf_f(pmrs->log, "before open device[%s]\n", spidev_0); 
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+
+    #if 0
+    pmrs->sfm[0] = 0;
+    pmrs->sfm[1] = 0;
+    pmrs->smode = 0;
+    pmrs->smode |= SPI_MODE_1;
+    sprintf_f(pmrs->log, "disable SPI for debug!!!\n"); 
+    print_f(&pmrs->plog, "SPI", pmrs->log);
+    #else 
 /*
     ret = mspFS_createRoot(&pmrs->aspFat.fatRootdir, &pmrs->aspFat, dir);
     if (!ret) {
@@ -47914,7 +48015,7 @@ int main(int argc, char *argv[])
     pmrs->sfm[0] = fd0;
     pmrs->sfm[1] = fd1;
     pmrs->smode = 0;
-    pmrs->smode |= SPI_MODE_1;
+    pmrs->smode |= SPI_MODE_0;
 
     bitset = 1;
     msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
@@ -47951,7 +48052,12 @@ int main(int argc, char *argv[])
     bitset = 0;
     ret = msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
     sprintf_f(pmrs->log, "Set RDY low at beginning\n");
-    print_f(&pmrs->plog, "SPI", pmrs->log);
+    print_f(&pmrs->plog, "SPI0", pmrs->log);
+
+    bitset = 0;
+    ret = msp_spi_conf(pmrs->sfm[1], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
+    sprintf_f(pmrs->log, "Set RDY low at beginning\n");
+    print_f(&pmrs->plog, "SPI1", pmrs->log);
     
     /*
      * spi mode 
@@ -47976,7 +48082,8 @@ int main(int argc, char *argv[])
         printf("can't get spi mode\n"); 
 
     dbgShowTimeStamp("s10", pmrs, NULL, 2, NULL);
-    
+
+    #endif
 // IPC
     pipe(pmrs->pipedn[0].rt);
     //pipe2(pmrs->pipedn[0].rt, O_NONBLOCK);
