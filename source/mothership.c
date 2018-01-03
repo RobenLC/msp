@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Fri Sep 22 16:39:05 2017 4d3fdd72ab [FATFMT] impl format command for 16G 32G 64G 128G, and reboot command new mk, sd offset, reset spi on OP_FIH failure typo remove, enable reset and sent"
+#define MSP_VERSION "Fri Sep 22 16:39:05 2017 4d3fdd72ab [FATFMT] impl format command for 16G 32G 64G 128G, and reboot command new mk, sd offset, reset spi on OP_FIH failure and bypass 0x07"
 
 #define SPI1_ENABLE (1) 
 
@@ -24220,9 +24220,10 @@ static int cmdfunc_meta_opcode(int argc, char *argv[])
         goto end;
     }
         
-    if ((n) && (rsp != 0x1)) {
+    if ((n) || (rsp != 0x1)) {
          sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
          print_f(&mrs->plog, "DBG", mrs->log);
+         ret = -5;
     }
 
     sprintf_f(mrs->log, "cmdfunc_meta_opcode n = %d, rsp = %d\n", n, rsp); 
@@ -26251,10 +26252,10 @@ static int fs22(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             mrs->sfm[0] = fd0;
 
-            sprintf_f(mrs->log, "FAIL!!send command again!\n");
+            sprintf_f(mrs->log, "ERROR !! bypasss 0x07!\n");
             print_f(&mrs->plog, "fs22", mrs->log);
             
-            modersp->m = modersp->m - 1;        
+            modersp->m = modersp->m + 1;        
             return 2;
     }
 
@@ -27491,10 +27492,10 @@ static int fs49(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             mrs->sfm[0] = fd0;
 
-            sprintf_f(mrs->log, "FAIL!!send command again!\n");
+            sprintf_f(mrs->log, "ERROR !! bypasss 0x07!\n");
             print_f(&mrs->plog, "fs49", mrs->log);
             
-            modersp->m = modersp->m - 1;        
+            modersp->m = modersp->m + 1;        
             return 2;
     }
     
@@ -48015,7 +48016,7 @@ int main(int argc, char *argv[])
     pmrs->sfm[0] = fd0;
     pmrs->sfm[1] = fd1;
     pmrs->smode = 0;
-    pmrs->smode |= SPI_MODE_0;
+    pmrs->smode |= SPI_MODE_1;
 
     bitset = 1;
     msp_spi_conf(pmrs->sfm[0], _IOW(SPI_IOC_MAGIC, 11, __u32), &bitset);   //SPI_IOC_WR_SLVE_READY
