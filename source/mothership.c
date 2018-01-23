@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Fri Sep 22 16:39:05 2017 4d3fdd72ab [FATFMT] impl format command for 16G 32G 64G 128G, and reboot command new mk, sd offset, reset spi on OP_FIH failure and bypass 0x07"
+#define MSP_VERSION "Wed Jan 3 09:54:16 2018 cfb6543c08 SPI return to mode 1, bypass 0x07 fail, fix META_NG not working, MBR support"
 
 #define SPI1_ENABLE (1) 
 
@@ -702,6 +702,7 @@ struct pipe_s{
 
 typedef enum {
     ASPFAT_STATUS_INIT = 0x1,
+    ASPFAT_STATUS_MBR = 0x1,
     ASPFAT_STATUS_BOOT_SEC = 0x2,
     ASPFAT_STATUS_FS_INFO = 0x4,
     ASPFAT_STATUS_FAT = 0x8,
@@ -6380,7 +6381,7 @@ static int doSystemCmd(char *sCommand)
     
     if (!fpRead) return -1;
 
-    pBig = bigBuff;
+    //pBig = bigBuff;
     pch = fgets(retBuff, BUFLEN , fpRead);
     while (pch) {
     
@@ -6389,18 +6390,18 @@ static int doSystemCmd(char *sCommand)
             //p0 = strstr(pch, "\n");
             //if (p0) *p0 = '\0';
 
-            n = strlen(pch);
-            totlog += n;
-            if (totlog > BIGBUFLEN) break;
+            //n = strlen(pch);
+            //totlog += n;
+            //if (totlog > BIGBUFLEN) break;
 
-            strncpy(pBig, pch, n);
-            pBig += n;
+            //strncpy(pBig, pch, n);
+            //pBig += n;
             
             //printf("sCommand: [%s] \n", pch);
             //shmem_dump(retBuff, BUFLEN);
         } else {
             wct++;
-            //printf("sCommand: %d...\n", wct);
+            printf("sCommand: %d...\n", wct);
             if (wct > 3) {
                 //break;
             }
@@ -15196,7 +15197,19 @@ static int stfat_30(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
         
-            if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
+            if (!(pFat->fatStatus & ASPFAT_STATUS_MBR)) {
+                secStr = 0;
+                secLen = 16;
+                c->opinfo = secStr;
+                p->opinfo = secLen;
+
+                sprintf_f(rs->logs, "MBR_SEC secStr:%d, secLen:%d, fat status:0x%.8x \n", secStr, secLen, pFat->fatStatus); 
+                print_f(rs->plogs, "FAT", rs->logs);  
+
+                ch = 136;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+            } else if (!(pFat->fatStatus & ASPFAT_STATUS_BOOT_SEC)) {
                 secStr = 0 + pFat->fatBootsec.secBoffset;
                 secLen = 16;
                 c->opinfo = secStr;
@@ -27517,9 +27530,6 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct sdParseBuff_s *pParBuf=0;
     struct info16Bit_s *p=0, *c=0;
-    //char fatRev[512];
-    char *fatRev=0;
-    fatRev = aspMemalloc(1024, 10);
     
     sprintf_f(mrs->log, "parsing boot sector \n");
     print_f(&mrs->plog, "fs50", mrs->log);
@@ -27608,7 +27618,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
         psec->secWhfat = psec->secResv;
         psec->secWhroot = psec->secWhfat + psec->secPrfat * 2;
 
-        pParBuf->dirBuffUsed = 0;
+        //pParBuf->dirBuffUsed = 0;
         
 #if 0 /* test reverse fat */
         /* 0  Jump command */
@@ -27700,6 +27710,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
             psec->secWhroot += psec->secBoffset;
 
             debugPrintBootSec(psec);
+            pParBuf->dirBuffUsed = 0;
         } else {
             pfat->fatRetry += 1;
 #if 0 /* test if boot failed */
@@ -27740,8 +27751,11 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
             memset(psec, 0, sizeof(struct sdbootsec_s));
             msync(psec, sizeof(struct sdbootsec_s), MS_SYNC);
 
-            if (pfat->fatRetry > 2) {
-                psec->secBoffset = 8192;
+            if (pfat->fatRetry > 1) {
+                //psec->secBoffset = 8192;
+                pfat->fatStatus &= ~ASPFAT_STATUS_MBR;
+            } else {
+                pParBuf->dirBuffUsed = 0;
             }
 #endif
         }
@@ -28416,12 +28430,14 @@ static int fs55(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
     struct sdFAT_s *pfat=0;
-
+    
+    pfat = &mrs->aspFat;
+    
     sprintf_f(mrs->log, "show the tree!!!  \n");
     print_f(&mrs->plog, "fs56", mrs->log);
 
-    pfat = &mrs->aspFat;
-
+    msync(pfat, sizeof(struct sdFAT_s), MS_SYNC);
+    
     if (!(pfat->fatStatus & ASPFAT_STATUS_BOOT)) {
         //mspFS_listDetail(curDir, 4);
         //mspFS_list(curDir, 4);
@@ -28431,6 +28447,7 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
         //aspFScpDir(&pfat->fatCurDir, &pfat->fatRootdir);
     } else {
         //aspMemClear(aspMemAsign, asptotMalloc, 10);
+        /*
         if(!pfat->fatDirTr.dirCur) {
             //pfat->fatCurDir = pfat->fatRootdir;
             aspFScpDir(&pfat->fatCurDir, pfat->fatDirTr.dirRoot);            
@@ -28441,7 +28458,15 @@ static int fs56(struct mainRes_s *mrs, struct modersp_s *modersp)
             //mspFS_folderList(pfat->fatDirTr.dirCur, 4);            
             mspFS_list(pfat->fatDirTr.dirRoot, 4);            
         }
+        */
+    }
 
+    if(!pfat->fatDirTr.dirCur) {
+        aspFScpDir(&pfat->fatCurDir, pfat->fatDirTr.dirRoot);            
+        pfat->fatDirTr.dirCur = pfat->fatDirTr.dirRoot;
+        mspFS_list(pfat->fatDirTr.dirRoot, 4);            
+    } else {          
+        mspFS_list(pfat->fatDirTr.dirRoot, 4);            
     }
 
     modersp->r = 4;    
@@ -35099,8 +35124,112 @@ static int fs135(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs136(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf_f(mrs->log, "empty !!!\n");
+#define SF0 (8 * 0)
+#define SF1 (8 * 1)
+#define SF2 (8 * 2)
+#define SF3 (8 * 3)
+
+    uint32_t val=0, i=0;
+    char *pr=0, *ppart=0;
+    char system_id=0, end55=0, endaa=0;
+    uint32_t secStr=0, secLen=0, secRel=0;
+    struct aspConfig_s *pct=0;
+    struct sdbootsec_s   *psec=0;
+    struct sdFAT_s *pfat=0;
+    struct sdParseBuff_s *pParBuf=0;
+    struct info16Bit_s *p=0, *c=0;
+    
+    sprintf_f(mrs->log, "parsing MBR sector \n");
     print_f(&mrs->plog, "fs136", mrs->log);
+
+    c = &mrs->mchine.cur;
+    p = &mrs->mchine.tmp;
+    
+    pct = mrs->configTable;
+    pfat = &mrs->aspFat;
+    pParBuf = &pfat->parBuf;
+
+    if (pParBuf->dirBuffUsed) {
+        sprintf_f(mrs->log, "parsing, buff  size:%d\n", pParBuf->dirBuffUsed);
+        print_f(&mrs->plog, "fs136", mrs->log);
+
+        pParBuf->dirBuffUsed = 0;
+        
+        psec = &pfat->fatBootsec;
+        
+        //memset(psec, 0, sizeof(struct sdbootsec_s));
+        //msync(psec, sizeof(struct sdbootsec_s), MS_SYNC);
+        
+        pr = pParBuf->dirParseBuff;
+        
+        shmem_dump(pr, 512);   
+        ppart = &pr[446];
+        end55 = pr[510];
+        endaa = pr[511];
+        shmem_dump(ppart, 16);   
+        system_id = ppart[4];
+        secRel = ppart[8] | (ppart[9] << 8) | (ppart[10] << 16) | (ppart[11] << 24);
+
+        sprintf_f(mrs->log, "end: 0x%.2x 0x%.2x ,sys id: 0x%.2x, sector relative: %d \n", end55, endaa, system_id, secRel);
+        print_f(&mrs->plog, "fs136", mrs->log);
+        
+        //if ((secRel % 32) == 0) {
+            if ((secRel * 512) <= (0x4000000)) {
+                psec->secBoffset = secRel;
+            }
+        //}
+        
+        if ((psec->secBoffset) && (end55 == 0x55) && (endaa == 0xaa) 
+            && ((system_id == 0x0c) || (system_id == 0x0b))) {
+            pfat->fatStatus |= ASPFAT_STATUS_MBR;
+            pfat->fatRetry = 0;
+        } else {
+            pfat->fatRetry += 1;
+            if (pfat->fatRetry > 6) {
+                sprintf_f(mrs->log, "!!!! retry times == %d  break!!!!\n", pfat->fatRetry);
+                print_f(&mrs->plog, "fs136", mrs->log);
+
+                modersp->r = 0xed;
+                return 1;
+            }
+        }
+
+        sprintf_f(mrs->log, "!!!! offset: %d  !!!!\n", psec->secBoffset);
+        print_f(&mrs->plog, "fs136", mrs->log);
+
+        modersp->r = 1;
+    }else {
+        secStr = c->opinfo;
+        secLen = p->opinfo;
+
+        sprintf_f(mrs->log, "buff empty, set str:%d(0x%x), len:%d \n", secStr, secStr, secLen);
+        print_f(&mrs->plog, "fs136", mrs->log);
+
+        cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
+
+        val = cfgValueOffset(secStr, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_STR01, val);
+        val = cfgValueOffset(secStr, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_STR02, val);
+        val = cfgValueOffset(secStr, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_STR03, val);
+        val = cfgValueOffset(secStr, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_STR04, val);
+
+        val = cfgValueOffset(secLen, 24);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN01, val);
+        val = cfgValueOffset(secLen, 16);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN02, val);
+        val = cfgValueOffset(secLen, 8);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN03, val);
+        val = cfgValueOffset(secLen, 0);
+        cfgTableSet(pct, ASPOP_SDFAT_LEN04, val);
+
+        cfgTableSet(pct, ASPOP_SDFAT_SDAT, 1);
+
+        modersp->r = 2;
+    }
+
 
     return 1;
 }
@@ -47705,9 +47834,9 @@ int main(int argc, char *argv[])
             sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -imlan0 -Dnl80211 -dd");
             ret = doSystemCmd(syscmd);
 
-            sleep(3);
+            //sleep(3);
 
-            sprintf(syscmd, "udhcpc -i mlan0 -t 3 -n");
+            sprintf(syscmd, "udhcpc -i mlan0 -t 6 -n");
             ret = doSystemCmd(syscmd);
 
             sprintf_f(pmrs->log, "exec [%s]...\n", syscmd);
