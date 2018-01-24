@@ -24,7 +24,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Wed Jan 3 09:54:16 2018 cfb6543c08 SPI return to mode 1, bypass 0x07 fail, fix META_NG not working, MBR support"
+#define MSP_VERSION "Tue Jan 23 09:14:36 2018 7bc3b180e4 [FAT] parsing partition table, skipp t3"
 
 #define SPI1_ENABLE (1) 
 
@@ -701,7 +701,7 @@ struct pipe_s{
 };
 
 typedef enum {
-    ASPFAT_STATUS_INIT = 0x1,
+    ASPFAT_STATUS_INIT = 0x0,
     ASPFAT_STATUS_MBR = 0x1,
     ASPFAT_STATUS_BOOT_SEC = 0x2,
     ASPFAT_STATUS_FS_INFO = 0x4,
@@ -895,6 +895,7 @@ struct modersp_s{
     int d;
     int v;  
     int c;
+    int t;
 };
 
 struct info16Bit_s{
@@ -1406,6 +1407,7 @@ static int aspNameCpyfromName(char *raw, char *dst, int offset, int len, int jum
 static int atFindIdx(char *str, char ch);
 
 static int cmdfunc_opchk_single(uint32_t val, uint32_t mask, int len, int type);
+static int cfgTableUpd(struct aspConfig_s *table, int idx, uint32_t val);
 static int cfgTableSet(struct aspConfig_s *table, int idx, uint32_t val);
 static void* aspMemalloc(uint32_t asz, int pidx);
 static int aspMemFree(void *dval, int pidx);
@@ -7232,6 +7234,29 @@ static uint32_t aspRawReverse(char * raw, int size, uint32_t val)
 static uint32_t cfgValueOffset(uint32_t val, int offset)
 {
     return (val >> offset) & 0xff;
+}
+
+static int cfgTableUpd(struct aspConfig_s *table, int idx, uint32_t val)
+{
+    struct aspConfig_s *p=0;
+    int ret=0;
+
+    if (!table) return -1;
+    if (idx >= ASPOP_CODE_MAX) return -1;
+
+    p = &table[idx];
+    if (!p) return -2;
+
+    ret = cmdfunc_opchk_single(val, p->opMask, p->opBitlen, p->opType);
+    if (ret < 0) {
+        ret = (ret * 10) -3;
+        return ret;
+    } else {            
+        p->opValue = val;
+        p->opStatus = ASPOP_STA_UPD;
+    }
+
+    return 0;
 }
 
 static int cfgTableSet(struct aspConfig_s *table, int idx, uint32_t val)
@@ -16532,7 +16557,13 @@ static int stsda_51(struct psdata_s *data)
         case STINIT:
             /* TODO */
             if (!(pFat->fatStatus & ASPFAT_STATUS_FAT)) {
-                data->result = emb_result(data->result, EVTMAX);
+                ch = 137;
+                rs_ipc_put(data->rs, &ch, 1);
+                data->result = emb_result(data->result, WAIT);
+                sprintf_f(rs->logs, "op_51: fatStatus: %x, Error !!not doing boot yet !!\n", pFat->fatStatus); 
+                print_f(rs->plogs, "SDA", rs->logs);  
+
+                //data->result = emb_result(data->result, EVTMAX);
             } else {
                 ch = 91;
                 rs_ipc_put(data->rs, &ch, 1);
@@ -22196,7 +22227,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
 
     ret = msp_spi_conf(fd, SPI_IOC_MESSAGE(1), tr);
     if (ret < 0) {
-        printf("spi error code: %d \n", ret);
+        //printf("spi error code: %d \n", ret);
     }
     
     return ret;
@@ -27751,9 +27782,11 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
             memset(psec, 0, sizeof(struct sdbootsec_s));
             msync(psec, sizeof(struct sdbootsec_s), MS_SYNC);
 
-            if (pfat->fatRetry > 1) {
+            if (pfat->fatRetry > 6) {
                 //psec->secBoffset = 8192;
-                pfat->fatStatus &= ~ASPFAT_STATUS_MBR;
+                //pfat->fatStatus &= ~ASPFAT_STATUS_MBR;
+                modersp->r = 0xed;
+                return 1;
             } else {
                 pParBuf->dirBuffUsed = 0;
             }
@@ -28865,8 +28898,8 @@ static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
     mrs_ipc_put(mrs, "n", 1, 1);
     
     //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
-#if CHECK_SOCKET_STATUS
     modersp->v = 0;
+#if CHECK_SOCKET_STATUS
     modersp->m = modersp->m + 1;
 #else
     modersp->d = modersp->m + 1;
@@ -28974,8 +29007,10 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             ret = aspCalcSupLen(pfat->fatSupdata);
         }
-
+        
+        modersp->t = modersp->v;
         modersp->c = 0;
+
         mrs_ipc_put(mrs, "N", 1, 3);
         sprintf_f(mrs->log, "%d end, len: %d, calcu: %d\n", modersp->v, len, ret);
         print_f(&mrs->plog, "fs68", mrs->log);
@@ -28988,14 +29023,14 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
             bitset = 0;
             ret = msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 14, __u32), &bitset);  //SPI_IOC_STOP_THREAD
             sprintf_f(mrs->log, "Stop spi0 spidev thread, ret: 0x%x\n", ret);
-            print_f(&mrs->plog, "fs69", mrs->log);
+            print_f(&mrs->plog, "fs68", mrs->log);
 #endif
 
 #if PULL_LOW_AFTER_DATA
             bitset = 0;
             msp_spi_conf(mrs->sfm[0], _IOW(SPI_IOC_MAGIC, 6, __u32), &bitset);   //SPI_IOC_WR_CTL_PIN
             sprintf_f(mrs->log, "set RDY pin %d\n",bitset);
-            print_f(&mrs->plog, "fs69", mrs->log);
+            print_f(&mrs->plog, "fs68", mrs->log);
             usleep(210000);
 #endif
 
@@ -29011,14 +29046,25 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    //sprintf_f(mrs->log, "wait wifi tx end\n");
-    //print_f(&mrs->plog, "fs69", mrs->log);
+    sprintf_f(mrs->log, "wait wifi tx end, t: %d \n", modersp->t);
+    print_f(&mrs->plog, "fs69", mrs->log);
+    
+    if (modersp->t == 0) {
+        sprintf_f(mrs->log, "wait wifi tx end, t: %d \n", modersp->t);
+        print_f(&mrs->plog, "fs69", mrs->log);
+
+        ring_buf_init(&mrs->cmdRx);
+
+        modersp->m = modersp->d;
+        modersp->d = 0;
+        return 2;
+    }
 
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     while (len > 0) {
 
-        //sprintf_f(mrs->log, "ch: %c - end\n", ch);
-        //print_f(&mrs->plog, "fs69", mrs->log);
+        sprintf_f(mrs->log, "ch: %c - end\n", ch);
+        print_f(&mrs->plog, "fs69", mrs->log);
         modersp->c ++;
         
         if (ch == 'N') {
@@ -29026,7 +29072,8 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs69", mrs->log);
 
             ring_buf_init(&mrs->cmdRx);
-
+            modersp->t = 0;
+            
             if (modersp->d) {
                 modersp->m = modersp->d;
                 modersp->d = 0;
@@ -33048,9 +33095,13 @@ static int fs113(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     int len=0;
     char ch=0;
+    struct sdFAT_s *pfat=0;
+
+    pfat = &mrs->aspFat;
+
     //sprintf_f(mrs->log, "check P6 getting the notice\n");
     //print_f(&mrs->plog, "fs113", mrs->log);
-
+    
     len = mrs_ipc_get(mrs, &ch, 1, 7);
 
     if (len > 0) {
@@ -33072,6 +33123,9 @@ static int fs113(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r = 1;
             return 1;
         } else {
+            pfat->fatSupdata = 0;
+            pfat->fatSupcur = 0;
+
             //sprintf_f(mrs->log, "FAIL!!send notice to P6 again!\n");
             sprintf_f(mrs->log, "P6 response BREAK loop ch = %c \n", ch);
             print_f(&mrs->plog, "fs113", mrs->log);
@@ -35185,12 +35239,11 @@ static int fs136(struct mainRes_s *mrs, struct modersp_s *modersp)
             pfat->fatRetry = 0;
         } else {
             pfat->fatRetry += 1;
-            if (pfat->fatRetry > 6) {
-                sprintf_f(mrs->log, "!!!! retry times == %d  break!!!!\n", pfat->fatRetry);
+            if (pfat->fatRetry > 2) {
+                sprintf_f(mrs->log, "!!!! MBR retry times == %d  break!!!!\n", pfat->fatRetry);
                 print_f(&mrs->plog, "fs136", mrs->log);
-
-                modersp->r = 0xed;
-                return 1;
+                pfat->fatStatus |= ASPFAT_STATUS_MBR;
+                psec->secBoffset = 0;                
             }
         }
 
@@ -35236,18 +35289,70 @@ static int fs136(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs137(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf_f(mrs->log, "empty !!!\n");
+    struct aspConfig_s *pct=0;
+
+    pct = mrs->configTable;
+
+    cfgTableUpd(pct, ASPOP_IMG_LEN, 0);
+
+    cfgTableUpd(pct, ASPOP_CROP_01, 0);
+    cfgTableUpd(pct, ASPOP_CROP_02, 0);
+    cfgTableUpd(pct, ASPOP_CROP_03, 0);
+    cfgTableUpd(pct, ASPOP_CROP_04, 0);
+    cfgTableUpd(pct, ASPOP_CROP_05, 0);
+    cfgTableUpd(pct, ASPOP_CROP_06, 0);
+    cfgTableUpd(pct, ASPOP_CROP_07, 0);
+    cfgTableUpd(pct, ASPOP_CROP_08, 0);
+    cfgTableUpd(pct, ASPOP_CROP_09, 0);
+    cfgTableUpd(pct, ASPOP_CROP_10, 0);
+    cfgTableUpd(pct, ASPOP_CROP_11, 0);
+    cfgTableUpd(pct, ASPOP_CROP_12, 0);
+    cfgTableUpd(pct, ASPOP_CROP_13, 0);
+    cfgTableUpd(pct, ASPOP_CROP_14, 0);
+    cfgTableUpd(pct, ASPOP_CROP_15, 0);
+    cfgTableUpd(pct, ASPOP_CROP_16, 0);
+    cfgTableUpd(pct, ASPOP_CROP_17, 0);
+    cfgTableUpd(pct, ASPOP_CROP_18, 0);
+    
+    sprintf_f(mrs->log, "send notice to P6 for stoping meta\n");
     print_f(&mrs->plog, "fs137", mrs->log);
 
-    return 1;
+    
+    mrs_ipc_put(mrs, "c", 1, 7);
+    modersp->m = modersp->m + 1;
+    
+    return 0;
 }
 
 static int fs138(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf_f(mrs->log, "empty !!!\n");
-    print_f(&mrs->plog, "fs138", mrs->log);
+    int len=0;
+    char ch=0;
+    //sprintf_f(mrs->log, "check P6 getting the notice\n");
+    //print_f(&mrs->plog, "fs138", mrs->log);
 
-    return 1;
+    len = mrs_ipc_get(mrs, &ch, 1, 7);
+
+    if (len > 0) {
+        sprintf_f(mrs->log, "check P6 getting the stopping notice, len = %d, ch = 0x%.2x\n", len, ch);
+        print_f(&mrs->plog, "fs138", mrs->log);
+  
+        len = 0;
+        len = mrs_ipc_get(mrs, &ch, 1, 7);
+        while (len > 0) {
+            sprintf_f(mrs->log, "check P6 getting the stopping notice, len = %d, ch = 0x%.2x\n", len, ch);
+            print_f(&mrs->plog, "fs138", mrs->log);
+
+            len = mrs_ipc_get(mrs, &ch, 1, 7);        
+        }
+        
+        if (ch == 'E') {
+            modersp->r = 0xed;
+            return 1;
+        }
+    }
+    
+    return 0; 
 }
 
 static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -35333,7 +35438,8 @@ static int p0(struct mainRes_s *mrs)
     modesw->m = -2;
     modesw->r = 0;
     modesw->d = 0;
-
+    modesw->t = 0;
+    
     while (1) {
         //sprintf_f(mrs->log, ".\n");
         //print_f(&mrs->plog, "P0", mrs->log);
@@ -35390,6 +35496,7 @@ static int p0(struct mainRes_s *mrs)
             modesw->r = 0;
             //modesw->v = 0; /* do not reset */
             modesw->d = 0;
+            //modesw->t = 0; /* do not reset */
             modesw->m = -2;
             tmp = -1;
 
@@ -40840,7 +40947,7 @@ static int p6(struct procRes_s *rs)
                         sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
                         print_f(rs->plogs, "P6", rs->logs);    
                     } else {
-                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        sprintf_f(rs->logs, "warnning!! ch == %c \n", ch);
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
