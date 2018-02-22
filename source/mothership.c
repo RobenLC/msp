@@ -27,7 +27,8 @@
 #define MSP_VERSION "Wed Jan 24 17:09:27 2018 \
 ec31bdbf47 \
 [FAT] fix SD FAT only write back mode \
-folder add"
+folder add \
+ap mode default on"
 
 #define SPI1_ENABLE (1) 
 
@@ -247,7 +248,7 @@ static int *totSalloc=0;
 #define FAT_DIRPOOL_IDX_MAX   (65535)
 #define FAT_DIRPOO_ARY_MAX   (4095)
 
-#define LOG_FS_EN (1)
+#define LOG_FS_EN (0)
 #define LOG_DOT_PROG_EN (0)
 
 #define ANSP0_RECOVER (1)
@@ -1216,7 +1217,7 @@ struct procRes_s{
     // save log file
     FILE *flog_s;
     // save data file
-    FILE *fdat_s[3];
+    FILE *fdat_s[4];
     // time measurement
     struct timespec *tm[2];
     struct timespec tdf[2];
@@ -24934,8 +24935,12 @@ static int cmdfunc_upld_opcode(int argc, char *argv[])
     /* set data for update to scanner */
     pkt->opcode = OP_SINGLE;
     pkt->data = SINSCAN_WIFI_ONLY;
-    //n = cmdfunc_upd2host(mrs, 'u', &rsp);
+
+    #if 1 /* 0: test fat folder creating */
+    n = cmdfunc_upd2host(mrs, 'u', &rsp);
+    #else
     n = cmdfunc_upd2host(mrs, '9', &rsp);
+    #endif
     if ((n == -32) || (n == -33)) {
         brk = 1;
         goto end;
@@ -29144,8 +29149,8 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf_f(mrs->log, "wait wifi tx end, t: %d \n", modersp->t);
-    print_f(&mrs->plog, "fs69", mrs->log);
+    //sprintf_f(mrs->log, "wait wifi tx end, t: %d \n", modersp->t);
+    //print_f(&mrs->plog, "fs69", mrs->log);
     
     if (modersp->t == 0) {
         sprintf_f(mrs->log, "wait wifi tx end, t: %d \n", modersp->t);
@@ -33088,7 +33093,7 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     sleep(3);
 
-    sprintf(syscmd, "udhcpc -i mlan0 -t 3 -n");
+    sprintf(syscmd, "udhcpc -i mlan0 -t 10 -n");
     ret = doSystemCmd(syscmd);
 
     sprintf(syscmd, "ifconfig");
@@ -35537,9 +35542,9 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs139", mrs->log);
 
     debugPrintDir(curDir);
-    debugPrintDir(&pfat->fatFileUpld);
+    //debugPrintDir(&pfat->fatFileUpld);
     debugPrintDir(chlDir);
-    debugPrintDir(&pfat->fatFolderCrt);
+    //debugPrintDir(&pfat->fatFolderCrt);
     
     if (strcmp(curDir->dfSFN, pfat->fatFileUpld.dfSFN) != 0) {
         ret = mspFS_allocDir(&pfat->fatDirTr, &getDir1, 9);
@@ -35570,7 +35575,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf_f(mrs->log, "print cur dir before cp: \n");
         print_f(&mrs->plog, "fs139", mrs->log);
 
-        debugPrintDir(curDir);
+        //debugPrintDir(curDir);
         ret = aspFScpDirTr(curDir, &pfat->fatFileUpld, &pfat->fatDirTr);
         if (ret < 0) {
             sprintf_f(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
@@ -35578,7 +35583,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r = 0xed;
             return 1;
         }
-        debugPrintDir(curDir);
+        //debugPrintDir(curDir);
         
         if (tpid != dirid) {
             sprintf_f(mrs->log, "WARNNING check curdir(id:%d) not %d\n", curDir->dfindex, dirid);
@@ -35597,7 +35602,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf_f(mrs->log, "print chld dir before cp: \n");
         print_f(&mrs->plog, "fs139", mrs->log);
 
-        debugPrintDir(chlDir);
+        //debugPrintDir(chlDir);
         ret = aspFScpDirTr(chlDir, &pfat->fatFolderCrt, &pfat->fatDirTr);
         if (ret < 0) {
             sprintf_f(mrs->log, "cp dir into file tree failed ret: %d\n", ret);
@@ -35605,7 +35610,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r = 0xed;
             return 1;
         }
-        debugPrintDir(chlDir);
+        //debugPrintDir(chlDir);
         
         if (tpid != chlid) {
             sprintf_f(mrs->log, "WARNNING check curdir(id:%d) not %d\n", chlDir->dfindex, chlid);
@@ -35616,8 +35621,8 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf_f(mrs->log, "print chld and cur dir before insert: \n");
         print_f(&mrs->plog, "fs139", mrs->log);
 
-        debugPrintDir(curDir->pa);
-        debugPrintDir(curDir);
+        //debugPrintDir(curDir->pa);
+        //debugPrintDir(curDir);
 
         if (curDir->pa) {
             aspFS_insertFATChild(curDir->pa, curDir);
@@ -35628,9 +35633,9 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs139", mrs->log);
         }
 
-        debugPrintDir(curDir->pa);
-        debugPrintDir(curDir);
-        debugPrintDir(chlDir);
+        //debugPrintDir(curDir->pa);
+        //debugPrintDir(curDir);
+        //debugPrintDir(chlDir);
         
         aspFS_insertFATChild(curDir, chlDir);
         sprintf_f(mrs->log, "insert [%s] into [%s] \n", chlDir->dfSFN, chlDir->pa->dfSFN);
@@ -35639,8 +35644,8 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf_f(mrs->log, "[%s] has ch [%s] \n", curDir->dfSFN, curDir->ch->dfSFN);
         print_f(&mrs->plog, "fs139", mrs->log);
 
-        debugPrintDir(curDir);
-        debugPrintDir(chlDir);
+        //debugPrintDir(curDir);
+        //debugPrintDir(chlDir);
 
         mspFS_list(curDir->pa, 4);
         
@@ -45328,7 +45333,7 @@ static int p6(struct procRes_s *rs)
             aspFScpDir(&pfat->fatCurDir, fscur);
 
         }
-        else if (opcode == 0x25) { /* upload file */
+        else if (opcode == 0x13) { /* 0x13: upload file */
             sprintf_f(rs->logs, "handle opcode: 0x%x\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
@@ -45593,7 +45598,7 @@ static int p6(struct procRes_s *rs)
                 nexinfo = asp_freeInfo(nexinfo);
             }
         } 
-        else if (opcode == 0x13) { /* create folder */
+        else if (opcode == 0x25) { /* 0x25: create folder */
             sprintf_f(rs->logs, "handle opcode: 0x%x\n", opcode);
             print_f(rs->plogs, "P6", rs->logs);
 
@@ -45812,19 +45817,19 @@ static int p6(struct procRes_s *rs)
                         }
 */                        
 
-                        debugPrintDir(upld);
-                        debugPrintDir(fscur);
+                        //debugPrintDir(upld);
+                        //debugPrintDir(fscur);
 
                         aspFS_insertFATChild(fscur, upld);
                         
-                        debugPrintDir(upld);
-                        debugPrintDir(fscur);
-                        debugPrintDir(chld);                        
+                        //debugPrintDir(upld);
+                        //debugPrintDir(fscur);
+                        //debugPrintDir(chld);                        
 
                         aspFS_insertFATChild(upld, chld);
 
-                        debugPrintDir(chld);                                                
-                        debugPrintDir(upld);
+                        //debugPrintDir(chld);                                                
+                        //debugPrintDir(upld);
 
 
                         //pfat->fatFileUpld = upld;
@@ -46521,8 +46526,8 @@ static int p8(struct procRes_s *rs)
     struct addrinfo clients, *clintinfo, *c;
     struct sockaddr_in *saddr, *haddr;
     const struct sockaddr_storage their_addr;
-    char s[INET6_ADDRSTRLEN];
-    char d[INET6_ADDRSTRLEN];
+    char s[INET_ADDRSTRLEN];
+    char d[INET_ADDRSTRLEN];
     char port[8];
     int rv, sockfd, sockback;
 
@@ -46565,7 +46570,7 @@ static int p8(struct procRes_s *rs)
             if (ifa->ifa_addr == NULL)
                 continue;
 
-            ret=getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),s, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
+            ret=getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),s, INET_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
 
             if((strcmp(ifa->ifa_name, rs->pnetIntfs)==0)&&(ifa->ifa_addr->sa_family==AF_INET)) {
                 if (ret != 0) {
@@ -47554,7 +47559,7 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
-            #if 0 /* test AP mode */
+            #if 1 /* test AP mode */
             case ASPOP_AP_MODE: 
                 ctb->opStatus = ASPOP_STA_APP; //default for debug ASPOP_STA_NONE;
                 ctb->opCode = OP_AP_MODEN;
@@ -48930,7 +48935,7 @@ int main(int argc, char *argv[])
     
     /* AP mode launch or not */
     int isLaunch = 0;
-    char s[INET6_ADDRSTRLEN];
+    char s[INET_ADDRSTRLEN];
     struct ifaddrs *ifaddr, *ifa;
 
     ctb = &pmrs->configTable[ASPOP_AP_MODE];
@@ -48953,9 +48958,9 @@ int main(int argc, char *argv[])
             sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -imlan0 -Dnl80211 -dd");
             ret = doSystemCmd(syscmd);
 
-            //sleep(3);
+            sleep(3);
 
-            sprintf(syscmd, "udhcpc -i mlan0 -t 6 -n");
+            sprintf(syscmd, "udhcpc -i mlan0 -t 10 -n");
             ret = doSystemCmd(syscmd);
 
             sprintf_f(pmrs->log, "exec [%s]...\n", syscmd);
@@ -48974,7 +48979,7 @@ int main(int argc, char *argv[])
                     if (ifa->ifa_addr == NULL)
                         continue;
 
-                    ret=getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),s, INET6_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
+                    ret=getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),s, INET_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
                     if (ret != 0) {
                         printf("getnameinfo() failed: %s\n", gai_strerror(ret));
                         //exit(EXIT_FAILURE);
