@@ -120,7 +120,7 @@
 #define OP_BLEEDTHROU_ADJUST 0x81
 #define OP_BLACKWHITE_THSHLD 0x82
 
-#define DATA_END_PULL_LOW_DELAY 10000
+#define DATA_END_PULL_LOW_DELAY 30000
 
 /* debug */
 #define OP_SAVE         0x80
@@ -8490,6 +8490,8 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
     //char diskname[128] = "/mnt/mmc2/32g_and.bin";
     char diskname[128] = "/mnt/mmc2/32g_win.bin";
+    //char diskname[128] = "/mnt/mmc2/phy_32g_empty_diff.bin";
+    //char diskname[128] = "/mnt/mmc2/phy_folder.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
     struct aspMetaData_s *pmeta;
@@ -9258,6 +9260,8 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
     //char diskname[128] = "/mnt/mmc2/32g_and.bin";
     char diskname[128] = "/mnt/mmc2/32g_win.bin";
+    //char diskname[128] = "/mnt/mmc2/phy_32g_empty_diff.bin";
+    //char diskname[128] = "/mnt/mmc2/phy_folder.bin";
     struct DiskFile_s *fd;
     FILE *fp=0;
 
@@ -10407,10 +10411,11 @@ static int p2(struct procRes_s *rs)
             } else {
 #if CROP_SAMPLE_SIZE
                 #define SAMPLE_MIN 4
+                #define SAMPLE_CROP_MAX CROP_SAMPLE_SIZE // less than CROP_SAMPLE_SIZE
                 if (rs->pmetaMass->massIdx > SAMPLE_MIN) {
                     rs->pmetaMass->massIdx -= SAMPLE_MIN;
                 }
-                rs->pmetaMass->massIdx = SAMPLE_MIN + (rs->pmetaMass->massIdx % (CROP_SAMPLE_SIZE - SAMPLE_MIN)); // for debug
+                rs->pmetaMass->massIdx = SAMPLE_MIN + (rs->pmetaMass->massIdx % (SAMPLE_CROP_MAX - SAMPLE_MIN)); // for debug
                 
                 idx = rs->pmetaMass->massIdx;
 
@@ -12227,6 +12232,8 @@ int main(int argc, char *argv[])
 //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
 //char diskname[128] = "/mnt/mmc2/32g_and.bin";
 char diskname[128] = "/mnt/mmc2/32g_win.bin";
+//char diskname[128] = "/mnt/mmc2/phy_32g_empty_diff.bin";
+//char diskname[128] = "/mnt/mmc2/phy_folder.bin";
 static char spi1[] = "/dev/spidev32766.0"; 
 static char spi0[] = "/dev/spidev32765.0"; 
 

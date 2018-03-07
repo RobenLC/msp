@@ -24,11 +24,10 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Wed Jan 24 17:09:27 2018 \
-ec31bdbf47 \
-[FAT] fix SD FAT only write back mode \
-folder add \
-ap mode default on"
+#define MSP_VERSION "Thu Feb 22 15:17:05 2018 \
+35be4953f7 \
+[FAT] remove unused log \
+fix redundant data channel"
 
 #define SPI1_ENABLE (1) 
 
@@ -35994,11 +35993,11 @@ static int fs142(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     ring_buf_init(&mrs->cmdTx);
 
-    mrs_ipc_put(mrs, "u", 1, 3);
+    //mrs_ipc_put(mrs, "u", 1, 3);
     //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
-    mrs_ipc_put(mrs, "u", 1, 8);
+    //mrs_ipc_put(mrs, "u", 1, 8);
             
-    modersp->m = modersp->m + 1;
+    modersp->m = modersp->m + 2;
     return 2;
 }
 
@@ -36607,7 +36606,6 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     return 0;
 }
 
-#define MSP_P4_SAVE_DAT (0)
 #define MSP_P2_SAVE_DAT (0)
 #define IN_SAVE (0)
 
@@ -36866,15 +36864,16 @@ static int p2(struct procRes_s *rs)
                 } else {
                     rs_ipc_put(rs, "b", 1);
                 }
-            }else if (cmode == 5) {
+            }
+            else if (cmode == 5) {
 #if MSP_P2_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[1], "/mnt/mmc2/tx/p2%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p2%d.dat");
                 if (ret) {
                     sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P2", rs->logs);         
                     while(1);
                 } else {
-                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[1]);
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
                     print_f(rs->plogs, "P2", rs->logs);         
                 }
 #endif
@@ -36925,8 +36924,8 @@ static int p2(struct procRes_s *rs)
 
 #if MSP_P2_SAVE_DAT
                     msync(addr, len, MS_SYNC);                    
-                    fwrite(addr, 1, len, rs->fdat_s[1]);
-                    fflush(rs->fdat_s[1]);
+                    fwrite(addr, 1, len, rs->fdat_s[0]);
+                    fflush(rs->fdat_s[0]);
 #endif
                     //printf("0 spi %d\n", opsz);
 #if LOG_P2_TX_EN
@@ -36998,13 +36997,25 @@ static int p2(struct procRes_s *rs)
                 print_f(rs->plogs, "P2", rs->logs);
 
 #if MSP_P2_SAVE_DAT
-                fclose(rs->fdat_s[1]);
+                fclose(rs->fdat_s[0]);
 #endif
             }
             else if (cmode == 6) {
                 totsz = 0;
                 sprintf_f(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
+
+#if MSP_P2_SAVE_DAT
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/rx/p2%d.dat");
+                if (ret) {
+                    sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                    print_f(rs->plogs, "P2", rs->logs);         
+                    while(1);
+                } else {
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
+                    print_f(rs->plogs, "P2", rs->logs);         
+                }
+#endif
 
                 sprintf(rs->logs, "_SPI_0_ BEG");
                 tlast = dbgShowTimeStamp(rs->logs, NULL, rs, 8, "_S0_S_");
@@ -37038,6 +37049,11 @@ static int p2(struct procRes_s *rs)
 
                             totsz += opsz;
 
+#if MSP_P2_SAVE_DAT
+                    msync(addr, len, MS_SYNC);                    
+                    fwrite(addr, 1, len, rs->fdat_s[0]);
+                    fflush(rs->fdat_s[0]);
+#endif
                             
                             if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
@@ -37121,6 +37137,10 @@ static int p2(struct procRes_s *rs)
                 cfgTableSet(pct, ASPOP_RAW_SIZE, totsz);
                 sprintf(rs->logs, "_SPI_0_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");                
+
+#if MSP_P2_SAVE_DAT
+                fclose(rs->fdat_s[0]);
+#endif
                 
                 ring_buf_set_last(rs->pcmdRx, opsz);
                 rs_ipc_put(rs, "d", 1);
@@ -37362,13 +37382,13 @@ static int p2(struct procRes_s *rs)
 
             else if (cmode == 10) {
 #if MSP_P2_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[1], "/mnt/mmc2/tx/p2%d.dat");
+                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p2%d.dat");
                 if (ret) {
                     sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P2", rs->logs);         
                     while(1);
                 } else {
-                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[1]);
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
                     print_f(rs->plogs, "P2", rs->logs);         
                 }
 #endif
@@ -37403,8 +37423,8 @@ static int p2(struct procRes_s *rs)
                     if (len > 0) {
                     msync(addr, len, MS_SYNC); 
 #if MSP_P2_SAVE_DAT
-                    fwrite(addr, 1, len, rs->fdat_s[1]);
-                    fflush(rs->fdat_s[1]);
+                    fwrite(addr, 1, len, rs->fdat_s[0]);
+                    fflush(rs->fdat_s[0]);
 #endif
 
                         if (len < SPI_TRUNK_SZ) len = SPI_TRUNK_SZ;
@@ -37476,7 +37496,7 @@ static int p2(struct procRes_s *rs)
                 print_f(rs->plogs, "P2", rs->logs);            
 
 #if MSP_P2_SAVE_DAT
-                fclose(rs->fdat_s[1]);
+                fclose(rs->fdat_s[0]);
 #endif
             }
 
@@ -38199,6 +38219,7 @@ static int p2(struct procRes_s *rs)
     return 0;
 }
 
+#define MSP_P3_SAVE_DAT (0)
 #define LOG_P3_TX_EN  (1)
 static int p3(struct procRes_s *rs)
 {
@@ -38481,7 +38502,18 @@ static int p3(struct procRes_s *rs)
                 print_f(rs->plogs, "P3", rs->logs);
 
                 pi = 0;  
-
+                
+#if MSP_P3_SAVE_DAT
+                ret = file_save_get(&rs->fdat_s[1], "/mnt/mmc2/rx/p3_%d.jpg");
+                if (ret) {
+                    sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                    print_f(rs->plogs, "P3", rs->logs);         
+                    while(1);
+                } else {
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[1]);
+                    print_f(rs->plogs, "P3", rs->logs);         
+                }
+#endif
                 tlast = dbgShowTimeStamp("_SPI_1_ BEG", NULL, rs, 8, "_S1_S_");
 
                 while (1) {
@@ -38509,7 +38541,12 @@ static int p3(struct procRes_s *rs)
 #endif
 
                             totsz += opsz;
-                            
+
+#if MSP_P3_SAVE_DAT
+                    msync(addr, len, MS_SYNC);                    
+                    fwrite(addr, 1, len, rs->fdat_s[1]);
+                    fflush(rs->fdat_s[1]);
+#endif
                             if ((opsz > 0) && (opsz < SPI_TRUNK_SZ)) { // workaround to fit original design
                                 opsz = 0 - opsz;
                             }
@@ -38578,6 +38615,10 @@ static int p3(struct procRes_s *rs)
                 cfgTableSet(pct, ASPOP_RAW_SIZE_DUO, totsz);
                 sprintf(rs->logs, "_SPI_1_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");                
+
+#if MSP_P3_SAVE_DAT
+                fclose(rs->fdat_s[1]);
+#endif
 
                 ring_buf_set_last(rs->pcmdTx, opsz);
                 rs_ipc_put(rs, "d", 1);
@@ -38682,6 +38723,7 @@ static int socket_nonblock_set (int sfd)
     return 0;
 }
 
+#define MSP_P4_SAVE_DAT (0)
 #define LOG_P4_TX_EN  (1)
 static int p4(struct procRes_s *rs)
 {
@@ -38858,13 +38900,13 @@ static int p4(struct procRes_s *rs)
             } 
             else if (cmode == 1) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p4%d.dat");
+                ret = file_save_get(&rs->fdat_s[2], "/mnt/mmc2/tx/p4%d.dat");
                 if (ret) {
                     sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P4", rs->logs);         
                     while(1);
                 } else {
-                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[2]);
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
 #endif
@@ -38968,8 +39010,9 @@ static int p4(struct procRes_s *rs)
                             print_f(rs->plogs, "P4", rs->logs);         
 #endif
 #if MSP_P4_SAVE_DAT
-                            fwrite(addr, 1, len, rs->fdat_s[0]);
-                            fflush(rs->fdat_s[0]);
+                            msync(addr, len, MS_SYNC);   
+                            fwrite(addr, 1, len, rs->fdat_s[2]);
+                            fflush(rs->fdat_s[2]);
 #endif
                         } else {
                             sprintf_f(rs->logs, "len:%d \n", len);
@@ -39015,7 +39058,7 @@ static int p4(struct procRes_s *rs)
                 sprintf_f(rs->logs, "%c socket tx %d - end\n", ch, pi);
                 print_f(rs->plogs, "P4", rs->logs);         
 #if MSP_P4_SAVE_DAT
-                fclose(rs->fdat_s[0]);
+                fclose(rs->fdat_s[2]);
 #endif
                 break;
             }
@@ -39504,13 +39547,13 @@ static int p4(struct procRes_s *rs)
             }
             else if (cmode == 4) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p4%d.dat");
+                ret = file_save_get(&rs->fdat_s[2], "/mnt/mmc2/tx/p4%d.dat");
                 if (ret) {
                     sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P4", rs->logs);         
                     while(1);
                 } else {
-                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[2]);
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
 #endif
@@ -39617,8 +39660,9 @@ static int p4(struct procRes_s *rs)
                             //sprintf_f(rs->logs, "tx %d -%d \n", opsz, pi);
                             //print_f(rs->plogs, "P4", rs->logs);      
 #if MSP_P4_SAVE_DAT
-                            fwrite(addr, 1, len, rs->fdat_s[0]);
-                            fflush(rs->fdat_s[0]);
+                            msync(addr, len, MS_SYNC);   
+                            fwrite(addr, 1, len, rs->fdat_s[2]);
+                            fflush(rs->fdat_s[2]);
 #endif                            
                             totsz += opsz;
                         } else {
@@ -39672,7 +39716,7 @@ static int p4(struct procRes_s *rs)
                 sprintf_f(rs->logs, "%c socket tx %d - end\n", ch, pi);
                 print_f(rs->plogs, "P4", rs->logs);         
 #if MSP_P4_SAVE_DAT
-                fclose(rs->fdat_s[0]);
+                fclose(rs->fdat_s[2]);
 #endif
                 if (!pftb->c) {
                     break;
@@ -39680,13 +39724,13 @@ static int p4(struct procRes_s *rs)
             }
             else if (cmode == 5) {
 #if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p4%d.dat");
+                ret = file_save_get(&rs->fdat_s[2], "/mnt/mmc2/tx/p4%d.dat");
                 if (ret) {
                     sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P4", rs->logs);         
                     while(1);
                 } else {
-                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[2]);
                     print_f(rs->plogs, "P4", rs->logs);         
                 }
 #endif
@@ -39951,8 +39995,9 @@ static int p4(struct procRes_s *rs)
                 
                 if (datLen == 0) {
 #if MSP_P4_SAVE_DAT 
-                    fwrite(pre, 1, acuhk, rs->fdat_s[0]);
-                    fflush(rs->fdat_s[0]);
+                    msync(addr, len, MS_SYNC);   
+                    fwrite(pre, 1, acuhk, rs->fdat_s[2]);
+                    fflush(rs->fdat_s[2]);
 #endif
                     ring_buf_prod(rs->pcmdTx);
                     ring_buf_set_last(rs->pcmdTx, acuhk);
@@ -39960,8 +40005,9 @@ static int p4(struct procRes_s *rs)
                     px++;
                     ring_buf_prod(rs->pcmdTx);
 #if MSP_P4_SAVE_DAT 
-                    fwrite(pre, 1, acuhk, rs->fdat_s[0]);
-                    fflush(rs->fdat_s[0]);
+                    msync(addr, len, MS_SYNC);   
+                    fwrite(pre, 1, acuhk, rs->fdat_s[2]);
+                    fflush(rs->fdat_s[2]);
 #endif
                 }
                 rs_ipc_put(rs, "u", 1);
@@ -40206,8 +40252,9 @@ static int p4(struct procRes_s *rs)
                     print_f(rs->plogs, "P4", rs->logs);
                     px++;
 #if MSP_P4_SAVE_DAT 
-                    fwrite(pre, 1, acuhk, rs->fdat_s[0]);
-                    fflush(rs->fdat_s[0]);
+                    msync(addr, len, MS_SYNC);   
+                    fwrite(pre, 1, acuhk, rs->fdat_s[2]);
+                    fflush(rs->fdat_s[2]);
 #endif
                     
                     ring_buf_prod(rs->pcmdTx);
@@ -40221,7 +40268,7 @@ static int p4(struct procRes_s *rs)
                 }
 
 #if MSP_P4_SAVE_DAT
-                fclose(rs->fdat_s[0]);
+                fclose(rs->fdat_s[2]);
 #endif
 
                 sprintf(rs->logs, "_WIFI_0_ END %d bytes ", totsz);
@@ -45893,6 +45940,7 @@ static int p6(struct procRes_s *rs)
     return 0;
 }
 
+#define MSP_P7_SAVE_DAT (0)
 #define LOG_P7_TX_EN (1)
 static int p7(struct procRes_s *rs)
 {
@@ -46002,6 +46050,9 @@ static int p7(struct procRes_s *rs)
 
             ret = rs_ipc_get(rs, &ch, 1);
 
+            sprintf_f(rs->logs, "%c ret:%d \n", ch, ret);
+            print_f(rs->plogs, "P7", rs->logs);
+
 #if LOG_DOT_PROG_EN
             printf("7%c", ch);
 #endif
@@ -46029,6 +46080,18 @@ static int p7(struct procRes_s *rs)
 
             if (cmode == 1) {
                 tx = 0;num = 0;totsz=0;
+
+#if MSP_P7_SAVE_DAT
+                ret = file_save_get(&rs->fdat_s[3], "/mnt/mmc2/tx/p7_%d.jpg");
+                if (ret) {
+                    sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
+                    print_f(rs->plogs, "P7", rs->logs);         
+                    while(1);
+                } else {
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[3]);
+                    print_f(rs->plogs, "P7", rs->logs);         
+                }
+#endif
                 
 #if SOCKET_EPOLL_EN
                 event.data.fd = consfd;
@@ -46050,6 +46113,11 @@ static int p7(struct procRes_s *rs)
                         tx++;
                     
                         msync(addr, len, MS_SYNC);
+#if MSP_P7_SAVE_DAT
+                            msync(addr, len, MS_SYNC);   
+                            fwrite(addr, 1, len, rs->fdat_s[3]);
+                            fflush(rs->fdat_s[3]);
+#endif
                         /* send data to wifi socket */
                         //sprintf_f(rs->logs, " %d -%d \n", len, tx);
                         //print_f(rs->plogs, "P7", rs->logs);         
@@ -46156,6 +46224,9 @@ static int p7(struct procRes_s *rs)
                 sprintf(rs->logs, "_WIFI_1_ throughput: %.2f MB/sec ", thrput);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 8, "done");
 
+#if MSP_P7_SAVE_DAT
+                fclose(rs->fdat_s[3]);
+#endif
                 rs_ipc_put(rs, "N", 1);
                 sprintf_f(rs->logs, "%c socket tx %d - end\n", ch, tx);
                 print_f(rs->plogs, "P7", rs->logs);                  
@@ -46172,14 +46243,14 @@ static int p7(struct procRes_s *rs)
                 }
             }
             else if (cmode == 3) {
-#if MSP_P4_SAVE_DAT
-                ret = file_save_get(&rs->fdat_s[0], "/mnt/mmc2/tx/p4%d.dat");
+#if MSP_P7_SAVE_DAT
+                ret = file_save_get(&rs->fdat_s[3], "/mnt/mmc2/tx/p7_%d.dat");
                 if (ret) {
                     sprintf_f(rs->logs, "get tx log data file error - %d, hold here\n", ret);
                     print_f(rs->plogs, "P7", rs->logs);         
                     while(1);
                 } else {
-                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[0]);
+                    sprintf_f(rs->logs, "get tx log data file ok - %d, f: %d\n", ret, rs->fdat_s[3]);
                     print_f(rs->plogs, "P7", rs->logs);         
                 }
 #endif
@@ -46275,9 +46346,10 @@ static int p7(struct procRes_s *rs)
                             //printf("socket tx %d %d\n", rs->psocket_r->connfd, num);
                             //sprintf_f(rs->logs, "%c socket tx %d %d %d \n", ch, rs->psocket_n->connfd, num, tx);
                             //print_f(rs->plogs, "P7", rs->logs);         
-#if MSP_P4_SAVE_DAT
-                            fwrite(addr, 1, len, rs->fdat_s[0]);
-                            fflush(rs->fdat_s[0]);
+#if MSP_P7_SAVE_DAT
+                            msync(addr, len, MS_SYNC);   
+                            fwrite(addr, 1, len, rs->fdat_s[3]);
+                            fflush(rs->fdat_s[3]);
 #endif
                         }
                     } else {
@@ -46301,8 +46373,8 @@ static int p7(struct procRes_s *rs)
                 rs_ipc_put(rs, "D", 1);
                 sprintf_f(rs->logs, "%c socket tx %d - end\n", ch, tx);
                 print_f(rs->plogs, "P7", rs->logs);         
-#if MSP_P4_SAVE_DAT
-                fclose(rs->fdat_s[0]);
+#if MSP_P7_SAVE_DAT
+                fclose(rs->fdat_s[3]);
 #endif
                 break;
             }
