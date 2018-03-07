@@ -17,6 +17,8 @@
 #include "inv_mpu_dmp_motion_driver.h"
 #include "dmpmap.h"
 
+#include <linux/poll.h>
+
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
  
 #define SPI_AT_CPHA  0x02          /* clock phase */
@@ -4907,8 +4909,10 @@ FILE *find_save(char *dst, char *tmple)
             break;
         } else {
             //printf("open file [%s] succeed \n", dst);
+            fclose(f);
         }
     }
+    
     f = fopen(dst, "w");
     return f;
 }
@@ -5365,8 +5369,557 @@ static char spi1[] = "/dev/spidev32766.0";
     ret = ioctl(fm[0], SPI_IOC_RD_BITS_PER_WORD, &bits); 
     if (ret == -1) pabort("can't get bits per word"); 
 
+#define PT_BUF_SIZE (32768)
+    if (sel == 25){ /* usb printer write access */
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/g_printer";
+        static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptbuf=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0;
+        int cntRecv=0, usCost=0, bufsize=0;
+        int bufmax=0, bufidx=0, printlog=0;
+        double throughput=0.0;
+        struct timespec tstart, tend;
+        char firstTrunk[32] = {0x55, 0x53, 0x42, 0x43, 0x74, 0x34, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+                                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        
+        ptfd[0].fd = open(ptdevpath, O_WRONLY);
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        if (arg0 > 0) {
+            bufsize = arg0;
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+
+        if (bufsize > PT_BUF_SIZE) {
+            bufsize = PT_BUF_SIZE;
+        }
+
+        printf("usb write size[%d]\n", bufsize); 
+        
+        ptbuf = malloc(PT_BUF_SIZE);
+        ptrecv = ptbuf;
+        
+        wrtsz = 32;
+        acusz = PT_BUF_SIZE;
+        while (acusz > 0) {
+            if (acusz > wrtsz) {
+                recvsz = wrtsz; 
+            } else {
+                recvsz = acusz; 
+            }
+            memcpy(ptrecv, firstTrunk, recvsz);
+
+            acusz -= recvsz;
+            ptrecv += recvsz;
+        }
+
+        //shmem_dump(ptbuf, PT_BUF_SIZE);
+
+        if (arg1 > 0) {
+            printlog = arg1;
+        }
+
+        ptfd[0].events = POLLOUT;
+
+        ptrecv = ptbuf;
+        while(1) {
+            ptret = poll(ptfd, 1, -1);
+            printf("usb poll ret: %d \n", ptret);
+            if (ptret < 0) {
+                printf("usb poll failed ret: %d\n", ptret);
+                break;
+            }
+
+            if (ptret && (ptfd[0].revents & POLLOUT)) {
+
+                recvsz = write(ptfd[0].fd, ptrecv, bufsize);
+                printf("usb write ret: %d \n", recvsz);
+
+                break;
+            }                
+            
+        }
+
+        close(ptfd[0].fd);
+        free(ptbuf);
+
+        goto end;
+    }
+    
+    if (sel == 24){ /* usb printer read access */
+        //#define PT_BUF_SIZE (512)
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/g_printer";
+        static char ptfileSend[] = "/mnt/mmc2/usb/send001.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptsend, *palloc=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0;
+        int cntTx=0, usCost=0, bufsize=0;
+        double throughput=0.0;
+        FILE *fsave=0, *fsend=0;
+        struct timespec tstart, tend;
+        
+        ptfd[0].fd = open(ptdevpath, O_RDWR);
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        ptfd[0].events = POLLIN;
+
+        if (arg0 > 0) {
+            wrtsz = arg0;        
+        } else {
+            wrtsz = PT_BUF_SIZE;
+        }
+        
+        printf(" recv size:[%d] \n", wrtsz);
+        palloc = malloc(PT_BUF_SIZE);
+        ptrecv = palloc;
+
+        while(1) {
+
+            ptret = poll(ptfd, 1, -1);
+
+            if (ptret < 0) {
+                printf("poll return %d \n", ptret);
+                break;
+            }
+
+            if (ptret && (ptfd[0].revents & POLLIN)) {
+                recvsz = read(ptfd[0].fd, ptrecv, wrtsz);
+                
+                printf("usb recv ret: %d ", recvsz);
+            
+                break;
+            }
+            
+        }
+
+        shmem_dump(ptrecv, recvsz);
+        
+        close(ptfd[0].fd);
+        free(palloc);
+
+        goto end;
+    }
 
 #define GSENSOR_TIME_LOG (0)
+
+    if (sel == 23){ /* usb printer write access */
+        //#define PT_BUF_SIZE (512)
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/g_printer";
+        static char ptfileSend[] = "/mnt/mmc2/usb/send001.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptsend, *palloc=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0;
+        int cntTx=0, usCost=0, bufsize=0;
+        double throughput=0.0;
+        FILE *fsave=0, *fsend=0;
+        struct timespec tstart, tend;
+        
+        ptfd[0].fd = open(ptdevpath, O_RDWR);
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        ptfd[0].events = POLLOUT;
+
+        printf(" open file [%s] \n", ptfileSend);
+        fsend = fopen(ptfileSend, "r");
+       
+        if (!fsend) {
+            printf(" [%s] file open failed \n", ptfileSend);
+            goto end;
+        }   
+        printf(" [%s] file open succeed \n", ptfileSend);
+
+        if (arg0 > 0) {
+            bufsize = arg0;        
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+        printf(" recv buff size:[%d] \n", bufsize);
+
+        ptret = fseek(fsend, 0, SEEK_END);
+        if (ptret) {
+            printf(" file seek failed!! ret:%d \n", ptret);
+            goto end;
+        }
+
+        maxsz = ftell(fsend);
+        printf(" file [%s] size: %d \n", ptfileSend, maxsz);
+        
+        ptsend = malloc(maxsz);
+        if (ptsend) {
+            printf(" send buff alloc succeed! size: %d \n", maxsz);
+        } else {
+            printf(" send buff alloc failed! size: %d \n", maxsz);
+            goto end;
+        }
+
+        ptret = fseek(fsend, 0, SEEK_SET);
+        if (ptret) {
+            printf(" file seek failed!! ret:%d \n", ptret);
+            goto end;
+        }
+        
+        ptret = fread(ptsend, 1, maxsz, fsend);
+        printf(" output file read size: %d/%d \n", ptret, maxsz);
+
+        fclose(fsend);
+
+        lastsz = maxsz;        
+        palloc = ptsend;
+        while(1) {
+
+            ptret = poll(ptfd, 1, -1);
+
+            if (ptret < 0) {
+                printf("poll return %d \n", ptret);
+                break;
+            }
+
+            if (ptret && (ptfd[0].revents & POLLOUT)) {
+                if (lastsz > bufsize) {
+                    wrtsz = bufsize;
+                } else {
+                    wrtsz = lastsz;
+                    if (wrtsz == 1) {
+                        wrtsz = 2;
+                    }
+                }
+                
+                sendsz = write(ptfd[0].fd, ptsend, wrtsz);
+                
+                if (sendsz < 0) {
+                    printf("usb send ret: %d, error!!!", sendsz);
+                    break;
+                }
+
+                if (cntTx == 0) {
+                    clock_gettime(CLOCK_REALTIME, &tstart);
+                }
+                
+                ptsend += sendsz;
+                acusz += sendsz;
+                lastsz = lastsz - sendsz;
+                cntTx ++;
+                
+                //printf("usb send %d/%d to usb total %d last %d\n", sendsz, wrtsz, acusz, lastsz);
+
+                if (lastsz == 0) {
+                    sendsz = write(ptfd[0].fd, ptsend, 1);
+                    printf("usb send end last size = %d \n", sendsz);
+                    clock_gettime(CLOCK_REALTIME, &tend);
+                    break;
+                }
+            }
+            
+        }
+
+        usCost = test_time_diff(&tstart, &tend, 1000);
+
+        throughput = maxsz*8.0 / usCost*1.0;
+        
+        printf("usb throughput: %d bytes / %d us = %lf MBits\n", maxsz, usCost, throughput);
+        
+        close(ptfd[0].fd);
+        free(palloc);
+        goto end;
+    }
+
+    if (sel == 22){ /* usb printer read access */
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/usb/lp0";
+        static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptbuf=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0;
+        int cntRecv=0, usCost=0, bufsize=0;
+        int bufmax=0, bufidx=0, printlog=0;
+        double throughput=0.0;
+        struct timespec tstart, tend;
+        FILE *fsave=0;
+        
+        ptfd[0].fd = open(ptdevpath, O_RDWR);
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        if (arg0 > 0) {
+            bufsize = arg0;
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+
+        if (arg1 > 0) {
+            printlog = arg1;
+        }
+        
+        printf("usb recv buff size:[%d]\n", bufsize); 
+        
+        ptfd[0].events = POLLIN;
+        fsave = find_save(ptfilepath, ptfileSave);
+        if (!fsave) {
+            goto end;    
+        }
+
+        printf("usb find save [%s] \n", ptfilepath);
+
+        bufmax = 128*1024*1024;
+        ptbuf = malloc(bufmax);  //1024*32768
+        printf("usb allocate memory size:[%d] \n", bufmax);
+
+        ptrecv = ptbuf;
+        while(1) {
+            //ptret = read();
+            //ptret = poll(ptfd, 1, -1);
+            //printf("usb poll ret: %d \n", ptret);
+            //if (ptret < 0) {
+                //printf("usb poll failed ret: %d\n", ptret);
+                //break;
+            //}
+
+            //if (ptret && (ptfd[0].revents & POLLIN)) {
+                recvsz = read(ptfd[0].fd, ptrecv, bufsize);
+
+                //printf("usb recv ret: %d \n", recvsz);
+                if (recvsz <= 1) {
+                    switch (recvsz) {
+                        case 1:
+                            printf("usb recv ret: %d, break!!!", recvsz);
+                            break;
+                        case 0:
+                            continue;
+                            break;
+                        default:
+                            printf("usb recv ret: %d, error!!!", recvsz);
+                            break;
+                    }
+                    break;
+                }
+                
+                /*
+                if (!recvsz) {
+                    continue;
+                }
+                */
+                
+                /*
+                if (cntRecv == 0) {
+                    clock_gettime(CLOCK_REALTIME, &tstart);
+                }
+                */
+
+                //wrtsz = fwrite(ptrecv, 1, recvsz, fsave);
+                wrtsz = recvsz;
+
+                //sync();
+                
+                acusz += wrtsz;
+                //ptrecv += wrtsz;
+
+                
+                
+                if (printlog) {
+                    //cntRecv ++;
+                    printf("usb r %d w %d tot %d \n", recvsz, wrtsz, acusz);
+                }
+                
+/*
+                if (recvsz < bufsize) {
+                    printf("usb recv end last recv = %d \n", recvsz);
+                    clock_gettime(CLOCK_REALTIME, &tend);
+                    break;
+                }
+*/
+            //}
+
+            
+        }
+
+        //usCost = test_time_diff(&tstart, &tend, 1000);
+
+        //throughput = acusz*8.0 / usCost*1.0;
+        
+        //printf("usb throughput: %d bytes / %d us = %lf MBits\n", acusz, usCost, throughput);
+
+        printf("write file size [%d] \n", acusz);
+
+        /*
+        ptrecv = ptbuf;
+        while (acusz) {
+            if (acusz > 32768) {
+                wrtsz = 32768;
+            } else {
+                wrtsz = acusz;
+            }
+            
+            recvsz = fwrite(ptrecv, 1, wrtsz, fsave);
+            if (recvsz <= 0) {
+                break;
+            }
+            
+            acusz -= recvsz;
+            ptrecv += recvsz;
+
+            //printf("write file [%d] \n", acusz);
+        }
+        */
+        sync();
+
+        close(ptfd[0].fd);
+        fclose(fsave);
+        free(ptbuf);
+        goto end;
+    }
+    
+    if (sel == 21){ /* usb printer read access throughput */
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/usb/lp0";
+        static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptbuf=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0;
+        int cntRecv=0, usCost=0, bufsize=0;
+        int bufmax=0, bufidx=0;
+        double throughput=0.0;
+        struct timespec tstart, tend;
+        FILE *fsave=0;
+        
+        ptfd[0].fd = open(ptdevpath, O_RDWR);
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        if (arg0 > 0) {
+            bufsize = arg0;
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+        printf("usb recv buff size:[%d]\n", bufsize); 
+        
+        ptfd[0].events = POLLIN;
+        fsave = find_save(ptfilepath, ptfileSave);
+        if (!fsave) {
+            goto end;    
+        }
+
+        printf("usb find save [%s] \n", ptfilepath);
+
+        bufmax = 128*1024*1024;
+        ptbuf = malloc(bufmax);  //1024*32768
+        printf("usb allocate memory size:[%d] \n", bufmax);
+
+        ptrecv = ptbuf;
+        while(1) {
+            //ptret = read();
+            ptret = poll(ptfd, 1, -1);
+            //printf("usb poll ret: %d \n", ptret);
+            if (ptret < 0) {
+                printf("usb poll failed ret: %d\n", ptret);
+                break;
+            }
+
+            if (ptret && (ptfd[0].revents & POLLIN)) {
+                recvsz = read(ptfd[0].fd, ptrecv, bufsize);
+
+                //printf("usb recv ret: %d \n", recvsz);
+                if (recvsz < 0) {
+                    printf("usb recv ret: %d, error!!!", recvsz);
+                    break;
+                }
+
+                if (!recvsz) {
+                    continue;
+                }
+
+                if (cntRecv == 0) {
+                    clock_gettime(CLOCK_REALTIME, &tstart);
+                }
+
+                //wrtsz = fwrite(ptrecv, 1, recvsz, fsave);
+                wrtsz = recvsz;
+
+                acusz += wrtsz;
+                ptrecv += wrtsz;
+                cntRecv ++;
+                //printf("usb recv %d write %d to file total %d \n", recvsz, wrtsz, acusz);
+
+                if (recvsz < bufsize) {
+                    printf("usb recv end last recv = %d \n", recvsz);
+                    clock_gettime(CLOCK_REALTIME, &tend);
+                    break;
+                }
+            }
+            
+        }
+
+        usCost = test_time_diff(&tstart, &tend, 1000);
+
+        throughput = acusz*8.0 / usCost*1.0;
+        
+        printf("usb throughput: %d bytes / %d us = %lf MBits\n", acusz, usCost, throughput);
+
+        printf("write file size [%d] \n", acusz);
+        ptrecv = ptbuf;
+        while (acusz) {
+            if (acusz > 32768) {
+                wrtsz = 32768;
+            } else {
+                wrtsz = acusz;
+            }
+            
+            recvsz = fwrite(ptrecv, 1, wrtsz, fsave);
+            if (recvsz <= 0) {
+                break;
+            }
+            
+            acusz -= recvsz;
+            ptrecv += recvsz;
+
+            //printf("write file [%d] \n", acusz);
+        }
+
+        sync();
+
+        close(ptfd[0].fd);
+        fclose(fsave);
+        free(ptbuf);
+        goto end;
+    }
+    
     if (sel == 20){ /* command mode test ex[20 ]*/ /* gyro init */
         /* Starting sampling rate. */
         #define DEFAULT_DMP_HZ  (200)

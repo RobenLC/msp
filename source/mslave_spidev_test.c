@@ -16,6 +16,8 @@
 #include <dirent.h>
 #include <sys/stat.h>  
 
+#include <linux/poll.h>
+
 #define SPI1_ENABLE (1)
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
@@ -209,6 +211,23 @@ typedef enum {
     ASPFS_TYPE_FILE,
 } aspFS_Type_e;
 
+struct bitmapHeader_s {
+    char aspbmpMagic[4];
+    int    aspbhSize;
+    char aspbhReserve[4];
+    int    aspbhRawoffset;
+    int    aspbiSize;
+    int    aspbiWidth;
+    int    aspbiHeight;
+    int    aspbiCPP;
+    int    aspbiCompMethd;
+    int    aspbiRawSize;
+    int    aspbiResoluH;
+    int    aspbiResoluV;
+    int    aspbiNumCinCP;
+    int    aspbiNumImpColor;
+};
+
 /* construct the file system */
 static int aspFS_createRoot(struct directnFile_s **root, char *dir);
 static int aspFS_insertChilds(struct directnFile_s *root);
@@ -231,6 +250,136 @@ static int aspFS_getFilelist(char *flst, struct directnFile_s *note);
 
 static int aspSD_getRoot();
 static int aspSD_getDir();
+
+static int mspbitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen) 
+{
+    int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
+    float resH=0, resV=0, ratio=39.27, fval=0;
+
+    if (!w) return -1;
+    if (!h) return -2;
+    if (!dpi) return -3;
+    if (!flen) return -4;
+    memset(ph, 0, sizeof(struct bitmapHeader_s));
+
+    if (clr == 8) {
+        numclrp = 256;
+        rawoffset = 1078;
+        calcuraw = w * h;
+    }
+    else if (clr == 24) {
+        numclrp = 0;
+        rawoffset = 54;
+        calcuraw = w * h * 3;
+    } else {
+        printf("[BMP] reset header ERROR!!! color bits is %d \n", clr);
+        return -5;
+    }
+
+    if (calcuraw != flen) {
+        printf("[BMP] WARNNING!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
+        if (flen > calcuraw) {
+            rawsize = calcuraw;
+        } else {
+            rawsize = flen;
+        }
+    } else {
+        rawsize = calcuraw;
+    }
+
+    totsize = rawsize + rawoffset;
+    
+    fval = dpi;
+    resH = fval * ratio;
+    fval = dpi;
+    resV = fval * ratio;
+    
+    ph->aspbmpMagic[2] = 'B';
+    ph->aspbmpMagic[3] = 'M';       
+    ph->aspbhSize = totsize; // file total size
+    ph->aspbhRawoffset = rawoffset; // header size include color table 54 + 1024 = 1078
+    ph->aspbiSize = 40;
+    ph->aspbiWidth = w; // W
+    ph->aspbiHeight = h; // H
+    ph->aspbiCPP = 1;
+    ph->aspbiCPP |= clr << 16;  // 8 or 24
+    ph->aspbiCompMethd = 0;
+    ph->aspbiRawSize = rawsize; // size of raw
+    //ph->aspbiResoluH = (int)resH; // dpi x 39.27
+    //ph->aspbiResoluV = (int)resV; // dpi x 39.27
+    ph->aspbiNumCinCP = numclrp;  // 24bit is 0, 8bit is 256
+    ph->aspbiNumImpColor = 0;
+
+    return 0;
+}
+
+static int changeJpgLen(uint8_t *data, uint32_t tlen, int max)
+{
+    int ret = -1, ix = 0, staf = 0;
+    uint8_t marker[2] = {0, 0};
+    uint32_t imgLen[2] = {0, 0};
+    uint8_t ch = 0;
+    uint32_t len = 0;
+
+    if (!data) return -2;
+    if (!max) return -3;
+    if (!tlen) return -4;
+    
+    msync(data, max, MS_SYNC);
+    
+    for (ix=0; ix < max; ix++) {
+        ch = data[ix];
+    
+        if (ch == 0xff) {
+            marker[0] = ch;
+            staf = 1;
+        } 
+        else if (staf == 1) {
+            if (((ch >> 4) == 0xc) && ((ch & 0xf) != 4)) {
+                marker[1] = ch;
+                
+                imgLen[1] = data[ix + 4];
+                imgLen[0] = data[ix + 5];
+                                
+                len = (imgLen[1] << 8) + imgLen[0];   
+
+                //printf("[changeImgLen] Length = %d -> %d\n", len, tlen);
+                
+                data[ix + 4] = tlen >> 8;
+                data[ix + 5] = tlen & 0xff;;
+
+                ret = 0;
+                break;
+            }
+            staf = 0;
+        }
+        
+    }
+
+    return ret;
+}
+
+static int shmem_dump(char *src, int size)
+{
+    int inc;
+    if (!src) return -1;
+
+    inc = 0;
+    printf("memdump[0x%.8x] sz%d: \n", src, size);
+    while (inc < size) {
+        printf("%.2x ", *src);
+
+        if (!((inc+1) % 16)) {
+            printf("\n");
+        }
+        inc++;
+        src++;
+    }
+
+    printf("\n");
+    
+    return inc;
+}
 
 static int spi_config(int dev, int flag, uint32_t *bitset) {
     int ret;
@@ -1741,6 +1890,449 @@ static char path[256];
 
     bitset = 1;
     spi_config(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
+
+#define PT_BUF_SIZE (32768)
+    if (sel == 31){ /* usb printer write access */
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/usb/lp0";
+        static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptbuf=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0;
+        int cntRecv=0, usCost=0, bufsize=0;
+        int bufmax=0, bufidx=0, printlog=0;
+        double throughput=0.0;
+        struct timespec tstart, tend;
+        char firstTrunk[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+                                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        
+        ptfd[0].fd = open(ptdevpath, O_WRONLY);
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        if (arg0 > 0) {
+            bufsize = arg0;
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+
+        if (bufsize > PT_BUF_SIZE) {
+            bufsize = PT_BUF_SIZE;
+        }
+
+        printf("usb write size[%d]\n", bufsize); 
+        
+        ptbuf = malloc(PT_BUF_SIZE);
+        ptrecv = ptbuf;
+        
+        wrtsz = 32;
+        acusz = PT_BUF_SIZE;
+        while (acusz > 0) {
+            if (acusz > wrtsz) {
+                recvsz = wrtsz; 
+            } else {
+                recvsz = acusz; 
+            }
+            memcpy(ptrecv, firstTrunk, recvsz);
+
+            acusz -= recvsz;
+            ptrecv += recvsz;
+        }
+
+        //shmem_dump(ptbuf, PT_BUF_SIZE);
+
+        if (arg1 > 0) {
+            printlog = arg1;
+        }
+
+        ptfd[0].events = POLLOUT;
+
+        ptrecv = ptbuf;
+        while(1) {
+            ptret = poll(ptfd, 1, -1);
+            printf("usb poll ret: %d \n", ptret);
+            if (ptret < 0) {
+                printf("usb poll failed ret: %d\n", ptret);
+                break;
+            }
+
+            if (ptret && (ptfd[0].revents & POLLOUT)) {
+
+                recvsz = write(ptfd[0].fd, ptrecv, bufsize);
+                printf("usb write ret: %d \n", recvsz);
+
+                break;
+            }                
+            
+        }
+
+        close(ptfd[0].fd);
+        free(ptbuf);
+
+        goto end;
+    }
+    
+    if (sel == 30){ /* usb printer read access (jpg) */
+#define USB_SAVE_RESULT 1
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/usb/lp0";
+        static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptbuf=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0;
+        int cntRecv=0, usCost=0, bufsize=0, cntTx=0;
+        int bufmax=0, bufidx=0, printlog=0, fileformat=0;
+        double throughput=0.0;
+        struct timespec tstart, tend;
+        FILE *fsave=0;
+        char lastTrunk[64];
+        char fileStr[64];
+        uint32_t tlen=0, filelen=0;
+        struct bitmapHeader_s bmpheader, *pbh;
+
+        pbh = &bmpheader;
+        
+        memset(pbh, 0, sizeof(struct bitmapHeader_s));
+        memset(lastTrunk, 0, 64);
+        
+        ptfd[0].fd = open(ptdevpath, O_RDWR);
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        if (arg0 > 0) {
+            bufsize = arg0;
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+
+        if (arg1 > 0) {
+            printlog = arg1;
+        }
+        
+        switch (arg2) {
+            case 0:
+            sprintf(fileStr, "JPG");
+            fileformat = 0;
+            break;
+            case 1:
+            sprintf(fileStr, "BMP");
+            fileformat = 1;
+            break;
+            default:
+            sprintf(fileStr, "JPG");
+            fileformat = 0;
+            break;
+        }
+
+        if (arg3 > 0) {
+            bufmax = arg3*1024*1024;
+        } else {
+            bufmax = 256*1024*1024;
+        }
+        
+        printf("usb recv buff size:[%d] format:[%s] \n", bufsize, fileStr); 
+        
+        ptfd[0].events = POLLIN;
+        fsave = find_save(ptfilepath, ptfileSave);
+        if (!fsave) {
+            goto end;    
+        }
+
+        printf("usb find save [%s] \n", ptfilepath);
+
+        //bufmax = 512*1024*1024;
+        ptbuf = malloc(bufmax);  //1024*32768
+        if (ptbuf) {
+            printf("usb allocate memory size:[%d] \n", bufmax);
+        } else {
+            printf("usb allocate memory size:[%d] failed!!!! \n", bufmax);
+        }
+
+        ptrecv = ptbuf;
+        while(1) {
+            //ptret = read();
+            ptret = poll(ptfd, 1, -1);
+            //printf("usb poll ret: %d \n", ptret);
+            //if (ptret < 0) {
+                //printf("usb poll failed ret: %d\n", ptret);
+                //break;
+            //}
+
+            if (ptret && (ptfd[0].revents & POLLIN)) {
+                recvsz = read(ptfd[0].fd, ptrecv, bufsize);
+
+                if (cntTx == 0) {
+                    clock_gettime(CLOCK_REALTIME, &tstart);
+                    cntTx ++;
+                }
+                
+                //printf("usb recv ret: %d \n", recvsz);
+                if (recvsz <= 1) {
+                    switch (recvsz) {
+                        case 1:
+                            printf("usb recv %d byte wait last trunk 64 bytes \n", recvsz);
+
+                            clock_gettime(CLOCK_REALTIME, &tend);
+                            
+                            bufsize = 64;
+                            ptret = read(ptfd[0].fd, lastTrunk, bufsize);
+                            printf("usb recv last trunk size: %d, break!!!\n", ptret);        
+
+                            shmem_dump(lastTrunk, 64);
+
+                            switch (fileformat) {
+                                case 0:
+                                    tlen = lastTrunk[4] + (lastTrunk[5] << 8);
+                                    printf("%s scan length: %d \n",fileStr, tlen);
+                                    changeJpgLen(ptbuf, tlen, acusz);
+                                    break;
+                                case 1:
+                                    tlen = lastTrunk[4] + (lastTrunk[5] << 8);
+                                    filelen = lastTrunk[7] + (lastTrunk[8] << 8) + (lastTrunk[9] << 16) + (lastTrunk[10] << 24);
+                                    
+                                    printf("%s scan length: %d file length: %d \n",fileStr, tlen, filelen);
+                                    
+                                    memcpy(&pbh->aspbmpMagic[2], ptbuf, sizeof(struct bitmapHeader_s) - 2);
+
+                                    mspbitmapHeaderSetup(pbh, 24, pbh->aspbiWidth, tlen, -1, acusz+recvsz);
+
+                                    memcpy(ptbuf, &pbh->aspbmpMagic[2], sizeof(struct bitmapHeader_s) - 2);
+                                    
+                                    printf("%s scan length: %d filelen\n", fileStr, tlen, filelen);
+                                    break;
+                                default:
+                                    printf("unknown file format: %d \n", fileformat);
+                                    tlen = 0;
+                                    break;
+                            }
+                            
+                            break;
+                        case 0:
+                            continue;
+                            break;
+                        default:
+                            printf("usb recv ret: %d, error!!!", recvsz);
+                            break;
+                    }
+                    break;
+                }
+                
+                /*
+                if (!recvsz) {
+                    continue;
+                }
+                */
+                
+                /*
+                if (cntRecv == 0) {
+                    clock_gettime(CLOCK_REALTIME, &tstart);
+                }
+                */
+
+                //wrtsz = fwrite(ptrecv, 1, recvsz, fsave);
+                wrtsz = recvsz;
+
+                //sync();
+                
+                acusz += wrtsz;
+#if (USB_SAVE_RESULT == 1)
+                ptrecv += wrtsz;
+#endif
+/*
+                if (printlog) {
+                    //cntRecv ++;
+                    printf("usb r %d w %d tot %d \n", recvsz, wrtsz, acusz);
+                }
+*/
+                
+/*
+                if (recvsz < bufsize) {
+                    printf("usb recv end last recv = %d \n", recvsz);
+                    clock_gettime(CLOCK_REALTIME, &tend);
+                    break;
+                }
+*/
+            }
+
+            
+        }
+
+        usCost = test_time_diff(&tstart, &tend, 1000);
+
+        throughput = acusz*8.0 / usCost*1.0;
+        
+        printf("usb throughput: %d bytes / %d us = %lf MBits\n", acusz, usCost, throughput);
+
+        printf("write file size [%d] \n", acusz);
+
+#if (USB_SAVE_RESULT == 1)
+        ptrecv = ptbuf;
+        while (acusz) {
+            if (acusz > 32768) {
+                wrtsz = 32768;
+            } else {
+                wrtsz = acusz;
+            }
+            
+            recvsz = fwrite(ptrecv, 1, wrtsz, fsave);
+            if (recvsz <= 0) {
+                break;
+            }
+            
+            acusz -= recvsz;
+            ptrecv += recvsz;
+
+            //printf("write file [%d] \n", acusz);
+        }
+#endif        
+        sync();
+
+        close(ptfd[0].fd);
+        fclose(fsave);
+        free(ptbuf);
+        goto end;
+    }
+    
+    if (sel == 29){ /* usb printer write access */
+        //#define PT_BUF_SIZE (512)
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/g_printer";
+        static char ptfileSend[] = "/mnt/mmc2/usb/send001.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptsend, *palloc=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0;
+        int cntTx=0, usCost=0, bufsize=0;
+        double throughput=0.0;
+        FILE *fsave=0, *fsend=0;
+        struct timespec tstart, tend;
+        
+        ptfd[0].fd = open(ptdevpath, O_RDWR);
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        ptfd[0].events = POLLOUT;
+
+        printf(" open file [%s] \n", ptfileSend);
+        fsend = fopen(ptfileSend, "r");
+       
+        if (!fsend) {
+            printf(" [%s] file open failed \n", ptfileSend);
+            goto end;
+        }   
+        printf(" [%s] file open succeed \n", ptfileSend);
+
+        if (arg0 > 0) {
+            bufsize = arg0;        
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+        printf(" recv buff size:[%d] \n", bufsize);
+
+        ptret = fseek(fsend, 0, SEEK_END);
+        if (ptret) {
+            printf(" file seek failed!! ret:%d \n", ptret);
+            goto end;
+        }
+
+        maxsz = ftell(fsend);
+        printf(" file [%s] size: %d \n", ptfileSend, maxsz);
+        
+        ptsend = malloc(maxsz);
+        if (ptsend) {
+            printf(" send buff alloc succeed! size: %d \n", maxsz);
+        } else {
+            printf(" send buff alloc failed! size: %d \n", maxsz);
+            goto end;
+        }
+
+        ptret = fseek(fsend, 0, SEEK_SET);
+        if (ptret) {
+            printf(" file seek failed!! ret:%d \n", ptret);
+            goto end;
+        }
+        
+        ptret = fread(ptsend, 1, maxsz, fsend);
+        printf(" output file read size: %d/%d \n", ptret, maxsz);
+
+        fclose(fsend);
+
+        lastsz = maxsz;        
+        palloc = ptsend;
+        while(1) {
+
+            ptret = poll(ptfd, 1, -1);
+
+            if (ptret < 0) {
+                printf("poll return %d \n", ptret);
+                break;
+            }
+
+            if (ptret && (ptfd[0].revents & POLLOUT)) {
+                if (lastsz > bufsize) {
+                    wrtsz = bufsize;
+                } else {
+                    wrtsz = lastsz;
+                    if (wrtsz == 1) {
+                        wrtsz = 2;
+                    }
+                }
+                
+                sendsz = write(ptfd[0].fd, ptsend, wrtsz);
+                
+                if (sendsz < 0) {
+                    printf("usb send ret: %d, error!!!", sendsz);
+                    break;
+                }
+
+                if (cntTx == 0) {
+                    clock_gettime(CLOCK_REALTIME, &tstart);
+                }
+                
+                ptsend += sendsz;
+                acusz += sendsz;
+                lastsz = lastsz - sendsz;
+                cntTx ++;
+                
+                //printf("usb send %d/%d to usb total %d last %d\n", sendsz, wrtsz, acusz, lastsz);
+
+                if (lastsz == 0) {
+                    sendsz = write(ptfd[0].fd, ptsend, 1);
+                    printf("usb send end last size = %d \n", sendsz);
+                    clock_gettime(CLOCK_REALTIME, &tend);
+                    break;
+                }
+            }
+            
+        }
+
+        usCost = test_time_diff(&tstart, &tend, 1000);
+
+        throughput = maxsz*8.0 / usCost*1.0;
+        
+        printf("usb throughput: %d bytes / %d us = %lf MBits\n", maxsz, usCost, throughput);
+        
+        close(ptfd[0].fd);
+        free(palloc);
+        goto end;
+    }
 
     if (sel == 28){ /* list the files in root ex[28]*/
        struct directnFile_s *root = 0;
