@@ -27,7 +27,8 @@
 #define MSP_VERSION "Thu Feb 22 15:17:05 2018 \
 35be4953f7 \
 [FAT] remove unused log \
-fix redundant data channel"
+fix redundant data channel \
+add p6 n==0 error message and do not break"
 
 #define SPI1_ENABLE (1) 
 
@@ -40910,7 +40911,14 @@ static int p6(struct procRes_s *rs)
             memcpy(folder, &recvbuf[be+1], n);
             folder[n] = '\0';
         } else {
-            goto socketEnd;
+
+            memset(folder, 0x00, 1024);
+            folder[0] = '\0';
+            
+            sprintf_f(rs->logs, "ERROR!!! string len = %d \n", n);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            //goto socketEnd;
         }
 
         sprintf_f(rs->logs, "get folder:[%s]\n", folder);
