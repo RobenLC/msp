@@ -18,6 +18,8 @@
 #include "dmpmap.h"
 
 #include <linux/poll.h>
+#include <sys/epoll.h>
+#include <errno.h> 
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
  
@@ -4706,7 +4708,7 @@ static void pabort(const char *s)
 } 
  
 static const char *device = "/dev/spidev32765.0"; 
-char data_path[256] = "/root/tx/1.jpg"; 
+char data_path[256] = "/mnt/mmc2/usb/greenhill_05.jpg"; 
 static uint8_t mode; 
 static uint8_t bits = 8; 
 static uint32_t speed = 1000000; 
@@ -5225,6 +5227,29 @@ static void parse_opts(int argc, char *argv[])
         } 
     } 
 } 
+
+static int usb_nonblock_set (int sfd)
+{
+    int val, ret;
+    ret = fcntl (sfd, F_GETFL, 0);
+    if (ret == -1)
+    {
+        perror ("fcntl");
+        return -1;
+    }
+
+    val = ret;  
+    val |= O_NONBLOCK;
+    ret = fcntl (sfd, F_SETFL, val);
+    if (ret == -1)
+    {
+        perror ("fcntl");
+        return -1;
+    }
+
+    return 0;
+}
+
 #if 1
 int main(int argc, char *argv[]) 
 { 
@@ -5317,11 +5342,12 @@ static char spi1[] = "/dev/spidev32766.0";
         }
         else 
             printf("open device[%s]\n", spi0); 
-            
+
         fd1 = open(spi1, O_RDWR);
         if (fd1 < 0) {
                 printf("can't open device[%s]\n", spi1); 
-		goto end;
+		//goto end;
+		fd1 = 0;
         }
         else 
             printf("open device[%s]\n", spi1); 
@@ -5333,22 +5359,22 @@ static char spi1[] = "/dev/spidev32766.0";
      */ 
     ret = ioctl(fd0, SPI_IOC_WR_MODE, &mode);    //?家Α 
     if (ret == -1) 
-        pabort("can't set spi mode"); 
+        printf("can't set spi mode"); 
  
     ret = ioctl(fd0, SPI_IOC_RD_MODE, &mode);    //?家Α 
     if (ret == -1) 
-        pabort("can't get spi mode"); 
+        printf("can't get spi mode"); 
 
    /*
      * spi1 mode
      */ 
     ret = ioctl(fd1, SPI_IOC_WR_MODE, &mode);    //?家Α 
     if (ret == -1) 
-        pabort("can't set spi mode"); 
+        printf("can't set spi mode"); 
  
     ret = ioctl(fd1, SPI_IOC_RD_MODE, &mode);    //?家Α 
     if (ret == -1) 
-        pabort("can't get spi mode"); 
+        printf("can't get spi mode"); 
 
     printf("spi%d mode:0x%x \n", 0, mode);
 
@@ -5370,6 +5396,487 @@ static char spi1[] = "/dev/spidev32766.0";
     if (ret == -1) pabort("can't get bits per word"); 
 
 #define PT_BUF_SIZE (32768)
+#define MAX_EVENTS (2)
+#define EPOLLLT (0)
+#define USB_SAVE_RESULT (1)
+
+    if (sel == 26){ /* usb printer test usb scam */
+        //#define PT_BUF_SIZE (512)
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/g_printer";
+        static char ptfileSend[] = "/mnt/mmc2/usb/greenhill_01.jpg";
+        //static char ptfileSend[] = "/mnt/mmc2/usb/send001.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptsend, *palloc=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0;
+        int cntTx=0, usCost=0, bufsize=0;
+        double throughput=0.0;
+        FILE *fsave=0, *fsend=0;
+        struct timespec tstart, tend;
+        char csw[13] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00};
+        char endTran[64] = {};
+        uint8_t cmd=0, opc=0, dat=0;
+        
+        struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
+        int usbfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0;
+
+        usbfd =  open(ptdevpath, O_RDWR);
+        if (usbfd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(usbfd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+        
+        //usb_nonblock_set(usbfd);
+#if 1
+        epollfd = epoll_create1(O_CLOEXEC);
+        if (epollfd < 0) {
+            perror("epoll_create1");
+            //exit(EXIT_FAILURE);
+            printf("epoll create failed, errno: %d\n", errno);
+        } else {
+            printf("epoll create succeed, epollfd: %d, errno: %d\n", epollfd, errno);
+        }
+        
+        //usb_nonblock_set(usbfd);
+
+        eventRx.data.fd = usbfd;
+        eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
+        ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
+        if (ret == -1)
+        {
+            perror ("epoll_ctl");
+            printf("spoll set ctl failed errno: %ds\n", errno);
+        }
+        
+/*
+        eventTx.data.fd = usbfd;
+        eventTx.events = EPOLLOUT | EPOLLET;
+        ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventTx);
+        if (ret == -1)
+        {
+            perror ("epoll_ctl");
+            printf("spoll set ctl failed errno: %ds\n", errno);
+        }
+*/
+#endif
+
+        ptrecv = malloc(PT_BUF_SIZE);
+        if (ptrecv) {
+            printf(" recv buff alloc succeed! size: %d \n", maxsz);
+        } else {
+            printf(" recv buff alloc failed! size: %d \n", maxsz);
+            goto end;
+        }
+        
+        printf(" open file [%s] \n", ptfileSend);
+        fsend = fopen(ptfileSend, "r");
+       
+        if (!fsend) {
+            printf(" [%s] file open failed \n", ptfileSend);
+            goto end;
+        }   
+        printf(" [%s] file open succeed \n", ptfileSend);
+
+        if (arg0 > 0) {
+            bufsize = arg0;        
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+        printf(" recv buff size:[%d] \n", bufsize);
+
+        ptret = fseek(fsend, 0, SEEK_END);
+        if (ptret) {
+            printf(" file seek failed!! ret:%d \n", ptret);
+            goto end;
+        }
+
+        maxsz = ftell(fsend);
+        printf(" file [%s] size: %d \n", ptfileSend, maxsz);
+        
+        ptsend = malloc(maxsz);
+        if (ptsend) {
+            printf(" send buff alloc succeed! size: %d \n", maxsz);
+        } else {
+            printf(" send buff alloc failed! size: %d \n", maxsz);
+            goto end;
+        }
+
+        ptret = fseek(fsend, 0, SEEK_SET);
+        if (ptret) {
+            printf(" file seek failed!! ret:%d \n", ptret);
+            goto end;
+        }
+        
+        ptret = fread(ptsend, 1, maxsz, fsend);
+        printf(" output file read size: %d/%d \n", ptret, maxsz);
+
+        palloc = ptsend;
+        
+        fclose(fsend);
+        
+#if 1
+        cntTx = 0;
+        while (1) {
+            //printf("epoll wait the very first request %d \n", cntTx);
+            cntTx++;
+
+            uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 5000);
+            if (uret < 0) {
+                perror("epoll_wait");
+                printf("nonblock failed errno: %d ret: %d\n", errno, uret);
+            } else if (uret == 0) {
+                printf("nonblock failed errno: %d ret: %d\n", errno, uret);
+            } else {
+                if (getevents[0].events & EPOLLIN) {
+                    //printf("[%d] IN \n", 0);
+                    break;
+                }
+                if (getevents[0].events & EPOLLOUT) {
+                    //printf("[%d] OUT \n", 0);
+                    /* do nothing */
+                }
+            }
+        }
+
+        cntTx = 0;
+        while (1) {
+            //printf("epoll %d \n", cntTx);
+            cntTx++;
+
+            uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 5000);
+            if (uret < 0) {
+                perror("epoll_wait");
+                printf("nonblock failed errno: %d ret: %d\n", errno, uret);
+            } else if (uret == 0) {
+                printf("nonblock failed errno: %d ret: %d\n", errno, uret);
+            } else {
+                for (ifx = 0; ifx < MAX_EVENTS; ifx++) {
+                    if (getevents[ifx].events & EPOLLIN) {
+                        rxfd = getevents[ifx].data.fd;
+
+                        if ((opc == 0x4c) && (dat == 0x01)) {
+                            recvsz = read(rxfd, ptrecv, 513);
+                            printf("usb RX size: %d / %d \n====================\n", recvsz, 513); 
+                            shmem_dump(ptrecv, recvsz);
+                            dat = 0;
+                        } else {
+                            recvsz = read(rxfd, ptrecv, 31);
+                            printf("usb RX size: %d / %d \n====================\n", recvsz, 31); 
+                            shmem_dump(ptrecv, recvsz);
+
+                            if ((ptrecv[0] == 0x55) && (ptrecv[1] == 0x53) && (ptrecv[2] == 0x42)) {
+                                cmd = ptrecv[15];
+                                opc = ptrecv[16];
+                                dat = ptrecv[17];
+                                printf("usb get cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);       
+
+                                if (cmd == 0x11) {
+                                    if ((opc == 0x4c) && (dat == 0x01)) {
+                                        continue;
+                                    }
+                                    else if ((opc == 0x04) && (dat == 0x85)) {
+                                    }
+                                    else {
+                                        continue;
+                                    }
+                                }
+                                else if (cmd == 0x12) {
+                                    if (opc == 0x04) {
+                                    }
+                                    else {
+                                        continue;
+                                    }
+                                }
+                                else {
+                                    continue;
+                                }
+                            }            
+                        }
+                    }
+                    
+                    if (getevents[ifx].events & EPOLLOUT) {
+                        //printf("cmd: 0x%.2x, opc: 0x%.2x \n", cmd, opc);
+                        
+                        if ((cmd == 0x12) && (opc == 0x04)) {
+                            printf("start to send image size: %d \n", maxsz);
+                            lastsz = maxsz;        
+                            ptsend = palloc;
+                            
+                            while(1) {
+                                if (lastsz > bufsize) {
+                                    wrtsz = bufsize;
+                                } else {
+                                    wrtsz = lastsz;
+                                    if (wrtsz == 1) {
+                                        wrtsz = 2;
+                                    }
+                                }
+                                
+                                sendsz = write(rxfd, ptsend, wrtsz);
+                                printf("usb TX size: %d, ret: %d \n", wrtsz, sendsz);
+                                if (sendsz < 0) {
+                                    printf("usb send ret: %d, error!!!", sendsz);
+                                    break;
+                                }
+                                
+                                if (cntTx == 0) {
+                                    clock_gettime(CLOCK_REALTIME, &tstart);
+                                }
+                                
+                                ptsend += sendsz;
+                                acusz += sendsz;
+                                lastsz = lastsz - sendsz;
+                                cntTx ++;
+                                
+                                //printf("usb send %d/%d to usb total %d last %d\n", sendsz, wrtsz, acusz, lastsz);
+                                
+                                if (lastsz == 0) {
+                                    sendsz = write(rxfd, ptsend, 64);
+                                    printf("usb send end last size = %d \n====================\n", sendsz);
+                                    clock_gettime(CLOCK_REALTIME, &tend);
+                                    break;
+                                }
+                            }
+                            
+                            usCost = test_time_diff(&tstart, &tend, 1000);
+                            throughput = maxsz*8.0 / usCost*1.0;
+                            printf("usb throughput: %d bytes / %d us = %lf MBits\n", maxsz, usCost, throughput);
+
+                            cmd = 0;
+                        }
+                        else if (cmd == 0x11) {
+                            cntTx++;
+                            csw[12] = cntTx;
+                            wrtsz = write(rxfd, csw, 13);
+                            printf("usb TX size: %d \n====================\n", wrtsz); 
+                            shmem_dump(csw, wrtsz);
+
+                            cmd = 0;
+                        }
+                        else {
+                            /* do nothing */
+                        }
+                    }
+                }
+            }
+        }
+#else   
+        ptfd[0].fd = usbfd;
+        if (ptfd[0].fd < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(ptfd[0].fd);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+            
+        ptfd[0].events = POLLOUT | POLLIN;
+        while(1) {
+            ptret = poll(ptfd, 1, -1);
+            //printf("\n====================\npoll return %d evt: 0x%.2x\n", ptret, ptfd[0].revents);
+            
+            if (ptret < 0) {
+                 printf("poll return %d \n", ptret);
+                 goto end;
+            }
+
+            if (ptfd[0].revents & POLLOUT) {
+                //wrtsz = write(ptfd[0].fd, csw, 1);
+                //printf("usb TX NULL \n====================\n"); 
+                //shmem_dump(csw, wrtsz);
+            }
+
+            if (ptfd[0].revents & POLLIN) {
+                printf("usb RX break \n====================\n"); 
+                break;
+            }
+        }
+        cntTx = 1;
+
+        while (1) {
+            /* send ready */
+            //memset(ptrecv, 0, PT_BUF_SIZE);
+            ptfd[0].events = POLLIN;
+
+            ptret = poll(ptfd, 1, -1);
+            printf("\n====================\npoll return %d evt: 0x%.2x\n", ptret, ptfd[0].revents);
+            
+            if (ptret < 0) {
+                 printf("poll return %d \n", ptret);
+                 goto end;
+            }
+
+            if (ptfd[0].revents & POLLIN) {
+                if ((opc == 0x4c) && (dat == 0x01)) {
+                    recvsz = read(ptfd[0].fd, ptrecv, 513);
+                    printf("usb RX size: %d \n====================\n", recvsz); 
+                    shmem_dump(ptrecv, recvsz);
+                    dat = 0;
+                } else {
+                    recvsz = read(ptfd[0].fd, ptrecv, 31);
+                    printf("usb RX size: %d \n====================\n", recvsz); 
+                    shmem_dump(ptrecv, recvsz);
+/*
+                    if ((ptrecv[0] == 0x55) && (ptrecv[1] == 0x53) && (ptrecv[2] == 0x42)) {
+                        if ((ptrecv[15] == 0x08) && (ptrecv[16] == 0x0b) && (ptrecv[17] == 0x85)) {
+                            //break;
+                        }
+                    }
+*/
+                    if ((ptrecv[0] == 0x55) && (ptrecv[1] == 0x53) && (ptrecv[2] == 0x42)) {
+                         cmd = ptrecv[15];
+                         opc = ptrecv[16];
+                         dat = ptrecv[17];
+                         printf("usb get opc: 0x%.2x, dat: 0x%.2x \n", opc, dat);       
+
+                         if (cmd == 0x11) {
+                             if ((opc == 0x4c) && (dat == 0x01)) {
+                                 continue;
+                             } else if ((opc == 0x04) && (dat == 0x85)) {
+                             } else {
+                                 continue;
+                             }
+                         } else if (cmd == 0x12) {
+                             if (opc == 0x04) {
+                             } else {
+                                 continue;
+                             }
+                         } else {
+                             continue;
+                         }
+                     }            
+                     else if (recvsz == 512) {
+                         cmd = 0;
+                         opc = 0;
+                         dat = 0;
+                     }
+                }
+            }
+
+            ptfd[0].events = POLLOUT;
+
+            ptret = poll(ptfd, 1, -1);
+            printf("\n====================\npoll return %d evt: 0x%.2x\n", ptret, ptfd[0].revents);
+            
+            if (ptret < 0) {
+                 printf("poll return %d \n", ptret);
+                 goto end;
+            }
+
+            if (ptfd[0].revents & POLLOUT) {
+                printf("cmd: 0x%.2x, opc: 0x%.2x \n", cmd, opc);
+                
+                if ((cmd == 0x12) && (opc == 0x04)) {
+                    printf("start to send image size: %d \n", maxsz);
+
+                    lastsz = maxsz;        
+                    ptsend = palloc;
+                    while(1) {
+                        if (lastsz > bufsize) {
+                            wrtsz = bufsize;
+                        } else {
+                            wrtsz = lastsz;
+                            if (wrtsz == 1) {
+                                wrtsz = 2;
+                            }
+                        }
+
+                        sendsz = write(ptfd[0].fd, ptsend, wrtsz);
+                        printf("usb TX size: %d, ret: %d \n", wrtsz, sendsz);
+                        
+                        if (sendsz < 0) {
+                            printf("usb send ret: %d, error!!!", sendsz);
+                            break;
+                        }
+
+                        if (cntTx == 0) {
+                            clock_gettime(CLOCK_REALTIME, &tstart);
+                        }
+
+                        ptsend += sendsz;
+                        acusz += sendsz;
+                        lastsz = lastsz - sendsz;
+                        cntTx ++;
+
+                        //printf("usb send %d/%d to usb total %d last %d\n", sendsz, wrtsz, acusz, lastsz);
+
+                        if (lastsz == 0) {
+                            sendsz = write(ptfd[0].fd, ptsend, 64);
+                            printf("usb send end last size = %d \n====================\n", sendsz);
+                            clock_gettime(CLOCK_REALTIME, &tend);
+                            break;
+                        }
+                    }
+
+
+                    usCost = test_time_diff(&tstart, &tend, 1000);
+                    throughput = maxsz*8.0 / usCost*1.0;
+                    printf("usb throughput: %d bytes / %d us = %lf MBits\n", maxsz, usCost, throughput);
+                
+                }
+                else {
+                    cntTx++;
+                    csw[12] = cntTx;
+                    wrtsz = write(ptfd[0].fd, csw, 13);
+                    printf("usb TX size: %d \n====================\n", wrtsz); 
+                    shmem_dump(csw, wrtsz);
+                }
+            }
+            
+            //STAGE_DELAY;
+        }
+#endif
+#if 0
+        /* reply META CSW */
+        //memset(ptrecv, 0, PT_BUF_SIZE);
+        ptfd[0].events = POLLOUT;
+
+        ptret = poll(ptfd, 1, -1);
+        printf("poll return %d \n", ptret);
+            
+        if (ptret < 0) {
+             printf("poll return %d \n", ptret);
+             goto end;
+        }
+
+        csw[12] = 1;
+        
+        if (ptret && (ptfd[0].revents & POLLOUT)) {
+            wrtsz = write(ptfd[0].fd, csw, 13);
+            printf("usb write size: %d - 3\n", wrtsz); 
+            shmem_dump(csw, wrtsz);
+        }
+
+        /* reply CSW */
+        //memset(ptrecv, 0, PT_BUF_SIZE);
+        ptfd[0].events = POLLOUT;
+
+        ptret = poll(ptfd, 1, -1);
+        printf("poll return %d \n", ptret);
+            
+        if (ptret < 0) {
+             printf("poll return %d \n", ptret);
+             goto end;
+        }
+        
+        csw[12] = 1;
+
+        if (ptret && (ptfd[0].revents & POLLOUT)) {
+            wrtsz = write(ptfd[0].fd, csw, 13);
+            printf("usb write size: %d - 3\n", wrtsz); 
+            shmem_dump(csw, wrtsz);
+        }
+#endif
+
+        close(usbfd);
+        free(palloc);
+        goto end;
+    }
     if (sel == 25){ /* usb printer write access */
         struct pollfd ptfd[1];
         static char ptdevpath[] = "/dev/g_printer";
