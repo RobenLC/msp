@@ -1875,10 +1875,12 @@ static int usb_send(char *pts, int usbfd, int len)
 {
     int ret=0, send=0;
     struct pollfd pllfd[1];
-    
+
+/*
     if (!(len % 512)) {
         len += 1;
     }
+*/
 
 #if 1
     if (!pts) return -1;
@@ -2231,6 +2233,8 @@ static char path[256];
             
             pcur += recvsz;
             acusz += recvsz;
+
+            //usleep(5000);
 
             if (acusz > bufmax) {
                 break;
