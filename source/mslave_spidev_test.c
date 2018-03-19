@@ -1876,11 +1876,11 @@ static int usb_send(char *pts, int usbfd, int len)
     int ret=0, send=0;
     struct pollfd pllfd[1];
 
-/*
+#if 0
     if (!(len % 512)) {
         len += 1;
     }
-*/
+#endif
 
 #if 1
     if (!pts) return -1;
@@ -1891,7 +1891,7 @@ static int usb_send(char *pts, int usbfd, int len)
     
     while(1) {
         ret = poll(pllfd, 1, -1);
-        printf("[UW] usb poll ret: %d \n", ret);
+        //printf("[UW] usb poll ret: %d \n", ret);
         if (ret < 0) {
             printf("[UW] usb poll failed ret: %d\n", ret);
             break;
@@ -1901,7 +1901,7 @@ static int usb_send(char *pts, int usbfd, int len)
             
             send = write(pllfd[0].fd, pts, len);
             
-            printf("[UW] usb write %d bytes, ret: %d (1)\n", len, send);
+            //printf("[UW] usb write %d bytes, ret: %d (1)\n", len, send);
             break;
         }                
     }
@@ -1925,7 +1925,7 @@ static int usb_read(char *ptr, int usbfd, int len)
     
     while(1) {
         ret = poll(pllfd, 1, -1);
-        printf("[UR] usb poll ret: %d \n", ret);
+        //printf("[UR] usb poll ret: %d \n", ret);
         if (ret < 0) {
             printf("[UR] usb poll failed ret: %d\n", ret);
             break;
@@ -1935,7 +1935,7 @@ static int usb_read(char *ptr, int usbfd, int len)
             
             recv = read(pllfd[0].fd, ptr, len);
             
-            printf("[UR] usb read %d bytes, ret: %d (1)\n", len, recv);
+            //printf("[UR] usb read %d bytes, ret: %d (1)\n", len, recv);
             break;
         }                
     }
@@ -2223,11 +2223,11 @@ static char path[256];
         pcur = pImage;
         recvsz = 0;
         acusz = 0;
-        
+
         while(1) {
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
 
-            if ((recvsz < 0) || (recvsz == 64)) {
+            if ((recvsz < 0) || (recvsz < PT_BUF_SIZE)) {
                 break;
             }
             
@@ -2239,10 +2239,6 @@ static char path[256];
             if (acusz > bufmax) {
                 break;
             }
-        }
-
-        if (recvsz == 64) {
-            shmem_dump(pcur, 64);
         }
 
         wrtsz = fwrite(pImage, 1, acusz, fsave);

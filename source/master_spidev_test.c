@@ -5502,6 +5502,8 @@ static char spi1[] = "/dev/spidev32766.0";
         char endTran[64] = {};
         uint8_t cmd=0, opc=0, dat=0;
         uint32_t usbentsRx=0, usbentsTx=0, getents=0;
+
+        int thrid[3];
         
         struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
         int usbfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0;
@@ -5516,7 +5518,7 @@ static char spi1[] = "/dev/spidev32766.0";
             printf("open device[%s]\n", ptdevpath); 
         }
         
-        //usb_nonblock_set(usbfd);
+        usb_nonblock_set(usbfd);
 #if 1
         epollfd = epoll_create1(O_CLOEXEC);
         if (epollfd < 0) {
@@ -5645,6 +5647,10 @@ static char spi1[] = "/dev/spidev32766.0";
             }
         }
 #endif
+
+        thrid[0] = fork();
+        if (!thrid[0]) {
+
         lastsz = 0;
         cntTx = 0;
         ifx = 0;
@@ -5656,7 +5662,7 @@ static char spi1[] = "/dev/spidev32766.0";
                 perror("epoll_wait");
                 printf("nonblock failed errno: %d ret: %d\n", errno, uret);
             } else if (uret == 0) {
-                printf("nonblock timeout errno: %d ret: %d\n", errno, uret);
+                //printf("nonblock timeout errno: %d ret: %d\n", errno, uret);
             } else {
 
                 //for(ifx =0; ifx < MAX_EVENTS; ifx++) {
@@ -5679,7 +5685,7 @@ static char spi1[] = "/dev/spidev32766.0";
                 //}
             }
             
-            printf("epoll %d/%d ret: %d \n", usbentsRx, usbentsTx, uret);
+            //printf("epoll %d/%d ret: %d \n", usbentsRx, usbentsTx, uret);
 
             if (usbentsRx == 1) {
                 //rxfd = getevents[ifx].data.fd;
@@ -5688,9 +5694,9 @@ static char spi1[] = "/dev/spidev32766.0";
                 while (1) {
                 if ((opc == 0x4c) && (dat == 0x01)) {
                     recvsz = read(usbfd, ptrecv, 512);
-                    printf("usb RX size: %d / %d \n====================\n", recvsz, 513); 
+                    printf("usb RX size: %d / %d \n====================\n", recvsz, 512); 
                     if (recvsz < 0) {
-                        usbentsRx = 0;
+                        //usbentsRx = 0;
                         break;
                     }
                     shmem_dump(ptrecv, recvsz);
@@ -5816,11 +5822,13 @@ static char spi1[] = "/dev/spidev32766.0";
                 }
             
                 if ((lastsz == 0) && (cntTx >0)) {
-                
+
+
+/*
                     sendsz = 0;
                     retry = 0;
                     while (1) {
-                        sendsz = write(usbfd, ptsend, 64);
+                        sendsz = write(usbfd, ptsend, 13);
                         if (sendsz > 0) {
                             printf("usb send end last size = %d \n====================\n", sendsz);
                             break;
@@ -5830,7 +5838,8 @@ static char spi1[] = "/dev/spidev32766.0";
                             break;
                         }
                     }
-                    
+*/
+
                     clock_gettime(CLOCK_REALTIME, &tend);
             
                     usCost = test_time_diff(&tstart, &tend, 1000);
@@ -5844,6 +5853,29 @@ static char spi1[] = "/dev/spidev32766.0";
                 }
             
             }
+        }
+
+        }
+        else {
+            cntTx = 0;
+
+            ptfd[0].events = POLLOUT | POLLIN;
+            while(1) {
+                cntTx++;
+                ptret = poll(ptfd, 1, -1);
+                printf("poll return %d evt: 0x%.2x - %d\n", ptret, ptfd[0].revents, cntTx);
+
+                sleep(1);
+            }
+            
+            /*
+
+            while(1) {
+                cntTx++;
+                printf("[2] wait %ds \n", cntTx);
+                sleep(1);
+            }
+            */
         }
 #else   
         ptfd[0].fd = usbfd;
