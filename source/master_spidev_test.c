@@ -5028,7 +5028,7 @@ static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
     return diff;
 }
 
-static unsigned long long time_get_us(struct timespec *s)
+static unsigned long long int time_get_us(struct timespec *s)
 {
     unsigned long long cur, tnow, lnow, gunit;
     unsigned long long us, deg;
@@ -5045,10 +5045,10 @@ static unsigned long long time_get_us(struct timespec *s)
     return us;
 }
 
-static unsigned long long time_get_ms(struct timespec *s)
+static unsigned long long int time_get_ms(struct timespec *s)
 {
-    unsigned long long cur, tnow, lnow, gunit;
-    unsigned long long ms, deg;
+    unsigned long long int cur, tnow, lnow, gunit;
+    unsigned long long int ms, deg;
 
     gunit = 1000000;
     deg = 1000000000;
@@ -5537,7 +5537,7 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
     pp->lastsz = size;
     pp->lastflg = 1;
 
-    printf( "set last l:%d f:%d \n", pp->lastsz, pp->lastflg);
+    //printf( "set last l:%d f:%d \n", pp->lastsz, pp->lastflg);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return pp->lastflg;
@@ -5587,7 +5587,7 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     }
 
     if ((pp->lastflg) && (dist == 1)) {
-        printf("last, f: %d %d/l: %d %d\n", pp->r->folw.run, pp->r->folw.seq, pp->r->lead.run, pp->r->lead.seq);
+        //printf("last, f: %d %d/l: %d %d\n", pp->r->folw.run, pp->r->folw.seq, pp->r->lead.run, pp->r->lead.seq);
 
         if ((pp->r->folw.run == pp->r->lead.run) &&
             (pp->r->folw.seq == pp->r->lead.seq)) {
@@ -5711,6 +5711,8 @@ static int usb_read(char *ptr, int usbfd, int len)
     return recv;    
 }
 
+#define DBG_USB_HS 0
+#define USB_HS_SAVE_RESULT 0
 static int usb_host(struct shmem_s *pTx, char *pMta, int *pPtx, int *pPrx)
 {
     struct pollfd ptfd[1];
@@ -5728,7 +5730,7 @@ static int usb_host(struct shmem_s *pTx, char *pMta, int *pPtx, int *pPrx)
     char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     int usbid=0;
-#if USB_SAVE_RESULT
+#if USB_HS_SAVE_RESULT
     FILE *fsave=0;
     char *pImage=0;
     static char ptfileSave[] = "/mnt/mmc2/usb/image_RX_%.3d.jpg";
@@ -5758,7 +5760,7 @@ static int usb_host(struct shmem_s *pTx, char *pMta, int *pPtx, int *pPrx)
 
     memset(ptrecv, 0, 32);
 
-#if 1
+#if DBG_USB_HS
     for (idx=0; idx < 5; idx++) {
         printf("%d. %c - %d \n", idx, cmdMtx[idx][0], cmdMtx[idx][1]);
     }
@@ -5800,7 +5802,9 @@ static int usb_host(struct shmem_s *pTx, char *pMta, int *pPtx, int *pPrx)
     usb_send(ptm, usbid, sizeof(meta));
 
     usb_read(ptrecv, usbid, 13);
+#if DBG_USB_HS
     shmem_dump(ptrecv, 13);
+#endif
 
     chr = 'M';
     pieRet = write(pPrx[1], &chr, 1);
@@ -5814,12 +5818,14 @@ static int usb_host(struct shmem_s *pTx, char *pMta, int *pPtx, int *pPrx)
     usb_send(CBW, usbid, 31);
 
     usb_read(ptrecv, usbid, 13);
+#if DBG_USB_HS
     shmem_dump(ptrecv, 13);
+#endif
 
     insert_cbw(CBW, CBW_CMD_START_SCAN, OP_SINGLE, OPSUB_USB_Scan);
     usb_send(CBW, usbid, 31);     
         
-#if USB_SAVE_RESULT
+#if USB_HS_SAVE_RESULT
     fsave = find_save(ptfilepath, ptfileSave);
     if (!fsave) {
         goto end;    
@@ -5844,7 +5850,7 @@ static int usb_host(struct shmem_s *pTx, char *pMta, int *pPtx, int *pPrx)
         //printf("[HS] read %d \n", recvsz);
         
         if (recvsz > 0) {
-#if USB_SAVE_RESULT
+#if USB_HS_SAVE_RESULT
             memcpy(pcur, addr, recvsz);
 #endif
             ring_buf_prod(pTx);        
@@ -5864,15 +5870,17 @@ static int usb_host(struct shmem_s *pTx, char *pMta, int *pPtx, int *pPrx)
             chr = 'D';
             pieRet = write(pPrx[1], &chr, 1);
         }
-#if USB_SAVE_RESULT        
+#if USB_HS_SAVE_RESULT        
         pcur += recvsz;
 #endif
         acusz += recvsz;
         
+#if USB_HS_SAVE_RESULT               
         if (acusz > bufmax) {
             printf("[HS] save image error due to buffer size not enough!!!");
             break;
         }
+#endif
 
         len = ring_buf_get(pTx, &addr);
         while (len <= 0) {
@@ -5883,13 +5891,15 @@ static int usb_host(struct shmem_s *pTx, char *pMta, int *pPtx, int *pPrx)
 
     chr = 'E';
     pieRet = write(pPrx[1], &chr, 1);
-#if USB_SAVE_RESULT
+    
+#if USB_HS_SAVE_RESULT
     wrtsz = fwrite(pImage, 1, acusz, fsave);
 #endif
+
     printf("[HS] total read size: %d, write file size: %d \n", acusz, wrtsz);
             
+#if USB_HS_SAVE_RESULT
     sync();
-#if USB_SAVE_RESULT
     fclose(fsave);
     free(pImage);
 #endif
@@ -6048,6 +6058,8 @@ static char spi1[] = "/dev/spidev32766.0";
     ret = ioctl(fm[0], SPI_IOC_RD_BITS_PER_WORD, &bits); 
     if (ret == -1) pabort("can't get bits per word"); 
 
+#define DBG_27_DV     0
+#define DBG_27_EPOL  0
     if (sel == 27){ /* usb printer test usb scam */
         //#define PT_BUF_SIZE (512)
         struct pollfd ptfd[1];
@@ -6096,7 +6108,7 @@ static char spi1[] = "/dev/spidev32766.0";
         uint8_t cmd=0, opc=0, dat=0;
         uint32_t usbentsRx=0, usbentsTx=0, getents=0;
 
-        int thrid[3];
+        int thrid[4];
         
         struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
         int usbfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0;
@@ -6150,21 +6162,24 @@ static char spi1[] = "/dev/spidev32766.0";
         cntTx = 0;
         ifx = 0;
         while (1) {
+#if DBG_27_EPOL
             printf("[ePol] cmd: 0x%.2x, opc: 0x%.2x, dat: 0x%.2x, lastsz: %d, cnt: %d \n", cmd, opc, dat, lastsz, cntTx);
-
+#endif
             uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 1000);
             if (uret < 0) {
                 perror("epoll_wait");
                 printf("[ePol] failed errno: %d ret: %d\n", errno, uret);
             } else if (uret == 0) {
+#if DBG_27_EPOL
                 printf("[ePol] timeout errno: %d ret: %d\n", errno, uret);
+#endif
             } else {
 
                 rxfd = getevents[0].data.fd;
                 getents = getevents[0].events;
-
+#if DBG_27_EPOL
                 printf("[ePol] usbfd: %d, evt: 0x%x ret: %d - %d\n", usbfd, getevents[0].events, uret, ifx);
-                    
+#endif
                 if (getents & EPOLLIN) {
                     if (rxfd == usbfd) {               
                         usbentsRx = 1;
@@ -6178,22 +6193,27 @@ static char spi1[] = "/dev/spidev32766.0";
                 }
 
             }
-            
+#if DBG_27_EPOL
             printf("[ePol] epoll rx: %d, tx: %d ret: %d \n", usbentsRx, usbentsTx, uret);
-
+#endif
             if (usbentsRx == 1) {
                 //rxfd = getevents[ifx].data.fd;
+#if DBG_27_EPOL
                 printf("[ePol] Rx cmd: 0x%.2x, opc: 0x%.2x, dat: 0x%.2x, lastsz: %d, cnt: %d \n", cmd, opc, dat, lastsz, cntTx);
-
+#endif
                 while (1) {
                 if ((opc == 0x4c) && (dat == 0x01)) {
                     recvsz = read(usbfd, ptrecv, 512);
+#if DBG_27_DV
                     printf("[DV] usb RX size: %d / %d \n====================\n", recvsz, 512); 
+#endif              
                     if (recvsz < 0) {
                         //usbentsRx = 0;
                         break;
                     }
+#if DBG_27_DV
                     shmem_dump(ptrecv, recvsz);
+#endif
                     memcpy(metaPt, ptrecv, 512);
                     
                     chq = 'm';
@@ -6208,7 +6228,9 @@ static char spi1[] = "/dev/spidev32766.0";
                     break;
                 } else {
                     recvsz = read(usbfd, ptrecv, 31);
+#if DBG_27_DV
                     printf("[DV] usb RX size: %d / %d \n====================\n", recvsz, 31); 
+#endif
                     if (recvsz < 0) {
                         usbentsRx = 0;
                         break;
@@ -6262,8 +6284,9 @@ static char spi1[] = "/dev/spidev32766.0";
             }
             
             if (usbentsTx == 1) {
+#if DBG_27_EPOL
                 printf("[ePol] Tx cmd: 0x%.2x, opc: 0x%.2x, dat: 0x%.2x, lastsz: %d, cnt: %d \n", cmd, opc, dat, lastsz, cntTx);
-                
+#endif
                 if ((cmd == 0x12) && (opc == 0x04)) {
                     chq = 'd';
                     pipRet = write(pipeTx[1], &chq, 1);
@@ -6271,6 +6294,8 @@ static char spi1[] = "/dev/spidev32766.0";
                         printf("[DV] pipe send meta ret: %d \n", pipRet);
                         goto end;
                     }
+                    acusz = 0;
+                    cntTx = 0;
                     
                     cmd = 0;
                 }
@@ -6282,7 +6307,9 @@ static char spi1[] = "/dev/spidev32766.0";
                     retry = 0;
                     while (1) {
                         wrtsz = write(usbfd, csw, 13);
+#if DBG_27_DV
                         printf("[DV] usb TX size: %d \n====================\n", wrtsz); 
+#endif
                         if (wrtsz > 0) {
                             break;
                         }
@@ -6302,42 +6329,49 @@ static char spi1[] = "/dev/spidev32766.0";
                     cmd = 0;
                 }
                 else {
+#if DBG_27_DV
                     printf("[DV] thrid 1 id: %d, thrid 2 id: %d \n", thrid[1], thrid[2]);
+#endif
                     chq = 0;
-                    acusz = 0;
 
                     if (thrid[1] && thrid[2]) {
                         chq = 0;
                         pipRet = read(pipeRx[0], &chq, 1);
+#if DBG_27_DV
                         if (pipRet < 0) {
                             printf("[DV] get meta resp ret: %d, error!!\n", pipRet);
                         } else {
                             printf("[DV] get meta resp chq:%c ,ret: %d\n", chq, pipRet);
                         }
-
+#endif
                         if (chq == 'M') {
+#if DBG_27_DV
                             printf("[DV] meta thread pid: %d\n", thrid[2]);
+#endif
                             kill(thrid[2]);
                             thrid[2] = 0;
                         }                    
                     }
 
                     while (thrid[1]) {       
+#if DBG_27_DV
                         printf("[DV] addrd: 0x%.8x \n", addrd);
+#endif
                         if (!addrd) {
                             pipRet = read(pipeRx[0], &chq, 1);
                             if (pipRet < 0) {
                                 printf("[DV] get pipe send data ret: %d, error!!\n", pipRet);
                             }
-                            #if 1
                             else {
                                 if (chq == 'E') {
                                     printf("[DV] get pipe chq: %c ,ret: %d, get last trunk \n", chq, pipRet);
-                                } else {
+                                }
+#if DBG_27_DV
+                                else {
                                     printf("[DV] get pipe chq: %c ,ret: %d\n", chq, pipRet);
                                 }
+#endif
                             }
-                            #endif
 
                             lens = ring_buf_cons(usbTx, &addrd);                
                             while (lens <= 0) {
@@ -6345,15 +6379,28 @@ static char spi1[] = "/dev/spidev32766.0";
                                 sleep(1);
                                 lens = ring_buf_cons(usbTx, &addrd);                
                             }
+
+                            if (chq == 'E') {
+                                printf("[DV] the last trunk size is %d \n", lens);
+                            }
                         }
-                                
+
+                        if (cntTx == 0) {
+                            clock_gettime(CLOCK_REALTIME, &tstart);
+                            printf("[DV] start time %llu ms \n", time_get_ms(&tstart));
+                        }    
+
                         sendsz = write(usbfd, addrd, lens);
                         if (sendsz < 0) {
+#if DBG_27_DV
                             printf("[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
+#endif
                             usbentsTx = 0;
                             break;
                         } else {
+#if DBG_27_DV
                             printf("[DV] usb TX size: %d, ret: %d \n", lens, sendsz);
+#endif
                             if (lens == sendsz) {
                                 addrd = 0;
                             } else {
@@ -6361,17 +6408,14 @@ static char spi1[] = "/dev/spidev32766.0";
                                 continue;
                             }
                         }
-                    
-                        if (cntTx == 0) {
-                            clock_gettime(CLOCK_REALTIME, &tstart);
-                        }    
-            
+                                
                         acusz += sendsz;
                         cntTx ++;
 
                         if ((chq == 'E') && (addrd == 0)) {
 
                             clock_gettime(CLOCK_REALTIME, &tend);
+                            printf("[DV] end time %llu ms \n", time_get_ms(&tend));
                             usCost = test_time_diff(&tstart, &tend, 1000);
                             throughput = acusz*8.0 / usCost*1.0;
                             printf("[DV] usb throughput: %d bytes / %d us = %lf MBits\n", acusz, usCost, throughput);
@@ -6399,7 +6443,7 @@ static char spi1[] = "/dev/spidev32766.0";
                 ptret = poll(ptfd, 1, -1);
                 printf("[TH0] poll return %d evt: 0x%.2x - %d\n", ptret, ptfd[0].revents, cntTx);
 
-                sleep(1);
+                sleep(5);
             }
             
         }
@@ -6412,7 +6456,7 @@ static char spi1[] = "/dev/spidev32766.0";
         //#define PT_BUF_SIZE (512)
         struct pollfd ptfd[1];
         static char ptdevpath[] = "/dev/g_printer";
-        static char ptfileSend[] = "/mnt/mmc2/usb/greenhill_01.jpg";
+        static char ptfileSend[] = "/mnt/mmc2/usb/handmade_o.jpg";
         //static char ptfileSend[] = "/mnt/mmc2/usb/send001.jpg";
         char ptfilepath[128];
         char *ptrecv, *ptsend, *palloc=0;
@@ -6676,6 +6720,7 @@ static char spi1[] = "/dev/spidev32766.0";
                     printf("start to send image size: %d \n", maxsz);
                     lastsz = maxsz;        
                     ptsend = palloc;
+                    cntTx = 0;
                     
                     cmd = 0;
                 }
@@ -6719,6 +6764,10 @@ static char spi1[] = "/dev/spidev32766.0";
                             wrtsz = 2;
                         }
                     }
+                    
+                    if (cntTx == 0) {
+                        clock_gettime(CLOCK_REALTIME, &tstart);
+                    }    
             
                     sendsz = write(usbfd, ptsend, wrtsz);
                     if (sendsz < 0) {
@@ -6731,9 +6780,6 @@ static char spi1[] = "/dev/spidev32766.0";
                     //printf("delay 1ms...");
                     //usleep(1000); 
                     
-                    if (cntTx == 0) {
-                        clock_gettime(CLOCK_REALTIME, &tstart);
-                    }    
             
                     ptsend += sendsz;
                     acusz += sendsz;
@@ -6772,8 +6818,8 @@ static char spi1[] = "/dev/spidev32766.0";
                     throughput = maxsz*8.0 / usCost*1.0;
                     printf("usb throughput: %d bytes / %d us = %lf MBits\n", maxsz, usCost, throughput);
             
-                    cntTx = 0;
                     cmd = 0;
+                    cntTx = 0;                    
                     
                     //usbentsTx = 0;
                 }
