@@ -1901,7 +1901,7 @@ static int usb_send(char *pts, int usbfd, int len)
             
             send = write(pllfd[0].fd, pts, len);
             
-            //printf("[UW] usb write %d bytes, ret: %d (1)\n", len, send);
+            printf("[UW] usb write %d bytes, ret: %d (1)\n", len, send);
             break;
         }                
     }
@@ -1935,7 +1935,7 @@ static int usb_read(char *ptr, int usbfd, int len)
             
             recv = read(pllfd[0].fd, ptr, len);
             
-            //printf("[UR] usb read %d bytes, ret: %d (1)\n", len, recv);
+            printf("[UR] usb read %d bytes, ret: %d (1)\n", len, recv);
             break;
         }                
     }
@@ -2163,7 +2163,7 @@ static char path[256];
             printf("open device[%s]\n", ptdevpath); 
         }
 
-        usb_nonblock_set(usbid);
+        //usb_nonblock_set(usbid);
 
         pmeta = &meta;
         ptm = (char *)pmeta;
@@ -2217,7 +2217,7 @@ static char path[256];
             goto end;    
         }
 
-        bufmax = 8*1024*1024;
+        bufmax = 48*1024*1024;
 
         pImage = malloc(bufmax);
         pcur = pImage;
