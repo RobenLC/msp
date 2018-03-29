@@ -1870,7 +1870,7 @@ static int insert_cbw(char *cbw, char cmd, char opc, char dat)
 
     return 0;
 }
-
+#define USB_TX_LOG 0
 static int usb_send(char *pts, int usbfd, int len)
 {
     int ret=0, send=0;
@@ -1900,8 +1900,9 @@ static int usb_send(char *pts, int usbfd, int len)
         if (ret && (pllfd[0].revents & POLLOUT)) {
             
             send = write(pllfd[0].fd, pts, len);
-            
+#if USB_TX_LOG
             printf("[UW] usb write %d bytes, ret: %d (1)\n", len, send);
+#endif
             break;
         }                
     }
@@ -1934,8 +1935,9 @@ static int usb_read(char *ptr, int usbfd, int len)
         if (ret && (pllfd[0].revents & POLLIN)) {
             
             recv = read(pllfd[0].fd, ptr, len);
-            
+#if USB_TX_LOG
             printf("[UR] usb read %d bytes, ret: %d (1)\n", len, recv);
+#endif
             break;
         }                
     }
@@ -2134,8 +2136,8 @@ static char path[256];
 #define  OPSUB_DualStream_SD_only   0x87
 #define  OPSUB_Hand_Scan     0x89
 #define  OPSUB_Enc_Dec_Test   0x8A
-        
-    if (sel == 34){ /* usb printer write access */
+
+    if (sel == 35){ /* usb printer duplex scan */
         struct pollfd ptfd[1];
         static char ptdevpath[] = "/dev/usb/lp0";
         static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
@@ -2163,7 +2165,7 @@ static char path[256];
             printf("open device[%s]\n", ptdevpath); 
         }
 
-        //usb_nonblock_set(usbid);
+        usb_nonblock_set(usbid);
 
         pmeta = &meta;
         ptm = (char *)pmeta;
@@ -2224,16 +2226,210 @@ static char path[256];
         recvsz = 0;
         acusz = 0;
 
+        cntRecv = 0;
         while(1) {
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
 
-            if ((recvsz < 0) || (recvsz < PT_BUF_SIZE)) {
+            if (recvsz < 0) {
+                cntRecv++;
+                if (cntRecv > 0xffff) {
+                    break;
+                }
+            } else {
+                cntRecv = 0;
+            }
+            
+            pcur += recvsz;
+            acusz += recvsz;
+            
+            if (recvsz < PT_BUF_SIZE) {
+                break;
+            }
+            
+            //usleep(5000);
+
+            if (acusz > bufmax) {
+                break;
+            }
+        }
+
+        wrtsz = fwrite(pImage, 1, acusz, fsave);
+        printf("total read size: %d, write file size: %d \n", acusz, wrtsz);
+            
+        sync();
+        fclose(fsave);
+        fsave = 0;
+        //free(pImage);
+#endif
+
+        insert_cbw(CBW, CBW_CMD_START_SCAN, OP_SINGLE, OPSUB_USB_Scan);
+        usb_send(CBW, usbid, 31);     
+        
+#if USB_SAVE_RESULT
+        fsave = find_save(ptfilepath, ptfileSave);
+        if (!fsave) {
+            goto end;    
+        }
+
+        //bufmax = 48*1024*1024;
+
+        //pImage = malloc(bufmax);
+        pcur = pImage;
+        recvsz = 0;
+        acusz = 0;
+
+        cntRecv = 0;
+        while(1) {
+            recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
+
+            if (recvsz < 0) {
+                cntRecv++;
+                if (cntRecv > 0xffff) {
+                    break;
+                }
+            } else {
+                cntRecv = 0;
+            }
+
+            if (recvsz < PT_BUF_SIZE) {
                 break;
             }
             
             pcur += recvsz;
             acusz += recvsz;
+            
+            //usleep(5000);
 
+            if (acusz > bufmax) {
+                break;
+            }
+        }
+
+        wrtsz = fwrite(pImage, 1, acusz, fsave);
+        printf("total read size: %d, write file size: %d \n", acusz, wrtsz);
+            
+        sync();
+        fclose(fsave);
+        
+        free(pImage);
+#endif
+
+        close(usbid);
+        free(ptbuf);
+        free(ptrecv);
+
+        goto end;
+    }
+    
+    if (sel == 34){ /* usb printer simplex scan */
+        struct pollfd ptfd[1];
+        static char ptdevpath[] = "/dev/usb/lp0";
+        static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
+        char ptfilepath[128];
+        char *ptrecv, *ptbuf=0, *pImage=0;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0;
+        int cntRecv=0, usCost=0, bufsize=0;
+        int bufmax=0, bufidx=0, printlog=0;
+        double throughput=0.0;
+        struct timespec tstart, tend;
+        struct aspMetaData_s meta, *pmeta=0;
+        char *ptm=0, *pcur=0;
+        char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+                                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        int usbid=0;
+        FILE *fsave=0;
+        
+        usbid = open(ptdevpath, O_RDWR);
+        if (usbid < 0) {
+            printf("can't open device[%s]\n", ptdevpath); 
+            close(usbid);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", ptdevpath); 
+        }
+
+        usb_nonblock_set(usbid);
+
+        pmeta = &meta;
+        ptm = (char *)pmeta;
+        memset(ptm, 0, sizeof(meta));
+        meta.ASP_MAGIC[0] = 0x20;
+        meta.ASP_MAGIC[1] = 0x14;
+
+        if (arg0 > 0) {
+            bufsize = arg0;
+        } else {
+            bufsize = PT_BUF_SIZE;
+        }
+
+        if (bufsize > PT_BUF_SIZE) {
+            bufsize = PT_BUF_SIZE;
+        }
+
+        printf("usb write size[%d]\n", bufsize); 
+        
+        ptrecv = malloc(PT_BUF_SIZE);
+        memset(ptrecv, 0, PT_BUF_SIZE);
+        ptbuf = malloc(PT_BUF_SIZE);
+        memset(ptbuf, 0, PT_BUF_SIZE);
+        
+        insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
+        usb_send(CBW, usbid, 31);
+
+        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
+        usb_send(CBW, usbid, 31);
+
+        usb_send(ptm, usbid, sizeof(meta));
+
+        usb_read(ptrecv, usbid, 13);
+        shmem_dump(ptrecv, 13);
+
+        insert_cbw(CBW, CBW_CMD_READY, 0, 0);
+        usb_send(CBW, usbid, 31);
+        
+        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_SINGLE, OPSUB_USB_Scan);
+        usb_send(CBW, usbid, 31);
+        
+        usb_read(ptrecv, usbid, 13);
+        shmem_dump(ptrecv, 13);
+        
+        insert_cbw(CBW, CBW_CMD_START_SCAN, OP_SINGLE, OPSUB_USB_Scan);
+        usb_send(CBW, usbid, 31);     
+        
+#if USB_SAVE_RESULT
+        fsave = find_save(ptfilepath, ptfileSave);
+        if (!fsave) {
+            goto end;    
+        }
+
+        bufmax = 48*1024*1024;
+
+        pImage = malloc(bufmax);
+        pcur = pImage;
+        recvsz = 0;
+        acusz = 0;
+
+        cntRecv = 0;
+        while(1) {
+            recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
+
+            if (recvsz < 0) {
+                cntRecv++;
+                if (cntRecv > 0xffff) {
+                    break;
+                }
+            } else {
+                cntRecv = 0;
+            }
+            
+            pcur += recvsz;
+            acusz += recvsz;
+
+            if (recvsz < PT_BUF_SIZE) {
+                break;
+            }
+            
             //usleep(5000);
 
             if (acusz > bufmax) {
