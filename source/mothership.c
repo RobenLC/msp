@@ -24,11 +24,10 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Feb 22 15:17:05 2018 \
-35be4953f7 \
-[FAT] remove unused log \
-fix redundant data channel \
-add p6 n==0 error message and do not break"
+#define MSP_VERSION "Thu Mar 8 17:14:30 2018 \
+ab1f696317 \
+show error msg when p6 get empty string \
+debug 06"
 
 #define SPI1_ENABLE (1) 
 
@@ -29637,7 +29636,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
                 }
 
                 totalsize = freeClst * psec->secPrClst * psec->secSize;
-                sprintf_f(mrs->log, " re-calculate total free cluster: %d free sector: %d (size: %ld) \n", 
+                sprintf_f(mrs->log, "re-calculate total free cluster: %d free sector: %d (size: %ld) \n", 
                     freeClst, freeClst * psec->secPrClst, totalsize);
                 print_f(&mrs->plog, "fs75", mrs->log);     
                 usedClst = totClst - freeClst;
@@ -30171,7 +30170,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf_f(mrs->log, "get parse buffer used size: %d]\n", pParBuf->dirBuffUsed);
             print_f(&mrs->plog, "fs81", mrs->log);
 
-            msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
+            //msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
             
             /* fill the DEF */
             
@@ -30289,7 +30288,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                             pflnt = pflnt->n;
                         }
 
-                        sprintf_f(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+                        sprintf_f(mrs->log, "re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
                         print_f(&mrs->plog, "fs81", mrs->log);     
                         usedClst = totClst - freeClst;
 
@@ -30707,7 +30706,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
         pflnt = pftb->c;
         
-        msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
+        //msync(pParBuf->dirParseBuff, pParBuf->dirBuffUsed, MS_SYNC);
         //shmem_dump(pParBuf->dirParseBuff, pParBuf->dirBuffUsed);
         /* find the free space, slot unit is 32 bytes */
         fLen = aspFindFreeDEF(&pdef, pParBuf->dirParseBuff, pParBuf->dirBuffUsed, 32);
@@ -30783,22 +30782,22 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
                 fwrite(pr, 1, len, f);
                 fflush(f);
                 fclose(f);
-                sprintf_f(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
-                print_f(&mrs->plog, "fs81", mrs->log);
+                sprintf_f(mrs->log, "DEF save to [%s] size:%d\n", clstPath, len);
+                print_f(&mrs->plog, "fs88", mrs->log);
             } else {
-                sprintf_f(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
-                print_f(&mrs->plog, "fs81", mrs->log);
+                sprintf_f(mrs->log, "DEF find save to [%s] failed !!!\n", clstPath);
+                print_f(&mrs->plog, "fs88", mrs->log);
             }
         } else {
             f = fopen(clstPath, "w+");
             if (f) {
                 fflush(f);
                 fclose(f);
-                sprintf_f(mrs->log, "FAT table save to [%s] size:%d\n", clstPath, len);
-                print_f(&mrs->plog, "fs81", mrs->log);
+                sprintf_f(mrs->log, "DEF save to [%s] size:%d\n", clstPath, len);
+                print_f(&mrs->plog, "fs88", mrs->log);
             } else {
-                sprintf_f(mrs->log, "FAT table find save to [%s] failed !!!\n", clstPath);
-                print_f(&mrs->plog, "fs81", mrs->log);
+                sprintf_f(mrs->log, "DEF find save to [%s] failed !!!\n", clstPath);
+                print_f(&mrs->plog, "fs88", mrs->log);
             }
         }
 
@@ -31262,7 +31261,7 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
             pflnt = pflnt->n;
         }
 
-        sprintf_f(mrs->log, " re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+        sprintf_f(mrs->log, "re-calculate total free cluster: %d \n free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
         print_f(&mrs->plog, "fs98", mrs->log);     
         usedClst = totClst - freeClst;
 
@@ -32469,7 +32468,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
                 pflnt = pflnt->n;
             }
 
-            sprintf_f(mrs->log, " re-calculate total free cluster: %d free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
+            sprintf_f(mrs->log, "re-calculate total free cluster: %d free sector: %d (size: %d) \n", freeClst, freeClst * psec->secPrClst, freeClst * psec->secPrClst * psec->secSize);
             print_f(&mrs->plog, "fs98", mrs->log);     
             usedClst = totClst - freeClst;
 
@@ -34401,7 +34400,10 @@ static int fs117(struct mainRes_s *mrs, struct modersp_s *modersp)
     int len=0, bitset=0, ret=0, count=0;
     char ch=0;
     struct info16Bit_s *p;
+    struct sdFAT_s *pfat=0;
 
+    pfat = &mrs->aspFat;
+    
     //sprintf_f(mrs->log, "wait spi0 tx end\n");
     //print_f(&mrs->plog, "fs117", mrs->log);
 
@@ -34429,6 +34431,10 @@ static int fs117(struct mainRes_s *mrs, struct modersp_s *modersp)
             usleep(210000);
 #endif
 
+            pfat->parBuf.dirParseBuff = 0;
+            pfat->parBuf.dirBuffUsed = 0;
+            pfat->parBuf.dirBuffMax = 0;
+    
             aspMemClear(aspMemAsign, asptotMalloc, 10);
             modersp->m = 48;            
             return 2;
@@ -34634,7 +34640,7 @@ static int fs123(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct aspConfig_s *pct=0;
     struct aspConfig_s *pdt, *pdtduo=0;
-                
+    
     pct = mrs->configTable;                
 
     pfat = &mrs->aspFat;
@@ -34660,6 +34666,11 @@ static int fs123(struct mainRes_s *mrs, struct modersp_s *modersp)
         pfat->fatSupcur = 0;
         pfat->fatSupdataDuo = 0;    
         pfat->fatSupcurDuo = 0;
+
+        pfat->parBuf.dirParseBuff = 0;
+        pfat->parBuf.dirBuffUsed = 0;
+        pfat->parBuf.dirBuffMax = 0;
+        
         aspMemClear(aspMemAsign, asptotMalloc, 10);
 
         modersp->r = 2;
@@ -34679,7 +34690,7 @@ static int fs123(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs124(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct sdFAT_s *pfat=0;
-            
+    
     sprintf_f(mrs->log, "release resource for single side SD write back\n");
     print_f(&mrs->plog, "fs124", mrs->log);
 
@@ -34687,6 +34698,10 @@ static int fs124(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     pfat->fatSupdata = 0;
     pfat->fatSupcur = 0;
+    pfat->parBuf.dirParseBuff = 0;
+    pfat->parBuf.dirBuffUsed = 0;
+    pfat->parBuf.dirBuffMax = 0;
+
     aspMemClear(aspMemAsign, asptotMalloc, 10);
 
     modersp->r = 1;
@@ -35473,7 +35488,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdParseBuff_s *pParBuf=0;
     struct info16Bit_s *p=0, *c=0;
     struct directnFile_s *curDir=0, *chlDir=0, *br=0, *getDir1=0, *pa=0, *getDir2;
-    struct directnFile_s tmpDir;
+    struct directnFile_s *tmpDir;
     struct folderQueue_s *pfhead=0, *pfdirt=0, *pfnext=0;
     struct adFATLinkList_s *pflsh=0, *pflnt=0;
     struct adFATLinkList_s *pfre=0, *pnxf=0, *pclst=0;
@@ -35488,7 +35503,21 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
     psec = &pfat->fatBootsec;
     pftb = &pfat->fatTable;
     clstByte = psec->secSize * psec->secPrClst;
-    memset(&tmpDir, 0, sizeof(struct directnFile_s));
+
+    tmpDir = aspMemalloc(sizeof(struct directnFile_s), 10);
+    memset(tmpDir, 0, sizeof(struct directnFile_s));
+
+    if (!pParBuf->dirParseBuff) {
+        pParBuf->dirParseBuff = aspMemalloc(32768, 10);    
+        pParBuf->dirBuffMax = 32768;
+        sprintf_f(mrs->log, "WARNNING!! buffer is null!! allocate 32768 bytes, addr: 0x%.8x \n", pParBuf->dirParseBuff);
+        print_f(&mrs->plog, "fs139", mrs->log);
+    }
+    else {
+        sprintf_f(mrs->log, "WARNNING!! buffer is NOT null!! addr: 0x%.8x, used: %d, max: %d \n", 
+                       pParBuf->dirParseBuff, pParBuf->dirBuffUsed, pParBuf->dirBuffMax);
+        print_f(&mrs->plog, "fs139", mrs->log);
+    }
     
     if (!clstByte) {
         sprintf_f(mrs->log, "ERROR!! bytes number of cluster is zero \n");
@@ -35697,7 +35726,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
             }
     
             totalsize = freeClst * psec->secPrClst * psec->secSize;
-            sprintf_f(mrs->log, " re-calculate total free cluster: %d free sector: %d (size: %lu) \n", 
+            sprintf_f(mrs->log, "re-calculate total free cluster: %d free sector: %d (size: %lu) \n", 
                 freeClst, freeClst * psec->secPrClst, totalsize);
             print_f(&mrs->plog, "fs139", mrs->log);     
             usedClst = totClst - freeClst;
@@ -35721,8 +35750,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
         sprintf_f(mrs->log, "total allocated cluster is %d!! \n", val);
         print_f(&mrs->plog, "fs139", mrs->log);
-    
-    
+
         pftb->h = pflsh;
         pftb->c = pftb->h;
 
@@ -35732,18 +35760,23 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf_f(mrs->log, "WARNNING buff used is %d!! \n", pParBuf->dirBuffUsed);
             print_f(&mrs->plog, "fs139", mrs->log);
         }
+        
         pParBuf->dirBuffUsed = 0;
         pr = pParBuf->dirParseBuff;
+        sprintf_f(mrs->log, "dump parsing buffer addr: 0x%.8x\n", pr);
+        print_f(&mrs->plog, "fs139", mrs->log);
+        shmem_dump(pr, 64);
+        
         memset(pr, 0x0, pParBuf->dirBuffMax);
 
-        memcpy(&tmpDir, curDir, sizeof(struct directnFile_s));
-        tmpDir.dflen = 0;
-        
+        memcpy(tmpDir, curDir, sizeof(struct directnFile_s));
+        tmpDir->dflen = 0;
+
         //memset(&tmpDir.dfSFN[0], 0x20, 16);
         //tmpDir.dfSFN[0] = 0x2e;
-
-        strcpy(tmpDir.dfSFN, ".");
-        aspCompirseDEF(pr, &tmpDir);
+        
+        strcpy(tmpDir->dfSFN, ".");
+        aspCompirseDEF(pr, tmpDir);
         
         pa = curDir->pa;
         if (!pa) {
@@ -35753,13 +35786,15 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf_f(mrs->log, "curDir's pa = [%s] !!! \n", pa->dfSFN);
             print_f(&mrs->plog, "fs139", mrs->log);
         }
-        tmpDir.dfclstnum = pa->dfclstnum;
+        tmpDir->dfclstnum = pa->dfclstnum;
         //tmpDir.dfSFN[1] = 0x2e;
         pr += 32;
-        strcpy(tmpDir.dfSFN, "..");
-        aspCompirseDEF(pr, &tmpDir);
 
+        strcpy(tmpDir->dfSFN, "..");
+        aspCompirseDEF(pr, tmpDir);
+        
         shmem_dump(pParBuf->dirParseBuff, 64);
+        pParBuf->dirBuffUsed = 64;
         
         pfat->fatStatus |= ASPFAT_STATUS_FOLDRWT;
         pfat->fatStatus |= ASPFAT_STATUS_FATWT;
@@ -46667,6 +46702,7 @@ static int p8(struct procRes_s *rs)
                 
                 sprintf(sendbuf, "iface: %s addr: %s port: %d", rs->pnetIntfs, s, 8000);
 
+                break;
             }
         }
         freeifaddrs(ifaddr);
@@ -49040,7 +49076,7 @@ int main(int argc, char *argv[])
 
             sleep(3);
 
-            sprintf(syscmd, "udhcpc -i mlan0 -t 10 -n");
+            sprintf(syscmd, "udhcpc -i mlan0 -t 3 -n");
             ret = doSystemCmd(syscmd);
 
             sprintf_f(pmrs->log, "exec [%s]...\n", syscmd);
