@@ -43,6 +43,7 @@
 #define SPI_RX_QUAD 0x800         /* receive with 4 wires */
 #define BUFF_SIZE  2048
 
+#define USB_META_SIZE 512
 #define PT_BUF_SIZE (32768)
 #define MAX_EVENTS (32)
 #define EPOLLLT (0)
@@ -77,7 +78,7 @@
 #define  OPSUB_Enc_Dec_Test   0x8A
 
 #define MIN_SECTOR_SIZE  (512)
-#define RING_BUFF_NUM   (256)
+#define RING_BUFF_NUM   (1024)
 #define DATA_RX_SIZE RING_BUFF_NUM
 
 #define SPI_TRUNK_SZ 32768
@@ -5819,7 +5820,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             pmeta = &meta;
             ptm = (char *)pmeta;
             
-            msync(pMta, 512, MS_SYNC);
+            msync(pMta, USB_META_SIZE, MS_SYNC);
             memcpy(ptm, pMta, sizeof(struct aspMetaData_s));
 
             printf("[HS] get meta magic number: 0x%.2x, 0x%.2x \n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
@@ -5830,9 +5831,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
             usb_send(CBW, usbid, 31);
     
-            usb_send(ptm, usbid, sizeof(meta));
-            shmem_dump(ptm, sizeof(meta));
-    
+            usb_send(ptm, usbid, USB_META_SIZE);
+            shmem_dump(ptm, USB_META_SIZE);
+                
             usb_read(ptrecv, usbid, 13);
 #if DBG_USB_HS
             printf("[HS] dump 13 bytes");
@@ -6148,7 +6149,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushost = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 16MB
+        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 8MB
         if (!usbTx->pp) goto end;
         usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTx->totsz = DATA_RX_SIZE*bufsize;
@@ -6158,7 +6159,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushostd = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 16MB
+        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 8MB
         if (!usbTxd->pp) goto end;
         usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTxd->totsz = DATA_RX_SIZE*bufsize;
@@ -6446,9 +6447,9 @@ static char spi1[] = "/dev/spidev32766.0";
 #endif
                 while (1) {
                 if ((opc == 0x4c) && (dat == 0x01)) {
-                    recvsz = read(usbfd, ptrecv, 512);
+                    recvsz = read(usbfd, ptrecv, USB_META_SIZE);
 #if DBG_27_DV
-                    printf("[DV] usb RX size: %d / %d \n====================\n", recvsz, 512); 
+                    printf("[DV] usb RX size: %d / %d \n====================\n", recvsz, USB_META_SIZE); 
 #endif              
                     if (recvsz < 0) {
                         //usbentsRx = 0;
@@ -6457,7 +6458,7 @@ static char spi1[] = "/dev/spidev32766.0";
 
                     dat = 0;
                     
-                    if (recvsz != 512) {
+                    if (recvsz != USB_META_SIZE) {
                         printf("[DV] read meta failed, receive size: %d \n====================\n", recvsz); 
                         shmem_dump(ptrecv, recvsz);                        
 
@@ -6511,6 +6512,25 @@ static char spi1[] = "/dev/spidev32766.0";
                             if ((opc == 0x4c) && (dat == 0x01)) {                     
                                 continue;
                             }
+                            else if ((opc == 0x06) && (dat == 0x85)) {
+
+                                puscur = 0;
+                                ring_buf_init(usbTx);
+                                while (1) {
+                                    chq = 0;
+                                    pipRet = read(pipeRx[0], &chq, 1);
+                                    if (pipRet < 0) {
+                                        break;
+                                    }
+                                    else {
+#if 1 //DBG_27_DV
+                                        printf("[DV] clean pipe get chq: %c \n", chq);
+#endif
+                                    }
+                                }
+                        
+                                break;
+                            }
                             else if ((opc == 0x04) && (dat == 0x85)) {
 
                                 puscur = 0;
@@ -6549,6 +6569,24 @@ static char spi1[] = "/dev/spidev32766.0";
                             }
                         }
                         else if (cmd == 0x12) {
+                            if (opc == 0x06) {
+                                if (!puscur) {
+                                    puscur = pushost;                    
+
+                                    chq = 'd';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        printf("[DV]  pipe send meta ret: %d \n", pipRet);
+                                        goto end;
+                                    }
+                                }
+                                else {
+                                    /* should't be here */
+                                }
+                                
+                                acusz = 0;
+                                break;
+                            }
                             if (opc == 0x04) {
                                 if (!puscur) {
                                     puscur = pushost;                    
@@ -6869,8 +6907,8 @@ static char spi1[] = "/dev/spidev32766.0";
 
                 while (1) {
                 if ((opc == 0x4c) && (dat == 0x01)) {
-                    recvsz = read(usbfd, ptrecv, 512);
-                    printf("usb RX size: %d / %d \n====================\n", recvsz, 512); 
+                    recvsz = read(usbfd, ptrecv, USB_META_SIZE);
+                    printf("usb RX size: %d / %d \n====================\n", recvsz, USB_META_SIZE); 
                     if (recvsz < 0) {
                         //usbentsRx = 0;
                         break;
