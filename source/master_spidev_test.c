@@ -5741,7 +5741,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     struct aspMetaData_s meta, *pmeta=0;
     int len=0, pieRet=0;
     char *ptm=0, *pcur=0, *addr=0;
-    char chr;
+    char chr=0, opc=0, dat=0;
     char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     int usbid=0;
@@ -5801,10 +5801,14 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             cmdchr = cmdMtx[0][1];
             break;
         case 'd':
+            opc = OP_SINGLE;
+            dat = OPSUB_USB_Scan;
             cmdchr = cmdMtx[1][1];
             break;
         case 'a':
-            cmdchr = cmdMtx[2][1];
+            opc = OP_DUPLEX;
+            dat = OPSUB_USB_Scan;
+            cmdchr = cmdMtx[1][1];
             break;
         case 's':
             cmdchr = cmdMtx[3][1];
@@ -5824,9 +5828,11 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             memcpy(ptm, pMta, sizeof(struct aspMetaData_s));
 
             printf("[HS] get meta magic number: 0x%.2x, 0x%.2x \n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
-    
+
+#if 0 /* remove ready */    
             insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
             usb_send(CBW, usbid, 31);
+#endif
 
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
             usb_send(CBW, usbid, 31);
@@ -5844,10 +5850,13 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             //pieRet = write(pPrx[1], &chr, 1);
         }
         else if (cmdchr == 0x02) {
+        
+#if 0 /* remove ready */
             insert_cbw(CBW, CBW_CMD_READY, 0, 0);
             usb_send(CBW, usbid, 31);
+#endif
 
-            insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_SINGLE, OPSUB_USB_Scan);
+            insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
             usb_send(CBW, usbid, 31);
 
             usb_read(ptrecv, usbid, 13);
@@ -5856,7 +5865,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             shmem_dump(ptrecv, 13);
 #endif
 
-            insert_cbw(CBW, CBW_CMD_START_SCAN, OP_SINGLE, OPSUB_USB_Scan);
+            insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
             usb_send(CBW, usbid, 31);     
         
 #if USB_HS_SAVE_RESULT
@@ -6136,11 +6145,13 @@ static char spi1[] = "/dev/spidev32766.0";
         char chq=0, chd=0;
         struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
         int *piptx=0, *piprx=0;
+        
         if (arg0 > 0) {
             bufsize = arg0;        
-        } else {
-            bufsize = PT_BUF_SIZE;
         }
+        
+        bufsize = PT_BUF_SIZE;
+        
         printf(" recv buff size:[%d] \n", bufsize);
         
         totSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -6149,7 +6160,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushost = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 8MB
+        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 32MB
         if (!usbTx->pp) goto end;
         usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTx->totsz = DATA_RX_SIZE*bufsize;
@@ -6159,7 +6170,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushostd = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 8MB
+        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 32MB
         if (!usbTxd->pp) goto end;
         usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTxd->totsz = DATA_RX_SIZE*bufsize;
@@ -6292,7 +6303,7 @@ static char spi1[] = "/dev/spidev32766.0";
 #if DBG_27_EPOL
                 printf("[ePol] Tx cmd: 0x%.2x, opc: 0x%.2x, dat: 0x%.2x, lastsz: %d, cnt: %d \n", cmd, opc, dat, lastsz, cntTx);
 #endif
-                if ((cmd == 0x12) && (opc == 0x04)) {
+                if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05))) {
 
 #if 0
                     while (1) {
@@ -6347,7 +6358,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             lens = ring_buf_cons(usbCur, &addrd);                
                             while (lens <= 0) {
                                 //printf("[DV] cons ring buff ret: %d \n", lens);
-                                usleep(100);
+                                usleep(1000);
                                 lens = ring_buf_cons(usbCur, &addrd);                
                             }
 
@@ -6512,7 +6523,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             if ((opc == 0x4c) && (dat == 0x01)) {                     
                                 continue;
                             }
-                            else if ((opc == 0x06) && (dat == 0x85)) {
+                            else if ((opc == 0x04) && (dat == 0x85)) {
 
                                 puscur = 0;
                                 ring_buf_init(usbTx);
@@ -6531,7 +6542,7 @@ static char spi1[] = "/dev/spidev32766.0";
                         
                                 break;
                             }
-                            else if ((opc == 0x04) && (dat == 0x85)) {
+                            else if ((opc == 0x05) && (dat == 0x85)) {
 
                                 puscur = 0;
                                 ring_buf_init(usbTx);
@@ -6569,7 +6580,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             }
                         }
                         else if (cmd == 0x12) {
-                            if (opc == 0x06) {
+                            if (opc == 0x04) {
                                 if (!puscur) {
                                     puscur = pushost;                    
 
@@ -6587,18 +6598,18 @@ static char spi1[] = "/dev/spidev32766.0";
                                 acusz = 0;
                                 break;
                             }
-                            if (opc == 0x04) {
+                            if (opc == 0x05) {
                                 if (!puscur) {
                                     puscur = pushost;                    
 
-                                    chq = 'd';
+                                    chq = 'a';
                                     pipRet = write(pipeTx[1], &chq, 1);
                                     if (pipRet < 0) {
                                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
                                         goto end;
                                     }
 
-                                    chd = 'd';
+                                    chd = 'a';
                                     pipRet = write(pipeTxd[1], &chd, 1);
                                     if (pipRet < 0) {
                                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
@@ -6703,7 +6714,8 @@ static char spi1[] = "/dev/spidev32766.0";
         //#define PT_BUF_SIZE (512)
         struct pollfd ptfd[1];
         static char ptdevpath[] = "/dev/g_printer";
-        static char ptfileSend[] = "/mnt/mmc2/usb/handmade_o.jpg";
+        static char samplePath[] = "/mnt/mmc2/usb/handmade_o.jpg";
+        static char *ptfileSend;
         //static char ptfileSend[] = "/mnt/mmc2/usb/greenhill_05.jpg";
         char ptfilepath[128];
         char *ptrecv, *ptsend, *palloc=0;
@@ -6773,6 +6785,13 @@ static char spi1[] = "/dev/spidev32766.0";
             printf(" recv buff alloc failed! size: %d \n", maxsz);
             goto end;
         }
+
+        if (argc > 2) {
+            printf(" input file: %s \n", argv[2]);
+            ptfileSend = argv[2];
+        } else {
+            ptfileSend = samplePath;
+        }
         
         printf(" open file [%s] \n", ptfileSend);
         fsend = fopen(ptfileSend, "r");
@@ -6783,11 +6802,9 @@ static char spi1[] = "/dev/spidev32766.0";
         }   
         printf(" [%s] file open succeed \n", ptfileSend);
 
-        if (arg0 > 0) {
-            bufsize = arg0;        
-        } else {
-            bufsize = PT_BUF_SIZE;
-        }
+        
+        bufsize = PT_BUF_SIZE;
+        
         printf(" recv buff size:[%d] \n", bufsize);
 
         ptret = fseek(fsend, 0, SEEK_END);
@@ -6940,12 +6957,18 @@ static char spi1[] = "/dev/spidev32766.0";
                             else if ((opc == 0x04) && (dat == 0x85)) {
                                 break;
                             }
+                            else if ((opc == 0x05) && (dat == 0x85)) {
+                                break;
+                            }
                             else {
                                 continue;
                             }
                         }
                         else if (cmd == 0x12) {
                             if (opc == 0x04) {
+                                break;
+                            }
+                            else if (opc == 0x05) {
                                 break;
                             }
                             else {
@@ -6963,7 +6986,7 @@ static char spi1[] = "/dev/spidev32766.0";
             if (usbentsTx == 1) {
                 //printf("Tx cmd: 0x%.2x, opc: 0x%.2x, dat: 0x%.2x, lastsz: %d, cnt: %d \n", cmd, opc, dat, lastsz, cntTx);
                 
-                if ((cmd == 0x12) && (opc == 0x04)) {
+                if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05))) {
                     printf("start to send image size: %d \n", maxsz);
                     lastsz = maxsz;        
                     ptsend = palloc;
