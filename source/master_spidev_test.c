@@ -78,7 +78,7 @@
 #define  OPSUB_Enc_Dec_Test   0x8A
 
 #define MIN_SECTOR_SIZE  (512)
-#define RING_BUFF_NUM   (1024)
+#define RING_BUFF_NUM   (3260) //(1024)
 #define DATA_RX_SIZE RING_BUFF_NUM
 
 #define SPI_TRUNK_SZ 32768
@@ -285,6 +285,7 @@ struct usbhost_s{
     char *puhsmeta;
     int *pushrx;
     int *pushtx;
+    int pushcnt;
 };
 
 struct calab_data_s {
@@ -5808,10 +5809,14 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         case 'a':
             opc = OP_DUPLEX;
             dat = OPSUB_USB_Scan;
+            usleep(10000);
+            //sleep(5);
             cmdchr = cmdMtx[1][1];
             break;
         case 's':
-            cmdchr = cmdMtx[3][1];
+            opc = OP_DUPLEX;
+            dat = OPSUB_USB_Scan;
+            cmdchr = cmdMtx[1][1];
             break;
         case 'p':
             cmdchr = cmdMtx[4][1];
@@ -5897,7 +5902,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                     memcpy(pcur, addr, recvsz);
 #endif
                     ring_buf_prod(pTx);        
-                } 
+                }
                 
                 if (recvsz < 0) {
                     break;
@@ -6145,6 +6150,7 @@ static char spi1[] = "/dev/spidev32766.0";
         char chq=0, chd=0;
         struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
         int *piptx=0, *piprx=0;
+        int cntLp0=0, cntLp1=0, cntLpx=0;
         
         if (arg0 > 0) {
             bufsize = arg0;        
@@ -6160,7 +6166,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushost = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 32MB
+        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 100MB 
         if (!usbTx->pp) goto end;
         usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTx->totsz = DATA_RX_SIZE*bufsize;
@@ -6170,7 +6176,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushostd = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 32MB
+        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 100MB
         if (!usbTxd->pp) goto end;
         usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTxd->totsz = DATA_RX_SIZE*bufsize;
@@ -6324,6 +6330,7 @@ static char spi1[] = "/dev/spidev32766.0";
                     }
 #endif
 
+#if 0
                     if (puscur) {
                         usbCur = puscur->pushring;
                         piptx = puscur->pushtx;
@@ -6331,12 +6338,95 @@ static char spi1[] = "/dev/spidev32766.0";
                     } else {
                         /* error */
                     }
+#endif
+                    if ((opc == 0x05) && (!pushostd->pushcnt)) {
 
+                        cntLp0 = 0;
+                        while (1) {
+                            chq = 0;
+                            pipRet = 0;
+                            pipRet = read(pipeRx[0], &chq, 1);
+                            if (pipRet < 0) {
+                                //printf("[DV] get pipe send data ret: %d, error!!\n", pipRet);
+                                usleep(10000);
+                                continue;
+                            }
+                            else {
+                                //printf("[LP0] chq: %c - %d \n", chq, cntLp0);
+                                cntLp0++;
+                                if (chq == 'E') {
+                                    printf("[LP0] chq: %c - %d \n", chq, cntLp0);
+                                    break;
+                                }
+                                else {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        pushost->pushcnt = cntLp0;
+
+                        cntLp1 = 0;
+                        while (1) {
+                            chq = 0;
+                            pipRet = 0;
+                            pipRet = read(pipeRxd[0], &chq, 1);
+                            if (pipRet < 0) {
+                                //printf("[DV] get pipe send data ret: %d, error!!\n", pipRet);
+                                usleep(10000);
+                                continue;
+                            }
+                            else {
+                                //printf("[LP1] chq: %c - %d \n", chq, cntLp1);
+                                cntLp1++;
+                                if (chq == 'E') {
+                                    printf("[LP1] chq: %c - %d \n", chq, cntLp1);
+                                    break;
+                                }
+                                else {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        pushostd->pushcnt = cntLp1;
+                        
+                    }
+
+                    if ((opc == 0x04) && (!pushost->pushcnt)) {
+                        cntLp0 = 0;
+                        while (1) {
+                            chq = 0;
+                            pipRet = 0;
+                            pipRet = read(pipeRx[0], &chq, 1);
+                            if (pipRet < 0) {
+                                //printf("[DV] get pipe send data ret: %d, error!!\n", pipRet);
+                                usleep(10000);
+                                continue;
+                            }
+                            else {
+                                printf("[LP0] chq: %c - %d \n", chq, cntLp0);
+                                cntLp0++;
+                                if (chq == 'E') {
+                                    break;
+                                }
+                                else {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        pushost->pushcnt = cntLp0;
+                    }
+                    
                     while (1) {       
 #if DBG_27_DV
                         printf("[DV] addrd: 0x%.8x \n", addrd);
 #endif
-                        while (!addrd) {
+                        
+
+                        while ((!addrd) && (puscur->pushcnt > 0)) {
+#if 0
                             chq = 0;
                             pipRet = read(piprx[0], &chq, 1);
                             if (pipRet < 0) {
@@ -6354,6 +6444,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                 }
 #endif
                             }
+#endif
 
                             lens = ring_buf_cons(usbCur, &addrd);                
                             while (lens <= 0) {
@@ -6361,10 +6452,16 @@ static char spi1[] = "/dev/spidev32766.0";
                                 usleep(1000);
                                 lens = ring_buf_cons(usbCur, &addrd);                
                             }
+                            puscur->pushcnt --;
 
+                            if (puscur->pushcnt == 0) {
+                                printf("[DV] the last trunk size is %d \n", lens);
+                            }
+#if 0
                             if (chq == 'E') {
                                 printf("[DV] the last trunk size is %d \n", lens);
                             }
+#endif
                         }
 
                         if (cntTx == 0) {
@@ -6389,7 +6486,8 @@ static char spi1[] = "/dev/spidev32766.0";
                             
                             if (lens == sendsz) {
                                 addrd = 0;
-                                if (chq == 'E') break;
+                                //if (chq == 'E') break;
+                                if (puscur->pushcnt == 0) break;
                             } else {
                                 lens -= sendsz;
                                 addrd += sendsz;
@@ -6401,7 +6499,7 @@ static char spi1[] = "/dev/spidev32766.0";
 
                     }
 
-                    if ((chq == 'E') && (addrd == 0)) {
+                    if ((puscur->pushcnt == 0) && (addrd == 0)) {
 
                         clock_gettime(CLOCK_REALTIME, &tend);
                         printf("[DV] end time %llu ms \n", time_get_ms(&tend));
@@ -6590,6 +6688,10 @@ static char spi1[] = "/dev/spidev32766.0";
                                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
                                         goto end;
                                     }
+                                    
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
                                 }
                                 else {
                                     /* should't be here */
@@ -6609,15 +6711,23 @@ static char spi1[] = "/dev/spidev32766.0";
                                         goto end;
                                     }
 
-                                    chd = 'a';
+                                    chd = 's';
                                     pipRet = write(pipeTxd[1], &chd, 1);
                                     if (pipRet < 0) {
                                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
                                         goto end;
                                     }
+
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
                                 }
                                 else if (puscur == pushost) {
                                     puscur = pushostd;
+                                    
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
                                 }
                                 else {
                                     /* should't be here */
