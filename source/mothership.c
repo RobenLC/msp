@@ -27,7 +27,8 @@
 #define MSP_VERSION "Thu Mar 8 17:14:30 2018 \
 ab1f696317 \
 show error msg when p6 get empty string \
-debug 06"
+debug 06, fix 01 \
+parsing buff issue"
 
 #define SPI1_ENABLE (1) 
 
@@ -27426,7 +27427,7 @@ static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
 #endif
 
     ring_buf_init(&mrs->dataRx);
-    pabuf->dirBuffUsed = 0;
+    //pabuf->dirBuffUsed = 0;
     modersp->v = 0;
     
     sprintf_f(mrs->log, "trigger spi0 \n");
@@ -27471,17 +27472,22 @@ static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf_f(mrs->log, "%d end, bufn: %d, spirecv: %d\n", modersp->v, bufn, pabuf->dirBuffUsed);
         print_f(&mrs->plog, "fs46", mrs->log);
 
-        dstsz = (bufn + 1) * SPI_TRUNK_SZ;
-        dst = aspMemalloc(dstsz, 10);
-        if (!dst) {
-            sprintf_f(mrs->log, "%d. len: %d\n", loop, len);
-            print_f(&mrs->plog, "fs46", mrs->log);
-            modersp->r = 0xed;
-            return 1;
+        if (!pabuf->dirParseBuff) {
+            dstsz = (bufn + 1) * SPI_TRUNK_SZ;
+            dst = aspMemalloc(dstsz, 10);
+            if (!dst) {
+                sprintf_f(mrs->log, "cnt: %d, len: %d\n", loop, len);
+                print_f(&mrs->plog, "fs46", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            }
+            memset(dst, 0, dstsz);
+            pabuf->dirBuffMax = dstsz;
+            pabuf->dirParseBuff = dst;
+        } else {
+            dst = pabuf->dirParseBuff + pabuf->dirBuffUsed;
         }
-        memset(dst, 0, dstsz);
-        pabuf->dirBuffMax = dstsz;
-
+        
         totsz = 0;
         pt = dst;
         loop = modersp->v;
@@ -27506,8 +27512,8 @@ static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp)
             print_f(&mrs->plog, "fs46", mrs->log);
         }
 
-        //pabuf->dirBuffUsed = totsz;
-        pabuf->dirParseBuff = dst;
+        pabuf->dirBuffUsed += totsz;
+        //pabuf->dirParseBuff = dst;
         modersp->m = modersp->m + 1;
         return 2;
     }
@@ -27934,7 +27940,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
-    int val=0, i=0, ret=0, err=0;
+    int val=0, i=0, ret=0, err=0, clstlen=0, datlen=0;
     char *pr=0;
     uint32_t secStr=0, secLen=0;
     struct aspConfig_s *pct=0;
@@ -28040,7 +28046,8 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (err < 0) {
             modersp->r = 0xed;
         }
-    }else {
+    }
+    else {
 
         if (!pftb->h) {
             pflsh = 0;
@@ -28056,14 +28063,35 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             pflnt = pflsh;
             while (pflnt) {
+                clstlen += pflnt->ftLen;
                 sprintf_f(mrs->log, "    str:%d len:%d\n", pflnt->ftStart, pflnt->ftLen);
                 print_f(&mrs->plog, "fs51", mrs->log);
                 pflnt = pflnt->n;
             }
             pftb->h = pflsh;
             pftb->c = pftb->h;
+
+            sprintf_f(mrs->log, "total cluster len:%d\n", clstlen);
+            print_f(&mrs->plog, "fs51", mrs->log);            
+
+            datlen = (clstlen * psec->secPrClst) * 512;
+            pr = aspMemalloc(datlen, 10);
+            if (!pr) {
+                sprintf_f(mrs->log, "memory alloc error len: %d\n", datlen);
+                print_f(&mrs->plog, "fs51", mrs->log);
+                modersp->r = 0xed;
+                return 1;
+            } else {
+                sprintf_f(mrs->log, "parsing buffer memory alloc succeed len: %d(10)\n", datlen);
+                print_f(&mrs->plog, "fs51", mrs->log);
+            }
+            memset(pr, 0, datlen);
+            pParBuf->dirBuffMax = datlen;
+            pParBuf->dirParseBuff = pr;
+            pParBuf->dirBuffUsed = 0;
         }
 
+            
         pflnt = pftb->c;
                  
         secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
@@ -28074,7 +28102,7 @@ static int fs51(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         if (secLen < 16) secLen = 16;
 
-        sprintf_f(mrs->log, "buff empty, set str:%d, len:%d \n", secStr, secLen);
+        sprintf_f(mrs->log, "buff empty, set str:%d, len:%d, pbuff used: %d \n", secStr, secLen, pParBuf->dirBuffUsed);
         print_f(&mrs->plog, "fs51", mrs->log);
 
         cfgTableSet(pct, ASPOP_SDFAT_RD, 1);
@@ -30344,7 +30372,8 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
             mrs->folder_dirt = 0;
             modersp->r = 0xed;
         }
-    } else {
+    }
+    else {
 
         if (pftb->h) {
             pflnt = pftb->h;
@@ -35510,7 +35539,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
     if (!pParBuf->dirParseBuff) {
         pParBuf->dirParseBuff = aspMemalloc(32768, 10);    
         pParBuf->dirBuffMax = 32768;
-        sprintf_f(mrs->log, "WARNNING!! buffer is null!! allocate 32768 bytes, addr: 0x%.8x \n", pParBuf->dirParseBuff);
+        sprintf_f(mrs->log, "WARNNING!! buffer is null!! allocate %d bytes, addr: 0x%.8x \n", 32768, pParBuf->dirParseBuff);
         print_f(&mrs->plog, "fs139", mrs->log);
     }
     else {
@@ -35900,12 +35929,12 @@ static int fs140(struct mainRes_s *mrs, struct modersp_s *modersp)
         pflnt = pftb->c;
                  
         secStr = (pflnt->ftStart - 2) * psec->secPrClst + psec->secWhroot;
-        secLen = pflnt->ftLen * psec->secPrClst;
+        secLen = 16; //pflnt->ftLen * psec->secPrClst;
 
         c->opinfo = secStr;
         p->opinfo = secLen;
 
-        if (secLen < 16) secLen = 16;
+        //if (secLen < 16) secLen = 16;
 
         sprintf_f(mrs->log, "set secStart:%d, secLen:%d \n", secStr, secLen);
         print_f(&mrs->plog, "fs140", mrs->log);
@@ -37294,7 +37323,7 @@ static int p2(struct procRes_s *rs)
 
                 ring_buf_set_last(rs->pdataRx, opsz);
                 rs_ipc_put(rs, "S", 1);
-                pabuf->dirBuffUsed += totsz;
+                //pabuf->dirBuffUsed += totsz;
                 //msync(pabuf->dirParseBuff, len, MS_SYNC);
                 rs_ipc_put(rs, "S", 1);
 
