@@ -13809,7 +13809,7 @@ static int stdob_08(struct psdata_s *data)
     switch (rlt) {
         case STINIT:
             pdt = &pct[ASPOP_SCAN_DOUBLE];
-            if (pdt->opCode != OP_DOUBLE) {
+            if ((pdt->opCode != OP_DOUBLE) && (pdt->opCode != OP_MDOUBLE)) {
                 sprintf_f(rs->logs, "op_08, OP_DOUBLE opcode is wrong val:%x\n", pdt->opCode); 
                 print_f(rs->plogs, "DOB", rs->logs);  
                 data->result = emb_result(data->result, EVTMAX);
