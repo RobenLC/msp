@@ -29,7 +29,7 @@ ab1f696317 \
 show error msg when p6 get empty string \
 debug 06, fix 01 \
 parsing buff issue \
-mdouble issue "
+mdouble issue decrease delay"
 
 #define SPI1_ENABLE (1) 
 
@@ -26795,7 +26795,7 @@ static int fs33(struct mainRes_s *mrs, struct modersp_s *modersp)
     ring_buf_init(&mrs->cmdTx);
 
     mrs_ipc_put(mrs, "n", 1, 2);
-    usleep(100000);
+    //usleep(100000);
 
 #if SPI_KTHREAD_USE
     bitset = 0;
@@ -26842,7 +26842,7 @@ static int fs34(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs35(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
 #define QSIZE 7
-#define QDELAY 1000
+#define QDELAY 0
     int ret, bitset, tmc, len;
     char ch, *addr=0, *dst=0;
     struct sdFAT_s *pfat=0;
@@ -37103,7 +37103,7 @@ static int p2(struct procRes_s *rs)
                             opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                             if (opsz == 0) {
 #if SPI_KTHREAD_DLY
-                                usleep(100000);
+                                usleep(1000);
                                 sprintf_f(rs->logs, "kth opsz:%d\n", opsz);
                                 print_f(rs->plogs, "P2", rs->logs);  
 #endif
@@ -37990,7 +37990,7 @@ static int p2(struct procRes_s *rs)
                             opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                             if (opsz == 0) {
 #if SPI_KTHREAD_DLY
-                                usleep(100000);
+                                usleep(1000);
                                 sprintf_f(rs->logs, "kth opsz:%d\n", opsz);
                                 print_f(rs->plogs, "P2", rs->logs);  
 #endif
@@ -38161,7 +38161,7 @@ static int p2(struct procRes_s *rs)
                             opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                             if (opsz == 0) {
 #if SPI_KTHREAD_DLY
-                                usleep(100000);
+                                usleep(1000);
                                 sprintf_f(rs->logs, "kth opsz:%d\n", opsz);
                                 print_f(rs->plogs, "P2", rs->logs);  
 #endif
@@ -38596,7 +38596,7 @@ static int p3(struct procRes_s *rs)
                             opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
                             if (opsz == 0) {
 #if SPI_KTHREAD_DLY
-                                usleep(100000);
+                                usleep(1000);
                                 sprintf_f(rs->logs, "kth opsz:%d\n", opsz);
                                 print_f(rs->plogs, "P3", rs->logs);  
 #endif
@@ -39157,7 +39157,7 @@ static int p4(struct procRes_s *rs)
                 len = 0;
                 len = ring_buf_get(rs->pcmdTx, &addr);
                 while (len <= 0) {
-                    usleep(10000000);
+                    usleep(10000);
                     len = ring_buf_get(rs->pcmdTx, &addr);
                 }
                 acuhk = 0;
@@ -39379,7 +39379,7 @@ static int p4(struct procRes_s *rs)
                     len = 0;
                     len = ring_buf_get(rs->pcmdTx, &addr);
                     while (len <= 0) {
-                        usleep(10000000);
+                        usleep(10000);
                         len = ring_buf_get(rs->pcmdTx, &addr);
                     }
 
@@ -39834,7 +39834,7 @@ static int p4(struct procRes_s *rs)
                 len = 0;
                 len = ring_buf_get(rs->pcmdTx, &addr);
                 while (len <= 0) {
-                    usleep(1000000);
+                    usleep(10000);
                     len = ring_buf_get(rs->pcmdTx, &addr);
                 }
                 
@@ -40085,7 +40085,7 @@ static int p4(struct procRes_s *rs)
                     len = ring_buf_get(rs->pcmdTx, &addr);
                     while (len <= 0) {
                         rs_ipc_put(rs, "h", 1);
-                        usleep(1000000);
+                        usleep(10000);
                         len = ring_buf_get(rs->pcmdTx, &addr);
                     }
 
