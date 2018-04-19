@@ -28,7 +28,8 @@
 ab1f696317 \
 show error msg when p6 get empty string \
 debug 06, fix 01 \
-parsing buff issue"
+parsing buff issue \
+mdouble issue "
 
 #define SPI1_ENABLE (1) 
 
@@ -26586,6 +26587,7 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
             if (modersp->d) {
                 modersp->m = modersp->d;
                 modersp->d = 0;
+                modersp->r = 0;
                 return 0;
             } else {
                 modersp->r = 1;
@@ -26675,7 +26677,7 @@ static int fs28(struct mainRes_s *mrs, struct modersp_s *modersp)
             return 1;
         } else  {
             modersp->r = 3;
-         return 0;
+            return 0;
         }
     }
     return 0; 
@@ -44860,6 +44862,10 @@ static int p6(struct procRes_s *rs)
                                     strncpy(&recvbuf[n], rs->logs, strlen(rs->logs));
                                     n += strlen(rs->logs);
                                 }
+                                else {
+                                    sprintf_f(rs->logs, "Error!!! get 0x%.2x = 0x%.2x (%d) mask: 0x%x out of range ret: %d\n", op, cd, fg, pdt->opMask, ret);
+                                    print_f(rs->plogs, "P6", rs->logs);
+                                }
                             }
                         }
                     }
@@ -47964,7 +47970,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_COLRMOD;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_3;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_COMPRES_RATE:
@@ -47972,7 +47978,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_COMPRAT;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_3;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_SCAN_SINGLE: 
@@ -48004,7 +48010,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_RESOLTN;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_3;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_SCAN_GRAVITY:
@@ -48012,7 +48018,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_SCANGAV;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_2;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_MAX_WIDTH:   
@@ -48020,7 +48026,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_MAXWIDH;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_2;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_WIDTH_ADJ_H: 
@@ -48060,7 +48066,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_INTERIMG;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_3;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_AFEIC_SEL: 
@@ -48076,7 +48082,7 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_EXTPULSE;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
-                ctb->opMask = ASPOP_MASK_3;
+                ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
             case ASPOP_SDFAT_RD: 
