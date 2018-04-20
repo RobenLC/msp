@@ -29,7 +29,8 @@ ab1f696317 \
 show error msg when p6 get empty string \
 debug 06, fix 01 \
 parsing buff issue \
-mdouble issue decrease delay"
+mdouble issue decrease delay \
+no upsd everytime"
 
 #define SPI1_ENABLE (1) 
 
@@ -7720,9 +7721,9 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
 
     while (!(srctr->dirFATDirty & 0x2)) {
         msync(srctr, sizeof(struct sdFatDir_s), MS_SYNC);    
-        usleep(1000);
+        usleep(100000);
         cntout++;
-        if (cntout > 100) {
+        if (cntout > 5) {
             sprintf_f(rs->logs, "time out break !!!cnt: %d \n", cntout);
             print_f(rs->plogs, "CPFAT", rs->logs);    
             return 1;
@@ -34753,12 +34754,12 @@ static int fs125(struct mainRes_s *mrs, struct modersp_s *modersp)
     pfatdir = &mrs->aspFat.fatDirTr;
     msync(pfatdir, sizeof(struct sdFatDir_s), MS_SYNC);
 
-/*
+#if 1
     if (!pfatdir->dirFATDirty) {
         modersp->r = 1;
         return 1;
     }
-*/
+#endif
 
 #if 1 /* set to 1 to notice fat update */
     pfatdir->dirFATDirty |= 0x2;
@@ -45884,6 +45885,9 @@ static int p6(struct procRes_s *rs)
                             } else {
                                 strncpy(upld->dfSFN, nexinfo->infoStr, len);
                                 upld->dfSFN[len] = '\0';
+                                strncpy(upld->dfLFN,  nexinfo->infoStr, len);
+                                upld->dflen = len;
+                                upld->dfLFN[len] = '\0';
                             }
                         } else {
                             if (ret == (len - 1 - 3)) {
