@@ -24,13 +24,14 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Mar 8 17:14:30 2018 \
-ab1f696317 \
+#define MSP_VERSION "Suu Apil 23 00:00:00 2018 \
+xxxxxxxxxx \
 show error msg when p6 get empty string \
 debug 06, fix 01 \
 parsing buff issue \
 mdouble issue decrease delay \
-no upsd everytime"
+no upsd everytime \
+BMP test on"
 
 #define SPI1_ENABLE (1) 
 
@@ -256,7 +257,7 @@ static int *totSalloc=0;
 #define ANSP0_RECOVER (1)
 
 #define PI (CFLOAT)(3.1415)
-#define BMP_TEST (0)
+#define BMP_TEST (1)
 
 #define SD_RDWT_USING_META (1)
 #define MIN_MEM_ALLOC_SIZE (4)
@@ -29196,8 +29197,8 @@ static int fs69(struct mainRes_s *mrs, struct modersp_s *modersp)
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     while (len > 0) {
 
-        sprintf_f(mrs->log, "ch: %c - end\n", ch);
-        print_f(&mrs->plog, "fs69", mrs->log);
+        //sprintf_f(mrs->log, "ch: %c - end\n", ch);
+        //print_f(&mrs->plog, "fs69", mrs->log);
         modersp->c ++;
         
         if (ch == 'N') {
@@ -40783,7 +40784,7 @@ static int atFindIdx(char *str, char ch)
 #define LOG_P6_RX_EN    (1)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
-#define LOG_P6_CROP_EN    (0)
+#define LOG_P6_CROP_EN    (1)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
@@ -43894,7 +43895,11 @@ static int p6(struct procRes_s *rs)
         if (opcode == 0x19) { /* send CROP info (new)*/
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (CROP new)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
-
+            
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
             switch (tmp) {
             case RESOLUTION_1200:
