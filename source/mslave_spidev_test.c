@@ -1870,7 +1870,7 @@ static int insert_cbw(char *cbw, char cmd, char opc, char dat)
 
     return 0;
 }
-#define USB_TX_LOG 0
+#define USB_TX_LOG 1
 static int usb_send(char *pts, int usbfd, int len)
 {
     int ret=0, send=0;
@@ -1882,7 +1882,7 @@ static int usb_send(char *pts, int usbfd, int len)
     }
 #endif
 
-#if 1
+#if 0
     if (!pts) return -1;
     if (!usbfd) return -2;
 
@@ -1916,7 +1916,7 @@ static int usb_send(char *pts, int usbfd, int len)
 static int usb_read(char *ptr, int usbfd, int len)
 {
     int ret=0, recv=0;
-#if 1
+#if 0
     struct pollfd pllfd[1];
     if (!ptr) return -1;
     if (!usbfd) return -2;
@@ -1943,7 +1943,7 @@ static int usb_read(char *ptr, int usbfd, int len)
     }
 #else
     recv = read(usbfd, ptr, len);
-    printf("[UR] usb read %d bytes, ret: %d (2)\n", len, recv);
+    //printf("[UR] usb read %d bytes, ret: %d (2)\n", len, recv);
 #endif
     
     return recv;    
@@ -2230,7 +2230,9 @@ static char path[256];
         while(1) {
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
 
-            if (recvsz < 0) {
+            if (recvsz == 0) {
+                continue;
+            } else if (recvsz < 0) {
                 cntRecv++;
                 if (cntRecv > 0xffff) {
                     break;
@@ -2349,7 +2351,7 @@ static char path[256];
             printf("open device[%s]\n", ptdevpath); 
         }
 
-        usb_nonblock_set(usbid);
+        //usb_nonblock_set(usbid);
 
         pmeta = &meta;
         ptm = (char *)pmeta;
@@ -2414,11 +2416,14 @@ static char path[256];
         while(1) {
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
 
-            if (recvsz < 0) {
+            if (recvsz == 0) {
+                continue;
+            } else if (recvsz < 0) {
                 cntRecv++;
                 if (cntRecv > 0xffff) {
                     break;
                 }
+                continue;
             } else {
                 cntRecv = 0;
             }

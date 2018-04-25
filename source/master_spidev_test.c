@@ -130,6 +130,11 @@
 #define OP_SUP               0x31
 #define OP_SAVE             0x32
 
+/* usblp ioctls */
+#define IOCNR_CONTI_READ_START  8
+#define IOCNR_CONTI_READ_STOP    9
+#define IOCNR_CONTI_READ_PROBE    10
+
 /* Data requested by client. */
 #define PRINT_ACCEL     (0x01)
 #define PRINT_GYRO      (0x02)
@@ -5656,7 +5661,7 @@ static int usb_send(char *pts, int usbfd, int len)
     }
 #endif
 
-#if 1
+#if 0
     if (!pts) return -1;
     if (!usbfd) return -2;
 
@@ -5693,7 +5698,7 @@ static int usb_read(char *ptr, int usbfd, int len)
 {
     int ret=0, recv=0;
     
-#if 1
+#if 0
     struct pollfd pllfd[1];
     if (!ptr) return -1;
     if (!usbfd) return -2;
@@ -5722,7 +5727,7 @@ static int usb_read(char *ptr, int usbfd, int len)
     }
 #else
     recv = read(usbfd, ptr, len);
-    printf("[UR] usb read %d bytes, ret: %d (2)\n", len, recv);
+    //printf("[UR] usb read %d bytes, ret: %d (2)\n", len, recv);
 #endif
     
     return recv;    
@@ -5905,7 +5910,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 }
                 
                 if (recvsz < 0) {
-                    break;
+                    printf("[HS] usb read ret: %d !!!", recvsz);
+                    continue;
+                    //break;
                 }
                 else if (recvsz == 0) {
                     continue;
@@ -6138,7 +6145,7 @@ static char spi1[] = "/dev/spidev32766.0";
         char ptfilepath[128];
         char *ptrecv, *ptsend, *palloc=0;
         int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0;
-        int cntTx=0, usCost=0, bufsize=0, seqtx=0, retry=0;
+        int cntTx=0, usCost=0, bufsize=0, seqtx=0, retry=0, msCost=0;
         double throughput=0.0;
         FILE *fsave=0;
         struct timespec tstart, tend;
@@ -6504,8 +6511,9 @@ static char spi1[] = "/dev/spidev32766.0";
                         clock_gettime(CLOCK_REALTIME, &tend);
                         printf("[DV] end time %llu ms \n", time_get_ms(&tend));
                         usCost = test_time_diff(&tstart, &tend, 1000);
+                        //msCost = test_time_diff(&tstart, &tend, 1000000);
                         throughput = acusz*8.0 / usCost*1.0;
-                        printf("[DV] usb throughput: %d bytes / %d us = %lf MBits\n", acusz, usCost, throughput);
+                        printf("[DV] usb throughput: %d bytes / %d us = %lf MBits\n", acusz, usCost / 1000, throughput);
 
                         cntTx = 0;
                         cmd = 0;
@@ -7145,9 +7153,6 @@ static char spi1[] = "/dev/spidev32766.0";
                         }
                     }
                     
-                    if (cntTx == 0) {
-                        clock_gettime(CLOCK_REALTIME, &tstart);
-                    }    
             
                     sendsz = write(usbfd, ptsend, wrtsz);
                     if (sendsz < 0) {
@@ -7155,7 +7160,11 @@ static char spi1[] = "/dev/spidev32766.0";
                         usbentsTx = 0;
                         break;
                     }  
-                    
+
+                    if (cntTx == 0) {
+                        clock_gettime(CLOCK_REALTIME, &tstart);
+                    }    
+
 #if USB_TX_LOG
                     printf("usb TX size: %d, ret: %d \n", wrtsz, sendsz);
 #endif
@@ -7199,7 +7208,7 @@ static char spi1[] = "/dev/spidev32766.0";
             
                     usCost = test_time_diff(&tstart, &tend, 1000);
                     throughput = maxsz*8.0 / usCost*1.0;
-                    printf("usb throughput: %d bytes / %d us = %lf MBits\n", maxsz, usCost, throughput);
+                    printf("usb throughput: %d bytes / %d ms = %lf MBits\n", maxsz, usCost / 1000, throughput);
             
                     cmd = 0;
                     cntTx = 0;                    
