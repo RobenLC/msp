@@ -90,6 +90,8 @@
 
 #define OP_SUP               0x31
 
+#define sprintf_f  sprintf
+
 struct intMbs_s{
     union {
         uint32_t n;
@@ -307,13 +309,15 @@ static uint16_t delay;
 static uint16_t command = 0; 
 static uint8_t loop = 0; 
 
+static struct logPool_s *mlogPool=0;
+
 typedef enum {
     ASPFS_TYPE_ROOT = 0x1,
     ASPFS_TYPE_DIR,
     ASPFS_TYPE_FILE,
 } aspFS_Type_e;
 
-struct bitmapHeader_s {
+struct slvbitMapHeader_s {
     char aspbmpMagic[4];
     int    aspbhSize;
     char aspbhReserve[4];
@@ -328,6 +332,15 @@ struct bitmapHeader_s {
     int    aspbiResoluV;
     int    aspbiNumCinCP;
     int    aspbiNumImpColor;
+    char *bitbuf;
+};
+
+struct logPool_s{
+    char *pool;
+    char *cur;
+    int max;
+    int len;
+    uint32_t dislog;
 };
 
 /* construct the file system */
@@ -353,7 +366,7 @@ static int aspFS_getFilelist(char *flst, struct directnFile_s *note);
 static int aspSD_getRoot();
 static int aspSD_getDir();
 
-static int mspbitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen) 
+static int mspbitmapHeaderSetup(struct slvbitMapHeader_s *ph, int clr, int w, int h, int dpi, int flen) 
 {
     int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
     float resH=0, resV=0, ratio=39.27, fval=0;
@@ -362,7 +375,7 @@ static int mspbitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h
     if (!h) return -2;
     if (!dpi) return -3;
     if (!flen) return -4;
-    memset(ph, 0, sizeof(struct bitmapHeader_s));
+    memset(ph, 0, sizeof(struct slvbitMapHeader_s));
 
     if (clr == 8) {
         numclrp = 256;
@@ -1949,6 +1962,160 @@ static int usb_read(char *ptr, int usbfd, int len)
     return recv;    
 }
 
+static int print_f(struct logPool_s *plog, char *head, char *str)
+{
+    uint32_t logdisplayflag=0;
+    int len;
+    char ch[1152];
+    
+    if (!str) return (-1);
+
+    if (head) {
+        //if (!strcmp(head, "P2")) return 0;
+        sprintf(ch, "[%s] %s", head, str);
+    } else {
+        sprintf(ch, "%s", str);
+    }
+
+    printf("%s",ch);
+
+#if 0
+    if (!plog) return (-2);
+
+    logdisplayflag = plog->dislog;
+    
+    msync(plog, sizeof(struct logPool_s), MS_SYNC);
+    len = strlen(ch);
+    if ((len + plog->len) > plog->max) return (-3);
+    memcpy(plog->cur, ch, strlen(ch));
+    plog->cur += len;
+    plog->len += len;
+#endif
+    //if (!mlog) return (-4);
+    //fwrite(ch, 1, strlen(ch), mlog);
+    //fflush(mlog);
+    //fprintf(mlog, "%s", ch);
+    
+    return 0;
+}
+
+static int mslvBMPClip(struct slvbitMapHeader_s *dst, struct slvbitMapHeader_s *src, int x, int y)
+{
+    int srcW=0, srcH=0;
+    int dstW=0, dstH=0;
+    int offset=0, dstImgSize=0, linebytes=0;
+    char *srcImg=0, *dstImg=0;
+    int bix=0, biy=0;
+    int offx=0, offy=0;
+    char *ybengin=0, *xbegin=0;
+    char *destAddr=0;
+    int linebyDst=0;
+    char *pdh=0;
+
+    srcW = src->aspbiWidth;
+    srcH = src->aspbiHeight;
+
+    dstW= dst->aspbiWidth;
+    dstH = dst->aspbiHeight;
+
+    if ((x+dstW) > srcW) return -1;
+    if ((y+dstH) > srcH) return -2;
+
+    offset = src->aspbhRawoffset;
+    srcImg = src->bitbuf+offset;
+
+    linebytes = !(srcW % 4) ? srcW : srcW - (srcW % 4) + 4;
+    linebyDst = !(dstW % 4) ? dstW : dstW - (dstW % 4) + 4;
+    printf("allign src: %d / %d, dst: %d / %d\n", linebytes, srcW, linebyDst, dstW);
+    dstImgSize = offset + linebyDst * dstH;
+    dst->aspbhSize = dstImgSize;
+    dst->bitbuf = malloc(dstImgSize);
+    
+    if (!dst->bitbuf) return -3;
+    memset(dst->bitbuf, 0, dstImgSize);
+
+    dstImg = dst->bitbuf + offset;
+    memcpy(dst->bitbuf, src->bitbuf, offset);
+    
+    destAddr = dstImg;
+    for (biy=0; biy < dstH; biy++) {
+        offy = biy + y;
+        ybengin = srcImg + (offy * linebytes);
+        xbegin = ybengin + x;
+        destAddr = dstImg + (linebyDst * biy);
+        for (bix=0; bix < dstW; bix++) {
+            *destAddr = *xbegin;
+            destAddr ++;
+            xbegin ++;
+        }
+    }
+    dst->aspbiRawSize = linebyDst * dstH;
+    pdh = &dst->aspbmpMagic[2];
+    memcpy(dst->bitbuf, pdh, sizeof(struct slvbitMapHeader_s) - 6);
+
+    return 0;
+}
+
+static int mslvdbgBitmapHeader(struct slvbitMapHeader_s *ph, int len) 
+{
+    char mlog[256];
+
+    msync(ph, sizeof(struct slvbitMapHeader_s), MS_SYNC);
+
+    sprintf_f(mlog, "********************************************\n");
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "debug print bitmap header length: %d\n", len);
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "MAGIC NUMBER: [%c] [%c] \n",ph->aspbmpMagic[2], ph->aspbmpMagic[3]);         
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "FILE TOTAL LENGTH: [%d] \n",ph->aspbhSize);                                                 // mod
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "HEADER TOTAL LENGTH: [%d] \n",ph->aspbhRawoffset);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "INFO HEADER LENGTH: [%d] \n",ph->aspbiSize);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "WIDTH: [%d] \n",ph->aspbiWidth);                                                          // mod
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "HEIGHT: [%d] \n",ph->aspbiHeight);                                                        // mod
+    print_f(mlogPool, "BMP", mlog);
+    
+    sprintf_f(mlog, "NUM OF COLOR PLANES: [%d] \n",ph->aspbiCPP & 0xffff);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "BITS PER PIXEL: [%d] \n",ph->aspbiCPP >> 16);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "COMPRESSION METHOD: [%d] \n",ph->aspbiCompMethd);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "SIZE OF RAW: [%d] \n",ph->aspbiRawSize);                                            // mod
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "HORIZONTAL RESOLUTION: [%d] \n",ph->aspbiResoluH);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "VERTICAL RESOLUTION: [%d] \n",ph->aspbiResoluV);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "NUM OF COLORS IN CP: [%d] \n",ph->aspbiNumCinCP);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "NUM OF IMPORTANT COLORS: [%d] \n",ph->aspbiNumImpColor);          
+    print_f(mlogPool, "BMP", mlog);
+
+    sprintf_f(mlog, "********************************************\n");
+    print_f(mlogPool, "BMP", mlog);
+
+    return 0;
+}
+
 int main(int argc, char *argv[]) 
 { 
 static char spi0[] = "/dev/spidev32765.0"; 
@@ -2136,7 +2303,131 @@ static char path[256];
 #define  OPSUB_DualStream_SD_only   0x87
 #define  OPSUB_Hand_Scan     0x89
 #define  OPSUB_Enc_Dec_Test   0x8A
+    if (sel == 36){ /* dollar number recognize */
+        struct pollfd ptfd[1];
+        char ptfilepath[256];
+        char selecpath[] = "/mnt/mmc2/dollar/256.bmp";
+        static char ptfileSave[] = "/mnt/mmc2/dollar/clip%.3d.jpg";
+        char *filename=0, *ptfileSend=0;
+        int dw=200, dh=100, dx=0, dy=0;
+        
+        FILE *fdollar=0, *fsave=0;
+        int ret=0, len=0;
+        char *buf=0, *ph=0, *pd=0;
+        struct slvbitMapHeader_s *bhead=0, *bdst=0;
 
+        if (argc > 2) {
+            printf(" input file: %s \n", argv[2]);
+            filename = argv[2];
+        } else {
+            filename = selecpath;
+        }
+        
+        if (argc > 3) {
+            dw = arg1;
+        }
+
+        if (argc > 4) {
+            dh = arg2;
+        }
+
+        if (argc > 5) {
+            dx = arg3;
+        }
+
+        if (argc > 6) {
+            dy = arg4;
+        }
+        
+        printf(" clip info dw:%d dh:%d dx:%d dy:%d \n", dw, dh, dx, dy);
+        
+        bhead = malloc(sizeof(struct slvbitMapHeader_s));
+        memset(bhead, 0, sizeof(struct slvbitMapHeader_s));
+        ph = &bhead->aspbmpMagic[2];
+
+        bdst = malloc(sizeof(struct slvbitMapHeader_s));
+        memset(bdst, 0, sizeof(struct slvbitMapHeader_s));
+        pd = &bdst->aspbmpMagic[2];
+        
+        printf(" open file [%s] \n", filename);
+        fdollar = fopen(filename, "r");
+       
+        if (!fdollar) {
+            printf(" [%s] file open failed \n", filename);
+            goto err;
+        }   
+        printf(" [%s] file open succeed \n", filename);
+
+        ret = fseek(fdollar, 0, SEEK_END);
+        if (ret) {
+            printf(" file seek failed!! ret:%d \n", ret);
+            goto err;
+        }
+
+        len = ftell(fdollar);
+        printf(" file [%s] size: %d \n", filename, len);
+        
+        buf = malloc(len);
+        if (buf) {
+            printf(" send buff alloc succeed! size: %d \n", len);
+        } else {
+            printf(" send buff alloc failed! size: %d \n", len);
+            goto err;
+        }
+
+        ret = fseek(fdollar, 0, SEEK_SET);
+        if (ret) {
+            printf(" file seek failed!! ret:%d \n", ret);
+            goto err;
+        }
+        
+        ret = fread(buf, 1, len, fdollar);
+        printf(" file read size: %d/%d \n", ret, len);
+
+        //printf(" dump buffer size: %d \n", 512);
+        //shmem_dump(buf, 512);
+
+        len = sizeof(struct slvbitMapHeader_s) - 6;
+        memcpy(ph, buf, len);
+        bhead->bitbuf = buf;
+        
+        memcpy(pd, buf, len);
+        bdst->aspbiWidth = dw;
+        bdst->aspbiHeight = dh;
+        bdst->bitbuf = 0;
+        
+        mslvdbgBitmapHeader(bhead, len);
+
+        dy = bhead->aspbiHeight - dy;
+        if (dy < 0) goto err;
+        
+        ret = mslvBMPClip(bdst, bhead, dx, dy);
+        if (ret) {
+            printf(" BMP clip ret: %d \n", ret);
+            goto err;    
+        }
+
+        fsave = find_save(ptfilepath, ptfileSave);
+        if (!fsave) {
+            goto err;    
+        }
+
+        ret = fwrite(bdst->bitbuf, 1, bdst->aspbhSize, fsave);
+        printf("total write size: %d / %d \n", ret, bdst->aspbhSize);
+
+        mslvdbgBitmapHeader(bdst, len);
+
+err:
+        sync();
+        if (fsave) fclose(fsave);
+        if (buf) free(buf);
+        if (bdst->bitbuf) free(bdst->bitbuf);
+        if (bdst) free(bdst);
+        if (bhead) free(bhead);
+        if (fdollar) fclose(fdollar);
+        goto end;
+    }
+    
     if (sel == 35){ /* usb printer duplex scan */
         struct pollfd ptfd[1];
         static char ptdevpath[] = "/dev/usb/lp0";
@@ -2472,11 +2763,11 @@ static char path[256];
         char lastTrunk[64];
         char fileStr[64];
         uint32_t tlen=0, filelen=0;
-        struct bitmapHeader_s bmpheader, *pbh;
+        struct slvbitMapHeader_s bmpheader, *pbh;
 
         pbh = &bmpheader;
         
-        memset(pbh, 0, sizeof(struct bitmapHeader_s));
+        memset(pbh, 0, sizeof(struct slvbitMapHeader_s));
         memset(lastTrunk, 0, 64);
         
         ptfd[0].fd = open(ptdevpath, O_RDWR);
@@ -2582,11 +2873,11 @@ static char path[256];
                                     
                                     printf("%s scan length: %d file length: %d \n",fileStr, tlen, filelen);
                                     
-                                    memcpy(&pbh->aspbmpMagic[2], ptbuf, sizeof(struct bitmapHeader_s) - 2);
+                                    memcpy(&pbh->aspbmpMagic[2], ptbuf, sizeof(struct slvbitMapHeader_s) - 2);
 
                                     mspbitmapHeaderSetup(pbh, 24, pbh->aspbiWidth, tlen, -1, acusz+recvsz);
 
-                                    memcpy(ptbuf, &pbh->aspbmpMagic[2], sizeof(struct bitmapHeader_s) - 2);
+                                    memcpy(ptbuf, &pbh->aspbmpMagic[2], sizeof(struct slvbitMapHeader_s) - 2);
                                     
                                     printf("%s scan length: %d filelen\n", fileStr, tlen, filelen);
                                     break;
@@ -3137,11 +3428,11 @@ static char path[256];
         char lastTrunk[64];
         char fileStr[64];
         uint32_t tlen=0, filelen=0;
-        struct bitmapHeader_s bmpheader, *pbh;
+        struct slvbitMapHeader_s bmpheader, *pbh;
 
         pbh = &bmpheader;
         
-        memset(pbh, 0, sizeof(struct bitmapHeader_s));
+        memset(pbh, 0, sizeof(struct slvbitMapHeader_s));
         memset(lastTrunk, 0, 64);
         
         ptfd[0].fd = open(ptdevpath, O_RDWR);
@@ -3247,11 +3538,11 @@ static char path[256];
                                     
                                     printf("%s scan length: %d file length: %d \n",fileStr, tlen, filelen);
                                     
-                                    memcpy(&pbh->aspbmpMagic[2], ptbuf, sizeof(struct bitmapHeader_s) - 2);
+                                    memcpy(&pbh->aspbmpMagic[2], ptbuf, sizeof(struct slvbitMapHeader_s) - 2);
 
                                     mspbitmapHeaderSetup(pbh, 24, pbh->aspbiWidth, tlen, -1, acusz+recvsz);
 
-                                    memcpy(ptbuf, &pbh->aspbmpMagic[2], sizeof(struct bitmapHeader_s) - 2);
+                                    memcpy(ptbuf, &pbh->aspbmpMagic[2], sizeof(struct slvbitMapHeader_s) - 2);
                                     
                                     printf("%s scan length: %d filelen\n", fileStr, tlen, filelen);
                                     break;
