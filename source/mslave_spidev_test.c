@@ -2306,8 +2306,9 @@ static char path[256];
     if (sel == 36){ /* dollar number recognize */
         struct pollfd ptfd[1];
         char ptfilepath[256];
-        char selecpath[] = "/mnt/mmc2/dollar/256.bmp";
-        static char ptfileSave[] = "/mnt/mmc2/dollar/clip%.3d.jpg";
+        char selecpath[] = "/mnt/mmc2/dollar/sample/256.bmp";
+        char numberimg[] = "/mnt/mmc2/dollar/sample/d100.bmp";
+        static char ptfileSave[] = "/mnt/mmc2/dollar/clip%.3d.bmp";
         char *filename=0, *ptfileSend=0;
         int dw=200, dh=100, dx=0, dy=0;
         
@@ -2315,28 +2316,40 @@ static char path[256];
         int ret=0, len=0;
         char *buf=0, *ph=0, *pd=0;
         struct slvbitMapHeader_s *bhead=0, *bdst=0;
+        clock_t ckx[1000];
+        int icx=0;
 
-        if (argc > 2) {
-            printf(" input file: %s \n", argv[2]);
-            filename = argv[2];
+        for (icx=0; icx < 1000; icx++) {
+            usleep(3000);
+            ckx[icx] = clock();
+        }
+
+        for (icx=0; icx < 1000; icx++) {
+            printf("%d ", ckx[icx]);
+            if (!(icx+1)%10) printf("\n");
+        }
+
+        if (argc > 6) {
+            printf(" input file: %s \n", argv[6]);
+            filename = argv[6];
         } else {
             filename = selecpath;
         }
         
+        if (argc > 2) {
+            dw = arg0;
+        }
+
         if (argc > 3) {
-            dw = arg1;
+            dh = arg1;
         }
 
         if (argc > 4) {
-            dh = arg2;
+            dx = arg2;
         }
 
         if (argc > 5) {
-            dx = arg3;
-        }
-
-        if (argc > 6) {
-            dy = arg4;
+            dy = arg3;
         }
         
         printf(" clip info dw:%d dh:%d dx:%d dy:%d \n", dw, dh, dx, dy);

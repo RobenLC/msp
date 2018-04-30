@@ -8489,7 +8489,8 @@ static int fs36(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
     //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
     //char diskname[128] = "/mnt/mmc2/32g_and.bin";
-    char diskname[128] = "/mnt/mmc2/32g_win.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_win.bin";
+    char diskname[128] = "/mnt/mmc2/32g_mass.bin";
     //char diskname[128] = "/mnt/mmc2/phy_32g_empty_diff.bin";
     //char diskname[128] = "/mnt/mmc2/phy_folder.bin";
     struct DiskFile_s *fd;
@@ -9259,7 +9260,8 @@ static int fs58(struct mainRes_s *mrs, struct modersp_s *modersp)
     //char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
     //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
     //char diskname[128] = "/mnt/mmc2/32g_and.bin";
-    char diskname[128] = "/mnt/mmc2/32g_win.bin";
+    //char diskname[128] = "/mnt/mmc2/32g_win.bin";
+    char diskname[128] = "/mnt/mmc2/32g_mass.bin";
     //char diskname[128] = "/mnt/mmc2/phy_32g_empty_diff.bin";
     //char diskname[128] = "/mnt/mmc2/phy_folder.bin";
     struct DiskFile_s *fd;
@@ -11805,10 +11807,10 @@ static int p4(struct procRes_s *rs)
             print_f(rs->plogs, "P4", rs->logs);
 
             while (ch != 'I') {
-                sprintf(rs->logs, "%c clr\n", ch);
-                print_f(rs->plogs, "P4", rs->logs);         
                 ch = 0;
                 rs_ipc_get(rs, &ch, 1);
+                sprintf(rs->logs, "%c clr\n", ch);
+                print_f(rs->plogs, "P4", rs->logs);         
             }
 
             rs_ipc_put(rs, "I", 1);
@@ -12092,10 +12094,10 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
             }
 
             while (ch != 'I') {
-                sprintf(rs->logs, "%c clr\n", ch);
-                print_f(rs->plogs, "P5", rs->logs);         
                 ch = 0;
                 rs_ipc_get(rs, &ch, 1);
+                sprintf(rs->logs, "%c clr\n", ch);
+                print_f(rs->plogs, "P5", rs->logs);         
             }
 
             rs_ipc_put(rs, "I", 1);
@@ -12231,7 +12233,8 @@ int main(int argc, char *argv[])
 //char diskname[128] = "/mnt/mmc2/32g_ios_format.bin";
 //char diskname[128] = "/mnt/mmc2/128g_ios_format.bin";
 //char diskname[128] = "/mnt/mmc2/32g_and.bin";
-char diskname[128] = "/mnt/mmc2/32g_win.bin";
+//char diskname[128] = "/mnt/mmc2/32g_win.bin";
+char diskname[128] = "/mnt/mmc2/32g_mass.bin";
 //char diskname[128] = "/mnt/mmc2/phy_32g_empty_diff.bin";
 //char diskname[128] = "/mnt/mmc2/phy_folder.bin";
 static char spi1[] = "/dev/spidev32766.0"; 
