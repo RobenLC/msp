@@ -257,7 +257,7 @@ static int *totSalloc=0;
 #define ANSP0_RECOVER (1)
 
 #define PI (CFLOAT)(3.1415)
-#define BMP_TEST (1)
+#define BMP_TEST (0)
 
 #define SD_RDWT_USING_META (1)
 #define MIN_MEM_ALLOC_SIZE (4)
@@ -40784,7 +40784,7 @@ static int atFindIdx(char *str, char ch)
 #define LOG_P6_RX_EN    (1)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
-#define LOG_P6_CROP_EN    (1)
+#define LOG_P6_CROP_EN    (0)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
