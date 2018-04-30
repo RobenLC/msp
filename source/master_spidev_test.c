@@ -78,7 +78,7 @@
 #define  OPSUB_Enc_Dec_Test   0x8A
 
 #define MIN_SECTOR_SIZE  (512)
-#define RING_BUFF_NUM   (3260) //(1024)
+#define RING_BUFF_NUM   (5000) //(1024)
 #define DATA_RX_SIZE RING_BUFF_NUM
 
 #define SPI_TRUNK_SZ 32768
@@ -5762,7 +5762,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     struct shmem_s *pTx=0;
     char *pMta=0;
     int *pPtx=0, *pPrx=0;
-
+    struct timespec utstart, utend;
+    int tcnt=0;
+        
     pTx = puhs->pushring;
     pMta = puhs->puhsmeta;
     pPtx = puhs->pushtx;
@@ -5814,7 +5816,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         case 'a':
             opc = OP_DUPLEX;
             dat = OPSUB_USB_Scan;
-            usleep(10000);
+            usleep(500000);
             //sleep(5);
             cmdchr = cmdMtx[1][1];
             break;
@@ -5837,7 +5839,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             msync(pMta, USB_META_SIZE, MS_SYNC);
             memcpy(ptm, pMta, sizeof(struct aspMetaData_s));
 
-            printf("[HS] get meta magic number: 0x%.2x, 0x%.2x \n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
+            printf("[HS] get meta magic number: 0x%.2x, 0x%.2x !!!\n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
 
 #if 0 /* remove ready */    
             insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
@@ -5891,17 +5893,28 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
 
             recvsz = 0;
             acusz = 0;
+            tcnt = 0;
 
             len = ring_buf_get(pTx, &addr);    
             while (len <= 0) {
                 sleep(1);
+                printf("[%s]buffer full!!! ret:%d !!", strpath, len);
                 len = ring_buf_get(pTx, &addr);            
             }
-    
+            
             while(1) {
+            
+#if 0 /* test drop line */
+                usleep(10000);
+#endif
                 recvsz = usb_read(addr, usbid, len);
-                //printf("[HS] read %d \n", recvsz);
-        
+#if 0                
+                if (tcnt) {
+                    clock_gettime(CLOCK_REALTIME, &utend);
+                    //usCost = test_time_diff(&utstart, &utend, 1000);
+                    //printf("[%s] read %d (%d ms)\n", strpath, recvsz, usCost/1000);
+                }
+#endif 
                 if (recvsz > 0) {
 #if USB_HS_SAVE_RESULT
                     memcpy(pcur, addr, recvsz);
@@ -5910,9 +5923,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 }
                 
                 if (recvsz < 0) {
-                    printf("[HS] usb read ret: %d !!!", recvsz);
-                    continue;
-                    //break;
+                    printf("[HS] usb read ret: %d !!!\n", recvsz);
+                    //continue;
+                    break;
                 }
                 else if (recvsz == 0) {
                     continue;
@@ -5920,12 +5933,20 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 else {
                     /*do nothing*/
                 }
+
+                tcnt ++;
+
+                if (tcnt == 1) {
+                    clock_gettime(CLOCK_REALTIME, &utstart);
+                    printf("[%s] start ... \n", strpath);
+                }
 #if USB_HS_SAVE_RESULT        
                 pcur += recvsz;
 #endif
                 acusz += recvsz;
 
                 if (recvsz < len) {
+                    clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
                     break;
                 } else {
@@ -5943,6 +5964,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 len = ring_buf_get(pTx, &addr);
                 while (len <= 0) {
                     sleep(1);
+                    printf("[HS](%s) buffer full!!! ret:%d !!", strpath, len);
                     len = ring_buf_get(pTx, &addr);            
                 }
             }
@@ -5953,8 +5975,10 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
 #if USB_HS_SAVE_RESULT
             wrtsz = fwrite(pImage, 1, acusz, fsave);
 #endif
+            usCost = test_time_diff(&utstart, &utend, 1000);
+            throughput = acusz*8.0 / usCost*1.0;
 
-            printf("[HS] total read size: %d, write file size: %d \n", acusz, wrtsz);
+            printf("[HS] total read size: %d, write file size: %d throughput: %lf Mbits \n", acusz, wrtsz, throughput);
             
 #if USB_HS_SAVE_RESULT
             sync();
@@ -6412,7 +6436,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                 continue;
                             }
                             else {
-                                printf("[LP0] chq: %c - %d \n", chq, cntLp0);
+                                //printf("[LP0] chq: %c - %d \n", chq, cntLp0);
                                 cntLp0++;
                                 if (chq == 'E') {
                                     break;
@@ -6481,8 +6505,13 @@ static char spi1[] = "/dev/spidev32766.0";
 #if DBG_27_DV
                             printf("[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
 #endif
+#if 0
                             usbentsTx = 0;
                             break;
+#else
+                            //usleep(5000);
+                            continue;
+#endif
                         }
                         else {
 #if DBG_27_DV
@@ -6513,7 +6542,7 @@ static char spi1[] = "/dev/spidev32766.0";
                         usCost = test_time_diff(&tstart, &tend, 1000);
                         //msCost = test_time_diff(&tstart, &tend, 1000000);
                         throughput = acusz*8.0 / usCost*1.0;
-                        printf("[DV] usb throughput: %d bytes / %d us = %lf MBits\n", acusz, usCost / 1000, throughput);
+                        printf("[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, usCost / 1000, throughput);
 
                         cntTx = 0;
                         cmd = 0;
