@@ -33081,18 +33081,45 @@ static int fs107(struct mainRes_s *mrs, struct modersp_s *modersp)
     int ret;
     char syscmd[256] = "ls -al";
     
+    FILE *faptpe=0;
+    char aptypestr[32] = "wlan0";
+    int itypelen=0;
+    
+    faptpe = fopen("/root/config/aptype", "r");
+    if (faptpe) {
+        itypelen = fread(aptypestr, 1, 32, faptpe);
+        if ((itypelen > 0) && (itypelen < 32)) {
+            aptypestr[itypelen] = '\0';
+            if (aptypestr[itypelen-1] == '\n') {
+                aptypestr[itypelen-1] = '\0';
+            }
+            if (aptypestr[itypelen-1] == '\r') {
+                aptypestr[itypelen-1] = '\0';
+            }
+            sprintf(mrs->netIntfs, "%s", aptypestr);
+        } else {
+            memset(mrs->netIntfs, 0, 16);
+            sprintf(mrs->netIntfs, "wlan0");
+        }
+
+        fclose(faptpe);
+    } else {
+        memset(mrs->netIntfs, 0, 16);
+        sprintf(mrs->netIntfs, "wlan0");
+    }
+    
     sprintf_f(mrs->log, "launch Direct mode ...\n");
     print_f(&mrs->plog, "fs107", mrs->log);
 
-    sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
+    sprintf(syscmd, "/root/script/launchAP_now.sh");
     ret = doSystemCmd(syscmd);
 
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs107", mrs->log);
     
-    memset(mrs->netIntfs, 0, 16);
-    sprintf(mrs->netIntfs, "%s", "uap0");
     msync(mrs->netIntfs, 16, MS_SYNC);
+    sprintf_f(mrs->log, "interface = [%s] \n", mrs->netIntfs);
+    print_f(&mrs->plog, "fs107", mrs->log);
     
     modersp->r = 1; 
     return 1;
@@ -49170,6 +49197,11 @@ int main(int argc, char *argv[])
             print_f(&pmrs->plog, "APM", pmrs->log);
         }
     }
+
+    FILE *faptpe=0;
+    char aptypestr[32] = "wlan0";
+    int itypelen=0;
+    memset(aptypestr, 0, 32);
     
     if (!isLaunch) {
         /* launch AP  */
@@ -49178,10 +49210,36 @@ int main(int argc, char *argv[])
 
         sleep(1);
 
-        sprintf(syscmd, "/root/script/launchAP_88w8787.sh");
+        faptpe = fopen("/root/config/aptype", "r");
+        if (faptpe) {
+            itypelen = fread(aptypestr, 1, 16, faptpe);
+            if ((itypelen > 0) && (itypelen < 16)) {
+                aptypestr[itypelen] = '\0';
+                if (aptypestr[itypelen-1] == '\n') {
+                    aptypestr[itypelen-1] = '\0';
+                }
+                if (aptypestr[itypelen-1] == '\r') {
+                    aptypestr[itypelen-1] = '\0';
+                }
+                sprintf(pmrs->netIntfs, "%s", aptypestr);
+            } else {
+                memset(pmrs->netIntfs, 0, 16);
+                sprintf(pmrs->netIntfs, "wlan0");
+            }
+            fclose(faptpe);
+        } else {
+            memset(pmrs->netIntfs, 0, 16);
+            sprintf(pmrs->netIntfs, "wlan0");
+        }
+        
+        sprintf(syscmd, "/root/script/launchAP_now.sh");
         ret = doSystemCmd(syscmd);
-        memset(pmrs->netIntfs, 0, 16);
-        sprintf(pmrs->netIntfs, "%s", "uap0");
+        
+        sprintf_f(pmrs->log, "interface = [%s] \n", pmrs->netIntfs);
+        print_f(&pmrs->plog, "WIFC", pmrs->log);
+
+        //shmem_dump(pmrs->netIntfs, 16);
+        //shmem_dump(aptypestr, 16);
     }
   
     if ((pwfc->wfsidLen > 0) && (pwfc->wfpskLen > 0)) {
