@@ -8,6 +8,7 @@
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
+#include <sys/prctl.h>
 #include <linux/types.h> 
 #include <linux/spi/spidev.h> 
 //#include <sys/times.h> 
@@ -15,6 +16,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <linux/poll.h>
 
 #include <dirent.h>
 #include <sys/stat.h>  
@@ -1131,6 +1133,7 @@ struct bitmapRotate_s {
 };
 
 struct mainRes_s{
+    char nmrs[32];
     uint32_t mspconfig;
     int sid[9];
     int sfm[2];
@@ -1190,6 +1193,7 @@ struct fselec_s{
 };
 
 struct procRes_s{
+    char nrs[32];
     // pipe
     uint32_t *pmsconfig;
     int spifd;
@@ -22272,8 +22276,36 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
 
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx)
 {
-    int ret;
+    int ret=-1;
+#if 0
+    int tcnt=0, ptret=0;
+    char ch=0;
+    struct pollfd ptfd[1];
+    ptfd[0].fd = mrs->pipeup[idx].rt[0];
+    ptfd[0].events = POLLIN;
+
+    while(1) {
+        tcnt++;
+        ptret = poll(ptfd, 1, 1000);
+        //sprintf_f(mrs->log, "[%s] poll return %d evt: 0x%.2x - %d\n", mrs->nmrs, ptret, ptfd[0].revents, tcnt);
+        //print_f(&mrs->plog, "IPC", mrs->log);
+        if (ptret > 0) {
+            ret = read(mrs->pipeup[idx].rt[0], str, size);
+            //ch = *str;
+            //sprintf_f(mrs->log, "[%s] get chr: %c \n", mrs->nmrs, ch);
+            //print_f(&mrs->plog, "IPC", mrs->log);
+            return ret;
+        }
+
+        if (tcnt == 2) {
+            //sprintf_f(mrs->log, "[%s] poll wait - %d\n", mrs->nmrs, tcnt);
+            //print_f(&mrs->plog, "IPC", mrs->log);
+            break;
+        }
+    }
+#else
     ret = read(mrs->pipeup[idx].rt[0], str, size);
+#endif
     return ret;
 }
 
@@ -22293,8 +22325,35 @@ static int rs_ipc_put(struct procRes_s *rs, char *str, int size)
 
 static int rs_ipc_get(struct procRes_s *rs, char *str, int size)
 {
-    int ret;
+    int ret=-1;
+#if 0
+    int tcnt=0, ptret=0;
+    char ch=0;
+    struct pollfd ptfd[1];
+    ptfd[0].fd = rs->ppipedn->rt[0];
+    ptfd[0].events = POLLIN;
+
+    while(1) {
+        tcnt++;
+        ptret = poll(ptfd, 1, 1000);
+        //sprintf_f(rs->logs, "[%s] poll return %d evt: 0x%.2x - %d\n", rs->nrs, ptret, ptfd[0].revents, tcnt);
+        //print_f(rs->plogs, "IPC", rs->logs);
+        if (ptret > 0) {
+            ret = read(rs->ppipedn->rt[0], str, size);
+            ch = *str;
+            //sprintf_f(rs->logs, "[%s] get chr: %c \n", rs->nrs, ch);
+            //print_f(rs->plogs, "IPC", rs->logs);
+            return ret;
+        }
+
+        if (((tcnt+1) % 5) == 0) {
+            //sprintf_f(rs->logs, "[%s] poll wait - %d\n", rs->nrs, tcnt);
+            //print_f(rs->plogs, "IPC", rs->logs);
+        }
+    }
+#else
     ret = read(rs->ppipedn->rt[0], str, size);
+#endif
     return ret;
 }
 
@@ -25339,6 +25398,9 @@ static int dbg(struct mainRes_s *mrs)
 
     p0_init(mrs);
 
+    prctl(PR_SET_NAME, "dbg");
+    //sprintf(argv[0], "msp-dbg");
+    
     plog = aspMemalloc(2048, 8);
     if (!plog) {
         sprintf_f(mrs->log, "DBG plog alloc failed! \n");
@@ -26571,14 +26633,14 @@ static int fs26(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
     
-    sprintf_f(mrs->log, "wait socket status\n");
-    print_f(&mrs->plog, "fs26", mrs->log);
+    //sprintf_f(mrs->log, "wait socket status\n");
+    //print_f(&mrs->plog, "fs26", mrs->log);
     
     len = mrs_ipc_get(mrs, &ch, 1, 3);
     if (len > 0) {
 
-        sprintf_f(mrs->log, "wait 01 socket status ch: %c - end\n", ch);
-        print_f(&mrs->plog, "fs26", mrs->log);
+        //sprintf_f(mrs->log, "wait 01 socket status ch: %c - end\n", ch);
+        //print_f(&mrs->plog, "fs26", mrs->log);
 
         if (ch == 'R') {
 #if CHECK_SOCKET_STATUS
@@ -26656,14 +26718,14 @@ static int fs28(struct mainRes_s *mrs, struct modersp_s *modersp)
     char ch=0;
     struct info16Bit_s *p;
 
-    sprintf_f(mrs->log, "wait socket status\n");
-    print_f(&mrs->plog, "fs28", mrs->log);
+    //sprintf_f(mrs->log, "wait socket status\n");
+    //print_f(&mrs->plog, "fs28", mrs->log);
 
     len = mrs_ipc_get(mrs, &ch, 1, 8);
     if (len > 0) {
 
-        sprintf_f(mrs->log, "wait 02 socket status ch: %c - end\n", ch);
-        print_f(&mrs->plog, "fs28", mrs->log);
+        //sprintf_f(mrs->log, "wait 02 socket status ch: %c - end\n", ch);
+        //print_f(&mrs->plog, "fs28", mrs->log);
 
         if (ch == 'R') {
 #if CHECK_SOCKET_STATUS
@@ -32830,7 +32892,6 @@ static int getVector_x(CFLOAT *vec, CFLOAT *p1, CFLOAT *p2)
     vec[1] = b;
 
     return 0;
-
 }
 
 static int getCross_x(CFLOAT *v1, CFLOAT *v2, CFLOAT *pt)
@@ -36203,13 +36264,17 @@ static int p0(struct mainRes_s *mrs)
 
     int ret=0, len=0, tmp=0;
     char ch=0;
-
+    struct timespec tidle[2];
+    int tdiff=0, mbf=0;
     struct modersp_s *modesw = aspMemalloc(sizeof(struct modersp_s), 8);
     if (modesw == 0) {
         sprintf_f(mrs->log, "modesw memory allocation fail \n");
         print_f(&mrs->plog, "P0", mrs->log);
     }
-
+    
+    prctl(PR_SET_NAME, "p0");
+    //sprintf(argv[0], "msp-p0");
+    
     struct fselec_s afselec[PS_NUM] = {{ 0, fs00},{ 1, fs01},{ 2, fs02},{ 3, fs03},{ 4, fs04},
                                  { 5, fs05},{ 6, fs06},{ 7, fs07},{ 8, fs08},{ 9, fs09},
                                  {10, fs10},{11, fs11},{12, fs12},{13, fs13},{14, fs14},
@@ -36269,7 +36334,10 @@ static int p0(struct mainRes_s *mrs)
                                  {135, hd135},{136, hd136},{137, hd137},{138, hd138},{139, hd139},
                                  {140, hd140},{141, hd141},{142, hd142},{143, hd143},{144, hd144}};
     p0_init(mrs);
-
+    
+    clock_gettime(CLOCK_REALTIME, &tidle[0]);  
+    clock_gettime(CLOCK_REALTIME, &tidle[1]);  
+    
     modesw->m = -2;
     modesw->r = 0;
     modesw->d = 0;
@@ -36278,6 +36346,69 @@ static int p0(struct mainRes_s *mrs)
     while (1) {
         //sprintf_f(mrs->log, ".\n");
         //print_f(&mrs->plog, "P0", mrs->log);
+        while (modesw->m < 0) {
+            len = mrs_ipc_get(mrs, &ch, 1, 0);
+            if (len > 0) {
+                if ((ch >=0) && (ch < PS_NUM)) {
+                    modesw->m = ch;
+                    break;
+                }
+            } else {
+                clock_gettime(CLOCK_REALTIME, &tidle[0]);   
+                tdiff = time_diff(&tidle[1], &tidle[0], 1000000);           
+
+                //sprintf_f(mrs->log, "%d \n", tdiff);
+                //print_f(&mrs->plog, "P0", mrs->log);
+
+                if (tdiff > 200000) {
+                    tdiff = 200000;
+                }
+
+                if (tdiff > 10000) {
+                    usleep(tdiff);
+                }
+
+                mrs_ipc_put(mrs, "$", 1, 0);
+                continue;
+            }
+        }
+
+
+        //clock_gettime(CLOCK_REALTIME, &tidle[0]);    
+        tdiff = 0;mbf = 0;
+        while ((modesw->m >= 0) && (modesw->m < PS_NUM)) {
+            msync(modesw, sizeof(struct modersp_s), MS_SYNC);
+            //sprintf_f(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
+            //print_f(&mrs->plog, "P0", mrs->log);
+            if (mbf != modesw->m) {
+                clock_gettime(CLOCK_REALTIME, &tidle[0]);    
+            }
+            
+            ret = (*afselec[modesw->m].pfunc)(mrs, modesw);
+
+            msync(modesw, sizeof(struct modersp_s), MS_SYNC);
+            
+            //sprintf_f(mrs->log, "pmode:%d rsp:%d - 2, ret: %d\n", modesw->m, modesw->r, ret);
+            //print_f(&mrs->plog, "P0", mrs->log);
+
+            if (mbf == modesw->m) {
+                clock_gettime(CLOCK_REALTIME, &tidle[1]);    
+                tdiff = time_diff(&tidle[0], &tidle[1], 1000000);            
+            }
+            
+            if (ret == 1) {
+                tmp = modesw->m;
+                modesw->m = -1;
+                break;
+            }
+            
+            if (tdiff > 1000) {
+                break;
+            }
+
+            mbf = modesw->m;
+        }
+
         len = mrs_ipc_get(mrs, &ch, 1, 0);
         if (len > 0) {
 #if LOG_P0_EN
@@ -36304,23 +36435,6 @@ static int p0(struct mainRes_s *mrs)
             }
         }
 
-        if ((modesw->m >= 0) && (modesw->m < PS_NUM)) {
-            msync(modesw, sizeof(struct modersp_s), MS_SYNC);
-            //sprintf_f(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
-            //print_f(&mrs->plog, "P0", mrs->log);
-            
-            ret = (*afselec[modesw->m].pfunc)(mrs, modesw);
-
-            msync(modesw, sizeof(struct modersp_s), MS_SYNC);
-            
-            //sprintf_f(mrs->log, "pmode:%d rsp:%d - 2, ret: %d\n", modesw->m, modesw->r, ret);
-            //print_f(&mrs->plog, "P0", mrs->log);
-            if (ret == 1) {
-                tmp = modesw->m;
-                modesw->m = -1;
-            }
-        }
-
         if (modesw->m == -1) {
 #if LOG_P0_EN
             sprintf_f(mrs->log, "pmode:%d rsp:%d - end\n", tmp, modesw->r);
@@ -36343,7 +36457,7 @@ static int p0(struct mainRes_s *mrs)
             mrs_ipc_put(mrs, "$", 1, 0);
         }
 
-        usleep(1000);
+        //usleep(10);
     }
 
     p0_end(mrs);
@@ -36360,6 +36474,10 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
     uint32_t evt;
     struct timespec tidle[2];
     int tdiff=0, tcur=0, tnxt=1;
+
+    prctl(PR_SET_NAME, "msp-p1");
+    //sprintf(argv[0], "msp-p1");
+    
     clock_gettime(CLOCK_REALTIME, &tidle[0]);    
     clock_gettime(CLOCK_REALTIME, &tidle[1]);    
     
@@ -36742,6 +36860,9 @@ static int p2(struct procRes_s *rs)
     sprintf_f(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
 
+    prctl(PR_SET_NAME, "msp-p2");
+    //sprintf(argv[0], "msp-p2-spi");
+    
     pct = rs->pcfgTable;
     pfat = rs->psFat;
     pftb = &pfat->fatTable;
@@ -38337,6 +38458,9 @@ static int p3(struct procRes_s *rs)
     uint32_t fformat=0;
     struct aspMetaData_s *pmetaduo;
     CFLOAT thrput, fltime;
+
+    prctl(PR_SET_NAME, "msp-p3");
+    //sprintf(argv[0], "msp-p3-spi");
     
     pmetaduo = rs->pmetainduo;
     pct = rs->pcfgTable;
@@ -38840,6 +38964,9 @@ static int p4(struct procRes_s *rs)
     struct epoll_event event, events[MAX_EVENTS];
 #endif    
     int  consfd, nfds, epollfd;
+
+    prctl(PR_SET_NAME, "msp-p4");
+    //sprintf(argv[0], "msp-p4-socket6000");
     
     pfat = rs->psFat;
     pftb = &pfat->fatTable;
@@ -40416,6 +40543,10 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     unsigned char opcode=0, param=0, flag = 0;
     char msg[256] = "boot";
     char tgr[8] = "tgr";
+
+    prctl(PR_SET_NAME, "msp-p5");
+    //sprintf(argv[0], "msp-p5-socket5000");
+    
     sprintf_f(rs->logs, "p5\n");
     print_f(rs->plogs, "P5", rs->logs);
 
@@ -40867,6 +40998,9 @@ static int p6(struct procRes_s *rs)
     int clr=0, w=0, h=0, hduo=0, dpi=0, hlen=0, datlen=0, orglen=0, t=0, vhi=0, crpMx=0;
     uint32_t tmp=0, val=0, ffrmt=0, scanlen=0;
     char *hbuff=0;
+
+    prctl(PR_SET_NAME, "msp-p6");
+    //sprintf(argv[0], "msp-p6-socket4000");
     
     pct = rs->pcfgTable;
     pfat = rs->psFat;
@@ -46074,6 +46208,9 @@ static int p7(struct procRes_s *rs)
     struct epoll_event event, events[MAX_EVENTS];
 #endif
     int  consfd, nfds, epollfd;
+
+    prctl(PR_SET_NAME, "msp-p7");
+    //sprintf(argv[0], "msp-p7-socket7000");
     
     pfat = rs->psFat;
     pftb = &pfat->fatTable;
@@ -46719,6 +46856,9 @@ static int p8(struct procRes_s *rs)
 
     struct ifaddrs *ifaddr, *ifa;
 
+    prctl(PR_SET_NAME, "msp-p8");
+    //sprintf(argv[0], "msp-p8-udp-listen");
+    
     memset(&hints, 0, sizeof(hints));
 
     sprintf_f(rs->logs, "p8\n");
@@ -46992,6 +47132,8 @@ int main(int argc, char *argv[])
     pmrs = (struct mainRes_s *)aspSalloc(sizeof(struct mainRes_s));
     memset(pmrs, 0, sizeof(struct mainRes_s));
 
+    sprintf(pmrs->nmrs, "mrs");
+
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
     dbgShowTimeStamp("s1", pmrs, NULL, 4, NULL);
     
@@ -47041,6 +47183,11 @@ int main(int argc, char *argv[])
             break;
         case 3:
             pmrs->mspconfig |= 0x4;
+            pmrs->plog.dislog = 1;
+            break;
+        case 4:
+            pmrs->mspconfig |= 0x4;
+            pmrs->mspconfig |= 0x1;
             pmrs->plog.dislog = 1;
             break;
         default:
@@ -49600,42 +49747,78 @@ int main(int argc, char *argv[])
     ring_buf_init(&pmrs->cmdTx);
 
 // fork process
+    len = strlen(argv[0]);
+    memset(argv[0], 0, len);
+
+    if (argc > 1) {
+        len = strlen(argv[1]);
+        memset(argv[1], 0, len);
+    }
+    
+    sprintf(argv[0], "state");
     pmrs->sid[0] = fork();
     if (!pmrs->sid[0]) {
         p1(&rs[0], &rs[6]);
     } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "spi0");
         pmrs->sid[1] = fork();
         if (!pmrs->sid[1]) {
             p2(&rs[1]);
         } else {
+            len = strlen(argv[0]);
+            memset(argv[0], 0, len);
+            sprintf(argv[0], "spi1");
             pmrs->sid[2] = fork();
             if (!pmrs->sid[2]) {
                 p3(&rs[2]);
             } else {
+                len = strlen(argv[0]);
+                memset(argv[0], 0, len);
+                sprintf(argv[0], "socket port 6000");
                 pmrs->sid[3] = fork();
                 if (!pmrs->sid[3]) {
                     p4(&rs[3]);
-                } else {                
+                } else {
+                    len = strlen(argv[0]);
+                    memset(argv[0], 0, len);
+                    sprintf(argv[0], "socket port 5000");
                     pmrs->sid[4] = fork();
                     if (!pmrs->sid[4]) {
                         p5(&rs[4], &rs[5]);
-                    } else { 
+                    } else {
+                        len = strlen(argv[0]);
+                        memset(argv[0], 0, len);
+                        sprintf(argv[0], "command");
                         pmrs->sid[5] = fork();
                         if (!pmrs->sid[5]) {
                             dbg(pmrs);
                         } else {
+                            len = strlen(argv[0]);
+                            memset(argv[0], 0, len);
+                            sprintf(argv[0], "socket port 4000");
                             pmrs->sid[6] = fork();
                             if (!pmrs->sid[6]) {
                                 p6(&rs[7]);
                             } else {
+                                len = strlen(argv[0]);
+                                memset(argv[0], 0, len);
+                                sprintf(argv[0], "socket port 7000");
                                 pmrs->sid[7] = fork();
                                 if (!pmrs->sid[7]) {
                                     p7(&rs[8]);
-                                } else {                
+                                } else {
+                                    len = strlen(argv[0]);
+                                    memset(argv[0], 0, len);
+                                    sprintf(argv[0], "udp");
                                     pmrs->sid[8] = fork();
                                     if (!pmrs->sid[8]) {
                                         p8(&rs[9]);
-                                    } else {                
+                                    } else {              
+                                        len = strlen(argv[0]);
+                                        memset(argv[0], 0, len);
+                                        sprintf(argv[0], "func");
                                         p0(pmrs);
                                     }
                                 }
@@ -49873,6 +50056,7 @@ static int file_save_get(FILE **fp, char *path1)
 
 static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
 {
+    sprintf(rs->nrs, "rs%.2d", idx);
     rs->pmsconfig = &mrs->mspconfig;
     rs->pcmdRx = &mrs->cmdRx;
     rs->pcmdTx = &mrs->cmdTx;
