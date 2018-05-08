@@ -48,6 +48,7 @@
 #define MAX_EVENTS (32)
 #define EPOLLLT (0)
 #define USB_SAVE_RESULT (1)
+
 #define CBW_CMD_SEND_OPCODE   0x11
 #define CBW_CMD_START_SCAN    0x12
 #define CBW_CMD_READY   0x08
@@ -291,6 +292,11 @@ struct usbhost_s{
     int *pushrx;
     int *pushtx;
     int pushcnt;
+};
+
+struct usbdev_s{
+    struct usbhost_s *pushost1;
+    struct usbhost_s *pushost2;
 };
 
 struct calab_data_s {
@@ -5764,7 +5770,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     int *pPtx=0, *pPrx=0;
     struct timespec utstart, utend;
     int tcnt=0;
-        
+
     pTx = puhs->pushring;
     pMta = puhs->puhsmeta;
     pPtx = puhs->pushtx;
@@ -5784,6 +5790,21 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
 
     while(1) {
 
+        tcnt = 0;
+        ptfd[0].fd = pPtx[0];
+        ptfd[0].events = POLLIN;
+        while(1) {
+            tcnt++;
+            ptret = poll(ptfd, 1, 2000);
+            printf("[%s] poll return %d evt: 0x%.2x - %d\n", strpath, ptret, ptfd[0].revents, tcnt);
+            if (ptret > 0) {
+                //sleep(2);
+                read(pPtx[0], &chr, 1);
+                printf("[%s] get chr: %c \n", strpath, chr);
+                break;
+            }
+        }
+#if 0
         while (1) {
             chr = 0;
             pieRet = read(pPtx[0], &chr, 1);
@@ -5795,7 +5816,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 usleep(1000);
             }
         }
-
+#endif
         memset(ptrecv, 0, 32);
 
 #if DBG_USB_HS
@@ -6197,7 +6218,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushost = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 100MB 
+        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 150MB 
         if (!usbTx->pp) goto end;
         usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTx->totsz = DATA_RX_SIZE*bufsize;
@@ -6207,7 +6228,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushostd = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 100MB
+        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 150MB
         if (!usbTxd->pp) goto end;
         usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTxd->totsz = DATA_RX_SIZE*bufsize;
@@ -6842,13 +6863,15 @@ static char spi1[] = "/dev/spidev32766.0";
             }
 
             cntTx = 0;
+            ptfd[0].fd = usbfd;
             ptfd[0].events = POLLOUT | POLLIN;
             while(1) {
                 cntTx++;
-                ptret = poll(ptfd, 1, -1);
+                ptret = poll(ptfd, 1, 5000);
                 printf("[TH0] poll return %d evt: 0x%.2x - %d\n", ptret, ptfd[0].revents, cntTx);
-
-                sleep(5);
+                if (ptret > 0) {
+                    sleep(5);
+                }
             }
             
         }
