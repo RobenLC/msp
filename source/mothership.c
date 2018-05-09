@@ -32,8 +32,8 @@ show error msg when p6 get empty string \
 debug 06, fix 01 \
 parsing buff issue \
 mdouble issue decrease delay \
-no upsd everytime \
-BMP test on"
+log enable at begin \
+usb recover"
 
 #define SPI1_ENABLE (1) 
 
@@ -22426,6 +22426,48 @@ static int p8_end(struct procRes_s *rs)
     return ret;
 }
 
+static int p9_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p9_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p10_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p10_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p11_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p11_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
 static int p5_init(struct procRes_s *rs)
 {
     int ret;
@@ -36382,6 +36424,9 @@ static int p0(struct mainRes_s *mrs)
             //print_f(&mrs->plog, "P0", mrs->log);
             if (mbf != modesw->m) {
                 clock_gettime(CLOCK_REALTIME, &tidle[0]);    
+                sprintf_f(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
+                print_f(&mrs->plog, "P0", mrs->log);
+
             }
             
             ret = (*afselec[modesw->m].pfunc)(mrs, modesw);
@@ -46884,6 +46929,7 @@ static int p8(struct procRes_s *rs)
     hints.ai_flags = AI_PASSIVE; // use my IP
 
     while (1) {
+        usleep(100000);
 
         if (getifaddrs(&ifaddr) == -1) {
             perror("getifaddrs");        
@@ -47102,6 +47148,96 @@ static int p8(struct procRes_s *rs)
     return 0;
 }
 
+#define LOG_P9_EN (1)
+static int p9(struct procRes_s *rs)
+{
+    int ret=0;
+    char ch=0;
+    
+    sprintf_f(rs->logs, "p9\n");
+    print_f(rs->plogs, "P9", rs->logs);
+
+    p9_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p9");
+
+    while (1) {
+        ret = rs_ipc_get(rs, &ch, 1);
+
+        if (ret > 0) {
+            sprintf_f(rs->logs, "get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, "P9", rs->logs);
+        } else {
+            sprintf_f(rs->logs, "warnning ret: %d \n", ret);
+            print_f(rs->plogs, "P9", rs->logs);
+        }
+    }
+
+
+    p9_end(rs);
+    return 0;
+}
+
+#define LOG_P10_EN (1)
+static int p10(struct procRes_s *rs)
+{
+    int ret=0;
+    char ch=0;
+    
+    sprintf_f(rs->logs, "p10\n");
+    print_f(rs->plogs, "P10", rs->logs);
+
+    p10_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p10");
+
+    while (1) {
+        ret = rs_ipc_get(rs, &ch, 1);
+
+        if (ret > 0) {
+            sprintf_f(rs->logs, "get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, "P10", rs->logs);
+        } else {
+            sprintf_f(rs->logs, "warnning ret: %d \n", ret);
+            print_f(rs->plogs, "P10", rs->logs);
+        }
+    }
+
+
+    p10_end(rs);
+    return 0;
+}
+
+#define LOG_P11_EN (1)
+static int p11(struct procRes_s *rs)
+{
+    int ret=0;
+    char ch=0;
+    
+    sprintf_f(rs->logs, "p11\n");
+    print_f(rs->plogs, "P11", rs->logs);
+
+    p11_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p11");
+
+    while (1) {
+        ret = rs_ipc_get(rs, &ch, 1);
+
+        if (ret > 0) {
+            sprintf_f(rs->logs, "get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, "P11", rs->logs);
+        } else {
+            sprintf_f(rs->logs, "warnning ret: %d \n", ret);
+            print_f(rs->plogs, "P11", rs->logs);
+        }
+    }
+
+
+    p11_end(rs);
+    return 0;
+}
+
 #define DATA_RX_SIZE RING_BUFF_NUM
 #define DATA_TX_SIZE RING_BUFF_NUM
 #define CMD_RX_SIZE RING_BUFF_NUM
@@ -47133,7 +47269,10 @@ int main(int argc, char *argv[])
     memset(pmrs, 0, sizeof(struct mainRes_s));
 
     sprintf(pmrs->nmrs, "mrs");
-
+    pmrs->mspconfig |= 0x4;
+    pmrs->mspconfig |= 0x1;
+    pmrs->plog.dislog = 1;
+    
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
     dbgShowTimeStamp("s1", pmrs, NULL, 4, NULL);
     
