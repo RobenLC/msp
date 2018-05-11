@@ -44,7 +44,7 @@
 #define BUFF_SIZE  2048
 
 #define USB_META_SIZE 512
-#define PT_BUF_SIZE (32768)
+#define PT_BUF_SIZE (32768*3)
 #define MAX_EVENTS (32)
 #define EPOLLLT (0)
 #define USB_SAVE_RESULT (1)
@@ -79,7 +79,7 @@
 #define  OPSUB_Enc_Dec_Test   0x8A
 
 #define MIN_SECTOR_SIZE  (512)
-#define RING_BUFF_NUM   (5000) //(1024)
+#define RING_BUFF_NUM   (2000)//(6000/4) //(1024)
 #define DATA_RX_SIZE RING_BUFF_NUM
 
 #define SPI_TRUNK_SZ 32768
@@ -5929,6 +5929,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 usleep(10000);
 #endif
                 recvsz = usb_read(addr, usbid, len);
+                //printf("[%s] usb read %d / %d!!", strpath, recvsz, len);
 #if 0                
                 if (tcnt) {
                     clock_gettime(CLOCK_REALTIME, &utend);
@@ -5992,6 +5993,8 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
 
             chr = 'E';
             pieRet = write(pPrx[1], &chr, 1);
+
+            puhs->pushcnt = tcnt;
     
 #if USB_HS_SAVE_RESULT
             wrtsz = fwrite(pImage, 1, acusz, fsave);
@@ -6180,6 +6183,7 @@ static char spi1[] = "/dev/spidev32766.0";
 
 #define DBG_27_DV     0
 #define DBG_27_EPOL  0
+#define USB_HS_SAVE_RESULT_DV 0
     if (sel == 27){ /* usb printer test usb scam */
         //#define PT_BUF_SIZE (512)
         struct pollfd ptfd[1];
@@ -6192,7 +6196,6 @@ static char spi1[] = "/dev/spidev32766.0";
         int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0;
         int cntTx=0, usCost=0, bufsize=0, seqtx=0, retry=0, msCost=0;
         double throughput=0.0;
-        FILE *fsave=0;
         struct timespec tstart, tend;
 
         struct aspMetaData_s *metaRx = 0;
@@ -6203,7 +6206,14 @@ static char spi1[] = "/dev/spidev32766.0";
         struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
         int *piptx=0, *piprx=0;
         int cntLp0=0, cntLp1=0, cntLpx=0;
-        
+
+#if USB_HS_SAVE_RESULT_DV
+    FILE *fsave=0;
+    char *pImage=0, *ptmp=0;
+    static char ptfileSave[] = "/mnt/sdcard/usb/img_rx_%.3d.jpg";
+    int saveSize=0;
+#endif
+
         if (arg0 > 0) {
             bufsize = arg0;        
         }
@@ -6361,6 +6371,8 @@ static char spi1[] = "/dev/spidev32766.0";
 #if DBG_27_EPOL
                 printf("[ePol] Tx cmd: 0x%.2x, opc: 0x%.2x, dat: 0x%.2x, lastsz: %d, cnt: %d \n", cmd, opc, dat, lastsz, cntTx);
 #endif
+
+#if 0 /* buff all and send to pc */
                 if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05))) {
 
 #if 0
@@ -6566,13 +6578,166 @@ static char spi1[] = "/dev/spidev32766.0";
                         printf("[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, usCost / 1000, throughput);
 
                         cntTx = 0;
+                        
                         cmd = 0;
+                        //puscur = 0;
+                        
                         ring_buf_init(usbCur);
                     } else {
                         continue;
                     }
 
                 }
+#else /* send to pc in the mean time of recv */
+                if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05))) {
+
+                        //usbCur = puscur->pushring;
+                        //piptx = puscur->pushtx;
+                        //piprx = puscur->pushrx; 
+#if USB_HS_SAVE_RESULT_DV
+            fsave = find_save(ptfilepath, ptfileSave);
+            if (!fsave) {
+                printf("[DV] find save [%s] failed!!! \n", ptfileSave);
+                goto end;    
+            }
+            saveSize = 120*1024*1024;
+            pImage = malloc(saveSize);
+            if (pImage) {
+                ptmp = pImage;
+            } else {
+                printf("alloc memory failed!! size: %d \n", saveSize);
+            }
+#endif
+
+                    while (1) {       
+#if DBG_27_DV
+                        printf("[DV] addrd: 0x%.8x \n", addrd);
+#endif
+                        
+
+                        while (addrd == 0) {
+#if 1
+                            chq = 0;
+                            pipRet = read(piprx[0], &chq, 1);
+                            if (pipRet < 0) {
+                                //printf("[DV] get pipe send data ret: %d, error!!\n", pipRet);
+                                usleep(1000);
+                                continue;
+                            }
+                            else {
+                                if (chq == 'E') {
+                                    printf("[DV] get pipe chq: %c ,ret: %d, get last trunk \n", chq, pipRet);
+                                }
+#if DBG_27_DV
+                                else {
+                                    printf("[DV] get pipe chq: %c ,ret: %d\n", chq, pipRet);
+                                }
+#endif
+                            }
+#endif
+
+                            lens = ring_buf_cons(usbCur, &addrd);                
+                            while (lens <= 0) {
+                                //printf("[DV] cons ring buff ret: %d \n", lens);
+                                usleep(1000);
+                                lens = ring_buf_cons(usbCur, &addrd);                
+                            }
+#if 0                   
+                            puscur->pushcnt --;
+
+                            if (puscur->pushcnt == 0) {
+                                printf("[DV] the last trunk size is %d \n", lens);
+                            }
+#else
+                            if (chq == 'E') {
+                                printf("[DV] the last trunk size is %d %d/%d\n", lens, cntTx, puscur->pushcnt);
+                            }
+#endif
+                        }
+
+                        if (cntTx == 0) {
+                            clock_gettime(CLOCK_REALTIME, &tstart);
+                            printf("[DV] start time %llu ms \n", time_get_ms(&tstart));
+                        }    
+
+
+#if USB_HS_SAVE_RESULT_DV
+            //wrtsz = fwrite(addrd, 1, lens, fsave);
+            //printf("[DV] usb write file %d / %d !!!\n", wrtsz, lens);
+            wrtsz = lens;
+            memcpy(ptmp, addrd, lens);
+            ptmp += lens;
+#endif
+
+#if 0
+            sendsz = wrtsz;
+#else
+                        sendsz = write(usbfd, addrd, lens);
+#endif
+                        if (sendsz < 0) {
+#if DBG_27_DV
+                            printf("[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
+#endif
+
+#if 0
+                            usbentsTx = 0;
+                            break;
+#else
+                            //usleep(5000);
+                            continue;
+#endif
+                        }
+                        else {
+#if DBG_27_DV
+                            printf("[DV] usb TX size: %d, ret: %d \n", lens, sendsz);
+#endif
+
+                            acusz += sendsz;
+                            
+                            if (lens == sendsz) {
+                                addrd = 0;
+#if 1
+                                if (chq == 'E') break;
+#else
+                                if (puscur->pushcnt == 0) break;
+#endif
+                            } else {
+                                lens -= sendsz;
+                                addrd += sendsz;
+                                continue;
+                            }
+                        }
+                                
+                        cntTx ++;
+
+                    }
+
+                    if ((chq == 'E') && (addrd == 0)) {
+
+                        clock_gettime(CLOCK_REALTIME, &tend);
+                        printf("[DV] end time %llu ms \n", time_get_ms(&tend));
+                        usCost = test_time_diff(&tstart, &tend, 1000);
+                        //msCost = test_time_diff(&tstart, &tend, 1000000);
+                        throughput = acusz*8.0 / usCost*1.0;
+                        printf("[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, usCost / 1000, throughput);
+
+#if USB_HS_SAVE_RESULT_DV
+            wrtsz = fwrite(pImage, 1, cntTx*PT_BUF_SIZE, fsave);
+            sync();
+            fclose(fsave);
+            free(pImage);
+
+            printf("[DV] save file size: %d, ret: %d \n", cntTx*PT_BUF_SIZE, wrtsz);
+#endif
+
+                        cntTx = 0;
+                        cmd = 0;
+                        ring_buf_init(usbCur);
+                    } else {
+                        continue;
+                    }
+                }
+#endif
                 else if (cmd == 0x11) {
                     seqtx++;
                     csw[12] = seqtx;
