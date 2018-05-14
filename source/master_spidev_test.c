@@ -49,6 +49,22 @@
 #define EPOLLLT (0)
 #define USB_SAVE_RESULT (1)
 
+/* USB ioctl  */
+#define IOCNR_GET_DEVICE_ID		1
+#define IOCNR_CONTI_READ_START  8
+#define IOCNR_CONTI_READ_STOP    9
+#define IOCNR_CONTI_READ_PROBE    10
+
+#define USB_IOC_CONTI_READ_START  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_START, 0)
+#define USB_IOC_CONTI_READ_STOP    _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_STOP, 0)
+#define USB_IOC_CONTI_READ_PROBE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_PROBE, 0)
+#define LPIOC_GET_DEVICE_ID(len)     _IOC(_IOC_READ, 'P', IOCNR_GET_DEVICE_ID, len) 
+
+#define USB_IOCT_LOOP_START(a, b)               ioctl(a, USB_IOC_CONTI_READ_START, b)
+#define USB_IOCT_LOOP_CONTI_READ(a, b)     ioctl(a, USB_IOC_CONTI_READ_PROBE, b)
+#define USB_IOCT_LOOP_STOP(a, b)               ioctl(a, USB_IOC_CONTI_READ_STOP, b)
+#define USB_IOCT_GET_DEVICE_ID(a, b)          ioctl(a, LPIOC_GET_DEVICE_ID(4), b)
+
 #define CBW_CMD_SEND_OPCODE   0x11
 #define CBW_CMD_START_SCAN    0x12
 #define CBW_CMD_READY   0x08
@@ -5739,7 +5755,7 @@ static int usb_read(char *ptr, int usbfd, int len)
     return recv;    
 }
 
-#define DBG_USB_HS 0
+#define DBG_USB_HS 1
 #define USB_HS_SAVE_RESULT 0
 static int usb_host(struct usbhost_s *puhs, char *strpath)
 {
@@ -5763,13 +5779,14 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     static char ptfileSave[] = "/mnt/mmc2/usb/image_RX_%.3d.jpg";
     char ptfilepath[128];
 #endif
-    char cmdMtx[5][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x04},{'p', 0x05}};
+    char cmdMtx[6][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x00},{'s', 0x00},{'p', 0x03},{'u', 0x00}};
     uint8_t cmdchr=0;
     struct shmem_s *pTx=0;
     char *pMta=0;
     int *pPtx=0, *pPrx=0;
     struct timespec utstart, utend;
     int tcnt=0;
+    int bitset=0;
 
     pTx = puhs->pushring;
     pMta = puhs->puhsmeta;
@@ -5847,8 +5864,14 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             cmdchr = cmdMtx[1][1];
             break;
         case 'p':
+            opc = OP_DUPLEX;
+            dat = OPSUB_USB_Scan;
             cmdchr = cmdMtx[4][1];
             break;
+        case 'u':
+            cmdchr = cmdMtx[5][1];
+            break;
+
         default:
             break;
         }
@@ -5882,8 +5905,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             //chr = 'M';
             //pieRet = write(pPrx[1], &chr, 1);
         }
-        else if (cmdchr == 0x02) {
-        
+        else if (cmdchr == 0x03) {
+            //ptret = USB_IOCT_LOOP_CONTI_READ(usbid, &bitset);
+            //printf("\n\n[HS] conti read start ret: %d \n\n", ptret);
 #if 0 /* remove ready */
             insert_cbw(CBW, CBW_CMD_READY, 0, 0);
             usb_send(CBW, usbid, 31);
@@ -5894,9 +5918,16 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
 
             usb_read(ptrecv, usbid, 13);
 #if DBG_USB_HS
-            printf("[HS] dump 13 bytes");
+            printf("[%s] dump 13 bytes", strpath);
             shmem_dump(ptrecv, 13);
 #endif
+
+            /* start loop */
+            ptret = USB_IOCT_LOOP_START(usbid, &bitset);
+            printf("\n\n[HS] conti read start ret: %d \n\n", ptret);
+
+        }
+        else if (cmdchr == 0x02) {
 
             insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
             usb_send(CBW, usbid, 31);     
@@ -5915,7 +5946,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             recvsz = 0;
             acusz = 0;
             tcnt = 0;
-
+            
             len = ring_buf_get(pTx, &addr);    
             while (len <= 0) {
                 sleep(1);
@@ -5926,10 +5957,16 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             while(1) {
             
 #if 0 /* test drop line */
-                usleep(10000);
+                usleep(5);
 #endif
+
+#if 0 /* debug */
                 recvsz = usb_read(addr, usbid, len);
-                //printf("[%s] usb read %d / %d!!", strpath, recvsz, len);
+#else
+                recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, addr);
+                //recvsz = len;
+#endif
+                //printf("[%s] usb read %d / %d!!\n ", strpath, recvsz, len);
 #if 0                
                 if (tcnt) {
                     clock_gettime(CLOCK_REALTIME, &utend);
@@ -5946,8 +5983,8 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 
                 if (recvsz < 0) {
                     printf("[HS] usb read ret: %d !!!\n", recvsz);
-                    //continue;
-                    break;
+                    continue;
+                    //break;
                 }
                 else if (recvsz == 0) {
                     continue;
@@ -5968,8 +6005,10 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 acusz += recvsz;
 
                 if (recvsz < len) {
+                    ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
                     clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
+                    printf("[%s] stop loop ret: %d, the last size: %d \n", strpath, ptret, recvsz);
                     break;
                 } else {
                     chr = 'D';
@@ -6820,7 +6859,7 @@ static char spi1[] = "/dev/spidev32766.0";
                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
                         goto end;
                     }
-                    
+
                     break;
                 }
                 else {
@@ -6926,6 +6965,20 @@ static char spi1[] = "/dev/spidev32766.0";
                             if (opc == 0x05) {
                                 if (!puscur) {
                                     puscur = pushost;                    
+
+                                    chq = 'p';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        printf("[DV]  pipe send meta ret: %d \n", pipRet);
+                                        goto end;
+                                    }
+
+                                    chd = 'p';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        printf("[DV]  pipe send meta ret: %d \n", pipRet);
+                                        goto end;
+                                    }
 
                                     chq = 'a';
                                     pipRet = write(pipeTx[1], &chq, 1);
