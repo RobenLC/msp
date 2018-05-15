@@ -49,6 +49,7 @@
 #define EPOLLLT (0)
 #define USB_SAVE_RESULT (1)
 
+#define USB_CALLBACK_SUBMIT (0)
 /* USB ioctl  */
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_CONTI_READ_START  8
@@ -5922,10 +5923,11 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             shmem_dump(ptrecv, 13);
 #endif
 
+#if USB_CALLBACK_SUBMIT
             /* start loop */
             ptret = USB_IOCT_LOOP_START(usbid, &bitset);
             printf("\n\n[HS] conti read start ret: %d \n\n", ptret);
-
+#endif
         }
         else if (cmdchr == 0x02) {
 
@@ -5960,10 +5962,10 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 usleep(5);
 #endif
 
-#if 0 /* debug */
-                recvsz = usb_read(addr, usbid, len);
-#else
+#if USB_CALLBACK_SUBMIT 
                 recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, addr);
+#else
+                recvsz = usb_read(addr, usbid, len);
                 //recvsz = len;
 #endif
                 //printf("[%s] usb read %d / %d!!\n ", strpath, recvsz, len);
@@ -6005,7 +6007,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 acusz += recvsz;
 
                 if (recvsz < len) {
+#if USB_CALLBACK_SUBMIT 
                     ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
+#endif
                     clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
                     printf("[%s] stop loop ret: %d, the last size: %d \n", strpath, ptret, recvsz);
