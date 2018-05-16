@@ -96,7 +96,7 @@
 #define  OPSUB_Enc_Dec_Test   0x8A
 
 #define MIN_SECTOR_SIZE  (512)
-#define RING_BUFF_NUM   (2000)//(6000/4) //(1024)
+#define RING_BUFF_NUM   (256)//(6000/4) //(1024)
 #define DATA_RX_SIZE RING_BUFF_NUM
 
 #define SPI_TRUNK_SZ 32768
@@ -305,9 +305,12 @@ struct shmem_s{
 
 struct usbhost_s{
     struct shmem_s *pushring;
+    struct shmem_s *pgatring;
     char *puhsmeta;
     int *pushrx;
     int *pushtx;
+    int *pgatrx;
+    int *pgattx;
     int pushcnt;
 };
 
@@ -5756,6 +5759,107 @@ static int usb_read(char *ptr, int usbfd, int len)
     return recv;    
 }
 
+static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
+{
+    struct pollfd pllfd[5];
+    int *dvtx=0, *dvrx=0;
+    int *uphstx=0, *uphsrx=0;
+    int *updvtx=0, *updvrx=0;
+    int *dnhstx=0, *dnhsrx=0;
+    int *dndvtx=0, *dndvrx=0;
+    
+    int ptret=0, ins=0, evcnt=0;
+    char chp=0;
+    char pllcmd[5];
+    int outfd[5];
+
+    uphstx = ppup->pushtx;
+    uphsrx = ppup->pushrx;
+    updvtx = ppup->pgattx;
+    updvrx = ppup->pgatrx;
+
+    dnhstx = ppdn->pushtx;
+    dnhsrx = ppdn->pushrx;
+    dndvtx = ppdn->pgattx;
+    dndvrx = ppdn->pgatrx;
+    
+    pllfd[0].fd = uphstx[0];
+    pllfd[0].events = POLLIN;
+    outfd[0] = updvtx[1];
+
+    pllfd[1].fd = updvrx[0];
+    pllfd[1].events = POLLIN;
+    outfd[1] = uphsrx[1];
+    
+    pllfd[2].fd = dnhstx[0];
+    pllfd[2].events = POLLIN;
+    outfd[2] = dndvtx[1];
+    
+    pllfd[3].fd = dndvrx[0];
+    pllfd[3].events = POLLIN;
+    outfd[3] = dnhsrx[1];
+
+    pllfd[4].fd = -1;
+    
+    while(1) {
+        ptret = poll(pllfd, 5, 2000);
+        printf("[G] poll return %d\n", ptret);
+        if (ptret < 0) {
+            perror("poll");
+            printf("poll failed, errno: %d\n", errno);
+        }
+        
+        if (ptret > 0) {
+            evcnt = 0;
+            memset(pllcmd, 0, 5);
+            for (ins=0; ins < 5; ins++) {
+                if ((pllfd[ins].revents & POLLIN) == POLLIN) {
+                
+                    read(pllfd[ins].fd, &pllcmd[ins], 1);
+                    printf("[G] pll%d get chr: %c total:%d\n", ins, pllcmd[ins], ptret);
+                    
+
+                    evcnt++;
+                    if (ptret == evcnt) {
+                        break;
+                    }
+                }
+            }
+
+            evcnt = 0;
+            for (ins=0; ins < 5; ins++) {
+                if (pllcmd[ins]) {
+                    evcnt++;
+                    printf("[G] out%d put chr: %c total:%d\n", ins, pllcmd[ins], evcnt);
+                    switch(ins) {
+                    case 0:
+                        write(outfd[ins], &pllcmd[ins], 1);
+                        break;
+                    case 1:
+                        write(outfd[ins], &pllcmd[ins], 1);
+                        break;
+                    case 2:
+                        write(outfd[ins], &pllcmd[ins], 1);
+                        break;
+                    case 3:
+                        write(outfd[ins], &pllcmd[ins], 1);
+                        break;
+                    default:
+                        write(outfd[ins], &pllcmd[ins], 1);
+                        break;
+                    }
+                }
+            }
+        }
+        
+    }
+
+    while (1) {
+    }
+    
+    return 0;
+}
+
 #define DBG_USB_HS 1
 #define USB_HS_SAVE_RESULT 0
 static int usb_host(struct usbhost_s *puhs, char *strpath)
@@ -5789,10 +5893,15 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     int tcnt=0;
     int bitset=0;
 
+#if 1 /* original */
     pTx = puhs->pushring;
+#else
+    pTx = puhs->pgatring;
+#endif
+
     pMta = puhs->puhsmeta;
-    pPtx = puhs->pushtx;
-    pPrx = puhs->pushrx;
+    pPtx = puhs->pgattx;
+    pPrx = puhs->pgatrx;
     
     usbid = open(strpath, O_RDWR);
     if (usbid < 0) {
@@ -6244,7 +6353,9 @@ static char spi1[] = "/dev/spidev32766.0";
         struct aspMetaData_s *metaRx = 0;
         char *metaPt=0, *addrd=0;
         struct shmem_s *usbTx=0, *usbTxd=0, *usbCur=0;
+        struct shmem_s *gateTx=0, *gateTxd=0;
         int pipeTx[2], pipeRx[2], pipRet=0, lens=0, pipeTxd[2], pipeRxd[2];
+        int gateUpTx[2], gateUpRx[2], gateDnTx[2], gateDnRx[2];
         char chq=0, chd=0;
         struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
         int *piptx=0, *piprx=0;
@@ -6271,7 +6382,7 @@ static char spi1[] = "/dev/spidev32766.0";
         pushost = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize); // 150MB 
+        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize);  
         if (!usbTx->pp) goto end;
         usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTx->totsz = DATA_RX_SIZE*bufsize;
@@ -6281,13 +6392,31 @@ static char spi1[] = "/dev/spidev32766.0";
         pushostd = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
 
-        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); // 150MB
+        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); 
         if (!usbTxd->pp) goto end;
         usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
         usbTxd->totsz = DATA_RX_SIZE*bufsize;
         usbTxd->chksz = bufsize;
         usbTxd->svdist = 8;
 
+        gateTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+        gateTx->pp = memory_init(&gateTx->slotn, DATA_RX_SIZE*bufsize, bufsize); 
+        if (!gateTx->pp) goto end;
+        gateTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+        gateTx->totsz = DATA_RX_SIZE*bufsize;
+        gateTx->chksz = bufsize;
+        gateTx->svdist = 8;
+
+        metaRx = (struct aspMetaData_s *)aspSalloc(sizeof(struct aspMetaData_s));
+        metaPt = (char *)metaRx;
+        
+        gateTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+        gateTxd->pp = memory_init(&gateTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); 
+        if (!gateTxd->pp) goto end;
+        gateTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+        gateTxd->totsz = DATA_RX_SIZE*bufsize;
+        gateTxd->chksz = bufsize;
+        gateTxd->svdist = 8;
 
         metaRx = (struct aspMetaData_s *)aspSalloc(sizeof(struct aspMetaData_s));
         metaPt = (char *)metaRx;
@@ -6304,24 +6433,37 @@ static char spi1[] = "/dev/spidev32766.0";
 
         pipe2(pipeTxd, O_NONBLOCK);
         pipe2(pipeRxd, O_NONBLOCK);
+
+        pipe2(gateUpTx, O_NONBLOCK);
+        pipe2(gateUpRx, O_NONBLOCK);
+
+        pipe2(gateDnTx, O_NONBLOCK);
+        pipe2(gateDnRx, O_NONBLOCK);
+
 #endif
 
         pushost->pushring = usbTx;
+        pushost->pgatring = gateTx;
         pushost->puhsmeta = metaPt;
         pushost->pushrx = pipeRx;
         pushost->pushtx = pipeTx;
-
+        pushost->pgattx = gateUpTx;
+        pushost->pgatrx = gateUpRx;
+        
         pushostd->pushring = usbTxd;
+        pushostd->pgatring = gateTxd;
         pushostd->puhsmeta = metaPt;
         pushostd->pushrx = pipeRxd;
         pushostd->pushtx = pipeTxd;
+        pushostd->pgattx = gateDnTx;
+        pushostd->pgatrx = gateDnRx;
         
         char csw[13] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00};
         char endTran[64] = {};
         uint8_t cmd=0, opc=0, dat=0;
         uint32_t usbentsRx=0, usbentsTx=0, getents=0;
 
-        int thrid[5];
+        int thrid[6];
         
         struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
         int usbfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0;
@@ -6890,7 +7032,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             else if ((opc == 0x04) && (dat == 0x85)) {
 
                                 puscur = 0;
-                                ring_buf_init(usbTx);
+                                ring_buf_init(pushost->pushring);
                                 while (1) {
                                     chq = 0;
                                     pipRet = read(pipeRx[0], &chq, 1);
@@ -6909,7 +7051,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             else if ((opc == 0x05) && (dat == 0x85)) {
 
                                 puscur = 0;
-                                ring_buf_init(usbTx);
+                                ring_buf_init(pushost->pushring);
                                 while (1) {
                                     chq = 0;
                                     pipRet = read(pipeRx[0], &chq, 1);
@@ -6923,7 +7065,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                     }
                                 }
 
-                                ring_buf_init(usbTxd);
+                                ring_buf_init(pushostd->pushring);
                                 while (1) {
                                     chd = 0;
                                     pipRet = read(pipeRxd[0], &chd, 1);
@@ -7066,6 +7208,19 @@ static char spi1[] = "/dev/spidev32766.0";
                 } else {
                     printf("[PID] create thread 4 id: %d exit\n", thrid[4]);
                     printf("[DVF] meta usb host _2_ PID[%d] \n", thrid[4]);
+                }
+
+                thrid[5] = fork();
+                if (!thrid[5]) {
+                
+                    printf("[DVF] meta usb gate start, PID[%d] \n", thrid[5]);
+                    ret = usb_gate(pushost, pushostd);
+                    printf("[DVF] meta usb gate end, PID[%d] ret: %d \n", thrid[5], ret);
+                    exit(0);
+                    goto  end;
+                } else {
+                    printf("[PID] create thread 5 id: %d exit\n", thrid[5]);
+                    printf("[DVF] meta usb gate PID[%d] \n", thrid[5]);
                 }
 
                 exit(0);
