@@ -50,6 +50,7 @@
 #define USB_SAVE_RESULT (1)
 
 #define USB_CALLBACK_SUBMIT (0)
+#define USB_RINGBUF_USE_GATE (1)
 /* USB ioctl  */
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_CONTI_READ_START  8
@@ -5773,6 +5774,16 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
     char pllcmd[5];
     int outfd[5];
 
+    struct shmem_s *ringbf[4];
+    char *addrd, *addrs;
+    int lens=0, szup=0, szdn=0;
+
+    ringbf[0] = ppup->pushring;
+    ringbf[1] = ppup->pgatring;
+    ringbf[2] = ppdn->pushring;
+    ringbf[3] = ppdn->pgatring;
+    
+    
     uphstx = ppup->pushtx;
     uphsrx = ppup->pushrx;
     updvtx = ppup->pgattx;
@@ -5837,12 +5848,63 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                         break;
                     case 1:
                         write(outfd[ins], &pllcmd[ins], 1);
+#if USB_RINGBUF_USE_GATE
+                        if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
+
+                            lens = ring_buf_cons(ringbf[1], &addrs);                
+                            while (lens <= 0) {
+                                //printf("[DV] cons ring buff ret: %d \n", lens);
+                                usleep(1000);
+                                lens = ring_buf_cons(ringbf[1], &addrs);
+                            }
+
+                            ring_buf_get(ringbf[0], &addrd);
+
+                            memcpy(addrd, addrs, lens);
+
+                            ring_buf_prod(ringbf[0]);
+
+                            szup += lens;
+                            printf("[G] ring%d trunk size: %d, total: %d\n", ins, lens, szup);
+                            
+                            if (lens < PT_BUF_SIZE) {
+                                ring_buf_set_last(ringbf[0], lens);
+                                printf("[G] ring%d the last trunk size: %d\n", ins, lens);
+                            }
+                            
+                        }
+#endif                        
                         break;
                     case 2:
                         write(outfd[ins], &pllcmd[ins], 1);
                         break;
                     case 3:
                         write(outfd[ins], &pllcmd[ins], 1);
+#if USB_RINGBUF_USE_GATE
+                        if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
+
+                            lens = ring_buf_cons(ringbf[3], &addrs);                
+                            while (lens <= 0) {
+                                //printf("[DV] cons ring buff ret: %d \n", lens);
+                                usleep(1000);
+                                lens = ring_buf_cons(ringbf[3], &addrs);
+                            }
+
+                            ring_buf_get(ringbf[2], &addrd);
+
+                            memcpy(addrd, addrs, lens);
+
+                            ring_buf_prod(ringbf[2]);
+
+                            szdn += lens;
+                            printf("[G] ring%d trunk size: %d, total: %d\n", ins, lens, szdn);
+
+                            if (lens < PT_BUF_SIZE) {
+                                ring_buf_set_last(ringbf[2], lens);
+                                printf("[G] ring%d the last trunk size: %d\n", ins, lens);
+                            }
+                        }
+#endif
                         break;
                     default:
                         write(outfd[ins], &pllcmd[ins], 1);
@@ -5893,10 +5955,10 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     int tcnt=0;
     int bitset=0;
 
-#if 1 /* original */
-    pTx = puhs->pushring;
-#else
+#if USB_RINGBUF_USE_GATE /* original */
     pTx = puhs->pgatring;
+#else
+    pTx = puhs->pushring;
 #endif
 
     pMta = puhs->puhsmeta;
@@ -5974,8 +6036,6 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             cmdchr = cmdMtx[1][1];
             break;
         case 'p':
-            opc = OP_DUPLEX;
-            dat = OPSUB_USB_Scan;
             cmdchr = cmdMtx[4][1];
             break;
         case 'u':
@@ -6018,6 +6078,8 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         else if (cmdchr == 0x03) {
             //ptret = USB_IOCT_LOOP_CONTI_READ(usbid, &bitset);
             //printf("\n\n[HS] conti read start ret: %d \n\n", ptret);
+        }
+        else if (cmdchr == 0x02) {
 #if 0 /* remove ready */
             insert_cbw(CBW, CBW_CMD_READY, 0, 0);
             usb_send(CBW, usbid, 31);
@@ -6037,8 +6099,6 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             ptret = USB_IOCT_LOOP_START(usbid, &bitset);
             printf("\n\n[HS] conti read start ret: %d \n\n", ptret);
 #endif
-        }
-        else if (cmdchr == 0x02) {
 
             insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
             usb_send(CBW, usbid, 31);     
@@ -7033,6 +7093,7 @@ static char spi1[] = "/dev/spidev32766.0";
 
                                 puscur = 0;
                                 ring_buf_init(pushost->pushring);
+                                ring_buf_init(pushost->pgatring);
                                 while (1) {
                                     chq = 0;
                                     pipRet = read(pipeRx[0], &chq, 1);
@@ -7052,6 +7113,7 @@ static char spi1[] = "/dev/spidev32766.0";
 
                                 puscur = 0;
                                 ring_buf_init(pushost->pushring);
+                                ring_buf_init(pushost->pgatring);
                                 while (1) {
                                     chq = 0;
                                     pipRet = read(pipeRx[0], &chq, 1);
@@ -7066,6 +7128,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                 }
 
                                 ring_buf_init(pushostd->pushring);
+                                ring_buf_init(pushost->pgatring);
                                 while (1) {
                                     chd = 0;
                                     pipRet = read(pipeRxd[0], &chd, 1);
@@ -7096,8 +7159,11 @@ static char spi1[] = "/dev/spidev32766.0";
                                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
                                         goto end;
                                     }
-                                    
+#if 0
+                                    usbCur = puscur->pgatring;
+#else
                                     usbCur = puscur->pushring;
+#endif
                                     piptx = puscur->pushtx;
                                     piprx = puscur->pushrx; 
                                 }
@@ -7111,21 +7177,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             if (opc == 0x05) {
                                 if (!puscur) {
                                     puscur = pushost;                    
-
-                                    chq = 'p';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        printf("[DV]  pipe send meta ret: %d \n", pipRet);
-                                        goto end;
-                                    }
-
-                                    chd = 'p';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        printf("[DV]  pipe send meta ret: %d \n", pipRet);
-                                        goto end;
-                                    }
-
+                                    
                                     chq = 'a';
                                     pipRet = write(pipeTx[1], &chq, 1);
                                     if (pipRet < 0) {
@@ -7139,15 +7191,22 @@ static char spi1[] = "/dev/spidev32766.0";
                                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
                                         goto end;
                                     }
-
+#if 0
+                                    usbCur = puscur->pgatring;
+#else
                                     usbCur = puscur->pushring;
+#endif
                                     piptx = puscur->pushtx;
                                     piprx = puscur->pushrx; 
                                 }
                                 else if (puscur == pushost) {
                                     puscur = pushostd;
-                                    
+
+#if 0
+                                    usbCur = puscur->pgatring;
+#else
                                     usbCur = puscur->pushring;
+#endif
                                     piptx = puscur->pushtx;
                                     piprx = puscur->pushrx; 
                                 }
