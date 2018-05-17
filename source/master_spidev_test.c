@@ -5793,14 +5793,18 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
     char *addrd, *addrs;
     int lens=0, szup=0, szdn=0;
 
-    struct usbBuffLink_s *pubffh=0, *pubffc=0, *pubfft=0, *pubffm=0, *pubffo=0;
+    struct usbBuffLink_s *pubffh=0, *pubffc=0, *pubfft=0, *pubffm=0, *pubffo=0, *pubffd=0;
     struct usbBuff_s *curbf=0, *headbf=0, *tmpbf=0, *outbf=0;
     
     ringbf[0] = ppup->pushring;
     ringbf[1] = ppup->pgatring;
     ringbf[2] = ppdn->pushring;
     ringbf[3] = ppdn->pgatring;
-    
+
+    ring_buf_init(ringbf[0]);
+    ring_buf_init(ringbf[1]);
+    ring_buf_init(ringbf[2]);
+    ring_buf_init(ringbf[3]);
     
     uphstx = ppup->pushtx;
     printf("[GW] uphstx 0:%d 1:%d\n", uphstx[0], uphstx[1]);
@@ -5879,24 +5883,17 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 printf("[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);            
                             } else {
                                 if (!pubffo) {
+                                    
                                     pubffo = pubffh;
-                                    outbf = pubffo->ubbufh;
-                                } else {
-                                    if (!outbf) {
-                                        headbf = pubffo->ubbufh;
-                                        while (headbf) {
-                                            tmpbf = headbf;                                            
-                                            headbf = tmpbf->bn;
-                                            printf("[GW] clean buf addr: 0x%.8x\n", tmpbf);
-                                            free(tmpbf);
+                                    while (pubffo) {
+                                        if (pubffo->ubindex == (pllcmd[ins] & 0x7f)) {
+                                            break;
                                         }
+                                        pubffo = pubffo->ubnxt;
+                                    }
 
-                                        if(pubffh == pubffo) {
-                                            pubffh = pubffo->ubnxt;
-                                        }
-                                        
-                                        free(pubffo);
-                                        pubffo = 0;
+                                    if (pubffo) {
+                                        outbf = pubffo->ubbufh;
                                     }
                                 }
                                 
@@ -5917,17 +5914,16 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         lens = pubffo->ublastsize;
                                     }
 
-                                    msync(addrs, lens, MS_SYNC);
-                                    printf("[GW] dump 32 - 2 - 1\n");
+                                    //msync(addrs, lens, MS_SYNC);
+                                    //printf("[GW] dump 32 - 2 - 1\n");
                                     shmem_dump(addrs, 32);
                                     
                                     memcpy(addrd, addrs, lens);
-                                    printf("[GW] memcpy len: %d \n", lens);
 
                                     msync(addrd, lens, MS_SYNC);
                                     
-                                    printf("[GW] dump 32 - 2 - 2\n");
-                                    shmem_dump(addrd, 32);
+                                    //printf("[GW] dump 32 - 2 - 2\n");
+                                    //shmem_dump(addrd, 32);
                                     
                                         
                                     if (lens < PT_BUF_SIZE) {
@@ -5935,8 +5931,36 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         ring_buf_set_last(ringbf[0], lens);
                                         
                                         pllcmd[ins] = pllcmd[ins] & 0x7f;
+
                                         outbf = 0;
 
+                                        headbf = pubffo->ubbufh;
+                                        while (headbf) {
+                                            tmpbf = headbf;                                            
+                                            headbf = tmpbf->bn;
+                                            printf("[GW] clean buf addr: 0x%.8x\n", tmpbf);
+                                            free(tmpbf);
+                                        }
+                                        tmpbf = 0;
+                                    
+                                        if(pubffh == pubffo) {
+                                            pubffh = pubffo->ubnxt;
+                                        } else {
+                                            pubffm = pubffh;
+                                            while (pubffm) {
+                                                if (pubffm->ubnxt == pubffo) {
+                                                    pubffm->ubnxt = pubffo->ubnxt;
+                                                    printf("[GW] remove current buf addr: 0x%.8x\n", pubffo);
+                                                    break;
+                                                }
+                                                pubffm = pubffm->ubnxt;
+                                            }
+                                        }
+                                        
+                                        free(pubffo);
+                                        
+                                        pubffo = 0;
+                                        
                                         printf("[GW] the last trunk reach, set outbf == 0 \n");
                                     } else if (tmpbf) {
                                         ring_buf_prod(ringbf[0]);
@@ -5999,7 +6023,6 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             }
 
                             if (!pubffh) {
-                                //ring_buf_prod(ringbf[0]);
                                 break;
                             }
 
@@ -6023,7 +6046,6 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             }
                             
                             if (!pubffc) {
-                                //ring_buf_prod(ringbf[0]);
                                 break;
                             }
 
@@ -6049,23 +6071,17 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             curbf = pubffc->ubbufc;
 
                             if ((!curbf) || (!pubffh->ubbufh)) {
-                                //ring_buf_prod(ringbf[0]);
                                 break;
                             }
-                            
-                            //ring_buf_get(ringbf[0], &addrd);
                             
                             addrd = curbf->bpt;
 
                             msync(addrs, lens, MS_SYNC);
                             
-                            printf("[GW] dump 32 - 1\n");
-                            shmem_dump(addrs, 32);
+                            //printf("[GW] dump 32 - 1\n");
+                            //shmem_dump(addrs, 32);
                             
                             memcpy(addrd, addrs, lens);
-
-                            
-                            //ring_buf_prod(ringbf[0]);
 
                             szup += lens;
                             printf("[GW] ring%d trunk size: %d, total: %d\n", ins, lens, szup);
@@ -6078,6 +6094,8 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 printf("[GW] ring%d the last trunk size: %d\n", ins, lens);
                                 pubffc->ublastsize = lens;
                                 pubffc = 0;
+
+                                ring_buf_init(ringbf[1]);
                             }
 
                             write(outfd[ins], &pllcmd[ins], 1);
@@ -6089,11 +6107,110 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 #endif                 
                         break;
                     case 2:
-                        write(outfd[ins], &pllcmd[ins], 1);
-                        printf("[GW] out%d put chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], evcnt);
+                        if (pllcmd[ins] & 0x80) {
+                            if (!pubffh) {
+                                pllcmd[ins] = 0x80;
+                                write(infd[ins], &pllcmd[ins], 1);
+                                printf("[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);            
+                            } else {
+                                if (!pubffo) {
+                                    pubffo = pubffh;
+                                    outbf = pubffo->ubbufh;
+                                } else {
+                                    if (!outbf) {
+                                        headbf = pubffo->ubbufh;
+                                        while (headbf) {
+                                            tmpbf = headbf;                                            
+                                            headbf = tmpbf->bn;
+                                            printf("[GW] clean buf addr: 0x%.8x\n", tmpbf);
+                                            free(tmpbf);
+                                        }
+
+                                        if(pubffh == pubffo) {
+                                            pubffh = pubffo->ubnxt;
+                                        }
+                                        
+                                        free(pubffo);
+                                        pubffo = 0;
+                                    }
+                                }
+                                
+                                if (!outbf) {
+                                    pllcmd[ins] = 0x80;
+                                    write(infd[ins], &pllcmd[ins], 1);
+                                    printf("[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);
+                                    //pubffm = pubffo->ubnxt;                                        
+                                    //pubffh = pubffm;
+                                } else {
+                                    pllcmd[ins] = (pubffo->ubindex & 0x7f) | 0x80;;
+                                    lens = ring_buf_get(ringbf[2], &addrd);
+                                    addrs = outbf->bpt;
+
+                                    tmpbf = outbf->bn;
+
+                                    if ((!tmpbf) && (pubffo->ublastsize)) {
+                                        lens = pubffo->ublastsize;
+                                    }
+
+                                    //msync(addrs, lens, MS_SYNC);
+                                    //printf("[GW] dump 32 - 2 - 1\n");
+                                    shmem_dump(addrs, 32);
+                                    
+                                    memcpy(addrd, addrs, lens);
+
+                                    msync(addrd, lens, MS_SYNC);
+                                    
+                                    //printf("[GW] dump 32 - 2 - 2\n");
+                                    //shmem_dump(addrd, 32);
+                                    
+                                        
+                                    if (lens < PT_BUF_SIZE) {
+                                        ring_buf_prod(ringbf[2]);
+                                        ring_buf_set_last(ringbf[2], lens);
+                                        
+                                        pllcmd[ins] = pllcmd[ins] & 0x7f;
+                                        outbf = 0;
+
+                                        printf("[GW] the last trunk reach, set outbf == 0 \n");
+                                    } else if (tmpbf) {
+                                        ring_buf_prod(ringbf[2]);
+                                        //pubffo->ubbufo= tmpbf;
+                                        outbf = tmpbf;
+                                        printf("[GW] prod one trunk next outbf == 0x%.8x\n", outbf);
+                                    } else {
+                                        pllcmd[ins] = 0x80;                                    
+                                        printf("[GW] idle \n");
+                                    }
+
+                                    if (tmpbf) {
+                                        headbf = pubffo->ubbufh;
+                                        while (headbf) {
+                                            if  (headbf != outbf) {
+                                                tmpbf = headbf;
+                                                headbf = tmpbf->bn;
+                                                printf("[GW] free used buf addr: 0x%.8x \n", tmpbf);
+                                                free(tmpbf);
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        pubffo->ubbufh = headbf;
+                                    }
+                                    
+                                    write(infd[ins], &pllcmd[ins], 1);
+                                    printf("[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);            
+                                }                                    
+                            }
+                        }
+                        else if ((pllcmd[ins] == 'd') || (pllcmd[ins] == 'a') || (pllcmd[ins] == 's') || (pllcmd[ins] == 'm')) {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                            printf("[GW] out%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins], evcnt);
+                        }
+                        else {
+                            printf("\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
+                        }
                         break;
                     case 3:
-                        write(outfd[ins], &pllcmd[ins], 1);
 #if USB_RINGBUF_USE_GATE
                         if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
 
@@ -6104,22 +6221,100 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 lens = ring_buf_cons(ringbf[3], &addrs);
                             }
 
-                            ring_buf_get(ringbf[2], &addrd);
+                            if (!pubffh) {
+                                pubffh = malloc(sizeof(struct usbBuffLink_s));
+                                if (pubffh) {
+                                    memset(pubffh, 0, sizeof(struct usbBuffLink_s));
+                                    pubffh->ubindex = 1;
+                                } else {
+                                    printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
+                                }
+                                pubffd = pubffh;
+                            }
 
+                            if (!pubffh) {
+                                break;
+                            }
+
+                            if (!pubffd) {
+                                pubffd = malloc(sizeof(struct usbBuffLink_s));
+                                if (pubffd) {
+                                    memset(pubffd, 0, sizeof(struct usbBuffLink_s));
+
+                                    pubffm = pubffh;
+                                    pubfft = pubffm->ubnxt;
+                                    while (pubfft) {
+                                        pubffm = pubfft;
+                                        pubfft = pubffm->ubnxt;
+                                    }
+                                    
+                                    pubffd->ubindex = pubffm->ubindex+1;
+                                    pubffm->ubnxt = pubffd;
+                                } else {
+                                    printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
+                                }
+                            }
+                            
+                            if (!pubffd) {
+                                break;
+                            }
+
+                            if (!pubffd->ubbufh) {
+                                pubffd->ubbufh= malloc(sizeof(struct usbBuff_s));
+                                if (pubffd->ubbufh) {
+                                    pubffd->ubbufh->bn = 0;
+                                } else {
+                                    printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuff_s)); 
+                                }
+                                curbf = pubffd->ubbufh;
+                                pubffd->ubbufc = curbf;
+                            } else {
+                                curbf = pubffd->ubbufc;
+                                tmpbf = malloc(sizeof(struct usbBuff_s));
+                                if (tmpbf) {
+                                    tmpbf->bn = 0;
+                                    curbf->bn = tmpbf;
+                                    pubffd->ubbufc = tmpbf;
+                                }
+                            }
+                            
+                            curbf = pubffd->ubbufc;
+
+                            if ((!curbf) || (!pubffh->ubbufh)) {
+                                break;
+                            }
+                            
+                            addrd = curbf->bpt;
+
+                            msync(addrs, lens, MS_SYNC);
+                            
+                            //printf("[GW] dump 32 - 1\n");
+                            //shmem_dump(addrs, 32);
+                            
                             memcpy(addrd, addrs, lens);
 
-                            ring_buf_prod(ringbf[2]);
+                            szup += lens;
+                            printf("[GW] ring%d trunk size: %d, total: %d\n", ins, lens, szup);
 
-                            szdn += lens;
-                            printf("[GW] ring%d trunk size: %d, total: %d\n", ins, lens, szdn);
-
+                            /* send back index */
+                            pllcmd[ins] = (pubffd->ubindex & 0x7f) | 0x80;
+                            
                             if (lens < PT_BUF_SIZE) {
-                                ring_buf_set_last(ringbf[2], lens);
+                                //ring_buf_set_last(ringbf[0], lens);
                                 printf("[GW] ring%d the last trunk size: %d\n", ins, lens);
+                                pubffd->ublastsize = lens;
+                                pubffd = 0;
+
+                                ring_buf_init(ringbf[3]);
                             }
+
+                            write(outfd[ins], &pllcmd[ins], 1);
+                            printf("[GW] out%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins], evcnt);
                         }
-#endif
-                        printf("[GW] out%d put chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], evcnt);
+                        else {
+                            printf("\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
+                        }
+#endif                 
                         break;
                     default:
                         write(outfd[ins], &pllcmd[ins], 1);
@@ -6382,9 +6577,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                     /*do nothing*/
                 }
 
-                printf("[HS] dump 32 - 0 \n");
-                msync(addr, recvsz, MS_SYNC);
-                shmem_dump(addr, 32);
+                //printf("[HS] dump 32 - 0 \n");
+                //msync(addr, recvsz, MS_SYNC);
+                //shmem_dump(addr, 32);
 
                 tcnt ++;
 
@@ -6925,8 +7120,8 @@ static char spi1[] = "/dev/spidev32766.0";
                             }
                             msync(addrd, lens, MS_SYNC);
 
-                            printf("[DV] dump 32 - 3\n");
-                            shmem_dump(addrd, 32);
+                            //printf("[DV] dump 32 - 3\n");
+                            //shmem_dump(addrd, 32);
                             
 #if 0                   
                             puscur->pushcnt --;
@@ -7132,8 +7327,8 @@ static char spi1[] = "/dev/spidev32766.0";
                             else if ((opc == 0x04) && (dat == 0x85)) {
 
                                 puscur = 0;
-                                ring_buf_init(pushost->pushring);
-                                ring_buf_init(pushost->pgatring);
+                                //ring_buf_init(pushost->pushring);
+                                //ring_buf_init(pushost->pgatring);
                                 while (1) {
                                     chq = 0;
                                     pipRet = read(pipeRx[0], &chq, 1);
@@ -7152,8 +7347,8 @@ static char spi1[] = "/dev/spidev32766.0";
                             else if ((opc == 0x05) && (dat == 0x85)) {
 
                                 puscur = 0;
-                                ring_buf_init(pushost->pushring);
-                                ring_buf_init(pushost->pgatring);
+                                //ring_buf_init(pushost->pushring);
+                                //ring_buf_init(pushost->pgatring);
                                 while (1) {
                                     chq = 0;
                                     pipRet = read(pipeRx[0], &chq, 1);
@@ -7167,8 +7362,8 @@ static char spi1[] = "/dev/spidev32766.0";
                                     }
                                 }
 
-                                ring_buf_init(pushostd->pushring);
-                                ring_buf_init(pushost->pgatring);
+                                //ring_buf_init(pushostd->pushring);
+                                //ring_buf_init(pushost->pgatring);
                                 while (1) {
                                     chd = 0;
                                     pipRet = read(pipeRxd[0], &chd, 1);
