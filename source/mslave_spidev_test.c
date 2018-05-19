@@ -192,6 +192,17 @@ struct aspMetaData_s{
 };
 
 typedef enum {
+    ASPMETA_FUNC_NONE = 0,
+    ASPMETA_FUNC_CONF = 0b00000001,
+    ASPMETA_FUNC_CROP = 0b00000010,
+    ASPMETA_FUNC_IMGLEN = 0b00000100,
+    ASPMETA_FUNC_SDFREE = 0b00001000,
+    ASPMETA_FUNC_SDUSED = 0b00010000,
+    ASPMETA_FUNC_SDRD = 0b00100000,
+    ASPMETA_FUNC_SDWT = 0b01000000,
+} aspMetaFuncbit_e;
+
+typedef enum {
     ASPFS_ATTR_READ_ONLY = 0x01,
     ASPFS_ATTR_HIDDEN = 0x02,
     ASPFS_ATTR_SYSTEM = 0x04,
@@ -362,7 +373,7 @@ static int aspFS_save(struct directnFile_s *root, FILE fp);
 static int aspFS_extract(struct directnFile_s *root, FILE fp);
 static int aspFS_getNote(struct directnFile_s *note, struct directnFile_s *root, char *path);
 static int aspFS_getFilelist(char *flst, struct directnFile_s *note);
-
+static uint32_t msb2lsb(struct intMbs_s *msb);
 static int aspSD_getRoot();
 static int aspSD_getDir();
 
@@ -1810,6 +1821,43 @@ static int chk_reply(char * rx, char *ans, int sz)
         return 0;
 }
 
+static int print_f(struct logPool_s *plog, char *head, char *str)
+{
+    uint32_t logdisplayflag=0;
+    int len;
+    char ch[1152];
+    
+    if (!str) return (-1);
+
+    if (head) {
+        //if (!strcmp(head, "P2")) return 0;
+        sprintf(ch, "[%s] %s", head, str);
+    } else {
+        sprintf(ch, "%s", str);
+    }
+
+    printf("%s",ch);
+
+#if 0
+    if (!plog) return (-2);
+
+    logdisplayflag = plog->dislog;
+    
+    msync(plog, sizeof(struct logPool_s), MS_SYNC);
+    len = strlen(ch);
+    if ((len + plog->len) > plog->max) return (-3);
+    memcpy(plog->cur, ch, strlen(ch));
+    plog->cur += len;
+    plog->len += len;
+#endif
+    //if (!mlog) return (-4);
+    //fwrite(ch, 1, strlen(ch), mlog);
+    //fflush(mlog);
+    //fprintf(mlog, "%s", ch);
+    
+    return 0;
+}
+
 FILE *find_save(char *dst, char *tmple)
 {
     int i;
@@ -1826,6 +1874,227 @@ FILE *find_save(char *dst, char *tmple)
     }
     f = fopen(dst, "w");
     return f;
+}
+
+static uint32_t msb2lsb(struct intMbs_s *msb)
+{
+    uint32_t lsb=0;
+    int i=0;
+
+    while (i < 4) {
+        lsb = lsb << 8;
+        
+        lsb |= msb->d[i];
+        
+        //printf("[%d] :0x%.2x <- 0x%.2x \n", i, lsb & 0xff, msb->d[i]);
+        
+        i++;
+    }
+
+    //printf("msb2lsb() msb:0x%.8x -> lsb:0x%.8x \n", msb->n, lsb);
+    
+    return lsb;
+}
+static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta) 
+{
+    char mlog[256];
+    char *pch=0;
+    
+    msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
+    sprintf_f(mlog, "********************************************\n");
+    print_f(mlogPool, "META", mlog);
+    sprintf_f(mlog, "_ debug print , funcBits: 0x%.8x, magic[0]: 0x%.2x magic[1]: 0x%.2x \n", funcbits, pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+    print_f(mlogPool, "META", mlog);
+    
+    if ((pmeta->ASP_MAGIC[0] != 0x20) || (pmeta->ASP_MAGIC[1] != 0x14)) {
+        sprintf_f(mlog, " Warning!!! magic[0]: 0x%.2x magic[1]: 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "********************************************\n");
+        print_f(mlogPool, "META", mlog);
+        return -2;
+    }
+    
+    if (funcbits == ASPMETA_FUNC_NONE) {
+        sprintf_f(mlog, "********************************************\n");
+        print_f(mlogPool, "META", mlog);
+        return -3;
+    }
+
+    if (funcbits & ASPMETA_FUNC_CONF) {
+        sprintf_f(mlog, "__ASPMETA_FUNC_CONF__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CONF, (funcbits & ASPMETA_FUNC_CONF));
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "FILE_FORMAT: 0x%.2x    \n",pmeta->FILE_FORMAT     );          //0x31
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "COLOR_MODE: 0x%.2x      \n",pmeta->COLOR_MODE      );        //0x32
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "COMPRESSION_RATE: 0x%.2x\n",pmeta->COMPRESSION_RATE);   //0x33
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "RESOLUTION: 0x%.2x      \n",pmeta->RESOLUTION      );         //0x34
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SCAN_GRAVITY: 0x%.2x    \n",pmeta->SCAN_GRAVITY    );       //0x35
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CIS_MAX_Width: 0x%.2x   \n",pmeta->CIS_MAX_WIDTH   );        //0x36
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "WIDTH_ADJUST_H: 0x%.2x  \n",pmeta->WIDTH_ADJUST_H  );     //0x37
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "WIDTH_ADJUST_L: 0x%.2x  \n",pmeta->WIDTH_ADJUST_L  );      //0x38
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SCAN_LENGTH_H: 0x%.2x   \n",pmeta->SCAN_LENGTH_H   );      //0x39
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SCAN_LENGTH_L: 0x%.2x   \n",pmeta->SCAN_LENGTH_L   );       //0x3a
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "INTERNAL_IMG: 0x%.2x    \n",pmeta->INTERNAL_IMG    );         //0x3b
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "AFE_IC_SELEC: 0x%.2x    \n",pmeta->AFE_IC_SELEC    );         //0x3c
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "EXTNAL_PULSE: 0x%.2x    \n",pmeta->EXTNAL_PULSE    );         //0x3d
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SUP_WRITEBK: 0x%.2x     \n",pmeta->SUP_WRITEBK     );       //0x3e
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_00: 0x%.2x      \n",pmeta->OP_FUNC_00      );     //0x70
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_01: 0x%.2x      \n",pmeta->OP_FUNC_01      );     //0x71
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_02: 0x%.2x      \n",pmeta->OP_FUNC_02      );     //0x72
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_03: 0x%.2x      \n",pmeta->OP_FUNC_03      );     //0x73
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_04: 0x%.2x      \n",pmeta->OP_FUNC_04      );     //0x74
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_05: 0x%.2x      \n",pmeta->OP_FUNC_05      );     //0x75
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_06: 0x%.2x      \n",pmeta->OP_FUNC_06      );     //0x76
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_07: 0x%.2x      \n",pmeta->OP_FUNC_07      );     //0x77
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_08: 0x%.2x      \n",pmeta->OP_FUNC_08      );     //0x78
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_09: 0x%.2x      \n",pmeta->OP_FUNC_09      );     //0x79
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_10: 0x%.2x      \n",pmeta->OP_FUNC_10      );     //0x7A
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_11: 0x%.2x      \n",pmeta->OP_FUNC_11      );     //0x7B
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_12: 0x%.2x      \n",pmeta->OP_FUNC_12      );     //0x7C
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_13: 0x%.2x      \n",pmeta->OP_FUNC_13      );     //0x7D
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_14: 0x%.2x      \n",pmeta->OP_FUNC_14      );     //0x7E
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_15: 0x%.2x      \n",pmeta->OP_FUNC_15      );     //0x7F  
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "BLEEDTHROU_ADJUST: 0x%.2x      \n",pmeta->BLEEDTHROU_ADJUST);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "BLACKWHITE_THSHLD: 0x%.2x      \n",pmeta->BLACKWHITE_THSHLD);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SD_CLK_RATE_16: 0x%.2x      \n",pmeta->SD_CLK_RATE_16);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "PAPER_SIZE: 0x%.2x      \n",pmeta->PAPER_SIZE);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "JPGRATE_ENG_17: 0x%.2x      \n",pmeta->JPGRATE_ENG_17);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_18: 0x%.2x      \n",pmeta->OP_FUNC_18);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_19: 0x%.2x      \n",pmeta->OP_FUNC_19);
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_20: 0x%.2x      \n",pmeta->OP_FUNC_20);
+        print_f(mlogPool, "META", mlog);
+    }
+    
+    if (funcbits & ASPMETA_FUNC_CROP) {
+        sprintf_f(mlog, "__ASPMETA_FUNC_CROP__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CROP, (funcbits & ASPMETA_FUNC_CROP));
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_01: %d, %d\n", msb2lsb(&pmeta->CROP_POS_1) >> 16, msb2lsb(&pmeta->CROP_POS_1) & 0xffff);                      //byte[68]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_02: %d, %d\n", msb2lsb(&pmeta->CROP_POS_2) >> 16, msb2lsb(&pmeta->CROP_POS_2) & 0xffff);                      //byte[72]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_03: %d, %d\n", msb2lsb(&pmeta->CROP_POS_3) >> 16, msb2lsb(&pmeta->CROP_POS_3) & 0xffff);                      //byte[76]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_04: %d, %d\n", msb2lsb(&pmeta->CROP_POS_4) >> 16, msb2lsb(&pmeta->CROP_POS_4) & 0xffff);                      //byte[80]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_05: %d, %d\n", msb2lsb(&pmeta->CROP_POS_5) >> 16, msb2lsb(&pmeta->CROP_POS_5) & 0xffff);                      //byte[84]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_06: %d, %d\n", msb2lsb(&pmeta->CROP_POS_6) >> 16, msb2lsb(&pmeta->CROP_POS_6) & 0xffff);                      //byte[88]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_07: %d, %d\n", msb2lsb(&pmeta->CROP_POS_7) >> 16, msb2lsb(&pmeta->CROP_POS_7) & 0xffff);                      //byte[92]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_08: %d, %d\n", msb2lsb(&pmeta->CROP_POS_8) >> 16, msb2lsb(&pmeta->CROP_POS_8) & 0xffff);                      //byte[96]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_09: %d, %d\n", msb2lsb(&pmeta->CROP_POS_9) >> 16, msb2lsb(&pmeta->CROP_POS_9) & 0xffff);                      //byte[100]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_10: %d, %d\n", msb2lsb(&pmeta->CROP_POS_10) >> 16, msb2lsb(&pmeta->CROP_POS_10) & 0xffff);                      //byte[104]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_11: %d, %d\n", msb2lsb(&pmeta->CROP_POS_11) >> 16, msb2lsb(&pmeta->CROP_POS_11) & 0xffff);                      //byte[108]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_12: %d, %d\n", msb2lsb(&pmeta->CROP_POS_12) >> 16, msb2lsb(&pmeta->CROP_POS_12) & 0xffff);                      //byte[112]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_13: %d, %d\n", msb2lsb(&pmeta->CROP_POS_13) >> 16, msb2lsb(&pmeta->CROP_POS_13) & 0xffff);                      //byte[116]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_14: %d, %d\n", msb2lsb(&pmeta->CROP_POS_14) >> 16, msb2lsb(&pmeta->CROP_POS_14) & 0xffff);                      //byte[120]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_15: %d, %d\n", msb2lsb(&pmeta->CROP_POS_15) >> 16, msb2lsb(&pmeta->CROP_POS_15) & 0xffff);                      //byte[124]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_16: %d, %d\n", msb2lsb(&pmeta->CROP_POS_16) >> 16, msb2lsb(&pmeta->CROP_POS_16) & 0xffff);                      //byte[128]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_17: %d, %d\n", msb2lsb(&pmeta->CROP_POS_17) >> 16, msb2lsb(&pmeta->CROP_POS_17) & 0xffff);                      //byte[132]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "CROP_POSX_18: %d, %d\n", msb2lsb(&pmeta->CROP_POS_18) >> 16, msb2lsb(&pmeta->CROP_POS_18) & 0xffff);                      //byte[136]
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "YLine_Gap: %.d      \n",pmeta->YLine_Gap); 
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "Start_YLine_No: %d      \n",pmeta->Start_YLine_No); 
+        print_f(mlogPool, "META", mlog);
+        pch = (char *)&pmeta->YLines_Recorded;
+        sprintf_f(mlog, "YLines_Recorded: %d      \n",(pch[0] << 8) | pch[1]); 
+        print_f(mlogPool, "META", mlog);
+    }
+
+    if (funcbits & ASPMETA_FUNC_IMGLEN) {
+        sprintf_f(mlog, "__ASPMETA_FUNC_IMGLEN__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_IMGLEN, (funcbits & ASPMETA_FUNC_IMGLEN));
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SCAN_IMAGE_LEN: %d\n", msb2lsb(&pmeta->SCAN_IMAGE_LEN));                      //byte[124]        
+        print_f(mlogPool, "META", mlog);
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDFREE) {      
+        sprintf_f(mlog, "__ASPMETA_FUNC_SDFREE__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDFREE, (funcbits & ASPMETA_FUNC_SDFREE));
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "FREE_SECTOR_ADD: %d\n", msb2lsb(&pmeta->FREE_SECTOR_ADD));                      //byte[128]            
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "FREE_SECTOR_LEN: %d\n", msb2lsb(&pmeta->FREE_SECTOR_LEN));                      //byte[132]        
+        print_f(mlogPool, "META", mlog);
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDUSED) {
+        sprintf_f(mlog, "__ASPMETA_FUNC_SDUSED__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDUSED, (funcbits & ASPMETA_FUNC_SDUSED));
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "USED_SECTOR_ADD: %d\n", msb2lsb(&pmeta->USED_SECTOR_ADD));                      //byte[136]            
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "USED_SECTOR_LEN: %d\n", msb2lsb(&pmeta->USED_SECTOR_LEN));                      //byte[140]        
+        print_f(mlogPool, "META", mlog);
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDRD) {
+        sprintf_f(mlog, "__ASPMETA_FUNC_SDRD__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDRD, (funcbits & ASPMETA_FUNC_SDRD));
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[144]            
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[148]        
+        print_f(mlogPool, "META", mlog);
+    }
+
+    if (funcbits & ASPMETA_FUNC_SDWT) {
+        sprintf_f(mlog, "__ASPMETA_FUNC_SDWT__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDWT, (funcbits & ASPMETA_FUNC_SDWT));
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[136]            
+        print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[140]        
+        print_f(mlogPool, "META", mlog);
+    }
+
+    sprintf_f(mlog, "********************************************\n");
+    print_f(mlogPool, "META", mlog);
+    return 0;
 }
 
 FILE *find_open(char *dst, char *tmple)
@@ -1886,7 +2155,7 @@ static int insert_cbw(char *cbw, char cmd, char opc, char dat)
 #define USB_TX_LOG 1
 static int usb_send(char *pts, int usbfd, int len)
 {
-    int ret=0, send=0;
+    int ret=0, send=0, cnt=0;
     struct pollfd pllfd[1];
 
 #if 0
@@ -1921,14 +2190,25 @@ static int usb_send(char *pts, int usbfd, int len)
     }
 #else
     send = write(usbfd, pts, len);
-    printf("[UW] usb write %d bytes, ret: %d (2)\n", len, send);
+    while (send < 0) {
+        cnt++;
+        if (cnt > 100) break;
+        perror("[USB] send error !!\n"); 
+        printf("epoll create failed, errno: %d ret: %d \n", errno, send);
+
+        usleep(1000);
+
+        send = write(usbfd, pts, len);
+    }
+
+    printf("[USB] usb write %d bytes, ret: %d (2)\n", len, send);
 #endif
     return send;    
 }
 
 static int usb_read(char *ptr, int usbfd, int len)
 {
-    int ret=0, recv=0;
+    int ret=0, recv=0, cnt=0;
 #if 0
     struct pollfd pllfd[1];
     if (!ptr) return -1;
@@ -1956,47 +2236,22 @@ static int usb_read(char *ptr, int usbfd, int len)
     }
 #else
     recv = read(usbfd, ptr, len);
-    //printf("[UR] usb read %d bytes, ret: %d (2)\n", len, recv);
+    while (recv < 0) {
+        cnt++;
+        if (cnt > 100) break;
+
+        perror("[USB] read error !!\n"); 
+        printf("epoll create failed, errno: %d ret: %d \n", errno, recv);
+
+        usleep(1000);
+        
+        recv = read(usbfd, ptr, len);
+    }
+    
+    //printf("[USB] usb read %d bytes, ret: %d (2)\n", len, recv);
 #endif
     
     return recv;    
-}
-
-static int print_f(struct logPool_s *plog, char *head, char *str)
-{
-    uint32_t logdisplayflag=0;
-    int len;
-    char ch[1152];
-    
-    if (!str) return (-1);
-
-    if (head) {
-        //if (!strcmp(head, "P2")) return 0;
-        sprintf(ch, "[%s] %s", head, str);
-    } else {
-        sprintf(ch, "%s", str);
-    }
-
-    printf("%s",ch);
-
-#if 0
-    if (!plog) return (-2);
-
-    logdisplayflag = plog->dislog;
-    
-    msync(plog, sizeof(struct logPool_s), MS_SYNC);
-    len = strlen(ch);
-    if ((len + plog->len) > plog->max) return (-3);
-    memcpy(plog->cur, ch, strlen(ch));
-    plog->cur += len;
-    plog->len += len;
-#endif
-    //if (!mlog) return (-4);
-    //fwrite(ch, 1, strlen(ch), mlog);
-    //fflush(mlog);
-    //fprintf(mlog, "%s", ch);
-    
-    return 0;
 }
 
 static int mslvBMPClip(struct slvbitMapHeader_s *dst, struct slvbitMapHeader_s *src, int x, int y)
@@ -2274,7 +2529,7 @@ static char path[256];
 #define PT_BUF_SIZE (32768) //32768
 #define MAX_EVENTS (2)
 #define EPOLLLT (0)
-#define USB_SAVE_RESULT (1)
+#define USB_SAVE_RESULT (0)
 #define CBW_CMD_SEND_OPCODE   0x11
 #define CBW_CMD_START_SCAN    0x12
 #define CBW_CMD_READY   0x08
@@ -2445,6 +2700,7 @@ err:
         struct pollfd ptfd[1];
         static char ptdevpath[] = "/dev/usb/lp0";
         static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
+        static char ptfileMeta[] = "/mnt/mmc2/usb/meta.bin";
         char ptfilepath[128];
         char *ptrecv, *ptbuf=0, *pImage=0;
         int ptret=0, recvsz=0, acusz=0, wrtsz=0;
@@ -2457,7 +2713,8 @@ err:
         char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
                                             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
         int usbid=0;
-        FILE *fsave=0;
+        FILE *fsave=0, *fmeta=0;
+        int looptimes=0;
         
         usbid = open(ptdevpath, O_RDWR);
         if (usbid < 0) {
@@ -2469,23 +2726,34 @@ err:
             printf("open device[%s]\n", ptdevpath); 
         }
 
-        usb_nonblock_set(usbid);
+        if (arg0 > 0) {
+            looptimes = arg0;
+        } else {
+            looptimes = 1;
+        }
+
+        //usb_nonblock_set(usbid);
 
         pmeta = &meta;
         ptm = (char *)pmeta;
-        memset(ptm, 0, sizeof(meta));
-        meta.ASP_MAGIC[0] = 0x20;
-        meta.ASP_MAGIC[1] = 0x14;
 
-        if (arg0 > 0) {
-            bufsize = arg0;
+        fmeta = fopen(ptfileMeta, "r");
+        if (fmeta) {
+            printf("open meta sample file [%s] succeed \n", ptfileMeta);
+            ptret = fread(ptm, 1, 512, fmeta);
+            printf("read meta size: %d /%d \n", ptret, 512);
+
+            shmem_dump(ptm, 512);
+            dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
         } else {
-            bufsize = PT_BUF_SIZE;
+            printf("open meta sample file [%s] failed \n", ptfileMeta);
+            memset(ptm, 0, sizeof(meta));
+            meta.ASP_MAGIC[0] = 0x20;
+            meta.ASP_MAGIC[1] = 0x14;
         }
 
-        if (bufsize > PT_BUF_SIZE) {
-            bufsize = PT_BUF_SIZE;
-        }
+        bufsize = PT_BUF_SIZE;
+
 
         printf("usb write size[%d]\n", bufsize); 
         
@@ -2494,9 +2762,15 @@ err:
         ptbuf = malloc(PT_BUF_SIZE);
         memset(ptbuf, 0, PT_BUF_SIZE);
         
-        insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
-        usb_send(CBW, usbid, 31);
+        //insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
+        //usb_send(CBW, usbid, 31);
+        bufmax = 48*1024*1024;
+        pImage = malloc(bufmax);
+        
+//while (looptimes) {
 
+        //printf("usb loop times: %d buff size: %d - 1\n", looptimes, PT_BUF_SIZE);
+        
         insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
         usb_send(CBW, usbid, 31);
 
@@ -2505,16 +2779,20 @@ err:
         usb_read(ptrecv, usbid, 13);
         shmem_dump(ptrecv, 13);
 
-        insert_cbw(CBW, CBW_CMD_READY, 0, 0);
-        usb_send(CBW, usbid, 31);
+        //insert_cbw(CBW, CBW_CMD_READY, 0, 0);
+        //usb_send(CBW, usbid, 31);
+
+while (looptimes) {
+
+        printf("usb loop times: %d buff size: %d - 2\n", looptimes, PT_BUF_SIZE);
         
-        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_SINGLE, OPSUB_USB_Scan);
+        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_DUPLEX, OPSUB_USB_Scan);
         usb_send(CBW, usbid, 31);
         
         usb_read(ptrecv, usbid, 13);
         shmem_dump(ptrecv, 13);
-        
-        insert_cbw(CBW, CBW_CMD_START_SCAN, OP_SINGLE, OPSUB_USB_Scan);
+
+        insert_cbw(CBW, CBW_CMD_START_SCAN, OP_DUPLEX, OPSUB_USB_Scan);
         usb_send(CBW, usbid, 31);     
         
 #if USB_SAVE_RESULT
@@ -2522,11 +2800,10 @@ err:
         if (!fsave) {
             goto end;    
         }
+#endif
 
-        bufmax = 48*1024*1024;
-
-        pImage = malloc(bufmax);
         pcur = pImage;
+
         recvsz = 0;
         acusz = 0;
 
@@ -2558,17 +2835,19 @@ err:
                 break;
             }
         }
-
+#if USB_SAVE_RESULT
         wrtsz = fwrite(pImage, 1, acusz, fsave);
-        printf("total read size: %d, write file size: %d \n", acusz, wrtsz);
-            
+#endif
+        printf("total read size: %d, write file size: %d last szie: %d\n", acusz, wrtsz, recvsz);
+
+#if USB_SAVE_RESULT
         sync();
         fclose(fsave);
-        fsave = 0;
-        //free(pImage);
 #endif
 
-        insert_cbw(CBW, CBW_CMD_START_SCAN, OP_SINGLE, OPSUB_USB_Scan);
+        fsave = 0;
+
+        insert_cbw(CBW, CBW_CMD_START_SCAN, OP_DUPLEX, OPSUB_USB_Scan);
         usb_send(CBW, usbid, 31);     
         
 #if USB_SAVE_RESULT
@@ -2576,10 +2855,7 @@ err:
         if (!fsave) {
             goto end;    
         }
-
-        //bufmax = 48*1024*1024;
-
-        //pImage = malloc(bufmax);
+#endif
         pcur = pImage;
         recvsz = 0;
         acusz = 0;
@@ -2596,13 +2872,13 @@ err:
             } else {
                 cntRecv = 0;
             }
+            
+            pcur += recvsz;
+            acusz += recvsz;
 
             if (recvsz < PT_BUF_SIZE) {
                 break;
             }
-            
-            pcur += recvsz;
-            acusz += recvsz;
             
             //usleep(5000);
 
@@ -2610,19 +2886,29 @@ err:
                 break;
             }
         }
-
+#if USB_SAVE_RESULT
         wrtsz = fwrite(pImage, 1, acusz, fsave);
-        printf("total read size: %d, write file size: %d \n", acusz, wrtsz);
-            
+#endif
+        printf("total read size: %d, write file size: %d last szie: %d\n", acusz, wrtsz, recvsz);
+        
+#if USB_SAVE_RESULT 
         sync();
         fclose(fsave);
+#endif
+        fsave = 0;
+
+        looptimes --;
+}
+
+        printf("usb loop times: %d END !!\n", looptimes);
         
         free(pImage);
-#endif
 
         close(usbid);
         free(ptbuf);
         free(ptrecv);
+
+        sync();
 
         goto end;
     }
@@ -2680,8 +2966,8 @@ err:
         ptbuf = malloc(PT_BUF_SIZE);
         memset(ptbuf, 0, PT_BUF_SIZE);
         
-        insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
-        usb_send(CBW, usbid, 31);
+        //insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
+        //usb_send(CBW, usbid, 31);
 
         insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
         usb_send(CBW, usbid, 31);
@@ -2691,8 +2977,8 @@ err:
         usb_read(ptrecv, usbid, 13);
         shmem_dump(ptrecv, 13);
 
-        insert_cbw(CBW, CBW_CMD_READY, 0, 0);
-        usb_send(CBW, usbid, 31);
+        //insert_cbw(CBW, CBW_CMD_READY, 0, 0);
+        //usb_send(CBW, usbid, 31);
         
         insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_SINGLE, OPSUB_USB_Scan);
         usb_send(CBW, usbid, 31);
