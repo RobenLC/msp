@@ -24,6 +24,24 @@
 #define SPI1_ENABLE (1)
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
+
+/* USB ioctl  */
+#define IOCNR_GET_DEVICE_ID		1
+#define IOCNR_CONTI_READ_START  8
+#define IOCNR_CONTI_READ_STOP    9
+#define IOCNR_CONTI_READ_PROBE    10
+
+#define USB_IOC_CONTI_READ_START  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_START, 0)
+#define USB_IOC_CONTI_READ_STOP    _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_STOP, 0)
+#define USB_IOC_CONTI_READ_PROBE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_PROBE, 0)
+#define LPIOC_GET_DEVICE_ID(len)     _IOC(_IOC_READ, 'P', IOCNR_GET_DEVICE_ID, len) 
+
+#define USB_IOCT_LOOP_START(a, b)               ioctl(a, USB_IOC_CONTI_READ_START, b)
+#define USB_IOCT_LOOP_CONTI_READ(a, b)     ioctl(a, USB_IOC_CONTI_READ_PROBE, b)
+#define USB_IOCT_LOOP_STOP(a, b)               ioctl(a, USB_IOC_CONTI_READ_STOP, b)
+#define USB_IOCT_GET_DEVICE_ID(a, b)          ioctl(a, LPIOC_GET_DEVICE_ID(4), b)
+
+#define USB_CALLBACK_SUBMIT (1)
  
 #define SPI_CPHA  0x01          /* clock phase */
 #define SPI_CPOL  0x02          /* clock polarity */
@@ -2192,11 +2210,11 @@ static int usb_send(char *pts, int usbfd, int len)
     send = write(usbfd, pts, len);
     while (send < 0) {
         cnt++;
-        if (cnt > 100) break;
+        if (cnt > 3) break;
         perror("[USB] send error !!\n"); 
         printf("epoll create failed, errno: %d ret: %d \n", errno, send);
 
-        usleep(1000);
+        usleep(100000);
 
         send = write(usbfd, pts, len);
     }
@@ -2238,12 +2256,12 @@ static int usb_read(char *ptr, int usbfd, int len)
     recv = read(usbfd, ptr, len);
     while (recv < 0) {
         cnt++;
-        if (cnt > 100) break;
+        if (cnt > 2) break;
 
         perror("[USB] read error !!\n"); 
         printf("epoll create failed, errno: %d ret: %d \n", errno, recv);
 
-        usleep(1000);
+        usleep(100000);
         
         recv = read(usbfd, ptr, len);
     }
@@ -2526,7 +2544,7 @@ static char path[256];
     bitset = 1;
     spi_config(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
-#define PT_BUF_SIZE (32768) //32768
+#define PT_BUF_SIZE (32768*3)//32768
 #define MAX_EVENTS (2)
 #define EPOLLLT (0)
 #define USB_SAVE_RESULT (0)
@@ -2702,7 +2720,7 @@ err:
         static char ptfileSave[] = "/mnt/mmc2/usb/image%.3d.jpg";
         static char ptfileMeta[] = "/mnt/mmc2/usb/meta.bin";
         char ptfilepath[128];
-        char *ptrecv, *ptbuf=0, *pImage=0;
+        char *ptrecv, *ptbuf=0, *pImage=0, *pImage2=0;;
         int ptret=0, recvsz=0, acusz=0, wrtsz=0;
         int cntRecv=0, usCost=0, bufsize=0;
         int bufmax=0, bufidx=0, printlog=0;
@@ -2766,6 +2784,7 @@ err:
         //usb_send(CBW, usbid, 31);
         bufmax = 48*1024*1024;
         pImage = malloc(bufmax);
+        pImage2 = malloc(bufmax);
         
 //while (looptimes) {
 
@@ -2784,13 +2803,13 @@ err:
 
 while (looptimes) {
 
-        printf("usb loop times: %d buff size: %d - 2\n", looptimes, PT_BUF_SIZE);
+        //printf("usb loop times: %d buff size: %d - 2\n", looptimes, PT_BUF_SIZE);
         
         insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_DUPLEX, OPSUB_USB_Scan);
         usb_send(CBW, usbid, 31);
         
         usb_read(ptrecv, usbid, 13);
-        shmem_dump(ptrecv, 13);
+        //shmem_dump(ptrecv, 13);
 
         insert_cbw(CBW, CBW_CMD_START_SCAN, OP_DUPLEX, OPSUB_USB_Scan);
         usb_send(CBW, usbid, 31);     
@@ -2802,30 +2821,49 @@ while (looptimes) {
         }
 #endif
 
+#if USB_CALLBACK_SUBMIT
+            /* start loop */
+        ptret = USB_IOCT_LOOP_START(usbid, &bitset);
+        printf("\n\n[HS] conti read start ret: %d \n\n", ptret);
+#endif
+
         pcur = pImage;
 
         recvsz = 0;
         acusz = 0;
-
         cntRecv = 0;
         while(1) {
+        
+#if USB_CALLBACK_SUBMIT 
+            recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, pcur);
+#else
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
+#endif
 
-            if (recvsz == 0) {
-                continue;
-            } else if (recvsz < 0) {
+            //printf("[HS] conti read size: %d \n", recvsz);
+            
+            if (recvsz <= 0) {
                 cntRecv++;
-                if (cntRecv > 0xffff) {
-                    break;
+                if (cntRecv > 2) {
+                    //break;
                 }
+                continue;
             } else {
                 cntRecv = 0;
             }
+
+            //printf("[HS] conti read size: %d \n", recvsz);
             
             pcur += recvsz;
             acusz += recvsz;
             
             if (recvsz < PT_BUF_SIZE) {
+                //ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE+1);
+                //printf("reach the last trunk size: %d, redundent read ret: %d (%d)\n", recvsz, ptret, PT_BUF_SIZE+1);        
+#if USB_CALLBACK_SUBMIT 
+                ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
+                printf("\n\n[HS] conti read stop ret: %d \n\n", ptret);
+#endif
                 break;
             }
             
@@ -2856,27 +2894,47 @@ while (looptimes) {
             goto end;    
         }
 #endif
-        pcur = pImage;
+
+#if USB_CALLBACK_SUBMIT
+            /* start loop */
+        ptret = USB_IOCT_LOOP_START(usbid, &bitset);
+        printf("\n\n[HS] conti read start ret: %d \n\n", ptret);
+#endif
+
+        pcur = pImage2;
         recvsz = 0;
         acusz = 0;
-
         cntRecv = 0;
         while(1) {
+#if USB_CALLBACK_SUBMIT 
+            recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, pcur);
+#else
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
-
-            if (recvsz < 0) {
+#endif
+            //printf("[HS] conti read size: %d \n", recvsz);
+            
+            if (recvsz <= 0) {
                 cntRecv++;
-                if (cntRecv > 0xffff) {
-                    break;
+                if (cntRecv > 2) {
+                    //break;
                 }
+                continue;
             } else {
                 cntRecv = 0;
             }
+
+            //printf("[HS] conti read size: %d \n", recvsz);
             
             pcur += recvsz;
             acusz += recvsz;
 
             if (recvsz < PT_BUF_SIZE) {
+                //ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE+1);
+                //printf("reach the last trunk size: %d, redundent read ret: %d \n", recvsz, ptret);        
+#if USB_CALLBACK_SUBMIT 
+                ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
+                printf("\n\n[HS] conti read stop ret: %d \n\n", ptret);
+#endif
                 break;
             }
             
@@ -2887,7 +2945,7 @@ while (looptimes) {
             }
         }
 #if USB_SAVE_RESULT
-        wrtsz = fwrite(pImage, 1, acusz, fsave);
+        wrtsz = fwrite(pImage2, 1, acusz, fsave);
 #endif
         printf("total read size: %d, write file size: %d last szie: %d\n", acusz, wrtsz, recvsz);
         
@@ -2903,6 +2961,8 @@ while (looptimes) {
         printf("usb loop times: %d END !!\n", looptimes);
         
         free(pImage);
+        free(pImage2);
+        
 
         close(usbid);
         free(ptbuf);
@@ -3022,6 +3082,8 @@ while (looptimes) {
             acusz += recvsz;
 
             if (recvsz < PT_BUF_SIZE) {
+                ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE+1);
+                printf("reach the last trunk size: %d, redundent read ret: %d \n", recvsz, ptret);        
                 break;
             }
             
