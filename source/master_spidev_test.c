@@ -50,7 +50,7 @@
 #define EPOLLLT (0)
 #define USB_SAVE_RESULT (1)
 
-#define USB_CALLBACK_SUBMIT (0)
+#define USB_CALLBACK_SUBMIT (1)
 #define USB_RINGBUF_USE_GATE (1)
 /* USB ioctl  */
 #define IOCNR_GET_DEVICE_ID		1
@@ -5091,6 +5091,10 @@ static int test_time_diff(struct timespec *s, struct timespec *e, int unit)
         diff = (lpast - lnow)/gunit;
     }
 
+    if (diff == 0) {
+        diff = 1;
+    }
+
     return diff;
 }
 
@@ -6140,11 +6144,45 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             write(outfd[ins], &pllcmd[ins], 1);
                             printf("[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
 
+                            latcmd[0] = 0;
+                            latcmd[1] = 0;
+                            latcmd[2] = 0;
+                            latcmd[3] = 0;
+
                             idxInit[0] = 1;
                             idxInit[1] = 1;
                             idxInit[2] = 2;
                             idxInit[3] = 2;
-                            
+
+                            if (pubffh) {
+                                memsz = 0;
+                                pageidx = 0;
+                                
+                                pubffm = pubffh;
+                                while (pubffm) {
+                                    pageidx += 1;
+
+                                    headbf = pubffm->ubbufh;
+                                    while (headbf) {
+                                        memsz += PT_BUF_SIZE;
+                                        tmpbf = headbf;                                            
+                                        headbf = tmpbf->bn;
+                                        //printf("[GW] clean mem addr: 0x%.8x\n", tmpbf);
+                                        free(tmpbf);
+                                    }
+                                    
+                                    tmpbf = 0;
+                                            
+                                    printf("[GW] clean memory used: %d - %d idx: 0x%.2x \n", memsz, pageidx, pubffm->ubindex);
+
+                                    pubfft = pubffm;
+                                    pubffm = pubfft->ubnxt;
+
+                                    free(pubfft);
+                                }
+
+                                pubffh = 0;
+                            }
                         }
                         else {
                             printf("\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
@@ -6425,7 +6463,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         while(1) {
             tcnt++;
             ptret = poll(ptfd, 1, 2000);
-            //printf("[%s] poll return %d id:%d evt: 0x%.2x - %d\n", strpath, ptret, ptfd[0].fd ,ptfd[0].revents, tcnt);
+            printf("[%s] poll return %d id:%d evt: 0x%.2x - %d\n", strpath, ptret, ptfd[0].fd ,ptfd[0].revents, tcnt);
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
@@ -6594,6 +6632,13 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                     //printf("[%s] read %d (%d ms)\n", strpath, recvsz, usCost/1000);
                 }
 #endif 
+                if (recvsz > len) {
+                    if (recvsz & 0x20000) {
+                        printf("[%s] get the end signal 0x20000 \n", strpath);
+                        chr = 0;
+                    }
+                    recvsz = len - 1;
+                }
                 
                 if (recvsz > 0) {
 #if USB_HS_SAVE_RESULT
@@ -6603,7 +6648,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 }
                 
                 if (recvsz < 0) {
-                    printf("[%s] usb read ret: %d !!!\n", strpath, recvsz);
+                    printf("[%s] usb read ret: %d !!! interrupt to end the transmission !!!\n", strpath, recvsz);
                     continue;
                     //break;
                 }
@@ -7649,6 +7694,45 @@ static char spi1[] = "/dev/spidev32766.0";
                     if (pipRet < 0) {
                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
                         goto end;
+                    }
+
+#if 1
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                        else {
+                            printf("[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
+                        }
+                    }
+
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                        else {
+                            printf("[DV] clean pipe get chd: %c(0x%.2x) \n", chd, chd);
+                        }
+                    }
+#endif
+                    if (puimCnTH) {
+                        ix=0;
+                        puimTmp = puimCnTH;
+                        while(puimTmp) {
+                            printf("[DV] clean %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                            puimUse = puimTmp;
+                            puimTmp = puimUse->uimNxt;
+                            ix++;
+
+                            free(puimUse);
+                        }
+                        puimCnTH = 0;
+                        puimCur = 0;
+                        puimGet = 0;
                     }
 
                     break;
