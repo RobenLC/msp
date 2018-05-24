@@ -45,7 +45,7 @@
 
 #define USB_META_SIZE 512
 #define PT_BUF_SIZE (32768*3)
-#define CYCLE_LEN (20)
+#define CYCLE_LEN (40)
 #define MAX_EVENTS (32)
 #define EPOLLLT (0)
 #define USB_SAVE_RESULT (1)
@@ -5890,7 +5890,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                 if ((pllfd[ins].revents & POLLIN) == POLLIN) {
                 
                     read(pllfd[ins].fd, &pllcmd[ins], 1);
-                    printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
+                    //printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
                     
                     evcnt++;
                     if (ptret == evcnt) {
@@ -5927,7 +5927,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         outbf = pubffo->ubbufh;
                                     }
                                 }
-
+#if 0 /* memory used debug */
                                 if (pubffh) {
                                     memsz = 0;
                                     pageidx = 0;
@@ -5948,7 +5948,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 
                                     }
                                 }
-                                
+#endif
                                 if (!outbf) {
                                     pllcmd[ins] = 0x80;
                                     write(infd[ins], &pllcmd[ins], 1);
@@ -5972,7 +5972,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         
                                         tmpbf = outbf->bn;
 
-                                        printf("[GW] addrs: 0x%.8x, tmpbf: 0x%.8x lens: %d - %d\n", addrs, tmpbf, lens, cycCnt[ins]);
+                                        //printf("[GW] addrs: 0x%.8x, tmpbf: 0x%.8x lens: %d - %d\n", addrs, tmpbf, lens, cycCnt[ins]);
                                         
                                         if ((!tmpbf) && (pubffo->ublastsize)) {
                                             lens = pubffo->ublastsize;
@@ -6006,14 +6006,14 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                             while (headbf) {
                                                 tmpbf = headbf;                                            
                                                 headbf = tmpbf->bn;
-                                                printf("[GW] clean buf addr: 0x%.8x\n", tmpbf);
+                                                //printf("[GW] clean buf addr: 0x%.8x\n", tmpbf);
                                                 free(tmpbf);
                                             }
                                             tmpbf = 0;
                                         
                                             if(pubffh == pubffo) {
                                                 pubffh = pubffo->ubnxt;
-                                                printf("[GW] remove current buf addr: 0x%.8x ,head: 0x%.8x\n", pubffo, pubffh);
+                                                //printf("[GW] remove current buf addr: 0x%.8x ,head: 0x%.8x\n", pubffo, pubffh);
                                             } else {
                                                 pubffm = pubffh;
                                                 while (pubffm) {
@@ -6030,7 +6030,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                             
                                             pubffo = 0;
                                             
-                                            printf("[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", pubffh);
+                                            //printf("[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", pubffh);
                                             
                                             cycCnt[ins] = cycCnt[ins] + 1;
                                         
@@ -6069,8 +6069,9 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     if (pllcmd[ins] == 0x7f) {
                                         minfo[0] = 0x7f;
                                         minfo[1] = cycCnt[ins];
+                                        minfo[2] = latcmd[ins];
 
-                                        write(infd[ins], &minfo, 2);
+                                        write(infd[ins], &minfo, 3);
                                         printf("[GW] in%d id:%d put minfo: 0x%.2x + %d \n", ins, infd[ins], minfo[0], minfo[1]);            
                                     } else {
                                         write(infd[ins], &pllcmd[ins], 1);
@@ -6095,8 +6096,11 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             if (ins == 2) {
                                 write(outfd[ins], &pllcmd[ins], 1);
                                 printf("[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);                                
+                                latcmd[ins] = 's';
+                                latcmd[ins+1] = 's';
                             } else {
                                 latcmd[ins] = 's';
+                                latcmd[ins+1] = 's';
                             }
                             
                             totsz[ins] =0;
@@ -6112,8 +6116,10 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     write(outfd[ins], &pllcmd[ins], 1);
                                     printf("[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                                     latcmd[ins] = 'q';
+                                    latcmd[ins+1] = 'q';
                                 } else {
                                     latcmd[ins] = 'q';
+                                    latcmd[ins+1] = 'q';
                                 }
 
                                 totsz[ins] =0;
@@ -6133,6 +6139,12 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                         else if (pllcmd[ins] == 'm') {
                             write(outfd[ins], &pllcmd[ins], 1);
                             printf("[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+
+                            idxInit[0] = 1;
+                            idxInit[1] = 1;
+                            idxInit[2] = 2;
+                            idxInit[3] = 2;
+                            
                         }
                         else {
                             printf("\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
@@ -6152,7 +6164,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 
                             memallocsz += 1;
 
-                            printf("[GW] memallocsz : %d \n", memallocsz);
+                            //printf("[GW] memallocsz : %d ch%d \n", memallocsz, ins);
 
                             if (!pubffh) {
                                 pubffh = malloc(sizeof(struct usbBuffLink_s));
@@ -6160,8 +6172,16 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     memset(pubffh, 0, sizeof(struct usbBuffLink_s));
                                     
                                     pubffh->ubindex = idxInit[ins];
-                                    idxInit[ins] += 2;
-                                    
+
+                                    if ((latcmd[ins] == 'q') || (latcmd[ins] == 'Q')) { 
+                                        idxInit[ins] += 2;
+                                    } else {
+                                        idxInit[ins] += 1;
+                                    }
+                                    if (idxInit[ins] > 63) {
+                                        idxInit[ins] = idxInit[ins] % 64;
+                                    }
+                                    printf("[GW] ch%d new index: %d the next is %d latcmd: %c - 1\n", ins, pubffh->ubindex, idxInit[ins], latcmd[ins]);
                                 } else {
                                     printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
                                 }
@@ -6176,16 +6196,24 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 pubffcd[ins] = malloc(sizeof(struct usbBuffLink_s));
                                 if (pubffcd[ins]) {
                                     memset(pubffcd[ins], 0, sizeof(struct usbBuffLink_s));
-
+                                    
+                                    pubffcd[ins]->ubindex = idxInit[ins];
+                                    if ((latcmd[ins] == 'q') || (latcmd[ins] == 'Q')) { 
+                                        idxInit[ins] += 2;
+                                    } else {
+                                        idxInit[ins] += 1;
+                                    }
+                                    if (idxInit[ins] > 63) {
+                                        idxInit[ins] = idxInit[ins] % 64;
+                                    }
+                                    printf("[GW] ch%d new index: %d the next is %d latcmd: %c - 2\n", ins, pubffcd[ins]->ubindex, idxInit[ins], latcmd[ins]);
+                                    
                                     pubffm = pubffh;
                                     pubfft = pubffm->ubnxt;
                                     while (pubfft) {
                                         pubffm = pubfft;
                                         pubfft = pubffm->ubnxt;
                                     }
-
-                                    pubffh->ubindex = idxInit[ins];
-                                    idxInit[ins] += 2;
 
                                     pubffm->ubnxt = pubffcd[ins];
                                 } else {
@@ -6265,7 +6293,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
 
                                     write(outfd[ins], &pllcmd[ins], 1);
-                                    printf("[GW] out%d id:%d put chr: %c(0x%.2x) - middle of transmission count: %d \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins], pubffcd[ins]->ubcylcnt);
+                                    //printf("[GW] out%d id:%d put chr: %c(0x%.2x) - middle of transmission count: %d \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins], pubffcd[ins]->ubcylcnt);
                                     cycCnt[ins] = 0;
                                 }
 
@@ -6849,13 +6877,14 @@ static char spi1[] = "/dev/spidev32766.0";
         struct shmem_s *gateTx=0, *gateTxd=0;
         int pipeTx[2], pipeRx[2], pipRet=0, lens=0, pipeTxd[2], pipeRxd[2];
         int gateUpTx[2], gateUpRx[2], gateDnTx[2], gateDnRx[2];
-        char chq=0, chd=0, chr=0, cinfo=0;
+        char chq=0, chd=0, chr=0, cinfo[2];
         struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
         int *piptx=0, *piprx=0;
         int cntLp0=0, cntLp1=0, cntLpx=0;
-        struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0;
+        struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0;
         int uimCylcnt=0;
         int ix=0;
+        char cmdtyp=0;
         
 #if USB_HS_SAVE_RESULT_DV
     FILE *fsave=0;
@@ -7155,7 +7184,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                         
                                     }
 
-                                    printf("[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 0\n", puimCnTH, puimCur, puimGet, chr);
+                                    //printf("[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 0\n", puimCnTH, puimCur, puimGet, chr);
                                     
                                     if (puimGet) {
                                         if (!chr) {
@@ -7213,7 +7242,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                         }
                                     }
                                 
-                                    printf("[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 1\n", puimCnTH, puimCur, puimGet, chr);
+                                    //printf("[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 1\n", puimCnTH, puimCur, puimGet, chr);
 
                                     if (puimCur) {
                                         if (puimCur->uimIdex == (chq & 0x7f)) {
@@ -7284,7 +7313,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                         }
                                     }
                                     
-                                    printf("[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 2\n", puimCnTH, puimCur, puimGet, chr);
+                                    //printf("[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 2\n", puimCnTH, puimCur, puimGet, chr);
                                     
                                 }
                                 else {
@@ -7302,32 +7331,77 @@ static char spi1[] = "/dev/spidev32766.0";
                                             puimGet->uimGetCnt += 1;
                                             //chq = 'E';
 
-                                            cinfo = 0;
-                                            pipRet = read(piprx[0], &cinfo, 1);
+                                            memset(cinfo, 0, 2);
+                                            pipRet = read(piprx[0], cinfo, 2);
                                             while (pipRet < 0) {
-                                                pipRet = read(piprx[0], &cinfo, 1);
+                                                pipRet = read(piprx[0], cinfo, 2);
                                             }
 
-                                            printf("[DV] get the last trunk read cycle len: %d\n", cinfo);
+                                            printf("[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x)\n", cinfo[0], cinfo[1], cinfo[1]);
+                                            printf("[DV] get info %d:%d \n", puimGet->uimGetCnt, puimGet->uimCount);
 
-                                            uimCylcnt = cinfo;
+                                            uimCylcnt = cinfo[0];
+                                            cmdtyp = cinfo[1];
+                                            puimNxt = 0;
 
                                             if (puimCnTH == puimGet) {
                                                 puimCnTH = puimGet->uimNxt;
-                                            } else {
+                                                
+                                                printf("[DV] find next puim on head \n");                                                
+                                                printf("[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                                
+                                                ix=0;
                                                 puimTmp = puimCnTH;
                                                 while (puimTmp) {
                                                     puimUse = puimTmp;
+                                                    printf("[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
+                                                    if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                        puimNxt = puimUse;
+                                                        printf("[DV] match   !!!!\n");
+                                                    }
+                                                    puimTmp = puimUse->uimNxt;
+                                                    ix++;
+                                                }
+                                            } else {
+                                                printf("[DV] find next puim on the middle \n");                                                
+                                                printf("[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+
+                                                ix=0;
+                                                puimTmp = puimCnTH;
+                                                while (puimTmp) {
+                                                    puimUse = puimTmp;
+                                                    printf("[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
+                                                    if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                        puimNxt = puimUse;
+                                                        printf("[DV] match !!\n");
+                                                    }
                                                     puimTmp = puimUse->uimNxt;
                                                     if (puimTmp == puimGet) {
                                                         puimUse->uimNxt = puimGet->uimNxt;
-                                                        break;
                                                     }                
+                                                    puimTmp = puimUse->uimNxt;
+                                                    ix++;
                                                 }
                                             }
-                                           
-                                            free(puimGet);
-                                            puimGet = 0;
+
+                                            if (puimNxt) {
+                                                printf("[DV] puimNxt is valid \n");
+                                                free(puimGet);
+                                                puimGet = puimNxt;
+                                            } else {
+                                                printf("[DV] puimNxt is NULL \n");
+                                                ix = puimGet->uimIdex + 1;
+                                                memset(puimGet, 0, sizeof(struct usbIndex_s));
+                                                puimGet->uimIdex = ix;
+                                                if (puimUse) {
+                                                    puimUse->uimNxt = puimGet;
+                                                } else {
+                                                    printf("[DV] puimUse is NULL \n");
+                                                    puimCnTH = puimGet;
+                                                }
+                                            }
+
+                                            printf("[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
 
                                             chr = 0;
                                             
