@@ -50,7 +50,7 @@
 #define EPOLLLT (0)
 #define USB_SAVE_RESULT (1)
 
-#define USB_CALLBACK_SUBMIT (1)
+#define USB_CALLBACK_SUBMIT (0)
 #define USB_RINGBUF_USE_GATE (1)
 /* USB ioctl  */
 #define IOCNR_GET_DEVICE_ID		1
@@ -6132,7 +6132,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 ring_buf_init(ringbf[ins+1]);
                             }
                         }
-                        else if ((pllcmd[ins] == 'p') || (pllcmd[ins] == 'r')) {
+                        else if ((pllcmd[ins] == 'p') || (pllcmd[ins] == 'r') || (pllcmd[ins] == 'a')) {
                             if (latcmd[ins] == 'q') {
                                 printf("[GW] already trigger multiple scan latcmd[%d]:%c \n", ins, latcmd[ins]);
                             } else {
@@ -6357,9 +6357,11 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 if (latcmd[0] == 'Q') {
                                     latcmd[0] = 'q';
                                     latcmd[2] = 'q';
+#if 1
                                     chq = 'r';
                                     write(outfd[0], &chq, 1);
                                     write(outfd[2], &chq, 1);
+#endif
                                     write(outfd[2], &latcmd[2], 1);
                                 } else {
                                     latcmd[2] = 'Q';
@@ -6368,9 +6370,11 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 if (latcmd[2] == 'Q') {
                                     latcmd[0] = 'q';
                                     latcmd[2] = 'q';
+#if 1
                                     chq = 'r';
                                     write(outfd[0], &chq, 1);
                                     write(outfd[2], &chq, 1);
+#endif
                                     write(outfd[2], &latcmd[2], 1);
                                 } else {
                                     latcmd[0] = 'Q';
@@ -6423,7 +6427,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     static char ptfileSave[] = "/mnt/mmc2/usb/image_RX_%.3d.jpg";
     char ptfilepath[128];
 #endif
-    char cmdMtx[7][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x02},{'s', 0x02},{'p', 0x03},
+    char cmdMtx[7][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
     					    {'q', 0x02},{'r', 0x03}};
     uint8_t cmdchr=0;
     struct shmem_s *pTx=0;
@@ -6503,7 +6507,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             cmdchr = cmdMtx[1][1];
             break;
         case 'a':
-            //cmdchr = cmdMtx[2][1];
+            opc = OP_SINGLE;
+            dat = OPSUB_USB_Scan;
+            cmdchr = cmdMtx[2][1];
             break;
         case 's':
             opc = OP_DUPLEX;
@@ -6576,14 +6582,15 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             shmem_dump(ptrecv, 13);
 #endif
 
+        }
+        else if (cmdchr == 0x02) {
+        
 #if USB_CALLBACK_SUBMIT
             /* start loop */
             ptret = USB_IOCT_LOOP_START(usbid, &bitset);
             printf("\n\n[%s] conti read start ret: %d \n\n", strpath, ptret);
 #endif
 
-        }
-        else if (cmdchr == 0x02) {
             insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
             usb_send(CBW, usbid, 31);     
 
@@ -7290,6 +7297,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                     //printf("[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 1\n", puimCnTH, puimCur, puimGet, chr);
 
                                     if (puimCur) {
+                                        //printf("[DV] puimCur index: %d - %d:%d \n", puimCur->uimIdex, puimCur->uimGetCnt, puimCur->uimCount);
                                         if (puimCur->uimIdex == (chq & 0x7f)) {
                                             puimCur->uimCount += 1;
                                         } else {
@@ -7388,6 +7396,10 @@ static char spi1[] = "/dev/spidev32766.0";
                                             uimCylcnt = cinfo[0];
                                             cmdtyp = cinfo[1];
                                             puimNxt = 0;
+
+                                            if (puimCur == puimGet) {
+                                                puimCur = 0;
+                                            }
 
                                             if (puimCnTH == puimGet) {
                                                 puimCnTH = puimGet->uimNxt;
@@ -7696,7 +7708,7 @@ static char spi1[] = "/dev/spidev32766.0";
                         goto end;
                     }
 
-#if 1
+#if 1                     /* clean msg queue */
                     while (1) {
                         chq = 0;
                         pipRet = read(pipeRx[0], &chq, 1);
@@ -7718,7 +7730,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             printf("[DV] clean pipe get chd: %c(0x%.2x) \n", chd, chd);
                         }
                     }
-#endif
+
                     if (puimCnTH) {
                         ix=0;
                         puimTmp = puimCnTH;
@@ -7734,7 +7746,7 @@ static char spi1[] = "/dev/spidev32766.0";
                         puimCur = 0;
                         puimGet = 0;
                     }
-
+#endif
                     break;
                 }
                 else {
@@ -7857,6 +7869,13 @@ static char spi1[] = "/dev/spidev32766.0";
                             if (opc == 0x04) {
                                 if (!puscur) {
                                     puscur = pushost;                    
+                                    
+                                    chq = 'a';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        printf("[DV]  pipe send meta ret: %d \n", pipRet);
+                                        goto end;
+                                    }
 
                                     chq = 'd';
                                     pipRet = write(pipeTx[1], &chq, 1);
