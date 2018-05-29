@@ -1438,7 +1438,6 @@ static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen);
 static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
-
 static int aspFatFormat(struct sdFatFormat_s *pffmt)
 {
     float totSector=0, hidnSector=0, sectorPerCls=0;
@@ -50749,6 +50748,10 @@ static int time_diff(struct timespec *s, struct timespec *e, int unit)
         diff = -1;
     } else {
         diff = (lpast - lnow)/gunit;
+    }
+
+    if (diff == 0) {
+        diff = 1;
     }
 
     return diff;
