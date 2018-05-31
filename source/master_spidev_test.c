@@ -5894,7 +5894,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                 if ((pllfd[ins].revents & POLLIN) == POLLIN) {
                 
                     read(pllfd[ins].fd, &pllcmd[ins], 1);
-                    printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
+                    //printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
                     
                     evcnt++;
                     if (ptret == evcnt) {
@@ -6470,7 +6470,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
     return 0;
 }
 
-#define DBG_USB_HS 1
+#define DBG_USB_HS 0
 #define USB_HS_SAVE_RESULT 0
 static int usb_host(struct usbhost_s *puhs, char *strpath)
 {
@@ -6540,11 +6540,11 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         while(1) {
             tcnt++;
             ptret = poll(ptfd, 1, 2000);
-            printf("[%s] poll return %d id:%d evt: 0x%.2x - %d\n", strpath, ptret, ptfd[0].fd ,ptfd[0].revents, tcnt);
+            //printf("[%s] poll return %d id:%d evt: 0x%.2x - %d\n", strpath, ptret, ptfd[0].fd ,ptfd[0].revents, tcnt);
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
-                printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
+                //printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
                 break;
             }
         }
@@ -6657,17 +6657,13 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             //pieRet = write(pPrx[1], &chr, 1);
         }
         else if (cmdchr == 0x06) {
-#if USB_CALLBACK_SUBMIT 
-            printf("\n\n[%s] conti already stop !!!! \n\n", strpath);
+            printf("\n[%s] conti already stop !!!! \n\n", strpath);
             chq = 'G';
             pieRet = write(pPrx[1], &chq, 1);
-#endif
         }
         else if (cmdchr == 0x05) {
-#if USB_CALLBACK_SUBMIT 
             ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
-            printf("\n\n[%s] conti read stop ret: %d \n\n", strpath, ptret);
-#endif
+            printf("\n[%s] conti read stop ret: %d \n\n", strpath, ptret);
         }
         else if (cmdchr == 0x04) {
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
@@ -6676,11 +6672,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
             memcpy(&pkcbw[32], CBW, 32);            
             
-#if USB_CALLBACK_SUBMIT
             /* start loop */
             ptret = USB_IOCT_LOOP_START(usbid, pkcbw);
-            printf("\n\n[%s] conti read start ret: %d \n\n", strpath, ptret);
-#endif
+            printf("\n[%s] conti read start ret: %d \n\n", strpath, ptret);
 
             chq = 'S';
             pieRet = write(pPrx[1], &chq, 1);
@@ -6773,7 +6767,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 }
                 
                 if (recvsz < 0) {
-                    printf("[%s] usb read ret: %d !!! interrupt to end the transmission !!!\n", strpath, recvsz);
+                    printf("[%s] usb read ret: %d \n", strpath, recvsz);
                     continue;
                     //break;
                 }
@@ -7359,13 +7353,13 @@ static char spi1[] = "/dev/spidev32766.0";
                                 pipRet = read(piprx[0], &chq, 1);
                                 if (pipRet < 0) {
                                     //printf("[DV] get pipe(%d) ret: %d, error!! - 1\n", piprx[0], pipRet);
-                                    usleep(100000);
+                                    //usleep(100000);
                                     //continue;
                                     //break;
                                     
                                 }
 
-                                printf("[DV] chq: 0x%.2x chr: 0x%.2x \n", chq, chr);
+                                //printf("[DV] chq: 0x%.2x chr: 0x%.2x \n", chq, chr);
                                 
                                 if (chq == 0x80) {
                                     if (chr) {
@@ -7555,7 +7549,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                 }
                                 else {
                                     if (chq) {
-                                        printf("\n[DV] get ring buff response !!! chq: %c(0x%.2x) \n\n", chq, chq);
+                                        printf("[DV] get ring buff response !!! chq: %c(0x%.2x) \n", chq, chq);
                                     } else {
                                         if ((!chr) && (puimGet)) {
                                             if (puimGet->uimGetCnt < puimGet->uimCount) {
@@ -7704,7 +7698,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                                     goto end;
                                                 }
                                             } else {
-                                                printf("\n[DV] %d:%d wait for new data \n", puimGet->uimGetCnt, puimGet->uimCount);
+                                                printf("[DV] %d:%d wait for new data \n", puimGet->uimGetCnt, puimGet->uimCount);
                                                 chr = 0;
                                             }
 
