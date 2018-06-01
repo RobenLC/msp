@@ -8345,12 +8345,14 @@ static char spi1[] = "/dev/spidev32766.0";
         struct pollfd ptfd[1];
         static char ptdevpath[] = "/dev/g_printer";
         static char samplePath[] = "/mnt/mmc2/usb/handmade_o.jpg";
+        static char metaPath[] = "/mnt/mmc2/usb/greenhill_13.jpg";
         static char *ptfileSend;
+        static char *ptmetaSend;
         //static char ptfileSend[] = "/mnt/mmc2/usb/greenhill_05.jpg";
         char ptfilepath[128];
-        char *ptrecv, *ptsend, *palloc=0;
-        int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0;
-        int cntTx=0, usCost=0, bufsize=0, seqtx=0, retry=0;
+        char *ptrecv, *ptsend, *palloc=0, *ptmeta, *pallocm;
+        int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0, maxszm=0, lastszm=0;
+        int cntTx=0, usCost=0, bufsize=0, seqtx=0, retry=0, cntTxm=0;
         double throughput=0.0;
         FILE *fsave=0, *fsend=0;
         struct timespec tstart, tend;
@@ -8416,6 +8418,10 @@ static char spi1[] = "/dev/spidev32766.0";
             goto end;
         }
 
+        bufsize = PT_BUF_SIZE;
+        
+        printf(" recv buff size:[%d] \n", bufsize);
+        
         if (argc > 2) {
             printf(" input file: %s \n", argv[2]);
             ptfileSend = argv[2];
@@ -8431,11 +8437,6 @@ static char spi1[] = "/dev/spidev32766.0";
             goto end;
         }   
         printf(" [%s] file open succeed \n", ptfileSend);
-
-        
-        bufsize = PT_BUF_SIZE;
-        
-        printf(" recv buff size:[%d] \n", bufsize);
 
         ptret = fseek(fsend, 0, SEEK_END);
         if (ptret) {
@@ -8466,7 +8467,46 @@ static char spi1[] = "/dev/spidev32766.0";
         palloc = ptsend;
         
         fclose(fsend);
+
+        ptmetaSend = metaPath;
+        printf(" open file [%s] \n", ptmetaSend);
+        fsend = fopen(ptmetaSend, "r");
+       
+        if (!fsend) {
+            printf(" [%s] file open failed \n", ptmetaSend);
+            goto end;
+        }   
+        printf(" [%s] file open succeed \n", ptmetaSend);
+
+        ptret = fseek(fsend, 0, SEEK_END);
+        if (ptret) {
+            printf(" file seek failed!! ret:%d \n", ptret);
+            goto end;
+        }
+
+        maxszm = ftell(fsend);
+        printf(" file [%s] size: %d \n", ptmetaSend, maxszm);
         
+        ptmeta = malloc(maxszm);
+        if (ptmeta) {
+            printf(" send buff alloc succeed! size: %d \n", maxszm);
+        } else {
+            printf(" send buff alloc failed! size: %d \n", maxszm);
+            goto end;
+        }
+
+        ptret = fseek(fsend, 0, SEEK_SET);
+        if (ptret) {
+            printf(" file seek failed!! ret:%d \n", ptret);
+            goto end;
+        }
+        
+        ptret = fread(ptmeta, 1, maxszm, fsend);
+        printf(" output file read size: %d/%d \n", ptret, maxszm);
+
+        pallocm = ptmeta;
+        
+        fclose(fsend);
 #if 1
 #if 0
         cntTx = 0;
@@ -8590,6 +8630,9 @@ static char spi1[] = "/dev/spidev32766.0";
                             else if ((opc == 0x05) && (dat == 0x85)) {
                                 break;
                             }
+                            else if ((opc == 0x0a) && (dat == 0x85)) {
+                                break;
+                            }
                             else {
                                 continue;
                             }
@@ -8599,6 +8642,9 @@ static char spi1[] = "/dev/spidev32766.0";
                                 break;
                             }
                             else if (opc == 0x05) {
+                                break;
+                            }
+                            else if (opc == 0x0a) {
                                 break;
                             }
                             else {
@@ -8616,11 +8662,16 @@ static char spi1[] = "/dev/spidev32766.0";
             if (usbentsTx == 1) {
                 //printf("Tx cmd: 0x%.2x, opc: 0x%.2x, dat: 0x%.2x, lastsz: %d, cnt: %d \n", cmd, opc, dat, lastsz, cntTx);
                 
-                if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05))) {
+                if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) )) {
                     printf("start to send image size: %d \n", maxsz);
                     lastsz = maxsz;        
                     ptsend = palloc;
+                    
+                    lastszm = maxszm;        
+                    ptmeta = pallocm;
+                    
                     cntTx = 0;
+                    cntTxm = 0;
                     
                     cmd = 0;
                 }
@@ -8699,31 +8750,53 @@ static char spi1[] = "/dev/spidev32766.0";
             
                 if ((lastsz == 0) && (cntTx >0)) {
 
+                    while(lastszm) {
+                        if (lastszm > bufsize) {
+                            wrtsz = bufsize;
+                        } else {
+                            wrtsz = lastszm;
+                        }
+                        
+                        sendsz = write(usbfd, ptmeta, wrtsz);
+                        if (sendsz < 0) {
+                            usbentsTx = 0;
+                            break;
+                        }
 
-/*
-                    sendsz = 0;
-                    retry = 0;
-                    while (1) {
-                        sendsz = write(usbfd, ptsend, 13);
-                        if (sendsz > 0) {
-                            printf("usb send end last size = %d \n====================\n", sendsz);
-                            break;
-                        }
-                        retry++;
-                        if (retry > 32768) {
-                            break;
-                        }
+                        printf("usb meta tx: %d /%d (%d) \n", sendsz, wrtsz, lastszm);
+                        
+                        ptmeta += sendsz;
+                        lastszm = lastszm - sendsz;
+                        cntTxm ++;
                     }
-*/
 
-                    clock_gettime(CLOCK_REALTIME, &tend);
+                    if ((lastszm == 0) && (cntTxm >0)) {
+
+                        sendsz = 0;
+                        retry = 0;
+                        while (1) {
+                            sendsz = write(usbfd, ptsend, 13);
+                            if (sendsz > 0) {
+                                printf("usb send end last size = %d \n====================\n", sendsz);
+                                break;
+                            }
+                            retry++;
+                            if (retry > 32768) {
+                                break;
+                            }
+                        }
+
+                        clock_gettime(CLOCK_REALTIME, &tend);
             
-                    usCost = test_time_diff(&tstart, &tend, 1000);
-                    throughput = maxsz*8.0 / usCost*1.0;
-                    printf("usb throughput: %d bytes / %d ms = %lf MBits\n", maxsz, usCost / 1000, throughput);
+                        usCost = test_time_diff(&tstart, &tend, 1000);
+                        throughput = (maxsz + maxszm) *8.0 / usCost*1.0;
+                        printf("usb throughput: %d + %d bytes / %d ms = %lf MBits\n", maxsz, maxszm, usCost / 1000, throughput);
             
-                    cmd = 0;
-                    cntTx = 0;                    
+                        cmd = 0;
+                        cntTx = 0;                    
+                        cntTxm = 0;                    
+                    }
+
                     
                     //usbentsTx = 0;
                 }
@@ -8963,7 +9036,8 @@ static char spi1[] = "/dev/spidev32766.0";
 #endif
 
         close(usbfd);
-        free(palloc);
+        if (palloc)        free(palloc);
+        if (pallocm)     free(pallocm);
         goto end;
     }
     if (sel == 25){ /* usb printer write access */
