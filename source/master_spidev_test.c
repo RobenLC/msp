@@ -5898,7 +5898,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                 if ((pllfd[ins].revents & POLLIN) == POLLIN) {
                 
                     read(pllfd[ins].fd, &pllcmd[ins], 1);
-                    printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
+                    //printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
                     
                     evcnt++;
                     if (ptret == evcnt) {
@@ -5980,7 +5980,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         
                                         tmpbf = outbf->bn;
 
-                                        printf("[GW] addrs: 0x%.8x, tmpbf: 0x%.8x lens: %d - %d\n", addrs, tmpbf, lens, cycCnt[ins]);
+                                        //printf("[GW] addrs: 0x%.8x, tmpbf: 0x%.8x lens: %d - %d\n", addrs, tmpbf, lens, cycCnt[ins]);
                                         
                                         if ((!tmpbf) && (pubffo->ubmetasize)) {
                                             lens = pubffo->ubmetasize;
@@ -6099,12 +6099,16 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             }
                         }
                         else if (pllcmd[ins] == 'd') {
-                            write(outfd[ins], &pllcmd[ins], 1);
-                            printf("[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            latcmd[ins] = 'd';
+                            latcmd[ins+1] = 'd';
+                            matcmd[ins] = 'h';
+                            matcmd[ins+1] = 'h';
                             totsz[ins] =0;
                             totsz[ins+1] = 0;
                             ring_buf_init(ringbf[ins]);
                             ring_buf_init(ringbf[ins+1]);
+                            write(outfd[ins], &pllcmd[ins], 1);
+                            printf("[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                         }
                         else if (pllcmd[ins] == 's') {
                             if (ins == 2) {
@@ -6112,9 +6116,13 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 //printf("[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);                                
                                 latcmd[ins] = 's';
                                 latcmd[ins+1] = 's';
+                                matcmd[ins] = 'h';
+                                matcmd[ins+1] = 'h';
                             } else {
                                 latcmd[ins] = 's';
                                 latcmd[ins+1] = 's';
+                                matcmd[ins] = 'h';
+                                matcmd[ins+1] = 'h';
                             }
                             
                             totsz[ins] =0;
@@ -6156,6 +6164,9 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 printf("[GW] already trigger multiple scan latcmd[%d]:%c pllcmd:%c \n", ins, latcmd[ins], pllcmd[ins]);
                             } else if (latcmd[ins] == 'e') {
                                 printf("[GW] already stop multiple scan latcmd[%d]:%c pllcmd:%c\n", ins, latcmd[ins], pllcmd[ins]);
+                            } else if (pllcmd[ins] == 'a') {
+                                write(outfd[ins], &pllcmd[ins], 1);
+                                printf("[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                             } else {
                                 if (ins == 2) {
                                     write(outfd[ins], &pllcmd[ins], 1);
@@ -6177,6 +6188,11 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             matcmd[2] = 0;
                             matcmd[3] = 0;
 
+                            pubffcd[0] = 0;
+                            pubffcd[1] = 0;
+                            pubffcd[2] = 0;
+                            pubffcd[3] = 0;
+                            
                             idxInit[0] = 1;
                             idxInit[1] = 1;
                             idxInit[2] = 2;
@@ -6223,6 +6239,11 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             matcmd[1] = 0;
                             matcmd[2] = 0;
                             matcmd[3] = 0;
+
+                            pubffcd[0] = 0;
+                            pubffcd[1] = 0;
+                            pubffcd[2] = 0;
+                            pubffcd[3] = 0;
 
                             idxInit[0] = 1;
                             idxInit[1] = 1;
@@ -6280,7 +6301,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 
                             lens = ring_buf_cons(ringbf[ins], &addrs);                
                             while (lens <= 0) {
-                                //printf("[DV] cons ring buff ret: %d \n", lens);
+                                printf("[DV] cons ring buff ret: %d \n", lens);
                                 usleep(1000);
                                 lens = ring_buf_cons(ringbf[ins], &addrs);
                             }
@@ -6291,7 +6312,10 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 
                             if (!pubffh) {
                                 pubffh = malloc(sizeof(struct usbBuffLink_s));
+                                //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 1);
+                                
                                 if (pubffh) {
+                                    //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 2);
                                     memset(pubffh, 0, sizeof(struct usbBuffLink_s));
                                     
                                     pubffh->ubindex = idxInit[ins];
@@ -6308,14 +6332,24 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 } else {
                                     printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
                                 }
+
+                                //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 3);
+                                
                                 pubffcd[ins] = pubffh;
                             }
 
+                            //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 4);
+                            
                             if (!pubffh) {
                                 break;
                             }
 
+                            //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 5);
+                            
                             if (!pubffcd[ins]) {
+
+                                //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 6);
+                                
                                 pubffcd[ins] = malloc(sizeof(struct usbBuffLink_s));
                                 if (pubffcd[ins]) {
                                     memset(pubffcd[ins], 0, sizeof(struct usbBuffLink_s));
@@ -6343,21 +6377,30 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
                                 }
                             }
+
+                            //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 7);
                             
                             if (!pubffcd[ins]) {
                                 break;
                             }
 
+                            //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 8);
+                            
                             if (!pubffcd[ins]->ubbufh) {
+                                //printf("[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 1);
                                 pubffcd[ins]->ubbufh= malloc(sizeof(struct usbBuff_s));
                                 if (pubffcd[ins]->ubbufh) {
                                     pubffcd[ins]->ubbufh->bn = 0;
                                 } else {
                                     printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuff_s)); 
                                 }
+                                
+                                //printf("[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 2);
+                                
                                 curbf = pubffcd[ins]->ubbufh;
                                 pubffcd[ins]->ubbufc = curbf;
                             } else {
+                                //printf("[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 3);
                                 curbf = pubffcd[ins]->ubbufc;
                                 tmpbf = malloc(sizeof(struct usbBuff_s));
                                 if (tmpbf) {
@@ -6365,7 +6408,10 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     curbf->bn = tmpbf;
                                     pubffcd[ins]->ubbufc = tmpbf;
                                 }
+                                //printf("[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 4);
                             }
+
+                            //printf("[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 9);
                             
                             curbf = pubffcd[ins]->ubbufc;
 
@@ -6383,9 +6429,9 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             memcpy(addrd, addrs, lens);
 
                             totsz[ins] += lens;
-                            printf("[GW] ring%d trunk size: %d, total:%d pllcmd:%c dist:%d\n", ins, lens, totsz[ins], pllcmd[ins], ring_buf_info_len(ringbf[ins]));
+                            //printf("[GW] ring%d trunk size: %d, total:%d pllcmd:%c dist:%d\n", ins, lens, totsz[ins], pllcmd[ins], ring_buf_info_len(ringbf[ins]));
                             if (pllcmd[ins] == 'E') {
-                                if (matcmd[ins] == 'Q') {
+                                if ((matcmd[ins] == 'Q') ||(matcmd[ins] == 'D')) {
                                     if (pubffcd[ins]->ublastsize == 0) {
                                         pubffcd[ins]->ublastsize = lens;
                                         printf("[GW] ring%d the last trunk size: %d total: %d - 1\n", ins, lens, totsz[ins]);                                    
@@ -6592,9 +6638,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     static char ptfileSave[] = "/mnt/mmc2/usb/image_RX_%.3d.jpg";
     char ptfilepath[128];
 #endif
-    char cmdMtx[11][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
-    					    {'q', 0x02},{'r', 0x03},{'g', 0x05},{'e', 0x06},{'f', 0x07},
-    					    {'b', 0x08}};
+    char cmdMtx[12][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
+    					    {'q', 0x02},{'r', 0x04},{'g', 0x05},{'e', 0x06},{'f', 0x07},
+    					    {'b', 0x08},{'h', 0x07}};
     uint8_t cmdchr=0;
     struct shmem_s *pTx=0;
     char *pMta=0;
@@ -6642,7 +6688,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
-                //printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
+                printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
                 break;
             }
         }
@@ -6672,6 +6718,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         case 'm':
             cmdchr = cmdMtx[0][1];
             break;
+        /* simplex */
         case 'd':
             opc = OP_SINGLE;
             dat = OPSUB_USB_Scan;
@@ -6680,12 +6727,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         case 'a':
             opc = OP_SINGLE;
             dat = OPSUB_USB_Scan;
-#if USB_CALLBACK_SUBMIT 
-            cmdchr = 0x04;
-#else
             cmdchr = cmdMtx[2][1];
-#endif
             break;
+        /* duplex */
         case 's':
             opc = OP_DUPLEX;
             dat = OPSUB_USB_Scan;
@@ -6694,12 +6738,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         case 'p':
             opc = OP_DUPLEX;
             dat = OPSUB_USB_Scan;
-#if USB_CALLBACK_SUBMIT 
-            cmdchr = 0x04;
-#else
             cmdchr = cmdMtx[4][1];
-#endif
             break;
+        /* multiple duplex */
         case 'q':
             opc = OP_Multi_DUPLEX;
             dat = OPSUB_USB_Scan;
@@ -6708,12 +6749,9 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         case 'r':
             opc = OP_Multi_DUPLEX;
             dat = OPSUB_USB_Scan;
-#if USB_CALLBACK_SUBMIT 
-            cmdchr = 0x04;
-#else
             cmdchr = cmdMtx[6][1];
-#endif
             break;
+        /* stop loop procedure */
         case 'g':
             cmdchr = cmdMtx[7][1];
             break;
@@ -6723,13 +6761,21 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         case 'f':
             cmdchr = cmdMtx[9][1];
             break;
+        /* stop loop by host */
         case 'b':
             cmdchr = cmdMtx[10][1];
+            break;
+        case 'h':
+            cmdchr = cmdMtx[11][1];
             break;
         default:
             goto end;
             break;
         }
+
+#if DBG_USB_HS
+        printf("cmdchr: 0x%.2x \n", cmdchr);
+#endif
 
         if (cmdchr == 0x01) { 
             pmeta = &meta;
@@ -6892,8 +6938,12 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
 
             chq = 'E';
             pieRet = write(pPrx[1], &chq, 1);
-
-            if (chr == 'f') {
+            
+            if (chr == 'h') {
+                //chq = 'H';
+                //pieRet = write(pPrx[1], &chq, 1);
+            }
+            else if (chr == 'f') {
                 chq = 'F';
                 pieRet = write(pPrx[1], &chq, 1);
             } else if (chr == 'R') {
@@ -6950,22 +7000,22 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             pieRet = write(pPrx[1], &chq, 1);
         }
         else if (cmdchr == 0x03) {
-            //ptret = USB_IOCT_LOOP_CONTI_READ(usbid, &bitset);
-            //printf("\n\n[HS] conti read start ret: %d \n\n", ptret);
-#if 0 /* remove ready */
-            insert_cbw(CBW, CBW_CMD_READY, 0, 0);
-            usb_send(CBW, usbid, 31);
-#endif
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
-            usb_send(CBW, usbid, 31);
-            usb_read(ptrecv, usbid, 13);
-#if DBG_USB_HS
-            printf("[%s] dump 13 bytes", strpath);
-            shmem_dump(ptrecv, 13);
-#endif
-            insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
-            usb_send(CBW, usbid, 31);     
+            memcpy(&pkcbw[0], CBW, 32);
 
+            insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
+            memcpy(&pkcbw[32], CBW, 32);            
+
+            insert_cbw(CBW, 0x13, opc, dat);
+            memcpy(&pkcbw[64], CBW, 32);            
+            
+            /* start loop */
+            ptret = USB_IOCT_LOOP_START(usbid, pkcbw);
+            printf("\n[%s] conti read start ret: %d \n\n", strpath, ptret);
+
+            ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
+            printf("\n[%s] conti read stop ret: %d \n\n", strpath, ptret);
+            
             chq = 'S';
             pieRet = write(pPrx[1], &chq, 1);
         }
@@ -7042,14 +7092,16 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                     //break;
                 }
                 else if (recvsz == 0) {
+                    //printf("[%s] usb read ret: %d \n", strpath, recvsz);
                     continue;
                 }
                 else {
                     /*do nothing*/
                 }
-
-                //printf("[%s] usb read %d / %d!!\n ", strpath, recvsz, len);
                 
+#if DBG_USB_HS
+                printf("[%s] usb read %d / %d!!\n ", strpath, recvsz, len);
+#endif
                 //printf("[HS] dump 32 - 0 \n");
                 //msync(addr, recvsz, MS_SYNC);
                 //shmem_dump(addr, 32);
@@ -7090,8 +7142,15 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                 }
             }
 
-
-            if (chr == 'q') {
+            if (chr == 'd') {
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+            }
+            else if (chr == 's') {
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+            }
+            else if (chr == 'q') {
                 chq = 'Q';
                 pieRet = write(pPrx[1], &chq, 1);
             } else if (chr == 'R') {
@@ -7289,7 +7348,7 @@ static char spi1[] = "/dev/spidev32766.0";
     if (ret == -1) pabort("can't get bits per word"); 
 #endif
 #define DBG_GATE_PIPE (0)
-#define DBG_27_DV     1
+#define DBG_27_DV     0
 #define DBG_27_EPOL  0
 #define USB_HS_SAVE_RESULT_DV 0
     if (sel == 27){ /* usb printer test usb scam */
@@ -7621,13 +7680,13 @@ static char spi1[] = "/dev/spidev32766.0";
                                 pipRet = read(piprx[0], &chq, 1);
                                 if (pipRet < 0) {
                                     //printf("[DV] get pipe(%d) ret: %d, error!! - 1\n", piprx[0], pipRet);
-                                    usleep(100000);
+                                    //usleep(100000);
                                     //continue;
                                     //break;
                                     
                                 }
 
-                                printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
+                                //printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
                                 
                                 if (chq == 0x80) {
                                     if (chr) {
@@ -8015,7 +8074,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                     lens = lastCylen;
                                 }
 
-                                printf("[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d\n", addrd, lens, uimCylcnt, lastCylen);
+                                //printf("[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d\n", addrd, lens, uimCylcnt, lastCylen);
                             
                                 msync(addrd, lens, MS_SYNC);
                             
@@ -8058,7 +8117,7 @@ static char spi1[] = "/dev/spidev32766.0";
                         sendsz = write(usbfd, addrd, lens);
 #endif
                         if (sendsz < 0) {
-#if 1//DBG_27_DV
+#if DBG_27_DV
                             printf("[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
 #endif
 
@@ -8324,7 +8383,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             break;
                         }
                         else {
-                            printf("[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
+                            printf("[DV] clean pipe get chq: (0x%.2x) \n", chq);
                         }
                     }
 
@@ -8335,7 +8394,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             break;
                         }
                         else {
-                            printf("[DV] clean pipe get chd: %c(0x%.2x) \n", chd, chd);
+                            printf("[DV] clean pipe get chd: (0x%.2x) \n", chd);
                         }
                     }
 
@@ -8401,7 +8460,8 @@ static char spi1[] = "/dev/spidev32766.0";
                                         }
                                     }
                                 
-                                    continue;
+                                    //continue;
+                                    break;
                                 }
                                 else if ((opc == 0x05) && (dat == 0x85)) {
                                 
@@ -8436,7 +8496,8 @@ static char spi1[] = "/dev/spidev32766.0";
                                         }
                                     }
                                 
-                                    continue;
+                                    //continue;
+                                    break;
                                 }
                                 
                                 else if ((opc == 0x0a) && (dat == 0x85)) {
@@ -8472,9 +8533,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                         }
                                     }
 #endif                          
-                                    continue;
-                                }
-                                else if ((opc == 0x0f) && (dat == 0x00)) {
+                                    //continue;
                                     break;
                                 }
                                 else {
@@ -8487,7 +8546,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             uimCylcnt = 0;
                             datCylcnt = 0;
                             lastCylen = 0;
-                            if (opc == 0x04) {                                    
+                            if ((opc == 0x04) && (dat == 0x85)) {                                    
                                 if (!puscur) {
                                     puscur = pushost;                    
                                         
@@ -8521,7 +8580,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                 acusz = 0;
                                 break;
                             }
-                            else if (opc == 0x05) {
+                            else if ((opc == 0x05) && (dat == 0x85)) {
                                 if (!puscur) {
                                     puscur = pushost;                    
                                 
@@ -8580,7 +8639,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                 acusz = 0;
                                 break;
                             }
-                            else if (opc == 0x0a) {
+                            else if ((opc == 0x0a) && (dat == 0x85)) {
                                 if (!puscur) {
                                     puscur = pushost;                    
                                 
@@ -8682,74 +8741,7 @@ static char spi1[] = "/dev/spidev32766.0";
                         else if (cmd == 0x13) {
                             switch(opc) {
                             case 0x04:
-                                chq = 'b';
-                                pipRet = write(pipeTx[1], &chq, 1);
-                                if (pipRet < 0) {
-                                    printf("[DV]  pipe send meta ret: %d \n", pipRet);
-                                    goto end;
-                                }
-                                break;
                             case 0x05:
-
-                                while (1) {
-                                    chq = 0;
-                                    pipRet = read(pipeRx[0], &chq, 1);
-                                    if (pipRet < 0) {
-                                        break;
-                                    }
-                                    else {
-                                        printf("[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
-                                    }
-                                }
-                                
-                                while (1) {
-                                    chd = 0;
-                                    pipRet = read(pipeRxd[0], &chd, 1);
-                                    if (pipRet < 0) {
-                                        break;
-                                    }
-                                    else {
-                                        printf("[DV] clean pipe get chd: %c(0x%.2x) \n", chd, chd);
-                                    }
-                                }
-                                
-                                if (puimCnTH) {
-                                    ix=0;
-                                    puimTmp = puimCnTH;
-                                    while(puimTmp) {
-                                        printf("[DV] clean %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
-                                        puimUse = puimTmp;
-                                        puimTmp = puimUse->uimNxt;
-                                        ix++;
-                                
-                                        free(puimUse);
-                                    }
-                                    puimCnTH = 0;
-                                    puimCur = 0;
-                                    puimGet = 0;
-                                }
-                                
-                                endf = 0;
-                                endm = 0;
-                                
-                                uimCylcnt = 0;
-                                puscur = 0;
-
-                                chq = 'b';
-                                pipRet = write(pipeTx[1], &chq, 1);
-                                if (pipRet < 0) {
-                                    printf("[DV]  pipe send meta ret: %d \n", pipRet);
-                                    goto end;
-                                }
-                            
-                                chd = 'b';
-                                pipRet = write(pipeTxd[1], &chd, 1);
-                                if (pipRet < 0) {
-                                    printf("[DV]  pipe send meta ret: %d \n", pipRet);
-                                    goto end;
-                                }
-                                
-                                break;
                             case 0x0a:
 
                                 while (1) {
@@ -8759,7 +8751,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                         break;
                                     }
                                     else {
-                                        printf("[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
+                                        printf("[DV] clean pipe get chq: (0x%.2x) \n", chq);
                                     }
                                 }
                                 
@@ -8770,7 +8762,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                         break;
                                     }
                                     else {
-                                        printf("[DV] clean pipe get chd: %c(0x%.2x) \n", chd, chd);
+                                        printf("[DV] clean pipe get chd: (0x%.2x) \n", chd);
                                     }
                                 }
                                 
