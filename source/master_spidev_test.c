@@ -5914,6 +5914,13 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                     switch(ins) {
                     case 0:
                     case 2:
+                        if (latcmd[ins] == 'b') {
+                            if (pllcmd[ins] & 0x80) {
+                                printf("[GW] id:%d pipe%d get chr: %c(0x%.2x) skip !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                                break;
+                            } 
+                        }
+                        
                         if (pllcmd[ins] & 0x80) {
                             if (!pubffh) {
                                 pllcmd[ins] = 0x80;
@@ -5971,7 +5978,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         lens = ring_buf_get(ringbf[ins], &addrd);
                                         if (lens <= 0) {
                                             printf("[GW] get ring buffer failed !! ret: %d \n", lens);
-                                            break;
+                                            continue;
                                         }
 
                                         memallocsz -= 1;
@@ -6053,10 +6060,12 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         }
                                         else {
                                             pllcmd[ins] = 0x80;                                    
-                                            printf("[GW] idle \n");
+                                            printf("[GW] idle %d \n", cycCnt[ins]);
+                                            break;
                                         }
 
                                         cycCnt[ins] = cycCnt[ins] + 1;
+                                        
                                     }
                                     
                                     if (tmpbf) {
@@ -6291,7 +6300,16 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             if (pllcmd[ins] == 'B') {
                                 write(outfd[ins], &pllcmd[ins], 1);
                                 //printf("[GW] out%d id:%d put chr: %c(0x%.2x) - stop of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            } else {
+                            } 
+                            else if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
+                                lens = ring_buf_cons(ringbf[ins], &addrs);                
+                                while (lens <= 0) {
+                                    printf("[DV] psudo cons ring buff ret: %d \n", lens);
+                                    //usleep(1000);
+                                    lens = ring_buf_cons(ringbf[ins], &addrs);
+                                }
+                            }
+                            else {    
                                 //write(outfd[ins], &pllcmd[ins], 1);
                                 //printf("[GW] id:%d no handle chr: %c(0x%.2x) - stop of transmission !!! \n", ins, pllcmd[ins], pllcmd[ins]);
                             }
