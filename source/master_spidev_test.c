@@ -7399,7 +7399,7 @@ static char spi1[] = "/dev/spidev32766.0";
         int *piptx=0, *piprx=0;
         int cntLp0=0, cntLp1=0, cntLpx=0;
         struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0;
-        int uimCylcnt=0, datCylcnt=0, lastCylen=0;
+        int uimCylcnt=0, datCylcnt=0, lastCylen=0, waitCylen=0;
         int ix=0;
         char cmdtyp=0;
 
@@ -7918,15 +7918,6 @@ static char spi1[] = "/dev/spidev32766.0";
                                         }
                                         
                                         if (chq == 0x7f) {
-#if 1
-                                            ix = 0;
-                                            puimTmp = puimCnTH;
-                                            while(puimTmp) {
-                                                printf("[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
-                                                puimTmp = puimTmp->uimNxt;
-                                                ix++;
-                                            }                             
-#endif
                                             puimGet->uimGetCnt += 1;
                                             //chq = 'E';
 
@@ -8018,6 +8009,19 @@ static char spi1[] = "/dev/spidev32766.0";
                                                 }
                                             }
 
+                                            ix = 0;
+                                            puimTmp = puimCnTH;
+                                            while(puimTmp) {
+#if 1
+                                                printf("[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+#endif
+                                                puimTmp = puimTmp->uimNxt;
+                                                ix++;
+                                            }                             
+
+                                            waitCylen = ix;
+                                            printf("[DV] wait page size: %d\n", waitCylen);
+                                            
                                             //printf("[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
 
                                             chr = 0;
@@ -8282,7 +8286,8 @@ static char spi1[] = "/dev/spidev32766.0";
                     cmd = 0;
                 }
                 else if (cmd == 0x13) {
-
+                
+#if 0 /* 0x13 not to clean memory */
                     while (1) {
                         chq = 0;
                         pipRet = read(pipeRx[0], &chq, 1);
@@ -8308,9 +8313,16 @@ static char spi1[] = "/dev/spidev32766.0";
                             if (chd == 'B')  break;
                         }
                     }
+#endif
 
                     seqtx++;
-                    csw[12] = 0;//seqtx;
+                    if (waitCylen) {
+                        csw[11] = waitCylen & 0xff;
+                        csw[12] = 1;//seqtx;
+                    } else {
+                        csw[11] = 0;
+                        csw[12] = 0;//seqtx;
+                    }
 
                     wrtsz = 0;
                     retry = 0;
@@ -8445,6 +8457,10 @@ static char spi1[] = "/dev/spidev32766.0";
                     endm = 0;
 
                     uimCylcnt = 0;
+                    datCylcnt = 0;
+                    lastCylen = 0;
+                    waitCylen = 0;
+
 #endif
                     break;
                 }
@@ -8573,6 +8589,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             uimCylcnt = 0;
                             datCylcnt = 0;
                             lastCylen = 0;
+                            waitCylen = 0;
                             if ((opc == 0x04) && (dat == 0x85)) {                                    
                                 if (!puscur) {
                                     puscur = pushost;                    
@@ -8770,7 +8787,7 @@ static char spi1[] = "/dev/spidev32766.0";
                             case 0x04:
                             case 0x05:
                             case 0x0a:
-
+#if 0 /* 0x13 not to clean memory */
                                 while (1) {
                                     chq = 0;
                                     pipRet = read(pipeRx[0], &chq, 1);
@@ -8813,6 +8830,9 @@ static char spi1[] = "/dev/spidev32766.0";
                                 endm = 0;
                                 
                                 uimCylcnt = 0;
+                                datCylcnt = 0;
+                                lastCylen = 0;
+                                waitCylen = 0;
 
                                 puscur = 0;
 
@@ -8829,6 +8849,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                     printf("[DV]  pipe send meta ret: %d \n", pipRet);
                                     goto end;
                                 }
+#endif
                                 break;
                             default: 
                                 printf("\n[DV]  0x0f unknown opc: 0x%.2x \n", opc);
