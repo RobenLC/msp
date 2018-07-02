@@ -5957,7 +5957,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         outbf = pubffo->ubbufh;
                                     }
                                 }
-#if 1 /* memory used debug */
+#if 0 /* memory used debug */
                                 if (pubffh) {
                                     memsz = 0;
                                     pageidx = 0;
@@ -6061,7 +6061,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                             
                                             pubffo = 0;
                                             
-                                           printf("[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", pubffh);
+                                            printf("[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", pubffh);
                                             
                                             cycCnt[ins] = cycCnt[ins] + 1;
                                         
@@ -6815,7 +6815,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
-                printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
+                //printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
                 break;
             }
         }
@@ -7917,7 +7917,7 @@ static char spi1[] = "/dev/spidev32766.0";
                                             
                                             printf("[DV] wait id %d for %d ms (%lld->%lld)\n", puimGet->uimIdex, idlet, time_get_ms(&tidleS), time_get_ms(&tidleE));
 
-                                            if (idlet > 6000) {
+                                            if (idlet > 1500) {
                                                 clock_gettime(CLOCK_REALTIME, &tidleS);
 
                                                 if (puimCnTH == puimGet) {
@@ -7984,28 +7984,29 @@ static char spi1[] = "/dev/spidev32766.0";
                                                 //printf("[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
 
                                                 chr = 0;
-                                                puimGet = 0;
+                                                //puimGet = 0;
 
-                                                if (puscur == pushost) {
-                                                    puscur = pushostd;
-                                                    usbCur = puscur->pushring;
-                                                    piptx = puscur->pushtx;
-                                                    piprx = puscur->pushrx; 
-                                                }
-                                                else if (puscur == pushostd) {
-                                                    puscur = pushost;
-                                                    usbCur = puscur->pushring;
-                                                    piptx = puscur->pushtx;
-                                                    piprx = puscur->pushrx; 
+                                                if (puimGet) {
+                                                    if ((puimGet->uimIdex % 2) == 1) {
+                                                        puscur = pushost;
+                                                        usbCur = puscur->pushring;
+                                                        piptx = puscur->pushtx;
+                                                        piprx = puscur->pushrx; 
+                                                    } else {
+                                                        puscur = pushostd;
+                                                        usbCur = puscur->pushring;
+                                                        piptx = puscur->pushtx;
+                                                        piprx = puscur->pushrx; 
+                                                    }
                                                 } else {
-                                                    printf("[DV] should NOT be here, idle state \n");
+                                                    printf("[DV] puimGet is null timeout\n");
                                                 }
                                             }
                                         }
                                     }
                                 }
 
-                                printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
+                                //printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
                                 
                                 if (chq == 0x80) {
                                     if (chr) {
