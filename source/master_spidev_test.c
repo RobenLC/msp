@@ -9,6 +9,7 @@
 #include <linux/types.h> 
 #include <linux/spi/spidev.h> 
 #include <sys/times.h> 
+#include <sys/sysinfo.h> 
 #include <time.h>
 #include <math.h>
 #include "dmpKey.h"
@@ -5482,7 +5483,7 @@ static void parse_opts(int argc, char *argv[])
 
 static void* aspSalloc(int slen)
 {
-    int tot=0;
+    int tot=0, ret=0;
     char *p=0;
     
     tot = *totSalloc;
@@ -5491,7 +5492,12 @@ static void* aspSalloc(int slen)
     *totSalloc = tot;
     
     p = mmap(NULL, slen, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    return p;
+
+    if ((int)p != 0xffffffff) {
+        return p;
+    } else {
+        return 0;
+    }
 }
 
 static char **memory_init(int *sz, int tsize, int csize)
@@ -7615,9 +7621,14 @@ static char spi1[] = "/dev/spidev32766.0";
         int usb0pvid[2];
         int usb1pvid[2];
         struct timespec tidleS, tidleE;
+        struct sysinfo minfo;
         
         char *endf=0, *endm=0;
         char endstr[] = "usb_conti_stop";
+
+        totSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+        if (!totSalloc) goto end;
+
         
 #if USB_HS_SAVE_RESULT_DV
     FILE *fsave=0;
@@ -7628,18 +7639,66 @@ static char spi1[] = "/dev/spidev32766.0";
 
 #if 0 /* test memory */
         char *pt=0;
-        int m=1024*1024;
-        long long msz = 0;
+        int m=4096;
+        long long msz = 0, prs=0;
+#if mem
+struct sysinfo {
+	__kernel_long_t uptime;		/* Seconds since boot */
+	__kernel_ulong_t loads[3];	/* 1, 5, and 15 minute load averages */
+	__kernel_ulong_t totalram;	/* Total usable main memory size */
+	__kernel_ulong_t freeram;	/* Available memory size */
+	__kernel_ulong_t sharedram;	/* Amount of shared memory */
+	__kernel_ulong_t bufferram;	/* Memory used by buffers */
+	__kernel_ulong_t totalswap;	/* Total swap space size */
+	__kernel_ulong_t freeswap;	/* swap space still available */
+	__u16 procs;		   	/* Number of current processes */
+	__u16 pad;		   	/* Explicit padding for m68k */
+	__kernel_ulong_t totalhigh;	/* Total high memory size */
+	__kernel_ulong_t freehigh;	/* Available high memory size */
+	__u32 mem_unit;			/* Memory unit size in bytes */
+	char _f[20-2*sizeof(__kernel_ulong_t)-sizeof(__u32)];	/* Padding: libc5 uses this.. */
+};
+#endif
+        sysinfo(&minfo);
+        printf("[M] sysinfo free: %d total: %d \n", minfo.freeram, minfo.totalram);
+
+        prs = 32 * 1024 * 1024;
+        
         while (1) {
-            pt = malloc(m);
+            //pt = malloc(m);
+            pt = aspSalloc(m);
+            //printf("[M] 0x%.8x %lld \n", pt, msz);
+            
             if (pt) {
+                memset(pt, 0xff, m);
+                sysinfo(&minfo);
                 msz += m;
-                printf("[M] 0x%.8x %lld\n", pt, msz);
+                if ((msz % prs) == 0) {
+                    printf("[M] 0x%.8x %lld \n", pt, msz);
+
+                    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+                    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+                    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+                }
+
+                if (minfo.freeram < (256*1024*1024)) {
+
+                    printf("[M] 0x%.8x %lld \n", pt, msz);
+
+                    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+                    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+                    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+                
+                    break;
+                }
+
             } else {
                 break;
             }
         }
-        while(1);
+        printf("[M] 0x%.8x %lld \n", pt, msz);
+        
+        //while(1);
 #endif
 
         if(!fpd) {
@@ -7684,9 +7743,6 @@ static char spi1[] = "/dev/spidev32766.0";
         bufsize = PT_BUF_SIZE;
         
         printf(" recv buff size:[%d] \n", bufsize);
-        
-        totSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-        if (!totSalloc) goto end;
         
         pushost = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         memset(pushost, 0, sizeof(struct usbhost_s));
@@ -7833,6 +7889,11 @@ static char spi1[] = "/dev/spidev32766.0";
             printf(" recv buff alloc failed! size: %d \n", bufsize);
             goto end;
         }
+
+        sysinfo(&minfo);
+        printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+        printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+        printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
         
         thrid[0] = fork();
         if (!thrid[0]) {
@@ -8504,7 +8565,7 @@ static char spi1[] = "/dev/spidev32766.0";
 #else
                             //usleep(5000);
 
-                            if ((errcnt & 0x1ff) == 0) {
+                            if ((errcnt & 0x1fff) == 0) {
                                 printf("[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
                                 usleep(50000);
                             }
