@@ -219,6 +219,7 @@ struct usbBuffLink_s{
     int ublastsize;
     int ubmetasize;
     int ubcylcnt;
+    int ubcswerr;
 };
 
 struct intMbs_s{
@@ -6044,7 +6045,8 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                             
                                             //pllcmd[ins] = pllcmd[ins] & 0x7f;
                                             pllcmd[ins] = 0x7f;
-                                        
+                                            cswinf = pubffo->ubcswerr;
+                                            
                                             outbf = 0;
                                         
                                             headbf = pubffo->ubbufh;
@@ -6122,7 +6124,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         minfo[5] = (char)((lastlen >> 16) & 0xff);
                                         minfo[6] = (char)((lastlen >> 24) & 0xff);
 
-                                        minfo[7] = (char)(cswinf | 0x80);
+                                        minfo[7] = cswinf;
 
 #if 0 /* memory used debug */
                                         pageidx = 0;
@@ -6279,7 +6281,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             idxInit[2] = 2;
                             idxInit[3] = 2;
 
-                            cswinf = 0;
+                            //cswinf = 0;
 
                             if (pubffh) {
                                 memsz = 0;
@@ -6555,7 +6557,8 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 //printf("[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
                                 pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;                            
                                 //pubffcd[ins]->ubcylcnt = 0;
-                                pubffcd[ins] = 0;
+                                
+                                //pubffcd[ins] = 0; /* move to 'I' handle */
 
                                 totsz[ins] = 0;
                                 
@@ -6740,7 +6743,17 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             //write(outfd[ins], &pllcmd[ins], 1);
                             //write(outfd[ins], &cswinf, 1);
                             //printf("[GW] out%d id:%d put chr: %c(0x%.2x) - stall of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            printf("[GW] id:%d conti read get error status: 0x%.2x !!!\n", ins, cswinf);
+                            printf("[GW] id:%d conti read get error status: 0x%.2x 0x%.8x!!!\n", ins, cswinf, pubffcd[ins]);
+
+                            if (pubffcd[ins]) {
+                                pubffcd[ins]->ubcswerr = cswinf;
+                                printf("[GW] id:%d conti read set error status 0x%.2x, contenter id: %d \n", ins, cswinf, pubffcd[ins]->ubindex);
+
+                                pubffcd[ins] = 0;
+                            } else {
+                                printf("[GW] id:%d conti read set error status failed, contenter is null  !!!\n", ins);
+                            }
+                            
                         }
                         else {
                             printf("\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
@@ -7001,6 +7014,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             recvsz = 0;
             acusz = 0;
             tcnt = 0;
+            cswst = 0;
             
             len = ring_buf_get(pTx, &addr);    
             while (len <= 0) {
@@ -7034,12 +7048,8 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                         
                         cswst = (recvsz >> 20) & 0xff;
                         
-                        if (!cswst) {
-                            cswst = 0x7f;
-                        }
-
-                        if (cswst) {
-                            chr = 'I';
+                        if (cswst == 0x80) {
+                            cswst = 0xff;
                         }
 
                         printf("[%s] use the error status: 0x%.2x\n", strpath, cswst);
@@ -7047,10 +7057,16 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
                         recvsz = recvsz  & 0x1ffff;
                     }
                     else if (recvsz > 0x40000) {
+
                         cswst = (recvsz >> 20) & 0xff;
+                        
                         recvsz = recvsz  & 0x1ffff;
                         printf("[%s] get the error status: 0x%.2x\n", strpath, cswst);
-                        chr = 'I';
+#if 1 /* stop scan if get error status */
+                        if (cswst & 0x7f) {
+                            chr = 'R';                        
+                        }
+#endif
                     } 
                     else {
                         printf("[%s] Error!!! unknow len: %d(0x%.8x) \n", strpath, recvsz, recvsz);
@@ -7124,6 +7140,13 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
 
             chq = 'E';
             pieRet = write(pPrx[1], &chq, 1);
+
+            if (cswst) {
+                chq = 'I';
+                pieRet = write(pPrx[1], &chq, 1);
+                chq = cswst;
+                pieRet = write(pPrx[1], &chq, 1);
+            }
             
             if (chr == 'h') {
                 //chq = 'H';
@@ -7135,16 +7158,11 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             } else if (chr == 'f') {
                 chq = 'F';
                 pieRet = write(pPrx[1], &chq, 1);
-            } else if (chr == 'R') {
+            } else if (chr == 'R') {                
                 chq = 'R';
                 pieRet = write(pPrx[1], &chq, 1);
-            } else if (chr == 'I') {
-                chq = 'I';
-                pieRet = write(pPrx[1], &chq, 1);
-                chq = cswst;
-                pieRet = write(pPrx[1], &chq, 1);
-                chq = 'R';
-                pieRet = write(pPrx[1], &chq, 1);
+            } else {
+                printf("[%s] Error!!! unknown chr: %c \n", chr);
             }
     
 #if USB_HS_SAVE_RESULT
@@ -8006,7 +8024,7 @@ struct sysinfo {
 
                                             idlet = test_time_diff(&tidleS, &tidleE, 1000000);
                                             
-                                            printf("[DV] wait id %d for %d ms (%lld->%lld)\n", puimGet->uimIdex, idlet, time_get_ms(&tidleS), time_get_ms(&tidleE));
+                                            printf("[DV] wait id %d for %d ms \n", puimGet->uimIdex, idlet);
 
                                             if (idlet > 3000) {
                                                 clock_gettime(CLOCK_REALTIME, &tidleS);
