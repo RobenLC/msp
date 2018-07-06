@@ -67,12 +67,19 @@ int pipe2(int pipefd[2], int flags);
 #define IOCNR_CONTI_READ_PROBE    10
 #define IOCNR_CONTI_READ_ONCE    11
 #define IOCNR_CONTI_READ_RESET   12
+#define IOCNR_CONTI_BUFF_CREATE    13
+#define IOCNR_CONTI_BUFF_PROBE    14
+#define IOCNR_CONTI_BUFF_RELEASE    15
 
 #define USB_IOC_CONTI_READ_START  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_START, 0)
 #define USB_IOC_CONTI_READ_STOP    _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_STOP, 0)
 #define USB_IOC_CONTI_READ_PROBE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_PROBE, 0)
 #define USB_IOC_CONTI_READ_ONCE   _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_ONCE, 0)
 #define USB_IOC_CONTI_READ_RESET   _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_RESET, 0)
+#define USB_IOC_CONTI_BUFF_CREATE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_CREATE, 0)
+#define USB_IOC_CONTI_BUFF_PROBE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_PROBE, 0)
+#define USB_IOC_CONTI_BUFF_RELEASE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_RELEASE, 0)
+
 #define LPIOC_GET_DEVICE_ID(len)     _IOC(_IOC_READ, 'P', IOCNR_GET_DEVICE_ID, len) 
 #define LPIOC_GET_VID_PID(len) _IOC(_IOC_READ, 'P', IOCNR_GET_VID_PID, len)
 
@@ -81,6 +88,9 @@ int pipe2(int pipefd[2], int flags);
 #define USB_IOCT_LOOP_STOP(a, b)               ioctl(a, USB_IOC_CONTI_READ_STOP, b)
 #define USB_IOCT_LOOP_ONCE(a, b)               ioctl(a, USB_IOC_CONTI_READ_ONCE, b)
 #define USB_IOCT_LOOP_RESET(a, b)               ioctl(a, USB_IOC_CONTI_READ_RESET, b)
+#define USB_IOCT_LOOP_BUFF_CREATE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_CREATE, b)
+#define USB_IOCT_LOOP_BUFF_PROBE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_PROBE, b)
+#define USB_IOCT_LOOP_BUFF_RELEASE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_RELEASE, b)
 #define USB_IOCT_GET_DEVICE_ID(a, b)          ioctl(a, LPIOC_GET_DEVICE_ID(4), b)
 #define USB_IOCT_GET_VID_PID(a, b)          ioctl(a, LPIOC_GET_VID_PID(8), b)
 
@@ -357,6 +367,7 @@ struct usbhost_s{
     int *pgatrx;
     int *pgattx;
     int pushcnt;
+    uint32_t *pushvaddrtb;
 };
 
 struct usbdev_s{
@@ -6813,6 +6824,8 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
     int tcnt=0;
     int bitset=0;
     char cswst=0;
+    uint32_t *virtbl;
+    char *chvaddr=0;
 
     pkcbw = malloc(96);
     if (!pkcbw) {
@@ -6840,6 +6853,20 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         }
         else {
             printf("open device[%s]\n", strpath); 
+        }
+    }
+
+
+    if (puhs->pushvaddrtb) {
+        virtbl = puhs->pushvaddrtb;
+        printf("[%s] vaddr val check: \n", strpath); 
+        for (idx=0; idx < 512; idx++) {
+            chvaddr = (char *)virtbl[idx];
+            printf("0x%.2x ", chvaddr[0]);
+
+            if ((idx + 1) % 16 == 0) {
+                printf("\n");
+            }
         }
     }
 
@@ -7445,6 +7472,59 @@ end:
     return 0;
 }
 
+#define DBG_PHY2VIR 0
+int phy2vir(uint32_t *pvir, uint32_t phy, int physize, int memfd)
+{
+    char *ps8_page_start_addr;
+    char *curAddr;
+    int fd , r, pageSize;
+    unsigned int u32_start_addr , u32_len , u32_page_seek_cur , data;
+
+    
+    pageSize = getpagesize();
+#if DBG_PHY2VIR
+    printf("[MEM] get page size: %d \n", pageSize);
+#endif
+    u32_start_addr = phy;
+#if DBG_PHY2VIR
+    printf("[MEM] get start addr: 0x%.8x \n", u32_start_addr);
+#endif
+    u32_len = physize;
+#if DBG_PHY2VIR    
+    printf("[MEM] get len: %d \n", u32_len);
+#endif
+    u32_page_seek_cur = u32_start_addr % pageSize;
+#if DBG_PHY2VIR
+    printf("[MEM] page seek: %d \n", u32_page_seek_cur);
+    printf("Start addr : 0x%.8x  , length : %d \n" , u32_start_addr - u32_page_seek_cur , u32_page_seek_cur + u32_len );
+#endif
+
+    //sync();
+    
+    ps8_page_start_addr = mmap( 0 ,                                   // Start addr in file
+                           u32_page_seek_cur + u32_len , // len
+                           PROT_READ | PROT_WRITE , // mode
+                           MAP_SHARED ,                  // flag
+                           memfd ,
+                           u32_start_addr - u32_page_seek_cur ); // start addr in page system
+  
+    
+    if( MAP_FAILED == ps8_page_start_addr ) {
+        printf("mmap() errorn");
+        close(memfd);      
+        return -1;
+    }
+
+    curAddr = ps8_page_start_addr + u32_page_seek_cur;
+    *pvir = (uint32_t)curAddr;
+#if DBG_PHY2VIR
+    printf("[MEM] get addr s:0x%.8x c:0x%.8x\n", ps8_page_start_addr, curAddr);
+#endif
+    //munmap( ps8_page_start_addr , u32_len );
+  
+    return 0;
+}
+
 #if 1
 int main(int argc, char *argv[]) 
 { 
@@ -7612,6 +7692,7 @@ static char spi1[] = "/dev/spidev32766.0";
         static char ptdevpath0[] = "/dev/g_printer0";        
         static char pthostpath1[] = "/dev/usb/lp0";
         static char pthostpath2[] = "/dev/usb/lp1";
+#define MODULE_NAME "/dev/mem"
         char ptfilepath[128];
         char *ptrecv, *ptsend, *palloc=0;
         int ptret=0, recvsz=0, acusz=0, wrtsz=0, maxsz=0, sendsz=0, lastsz=0;
@@ -7638,6 +7719,10 @@ static char spi1[] = "/dev/spidev32766.0";
         int usbids[2];
         int usb0pvid[2];
         int usb1pvid[2];
+        uint32_t *phyaddr0=0, *phyaddr1=0, ut32=0;
+        uint32_t *viraddr0=0, *viraddr1=0, vt32=0;
+        int mfd;
+        char *chvir;
         struct timespec tidleS, tidleE;
         struct sysinfo minfo;
         
@@ -7912,7 +7997,164 @@ struct sysinfo {
         printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
         printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
         printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
+        mfd = open(MODULE_NAME , O_RDWR);
+        if(mfd < 0) {
+            printf("open() %s errorn" , MODULE_NAME);
+        } else {
+            printf("[R] open [%s] succeed!!!! \n", MODULE_NAME);
+        }
         
+        usbids[0] = open(pthostpath1, O_RDWR);
+        if (usbids[0] < 0) {
+            printf("[DVF] can't open device[%s]\n", pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ret = USB_IOCT_GET_VID_PID(usbids[0], usb0pvid);
+        if (ret < 0) {
+            printf("[DVF] can't get vid pid for [%s]\n", pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ix = 512;
+        ret = USB_IOCT_LOOP_BUFF_CREATE(usbids[0], &ix);
+        if (ret < 0) {
+            printf("[DVF] can't create buff failed, size: %d [%s]\n", 512, pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        phyaddr0 = malloc(512*4);
+        viraddr0 = malloc(512*4);
+        if (!phyaddr0) {
+            printf("[DVF] allocate memory failed, size: %d [%s]\n", 512*4, pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ret = USB_IOCT_LOOP_BUFF_PROBE(usbids[0], phyaddr0);
+        if (ret < 0) {
+            printf("[DVF] can't probe phy addr, size: %d [%s]\n", 512, pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ix = 0;
+        //printf("[DVF] addr0: \n%d: ", ix);
+        for (ix=0; ix < 512; ix++) {
+            ut32 = phyaddr0[ix];
+            //printf("p:0x%.8x ", ut32);
+        
+            ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
+            if (ret < 0) {
+                printf("[DVF] addr0 phy 2 vir error!!! ret: %d \n", ret);
+                break;
+            }
+            
+            viraddr0[ix] = vt32;
+            //printf("v:0x%.8x ", vt32);
+            if ((ix+1) % 4 == 0) {
+                //printf("\n%d: ", ix);
+            }
+        }
+
+        printf("[DVF] vaddr0 val check:\n");        
+        for (ix=0; ix < 512; ix++) {
+            chvir = (char *) viraddr0[ix];
+        
+            printf("0x%.2x ", chvir[0]);
+
+            if ((ix+1) % 16 == 0) {
+                printf("\n");
+            }
+        }
+        
+        printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[0], usb0pvid[0], usb0pvid[1], pthostpath1);
+        
+        usbids[1] = open(pthostpath2, O_RDWR);
+        if (usbids[1] < 0) {
+            printf("[DVF] can't open device[%s]\n", pthostpath2); 
+            close(usbids[1]);
+            goto end;
+        }
+        
+        ret = USB_IOCT_GET_VID_PID(usbids[1], usb1pvid);
+        if (ret < 0) {
+            printf("[DVF] can't get vid pid for [%s]\n", pthostpath2); 
+            close(usbids[1]);
+            goto end;
+        }
+        
+        ix = 512;
+        ret = USB_IOCT_LOOP_BUFF_CREATE(usbids[1], &ix);
+        if (ret < 0) {
+            printf("[DVF] can't create buff failed, size: %d [%s]\n", 512, pthostpath2); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        phyaddr1 = malloc(512*4);
+        viraddr1 = malloc(512*4);
+        if (!phyaddr1) {
+            printf("[DVF] allocate memory failed, size: %d [%s]\n", 512*4, pthostpath2); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ret = USB_IOCT_LOOP_BUFF_PROBE(usbids[1], phyaddr1);
+        if (ret < 0) {
+            printf("[DVF] can't probe phy addr, size: %d [%s]\n", 512, pthostpath2); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ix = 0;
+        //printf("[DVF] addr1: \n%d: ", ix);
+        for (ix=0; ix < 512; ix++) {
+            ut32 = phyaddr1[ix];
+            //printf("p:0x%.8x ", ut32);
+        
+            ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
+            if (ret < 0) {
+                printf("[DVF] addr1 phy 2 vir error!!! ret: %d \n", ret);
+                break;
+            }
+            
+            viraddr1[ix] = vt32;
+            //printf("v:0x%.8x ", vt32);
+            if ((ix+1) % 4 == 0) {
+                //printf("\n%d: ", ix);
+            }
+        }
+
+        printf("[DVF] vaddr1 val check:\n");        
+        for (ix=0; ix < 512; ix++) {
+            chvir = (char *) viraddr1[ix];
+        
+            printf("0x%.2x ", chvir[0]);
+
+            if ((ix+1) % 16 == 0) {
+                printf("\n");
+            }
+        }
+        
+        printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[1], usb1pvid[0], usb1pvid[1], pthostpath2);
+        
+        if (usb0pvid[1] < usb1pvid[1]) {
+            pushost->ushid = usbids[0];
+            pushost->pushvaddrtb = viraddr0;
+            pushostd->ushid = usbids[1];
+            pushostd->pushvaddrtb = viraddr1;
+        } else {
+            pushost->ushid = usbids[1];
+            pushost->pushvaddrtb = viraddr1;
+            pushostd->ushid = usbids[0];
+            pushostd->pushvaddrtb = viraddr0;
+        }
+                
         thrid[0] = fork();
         if (!thrid[0]) {
             printf("fork pid: %d\n", thrid[0]);
@@ -9440,46 +9682,6 @@ struct sysinfo {
             else if (thrid[1] > 0) {
                 printf("[PID] create thread 1 id: %d \n", thrid[1]);
             } else {
-
-                usbids[0] = open(pthostpath1, O_RDWR);
-                if (usbids[0] < 0) {
-                    printf("[DVF] can't open device[%s]\n", pthostpath1); 
-                    close(usbids[0]);
-                    goto end;
-                }
-                
-                ret = USB_IOCT_GET_VID_PID(usbids[0], usb0pvid);
-                if (ret < 0) {
-                    printf("[DVF] can't get vid pid for [%s]\n", pthostpath1); 
-                    close(usbids[0]);
-                    goto end;
-                }
-
-                printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[0], usb0pvid[0], usb0pvid[1], pthostpath1);
-
-                usbids[1] = open(pthostpath2, O_RDWR);
-                if (usbids[1] < 0) {
-                    printf("[DVF] can't open device[%s]\n", pthostpath2); 
-                    close(usbids[1]);
-                    goto end;
-                }
-
-                ret = USB_IOCT_GET_VID_PID(usbids[1], usb1pvid);
-                if (ret < 0) {
-                    printf("[DVF] can't get vid pid for [%s]\n", pthostpath2); 
-                    close(usbids[1]);
-                    goto end;
-                }
-                
-                printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[1], usb1pvid[0], usb1pvid[1], pthostpath2);
-                
-                if (usb0pvid[1] < usb1pvid[1]) {
-                    pushost->ushid = usbids[0];
-                    pushostd->ushid = usbids[1];
-                } else {
-                    pushost->ushid = usbids[1];
-                    pushostd->ushid = usbids[0];
-                }
                 
                 thrid[2] = fork();
                 if (!thrid[2]) {
