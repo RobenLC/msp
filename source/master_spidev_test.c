@@ -31,7 +31,7 @@ int pipe2(int pipefd[2], int flags);
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
 
 #define SPI_DISABLE (1)
- 
+//#define MALLOC_CHECK_ 0 
 #define SPI_AT_CPHA  0x02          /* clock phase */
 #define SPI_AT_CPOL  0x01          /* clock polarity */
 #define SPI_AT_MODE_0  (0|0)            /* (original MicroWire) */
@@ -5999,7 +5999,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                 if ((pllfd[ins].revents & POLLIN) == POLLIN) {
                 
                     read(pllfd[ins].fd, &pllcmd[ins], 1);
-                    printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
+                    //printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
                     
                     evcnt++;
                     if (ptret == evcnt) {
@@ -6996,7 +6996,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
         }
     }
 
-
+#if 0
     if (puhs->pushvaddrtb) {
         virtbl = puhs->pushvaddrtb;
         printf("[%s] vaddr val check: \n", strpath); 
@@ -7009,6 +7009,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             }
         }
     }
+#endif
 
     printf("[%s] get usbid:[%d]\n", strpath, usbid); 
     
@@ -7026,7 +7027,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
-                printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
+                //printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
                 break;
             }
         }
@@ -7681,6 +7682,8 @@ static char spi1[] = "/dev/spidev32766.0";
     mode &= ~SPI_AT_MODE_3;
     mode |= SPI_AT_MODE_3;
 
+    //MALLOC_CHECK_=0 ;
+
      printf("mode initial: 0x%x\n", mode & SPI_AT_MODE_3);
          
     if (argc > 1) {
@@ -8039,7 +8042,7 @@ struct sysinfo {
         //printf("[DVF] addr0: \n%d: ", ix);
         for (ix=0; ix < RING_BUFF_NUM; ix++) {
             ut32 = phyaddr0[ix];
-            printf("p:0x%.8x ", ut32);
+            //printf("p:0x%.8x ", ut32);
         
             ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
             if (ret < 0) {
@@ -8048,9 +8051,9 @@ struct sysinfo {
             }
             
             viraddr0[ix] = vt32;
-            printf("v:0x%.8x ", vt32);
+            //printf("v:0x%.8x ", vt32);
             if ((ix+1) % 4 == 0) {
-                printf("\n%d: ", ix);
+                //printf("\n%d: ", ix);
             }
         }
 
@@ -8123,7 +8126,7 @@ struct sysinfo {
         //printf("[DVF] addr1: \n%d: ", ix);
         for (ix=0; ix < RING_BUFF_NUM; ix++) {
             ut32 = phyaddr1[ix];
-            printf("p:0x%.8x ", ut32);
+            //printf("p:0x%.8x ", ut32);
         
             ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
             if (ret < 0) {
@@ -8132,9 +8135,9 @@ struct sysinfo {
             }
             
             viraddr1[ix] = vt32;
-            printf("v:0x%.8x ", vt32);
+            //printf("v:0x%.8x ", vt32);
             if ((ix+1) % 4 == 0) {
-                printf("\n%d: ", ix);
+                //printf("\n%d: ", ix);
             }
         }
 
@@ -8260,7 +8263,7 @@ struct sysinfo {
         printf("[DV]  gateDnRx 0:%d 1:%d\n", gateDnRx[0], gateDnRx[1]);
 
 #endif
-
+#if 0
         ix=0;
         printf("[DVF] usbTx ring buff test: \n%d: ", ix);
         ret = 0; 
@@ -8302,7 +8305,7 @@ struct sysinfo {
                 printf("\n%d: ", ix);
             }
         }
-        
+#endif
         pushost->pushring = usbTx;
         pushost->pgatring = gateTx;
         pushost->puhsmeta = metaPt;
@@ -8582,7 +8585,7 @@ struct sysinfo {
                                     }
                                 }
 
-                                printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
+                                //printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
                                 
                                 if (chq == 0x80) {
                                     if (chr) {
@@ -8836,6 +8839,8 @@ struct sysinfo {
                                             if (puimCur == puimGet) {
                                                 puimCur = 0;
                                             }
+
+                                            puimUse = 0;
 
                                             if (puimCnTH == puimGet) {
                                                 puimCnTH = puimGet->uimNxt;
@@ -9303,7 +9308,7 @@ struct sysinfo {
 
                         break;
                     }
-#if 1
+#if 0
         ix=0;
         printf("[DVF] usbTx ring buff test: \n%d: ", ix);
         ret = 0; 
@@ -9348,7 +9353,7 @@ struct sysinfo {
 #endif
 
                     
-#if 1//DBG_27_DV
+#if DBG_27_DV
                     shmem_dump(ptrecv, recvsz);
 #endif
 
@@ -9410,7 +9415,7 @@ struct sysinfo {
                         ix=0;
                         puimTmp = puimCnTH;
                         while(puimTmp) {
-                            printf("[DV] clean %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                            printf("[DV] clean H %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
                             puimUse = puimTmp;
                             puimTmp = puimUse->uimNxt;
                             ix++;
@@ -9426,7 +9431,7 @@ struct sysinfo {
                         ix=0;
                         puimTmp = puimGet;
                         while(puimTmp) {
-                            printf("[DV] clean %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                            printf("[DV] clean G %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
                             puimUse = puimTmp;
                             puimTmp = puimUse->uimNxt;
                             ix++;
