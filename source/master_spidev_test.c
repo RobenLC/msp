@@ -52,6 +52,11 @@ int pipe2(int pipefd[2], int flags);
 
 #define USB_META_SIZE 512
 #define PT_BUF_SIZE (32768*3)
+#if USB_VIRTABLE_USE
+#define TABLE_SLOT_SIZE 4
+#else
+#define TABLE_SLOT_SIZE PT_BUF_SIZE
+#endif
 #define CYCLE_LEN (20)
 #define MAX_EVENTS (32)
 #define EPOLLLT (0)
@@ -59,6 +64,7 @@ int pipe2(int pipefd[2], int flags);
 
 #define USB_CALLBACK_SUBMIT (1)
 #define USB_RINGBUF_USE_GATE (1)
+#define USB_VIRTABLE_USE (1)
 /* USB ioctl  */
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -126,10 +132,10 @@ int pipe2(int pipefd[2], int flags);
 #define  OPSUB_Enc_Dec_Test   0x8A
 
 #define MIN_SECTOR_SIZE  (512)
-#define RING_BUFF_NUM   (256)//(6000/4) //(1024)
+#define RING_BUFF_NUM   (1536)//(512)//(6000/4) //(1024)
 #define DATA_RX_SIZE RING_BUFF_NUM
 
-#define SPI_TRUNK_SZ 32768
+#define SPI_TRUNK_SZ 4
 #define TRUNK_SIZE SPI_TRUNK_SZ
 
 #define OP_PON 0x1
@@ -216,7 +222,8 @@ struct usbIndex_s{
 };
 
 struct usbBuff_s{
-    char bpt[PT_BUF_SIZE];
+    //char bpt[PT_BUF_SIZE];
+    char *bpt;
     struct usbBuff_s *bn;
 };
 
@@ -5512,9 +5519,37 @@ static void* aspSalloc(int slen)
     }
 }
 
+static char **memory_init_vtable(int *sz, int tsize, int csize, uint32_t *tbl)
+{
+    uint32_t *mbuf;
+    char **pma;
+    int asz, idx;
+    char mlog[256];
+    
+    if ((!tsize) || (!csize)) return (0);
+    if (tsize % csize) return (0);
+    if (!(tsize / csize)) return (0);
+        
+    asz = tsize / csize;
+    //pma = (char **) aspMemalloc(sizeof(char *) * asz);
+    pma = (char **) aspSalloc(sizeof(char *) * asz);
+
+    mbuf = tbl;
+    
+    //sprintf(mlog, "aspSalloc get 0x%.8x\n", mbuf);
+    //print_f(mlogPool, "memory_init", mlog);
+        
+    for (idx = 0; idx < asz; idx++) {
+        pma[(idx+1) % asz] = (char *) mbuf[idx];
+    }
+
+    *sz = asz;
+    return pma;
+}
+
 static char **memory_init(int *sz, int tsize, int csize)
 {
-    char *mbuf, *tmpB;
+    char *mbuf;
     char **pma;
     int asz, idx;
     char mlog[256];
@@ -5534,8 +5569,7 @@ static char **memory_init(int *sz, int tsize, int csize)
     
     //sprintf(mlog, "aspSalloc get 0x%.8x\n", mbuf);
     //print_f(mlogPool, "memory_init", mlog);
-        
-    tmpB = mbuf;
+
     for (idx = 0; idx < asz; idx++) {
         pma[idx] = mbuf;
         
@@ -5569,6 +5603,7 @@ static int ring_buf_info_len(struct shmem_s *pp)
 }
 
 #define LOG_DUAL_STREAM_RING (0)
+
 static int ring_buf_init(struct shmem_s *pp)
 {
     int idx=0;
@@ -5588,10 +5623,12 @@ static int ring_buf_init(struct shmem_s *pp)
     pp->lastsz = 0;
     pp->dualsz = 0;
 
+#if 0
     for (idx=0; idx <RING_BUFF_NUM; idx++) {
         memset(pp->pp[idx], 0x00, SPI_TRUNK_SZ);
         msync(pp->pp[idx], SPI_TRUNK_SZ, MS_SYNC);
     }
+#endif
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return 0;
@@ -5824,6 +5861,7 @@ static int usb_read(char *ptr, int usbfd, int len)
     return recv;    
 }
 
+#define DBG_DUMP_DAT32  (0)
 static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 {
     struct pollfd pllfd[5];
@@ -5844,6 +5882,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 
     struct shmem_s *ringbf[4];
     char *addrd, *addrs;
+    uint32_t *add32d, *add32s;
     int lens=0, szup=0, szdn=0, lastlen=0;
     int totsz[4];
     int cycCnt[4];
@@ -5873,6 +5912,34 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
     ringbf[2] = ppdn->pushring;
     ringbf[3] = ppdn->pgatring;
 
+
+    int ix=0, iv=0;
+    char *taddr=0;
+#if 0
+    for (iv = 0; iv < 4; iv++) {
+        ix = 0;
+        printf("[GW] ring %d buff test: \n%d: ", iv, ix);
+        ptret = 0; 
+        ring_buf_init(ringbf[iv]);
+        while(1) {
+            ptret = ring_buf_get(ringbf[iv], &taddr);
+            //printf("[0x%.8x]=0x%.2x ", taddr, *taddr);
+            shmem_dump(taddr, 32);
+            ix++;
+
+            ring_buf_prod(ringbf[iv]);
+            
+            if (ptret <= 0) {
+                printf("\n");
+                break;
+            }
+
+            if ((ix % 4) == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+    }
+#endif
     ring_buf_init(ringbf[0]);
     ring_buf_init(ringbf[1]);
     ring_buf_init(ringbf[2]);
@@ -5932,7 +5999,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                 if ((pllfd[ins].revents & POLLIN) == POLLIN) {
                 
                     read(pllfd[ins].fd, &pllcmd[ins], 1);
-                    //printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
+                    printf("[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
                     
                     evcnt++;
                     if (ptret == evcnt) {
@@ -5968,7 +6035,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     //printf("[GW] find outbuf in pubffo \n");
                                     pubffo = pubffh;
                                     while (pubffo) {
-                                        //printf("    [GW] %d:%d \n", pubffo->ubindex, (pllcmd[ins] & 0x7f));
+                                        printf("    [GW] %d:%d \n", pubffo->ubindex, (pllcmd[ins] & 0x7f));
                                         if (pubffo->ubindex == (pllcmd[ins] & 0x7f)) {
                                             break;
                                         }
@@ -6023,8 +6090,12 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         }
 
                                         memallocsz -= 1;
-                                        
-                                        addrs = outbf->bpt;
+#if USB_VIRTABLE_USE
+                                        add32s = (uint32_t *) outbf->bpt;                                        
+                                        addrs = (char *) *add32s;
+#else
+                                        addrs = outbf->bpt;                                        
+#endif
                                         
                                         tmpbf = outbf->bn;
 
@@ -6039,16 +6110,29 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         }
                                         
                                         msync(addrs, lens, MS_SYNC);
-                                        //printf("[GW] dump 32 - 2 - 1\n");
-                                        //shmem_dump(addrs, 32);
-                                        
+
+#if DBG_DUMP_DAT32
+                                        printf("[GW] dump 32 - 2 - 1\n");
+                                        shmem_dump(addrs, 32);
+#endif
+
+#if USB_VIRTABLE_USE
+                                        if (addrs == addrd) {
+#if DBG_DUMP_DAT32
+                                            printf("[GW] compare addr passed !! addr: 0x%.8x \n", addrs);
+#endif
+                                        } else {
+                                            printf("[GW] compare addr failed !! addrs: 0x%.8x addrd: 0x%.8x\n", addrs, addrd);
+                                        }
+#else
                                         memcpy(addrd, addrs, lens);
-                                        
+#endif
                                         msync(addrd, lens, MS_SYNC);
-                                        
-                                        //printf("[GW] dump 32 - 2 - 2\n");
-                                        //shmem_dump(addrd, 32);
-                                        
+
+#if DBG_DUMP_DAT32
+                                        printf("[GW] dump 32 - 2 - 2\n");
+                                        shmem_dump(addrd, 32);
+#endif       
                                             
                                         if (lens < PT_BUF_SIZE) {
                                             ring_buf_prod(ringbf[ins]);
@@ -6065,6 +6149,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                                 tmpbf = headbf;                                            
                                                 headbf = tmpbf->bn;
                                                 //printf("[GW] clean buf addr: 0x%.8x\n", tmpbf);
+                                                free(tmpbf->bpt);
                                                 free(tmpbf);
                                             }
                                             tmpbf = 0;
@@ -6117,6 +6202,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                                 tmpbf = headbf;
                                                 headbf = tmpbf->bn;
                                                 //printf("[GW] free used buf addr: 0x%.8x \n", tmpbf);
+                                                free(tmpbf->bpt);
                                                 free(tmpbf);
                                             } else {
                                                 break;
@@ -6308,6 +6394,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         tmpbf = headbf;                                            
                                         headbf = tmpbf->bn;
                                         //printf("[GW] clean mem addr: 0x%.8x\n", tmpbf);
+                                        free(tmpbf->bpt);
                                         free(tmpbf);
                                     }
                                     
@@ -6324,6 +6411,30 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 pubffh = 0;
                             }
 
+#if 0
+    for (iv = ins; iv < (ins+1); iv++) {
+        ix = 0;
+        printf("[GW] m cmd ring %d buff test: \n%d: ", iv, ix);
+        ptret = 0; 
+        ring_buf_init(ringbf[iv]);
+        while(1) {
+            ptret = ring_buf_get(ringbf[iv], &taddr);
+            printf("[0x%.8x]=0x%.2x ", taddr, *taddr);
+            ix++;
+
+            ring_buf_prod(ringbf[iv]);
+            
+            if (ptret <= 0) {
+                printf("\n");
+                break;
+            }
+
+            if ((ix % 4) == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+    }
+#endif
                             totsz[ins] =0;
                             totsz[ins+1] = 0;
                             ring_buf_init(ringbf[ins]);
@@ -6502,20 +6613,40 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 //printf("[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 1);
                                 pubffcd[ins]->ubbufh= malloc(sizeof(struct usbBuff_s));
                                 if (pubffcd[ins]->ubbufh) {
+#if USB_VIRTABLE_USE
+                                    pubffcd[ins]->ubbufh->bpt = malloc(sizeof(uint32_t));
+#else
+                                    pubffcd[ins]->ubbufh->bpt = malloc(PT_BUF_SIZE);
+#endif
+                                    if (!pubffcd[ins]->ubbufh->bpt) {
+                                        printf("[GW] ring%d ubbufh allocate memory failed!! size: %d\n", ins, PT_BUF_SIZE); 
+                                        break;
+                                    }
                                     pubffcd[ins]->ubbufh->bn = 0;
                                 } else {
                                     printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuff_s)); 
+                                    break;
                                 }
                                 
                                 //printf("[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 2);
                                 
                                 curbf = pubffcd[ins]->ubbufh;
                                 pubffcd[ins]->ubbufc = curbf;
-                            } else {
+                            }
+                            else {
                                 //printf("[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 3);
                                 curbf = pubffcd[ins]->ubbufc;
                                 tmpbf = malloc(sizeof(struct usbBuff_s));
                                 if (tmpbf) {
+#if USB_VIRTABLE_USE
+                                    tmpbf->bpt = malloc(sizeof(uint32_t));
+#else
+                                    tmpbf->bpt = malloc(PT_BUF_SIZE);
+#endif
+                                    if (!tmpbf->bpt) {
+                                        printf("[GW] ring%d tmpbf allocate memory failed!! size: %d\n", ins, PT_BUF_SIZE); 
+                                        break;
+                                    }
                                     tmpbf->bn = 0;
                                     curbf->bn = tmpbf;
                                     pubffcd[ins]->ubbufc = tmpbf;
@@ -6531,14 +6662,23 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 break;
                             }
                             
+#if USB_VIRTABLE_USE
+                            add32d = (uint32_t *) curbf->bpt;
+#else
                             addrd = curbf->bpt;
-
+#endif
                             msync(addrs, lens, MS_SYNC);
-                            
-                            //printf("[GW] dump 32 - 1\n");
-                            //shmem_dump(addrs, 32);
-                            
+
+#if DBG_DUMP_DAT32
+                            printf("[GW] dump 32 - 1\n");
+                            shmem_dump(addrs, 32);
+#endif
+
+#if USB_VIRTABLE_USE
+                            *add32d = (uint32_t)addrs;
+#else
                             memcpy(addrd, addrs, lens);
+#endif
 
                             totsz[ins] += lens;
                             //printf("[GW] ring%d trunk size: %d, total:%d pllcmd:%c dist:%d\n", ins, lens, totsz[ins], pllcmd[ins], ring_buf_info_len(ringbf[ins]));
@@ -6886,7 +7026,7 @@ static int usb_host(struct usbhost_s *puhs, char *strpath)
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
-                //printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
+                printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
                 break;
             }
         }
@@ -7482,20 +7622,15 @@ int phy2vir(uint32_t *pvir, uint32_t phy, int physize, int memfd)
 
     
     pageSize = getpagesize();
-#if DBG_PHY2VIR
+#if 0//DBG_PHY2VIR
     printf("[MEM] get page size: %d \n", pageSize);
 #endif
     u32_start_addr = phy;
-#if DBG_PHY2VIR
-    printf("[MEM] get start addr: 0x%.8x \n", u32_start_addr);
-#endif
     u32_len = physize;
-#if DBG_PHY2VIR    
-    printf("[MEM] get len: %d \n", u32_len);
-#endif
     u32_page_seek_cur = u32_start_addr % pageSize;
+
 #if DBG_PHY2VIR
-    printf("[MEM] page seek: %d \n", u32_page_seek_cur);
+    printf("[MEM] get start addr: 0x%.8x, len: %d, seek: %d\n", u32_start_addr, u32_len, u32_page_seek_cur);
     printf("Start addr : 0x%.8x  , length : %d \n" , u32_start_addr - u32_page_seek_cur , u32_page_seek_cur + u32_len );
 #endif
 
@@ -7713,7 +7848,7 @@ static char spi1[] = "/dev/spidev32766.0";
         int cntLp0=0, cntLp1=0, cntLpx=0;
         struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0;
         int uimCylcnt=0, datCylcnt=0, lastCylen=0, waitCylen=0, rwaitCylen=0;
-        int ix=0, errcnt=0;
+        int ix=0, errcnt=0, ind=0;
         char cmdtyp=0, cswerr=0, pagerst=0;
         int idlet=0;
         int usbids[2];
@@ -7721,12 +7856,14 @@ static char spi1[] = "/dev/spidev32766.0";
         int usb1pvid[2];
         uint32_t *phyaddr0=0, *phyaddr1=0, ut32=0;
         uint32_t *viraddr0=0, *viraddr1=0, vt32=0;
+        uint32_t *tbl0, *tbl1;
+        int usbid0=0, usbid1=0;
         int mfd;
         char *chvir;
         struct timespec tidleS, tidleE;
         struct sysinfo minfo;
         
-        char *endf=0, *endm=0;
+        char *endf=0, *endm=0, *taddr=0;
         char endstr[] = "usb_conti_stop";
 
         totSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -7846,34 +7983,234 @@ struct sysinfo {
         bufsize = PT_BUF_SIZE;
         
         printf(" recv buff size:[%d] \n", bufsize);
+
+        sysinfo(&minfo);
+        printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+        printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+        printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
+        mfd = open(MODULE_NAME , O_RDWR);
+        if(mfd < 0) {
+            printf("open() %s errorn" , MODULE_NAME);
+        } else {
+            printf("[R] open [%s] succeed!!!! \n", MODULE_NAME);
+        }
         
+        usbids[0] = open(pthostpath1, O_RDWR);
+        if (usbids[0] < 0) {
+            printf("[DVF] can't open device[%s]\n", pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        } else {
+            printf("[DVF] open device[%s] usbid: %d \n", pthostpath1, usbids[0]); 
+        }
+        
+        ret = USB_IOCT_GET_VID_PID(usbids[0], usb0pvid);
+        if (ret < 0) {
+            printf("[DVF] can't get vid pid for [%s]\n", pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ix = RING_BUFF_NUM;
+        ret = USB_IOCT_LOOP_BUFF_CREATE(usbids[0], &ix);
+        if (ret < 0) {
+            printf("[DVF] can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM, pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        phyaddr0 = malloc(RING_BUFF_NUM*4);
+        viraddr0 = malloc(RING_BUFF_NUM*4);
+        if (!phyaddr0) {
+            printf("[DVF] allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM*4, pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ret = USB_IOCT_LOOP_BUFF_PROBE(usbids[0], phyaddr0);
+        if (ret < 0) {
+            printf("[DVF] can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM, pthostpath1); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ix = 0;
+        //printf("[DVF] addr0: \n%d: ", ix);
+        for (ix=0; ix < RING_BUFF_NUM; ix++) {
+            ut32 = phyaddr0[ix];
+            printf("p:0x%.8x ", ut32);
+        
+            ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
+            if (ret < 0) {
+                printf("[DVF] addr0 phy 2 vir error!!! ret: %d \n", ret);
+                break;
+            }
+            
+            viraddr0[ix] = vt32;
+            printf("v:0x%.8x ", vt32);
+            if ((ix+1) % 4 == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+
+        printf("[DVF] vaddr0 val check:\n");        
+        for (ix=0; ix < RING_BUFF_NUM; ix++) {
+            chvir = (char *) viraddr0[ix];
+        
+            //printf("0x%.2x ", chvir[0]);
+            if (chvir[0] != (ix & 0xff)) {
+                printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
+            }
+            
+            /*
+            for (ind=1; ind < PT_BUF_SIZE; ind++) {
+                chvir[ind] = (ix + ind) & 0xff;
+            }
+            
+            msync(chvir, PT_BUF_SIZE, MS_SYNC);
+            */
+            
+            //shmem_dump(chvir, 32);
+
+            if ((ix+1) % 16 == 0) {
+                //printf("\n");
+            }
+        }
+        
+        printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[0], usb0pvid[0], usb0pvid[1], pthostpath1);
+        
+        usbids[1] = open(pthostpath2, O_RDWR);
+        if (usbids[1] < 0) {
+            printf("[DVF] can't open device[%s]\n", pthostpath2); 
+            close(usbids[1]);
+            goto end;
+        } else {
+            printf("[DVF] open device[%s] usbid: %d \n", pthostpath2, usbids[1]); 
+        }
+
+        ret = USB_IOCT_GET_VID_PID(usbids[1], usb1pvid);
+        if (ret < 0) {
+            printf("[DVF] can't get vid pid for [%s]\n", pthostpath2); 
+            close(usbids[1]);
+            goto end;
+        }
+        
+        ix = RING_BUFF_NUM;
+        ret = USB_IOCT_LOOP_BUFF_CREATE(usbids[1], &ix);
+        if (ret < 0) {
+            printf("[DVF] can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM, pthostpath2); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        phyaddr1 = malloc(RING_BUFF_NUM*4);
+        viraddr1 = malloc(RING_BUFF_NUM*4);
+        if (!phyaddr1) {
+            printf("[DVF] allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM*4, pthostpath2); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ret = USB_IOCT_LOOP_BUFF_PROBE(usbids[1], phyaddr1);
+        if (ret < 0) {
+            printf("[DVF] can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM, pthostpath2); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ix = 0;
+        //printf("[DVF] addr1: \n%d: ", ix);
+        for (ix=0; ix < RING_BUFF_NUM; ix++) {
+            ut32 = phyaddr1[ix];
+            printf("p:0x%.8x ", ut32);
+        
+            ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
+            if (ret < 0) {
+                printf("[DVF] addr1 phy 2 vir error!!! ret: %d \n", ret);
+                break;
+            }
+            
+            viraddr1[ix] = vt32;
+            printf("v:0x%.8x ", vt32);
+            if ((ix+1) % 4 == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+
+        printf("[DVF] vaddr1 val check:\n");        
+        for (ix=0; ix < RING_BUFF_NUM; ix++) {
+            chvir = (char *) viraddr1[ix];
+        
+            //printf("0x%.2x ", chvir[0]);
+            if (chvir[0] != (ix & 0xff)) {
+                printf("[DVF] 1e: %d-0x%.2x ", ix, chvir[0]);            
+            }
+            /*
+            for (ind=1; ind < PT_BUF_SIZE; ind++) {
+                chvir[ind] = (ix + ind) & 0xff;
+            }
+            
+            msync(chvir, PT_BUF_SIZE, MS_SYNC);
+            */
+            
+            //shmem_dump(chvir, 32);
+            if ((ix+1) % 16 == 0) {
+                //printf("\n");
+            }
+        }
+ 
+        if (usb0pvid[1] < usb1pvid[1]) {
+            usbid0 = usbids[0];
+            usbid1 = usbids[1];
+            tbl0 = viraddr0;
+            tbl1 = viraddr1;
+        } else {
+            usbid0 = usbids[1];
+            usbid1 = usbids[0];
+            tbl0 = viraddr1;
+            tbl1 = viraddr0;
+        }
+        
+        printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[1], usb1pvid[0], usb1pvid[1], pthostpath2);
+                
         pushost = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         memset(pushost, 0, sizeof(struct usbhost_s));
         usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
-
-        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE*bufsize, bufsize);  
+#if USB_VIRTABLE_USE
+        usbTx->pp = memory_init_vtable(&usbTx->slotn, DATA_RX_SIZE * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
+#else
+        usbTx->pp = memory_init(&usbTx->slotn, DATA_RX_SIZE * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE);  
+#endif
         if (!usbTx->pp) goto end;
         usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
-        usbTx->totsz = DATA_RX_SIZE*bufsize;
+        usbTx->totsz = DATA_RX_SIZE*TABLE_SLOT_SIZE;
         usbTx->chksz = bufsize;
         usbTx->svdist = 8;
 
         pushostd = (struct usbhost_s *)malloc(sizeof(struct usbhost_s));
         memset(pushostd, 0, sizeof(struct usbhost_s));
         usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
-
-        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); 
+#if USB_VIRTABLE_USE
+        usbTxd->pp = memory_init_vtable(&usbTxd->slotn, DATA_RX_SIZE*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+#else
+        usbTxd->pp = memory_init(&usbTxd->slotn, DATA_RX_SIZE*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE); 
+#endif
         if (!usbTxd->pp) goto end;
         usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
-        usbTxd->totsz = DATA_RX_SIZE*bufsize;
+        usbTxd->totsz = DATA_RX_SIZE*TABLE_SLOT_SIZE;
         usbTxd->chksz = bufsize;
         usbTxd->svdist = 8;
 
         gateTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
-        gateTx->pp = memory_init(&gateTx->slotn, DATA_RX_SIZE*bufsize, bufsize); 
+#if USB_VIRTABLE_USE
+        gateTx->pp = memory_init_vtable(&gateTx->slotn, DATA_RX_SIZE*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0); 
+#else
+        gateTx->pp = memory_init(&gateTx->slotn, DATA_RX_SIZE*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE); 
+#endif
         if (!gateTx->pp) goto end;
         gateTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
-        gateTx->totsz = DATA_RX_SIZE*bufsize;
+        gateTx->totsz = DATA_RX_SIZE*TABLE_SLOT_SIZE;
         gateTx->chksz = bufsize;
         gateTx->svdist = 8;
 
@@ -7881,10 +8218,14 @@ struct sysinfo {
         metaPt = (char *)metaRx;
         
         gateTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
-        gateTxd->pp = memory_init(&gateTxd->slotn, DATA_RX_SIZE*bufsize, bufsize); 
+#if USB_VIRTABLE_USE
+        gateTxd->pp = memory_init_vtable(&gateTxd->slotn, DATA_RX_SIZE*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+#else
+        gateTxd->pp = memory_init(&gateTxd->slotn, DATA_RX_SIZE*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE); 
+#endif
         if (!gateTxd->pp) goto end;
         gateTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
-        gateTxd->totsz = DATA_RX_SIZE*bufsize;
+        gateTxd->totsz = DATA_RX_SIZE*TABLE_SLOT_SIZE;
         gateTxd->chksz = bufsize;
         gateTxd->svdist = 8;
 
@@ -7920,6 +8261,48 @@ struct sysinfo {
 
 #endif
 
+        ix=0;
+        printf("[DVF] usbTx ring buff test: \n%d: ", ix);
+        ret = 0; 
+        ring_buf_init(usbTx);
+        while(1) {
+            ret = ring_buf_get(usbTx, &taddr);
+            printf("[0x%.8x]=0x%.2x ", taddr, *taddr);
+            ix++;
+
+            ring_buf_prod(usbTx);
+            
+            if (ret <= 0) {
+                printf("\n");
+                break;
+            }
+
+            if ((ix % 4) == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+
+        ix=0;
+        printf("[DVF] gateTx ring buff test: \n%d: ", ix);
+        ret = 0; 
+        ring_buf_init(gateTx);
+        while(1) {
+            ret = ring_buf_get(gateTx, &taddr);
+            printf("[0x%.8x]=0x%.2x ", taddr, *taddr);
+            ix++;
+
+            ring_buf_prod(gateTx);
+            
+            if (ret <= 0) {
+                printf("\n");
+                break;
+            }
+
+            if ((ix % 4) == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+        
         pushost->pushring = usbTx;
         pushost->pgatring = gateTx;
         pushost->puhsmeta = metaPt;
@@ -7927,6 +8310,8 @@ struct sysinfo {
         pushost->pushtx = pipeTx;
         pushost->pgattx = gateUpTx;
         pushost->pgatrx = gateUpRx;
+        pushost->pushvaddrtb = tbl0;
+        pushost->ushid = usbid0;
         
         pushostd->pushring = usbTxd;
         pushostd->pgatring = gateTxd;
@@ -7935,7 +8320,9 @@ struct sysinfo {
         pushostd->pushtx = pipeTxd;
         pushostd->pgattx = gateDnTx;
         pushostd->pgatrx = gateDnRx;
-        
+        pushostd->pushvaddrtb = tbl1;
+        pushostd->ushid = usbid1;
+
         char csw[13] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00};
         char endTran[64] = {};
         uint8_t cmd=0, opc=0, dat=0, smode=0;
@@ -7991,168 +8378,6 @@ struct sysinfo {
         } else {
             printf(" recv buff alloc failed! size: %d \n", bufsize);
             goto end;
-        }
-
-        sysinfo(&minfo);
-        printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-        printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-        printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
-
-        mfd = open(MODULE_NAME , O_RDWR);
-        if(mfd < 0) {
-            printf("open() %s errorn" , MODULE_NAME);
-        } else {
-            printf("[R] open [%s] succeed!!!! \n", MODULE_NAME);
-        }
-        
-        usbids[0] = open(pthostpath1, O_RDWR);
-        if (usbids[0] < 0) {
-            printf("[DVF] can't open device[%s]\n", pthostpath1); 
-            close(usbids[0]);
-            goto end;
-        }
-        
-        ret = USB_IOCT_GET_VID_PID(usbids[0], usb0pvid);
-        if (ret < 0) {
-            printf("[DVF] can't get vid pid for [%s]\n", pthostpath1); 
-            close(usbids[0]);
-            goto end;
-        }
-        
-        ix = 512;
-        ret = USB_IOCT_LOOP_BUFF_CREATE(usbids[0], &ix);
-        if (ret < 0) {
-            printf("[DVF] can't create buff failed, size: %d [%s]\n", 512, pthostpath1); 
-            close(usbids[0]);
-            goto end;
-        }
-        
-        phyaddr0 = malloc(512*4);
-        viraddr0 = malloc(512*4);
-        if (!phyaddr0) {
-            printf("[DVF] allocate memory failed, size: %d [%s]\n", 512*4, pthostpath1); 
-            close(usbids[0]);
-            goto end;
-        }
-        
-        ret = USB_IOCT_LOOP_BUFF_PROBE(usbids[0], phyaddr0);
-        if (ret < 0) {
-            printf("[DVF] can't probe phy addr, size: %d [%s]\n", 512, pthostpath1); 
-            close(usbids[0]);
-            goto end;
-        }
-        
-        ix = 0;
-        //printf("[DVF] addr0: \n%d: ", ix);
-        for (ix=0; ix < 512; ix++) {
-            ut32 = phyaddr0[ix];
-            //printf("p:0x%.8x ", ut32);
-        
-            ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
-            if (ret < 0) {
-                printf("[DVF] addr0 phy 2 vir error!!! ret: %d \n", ret);
-                break;
-            }
-            
-            viraddr0[ix] = vt32;
-            //printf("v:0x%.8x ", vt32);
-            if ((ix+1) % 4 == 0) {
-                //printf("\n%d: ", ix);
-            }
-        }
-
-        printf("[DVF] vaddr0 val check:\n");        
-        for (ix=0; ix < 512; ix++) {
-            chvir = (char *) viraddr0[ix];
-        
-            printf("0x%.2x ", chvir[0]);
-
-            if ((ix+1) % 16 == 0) {
-                printf("\n");
-            }
-        }
-        
-        printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[0], usb0pvid[0], usb0pvid[1], pthostpath1);
-        
-        usbids[1] = open(pthostpath2, O_RDWR);
-        if (usbids[1] < 0) {
-            printf("[DVF] can't open device[%s]\n", pthostpath2); 
-            close(usbids[1]);
-            goto end;
-        }
-        
-        ret = USB_IOCT_GET_VID_PID(usbids[1], usb1pvid);
-        if (ret < 0) {
-            printf("[DVF] can't get vid pid for [%s]\n", pthostpath2); 
-            close(usbids[1]);
-            goto end;
-        }
-        
-        ix = 512;
-        ret = USB_IOCT_LOOP_BUFF_CREATE(usbids[1], &ix);
-        if (ret < 0) {
-            printf("[DVF] can't create buff failed, size: %d [%s]\n", 512, pthostpath2); 
-            close(usbids[0]);
-            goto end;
-        }
-        
-        phyaddr1 = malloc(512*4);
-        viraddr1 = malloc(512*4);
-        if (!phyaddr1) {
-            printf("[DVF] allocate memory failed, size: %d [%s]\n", 512*4, pthostpath2); 
-            close(usbids[0]);
-            goto end;
-        }
-        
-        ret = USB_IOCT_LOOP_BUFF_PROBE(usbids[1], phyaddr1);
-        if (ret < 0) {
-            printf("[DVF] can't probe phy addr, size: %d [%s]\n", 512, pthostpath2); 
-            close(usbids[0]);
-            goto end;
-        }
-        
-        ix = 0;
-        //printf("[DVF] addr1: \n%d: ", ix);
-        for (ix=0; ix < 512; ix++) {
-            ut32 = phyaddr1[ix];
-            //printf("p:0x%.8x ", ut32);
-        
-            ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
-            if (ret < 0) {
-                printf("[DVF] addr1 phy 2 vir error!!! ret: %d \n", ret);
-                break;
-            }
-            
-            viraddr1[ix] = vt32;
-            //printf("v:0x%.8x ", vt32);
-            if ((ix+1) % 4 == 0) {
-                //printf("\n%d: ", ix);
-            }
-        }
-
-        printf("[DVF] vaddr1 val check:\n");        
-        for (ix=0; ix < 512; ix++) {
-            chvir = (char *) viraddr1[ix];
-        
-            printf("0x%.2x ", chvir[0]);
-
-            if ((ix+1) % 16 == 0) {
-                printf("\n");
-            }
-        }
-        
-        printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[1], usb1pvid[0], usb1pvid[1], pthostpath2);
-        
-        if (usb0pvid[1] < usb1pvid[1]) {
-            pushost->ushid = usbids[0];
-            pushost->pushvaddrtb = viraddr0;
-            pushostd->ushid = usbids[1];
-            pushostd->pushvaddrtb = viraddr1;
-        } else {
-            pushost->ushid = usbids[1];
-            pushost->pushvaddrtb = viraddr1;
-            pushostd->ushid = usbids[0];
-            pushostd->pushvaddrtb = viraddr0;
         }
                 
         thrid[0] = fork();
@@ -8357,7 +8582,7 @@ struct sysinfo {
                                     }
                                 }
 
-                                //printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
+                                printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
                                 
                                 if (chq == 0x80) {
                                     if (chr) {
@@ -8667,10 +8892,13 @@ struct sysinfo {
                                                     //printf("[DV] puimUse is NULL \n");
                                                     puimCnTH = puimGet;
                                                 }                                       
+
                                                 
                                                 clock_gettime(CLOCK_REALTIME, &tidleS);
                                             }
 
+                                            printf("[DV]puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                            
                                             ix = 0;
                                             puimTmp = puimCnTH;
                                             while(puimTmp) {
@@ -9075,6 +9303,50 @@ struct sysinfo {
 
                         break;
                     }
+#if 1
+        ix=0;
+        printf("[DVF] usbTx ring buff test: \n%d: ", ix);
+        ret = 0; 
+        ring_buf_init(usbTx);
+        while(1) {
+            ret = ring_buf_get(usbTx, &taddr);
+            printf("[0x%.8x]=0x%.2x ", taddr, *taddr);
+            ix++;
+
+            ring_buf_prod(usbTx);
+            
+            if (ret <= 0) {
+                printf("\n");
+                break;
+            }
+
+            if ((ix % 4) == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+
+        ix=0;
+        printf("[DVF] gateTx ring buff test: \n%d: ", ix);
+        ret = 0; 
+        ring_buf_init(gateTx);
+        while(1) {
+            ret = ring_buf_get(gateTx, &taddr);
+            printf("[0x%.8x]=0x%.2x ", taddr, *taddr);
+            ix++;
+
+            ring_buf_prod(gateTx);
+            
+            if (ret <= 0) {
+                printf("\n");
+                break;
+            }
+
+            if ((ix % 4) == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+#endif
+
                     
 #if 1//DBG_27_DV
                     shmem_dump(ptrecv, recvsz);
@@ -9150,6 +9422,21 @@ struct sysinfo {
                         puimGet = 0;
                     }
 
+                    if (puimGet) {
+                        ix=0;
+                        puimTmp = puimGet;
+                        while(puimTmp) {
+                            printf("[DV] clean %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                            puimUse = puimTmp;
+                            puimTmp = puimUse->uimNxt;
+                            ix++;
+
+                            free(puimUse);
+                        }
+
+                        puimGet = 0;
+                    }
+
                     endf = 0;
                     endm = 0;
 
@@ -9161,6 +9448,7 @@ struct sysinfo {
 
                     cswerr = 0;
                     pagerst = 0;
+
 
 #endif
                     break;
