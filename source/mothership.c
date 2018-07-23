@@ -15248,8 +15248,8 @@ static int stfat_30(struct psdata_s *data)
     rlt = abs_result(data->result); 
     pFat = data->rs->psFat;
 
-    sprintf_f(rs->logs, "op_30 rlt:0x%x fat:0x%.8x ansp:0x%x\n", rlt, pFat->fatStatus, data->ansp0); 
-    print_f(rs->plogs, "FAT", rs->logs);  
+    //sprintf_f(rs->logs, "op_30 rlt:0x%x fat:0x%.8x ansp:0x%x\n", rlt, pFat->fatStatus, data->ansp0); 
+    //print_f(rs->plogs, "FAT", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -15405,9 +15405,12 @@ static int stfat_30(struct psdata_s *data)
                 }
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
-            } else {
+            }
+/*
+            else {
                 data->result = emb_result(data->result, EVTMAX);
             }
+*/
             break;
         case NEXT:
             break;
@@ -20939,8 +20942,8 @@ static int stcrtfdr_118(struct psdata_s *data)
 
     rs = data->rs;
     rlt = abs_result(data->result); 
-    sprintf_f(rs->logs, "op_118 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "CFD", rs->logs);  
+    //sprintf_f(rs->logs, "op_118 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "CFD", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -21066,8 +21069,8 @@ static int stspy_01(struct psdata_s *data)
     uint32_t rlt;
     rlt = abs_result(data->result); 
 
-    sprintf_f(str, "op_01 - rlt:0x%x \n", rlt); 
-    print_f(mlogPool, "spy", str); 
+    //sprintf_f(str, "op_01 - rlt:0x%x \n", rlt); 
+    //print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
         case STINIT:
@@ -47228,7 +47231,8 @@ static int p11(struct procRes_s *rs)
     p11_init(rs);
 
     prctl(PR_SET_NAME, "msp-p11");
-
+    
+#if 0
     udevfd = open(ptdevpath, O_RDWR);
     while (udevfd <= 0) {
         sprintf_f(rs->logs, "can't open device[%s]\n", ptdevpath); 
@@ -47804,7 +47808,9 @@ static int p11(struct procRes_s *rs)
             print_f(rs->plogs, "P11", rs->logs);
         }
     }
-
+#else
+    while(1);
+#endif
 
     p11_end(rs);
     return 0;
@@ -50769,6 +50775,7 @@ static FILE *find_save(char *dst, char *tmple)
             break;
         } else {
             //printf("open file [%s] succeed \n", dst);
+            fclose(f);
         }
     }
     f = fopen(dst, "w");
