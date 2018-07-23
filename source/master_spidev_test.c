@@ -97,6 +97,7 @@ int pipe2(int pipefd[2], int flags);
 #define USB_IOCT_LOOP_BUFF_CREATE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_CREATE, b)
 #define USB_IOCT_LOOP_BUFF_PROBE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_PROBE, b)
 #define USB_IOCT_LOOP_BUFF_RELEASE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_RELEASE, b)
+
 #define USB_IOCT_GET_DEVICE_ID(a, b)          ioctl(a, LPIOC_GET_DEVICE_ID(4), b)
 #define USB_IOCT_GET_VID_PID(a, b)          ioctl(a, LPIOC_GET_VID_PID(8), b)
 
@@ -6124,9 +6125,9 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         } else {
                                             printf("[GW] compare addr failed !! addrs: 0x%.8x addrd: 0x%.8x\n", addrs, addrd);
                                         }
-#else
+#else // #if USB_VIRTABLE_USE
                                         memcpy(addrd, addrs, lens);
-#endif
+#endif // #if USB_VIRTABLE_USE
                                         msync(addrd, lens, MS_SYNC);
 
 #if DBG_DUMP_DAT32
@@ -7985,7 +7986,7 @@ struct sysinfo {
         
         bufsize = PT_BUF_SIZE;
         
-        printf(" recv buff size:[%d] \n", bufsize);
+        printf(" recv buff size:[%d] num:[%d]\n", bufsize, RING_BUFF_NUM);
 
         sysinfo(&minfo);
         printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
@@ -8039,10 +8040,10 @@ struct sysinfo {
         }
         
         ix = 0;
-        //printf("[DVF] addr0: \n%d: ", ix);
+        printf("[DVF] addr0: \n%d: ", ix);
         for (ix=0; ix < RING_BUFF_NUM; ix++) {
             ut32 = phyaddr0[ix];
-            //printf("p:0x%.8x ", ut32);
+            printf("p:0x%.8x ", ut32);
         
             ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
             if (ret < 0) {
@@ -8051,9 +8052,9 @@ struct sysinfo {
             }
             
             viraddr0[ix] = vt32;
-            //printf("v:0x%.8x ", vt32);
+            printf("v:0x%.8x ", vt32);
             if ((ix+1) % 4 == 0) {
-                //printf("\n%d: ", ix);
+                printf("\n%d: ", ix);
             }
         }
 
@@ -8123,10 +8124,10 @@ struct sysinfo {
         }
         
         ix = 0;
-        //printf("[DVF] addr1: \n%d: ", ix);
+        printf("[DVF] addr1: \n%d: ", ix);
         for (ix=0; ix < RING_BUFF_NUM; ix++) {
             ut32 = phyaddr1[ix];
-            //printf("p:0x%.8x ", ut32);
+            printf("p:0x%.8x ", ut32);
         
             ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
             if (ret < 0) {
@@ -8135,9 +8136,9 @@ struct sysinfo {
             }
             
             viraddr1[ix] = vt32;
-            //printf("v:0x%.8x ", vt32);
+            printf("v:0x%.8x ", vt32);
             if ((ix+1) % 4 == 0) {
-                //printf("\n%d: ", ix);
+                printf("\n%d: ", ix);
             }
         }
 
