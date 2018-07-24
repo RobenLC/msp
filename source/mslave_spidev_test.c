@@ -2280,7 +2280,7 @@ static int usb_read(char *ptr, int usbfd, int len)
         perror("[USB] read error !!\n"); 
         printf("read failed, errno: %d ret: %d \n", errno, recv);
 
-        usleep(100000);
+        //usleep(100000);
         
         recv = read(usbfd, ptr, len);
     }
@@ -2874,7 +2874,7 @@ err:
             printf("open device[%s]\n", ptdevpath); 
         }
 
-#if 0
+#if 1
         
         ret = USB_IOCT_GET_VID_PID(usbid, usb0pvid);
         if (ret < 0) {
@@ -2999,7 +2999,7 @@ err:
 //while (looptimes) {
 
         //printf("usb loop times: %d buff size: %d - 1\n", looptimes, PT_BUF_SIZE);
-        
+
         insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
         usb_send(CBW, usbid, 31);
 
@@ -3017,6 +3017,7 @@ err:
 while (looptimes) {
 
         //printf("usb loop times: %d buff size: %d - 2\n", looptimes, PT_BUF_SIZE);
+        USB_IOCT_LOOP_RESET(usbid, &ix);
         
         insert_cbw(CBW, CBW_CMD_START_SCAN, OP_Multi_DUPLEX, OPSUB_USB_Scan);
         usb_send(CBW, usbid, 31);     
@@ -3059,8 +3060,8 @@ while (looptimes) {
             acusz += recvsz;
             
             if (recvsz < PT_BUF_SIZE) {
-                ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE);
-                printf("reach the last trunk size: %d, redundent read ret: %d (%d)\n", recvsz, ptret, PT_BUF_SIZE);        
+                ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE-1);
+                printf("reach the last trunk size: %d, redundent read ret: %d, total: %d (%d) - 1\n", recvsz, ptret, acusz, PT_BUF_SIZE-1);        
 #if 0//USB_CALLBACK_SUBMIT 
                 ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
                 printf("\n\n[HS] conti read stop ret: %d \n\n", ptret);
@@ -3095,7 +3096,9 @@ while (looptimes) {
         //while(1);
 
         fsave = 0;
-
+        
+        USB_IOCT_LOOP_RESET(usbid, &ix);
+        
         insert_cbw(CBW, CBW_CMD_START_SCAN, OP_Multi_DUPLEX, OPSUB_USB_Scan);
         usb_send(CBW, usbid, 31);     
         
@@ -3120,7 +3123,7 @@ while (looptimes) {
 
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
 
-            //printf("[HS] conti read size: %d \n", recvsz);
+            //printf("[HS] read size: %d \n", recvsz);
             
             if (recvsz <= 0) {
                 cntRecv++;
@@ -3138,8 +3141,8 @@ while (looptimes) {
             acusz += recvsz;
 
             if (recvsz < PT_BUF_SIZE) {
-                ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE);
-                printf("reach the last trunk size: %d, redundent read ret: %d \n", recvsz, ptret);        
+                ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE-1);
+                printf("reach the last trunk size: %d, redundent read ret: %d, total: %d (%d) - 2\n", recvsz, ptret, acusz, PT_BUF_SIZE-1);        
 #if 0//USB_CALLBACK_SUBMIT 
                 ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
                 printf("\n\n[HS] conti read stop ret: %d \n\n", ptret);
@@ -3189,6 +3192,8 @@ while (looptimes) {
             } else {
                 while (looptimes) {
 
+                    USB_IOCT_LOOP_RESET(usbid, &ix);
+                    
                     insert_cbw(CBW, CBW_CMD_START_SCAN, OP_Multi_DUPLEX, OPSUB_USB_Scan);
                     usb_send(CBW, usbid, 31);     
         
@@ -3231,8 +3236,8 @@ while (looptimes) {
                         acusz += recvsz;
 
                         if (recvsz < PT_BUF_SIZE) {
-                            ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE);
-                            printf("reach the last trunk size: %d, redundent read ret: %d (%d)\n", recvsz, ptret, PT_BUF_SIZE);        
+                            ptret = usb_read(ptrecv, usbid, PT_BUF_SIZE-1);
+                            printf("reach the last trunk size: %d, redundent read ret: %d total: %d (%d) - s\n", recvsz, ptret, acusz, PT_BUF_SIZE-1);        
 #if 0//USB_CALLBACK_SUBMIT 
                             ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
                             printf("\n\n[HS] conti read stop ret: %d \n\n", ptret);
