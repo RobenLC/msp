@@ -5878,6 +5878,9 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
     char latcmd[5];
     char matcmd[5];
     char minfo[12];
+    char indexfo[2];
+    char midxfo[2];
+    char chindex[2];
     int outfd[5];
     int infd[5];
 
@@ -5889,6 +5892,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
     int cycCnt[4];
     int idxInit[4];
     int memsz=0, pageidx=0, trunkidx=0, memallocsz=0;
+    int mindex=0;
 
     struct usbBuffLink_s *pubffh=0, *pubffcd[4], *pubfft=0, *pubffm=0, *pubffo=0;
     struct usbBuff_s *curbf=0, *headbf=0, *tmpbf=0, *outbf=0;
@@ -5916,7 +5920,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 
     int ix=0, iv=0;
     char *taddr=0;
-#if 0
+#if 1
     for (iv = 0; iv < 4; iv++) {
         ix = 0;
         printf("[GW] ring %d buff test: \n%d: ", iv, ix);
@@ -5924,8 +5928,8 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
         ring_buf_init(ringbf[iv]);
         while(1) {
             ptret = ring_buf_get(ringbf[iv], &taddr);
-            //printf("[0x%.8x]=0x%.2x ", taddr, *taddr);
-            shmem_dump(taddr, 32);
+            printf("[0x%.8x]=0x%.2x ", taddr, *taddr);
+            //shmem_dump(taddr, 32);
             ix++;
 
             ring_buf_prod(ringbf[iv]);
@@ -6017,27 +6021,42 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                     case 0:
                     case 2:
                         if (latcmd[ins] == 'b') {
-                            if (pllcmd[ins] & 0x80) {
+                            if (((pllcmd[ins] & 0xc0) == 0xc0) || ((pllcmd[ins] & 0xc0) == 0x40)) {
                                 printf("[GW] id:%d pipe%d get chr: %c(0x%.2x) skip !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                                 break;
                             } 
                         }
                         
-                        if (pllcmd[ins] & 0x80) {
+                        if ((pllcmd[ins] & 0xc0) == 0xc0) {
                             if (!pubffh) {
-                                pllcmd[ins] = 0x80;
+                                pllcmd[ins] = 0xff;
                                 write(infd[ins], &pllcmd[ins], 1);
                                 printf("[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);            
                             } else {
+                                chindex[0] = pllcmd[ins];
 
-                                printf("[GW] pll%d get chr:(0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, pllcmd[ins], pubffo, pubffh);
+                                ptret = read(pllfd[ins].fd, &pllcmd[ins], 1);
+                                while (ptret < 0) {
+                                    ptret = read(pllfd[ins].fd, &pllcmd[ins], 1);
+                                }
+                                
+                                if ((pllcmd[ins] & 0xc0) == 0x40) {
+                                    chindex[1] = pllcmd[ins];
+                                } else {
+                                    printf("[GW] WARNNING!!! unknow ch: 0x%.2x \n", pllcmd[ins]);
+                                    break;
+                                }
+
+                                mindex = ((chindex[0] & 0x3f) << 6) | (chindex[1] & 0x3f);
+
+                                printf("[GW] pll%d get midx: %d(0x%.2x:0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, mindex, chindex[0], chindex[1], pubffo, pubffh);
                                 
                                 if (!pubffo) {
                                     //printf("[GW] find outbuf in pubffo \n");
                                     pubffo = pubffh;
                                     while (pubffo) {
-                                        printf("    [GW] %d:%d \n", pubffo->ubindex, (pllcmd[ins] & 0x7f));
-                                        if (pubffo->ubindex == (pllcmd[ins] & 0x7f)) {
+                                        printf("    [GW] %d:%d \n", pubffo->ubindex, mindex);
+                                        if (pubffo->ubindex == mindex) {
                                             break;
                                         }
                                         pubffo = pubffo->ubnxt;
@@ -6074,14 +6093,16 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 }
 #endif
                                 if (!outbf) {
-                                    pllcmd[ins] = 0x80;
+                                    pllcmd[ins] = 0xff;
                                     write(infd[ins], &pllcmd[ins], 1);
                                     printf("[GW] in%d id:%d put chr: %c(0x%.2x) no outbf\n", ins, infd[ins], pllcmd[ins], pllcmd[ins]);
                                     //pubffm = pubffo->ubnxt;                                        
                                     //pubffh = pubffm;
-                                } else if ((pllcmd[ins] & 0x7f) == pubffo->ubindex) { 
+                                } else if (mindex == pubffo->ubindex) { 
                                 
-                                    pllcmd[ins] = pubffo->ubindex & 0x7f;
+                                    //pllcmd[ins] = pubffo->ubindex & 0x7f;
+                                    midxfo[0] = ((pubffo->ubindex >> 6) & 0x3f) | 0x80;
+                                    midxfo[1] = (pubffo->ubindex & 0x3f) | 0x40;
                                     cycCnt[ins] = 0;
                                     while (cycCnt[ins] < CYCLE_LEN) {
                                         lens = ring_buf_get(ringbf[ins], &addrd);
@@ -6238,14 +6259,16 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                         
                                         write(infd[ins], &minfo, 9);
                                         //printf("[GW] in%d id:%d put minfo: 0x%.2x + %d + %c(0x%.2x) + %d\n", ins, infd[ins], minfo[0], minfo[1], minfo[2], minfo[2], lastlen);            
-                                    } else {
-                                        write(infd[ins], &pllcmd[ins], 1);
+                                    }
+                                    else {
+                                        //write(infd[ins], &pllcmd[ins], 1);
+                                        write(infd[ins], midxfo, 2);
                                         //printf("[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);            
                                     }
                                 }      
                                 else {                                   
-                                    write(infd[ins], &pllcmd[ins], 1);
-                                    printf("[GW] in%d id:%d put chr: %c(0x%.2x) cur: %d NOT handle buffer\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], pubffo->ubindex);
+                                    //write(infd[ins], &pllcmd[ins], 1);
+                                    printf("[GW] WARNNING!!! in%d id:%d cur index: %d get index: %d NOT handle buffer\n", ins, infd[ins], pubffo->ubindex, mindex);
                                 }
                             }
                         }
@@ -6549,9 +6572,11 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     } else {
                                         idxInit[ins] += 1;
                                     }
+                                    /*
                                     if (idxInit[ins] > 63) {
                                         idxInit[ins] = idxInit[ins] % 64;
                                     }
+                                    */
                                     printf("[GW] ch%d new index: %d the next is %d latcmd: %c - 1\n", ins, pubffh->ubindex, idxInit[ins], latcmd[ins]);
                                 } else {
                                     printf("[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
@@ -6584,9 +6609,11 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                     } else {
                                         idxInit[ins] += 1;
                                     }
+                                    /*
                                     if (idxInit[ins] > 63) {
                                         idxInit[ins] = idxInit[ins] % 64;
                                     }
+                                    */
                                     printf("[GW] ch%d new index: %d the next is %d latcmd: %c - 2\n", ins, pubffcd[ins]->ubindex, idxInit[ins], latcmd[ins]);
                                     
                                     pubffm = pubffh;
@@ -6707,7 +6734,13 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             } else if (lens < PT_BUF_SIZE) {
                                 //ring_buf_set_last(ringbf[0], lens);
                                 //printf("[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
-                                pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;                            
+                                //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
+                                indexfo[0] = ((pubffcd[ins]->ubindex >> 6) & 0x3f) | 0xc0;
+                                indexfo[1] = (pubffcd[ins]->ubindex & 0x3f) | 0x40;
+
+                                if ((pubffcd[ins]->ubindex >> 12) > 0) {
+                                    printf("\n[GW] WARNNING!!! pubffcd[ins]->ubindex: %d \n", pubffcd[ins]->ubindex);                                
+                                }
                                 //pubffcd[ins]->ubcylcnt = 0;
                                 
                                 //pubffcd[ins] = 0; /* move to 'I' handle */
@@ -6716,8 +6749,8 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                                 
                                 ring_buf_init(ringbf[ins]);
 
-                                /* send back index */
-                                write(outfd[ins], &pllcmd[ins], 1);
+                                //write(outfd[ins], &pllcmd[ins], 1);
+                                write(outfd[ins], indexfo, 2);
                                 printf("[GW] out%d id:%d put chr: %c(0x%.2x) - end of transmission \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                                 cycCnt[ins] = 0;
                             }
@@ -6729,9 +6762,13 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
 
                                 if ((cycCnt[ins] >= CYCLE_LEN) && (pubffcd[ins]->ubcylcnt > CYCLE_LEN)) {
                                     /* send back index */
-                                    pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
+                                    //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
+                                    indexfo[0] = ((pubffcd[ins]->ubindex >> 6) & 0x3f) | 0xc0;
+                                    indexfo[1] = (pubffcd[ins]->ubindex & 0x3f) | 0x40;
 
-                                    write(outfd[ins], &pllcmd[ins], 1);
+
+                                    //write(outfd[ins], &pllcmd[ins], 1);
+                                    write(outfd[ins], indexfo, 2);
                                     printf("[GW] out%d id:%d put chr: %c(0x%.2x) - middle of transmission count: %d \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins], pubffcd[ins]->ubcylcnt);
                                     cycCnt[ins] = 0;
                                 }
@@ -6875,7 +6912,7 @@ static int usb_gate(struct usbhost_s *ppup, struct usbhost_s *ppdn)
                             }
                         }
                         else if (pllcmd[ins] == 'G') {
-                            pllcmd[ins] = 0x40;;
+                            pllcmd[ins] = 0xbf;;
                             write(outfd[ins], &pllcmd[ins], 1);
                             printf("[GW] out%d id:%d put chr: %c(0x%.2x) - stall of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                         }
@@ -7846,7 +7883,8 @@ static char spi1[] = "/dev/spidev32766.0";
         struct shmem_s *gateTx=0, *gateTxd=0;
         int pipeTx[2], pipeRx[2], pipRet=0, lens=0, pipeTxd[2], pipeRxd[2];
         int gateUpTx[2], gateUpRx[2], gateDnTx[2], gateDnRx[2];
-        char chq=0, chd=0, chr=0, che=0, cinfo[12];
+        char chq=0, chd=0, che=0, cinfo[12], cindexfo[2], mindexfo[2];
+        int cindex=0, chr=0;
         struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
         int *piptx=0, *piprx=0;
         int cntLp0=0, cntLp1=0, cntLpx=0;
@@ -8566,7 +8604,7 @@ struct sysinfo {
                                                 chr = 0;
                                                 //puimGet = 0;
 
-                                                if (puimGet) {
+                                                if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
                                                     if ((puimGet->uimIdex % 2) == 1) {
                                                         puscur = pushost;
                                                         usbCur = puscur->pushring;
@@ -8586,21 +8624,71 @@ struct sysinfo {
                                     }
                                 }
 
-                                //printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
+                                printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
+
                                 
-                                if (chq == 0x80) {
+                                if (chq == 0xff) {
                                     if (chr) {
                                         //chr = (puimCnTH->uimIdex & 0x7f) | 0x80;
-                                        pipRet = write(piptx[1], &chr, 1);
+                                        mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x3f) | 0x40;
+                                        
+                                        //pipRet = write(piptx[1], &chr, 1);
+                                        pipRet = write(piptx[1], mindexfo, 2);
                                         if (pipRet < 0) {
-                                            printf("[DV]  pipe(%d) put chr: 0x%/2x ret: %d act 0x80\n", piptx[1], chr, pipRet);
+                                            printf("[DV]  pipe(%d) put chr: %d ret: %d act 0x80\n", piptx[1], chr, pipRet);
                                             goto end;
                                         }
                                     } else {
                                         printf("[DV] warnning!!! chr should not be 0 !! \n");
                                     }
                                 }
-                                else if (chq & 0x80) {
+                                else if (chq == 0xbf) {
+                                    printf("[DV] send redundant page size: %d\n", maxsz);
+                                    endf = endstr;
+                                    if (maxsz) {
+                                        seqtx = maxsz;
+                                        endm = palloc;
+#if 0                                                
+                                        addrd = endm;
+                                        if (seqtx < PT_BUF_SIZE) {
+                                            lens = seqtx;
+                                            seqtx = maxsz;
+                                            endm = palloc;                                                    
+                                        } else {
+                                            lens = PT_BUF_SIZE;
+                                            seqtx = seqtx - lens;
+                                            endm += lens;
+                                        }
+#endif                                                
+                                    }
+#if 0
+                                    else {
+                                        addrd = endf;
+                                        lens = strlen(endf);                                    
+                                    }
+#endif                                 
+                                            
+                                    break;
+                                }
+                                else if ((chq & 0xc0) == 0xc0) {
+                                    cindexfo[0] = chq;
+                                    pipRet = read(piprx[0], &chq, 1);
+                                    while (pipRet < 0) {
+                                        pipRet = read(piprx[0], &chq, 1);
+                                    }
+
+                                    printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d -2 \n", chq, chr, piprx[0]);
+                                        
+                                    if ((chq & 0xc0) == 0x40) {
+                                        cindexfo[1] = chq;
+                                    } else {
+                                        printf("[DV]  WARNNING get unknown chq: 0x%.2x \n", chq);
+                                        continue;
+                                    }
+
+                                    cindex = ((cindexfo[0] & 0x3f) << 6) | (cindexfo[1] & 0x3f);
+
                                     if (!puimCnTH) {
                                         puimCnTH = malloc(sizeof(struct usbIndex_s));
                                         if (!puimCnTH) {
@@ -8609,22 +8697,31 @@ struct sysinfo {
                                     
                                         memset(puimCnTH, 0, sizeof(struct usbIndex_s));
 
-                                        puimCnTH->uimIdex = chq & 0x7f;
+                                        //puimCnTH->uimIdex = chq & 0x7f;
+                                        puimCnTH->uimIdex = cindex;
                                         puimGet = puimCnTH;
                                         
                                         if (!chr) {
-                                            chr = (puimGet->uimIdex & 0x7f) | 0x80;
-                                            pipRet = write(piptx[1], &chr, 1);
+                                            chr = puimGet->uimIdex;
+                                            mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                            //pipRet = write(piptx[1], &chr, 1);
+                                            pipRet = write(piptx[1], mindexfo, 2);
                                             if (pipRet < 0) {
-                                                printf("[DV]  pipe(%d) put chr: 0x%/2x ret: %d \n", piptx[1], chr, pipRet);
+                                                printf("[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
                                                 goto end;
                                             }
                                         } else {
-                                            printf("[DV] warring!!! puimCnTH == 0, and chr == 0x%.2x \n", chr);
-                                            chr = (puimGet->uimIdex & 0x7f) | 0x80;
-                                            pipRet = write(piptx[1], &chr, 1);
+                                            printf("[DV] warring!!! puimCnTH == 0, and chr == %d \n", chr);
+                                            chr = puimGet->uimIdex;
+                                            mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                            //pipRet = write(piptx[1], &chr, 1);
+                                            pipRet = write(piptx[1], mindexfo, 2);
                                             if (pipRet < 0) {
-                                                printf("[DV]  pipe(%d) put chr: 0x%/2x ret: %d \n", piptx[1], chr, pipRet);
+                                                printf("[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
                                                 goto end;
                                             }
                                         }
@@ -8645,11 +8742,19 @@ struct sysinfo {
                                     
                                     if (puimGet) {
                                         if (!chr) {
-                                            chr = (puimGet->uimIdex & 0x7f) | 0x80;
-                                            pipRet = write(piptx[1], &chr, 1);
-                                            if (pipRet < 0) {
-                                                printf("[DV]  pipe(%d) put chr: 0x%/2x ret: %d \n", piptx[1], chr, pipRet);
-                                                goto end;
+                                            if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                                chr = puimGet->uimIdex;
+                                                mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                                mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                                //pipRet = write(piptx[1], &chr, 1);
+                                                pipRet = write(piptx[1], mindexfo, 2);
+                                                if (pipRet < 0) {
+                                                    printf("[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                                    goto end;
+                                                }
+                                            } else {
+                                                printf("\n[DV] %d:%d wait for new data get begin \n", puimGet->uimGetCnt, puimGet->uimCount);
                                             }
                                         } else {
                                             //printf("[DV] wait for response (0x%.2x) %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
@@ -8683,10 +8788,14 @@ struct sysinfo {
                                               
                                             if (!chr) {
                                                 if (puimGet->uimGetCnt < puimGet->uimCount) {
-                                                    chr = (puimGet->uimIdex & 0x7f) | 0x80;
-                                                    pipRet = write(piptx[1], &chr, 1);
+                                                    chr = puimGet->uimIdex;
+
+                                                    mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                                    mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                                    pipRet = write(piptx[1], mindexfo, 2);
                                                     if (pipRet < 0) {
-                                                        printf("[DV]  pipe(%d) put chr: 0x%/2x ret: %d \n", piptx[1], chr, pipRet);
+                                                        printf("[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
                                                         goto end;
                                                     }
                                                 } else {
@@ -8694,7 +8803,7 @@ struct sysinfo {
                                                     chr = 0;
                                                 }
                                             } else {
-                                                printf("[DV] should not be here chr: (0x%.2x) \n", chr);
+                                                printf("[DV] should not be here chr: (%d) \n", chr);
                                             }
                                         } else {
                                             printf("[DV] wait for more data \n");
@@ -8705,15 +8814,15 @@ struct sysinfo {
 
                                     if (puimCur) {
                                         //printf("[DV] puimCur index: %d - %d:%d \n", puimCur->uimIdex, puimCur->uimGetCnt, puimCur->uimCount);
-                                        if (puimCur->uimIdex == (chq & 0x7f)) {
+                                        if (puimCur->uimIdex == cindex) {
                                             puimCur->uimCount += 1;
                                         } else {
-                                            printf("\n[DV] current puim index not mach %d:%d \n\n", puimCur->uimIdex, (chq & 0x7f));
+                                            printf("\n[DV] current puim index not mach %d:%d \n\n", puimCur->uimIdex, cindex);
 
                                             puimTmp= puimCnTH;
                                             while(puimTmp) {
                                                 puimUse = puimTmp;
-                                                if (puimUse->uimIdex == (chq & 0x7f)) {
+                                                if (puimUse->uimIdex == cindex) {
                                                     puimTmp = puimUse;
                                                     break;
                                                 }
@@ -8731,7 +8840,7 @@ struct sysinfo {
 
                                                 memset(puimTmp, 0, sizeof(struct usbIndex_s));
 
-                                                puimTmp->uimIdex = chq & 0x7f;
+                                                puimTmp->uimIdex = cindex;
                                                 puimTmp->uimCount += 1;
                                                 puimUse->uimNxt = puimTmp;
 
@@ -8740,14 +8849,14 @@ struct sysinfo {
                                         }
                                     }
                                     else {
-                                        if (puimCnTH->uimIdex == (chq & 0x7f)) {
+                                        if (puimCnTH->uimIdex == cindex) {
                                             puimCnTH->uimCount += 1;
                                             puimCur = puimCnTH;
                                         } else {
                                             puimTmp= puimCnTH;
                                             while(puimTmp) {
                                                 puimUse = puimTmp;
-                                                if (puimUse->uimIdex == (chq & 0x7f)) {
+                                                if (puimUse->uimIdex == cindex) {
                                                     puimTmp = puimUse;
                                                     break;
                                                 }
@@ -8764,7 +8873,7 @@ struct sysinfo {
                                                 }
                                                 memset(puimTmp, 0, sizeof(struct usbIndex_s));
                                         
-                                                puimTmp->uimIdex = chq & 0x7f;
+                                                puimTmp->uimIdex = cindex;
                                                 puimTmp->uimCount += 1;
                                                 puimUse->uimNxt = puimTmp;
 
@@ -8776,23 +8885,9 @@ struct sysinfo {
                                     //printf("[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 2\n", puimCnTH, puimCur, puimGet, chr);
                                     
                                 }
-                                else {
-                                    if (chq) {
-                                        //printf("[DV] get ring buff response !!! chq: %c(0x%.2x) \n", chq, chq);
-                                    } else {
-                                        if ((!chr) && (puimGet)) {
-                                            if (puimGet->uimGetCnt < puimGet->uimCount) {
-                                                chr = (puimGet->uimIdex & 0x7f) | 0x80;
-                                                pipRet = write(piptx[1], &chr, 1);
-                                                if (pipRet < 0) {
-                                                    printf("[DV]  pipe(%d) put chr: 0x%/2x ret: %d \n", piptx[1], chr, pipRet);
-                                                    goto end;
-                                                }
-                                            }
-                                        }
-                                        continue;
-                                    }
-
+                                else if ((chq & 0xc0) == 0x80) {
+                                    //printf("[DV] get ring buff response !!! chq: %c(0x%.2x) \n", chq, chq);
+                                    
                                     if (!puimGet) {
                                         printf("\n[DV] Error!!! puimCur is null \n");
                                     } else {
@@ -8800,174 +8895,39 @@ struct sysinfo {
                                         if (!chr) {
                                             //printf("\n[DV] Warnning !!! chr == 0 not make sense !!!\n");
                                         }
-                                        
-                                        if (chq == 0x7f) {
-                                            puimGet->uimGetCnt += 1;
-                                            //chq = 'E';
 
-                                            memset(cinfo, 0, 12);
-                                            pipRet = read(piprx[0], cinfo, 8);
-                                            while (pipRet < 0) {
-                                                pipRet = read(piprx[0], cinfo, 8);
-                                            }
-
-                                            lastCylen |= cinfo[5];
-                                            
-                                            lastCylen  = lastCylen << 8;
-                                            lastCylen |= cinfo[4];
-
-                                            lastCylen  = lastCylen << 8;
-                                            lastCylen |= cinfo[3];
-                                            
-                                            lastCylen  = lastCylen << 8;
-                                            lastCylen |= cinfo[2];
-
-                                            //printf("[DV] 0x%.2x:0x%.2x:0x%.2x:0x%.2x = lastlen: %d\n", cinfo[2], cinfo[3], cinfo[4], cinfo[5], lastCylen);
-                                            
-                                            uimCylcnt = cinfo[0];
-                                            cmdtyp = cinfo[1];
-
-                                            cswerr = cinfo[6] & 0x7f;
-                                            printf("[DV] get csw err: 0x%.2x \n", cswerr);
-                                            puimNxt = 0;
-
-                                            pagerst = cinfo[7] & 0x7f;
-                                            printf("[DV] get page rest: %d \n", pagerst);
-                                            
-                                            //printf("[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
-                                            //printf("[DV] get info %d:%d \n", puimGet->uimGetCnt, puimGet->uimCount);
-
-                                            if (puimCur == puimGet) {
-                                                puimCur = 0;
-                                            }
-
-                                            puimUse = 0;
-
-                                            if (puimCnTH == puimGet) {
-                                                puimCnTH = puimGet->uimNxt;
-                                                
-                                                //printf("[DV] find next puim on head \n");                                                
-                                                //printf("[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                                
-                                                ix=0;
-                                                puimTmp = puimCnTH;
-                                                while (puimTmp) {
-                                                    puimUse = puimTmp;
-                                                    //printf("[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
-                                                    if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
-                                                        puimNxt = puimUse;
-                                                        //printf("[DV] match   !!!!\n");
-                                                    }
-                                                    puimTmp = puimUse->uimNxt;
-                                                    ix++;
-                                                }
-                                            } else {
-                                                //printf("[DV] find next puim on the middle \n");                                                
-                                                //printf("[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-
-                                                ix=0;
-                                                puimTmp = puimCnTH;
-                                                while (puimTmp) {
-                                                    puimUse = puimTmp;
-                                                    //printf("[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
-                                                    if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
-                                                        puimNxt = puimUse;
-                                                        //printf("[DV] match !!\n");
-                                                    }
-                                                    puimTmp = puimUse->uimNxt;
-                                                    if (puimTmp == puimGet) {
-                                                        puimUse->uimNxt = puimGet->uimNxt;
-                                                    }                
-                                                    puimTmp = puimUse->uimNxt;
-                                                    ix++;
-                                                }
-                                            }
-
-                                            if (puimNxt) {
-                                                //printf("[DV] puimNxt is valid \n");
-                                                free(puimGet);
-                                                puimGet = puimNxt;
-                                            } else {
-                                                //printf("[DV] puimNxt is NULL \n");
-                                                ix = puimGet->uimIdex + 1;
-                                                memset(puimGet, 0, sizeof(struct usbIndex_s));
-                                                puimGet->uimIdex = ix;
-                                                if (puimUse) {
-                                                    puimUse->uimNxt = puimGet;
-                                                } else {
-                                                    //printf("[DV] puimUse is NULL \n");
-                                                    puimCnTH = puimGet;
-                                                }                                       
-
-                                                
-                                                clock_gettime(CLOCK_REALTIME, &tidleS);
-                                            }
-
-                                            printf("[DV]puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                            
-                                            ix = 0;
-                                            puimTmp = puimCnTH;
-                                            while(puimTmp) {
-#if 1
-                                                printf("[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
-#endif
-
-                                                if (puimTmp->uimCount > 0) {
-                                                    ix++;
-                                                }
-
-                                                puimTmp = puimTmp->uimNxt;
-                                            }                             
-
-                                            waitCylen = ix;
-                                            printf("[DV] wait page size: %d\n", waitCylen);
-                                            
-                                            //printf("[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
-
-                                            chr = 0;
-                                            
-                                            break;
-                                        } 
-                                        else if (chq == 0x40) {
-                                            printf("[DV] send redundant page size: %d\n", maxsz);
-                                            endf = endstr;
-
-                                            if (maxsz) {
-                                                seqtx = maxsz;
-                                                endm = palloc;
-#if 0                                                
-                                                addrd = endm;
-                                                if (seqtx < PT_BUF_SIZE) {
-                                                    lens = seqtx;
-                                                    
-                                                    seqtx = maxsz;
-                                                    endm = palloc;                                                    
-                                                } else {
-                                                    lens = PT_BUF_SIZE;
-                                                    seqtx = seqtx - lens;
-                                                    endm += lens;
-                                                }
-#endif                                                
-                                            }
-#if 0
-                                            else {
-                                                addrd = endf;
-                                                lens = strlen(endf);                                    
-                                            }
-#endif                                 
-                                            
-                                            break;
+                                        cindexfo[0] = chq;
+                                        pipRet = read(piprx[0], &chq, 1);
+                                        while (pipRet < 0) {
+                                            pipRet = read(piprx[0], &chq, 1);
                                         }
-                                        else if (puimGet->uimIdex == (chq & 0x7f)) {
+
+                                        printf("[DV] chq: 0x%.2x chr: 0x%.2x pipe%d -3 \n", chq, chr, piprx[0]);
+                                        
+                                        if ((chq & 0xc0) == 0x40) {
+                                            cindexfo[1] = chq;
+                                        } else {
+                                            printf("[DV]  WARNNING get unknown chq: 0x%.2x - 2\n", chq);
+                                            continue;
+                                        }
+
+                                        cindex = ((cindexfo[0] & 0x3f) << 6) | (cindexfo[1] & 0x3f);
+                                        
+                                        if (puimGet->uimIdex == cindex) {
                                             puimGet->uimGetCnt += 1;
 
                                             //printf("[DV] current count: %d:%d \n", puimGet->uimGetCnt, puimGet->uimCount);
                                             
                                             if (puimGet->uimGetCnt < puimGet->uimCount) {
-                                                chr = (puimGet->uimIdex & 0x7f) | 0x80;
-                                                pipRet = write(piptx[1], &chr, 1);
+                                                chr = puimGet->uimIdex;
+
+                                                mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                                mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                                //pipRet = write(piptx[1], &chr, 1);
+                                                pipRet = write(piptx[1], mindexfo, 2);
                                                 if (pipRet < 0) {
-                                                    printf("[DV]  pipe(%d) put chr: 0x%/2x ret: %d \n", piptx[1], chr, pipRet);
+                                                    printf("[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
                                                     goto end;
                                                 }
                                             } else {
@@ -8982,6 +8942,153 @@ struct sysinfo {
                                         else {
                                             printf("\n[DV] Error!!! puimCur index is not match!! \n");
                                         }
+                                    }
+                                }
+                                else {
+                                    if (chq == 0x7f) {
+                                        puimGet->uimGetCnt += 1;
+                                        //chq = 'E';
+
+                                        memset(cinfo, 0, 12);
+                                        pipRet = read(piprx[0], cinfo, 8);
+                                        while (pipRet < 0) {
+                                            pipRet = read(piprx[0], cinfo, 8);
+                                        }
+
+                                        lastCylen |= cinfo[5];
+                                        
+                                        lastCylen  = lastCylen << 8;
+                                        lastCylen |= cinfo[4];
+
+                                        lastCylen  = lastCylen << 8;
+                                        lastCylen |= cinfo[3];
+                                        
+                                        lastCylen  = lastCylen << 8;
+                                        lastCylen |= cinfo[2];
+
+                                        //printf("[DV] 0x%.2x:0x%.2x:0x%.2x:0x%.2x = lastlen: %d\n", cinfo[2], cinfo[3], cinfo[4], cinfo[5], lastCylen);
+                                        
+                                        uimCylcnt = cinfo[0];
+                                        cmdtyp = cinfo[1];
+
+                                        cswerr = cinfo[6] & 0x7f;
+                                        printf("[DV] get csw err: 0x%.2x \n", cswerr);
+                                        puimNxt = 0;
+
+                                        pagerst = cinfo[7] & 0x7f;
+                                        printf("[DV] get page rest: %d \n", pagerst);
+                                        
+                                        //printf("[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
+                                        //printf("[DV] get info %d:%d \n", puimGet->uimGetCnt, puimGet->uimCount);
+
+                                        if (puimCur == puimGet) {
+                                            puimCur = 0;
+                                        }
+
+                                        puimUse = 0;
+
+                                        if (puimCnTH == puimGet) {
+                                            puimCnTH = puimGet->uimNxt;
+                                            
+                                            //printf("[DV] find next puim on head \n");                                                
+                                            //printf("[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                            
+                                            ix=0;
+                                            puimTmp = puimCnTH;
+                                            while (puimTmp) {
+                                                puimUse = puimTmp;
+                                                //printf("[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
+                                                if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                    puimNxt = puimUse;
+                                                    //printf("[DV] match   !!!!\n");
+                                                }
+                                                puimTmp = puimUse->uimNxt;
+                                                ix++;
+                                            }
+                                        } else {
+                                            //printf("[DV] find next puim on the middle \n");                                                
+                                            //printf("[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+
+                                            ix=0;
+                                            puimTmp = puimCnTH;
+                                            while (puimTmp) {
+                                                puimUse = puimTmp;
+                                                //printf("[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
+                                                if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                    puimNxt = puimUse;
+                                                    //printf("[DV] match !!\n");
+                                                }
+                                                puimTmp = puimUse->uimNxt;
+                                                if (puimTmp == puimGet) {
+                                                    puimUse->uimNxt = puimGet->uimNxt;
+                                                }                
+                                                puimTmp = puimUse->uimNxt;
+                                                ix++;
+                                            }
+                                        }
+
+                                        if (puimNxt) {
+                                            //printf("[DV] puimNxt is valid \n");
+                                            free(puimGet);
+                                            puimGet = puimNxt;
+                                        } else {
+                                            //printf("[DV] puimNxt is NULL \n");
+                                            ix = puimGet->uimIdex + 1;
+                                            memset(puimGet, 0, sizeof(struct usbIndex_s));
+                                            puimGet->uimIdex = ix;
+                                            if (puimUse) {
+                                                puimUse->uimNxt = puimGet;
+                                            } else {
+                                                //printf("[DV] puimUse is NULL \n");
+                                                puimCnTH = puimGet;
+                                            }                                       
+
+                                            
+                                            clock_gettime(CLOCK_REALTIME, &tidleS);
+                                        }
+
+                                        printf("[DV]puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                        
+                                        ix = 0;
+                                        puimTmp = puimCnTH;
+                                        while(puimTmp) {
+#if 1
+                                            printf("[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+#endif
+
+                                            if (puimTmp->uimCount > 0) {
+                                                ix++;
+                                            }
+
+                                            puimTmp = puimTmp->uimNxt;
+                                        }                             
+                                                
+                                        waitCylen = ix;
+                                        printf("[DV] wait page size: %d\n", waitCylen);
+                                        
+                                        //printf("[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
+
+                                        chr = 0;
+                                        
+                                        break;
+                                    } 
+                                    else {
+                                        //printf("\n[DV] Error!!! unknown chq: 0x%.2x \n", chq);
+                                        
+                                        if ((!chq) && (!chr) && (puimGet)) {
+                                            if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                                chr = puimGet->uimIdex;
+                                                mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                                mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                                pipRet = write(piptx[1], mindexfo, 2);
+                                                if (pipRet < 0) {
+                                                    printf("[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                                    goto end;
+                                                }
+                                            }
+                                        }
+                                        continue;
                                     }
                                 }
                             }
@@ -9827,11 +9934,27 @@ struct sysinfo {
                                         printf("[DV]  pipe send meta ret: %d \n", pipRet);
                                         goto end;
                                     }
+                                    
                                 } else {
                                     printf("\n[DVF] Error!!! unknown puscur 0x%.8x \n", puscur);      
                                     /* should't be here */
                                 }
-                                    
+
+                                if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                                    if ((puimGet->uimIdex % 2) == 1) {
+                                                puscur = pushost;
+                                                usbCur = puscur->pushring;
+                                                piptx = puscur->pushtx;
+                                                piprx = puscur->pushrx; 
+                                    } else {
+                                                puscur = pushostd;
+                                                usbCur = puscur->pushring;
+                                                piptx = puscur->pushtx;
+                                                piprx = puscur->pushrx; 
+                                    }
+                                } else {
+                                    printf("[DV] puimGet is null get next \n");
+                                }
                                 acusz = 0;
                                 break;
                             }    
