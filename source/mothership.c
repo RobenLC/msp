@@ -9,6 +9,7 @@
 #include <sys/mman.h> 
 #include <sys/epoll.h>
 #include <sys/prctl.h>
+#include <sys/sysinfo.h> 
 #include <linux/types.h> 
 #include <linux/spi/spidev.h> 
 //#include <sys/times.h> 
@@ -21077,7 +21078,7 @@ static int stspy_01(struct psdata_s *data)
     uint32_t rlt;
     rlt = abs_result(data->result); 
 
-    //sprintf_f(str, "op_01 - rlt:0x%x \n", rlt); 
+    //sprintf_f(str, "op_01 - rlt:0x%x ans: 0x%.2x\n", rlt, data->ansp0); 
     //print_f(mlogPool, "spy", str); 
 
     switch (rlt) {
@@ -22286,7 +22287,7 @@ static int mtx_data(int fd, uint8_t *rx_buff, uint8_t *tx_buff, int pksz, struct
 static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx)
 {
     int ret=-1;
-#if 0
+#if 1
     int tcnt=0, ptret=0;
     char ch=0;
     struct pollfd ptfd[1];
@@ -22295,19 +22296,19 @@ static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx)
 
     while(1) {
         tcnt++;
-        ptret = poll(ptfd, 1, 1000);
-        //sprintf_f(mrs->log, "[%s] poll return %d evt: 0x%.2x - %d\n", mrs->nmrs, ptret, ptfd[0].revents, tcnt);
+        ptret = poll(ptfd, 1, 100);
+        //sprintf_f(mrs->log, "[%s] poll return %d evt: 0x%.2x - %d\n", mrs->nmrs, ptret, ptfd[0].revents, idx);
         //print_f(&mrs->plog, "IPC", mrs->log);
         if (ptret > 0) {
             ret = read(mrs->pipeup[idx].rt[0], str, size);
-            //ch = *str;
-            //sprintf_f(mrs->log, "[%s] get chr: %c \n", mrs->nmrs, ch);
+            ch = *str;
+            //sprintf_f(mrs->log, "[%s] get chr: %c (0x%.2x) ret: %d - %d\n", mrs->nmrs, ch, ch, ret, idx);
             //print_f(&mrs->plog, "IPC", mrs->log);
             return ret;
         }
 
-        if (tcnt == 2) {
-            //sprintf_f(mrs->log, "[%s] poll wait - %d\n", mrs->nmrs, tcnt);
+        if (((tcnt+1) % 2) == 0) {
+            //sprintf_f(mrs->log, "[%s] poll wait - %d\n", mrs->nmrs, idx);
             //print_f(&mrs->plog, "IPC", mrs->log);
             break;
         }
@@ -22332,10 +22333,45 @@ static int rs_ipc_put(struct procRes_s *rs, char *str, int size)
     return ret;
 }
 
+static int rs_ipc_get_ms(struct procRes_s *rs, char *str, int size, int wms)
+{
+    int ret=-1;
+#if 1
+    int tcnt=0, ptret=0;
+    char ch=0;
+    struct pollfd ptfd[1];
+    ptfd[0].fd = rs->ppipedn->rt[0];
+    ptfd[0].events = POLLIN;
+
+    while(1) {
+        tcnt++;
+        ptret = poll(ptfd, 1, wms);
+        //sprintf_f(rs->logs, "[%s] poll return %d evt: 0x%.2x sz: %d\n", rs->nrs, ptret, ptfd[0].revents, size);
+        //print_f(rs->plogs, "IPC", rs->logs);
+        if (ptret > 0) {
+            ret = read(rs->ppipedn->rt[0], str, size);
+            ch = *str;
+            //sprintf_f(rs->logs, "[%s] size: %d, get chr: %c ret: %d \n", rs->nrs, size, ch, ret);
+            //print_f(rs->plogs, "IPC", rs->logs);
+            return ret;
+        }
+
+        if (((tcnt+1) % 2) == 0) {
+            //sprintf_f(rs->logs, "[%s] poll wait\n", rs->nrs);
+            //print_f(rs->plogs, "IPC", rs->logs);
+            break;
+        }
+    }
+#else
+    ret = read(rs->ppipedn->rt[0], str, size);
+#endif
+    return ret;
+}
+
 static int rs_ipc_get(struct procRes_s *rs, char *str, int size)
 {
     int ret=-1;
-#if 0
+#if 1
     int tcnt=0, ptret=0;
     char ch=0;
     struct pollfd ptfd[1];
@@ -22345,18 +22381,18 @@ static int rs_ipc_get(struct procRes_s *rs, char *str, int size)
     while(1) {
         tcnt++;
         ptret = poll(ptfd, 1, 1000);
-        //sprintf_f(rs->logs, "[%s] poll return %d evt: 0x%.2x - %d\n", rs->nrs, ptret, ptfd[0].revents, tcnt);
+        //sprintf_f(rs->logs, "[%s] poll return %d evt: 0x%.2x sz: %d\n", rs->nrs, ptret, ptfd[0].revents, size);
         //print_f(rs->plogs, "IPC", rs->logs);
         if (ptret > 0) {
             ret = read(rs->ppipedn->rt[0], str, size);
             ch = *str;
-            //sprintf_f(rs->logs, "[%s] get chr: %c \n", rs->nrs, ch);
+            //sprintf_f(rs->logs, "[%s] size: %d, get chr: %c ret: %d \n", rs->nrs, size, ch, ret);
             //print_f(rs->plogs, "IPC", rs->logs);
             return ret;
         }
 
-        if (((tcnt+1) % 5) == 0) {
-            //sprintf_f(rs->logs, "[%s] poll wait - %d\n", rs->nrs, tcnt);
+        if (((tcnt+1) % 2) == 0) {
+            //sprintf_f(rs->logs, "[%s] poll wait\n", rs->nrs);
             //print_f(rs->plogs, "IPC", rs->logs);
         }
     }
@@ -25779,7 +25815,8 @@ static int fs02(struct mainRes_s *mrs, struct modersp_s *modersp)
                 modersp->r = 1;
                 return 1;
             }
-        } else {
+        }
+        else {
             if (modersp->c < 10) { 
                 mrs_ipc_put(mrs, "b", 1, 1);
                 modersp->c += 1;
@@ -36429,8 +36466,10 @@ static int p0(struct mainRes_s *mrs)
         tdiff = 0;mbf = 0;
         while ((modesw->m >= 0) && (modesw->m < PS_NUM)) {
             msync(modesw, sizeof(struct modersp_s), MS_SYNC);
-            //sprintf_f(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
-            //print_f(&mrs->plog, "P0", mrs->log);
+#if LOG_P0_EN
+            sprintf_f(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
+            print_f(&mrs->plog, "P0", mrs->log);
+#endif            
             if (mbf != modesw->m) {
                 clock_gettime(CLOCK_REALTIME, &tidle[0]);    
                 sprintf_f(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
@@ -36441,10 +36480,10 @@ static int p0(struct mainRes_s *mrs)
             ret = (*afselec[modesw->m].pfunc)(mrs, modesw);
 
             msync(modesw, sizeof(struct modersp_s), MS_SYNC);
-            
-            //sprintf_f(mrs->log, "pmode:%d rsp:%d - 2, ret: %d\n", modesw->m, modesw->r, ret);
-            //print_f(&mrs->plog, "P0", mrs->log);
-
+#if LOG_P0_EN
+            sprintf_f(mrs->log, "pmode:%d rsp:%d - 2, ret: %d\n", modesw->m, modesw->r, ret);
+            print_f(&mrs->plog, "P0", mrs->log);
+#endif
             if (mbf == modesw->m) {
                 clock_gettime(CLOCK_REALTIME, &tidle[1]);    
                 tdiff = time_diff(&tidle[0], &tidle[1], 1000000);            
@@ -36583,16 +36622,20 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         cmd = '\0';
         ci = 0; 
         if (cmdt != 'w') {
-            ci = rs_ipc_get(rcmd, &cmd, 1);
+            //ci = rs_ipc_get(rcmd, &cmd, 1);
+            ci = rs_ipc_get_ms(rcmd, &cmd, 1, 100);
         }
 
-        //sprintf_f(rs->logs, "0x%x %d\n", cmd, ci);
-        //print_f(rs->plogs, "P1", rs->logs);
+#if 0
+        sprintf_f(rs->logs, "0x%x %d\n", cmd, ci);
+        print_f(rs->plogs, "P1", rs->logs);
+#endif
 
         while (ci > 0) {
+#if LOG_P1_EN
             sprintf_f(rs->logs, "%c %d\n", cmd, ci);
             print_f(rs->plogs, "P1", rs->logs);
-
+#endif
             if (cmdt == '\0') {
                 if (cmd == 'd') {
                     cmdt = cmd;
@@ -36762,10 +36805,14 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
 
         ret = 0; ch = '\0';
         ret = rs_ipc_get(rs, &ch, 1);
-        
+#if LOG_P1_EN
+        sprintf_f(rs->logs, "rsp, ret:%d ch:0x%.2x - 1\n", ret, ch);
+        print_f(rs->plogs, "P1", rs->logs);
+#endif
+
         if ((ret > 0) && (ch != '$')) {
 #if LOG_P1_EN
-            sprintf_f(rs->logs, "rsp, ret:%d ch:0x%.2x\n", ret, ch);
+            sprintf_f(rs->logs, "rsp, ret:%d ch:0x%.2x - 2\n", ret, ch);
             print_f(rs->plogs, "P1", rs->logs);
 #endif
         }
@@ -40759,7 +40806,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         if (strcmp("meta", msg) == 0) {
             rs_ipc_put(rcmd, "scango", 6);
             ch = 0; ret = 0;
-            ret = rs_ipc_get(rcmd, &ch, 1024);
+            ret = rs_ipc_get(rcmd, &ch, 1);
             if ((ret == 1) && (ch == 'Z')) {
                 ret = rs_ipc_get(rcmd, addr, 1024);
                 addr[ret] = '\0';
@@ -47240,7 +47287,17 @@ static int p11(struct procRes_s *rs)
 
     prctl(PR_SET_NAME, "msp-p11");
 
-    while(1);
+    while(1) {
+        ret = rs_ipc_get(rs, &ch, 1);
+
+        if (ret > 0) {
+            sprintf_f(rs->logs, "get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, "P11", rs->logs);
+        } else {
+            sprintf_f(rs->logs, "warnning ret: %d \n", ret);
+            print_f(rs->plogs, "P11", rs->logs);
+        }
+    }
 
     p11_end(rs);
     return 0;
@@ -47263,6 +47320,7 @@ int main(int argc, char *argv[])
     int arg[8];
     uint32_t bitset;
     char syscmd[256] = "ls -al";
+    struct sysinfo minfo;
     
     printf("\n        ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
 
@@ -47283,6 +47341,11 @@ int main(int argc, char *argv[])
     
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
     dbgShowTimeStamp("s1", pmrs, NULL, 4, NULL);
+
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
     
     pmrs->plog.max = OUT_BUFF_LEN - 4096;
     pmrs->plog.pool = aspSalloc(pmrs->plog.max);
@@ -47349,7 +47412,12 @@ int main(int argc, char *argv[])
     dbgShowTimeStamp(pmrs->log, pmrs, NULL, 4, NULL);
     
     dbgShowTimeStamp("s2", pmrs, NULL, 2, NULL);
-    
+
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
     pmrs->spioc1 = aspSalloc(sizeof(struct spi_ioc_transfer));
     pmrs->spioc2 = aspSalloc(sizeof(struct spi_ioc_transfer));
     /* disable swap */
@@ -47405,6 +47473,11 @@ int main(int argc, char *argv[])
 
     dbgShowTimeStamp("s3", pmrs, NULL, 2, NULL);
     
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
 // initial share parameter
     len = sizeof(struct aspMetaData_s);
     //pmrs->metaout = aspSalloc(len);
@@ -47507,6 +47580,11 @@ int main(int argc, char *argv[])
     pmrs->wtg.wtMrs = pmrs;
 
     dbgShowTimeStamp("s4", pmrs, NULL, 2, NULL);
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
     
     ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
     if (ret) {printf("get save file failed\n"); return 0;}
@@ -49325,6 +49403,11 @@ int main(int argc, char *argv[])
     #endif
 
     dbgShowTimeStamp("s5", pmrs, NULL, 2, NULL);
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
     
     #if 0 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
     if (arg[1] == 0) {
@@ -49414,6 +49497,11 @@ int main(int argc, char *argv[])
     }
 
     dbgShowTimeStamp("s6", pmrs, NULL, 2, NULL);
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
     
     /* AP mode launch or not */
     int isLaunch = 0;
@@ -49546,6 +49634,11 @@ int main(int argc, char *argv[])
     }    
 
     dbgShowTimeStamp("s7", pmrs, NULL, 2, NULL);
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
     
     #endif
     /* CROP */
@@ -49627,6 +49720,11 @@ int main(int argc, char *argv[])
 */
 
     dbgShowTimeStamp("s8", pmrs, NULL, 2, NULL);
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+
     
     /* FAT */
     /*
@@ -49714,6 +49812,10 @@ int main(int argc, char *argv[])
     pmrs->aspFat.fatStatus = ASPFAT_STATUS_INIT;
 
     dbgShowTimeStamp("s9", pmrs, NULL, 2, NULL);
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
     sprintf_f(pmrs->log, "before open device[%s]\n", spidev_0); 
     print_f(&pmrs->plog, "SPI", pmrs->log);
@@ -49849,6 +49951,10 @@ int main(int argc, char *argv[])
         printf("can't get spi mode\n"); 
 
     dbgShowTimeStamp("s10", pmrs, NULL, 2, NULL);
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
     #endif
 // IPC
