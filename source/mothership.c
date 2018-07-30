@@ -47,11 +47,54 @@ usb recover"
 
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
+#define RING_BUFF_NUM_USB   (1536)
+#define USB_BUF_SIZE (32768*3)
+
+#define IOCNR_GET_DEVICE_ID		1
+#define IOCNR_GET_VID_PID		6
+#define IOCNR_CONTI_READ_START  8
+#define IOCNR_CONTI_READ_STOP    9
+#define IOCNR_CONTI_READ_PROBE    10
+#define IOCNR_CONTI_READ_ONCE    11
+#define IOCNR_CONTI_READ_RESET   12
+#define IOCNR_CONTI_BUFF_CREATE    13
+#define IOCNR_CONTI_BUFF_PROBE    14
+#define IOCNR_CONTI_BUFF_RELEASE    15
+
+#define USB_IOC_CONTI_READ_START  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_START, 0)
+#define USB_IOC_CONTI_READ_STOP    _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_STOP, 0)
+#define USB_IOC_CONTI_READ_PROBE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_PROBE, 0)
+#define USB_IOC_CONTI_READ_ONCE   _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_ONCE, 0)
+#define USB_IOC_CONTI_READ_RESET   _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_RESET, 0)
+#define USB_IOC_CONTI_BUFF_CREATE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_CREATE, 0)
+#define USB_IOC_CONTI_BUFF_PROBE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_PROBE, 0)
+#define USB_IOC_CONTI_BUFF_RELEASE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_RELEASE, 0)
+
+#define LPIOC_GET_DEVICE_ID(len)     _IOC(_IOC_READ, 'P', IOCNR_GET_DEVICE_ID, len) 
+#define LPIOC_GET_VID_PID(len) _IOC(_IOC_READ, 'P', IOCNR_GET_VID_PID, len)
+
+#define USB_IOCT_LOOP_START(a, b)               ioctl(a, USB_IOC_CONTI_READ_START, b)
+#define USB_IOCT_LOOP_CONTI_READ(a, b)     ioctl(a, USB_IOC_CONTI_READ_PROBE, b)
+#define USB_IOCT_LOOP_STOP(a, b)               ioctl(a, USB_IOC_CONTI_READ_STOP, b)
+#define USB_IOCT_LOOP_ONCE(a, b)               ioctl(a, USB_IOC_CONTI_READ_ONCE, b)
+#define USB_IOCT_LOOP_RESET(a, b)               ioctl(a, USB_IOC_CONTI_READ_RESET, b)
+#define USB_IOCT_LOOP_BUFF_CREATE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_CREATE, b)
+#define USB_IOCT_LOOP_BUFF_PROBE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_PROBE, b)
+#define USB_IOCT_LOOP_BUFF_RELEASE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_RELEASE, b)
+
+#define USB_IOCT_GET_DEVICE_ID(a, b)          ioctl(a, LPIOC_GET_DEVICE_ID(4), b)
+#define USB_IOCT_GET_VID_PID(a, b)          ioctl(a, LPIOC_GET_VID_PID(8), b)
 
 #define PULL_LOW_AFTER_DATA (0)
 
+#define MODULE_NAME "/dev/mem"
+static char usbdevpath[] = "/dev/g_printer";
+static char usbdevpath0[] = "/dev/g_printer0";        
+static char usbhostpath1[] = "/dev/usb/lp0";
+static char usbhostpath2[] = "/dev/usb/lp1";
+
 #define SPI_CPHA  0x01          /* clock phase */
-#define SPI_CPOL  0x02          /* clock polarity */
+#define SPI_CPOL  0x02           /* clock polarity */
 #define SPI_MODE_0      (0|0)
 #define SPI_MODE_1      (0|SPI_CPHA)
 #define SPI_MODE_2      (SPI_CPOL|0)
@@ -1132,20 +1175,31 @@ struct bitmapRotate_s {
     int aspRotBuffSize;
 };
 
+struct usbHost_s {
+    int            ushostid;
+    uint32_t  *ushostblvir;
+    uint32_t  *ushostblphy;
+    int            ushostbmax;
+    int            ushostpidvid[2];
+};
+
 struct mainRes_s{
     char nmrs[32];
     uint32_t mspconfig;
     int sid[12];
     int sfm[2];
     int smode;
+    int usbmfd;
+    int usbdv;
+    struct usbHost_s *usbmh[2];
     struct psdata_s stdata;
     struct sdFAT_s aspFat;
     struct aspConfig_s configTable[ASPOP_CODE_MAX];
     struct folderQueue_s *folder_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
-    struct pipe_s pipedn[13];
-    struct pipe_s pipeup[13];
+    struct pipe_s pipedn[15];
+    struct pipe_s pipeup[15];
     // data mode share memory
     struct shmem_s dataRx;
     // command mode share memory
@@ -1197,6 +1251,8 @@ struct procRes_s{
     // pipe
     uint32_t *pmsconfig;
     int spifd;
+    int usbdvid;
+    struct usbHost_s *pusbmh[2];
     struct psdata_s *pstdata;
     struct sdFAT_s *psFat;
     struct sdFatDir_s   *cpyfatDirTr;
@@ -1284,8 +1340,8 @@ static int p0_init(struct mainRes_s *mrs);
 static int p0_end(struct mainRes_s *mrs);
 //p1: spi0 send
 static int p1(struct procRes_s *rs, struct procRes_s *rcmd);
-static int p1_init(struct procRes_s *rs);
-static int p1_end(struct procRes_s *rs);
+static int p1_init(struct procRes_s *rs, struct procRes_s *rcmd);
+static int p1_end(struct procRes_s *rs, struct procRes_s *rcmd);
 //p2: spi0 recv
 static int p2(struct procRes_s *rs);
 static int p2_init(struct procRes_s *rs);
@@ -1300,8 +1356,8 @@ static int p4_init(struct procRes_s *rs);
 static int p4_end(struct procRes_s *rs);
 //p5: socket recv
 static int p5(struct procRes_s *rs, struct procRes_s *rcmd);
-static int p5_init(struct procRes_s *rs);
-static int p5_end(struct procRes_s *rs);
+static int p5_init(struct procRes_s *rs, struct procRes_s *rcmd);
+static int p5_end(struct procRes_s *rs, struct procRes_s *rcmd);
 //p6: file list recv/send
 static int p6(struct procRes_s *rs);
 static int p6_init(struct procRes_s *rs);
@@ -1320,9 +1376,9 @@ static int p9_end(struct procRes_s *rs);
 static int p10(struct procRes_s *rs);
 static int p10_init(struct procRes_s *rs);
 static int p10_end(struct procRes_s *rs);
-static int p11(struct procRes_s *rs);
-static int p11_init(struct procRes_s *rs);
-static int p11_end(struct procRes_s *rs);
+static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd);
+static int p11_init(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd);
+static int p11_end(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd);
 static int pn_init(struct procRes_s *rs);
 static int pn_end(struct procRes_s *rs);
 //IPC wrap
@@ -1447,6 +1503,55 @@ static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen);
 static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
+
+#define DBG_PHY2VIR 0
+static int phy2vir(uint32_t *pvir, uint32_t phy, int physize, int memfd)
+{
+    char *ps8_page_start_addr;
+    char *curAddr;
+    int fd , r, pageSize;
+    unsigned int u32_start_addr , u32_len , u32_page_seek_cur , data;
+
+    
+    pageSize = getpagesize();
+#if 0//DBG_PHY2VIR
+    printf("[MEM] get page size: %d \n", pageSize);
+#endif
+    u32_start_addr = phy;
+    u32_len = physize;
+    u32_page_seek_cur = u32_start_addr % pageSize;
+
+#if DBG_PHY2VIR
+    printf("[MEM] get start addr: 0x%.8x, len: %d, seek: %d\n", u32_start_addr, u32_len, u32_page_seek_cur);
+    printf("Start addr : 0x%.8x  , length : %d \n" , u32_start_addr - u32_page_seek_cur , u32_page_seek_cur + u32_len );
+#endif
+
+    //sync();
+    
+    ps8_page_start_addr = mmap( 0 ,                                   // Start addr in file
+                           u32_page_seek_cur + u32_len , // len
+                           PROT_READ | PROT_WRITE , // mode
+                           MAP_SHARED ,                  // flag
+                           memfd ,
+                           u32_start_addr - u32_page_seek_cur ); // start addr in page system
+  
+    
+    if( MAP_FAILED == ps8_page_start_addr ) {
+        printf("mmap() errorn");
+        close(memfd);      
+        return -1;
+    }
+
+    curAddr = ps8_page_start_addr + u32_page_seek_cur;
+    *pvir = (uint32_t)curAddr;
+#if DBG_PHY2VIR
+    printf("[MEM] get addr s:0x%.8x c:0x%.8x\n", ps8_page_start_addr, curAddr);
+#endif
+    //munmap( ps8_page_start_addr , u32_len );
+  
+    return 0;
+}
+
 static int aspFatFormat(struct sdFatFormat_s *pffmt)
 {
     float totSector=0, hidnSector=0, sectorPerCls=0;
@@ -21812,9 +21917,9 @@ static int ring_buf_init(struct shmem_s *pp)
     pp->lastsz = 0;
     pp->dualsz = 0;
 
-    for (idx=0; idx <RING_BUFF_NUM; idx++) {
-        memset(pp->pp[idx], 0x00, SPI_TRUNK_SZ);
-        msync(pp->pp[idx], SPI_TRUNK_SZ, MS_SYNC);
+    for (idx=0; idx < pp->slotn; idx++) {
+        memset(pp->pp[idx], 0x00, pp->chksz);
+        msync(pp->pp[idx], pp->chksz, MS_SYNC);
     }
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
@@ -22499,31 +22604,37 @@ static int p10_end(struct procRes_s *rs)
     return ret;
 }
 
-static int p11_init(struct procRes_s *rs)
+static int p11_init(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
-    int ret;
+    int ret=0;
     ret = pn_init(rs);
+    ret |= pn_init(rsd);
+    ret |= pn_init(rcmd);
     return ret;
 }
 
-static int p11_end(struct procRes_s *rs)
+static int p11_end(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
-    int ret;
+    int ret=0;
     ret = pn_end(rs);
+    ret |= pn_end(rsd);
+    ret |= pn_end(rcmd);
     return ret;
 }
 
-static int p5_init(struct procRes_s *rs)
+static int p5_init(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    int ret;
+    int ret=0;
     ret = pn_init(rs);
+    ret |= pn_init(rcmd);
     return ret;
 }
 
-static int p5_end(struct procRes_s *rs)
+static int p5_end(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    int ret;
+    int ret=0;
     ret = pn_end(rs);
+    ret |= pn_end(rcmd);
     return ret;
 }
 
@@ -22569,17 +22680,19 @@ static int p2_end(struct procRes_s *rs)
     return ret;
 }
 
-static int p1_init(struct procRes_s *rs)
+static int p1_init(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    int ret;
+    int ret=0;
     ret = pn_init(rs);
+    ret |= pn_init(rcmd);
     return ret;
 }
 
-static int p1_end(struct procRes_s *rs)
+static int p1_end(struct procRes_s *rs, struct procRes_s *rcmd)
 {
-    int ret;
+    int ret=0;
     ret = pn_end(rs);
+    ret |= pn_end(rcmd);
     return ret;
 }
 
@@ -36606,7 +36719,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stfmty_116, stfmty_117, stcrtfdr_118, stcrtfdr_119, stcrtfdr_120}}; //FMTY
                             
 
-    p1_init(rs);
+    p1_init(rs, rcmd);
     stdata = rs->pstdata;
     // wait for ch from p0
     // state machine control
@@ -36917,7 +37030,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         //usleep(100000);
     }
 
-    p1_end(rs);
+    p1_end(rs, rcmd);
     return 0;
 }
 
@@ -40651,7 +40764,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
     sprintf_f(rs->logs, "p5\n");
     print_f(rs->plogs, "P5", rs->logs);
 
-    p5_init(rs);
+    p5_init(rs, rcmd);
     // wait for ch from p0
     // in charge of socket recv
 
@@ -41016,7 +41129,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         rs->psocket_r->connfd = 0;
     }
 
-    p5_end(rs);
+    p5_end(rs, rcmd);
     return 0;
 }
 
@@ -47267,7 +47380,7 @@ static int p10(struct procRes_s *rs)
 #define LOG_P11_EN (1)
 #define DBG_27_EPOL (1)
 #define DBG_27_DV (1)
-static int p11(struct procRes_s *rs)
+static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
     char ch=0;
@@ -47283,7 +47396,7 @@ static int p11(struct procRes_s *rs)
     sprintf_f(rs->logs, "p11\n");
     print_f(rs->plogs, "P11", rs->logs);
 
-    p11_init(rs);
+    p11_init(rs, rsd, rcmd);
 
     prctl(PR_SET_NAME, "msp-p11");
 
@@ -47299,7 +47412,7 @@ static int p11(struct procRes_s *rs)
         }
     }
 
-    p11_end(rs);
+    p11_end(rs, rsd, rcmd);
     return 0;
 }
 
@@ -47313,7 +47426,7 @@ int main(int argc, char *argv[])
 //static char spi0[] = "/dev/spidev32765.0"; 
     char dir[256] = "/mnt/mmc2";
     struct mainRes_s *pmrs;
-    struct procRes_s rs[13];
+    struct procRes_s rs[15];
     int ix, ret, len;
     char *log;
     int tdiff;
@@ -47321,6 +47434,9 @@ int main(int argc, char *argv[])
     uint32_t bitset;
     char syscmd[256] = "ls -al";
     struct sysinfo minfo;
+    struct usbHost_s *usbh[2];
+    uint32_t ut32=0, vt32=0;
+    char *chvir;
     
     printf("\n        ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
 
@@ -49820,14 +49936,14 @@ int main(int argc, char *argv[])
     sprintf_f(pmrs->log, "before open device[%s]\n", spidev_0); 
     print_f(&pmrs->plog, "SPI", pmrs->log);
 
-    #if 0
+#if DISABLE_SPI
     pmrs->sfm[0] = 0;
     pmrs->sfm[1] = 0;
     pmrs->smode = 0;
     pmrs->smode |= SPI_MODE_1;
     sprintf_f(pmrs->log, "disable SPI for debug!!!\n"); 
     print_f(&pmrs->plog, "SPI", pmrs->log);
-    #else 
+#else //#if DISABLE_SPI
 /*
     ret = mspFS_createRoot(&pmrs->aspFat.fatRootdir, &pmrs->aspFat, dir);
     if (!ret) {
@@ -49932,23 +50048,31 @@ int main(int argc, char *argv[])
      * spi mode 
      */ 
     ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_WR_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't set spi mode\n"); 
+    if (ret == -1) {
+        sprintf_f(pmrs->log, "can't set spi mode\n"); 
+        print_f(&pmrs->plog, "SPI0", pmrs->log);
+    }
     
     ret = msp_spi_conf(pmrs->sfm[0], SPI_IOC_RD_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't get spi mode\n"); 
+    if (ret == -1) {
+        sprintf_f(pmrs->log, "can't get spi mode\n"); 
+        print_f(&pmrs->plog, "SPI0", pmrs->log);
+    }
     
     /*
      * spi mode 
      */ 
     ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_WR_MODE, &pmrs->smode); 
-    if (ret == -1) 
-        printf("can't set spi mode\n"); 
+    if (ret == -1) {
+        sprintf_f(pmrs->log, "can't set spi mode\n"); 
+        print_f(&pmrs->plog, "SPI1", pmrs->log);
+    }
     
     ret = msp_spi_conf(pmrs->sfm[1], SPI_IOC_RD_MODE, &pmrs->smode);
-    if (ret == -1) 
-        printf("can't get spi mode\n"); 
+    if (ret == -1) {
+        sprintf_f(pmrs->log, "can't get spi mode\n"); 
+        print_f(&pmrs->plog, "SPI1", pmrs->log);
+    }
 
     dbgShowTimeStamp("s10", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
@@ -49956,7 +50080,241 @@ int main(int argc, char *argv[])
     printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
     printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
-    #endif
+#endif  //#if DISABLE_SPI
+
+    /* USB0 */
+    pmrs->usbmfd = open(MODULE_NAME , O_RDWR);
+    if(pmrs->usbmfd < 0) {
+        perror("/dev/mem open failed");
+        goto end;
+    } else {
+        sprintf_f(pmrs->log, "open [%s] succeed!!!! \n", MODULE_NAME);
+        print_f(&pmrs->plog, "DMEM", pmrs->log);
+    } 
+    
+    usbh[0] = 0;
+    usbh[0] = aspSalloc(sizeof(struct usbHost_s));
+    if (!usbh[0]) {
+        sprintf_f(pmrs->log, "allocate for usb struct failed !!! \n");
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        goto end;
+    }
+    
+    usbh[0]->ushostid = open(usbhostpath1, O_RDWR);
+    if (usbh[0]->ushostid < 0) {
+        sprintf_f(pmrs->log, "can't open device[%s]\n", usbhostpath1); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[0]->ushostid);
+        goto end;
+    } else {
+        sprintf_f(pmrs->log, "open device[%s] usbid: %d \n", usbhostpath1, usbh[0]->ushostid); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+    }
+
+    ret = USB_IOCT_GET_VID_PID(usbh[0]->ushostid, usbh[0]->ushostpidvid);
+    if (ret < 0) {
+        sprintf_f(pmrs->log, "can't get vid pid for [%s]\n", usbhostpath1); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[0]->ushostid);
+        goto end;
+    }
+        
+    ix = RING_BUFF_NUM_USB;
+    ret = USB_IOCT_LOOP_BUFF_CREATE(usbh[0]->ushostid, &ix);
+    if (ret < 0) {
+        sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath1); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[0]->ushostid);
+        goto end;
+    }
+
+    usbh[0]->ushostblvir = aspSalloc(RING_BUFF_NUM_USB*4);
+    usbh[0]->ushostblphy = aspSalloc(RING_BUFF_NUM_USB*4);
+
+    if ((!usbh[0]->ushostblphy) || (!usbh[0]->ushostblvir)) {
+        sprintf_f(pmrs->log, "allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM_USB*4, usbhostpath1); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[0]->ushostid);
+        goto end;
+    }
+        
+    ret = USB_IOCT_LOOP_BUFF_PROBE(usbh[0]->ushostid, usbh[0]->ushostblphy);
+    if (ret < 0) {
+        sprintf_f(pmrs->log, "can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath1); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[0]->ushostid);
+        goto end;
+    }
+
+    ix = 0;
+    sprintf_f(pmrs->log, "[%s] addr0: \n", usbhostpath1);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+        ut32 = usbh[0]->ushostblphy[ix];
+        
+        if ((ix % 4) == 0) {
+            sprintf_f(pmrs->log, "%d: ", ix);
+            print_f(&pmrs->plog, "USB", pmrs->log);
+        }
+
+        ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
+        if (ret < 0) {
+            sprintf_f(pmrs->log, "addr0 phy 2 vir error!!! ret: %d \n", ret);
+            print_f(&pmrs->plog, "USB", pmrs->log);
+            goto end;
+        }
+
+        usbh[0]->ushostblvir[ix] = vt32;
+        if ((ix % 4) == 3) {
+            sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+            print_f(&pmrs->plog, ".", pmrs->log);
+        } else {
+            sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x ", ut32, vt32);
+            print_f(&pmrs->plog, ".", pmrs->log);
+        }        
+        
+    }
+
+    sprintf_f(pmrs->log, "\n");
+    print_f(&pmrs->plog, "USB", pmrs->log);
+
+    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+        chvir = (char *) usbh[0]->ushostblvir[ix];
+        
+        if (chvir[0] != (ix & 0xff)) {
+            printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
+        }   
+    }
+
+    pmrs->usbmh[0] = usbh[0];
+    
+    sprintf_f(pmrs->log, "setup complete usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbh[0]->ushostid, usbh[0]->ushostpidvid[0], usbh[0]->ushostpidvid[1], usbhostpath1);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+
+    /* USB1 */
+    
+    usbh[1] = 0;
+    usbh[1] = aspSalloc(sizeof(struct usbHost_s));
+    if (!usbh[1]) {
+        sprintf_f(pmrs->log, "allocate for usb 1 struct failed !!! \n");
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        goto end;
+    }
+    
+    usbh[1]->ushostid = open(usbhostpath2, O_RDWR);
+    if (usbh[1]->ushostid < 0) {
+        sprintf_f(pmrs->log, "can't open device[%s]\n", usbhostpath2); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[1]->ushostid);
+        goto end;
+    } else {
+        sprintf_f(pmrs->log, "open device[%s] usbid: %d \n", usbhostpath2, usbh[1]->ushostid); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+    }
+
+    ret = USB_IOCT_GET_VID_PID(usbh[1]->ushostid, usbh[1]->ushostpidvid);
+    if (ret < 0) {
+        sprintf_f(pmrs->log, "can't get vid pid for [%s]\n", usbhostpath2); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[1]->ushostid);
+        goto end;
+    }
+        
+    ix = RING_BUFF_NUM_USB;
+    ret = USB_IOCT_LOOP_BUFF_CREATE(usbh[1]->ushostid, &ix);
+    if (ret < 0) {
+        sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath2); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[1]->ushostid);
+        goto end;
+    }
+
+    usbh[1]->ushostblvir = aspSalloc(RING_BUFF_NUM_USB*4);
+    usbh[1]->ushostblphy = aspSalloc(RING_BUFF_NUM_USB*4);
+
+    if ((!usbh[1]->ushostblphy) || (!usbh[1]->ushostblvir)) {
+        sprintf_f(pmrs->log, "allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM_USB*4, usbhostpath2); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[1]->ushostid);
+        goto end;
+    }
+        
+    ret = USB_IOCT_LOOP_BUFF_PROBE(usbh[1]->ushostid, usbh[1]->ushostblphy);
+    if (ret < 0) {
+        sprintf_f(pmrs->log, "can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath2); 
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        close(usbh[1]->ushostid);
+        goto end;
+    }
+
+    ix = 0;
+    sprintf_f(pmrs->log, "[%s] addr0: \n", usbhostpath2);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+        ut32 = usbh[1]->ushostblphy[ix];
+        
+        if ((ix % 4) == 0) {
+            sprintf_f(pmrs->log, "%d: ", ix);
+            print_f(&pmrs->plog, "USB", pmrs->log);
+        }
+
+        ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
+        if (ret < 0) {
+            sprintf_f(pmrs->log, "addr0 phy 2 vir error!!! ret: %d \n", ret);
+            print_f(&pmrs->plog, "USB", pmrs->log);
+            goto end;
+        }
+
+        usbh[1]->ushostblvir[ix] = vt32;
+        if ((ix % 4) == 3) {
+            sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+            print_f(&pmrs->plog, ".", pmrs->log);
+        } else {
+            sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x ", ut32, vt32);
+            print_f(&pmrs->plog, ".", pmrs->log);
+        }        
+        
+    }
+
+    sprintf_f(pmrs->log, "\n");
+    print_f(&pmrs->plog, "USB", pmrs->log);
+
+    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+        chvir = (char *) usbh[1]->ushostblvir[ix];
+        
+        if (chvir[0] != (ix & 0xff)) {
+            printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
+        }   
+    }
+
+    pmrs->usbmh[1] = usbh[1];
+    
+    sprintf_f(pmrs->log, "setup complete usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbh[1]->ushostid, usbh[1]->ushostpidvid[0], usbh[1]->ushostpidvid[1], usbhostpath2);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+
+    pmrs->usbdv = open(usbdevpath, O_RDWR);
+    if (pmrs->usbdv <= 0) {
+        printf("can't open device[%s]!!\n", usbdevpath); 
+        pmrs->usbdv = open(usbdevpath0, O_RDWR);    
+        if (pmrs->usbdv <= 0) {
+            printf("can't open device[%s]\n", usbdevpath0); 
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", usbdevpath0); 
+        }
+    }
+    else {
+        printf("open device[%s]\n", usbdevpath0); 
+    }
+    usb_nonblock_set(pmrs->usbdv);
+        
+    dbgShowTimeStamp("s11", pmrs, NULL, 2, NULL);
+    sysinfo(&minfo);
+    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    
 // IPC
     pipe(pmrs->pipedn[0].rt);
     //pipe2(pmrs->pipedn[0].rt, O_NONBLOCK);
@@ -49973,6 +50331,8 @@ int main(int argc, char *argv[])
     pipe(pmrs->pipedn[10].rt);
     pipe(pmrs->pipedn[11].rt);
     pipe(pmrs->pipedn[12].rt);
+    pipe(pmrs->pipedn[13].rt);
+    pipe(pmrs->pipedn[14].rt);
     
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[1].rt, O_NONBLOCK);
@@ -49987,7 +50347,9 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipeup[10].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[11].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[12].rt, O_NONBLOCK);
-    
+    pipe2(pmrs->pipeup[13].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[14].rt, O_NONBLOCK);
+  
     res_put_in(&rs[0], pmrs, 0);
     res_put_in(&rs[1], pmrs, 1);
     res_put_in(&rs[2], pmrs, 2);
@@ -50001,7 +50363,9 @@ int main(int argc, char *argv[])
     res_put_in(&rs[10], pmrs, 10);
     res_put_in(&rs[11], pmrs, 11);
     res_put_in(&rs[12], pmrs, 12);
-    
+    res_put_in(&rs[13], pmrs, 13);
+    res_put_in(&rs[14], pmrs, 14);
+  
 //  Share memory init
     ring_buf_init(&pmrs->dataRx);
     pmrs->dataRx.r->folw.seq = 1;
@@ -50098,7 +50462,7 @@ int main(int argc, char *argv[])
                                                 sprintf(argv[0], "g_printer");
                                                 pmrs->sid[11] = fork();
                                                 if (!pmrs->sid[11]) {
-                                                    p11(&rs[12]);
+                                                    p11(&rs[12], &rs[13], &rs[14]);
                                                 } else {              
                                                     len = strlen(argv[0]);
                                                     memset(argv[0], 0, len);
@@ -50398,6 +50762,10 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbheader = &mrs->bmpheader;
     rs->pbheaderDuo = &mrs->bmpheaderDuo;
     rs->pbrotate = &mrs->bmpRotate;
+
+    rs->usbdvid = mrs->usbdv;
+    rs->pusbmh[0] = mrs->usbmh[0];
+    rs->pusbmh[1] = mrs->usbmh[1];
 
     return 0;
 }
