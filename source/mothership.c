@@ -50,6 +50,7 @@ usb recover"
 #define RING_BUFF_NUM_USB   (1536)
 #define USB_BUF_SIZE (32768*3)
 #define USB_META_SIZE 512
+#define TABLE_SLOT_SIZE 4
 #define CYCLE_LEN (20)
 
 #define IOCNR_GET_DEVICE_ID		1
@@ -110,7 +111,11 @@ static char spidev_0[] = "/dev/spidev32765.0";
 static int *asptotMalloc=0;
 static int *totSalloc=0;
 //static char netIntfs[16] = "uap0";
-    
+
+#define CBW_CMD_SEND_OPCODE   0x11
+#define CBW_CMD_START_SCAN    0x12
+#define CBW_CMD_READY   0x08
+
 /* flow operation */
 #define OP_NONE          0x0     
 #define OP_PON            0x1                
@@ -126,6 +131,29 @@ static int *totSalloc=0;
 #define OP_HANDSCAN  0xb
 #define OP_NOTESCAN  0xc
 #define OP_POLL           0xd
+
+#define  OP_SEND_BACK        0x08
+#define  OP_Multi_Single     0x09
+#define  OP_Multi_DUPLEX     0x0A
+#define  OP_Hand_Scan       0x0B
+#define  OP_Note_Scan         0x0C
+#define  OP_Multi_Hand_Scan  0x0D
+#define  OP_Start_scan    0x0E
+#define  OP_Stop_scan     0x0F
+
+#define  OP_META             0x4C
+#define OP_META_Sub0      0x0
+#define OP_META_Sub1      0x1
+
+#define  OPSUB_WiFi_only      0x01
+#define  OPSUB_SD_only       0x02
+#define  OPSUB_WiFi_SD       0x03
+#define OPSUB_WBC_Proc    0x84
+#define  OPSUB_USB_Scan    0x85
+#define  OPSUB_DualStream_WiFi_only  0x86
+#define  OPSUB_DualStream_SD_only   0x87
+#define  OPSUB_Hand_Scan     0x89
+#define  OPSUB_Enc_Dec_Test   0x8A
 
 /* SD read write operation */               
 #define OP_SDRD            0x20
@@ -1231,6 +1259,7 @@ struct mainRes_s{
     int smode;
     int usbmfd;
     int usbdv;
+    struct usbhost_s *usbhost[2];
     struct usbHostmem_s *usbmh[2];
     struct psdata_s stdata;
     struct sdFAT_s aspFat;
@@ -1292,6 +1321,7 @@ struct procRes_s{
     uint32_t *pmsconfig;
     int spifd;
     int usbdvid;
+    struct usbhost_s *pusbhost;
     struct usbHostmem_s *pusbmh[2];
     struct psdata_s *pstdata;
     struct sdFAT_s *psFat;
@@ -1543,6 +1573,7 @@ static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen);
 static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
+static char **memory_init_vtable(int *sz, int tsize, int csize, uint32_t *tbl);
 
 static unsigned long long int time_get_ms(struct timespec *s)
 {
@@ -47523,8 +47554,8 @@ static int p8(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P9_EN (1)
-static int p9(struct procRes_s *rs)
+#define DBG_USB_HS 0
+static int usbhost(struct procRes_s *rs, char *sp)
 {
     int ret=0;
     char ch=0;
@@ -47565,19 +47596,19 @@ static int p9(struct procRes_s *rs)
     char cswst=0;
     uint32_t *virtbl;
     char *chvaddr=0;
-
+    struct usbhost_s *puhs=0;
+    
     sprintf_f(rs->logs, "p9\n");
-    print_f(rs->plogs, "P9", rs->logs);
+    print_f(rs->plogs, sp, rs->logs);
 
-    p9_init(rs);
-
-    prctl(PR_SET_NAME, "msp-p9");
-
-#if 0
+#if 1
     pkcbw = malloc(96);
     if (!pkcbw) {
-        printf("[%s] allocate memory for kernel cbw failed!!! ", strpath);
+        sprintf_f(rs->logs, "allocate memory for kernel cbw failed!!! ");
+        print_f(rs->plogs, sp, rs->logs);
     }
+
+    puhs = rs->pusbhost;
 
     pTx = puhs->pgatring;
 
@@ -47588,33 +47619,13 @@ static int p9(struct procRes_s *rs)
     if (puhs->ushid) {
         usbid = puhs->ushid;
     } else {
-        usbid = open(strpath, O_RDWR);
-        if (usbid < 0) {
-            printf("can't open device[%s]\n", strpath); 
-            close(usbid);
-            goto end;
-        }
-        else {
-            printf("open device[%s]\n", strpath); 
-        }
+        sprintf_f(rs->logs, "Error!!! device id not available !!! \n");
+        print_f(rs->plogs, sp, rs->logs);
+        goto end;
     }
 
-    #if 0
-    if (puhs->pushvaddrtb) {
-        virtbl = puhs->pushvaddrtb;
-        printf("[%s] vaddr val check: \n", strpath); 
-        for (idx=0; idx < 512; idx++) {
-            chvaddr = (char *)virtbl[idx];
-            printf("0x%.2x ", chvaddr[0]);
-
-            if ((idx + 1) % 16 == 0) {
-                printf("\n");
-            }
-        }
-    }
-    #endif
-
-    printf("[%s] get usbid:[%d]\n", strpath, usbid); 
+    sprintf_f(rs->logs, "get usbid:[%d]\n", usbid); 
+    print_f(rs->plogs, sp, rs->logs);
     
     //usb_nonblock_set(usbid);
 
@@ -47626,34 +47637,23 @@ static int p9(struct procRes_s *rs)
         while(1) {
             tcnt++;
             ptret = poll(ptfd, 1, 2000);
-            //printf("[%s] poll return %d id:%d evt: 0x%.2x - %d\n", strpath, ptret, ptfd[0].fd ,ptfd[0].revents, tcnt);
+            //sprintf_f(rs->logs, "poll return %d id:%d evt: 0x%.2x - %d\n", ptret, ptfd[0].fd ,ptfd[0].revents, tcnt);
+            //print_f(rs->plogs, sp, rs->logs);
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
-                //printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
+                //sprintf_f(rs->logs, "pipe%d get chr: %c(0x%.2x) \n", pPtx[0], chr, chr);
+                //print_f(rs->plogs, sp, rs->logs);
                 break;
             }
         }
-        
-        #if 0
-        while (1) {
-            chr = 0;
-            pieRet = read(pPtx[0], &chr, 1);
-            if (pieRet > 0) {
-                printf("[%s] get chr: %c \n", strpath, chr);
-                break;
-            } else {
-                //printf("[HS] get chr ret: %d \n", pieRet);
-                usleep(1000);
-            }
-        }
-        #endif
         
         memset(ptrecv, 0, 32);
 
         #if DBG_USB_HS
         for (idx=0; idx < 5; idx++) {
-            printf("%d. %c - %d \n", idx, cmdMtx[idx][0], cmdMtx[idx][1]);
+            sprintf_f(rs->logs, "%d. %c - %d \n", idx, cmdMtx[idx][0], cmdMtx[idx][1]);
+            print_f(rs->plogs, sp, rs->logs);
         }
         #endif
         
@@ -47677,7 +47677,7 @@ static int p9(struct procRes_s *rs)
             cmdchr = cmdMtx[3][1];
             break;
         case 'p':
-            opc = OP_DUPLEX;
+            opc = OP_DOUBLE;
             dat = OPSUB_USB_Scan;
             cmdchr = cmdMtx[4][1];
             break;
@@ -47725,7 +47725,8 @@ static int p9(struct procRes_s *rs)
         }
 
         #if DBG_USB_HS
-        printf("cmdchr: 0x%.2x \n", cmdchr);
+        sprintf_f(rs->logs, "cmdchr: 0x%.2x \n", cmdchr);
+        print_f(rs->plogs, sp, rs->logs);
         #endif
 
         if (cmdchr == 0x01) { 
@@ -47735,7 +47736,8 @@ static int p9(struct procRes_s *rs)
             msync(pMta, USB_META_SIZE, MS_SYNC);
             memcpy(ptm, pMta, sizeof(struct aspMetaData_s));
 
-            printf("[%s] get meta magic number: 0x%.2x, 0x%.2x !!!\n", strpath, meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
+            sprintf_f(rs->logs, "get meta magic number: 0x%.2x, 0x%.2x !!!\n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
+            print_f(rs->plogs, sp, rs->logs);
 
             #if 0 /* remove ready */    
             insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
@@ -47751,7 +47753,8 @@ static int p9(struct procRes_s *rs)
             usb_read(ptrecv, usbid, 13);
             
             #if DBG_USB_HS
-            printf("[%s] dump 13 bytes", strpath);
+            sprintf_f(rs->logs, "dump 13 bytes");
+            print_f(rs->plogs, sp, rs->logs);
             shmem_dump(ptrecv, 13);
             #endif
 
@@ -47760,7 +47763,8 @@ static int p9(struct procRes_s *rs)
         }
         else if (cmdchr == 0x08) {
             ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
-            printf("[%s] conti read stop ret: %d \n", strpath, ptret);
+            sprintf_f(rs->logs, "conti read stop ret: %d \n", ptret);
+            print_f(rs->plogs, sp, rs->logs);
             
             chq = 'B';
             pieRet = write(pPrx[1], &chq, 1);
@@ -47786,7 +47790,8 @@ static int p9(struct procRes_s *rs)
             len = ring_buf_get(pTx, &addr);    
             while (len <= 0) {
                 sleep(1);
-                printf("[%s]buffer full!!! ret:%d !!", strpath, len);
+                sprintf_f(rs->logs, "buffer full!!! ret:%d !!", len);
+                print_f(rs->plogs, sp, rs->logs);
                 len = ring_buf_get(pTx, &addr);            
             }
             
@@ -47803,10 +47808,12 @@ static int p9(struct procRes_s *rs)
                 #endif
                 
                 if (recvsz > len) {
-                    printf("[%s] last trunk size: %d 0x%x\n", strpath, recvsz, recvsz);
+                    sprintf_f(rs->logs, "last trunk size: %d 0x%x\n", recvsz, recvsz);
+                    print_f(rs->plogs, sp, rs->logs);
                     
                     if (recvsz & 0x20000) {
-                        printf("[%s] get the end signal 0x20000 \n", strpath);
+                        sprintf_f(rs->logs, "get the end signal 0x20000 \n");
+                        print_f(rs->plogs, sp, rs->logs);
                         
                         #if USB_CALLBACK_SUBMIT 
                         chr = 'R';
@@ -47820,7 +47827,8 @@ static int p9(struct procRes_s *rs)
                             cswst = 0xff;
                         }
 
-                        printf("[%s] use the error status: 0x%.2x\n", strpath, cswst);
+                        sprintf_f(rs->logs, "use the error status: 0x%.2x\n", cswst);
+                        print_f(rs->plogs, sp, rs->logs);
                         
                         recvsz = recvsz  & 0x1ffff;
                     }
@@ -47829,7 +47837,8 @@ static int p9(struct procRes_s *rs)
                         cswst = (recvsz >> 20) & 0xff;
                         
                         recvsz = recvsz  & 0x1ffff;
-                        printf("[%s] get the error status: 0x%.2x\n", strpath, cswst);
+                        sprintf_f(rs->logs, "get the error status: 0x%.2x\n", cswst);
+                        print_f(rs->plogs, sp, rs->logs);
                         
                         #if 1 /* stop scan if get error status */
                         if (cswst & 0x7f) {
@@ -47838,7 +47847,8 @@ static int p9(struct procRes_s *rs)
                         #endif
                     } 
                     else {
-                        printf("[%s] Error!!! unknow len: %d(0x%.8x) \n", strpath, recvsz, recvsz);
+                        sprintf_f(rs->logs, "Error!!! unknow len: %d(0x%.8x) \n", recvsz, recvsz);
+                        print_f(rs->plogs, sp, rs->logs);
                         continue;
                     }
                     
@@ -47854,7 +47864,8 @@ static int p9(struct procRes_s *rs)
                 }
                 
                 if (recvsz < 0) {
-                    printf("[%s] usb read ret: %d \n", strpath, recvsz);
+                    sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
+                    print_f(rs->plogs, sp, rs->logs);
                     continue;
                     //break;
                 }
@@ -47865,9 +47876,10 @@ static int p9(struct procRes_s *rs)
                     /*do nothing*/
                 }
 
-                printf("[%s] usb read %d / %d!!\n ", strpath, recvsz, len);
+                sprintf_f(rs->logs, "usb read %d / %d!!\n ", recvsz, len);
+                print_f(rs->plogs, sp, rs->logs);
                 
-                //printf("[HS] dump 32 - 0 \n");
+                //sprintf_f(rs->logs, "[HS] dump 32 - 0 \n");
                 //msync(addr, recvsz, MS_SYNC);
                 //shmem_dump(addr, 32);
 
@@ -47875,7 +47887,8 @@ static int p9(struct procRes_s *rs)
 
                 if (tcnt == 1) {
                     clock_gettime(CLOCK_REALTIME, &utstart);
-                    printf("[%s] start ... \n", strpath);
+                    sprintf_f(rs->logs, "start ... \n");
+                    print_f(rs->plogs, sp, rs->logs);
                 }
                 
                 #if USB_HS_SAVE_RESULT        
@@ -47887,7 +47900,8 @@ static int p9(struct procRes_s *rs)
                 if (recvsz < len) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
-                    printf("[%s] loop last ret: %d, the last size: %d \n", strpath, ptret, recvsz);
+                    sprintf_f(rs->logs, "loop last ret: %d, the last size: %d \n", ptret, recvsz);
+                    print_f(rs->plogs, sp, rs->logs);
                     break;
                 } else {
                     chq = 'D';
@@ -47896,7 +47910,8 @@ static int p9(struct procRes_s *rs)
                 
                 #if USB_HS_SAVE_RESULT               
                 if (acusz > bufmax) {
-                    printf("[%s] save image error due to buffer size not enough!!!", strpath);
+                    sprintf_f(rs->logs, "save image error due to buffer size not enough!!!");
+                    print_f(rs->plogs, sp, rs->logs);
                     break;
                 }
                 #endif
@@ -47904,7 +47919,8 @@ static int p9(struct procRes_s *rs)
                 len = ring_buf_get(pTx, &addr);
                 while (len <= 0) {
                     sleep(1);
-                    printf("[%s] buffer full!!! ret:%d !!\n", strpath, len);
+                    sprintf_f(rs->logs, "buffer full!!! ret:%d !!\n", len);
+                    print_f(rs->plogs, sp, rs->logs);
                     len = ring_buf_get(pTx, &addr);            
                 }
             }
@@ -47935,17 +47951,19 @@ static int p9(struct procRes_s *rs)
                 chq = 'R';
                 pieRet = write(pPrx[1], &chq, 1);
             } else {
-                printf("[%s] Error!!! unknown chr: %c \n", chr);
+                sprintf_f(rs->logs, "[%s] Error!!! unknown chr: %c \n", chr);
+                print_f(rs->plogs, sp, rs->logs);
             }
     
             #if USB_HS_SAVE_RESULT
             wrtsz = fwrite(pImage, 1, acusz, fsave);
             #endif
             
-            usCost = test_time_diff(&utstart, &utend, 1000);
+            usCost = time_diff(&utstart, &utend, 1000);
             throughput = acusz*8.0 / usCost*1.0;
 
-            printf("[%s] total read size: %d, write file size: %d throughput: %lf Mbits \n", strpath, acusz, wrtsz, throughput);
+            sprintf_f(rs->logs, "total read size: %d, write file size: %d throughput: %lf Mbits \n", acusz, wrtsz, throughput);
+            print_f(rs->plogs, sp, rs->logs);
             
             #if USB_HS_SAVE_RESULT
             sync();
@@ -47955,7 +47973,8 @@ static int p9(struct procRes_s *rs)
 
         }
         else if (cmdchr == 0x06) {
-            printf("[%s] conti already stop !!!! \n", strpath);
+            sprintf_f(rs->logs, "conti already stop !!!! \n");
+            print_f(rs->plogs, sp, rs->logs);
             chq = 'G';
             pieRet = write(pPrx[1], &chq, 1);
         }
@@ -47974,10 +47993,12 @@ static int p9(struct procRes_s *rs)
             
             /* start loop */
             ptret = USB_IOCT_LOOP_RESET(usbid, &bitset);
-            printf("[%s] conti read reset ret: %d \n", strpath, ptret);
+            sprintf_f(rs->logs, "conti read reset ret: %d \n", ptret);
+            print_f(rs->plogs, sp, rs->logs);
 
             ptret = USB_IOCT_LOOP_START(usbid, pkcbw);
-            printf("[%s] conti read start ret: %d \n", strpath, ptret);
+            sprintf_f(rs->logs, "conti read start ret: %d \n", ptret);
+            print_f(rs->plogs, sp, rs->logs);
 
             chq = 'S';
             pieRet = write(pPrx[1], &chq, 1);
@@ -47994,19 +48015,13 @@ static int p9(struct procRes_s *rs)
             
             /* start loop */
             
-            #if 1
             ptret = USB_IOCT_LOOP_RESET(usbid, &bitset);
-            printf("[%s] conti read reset ret: %d \n", strpath, ptret);
+            sprintf_f(rs->logs, "conti read reset ret: %d \n", ptret);
+            print_f(rs->plogs, sp, rs->logs);
 
             ptret = USB_IOCT_LOOP_ONCE(usbid, pkcbw);
-            printf("[%s] conti read once ret: %d \n", strpath, ptret);
-            #else
-            ptret = USB_IOCT_LOOP_START(usbid, pkcbw);
-            printf("[%s] conti read start ret: %d \n", strpath, ptret);
-
-            ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
-            printf("[%s] conti read stop ret: %d \n", strpath, ptret);
-            #endif     
+            sprintf_f(rs->logs, "conti read once ret: %d \n", ptret);
+            print_f(rs->plogs, sp, rs->logs);
             
             chq = 'S';
             pieRet = write(pPrx[1], &chq, 1);
@@ -48031,7 +48046,8 @@ static int p9(struct procRes_s *rs)
             len = ring_buf_get(pTx, &addr);    
             while (len <= 0) {
                 sleep(1);
-                printf("[%s]buffer full!!! ret:%d !!", strpath, len);
+                sprintf_f(rs->logs, "buffer full!!! ret:%d !!", len);
+                print_f(rs->plogs, sp, rs->logs);
                 len = ring_buf_get(pTx, &addr);            
             }
             
@@ -48053,13 +48069,13 @@ static int p9(struct procRes_s *rs)
                 if (tcnt) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     //usCost = test_time_diff(&utstart, &utend, 1000);
-                    //printf("[%s] read %d (%d ms)\n", strpath, recvsz, usCost/1000);
+                    //sprintf_f(rs->logs, "read %d (%d ms)\n", recvsz, usCost/1000);
                 }
                 #endif 
                 
                 if (recvsz > len) {
                     if (recvsz & 0x20000) {
-                        //printf("[%s] get the end signal 0x20000 \n", strpath);
+                        //sprintf_f(rs->logs, "get the end signal 0x20000 \n");
                         
                         #if USB_CALLBACK_SUBMIT 
                         chr = 'R';
@@ -48079,19 +48095,22 @@ static int p9(struct procRes_s *rs)
                         recvsz = recvsz  & 0x1ffff;
                         
                         /*should not be here*/
-                        printf("[%s] Error!!! get status: 0x%.2x recv:%d\n", strpath, cswst, recvsz);
+                        sprintf_f(rs->logs, "Error!!! get status: 0x%.2x recv:%d\n", cswst, recvsz);
+                        print_f(rs->plogs, sp, rs->logs);
                     }
                     else if (recvsz > 0x40000) {
                         cswst = (recvsz >> 20) & 0xff;
                         recvsz = recvsz  & 0x1ffff;
                         /*should not be here*/
-                        printf("[%s] Error!!!, get csw status: 0x%.2x recv:%d\n", strpath, cswst, recvsz);
+                        sprintf_f(rs->logs, "Error!!!, get csw status: 0x%.2x recv:%d\n", cswst, recvsz);
+                        print_f(rs->plogs, sp, rs->logs);
                         chr = 'I';
                     } else {
-                        printf("[%s] Error!!! unknow len: %d(0x%.8x) \n", strpath, recvsz, recvsz);
+                        sprintf_f(rs->logs, "Error!!! unknow len: %d(0x%.8x) \n", recvsz, recvsz);
+                        print_f(rs->plogs, sp, rs->logs);
                         continue;
                     }
-                    //printf("[%s] last trunk size: %d \n", strpath, recvsz);
+                    //sprintf_f(rs->logs, "last trunk size: %d \n", recvsz);
                 }
                 
                 if (recvsz > 0) {
@@ -48104,12 +48123,13 @@ static int p9(struct procRes_s *rs)
                 }
                 
                 if (recvsz < 0) {
-                    printf("[%s] usb read ret: %d \n", strpath, recvsz);
+                    sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
+                    print_f(rs->plogs, sp, rs->logs);
                     continue;
                     //break;
                 }
                 else if (recvsz == 0) {
-                    //printf("[%s] usb read ret: %d \n", strpath, recvsz);
+                    //sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
                     continue;
                 }
                 else {
@@ -48117,10 +48137,11 @@ static int p9(struct procRes_s *rs)
                 }
                 
                 #if DBG_USB_HS
-                printf("[%s] usb read %d / %d!!\n ", strpath, recvsz, len);
+                sprintf_f(rs->logs, "usb read %d / %d!!\n ", recvsz, len);
+                print_f(rs->plogs, sp, rs->logs);
                 #endif
                 
-                //printf("[HS] dump 32 - 0 \n");
+                //sprintf_f(rs->logs, "[HS] dump 32 - 0 \n");
                 //msync(addr, recvsz, MS_SYNC);
                 //shmem_dump(addr, 32);
 
@@ -48128,7 +48149,8 @@ static int p9(struct procRes_s *rs)
 
                 if (tcnt == 1) {
                     clock_gettime(CLOCK_REALTIME, &utstart);
-                    printf("[%s] start ... \n", strpath);
+                    sprintf_f(rs->logs, "start ... \n");
+                    print_f(rs->plogs, sp, rs->logs);
                 }
                 
                 #if USB_HS_SAVE_RESULT        
@@ -48140,7 +48162,8 @@ static int p9(struct procRes_s *rs)
                 if (recvsz < len) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
-                    printf("[%s] loop last ret: %d, the last size: %d \n", strpath, ptret, recvsz);
+                    sprintf_f(rs->logs, "loop last ret: %d, the last size: %d \n", ptret, recvsz);
+                    print_f(rs->plogs, sp, rs->logs);
                     break;
                 } else {
                     chq = 'D';
@@ -48149,7 +48172,8 @@ static int p9(struct procRes_s *rs)
                 
                 #if USB_HS_SAVE_RESULT               
                 if (acusz > bufmax) {
-                    printf("[%s] save image error due to buffer size not enough!!!", strpath);
+                    sprintf_f(rs->logs, "save image error due to buffer size not enough!!!");
+                    print_f(rs->plogs, sp, rs->logs);
                     break;
                 }
                 #endif
@@ -48157,7 +48181,8 @@ static int p9(struct procRes_s *rs)
                 len = ring_buf_get(pTx, &addr);
                 while (len <= 0) {
                     sleep(1);
-                    printf("[%s] buffer full!!! ret:%d !!\n", strpath, len);
+                    sprintf_f(rs->logs, "buffer full!!! ret:%d !!\n", len);
+                    print_f(rs->plogs, sp, rs->logs);
                     len = ring_buf_get(pTx, &addr);            
                 }
             }
@@ -48192,11 +48217,11 @@ static int p9(struct procRes_s *rs)
             wrtsz = fwrite(pImage, 1, acusz, fsave);
             #endif
             
-            usCost = test_time_diff(&utstart, &utend, 1000);
+            usCost = time_diff(&utstart, &utend, 1000);
             throughput = acusz*8.0 / usCost*1.0;
 
-            printf("[%s] total read size: %d, write file size: %d throughput: %lf Mbits \n", strpath, acusz, wrtsz, throughput);
-            
+            sprintf_f(rs->logs, "total read size: %d, write file size: %d throughput: %lf Mbits \n", acusz, wrtsz, throughput);
+            print_f(rs->plogs, sp, rs->logs);
             
             #if USB_HS_SAVE_RESULT
             sync();
@@ -48214,9 +48239,10 @@ end:
         chr = 0;
         pieRet = read(pPtx[0], &chr, 1);
         if (pieRet > 0) {
-            printf("[%s] get chr: %c \n", strpath, chr);
+            sprintf_f(rs->logs, "get chr: %c \n", chr);
+            print_f(rs->plogs, sp, rs->logs);
         } else {
-            //printf("[HS] get chr ret: %d \n", pieRet);
+            //sprintf_f(rs->logs, "[HS] get chr ret: %d \n", pieRet);
             usleep(1000);
         }
     }
@@ -48227,11 +48253,33 @@ end:
 
         if (ret > 0) {
             sprintf_f(rs->logs, "get ch[0x%.2x] \n", ch);
-            print_f(rs->plogs, "P9", rs->logs);
+            print_f(rs->plogs, sp, rs->logs);
         } else {
             sprintf_f(rs->logs, "warnning ret: %d \n", ret);
-            print_f(rs->plogs, "P9", rs->logs);
+            print_f(rs->plogs, sp, rs->logs);
         }
+    }
+
+
+    p9_end(rs);
+    return 0;
+}
+
+#define LOG_P9_EN (1)
+static int p9(struct procRes_s *rs)
+{
+    int ret=0;
+    char ch=0;
+    
+    sprintf_f(rs->logs, "enter p9\n");
+    print_f(rs->plogs, "P9", rs->logs);
+
+    p9_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p9");
+
+    while (1) {
+        usbhost(rs, "P9");
     }
 
 
@@ -48245,7 +48293,7 @@ static int p10(struct procRes_s *rs)
     int ret=0;
     char ch=0;
     
-    sprintf_f(rs->logs, "p10\n");
+    sprintf_f(rs->logs, "enter p10\n");
     print_f(rs->plogs, "P10", rs->logs);
 
     p10_init(rs);
@@ -48253,15 +48301,7 @@ static int p10(struct procRes_s *rs)
     prctl(PR_SET_NAME, "msp-p10");
 
     while (1) {
-        ret = rs_ipc_get(rs, &ch, 1);
-
-        if (ret > 0) {
-            sprintf_f(rs->logs, "get ch[0x%.2x] \n", ch);
-            print_f(rs->plogs, "P10", rs->logs);
-        } else {
-            sprintf_f(rs->logs, "warnning ret: %d \n", ret);
-            print_f(rs->plogs, "P10", rs->logs);
-        }
+        usbhost(rs, "P10");
     }
 
 
@@ -48378,8 +48418,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
         }
         
-        sprintf_f(rs->logs, "[ePol] epoll rx: %d, tx: %d ret: %d \n", usbentsRx, usbentsTx, uret);
-        print_f(rs->plogs, "P11", rs->logs);
+        //sprintf_f(rs->logs, "[ePol] epoll rx: %d, tx: %d ret: %d \n", usbentsRx, usbentsTx, uret);
+        //print_f(rs->plogs, "P11", rs->logs);
 
         if (usbentsTx == 1) {
             if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09))) {
@@ -49982,9 +50022,16 @@ int main(int argc, char *argv[])
     char syscmd[256] = "ls -al";
     struct sysinfo minfo;
     struct usbHostmem_s *usbh[2];
+    uint32_t *tbl0, *tbl1;
     uint32_t ut32=0, vt32=0;
+    int usbid0=0, usbid1=0;
     char *chvir;
-    
+    struct shmem_s *usbTx=0, *usbTxd=0, *usbCur=0;
+    struct shmem_s *gateTx=0, *gateTxd=0;
+    struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
+    struct aspMetaData_s *metaRx = 0;
+    char *metaPt=0;
+        
     printf("\n        ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
 
     aspMemAsign = (struct aspMemAsign_s *)mmap(NULL, sizeof(struct aspMemAsign_s) * MSP_P_NUM, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -52839,6 +52886,82 @@ int main(int argc, char *argv[])
     sprintf_f(pmrs->log, "setup complete usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbh[1]->ushostid, usbh[1]->ushostpidvid[0], usbh[1]->ushostpidvid[1], usbhostpath2);
     print_f(&pmrs->plog, "USB", pmrs->log);
 
+    if (usbh[0]->ushostpidvid[1] < usbh[1]->ushostpidvid[1]) {
+        pmrs->usbmh[0] = usbh[0];
+        pmrs->usbmh[1] = usbh[1];
+    } else {
+        pmrs->usbmh[0] = usbh[1];
+        pmrs->usbmh[1] = usbh[0];
+    }
+
+    usbid0 = pmrs->usbmh[0]->ushostid;
+    usbid1 = pmrs->usbmh[1]->ushostid;
+    tbl0 = pmrs->usbmh[0]->ushostblvir;
+    tbl1 = pmrs->usbmh[1]->ushostblvir;    
+
+    pushost = (struct usbhost_s *)aspSalloc(sizeof(struct usbhost_s));
+    memset(pushost, 0, sizeof(struct usbhost_s));
+    pushostd = (struct usbhost_s *)aspSalloc(sizeof(struct usbhost_s));
+    memset(pushostd, 0, sizeof(struct usbhost_s));
+
+    usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+    usbTx->pp =  (char **) memory_init_vtable(&usbTx->slotn, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
+    if (!usbTx->pp) goto end;
+    usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+    usbTx->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
+    usbTx->chksz = TABLE_SLOT_SIZE;
+    usbTx->svdist = 8;
+
+    usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+    usbTxd->pp = (char **) memory_init_vtable(&usbTxd->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+    if (!usbTxd->pp) goto end;
+    usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+    usbTxd->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
+    usbTxd->chksz = TABLE_SLOT_SIZE;
+    usbTxd->svdist = 8;
+
+    gateTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+    gateTx->pp = (char **) memory_init_vtable(&gateTx->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0); 
+    if (!gateTx->pp) goto end;
+    gateTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+    gateTx->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
+    gateTx->chksz = TABLE_SLOT_SIZE;
+    gateTx->svdist = 8;
+    
+    gateTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+    gateTxd->pp = (char **) memory_init_vtable(&gateTxd->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+    if (!gateTxd->pp) goto end;
+    gateTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+    gateTxd->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
+    gateTxd->chksz = TABLE_SLOT_SIZE;
+    gateTxd->svdist = 8;
+
+    metaRx = (struct aspMetaData_s *)aspSalloc(sizeof(struct aspMetaData_s));
+    metaPt = (char *)metaRx;
+
+    pushost->pushring = usbTx;
+    pushost->pgatring = gateTx;
+    pushost->puhsmeta = metaPt;
+    pushost->pushrx = pmrs->pipedn[12].rt;
+    pushost->pushtx = pmrs->pipeup[12].rt;
+    pushost->pgattx = pmrs->pipedn[10].rt;
+    pushost->pgatrx = pmrs->pipeup[10].rt;
+    pushost->pushvaddrtb = tbl0;
+    pushost->ushid = usbid0;
+
+    pushostd->pushring = usbTxd;
+    pushostd->pgatring = gateTxd;
+    pushostd->puhsmeta = metaPt;
+    pushostd->pushrx = pmrs->pipedn[13].rt;
+    pushostd->pushtx = pmrs->pipeup[13].rt;
+    pushostd->pgattx = pmrs->pipedn[11].rt;
+    pushostd->pgatrx = pmrs->pipeup[11].rt;
+    pushostd->pushvaddrtb = tbl1;
+    pushostd->ushid = usbid1;
+
+    pmrs->usbhost[0] = pushost;
+    pmrs->usbhost[1] = pushostd;
+        
     pmrs->usbdv = open(usbdevpath, O_RDWR);
     if (pmrs->usbdv <= 0) {
         printf("can't open device[%s]!!\n", usbdevpath); 
@@ -52855,6 +52978,7 @@ int main(int argc, char *argv[])
         printf("open device[%s]\n", usbdevpath0); 
     }
     usb_nonblock_set(pmrs->usbdv);
+
 
     dbgShowTimeStamp("s11", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
@@ -53145,6 +53269,34 @@ static int printf_flush(struct logPool_s *plog, FILE *f)
     return 0;
 }
 
+static char **memory_init_vtable(int *sz, int tsize, int csize, uint32_t *tbl)
+{
+    uint32_t *mbuf;
+    char **pma;
+    int asz, idx;
+    char mlog[256];
+    
+    if ((!tsize) || (!csize)) return (0);
+    if (tsize % csize) return (0);
+    if (!(tsize / csize)) return (0);
+        
+    asz = tsize / csize;
+    //pma = (char **) aspMemalloc(sizeof(char *) * asz);
+    pma = (char **) aspSalloc(sizeof(char *) * asz);
+
+    mbuf = tbl;
+    
+    //sprintf(mlog, "aspSalloc get 0x%.8x\n", mbuf);
+    //print_f(mlogPool, "memory_init", mlog);
+        
+    for (idx = 0; idx < asz; idx++) {
+        pma[(idx+1) % asz] = (char *) mbuf[idx];
+    }
+
+    *sz = asz;
+    return pma;
+}
+
 static char **memory_init(int *sz, int tsize, int csize)
 {
     char *mbuf, *tmpB;
@@ -53285,6 +53437,14 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pusbmh[0] = mrs->usbmh[0];
     rs->pusbmh[1] = mrs->usbmh[1];
 
+    if (idx == 10) { 
+        rs->pusbhost = mrs->usbhost[0];
+    } else if (idx == 11) {
+        rs->pusbhost = mrs->usbhost[1];
+    } else {
+        rs->pusbhost = 0;
+    }
+    
     return 0;
 }
 
