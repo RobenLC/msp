@@ -49,6 +49,8 @@ usb recover"
 #define RING_BUFF_NUM (64)
 #define RING_BUFF_NUM_USB   (1536)
 #define USB_BUF_SIZE (32768*3)
+#define USB_META_SIZE 512
+#define CYCLE_LEN (20)
 
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -1175,12 +1177,50 @@ struct bitmapRotate_s {
     int aspRotBuffSize;
 };
 
-struct usbHost_s {
+struct usbhost_s{
+    int ushid;
+    struct shmem_s *pushring;
+    struct shmem_s *pgatring;
+    char *puhsmeta;
+    int *pushrx;
+    int *pushtx;
+    int *pgatrx;
+    int *pgattx;
+    int pushcnt;
+    uint32_t *pushvaddrtb;
+};
+
+struct usbHostmem_s {
     int            ushostid;
     uint32_t  *ushostblvir;
     uint32_t  *ushostblphy;
     int            ushostbmax;
     int            ushostpidvid[2];
+};
+
+struct usbIndex_s{
+    int uimIdex;
+    int uimCount;
+    int uimGetCnt;    
+    struct usbIndex_s *uimNxt;
+};
+
+struct usbBuff_s{
+    //char bpt[PT_BUF_SIZE];
+    char *bpt;
+    struct usbBuff_s *bn;
+};
+
+struct usbBuffLink_s{
+    int ubindex;
+    struct usbBuff_s *ubbufh;
+    struct usbBuff_s *ubbufc;
+    struct usbBuff_s *ubbufo;
+    struct usbBuffLink_s *ubnxt;     
+    int ublastsize;
+    int ubmetasize;
+    int ubcylcnt;
+    int ubcswerr;
 };
 
 struct mainRes_s{
@@ -1191,7 +1231,7 @@ struct mainRes_s{
     int smode;
     int usbmfd;
     int usbdv;
-    struct usbHost_s *usbmh[2];
+    struct usbHostmem_s *usbmh[2];
     struct psdata_s stdata;
     struct sdFAT_s aspFat;
     struct aspConfig_s configTable[ASPOP_CODE_MAX];
@@ -1252,7 +1292,7 @@ struct procRes_s{
     uint32_t *pmsconfig;
     int spifd;
     int usbdvid;
-    struct usbHost_s *pusbmh[2];
+    struct usbHostmem_s *pusbmh[2];
     struct psdata_s *pstdata;
     struct sdFAT_s *psFat;
     struct sdFatDir_s   *cpyfatDirTr;
@@ -1503,6 +1543,169 @@ static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen);
 static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
+
+static unsigned long long int time_get_ms(struct timespec *s)
+{
+    unsigned long long int cur, tnow, lnow, gunit;
+    unsigned long long int ms, deg;
+
+    gunit = 1000000;
+    deg = 1000000000;
+
+    cur = s->tv_sec;
+    tnow = s->tv_nsec;
+    lnow = cur * deg + tnow;
+
+    ms = lnow / gunit;
+
+    return ms;
+}
+
+static int time_diff(struct timespec *s, struct timespec *e, int unit)
+{
+    unsigned long long cur, tnow, lnow, past, tbef, lpast, gunit;
+    int diff;
+
+    gunit = unit;
+    //clock_gettime(CLOCK_REALTIME, &curtime);
+    cur = s->tv_sec;
+    tnow = s->tv_nsec;
+    lnow = cur * 1000000000+tnow;
+    
+    //clock_gettime(CLOCK_REALTIME, &curtime);
+    past = e->tv_sec;
+    tbef = e->tv_nsec;      
+    lpast = past * 1000000000+tbef; 
+
+    if (lpast < lnow) {
+        diff = -1;
+    } else {
+        diff = (lpast - lnow)/gunit;
+    }
+
+    if (diff == 0) {
+        diff = 1;
+    }
+
+    return diff;
+}
+
+static int usb_nonblock_set (int sfd)
+{
+    int val, ret;
+    ret = fcntl (sfd, F_GETFL, 0);
+    if (ret == -1)
+    {
+        perror ("fcntl");
+        return -1;
+    }
+
+    val = ret;  
+    val |= O_NONBLOCK;
+    ret = fcntl (sfd, F_SETFL, val);
+    if (ret == -1)
+    {
+        perror ("fcntl");
+        return -1;
+    }
+
+    return 0;
+}
+
+static int insert_cbw(char *cbw, char cmd, char opc, char dat)
+{
+    if (!cbw) return -1;
+
+    cbw[15] = cmd;
+    cbw[16] = opc;
+    cbw[17] = dat;
+
+    return 0;
+}
+
+#define USB_TX_LOG 0
+static int usb_send(char *pts, int usbfd, int len)
+{
+    int ret=0, send=0;
+    struct pollfd pllfd[1];
+
+#if 0
+    if (!(len % 512)) {
+        len += 1;
+    }
+#endif
+
+#if 0
+    if (!pts) return -1;
+    if (!usbfd) return -2;
+
+    pllfd[0].fd = usbfd;
+    pllfd[0].events = POLLOUT;
+    
+    while(1) {
+        ret = poll(pllfd, 1, -1);
+        //printf("[UW] usb poll ret: %d \n", ret);
+        if (ret < 0) {
+            printf("[UW] usb poll failed ret: %d\n", ret);
+            break;
+        }
+
+        if (ret && (pllfd[0].revents & POLLOUT)) {
+            
+            send = write(pllfd[0].fd, pts, len);
+
+#if USB_TX_LOG
+            printf("[UW] usb write %d bytes, ret: %d (1)\n", len, send);
+#endif
+
+            break;
+        }                
+    }
+#else
+    send = write(usbfd, pts, len);
+    printf("[USB] usb write %d bytes, ret: %d (2)\n", len, send);
+#endif
+    return send;    
+}
+
+static int usb_read(char *ptr, int usbfd, int len)
+{
+    int ret=0, recv=0;
+    
+#if 0
+    struct pollfd pllfd[1];
+    if (!ptr) return -1;
+    if (!usbfd) return -2;
+
+    pllfd[0].fd = usbfd;
+    pllfd[0].events = POLLIN;
+    
+    while(1) {
+        ret = poll(pllfd, 1, -1);
+        //printf("[UR] usb poll ret: %d \n", ret);
+        if (ret < 0) {
+            printf("[UR] usb poll failed ret: %d\n", ret);
+            break;
+        }
+
+        if (ret && (pllfd[0].revents & POLLIN)) {
+            
+            recv = read(pllfd[0].fd, ptr, len);
+            
+#if USB_TX_LOG
+            printf("[UR] usb read %d bytes, ret: %d (1)\n", len, recv);
+#endif
+
+            break;
+        }                
+    }
+#else
+    recv = read(usbfd, ptr, len);
+    //printf("[USB] usb read %d bytes, ret: %d (2)\n", len, recv);
+#endif
+    
+    return recv;    
+}
 
 #define DBG_PHY2VIR 0
 static int phy2vir(uint32_t *pvir, uint32_t phy, int physize, int memfd)
@@ -21862,6 +22065,9 @@ static int shmem_dump(char *src, int size)
         inc++;
         src++;
     }
+
+    sprintf_f(str, "\n");
+    print_f(mlogPool, NULL, str);
 
     return inc;
 }
@@ -47323,12 +47529,698 @@ static int p9(struct procRes_s *rs)
     int ret=0;
     char ch=0;
     
+    struct pollfd ptfd[1];
+    char ptrecv[32];
+    int ptret=0, recvsz=0, acusz=0, wrtsz=0;
+    int cntRecv=0, usCost=0, bufsize=0;
+    int bufmax=0, idx=0, printlog=0;
+    double throughput=0.0;
+    struct timespec tstart, tend;
+    struct aspMetaData_s meta, *pmeta=0;
+    int len=0, pieRet=0;
+    char *ptm=0, *pcur=0, *addr=0;
+    char chr=0, opc=0, dat=0, chq=0;
+    char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    char *pkcbw=0;
+    int usbid=0;
+    
+    #if USB_HS_SAVE_RESULT
+    FILE *fsave=0;
+    char *pImage=0;
+    static char ptfileSave[] = "/mnt/mmc2/usb/image_RX_%.3d.jpg";
+    char ptfilepath[128];
+    #endif
+    
+    char cmdMtx[15][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
+    					    {'q', 0x02},{'r', 0x04},{'g', 0x05},{'e', 0x06},{'f', 0x07},
+    					    {'b', 0x08},{'h', 0x07}, {'c', 0x02}, {'k', 0x04}, {'o', 0x07}};
+    uint8_t cmdchr=0;
+    struct shmem_s *pTx=0;
+    char *pMta=0;
+    int *pPtx=0, *pPrx=0;
+    struct timespec utstart, utend;
+    int tcnt=0;
+    int bitset=0;
+    char cswst=0;
+    uint32_t *virtbl;
+    char *chvaddr=0;
+
     sprintf_f(rs->logs, "p9\n");
     print_f(rs->plogs, "P9", rs->logs);
 
     p9_init(rs);
 
     prctl(PR_SET_NAME, "msp-p9");
+
+#if 0
+    pkcbw = malloc(96);
+    if (!pkcbw) {
+        printf("[%s] allocate memory for kernel cbw failed!!! ", strpath);
+    }
+
+    pTx = puhs->pgatring;
+
+    pMta = puhs->puhsmeta;
+    pPtx = puhs->pgattx;
+    pPrx = puhs->pgatrx;
+
+    if (puhs->ushid) {
+        usbid = puhs->ushid;
+    } else {
+        usbid = open(strpath, O_RDWR);
+        if (usbid < 0) {
+            printf("can't open device[%s]\n", strpath); 
+            close(usbid);
+            goto end;
+        }
+        else {
+            printf("open device[%s]\n", strpath); 
+        }
+    }
+
+    #if 0
+    if (puhs->pushvaddrtb) {
+        virtbl = puhs->pushvaddrtb;
+        printf("[%s] vaddr val check: \n", strpath); 
+        for (idx=0; idx < 512; idx++) {
+            chvaddr = (char *)virtbl[idx];
+            printf("0x%.2x ", chvaddr[0]);
+
+            if ((idx + 1) % 16 == 0) {
+                printf("\n");
+            }
+        }
+    }
+    #endif
+
+    printf("[%s] get usbid:[%d]\n", strpath, usbid); 
+    
+    //usb_nonblock_set(usbid);
+
+    while(1) {
+
+        tcnt = 0;
+        ptfd[0].fd = pPtx[0];
+        ptfd[0].events = POLLIN;
+        while(1) {
+            tcnt++;
+            ptret = poll(ptfd, 1, 2000);
+            //printf("[%s] poll return %d id:%d evt: 0x%.2x - %d\n", strpath, ptret, ptfd[0].fd ,ptfd[0].revents, tcnt);
+            if (ptret > 0) {
+                //sleep(2);
+                read(pPtx[0], &chr, 1);
+                //printf("[%s] pipe%d get chr: %c(0x%.2x) \n", strpath, pPtx[0], chr, chr);
+                break;
+            }
+        }
+        
+        #if 0
+        while (1) {
+            chr = 0;
+            pieRet = read(pPtx[0], &chr, 1);
+            if (pieRet > 0) {
+                printf("[%s] get chr: %c \n", strpath, chr);
+                break;
+            } else {
+                //printf("[HS] get chr ret: %d \n", pieRet);
+                usleep(1000);
+            }
+        }
+        #endif
+        
+        memset(ptrecv, 0, 32);
+
+        #if DBG_USB_HS
+        for (idx=0; idx < 5; idx++) {
+            printf("%d. %c - %d \n", idx, cmdMtx[idx][0], cmdMtx[idx][1]);
+        }
+        #endif
+        
+        cmdchr = 0;
+        
+        switch (chr) {
+        case 'm':
+            cmdchr = cmdMtx[0][1];
+            break;
+        /* simplex */
+        case 'd':
+            cmdchr = cmdMtx[1][1];
+            break;
+        case 'a':
+            opc = OP_SINGLE;
+            dat = OPSUB_USB_Scan;
+            cmdchr = cmdMtx[2][1];
+            break;
+        /* duplex */
+        case 's':
+            cmdchr = cmdMtx[3][1];
+            break;
+        case 'p':
+            opc = OP_DUPLEX;
+            dat = OPSUB_USB_Scan;
+            cmdchr = cmdMtx[4][1];
+            break;
+        /* multiple duplex */
+        case 'q':
+            cmdchr = cmdMtx[5][1];
+            break;
+        case 'r':
+            opc = OP_Multi_DUPLEX;
+            dat = OPSUB_USB_Scan;
+            cmdchr = cmdMtx[6][1];
+            break;
+        /* stop loop procedure */
+        case 'g':
+            cmdchr = cmdMtx[7][1];
+            break;
+        case 'e':
+            cmdchr = cmdMtx[8][1];
+            break;
+        case 'f':
+            cmdchr = cmdMtx[9][1];
+            break;
+        /* stop loop by host */
+        case 'b':
+            cmdchr = cmdMtx[10][1];
+            break;
+        case 'h':
+            cmdchr = cmdMtx[11][1];
+            break;
+        /* multiple simplex */
+        case 'c':
+            cmdchr = cmdMtx[12][1];
+            break;
+        case 'k':
+            opc = OP_Multi_Single;
+            dat = OPSUB_USB_Scan;
+            cmdchr = cmdMtx[13][1];
+            break;
+        case 'o':
+            cmdchr = cmdMtx[14][1];
+            break;
+        default:
+            goto end;
+            break;
+        }
+
+        #if DBG_USB_HS
+        printf("cmdchr: 0x%.2x \n", cmdchr);
+        #endif
+
+        if (cmdchr == 0x01) { 
+            pmeta = &meta;
+            ptm = (char *)pmeta;
+            
+            msync(pMta, USB_META_SIZE, MS_SYNC);
+            memcpy(ptm, pMta, sizeof(struct aspMetaData_s));
+
+            printf("[%s] get meta magic number: 0x%.2x, 0x%.2x !!!\n", strpath, meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
+
+            #if 0 /* remove ready */    
+            insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
+            usb_send(CBW, usbid, 31);
+            #endif
+
+            insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
+            usb_send(CBW, usbid, 31);
+    
+            usb_send(ptm, usbid, USB_META_SIZE);
+            shmem_dump(ptm, USB_META_SIZE);
+                
+            usb_read(ptrecv, usbid, 13);
+            
+            #if DBG_USB_HS
+            printf("[%s] dump 13 bytes", strpath);
+            shmem_dump(ptrecv, 13);
+            #endif
+
+            //chr = 'M';
+            //pieRet = write(pPrx[1], &chr, 1);
+        }
+        else if (cmdchr == 0x08) {
+            ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
+            printf("[%s] conti read stop ret: %d \n", strpath, ptret);
+            
+            chq = 'B';
+            pieRet = write(pPrx[1], &chq, 1);
+        }
+        else if (cmdchr == 0x07) {
+                    
+            #if USB_HS_SAVE_RESULT
+            fsave = find_save(ptfilepath, ptfileSave);
+            if (!fsave) {
+                goto end;    
+            }
+
+            bufmax = 8*1024*1024;
+            pImage = malloc(bufmax);
+            pcur = pImage;
+            #endif
+
+            recvsz = 0;
+            acusz = 0;
+            tcnt = 0;
+            cswst = 0;
+            
+            len = ring_buf_get(pTx, &addr);    
+            while (len <= 0) {
+                sleep(1);
+                printf("[%s]buffer full!!! ret:%d !!", strpath, len);
+                len = ring_buf_get(pTx, &addr);            
+            }
+            
+            while(1) {
+            
+                #if 0 /* test drop line */
+                usleep(5);
+                #endif
+
+                #if USB_CALLBACK_SUBMIT 
+                recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, addr);
+                #else
+                recvsz = usb_read(addr, usbid, len);
+                #endif
+                
+                if (recvsz > len) {
+                    printf("[%s] last trunk size: %d 0x%x\n", strpath, recvsz, recvsz);
+                    
+                    if (recvsz & 0x20000) {
+                        printf("[%s] get the end signal 0x20000 \n", strpath);
+                        
+                        #if USB_CALLBACK_SUBMIT 
+                        chr = 'R';
+                        #else
+                        chr = 0;
+                        #endif
+                        
+                        cswst = (recvsz >> 20) & 0xff;
+                        
+                        if (cswst == 0x80) {
+                            cswst = 0xff;
+                        }
+
+                        printf("[%s] use the error status: 0x%.2x\n", strpath, cswst);
+                        
+                        recvsz = recvsz  & 0x1ffff;
+                    }
+                    else if (recvsz > 0x40000) {
+
+                        cswst = (recvsz >> 20) & 0xff;
+                        
+                        recvsz = recvsz  & 0x1ffff;
+                        printf("[%s] get the error status: 0x%.2x\n", strpath, cswst);
+                        
+                        #if 1 /* stop scan if get error status */
+                        if (cswst & 0x7f) {
+                            chr = 'R';                        
+                        }
+                        #endif
+                    } 
+                    else {
+                        printf("[%s] Error!!! unknow len: %d(0x%.8x) \n", strpath, recvsz, recvsz);
+                        continue;
+                    }
+                    
+                }
+                
+                if (recvsz > 0) {
+                    
+                    #if USB_HS_SAVE_RESULT
+                    memcpy(pcur, addr, recvsz);
+                    #endif
+                    
+                    ring_buf_prod(pTx);        
+                }
+                
+                if (recvsz < 0) {
+                    printf("[%s] usb read ret: %d \n", strpath, recvsz);
+                    continue;
+                    //break;
+                }
+                else if (recvsz == 0) {
+                    continue;
+                }
+                else {
+                    /*do nothing*/
+                }
+
+                printf("[%s] usb read %d / %d!!\n ", strpath, recvsz, len);
+                
+                //printf("[HS] dump 32 - 0 \n");
+                //msync(addr, recvsz, MS_SYNC);
+                //shmem_dump(addr, 32);
+
+                tcnt ++;
+
+                if (tcnt == 1) {
+                    clock_gettime(CLOCK_REALTIME, &utstart);
+                    printf("[%s] start ... \n", strpath);
+                }
+                
+                #if USB_HS_SAVE_RESULT        
+                pcur += recvsz;
+                #endif
+                
+                acusz += recvsz;
+
+                if (recvsz < len) {
+                    clock_gettime(CLOCK_REALTIME, &utend);
+                    ring_buf_set_last(pTx, recvsz);
+                    printf("[%s] loop last ret: %d, the last size: %d \n", strpath, ptret, recvsz);
+                    break;
+                } else {
+                    chq = 'D';
+                    pieRet = write(pPrx[1], &chq, 1);
+                }
+                
+                #if USB_HS_SAVE_RESULT               
+                if (acusz > bufmax) {
+                    printf("[%s] save image error due to buffer size not enough!!!", strpath);
+                    break;
+                }
+                #endif
+
+                len = ring_buf_get(pTx, &addr);
+                while (len <= 0) {
+                    sleep(1);
+                    printf("[%s] buffer full!!! ret:%d !!\n", strpath, len);
+                    len = ring_buf_get(pTx, &addr);            
+                }
+            }
+
+            puhs->pushcnt = tcnt;
+
+            chq = 'E';
+            pieRet = write(pPrx[1], &chq, 1);
+
+            if (cswst) {
+                chq = 'I';
+                pieRet = write(pPrx[1], &chq, 1);
+                chq = cswst;
+                pieRet = write(pPrx[1], &chq, 1);
+            }
+            
+            if (chr == 'h') {
+                //chq = 'H';
+                //pieRet = write(pPrx[1], &chq, 1);
+            }
+            else if (chr == 'o') {
+                chq = 'O';
+                pieRet = write(pPrx[1], &chq, 1);
+            } else if (chr == 'f') {
+                chq = 'F';
+                pieRet = write(pPrx[1], &chq, 1);
+            } else if (chr == 'R') {                
+                chq = 'R';
+                pieRet = write(pPrx[1], &chq, 1);
+            } else {
+                printf("[%s] Error!!! unknown chr: %c \n", chr);
+            }
+    
+            #if USB_HS_SAVE_RESULT
+            wrtsz = fwrite(pImage, 1, acusz, fsave);
+            #endif
+            
+            usCost = test_time_diff(&utstart, &utend, 1000);
+            throughput = acusz*8.0 / usCost*1.0;
+
+            printf("[%s] total read size: %d, write file size: %d throughput: %lf Mbits \n", strpath, acusz, wrtsz, throughput);
+            
+            #if USB_HS_SAVE_RESULT
+            sync();
+            fclose(fsave);
+            free(pImage);
+            #endif
+
+        }
+        else if (cmdchr == 0x06) {
+            printf("[%s] conti already stop !!!! \n", strpath);
+            chq = 'G';
+            pieRet = write(pPrx[1], &chq, 1);
+        }
+        else if (cmdchr == 0x05) {
+            
+        }
+        else if (cmdchr == 0x04) {
+            insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
+            memcpy(&pkcbw[0], CBW, 32);
+
+            insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
+            memcpy(&pkcbw[32], CBW, 32);            
+
+            insert_cbw(CBW, 0x13, opc, dat);
+            memcpy(&pkcbw[64], CBW, 32);            
+            
+            /* start loop */
+            ptret = USB_IOCT_LOOP_RESET(usbid, &bitset);
+            printf("[%s] conti read reset ret: %d \n", strpath, ptret);
+
+            ptret = USB_IOCT_LOOP_START(usbid, pkcbw);
+            printf("[%s] conti read start ret: %d \n", strpath, ptret);
+
+            chq = 'S';
+            pieRet = write(pPrx[1], &chq, 1);
+        }
+        else if (cmdchr == 0x03) {
+            insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
+            memcpy(&pkcbw[0], CBW, 32);
+
+            insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
+            memcpy(&pkcbw[32], CBW, 32);            
+
+            insert_cbw(CBW, 0x13, opc, dat);
+            memcpy(&pkcbw[64], CBW, 32);            
+            
+            /* start loop */
+            
+            #if 1
+            ptret = USB_IOCT_LOOP_RESET(usbid, &bitset);
+            printf("[%s] conti read reset ret: %d \n", strpath, ptret);
+
+            ptret = USB_IOCT_LOOP_ONCE(usbid, pkcbw);
+            printf("[%s] conti read once ret: %d \n", strpath, ptret);
+            #else
+            ptret = USB_IOCT_LOOP_START(usbid, pkcbw);
+            printf("[%s] conti read start ret: %d \n", strpath, ptret);
+
+            ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
+            printf("[%s] conti read stop ret: %d \n", strpath, ptret);
+            #endif     
+            
+            chq = 'S';
+            pieRet = write(pPrx[1], &chq, 1);
+        }
+        else if (cmdchr == 0x02) {
+
+            #if USB_HS_SAVE_RESULT
+            fsave = find_save(ptfilepath, ptfileSave);
+            if (!fsave) {
+                goto end;    
+            }
+
+            bufmax = 8*1024*1024;
+            pImage = malloc(bufmax);
+            pcur = pImage;
+            #endif
+
+            recvsz = 0;
+            acusz = 0;
+            tcnt = 0;
+            
+            len = ring_buf_get(pTx, &addr);    
+            while (len <= 0) {
+                sleep(1);
+                printf("[%s]buffer full!!! ret:%d !!", strpath, len);
+                len = ring_buf_get(pTx, &addr);            
+            }
+            
+            while(1) {
+            
+                #if 0 /* test drop line */
+                usleep(10000);
+                #endif
+
+                #if USB_CALLBACK_SUBMIT 
+                recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, addr);
+                #else
+                recvsz = usb_read(addr, usbid, len);
+                //recvsz = len;
+                #endif
+                
+                
+                #if 0                
+                if (tcnt) {
+                    clock_gettime(CLOCK_REALTIME, &utend);
+                    //usCost = test_time_diff(&utstart, &utend, 1000);
+                    //printf("[%s] read %d (%d ms)\n", strpath, recvsz, usCost/1000);
+                }
+                #endif 
+                
+                if (recvsz > len) {
+                    if (recvsz & 0x20000) {
+                        //printf("[%s] get the end signal 0x20000 \n", strpath);
+                        
+                        #if USB_CALLBACK_SUBMIT 
+                        chr = 'R';
+                        #else
+                        chr = 0;
+                        #endif
+                        
+                        cswst = (recvsz >> 20) & 0xff;
+                        if (!cswst) {
+                            cswst = 0x7f;
+                        }
+
+                        if (cswst) {
+                            chr = 'I';
+                        }
+                        
+                        recvsz = recvsz  & 0x1ffff;
+                        
+                        /*should not be here*/
+                        printf("[%s] Error!!! get status: 0x%.2x recv:%d\n", strpath, cswst, recvsz);
+                    }
+                    else if (recvsz > 0x40000) {
+                        cswst = (recvsz >> 20) & 0xff;
+                        recvsz = recvsz  & 0x1ffff;
+                        /*should not be here*/
+                        printf("[%s] Error!!!, get csw status: 0x%.2x recv:%d\n", strpath, cswst, recvsz);
+                        chr = 'I';
+                    } else {
+                        printf("[%s] Error!!! unknow len: %d(0x%.8x) \n", strpath, recvsz, recvsz);
+                        continue;
+                    }
+                    //printf("[%s] last trunk size: %d \n", strpath, recvsz);
+                }
+                
+                if (recvsz > 0) {
+                    
+                    #if USB_HS_SAVE_RESULT
+                    memcpy(pcur, addr, recvsz);
+                    #endif
+                    
+                    ring_buf_prod(pTx);        
+                }
+                
+                if (recvsz < 0) {
+                    printf("[%s] usb read ret: %d \n", strpath, recvsz);
+                    continue;
+                    //break;
+                }
+                else if (recvsz == 0) {
+                    //printf("[%s] usb read ret: %d \n", strpath, recvsz);
+                    continue;
+                }
+                else {
+                    /*do nothing*/
+                }
+                
+                #if DBG_USB_HS
+                printf("[%s] usb read %d / %d!!\n ", strpath, recvsz, len);
+                #endif
+                
+                //printf("[HS] dump 32 - 0 \n");
+                //msync(addr, recvsz, MS_SYNC);
+                //shmem_dump(addr, 32);
+
+                tcnt ++;
+
+                if (tcnt == 1) {
+                    clock_gettime(CLOCK_REALTIME, &utstart);
+                    printf("[%s] start ... \n", strpath);
+                }
+                
+                #if USB_HS_SAVE_RESULT        
+                pcur += recvsz;
+                #endif
+                
+                acusz += recvsz;
+
+                if (recvsz < len) {
+                    clock_gettime(CLOCK_REALTIME, &utend);
+                    ring_buf_set_last(pTx, recvsz);
+                    printf("[%s] loop last ret: %d, the last size: %d \n", strpath, ptret, recvsz);
+                    break;
+                } else {
+                    chq = 'D';
+                    pieRet = write(pPrx[1], &chq, 1);
+                }
+                
+                #if USB_HS_SAVE_RESULT               
+                if (acusz > bufmax) {
+                    printf("[%s] save image error due to buffer size not enough!!!", strpath);
+                    break;
+                }
+                #endif
+
+                len = ring_buf_get(pTx, &addr);
+                while (len <= 0) {
+                    sleep(1);
+                    printf("[%s] buffer full!!! ret:%d !!\n", strpath, len);
+                    len = ring_buf_get(pTx, &addr);            
+                }
+            }
+
+            if (chr == 'd') {
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+            }
+            else if (chr == 's') {
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+            }
+            else if (chr == 'q') {
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+            } 
+            else if (chr == 'c') {
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+            } else if (chr == 'R') {
+                chq = 'R';
+                pieRet = write(pPrx[1], &chq, 1);
+            }
+
+            puhs->pushcnt = tcnt;
+
+            chq = 'E';
+            pieRet = write(pPrx[1], &chq, 1);
+            
+            
+            #if USB_HS_SAVE_RESULT
+            wrtsz = fwrite(pImage, 1, acusz, fsave);
+            #endif
+            
+            usCost = test_time_diff(&utstart, &utend, 1000);
+            throughput = acusz*8.0 / usCost*1.0;
+
+            printf("[%s] total read size: %d, write file size: %d throughput: %lf Mbits \n", strpath, acusz, wrtsz, throughput);
+            
+            
+            #if USB_HS_SAVE_RESULT
+            sync();
+            fclose(fsave);
+            free(pImage);
+            #endif
+
+        }
+    }
+end:
+
+    if (usbid) close(usbid);
+    
+    while (1) {
+        chr = 0;
+        pieRet = read(pPtx[0], &chr, 1);
+        if (pieRet > 0) {
+            printf("[%s] get chr: %c \n", strpath, chr);
+        } else {
+            //printf("[HS] get chr ret: %d \n", pieRet);
+            usleep(1000);
+        }
+    }
+#endif
 
     while (1) {
         ret = rs_ipc_get(rs, &ch, 1);
@@ -47384,21 +48276,1676 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 {
     int ret=0;
     char ch=0;
-    static char ptdevpath[] = "/dev/g_printer";
     struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
     int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0;
-
+    #if 1 /* save meta */
+    char ptfilepath[128];
+    static char ptfileSaveMeta[] = "/mnt/mmc2/usb/meta_%.3d.bin";
+    FILE *fsmeta=0;
+    #endif
     char csw[13] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00};
     char endTran[64] = {};
+    char *ptrecv=0, *metaPt=0;
     uint8_t cmd=0, opc=0, dat=0;
     uint32_t usbentsRx=0, usbentsTx=0, getents=0;
-        
+    int usbfd=0;
+    char *addrd=0, *palloc=0;
+    int uimCylcnt=0, datCylcnt=0;
+    struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0;
+    char *endf=0, *endm=0;
+    char endstr[] = "usb_conti_stop";
+    int seqtx=0, lens=0, maxsz=0, pipRet=0, idlet=0, ix=0, waitCylen=0, chr=0, cindex=0, lastCylen=0;
+    char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12];
+    char cmdtyp=0, cswerr=0, pagerst=0, che=0;
+    int *piptx=0, *piprx=0;
+    int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0;
+    int pipeRx[2], pipeRxd[2], pipeTx[2], pipeTxd[2];
+    struct timespec tidleS, tidleE;
+    struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
+    struct shmem_s *usbTx=0, *usbTxd=0, *usbCur=0;
+    struct shmem_s *gateTx=0, *gateTxd=0;
+    struct timespec tstart, tend;
+    struct aspMetaData_s *metaRx = 0;
+    double throughput=0.0;
+    
     sprintf_f(rs->logs, "p11\n");
     print_f(rs->plogs, "P11", rs->logs);
 
     p11_init(rs, rsd, rcmd);
 
     prctl(PR_SET_NAME, "msp-p11");
+
+    metaRx = (struct aspMetaData_s *)aspSalloc(sizeof(struct aspMetaData_s));
+    metaPt = (char *)metaRx;
+
+    epollfd = epoll_create1(O_CLOEXEC);
+    if (epollfd < 0) {
+        perror("epoll_create1");
+        sprintf_f(rs->logs, "epoll create failed, errno: %d\n", errno);
+        print_f(rs->plogs, "P11", rs->logs);
+    } else {
+        sprintf_f(rs->logs, "epoll create succeed, epollfd: %d, errno: %d\n", epollfd, errno);
+        print_f(rs->plogs, "P11", rs->logs);
+    }
+
+    usb_nonblock_set(rs->usbdvid);
+
+    usbfd = rs->usbdvid;
+    eventRx.data.fd = rs->usbdvid;
+    eventRx.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, rs->usbdvid, &eventRx);
+    if (ret == -1) {
+        perror ("epoll_ctl");
+        sprintf_f(rs->logs, "spoll set ctl failed errno: %ds\n", errno);
+        print_f(rs->plogs, "P11", rs->logs);
+    }
+
+    ptrecv = malloc(USB_BUF_SIZE);
+    if (ptrecv) {
+        sprintf_f(rs->logs, " recv buff alloc succeed! size: %d \n", USB_BUF_SIZE);
+        print_f(rs->plogs, "P11", rs->logs);
+    } else {
+        sprintf_f(rs->logs, " recv buff alloc failed! size: %d break !!\n", USB_BUF_SIZE);
+        print_f(rs->plogs, "P11", rs->logs);
+        while(1);
+    }
+
+    cntTx = 0;
+    ifx = 0;
+    while (1) {
+        uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 100);
+        if (uret < 0) {
+            perror("epoll_wait");
+            sprintf_f(rs->logs, "[ePol] failed errno: %d ret: %d\n", errno, uret);
+            print_f(rs->plogs, "P11", rs->logs);
+        } else if (uret == 0) {
+            //sprintf_f(rs->logs, "[ePol] timeout errno: %d ret: %d\n", errno, uret);
+            //print_f(rs->plogs, "P11", rs->logs);
+        } else {
+            rxfd = getevents[0].data.fd;
+            getents = getevents[0].events;
+
+            if (getents & EPOLLIN) {
+                if (rxfd == usbfd) {               
+                    usbentsRx = 1;
+                }
+            }
+
+            if (getents & EPOLLOUT) {
+                if (rxfd == usbfd) {               
+                    usbentsTx = 1;
+                }
+            }
+        }
+        
+        sprintf_f(rs->logs, "[ePol] epoll rx: %d, tx: %d ret: %d \n", usbentsRx, usbentsTx, uret);
+        print_f(rs->plogs, "P11", rs->logs);
+
+        if (usbentsTx == 1) {
+            if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09))) {
+                #if USB_HS_SAVE_RESULT_DV
+                fsave = find_save(ptfilepath, ptfileSave);
+                if (!fsave) {
+                    sprintf_f(rs->logs, "[DV] find save [%s] failed!!! \n", ptfileSave);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    continue;    
+                }
+                saveSize = 120*1024*1024;
+                pImage = malloc(saveSize);
+                if (pImage) {
+                    ptmp = pImage;
+                } else {
+                    sprintf_f(rs->logs, "alloc memory failed!! size: %d \n", saveSize);
+                    print_f(rs->plogs, "P11", rs->logs);
+                }
+                #endif
+
+                while (1) {       
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] addrd: 0x%.8x cylcnt: %d:%d\n", addrd, uimCylcnt, datCylcnt);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    while (addrd == 0) {
+                        //chr = 0;
+                        while (1) {
+                            if (uimCylcnt > 0) {
+                                break;
+                            }
+
+                            if (endf) {
+                                //sprintf_f(rs->logs, "[DV] conti stop endf: (%s) seqtx:%d puimCnTH: 0x%.8x \n", endf, seqtx, puimCnTH);
+                                if (!puimCnTH) {
+                                    if (endm) {
+                                        addrd = endm;
+                                        if (seqtx < USB_BUF_SIZE) {
+                                            lens = seqtx;
+                                                
+                                            seqtx = maxsz;
+                                            endm = palloc;
+                                        } else {
+                                            lens = USB_BUF_SIZE;
+                                            seqtx = seqtx - lens;
+                                            endm += lens;
+                                        }
+                                    } else {
+                                        addrd = endf;
+                                        lens = strlen(endf);
+                                    }
+                                    break;
+                                }
+                            }
+
+                            chq = 0;
+                            pipRet = read(piprx[0], &chq, 1);
+                            if (pipRet < 0) {
+                                //sprintf_f(rs->logs, "[DV] get pipe(%d) ret: %d, error!! - 1\n", piprx[0], pipRet);
+                                usleep(100000);
+                                //continue;
+                                //break;
+                                if (puimGet) {
+                                    if ((puimGet->uimCount == 0) && ((opc == 0x0a) || (opc == 0x05))) {
+                                        clock_gettime(CLOCK_REALTIME, &tidleE);
+                                        idlet = time_diff(&tidleS, &tidleE, 1000000);
+
+                                        sprintf_f(rs->logs, "[DV] wait id %d for %d ms \n", puimGet->uimIdex, idlet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        if (idlet > 3000) {
+                                            clock_gettime(CLOCK_REALTIME, &tidleS);
+
+                                            if (puimCnTH == puimGet) {
+                                                puimCnTH = puimGet->uimNxt;
+
+                                                ix=0;
+                                                puimTmp = puimCnTH;
+                                                while (puimTmp) {
+                                                    puimUse = puimTmp;
+
+                                                    if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                        puimNxt = puimUse;
+                                                    }
+                                                    puimTmp = puimUse->uimNxt;
+                                                    ix++;
+                                                }
+                                            } else {
+
+                                                ix=0;
+                                                puimTmp = puimCnTH;
+                                                while (puimTmp) {
+                                                    puimUse = puimTmp;
+                                                    if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                        puimNxt = puimUse;
+                                                    }
+                                                    puimTmp = puimUse->uimNxt;
+                                                    if (puimTmp == puimGet) {
+                                                        puimUse->uimNxt = puimGet->uimNxt;
+                                                    }                
+
+                                                    puimTmp = puimUse->uimNxt;
+                                                    ix++;
+                                                }
+                                            }
+
+                                            if (puimNxt) {
+                                                free(puimGet);
+                                                puimGet = puimNxt;
+                                            } else {
+                                                ix = puimGet->uimIdex + 1;
+                                                memset(puimGet, 0, sizeof(struct usbIndex_s));
+                                                puimGet->uimIdex = ix;
+                                                if (puimUse) {
+                                                    puimUse->uimNxt = puimGet;
+                                                } else {
+                                                    puimCnTH = puimGet;
+                                                }                                                                                       
+                                                clock_gettime(CLOCK_REALTIME, &tidleS);
+                                            }
+
+                                            ix = 0;
+                                            puimTmp = puimCnTH;
+                                            while(puimTmp) {
+                                                #if 1
+                                                sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d timeout\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+
+                                                if (puimTmp->uimCount > 0) {
+                                                    ix++;
+                                                }
+                                                puimTmp = puimTmp->uimNxt;
+                                            }                             
+
+                                            waitCylen = ix;
+                                            sprintf_f(rs->logs, "[DV] wait page size: %d timeout\n", waitCylen);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            //sprintf_f(rs->logs, "[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
+
+                                            chr = 0;
+                                            //puimGet = 0;
+
+                                            if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                                                if ((puimGet->uimIdex % 2) == 1) {
+                                                    puscur = pushost;
+                                                    usbCur = puscur->pushring;
+                                                    piptx = puscur->pushtx;
+                                                    piprx = puscur->pushrx; 
+                                                } else {
+                                                    puscur = pushostd;
+                                                    usbCur = puscur->pushring;
+                                                    piptx = puscur->pushtx;
+                                                    piprx = puscur->pushrx; 
+                                                }
+                                            } else {
+                                                sprintf_f(rs->logs, "[DV] puimGet is null timeout\n");
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            //sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
+
+                            if (chq == 0xff) {
+                                if (chr) {
+                                    //chr = (puimCnTH->uimIdex & 0x7f) | 0x80;
+                                    mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                    mindexfo[1] = (chr & 0x3f) | 0x40;
+                                        
+                                    //pipRet = write(piptx[1], &chr, 1);
+                                    pipRet = write(piptx[1], mindexfo, 2);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d act 0x80\n", piptx[1], chr, pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                } else {
+                                    sprintf_f(rs->logs, "[DV] warnning!!! chr should not be 0 !! \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+                            }
+                            else if (chq == 0xbf) {
+                                sprintf_f(rs->logs, "[DV] send redundant page size: %d\n", maxsz);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                endf = endstr;
+                                if (maxsz) {
+                                    seqtx = maxsz;
+                                    endm = palloc;
+
+                                    #if 0                                                
+                                    addrd = endm;
+                                    if (seqtx < PT_BUF_SIZE) {
+                                        lens = seqtx;
+                                        seqtx = maxsz;
+                                        endm = palloc;                                                    
+                                    } else {
+                                        lens = PT_BUF_SIZE;
+                                        seqtx = seqtx - lens;
+                                        endm += lens;
+                                    }
+                                    #endif                                                
+                                }
+                                #if 0
+                                else {
+                                    addrd = endf;
+                                    lens = strlen(endf);                                    
+                                }
+                                #endif                                                                             
+                                break;
+                            }
+                            else if ((chq & 0xc0) == 0xc0) {
+                                cindexfo[0] = chq;
+                                pipRet = read(piprx[0], &chq, 1);
+                                while (pipRet < 0) {
+                                    pipRet = read(piprx[0], &chq, 1);
+                                }
+                                //sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x pipe%d -2 \n", chq, chr, piprx[0]);
+
+                                if ((chq & 0xc0) == 0x40) {
+                                    cindexfo[1] = chq;
+                                } else {
+                                    sprintf_f(rs->logs, "[DV]  WARNNING get unknown chq: 0x%.2x \n", chq);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+
+                                cindex = ((cindexfo[0] & 0x3f) << 6) | (cindexfo[1] & 0x3f);
+
+                                if (!puimCnTH) {
+                                    puimCnTH = malloc(sizeof(struct usbIndex_s));
+                                    if (!puimCnTH) {
+                                        sprintf_f(rs->logs, "\n\nError!!! can't get memory for usbIndex_s\n");
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+                                    
+                                    memset(puimCnTH, 0, sizeof(struct usbIndex_s));
+
+                                    //puimCnTH->uimIdex = chq & 0x7f;
+                                    puimCnTH->uimIdex = cindex;
+                                    puimGet = puimCnTH;
+                                        
+                                    if (!chr) {
+                                        chr = puimGet->uimIdex;
+                                        mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                        //pipRet = write(piptx[1], &chr, 1);
+                                        pipRet = write(piptx[1], mindexfo, 2);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    } else {
+                                        sprintf_f(rs->logs, "[DV] warring!!! puimCnTH == 0, and chr == %d \n", chr);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        chr = puimGet->uimIdex;
+                                        mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                        //pipRet = write(piptx[1], &chr, 1);
+                                        pipRet = write(piptx[1], mindexfo, 2);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                #if DBG_27_DV
+                                else {
+                                    ix = 0;
+                                    puimTmp = puimCnTH;
+                                    while(puimTmp) {
+                                        //sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                        puimTmp = puimTmp->uimNxt;
+
+                                        ix++;
+                                    }                             
+                                }
+                                #endif
+                                //sprintf_f(rs->logs, "[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 0\n", puimCnTH, puimCur, puimGet, chr);
+
+                                if (puimGet) {
+                                    if (!chr) {
+                                        if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                            chr = puimGet->uimIdex;
+                                            mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                            //pipRet = write(piptx[1], &chr, 1);
+                                            pipRet = write(piptx[1], mindexfo, 2);
+                                            if (pipRet < 0) {
+                                                sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                continue;
+                                            }
+                                        } else {
+                                            sprintf_f(rs->logs, "\n[DV] %d:%d wait for new data get begin \n", puimGet->uimGetCnt, puimGet->uimCount);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        }
+                                    } else {
+                                        //sprintf_f(rs->logs, "[DV] wait for response (0x%.2x) %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                    }
+                                }
+                                else {
+
+                                    ix = 0;
+                                    puimTmp = puimCnTH;
+                                    puimUse = puimCnTH;
+                                    while (puimTmp) {
+                                        if (puimTmp->uimIdex < puimUse->uimIdex) {
+                                            if (puimTmp->uimCount > 0) {
+                                                puimUse = puimTmp;
+                                            }
+                                        }
+                                        ix++;
+                                        puimTmp = puimTmp->uimNxt;
+                                    }
+
+                                    if (ix > 1) {
+                                        puimGet = puimUse;
+                                    } 
+                                        
+                                    if (ix == 1) {
+                                        if (puimUse->uimCount > 1) {
+                                            puimGet = puimUse;
+                                        }
+                                    }
+
+                                    if (puimGet) {
+                                        sprintf_f(rs->logs, "[DV] get puim index: 0x%.2x %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        if (!chr) {
+                                            if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                                chr = puimGet->uimIdex;
+
+                                                mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                                mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                                pipRet = write(piptx[1], mindexfo, 2);
+                                                if (pipRet < 0) {
+                                                    sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                                    print_f(rs->plogs, "P11", rs->logs);
+                                                    continue;
+                                                }
+                                            } else {
+                                                sprintf_f(rs->logs, "\n[DV] %d:%d wait for new data at begin \n", puimGet->uimGetCnt, puimGet->uimCount);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                chr = 0;
+                                            }
+                                        } else {
+                                            sprintf_f(rs->logs, "[DV] should not be here chr: (%d) \n", chr);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        }
+                                    } else {
+                                        sprintf_f(rs->logs, "[DV] wait for more data \n");
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+                                }
+                                
+                                //sprintf_f(rs->logs, "[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 1\n", puimCnTH, puimCur, puimGet, chr);
+                                if (puimCur) {
+                                    //sprintf_f(rs->logs, "[DV] puimCur index: %d - %d:%d \n", puimCur->uimIdex, puimCur->uimGetCnt, puimCur->uimCount);
+                                    if (puimCur->uimIdex == cindex) {
+                                        puimCur->uimCount += 1;
+                                    } else {
+                                        sprintf_f(rs->logs, "\n[DV] current puim index not mach %d:%d \n\n", puimCur->uimIdex, cindex);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        puimTmp= puimCnTH;
+                                        while(puimTmp) {
+                                            puimUse = puimTmp;
+                                            if (puimUse->uimIdex == cindex) {
+                                                puimTmp = puimUse;
+                                                break;
+                                            }
+                                            puimTmp = puimUse->uimNxt;
+                                        }
+
+                                        if (puimTmp) {
+                                            puimTmp->uimCount += 1;
+                                            puimCur = puimTmp;
+                                        } else {
+                                            puimTmp = malloc(sizeof(struct usbIndex_s));
+                                            if (!puimTmp) {
+                                                sprintf_f(rs->logs, "\n\nError!!! can't get memory for puimTmp -2\n");
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                            }
+
+                                            memset(puimTmp, 0, sizeof(struct usbIndex_s));
+
+                                            puimTmp->uimIdex = cindex;
+                                            puimTmp->uimCount += 1;
+                                            puimUse->uimNxt = puimTmp;
+
+                                            puimCur = puimTmp;
+                                        }
+                                    }
+                                }
+                                else {
+                                    if (puimCnTH->uimIdex == cindex) {
+                                        puimCnTH->uimCount += 1;
+                                        puimCur = puimCnTH;
+                                    } else {
+                                        puimTmp= puimCnTH;
+                                        while(puimTmp) {
+                                            puimUse = puimTmp;
+                                            if (puimUse->uimIdex == cindex) {
+                                                puimTmp = puimUse;
+                                                break;
+                                            }
+                                            puimTmp = puimUse->uimNxt;
+                                        }
+
+                                        if (puimTmp) {
+                                            puimTmp->uimCount += 1;                            
+                                            puimCur = puimTmp;
+                                        } else {
+                                            puimTmp = malloc(sizeof(struct usbIndex_s));
+                                            if (!puimTmp) {
+                                                sprintf_f(rs->logs, "\n\nError!!! can't get memory for puimTmp\n");
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                            }
+                                            memset(puimTmp, 0, sizeof(struct usbIndex_s));
+                                    
+                                            puimTmp->uimIdex = cindex;
+                                            puimTmp->uimCount += 1;
+                                            puimUse->uimNxt = puimTmp;
+
+                                            puimCur = puimTmp;
+                                        }
+                                    }
+                                }
+                                    
+                                //sprintf_f(rs->logs, "[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 2\n", puimCnTH, puimCur, puimGet, chr);
+                                    
+                            }
+                            else if ((chq & 0xc0) == 0x80) {
+                                //sprintf_f(rs->logs, "[DV] get ring buff response !!! chq: %c(0x%.2x) \n", chq, chq);
+                                
+                                if (!puimGet) {
+                                    sprintf_f(rs->logs, "\n[DV] Error!!! puimCur is null \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                } else {
+
+                                    if (!chr) {
+                                        //sprintf_f(rs->logs, "\n[DV] Warnning !!! chr == 0 not make sense !!!\n");
+                                        //print_f(rs->plogs, "P11", rs->logs);
+                                    }
+
+                                    cindexfo[0] = chq;
+                                    pipRet = read(piprx[0], &chq, 1);
+                                    while (pipRet < 0) {
+                                        pipRet = read(piprx[0], &chq, 1);
+                                    }
+
+                                    //sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x pipe%d -3 \n", chq, chr, piprx[0]);
+                                    
+                                    if ((chq & 0xc0) == 0x40) {
+                                        cindexfo[1] = chq;
+                                    } else {
+                                        sprintf_f(rs->logs, "[DV]  WARNNING get unknown chq: 0x%.2x - 3\n", chq);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+
+                                    cindex = ((cindexfo[0] & 0x3f) << 6) | (cindexfo[1] & 0x3f);
+                                    
+                                    if (puimGet->uimIdex == cindex) {
+                                        puimGet->uimGetCnt += 1;
+
+                                        //sprintf_f(rs->logs, "[DV] current count: %d:%d \n", puimGet->uimGetCnt, puimGet->uimCount);
+                                        
+                                        if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                            chr = puimGet->uimIdex;
+
+                                            mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                            //pipRet = write(piptx[1], &chr, 1);
+                                            pipRet = write(piptx[1], mindexfo, 2);
+                                            if (pipRet < 0) {
+                                                sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                continue;
+                                            }
+                                        } else {
+                                            //sprintf_f(rs->logs, "[DV] %d:%d wait for new data \n", puimGet->uimGetCnt, puimGet->uimCount);
+                                            //print_f(rs->plogs, "P11", rs->logs);
+                                            chr = 0;
+                                        }
+
+                                        uimCylcnt = CYCLE_LEN;
+                                        
+                                        break;
+                                    }
+                                    else {
+                                        sprintf_f(rs->logs, "\n[DV] Error!!! puimCur index is not match!! \n");
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+                                }
+                            }
+                            else {
+                                if (chq == 0x7f) {
+                                    puimGet->uimGetCnt += 1;
+                                    //chq = 'E';
+
+                                    memset(cinfo, 0, 12);
+                                    pipRet = read(piprx[0], cinfo, 8);
+                                    while (pipRet < 0) {
+                                        pipRet = read(piprx[0], cinfo, 8);
+                                    }
+
+                                    lastCylen |= cinfo[5];
+                                    
+                                    lastCylen  = lastCylen << 8;
+                                    lastCylen |= cinfo[4];
+
+                                    lastCylen  = lastCylen << 8;
+                                    lastCylen |= cinfo[3];
+                                    
+                                    lastCylen  = lastCylen << 8;
+                                    lastCylen |= cinfo[2];
+
+                                    //sprintf_f(rs->logs, "[DV] 0x%.2x:0x%.2x:0x%.2x:0x%.2x = lastlen: %d\n", cinfo[2], cinfo[3], cinfo[4], cinfo[5], lastCylen);
+                                    
+                                    uimCylcnt = cinfo[0];
+                                    cmdtyp = cinfo[1];
+
+                                    cswerr = cinfo[6] & 0x7f;
+                                    sprintf_f(rs->logs, "[DV] get csw err: 0x%.2x \n", cswerr);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    puimNxt = 0;
+
+                                    pagerst = cinfo[7] & 0x7f;
+                                    sprintf_f(rs->logs, "[DV] get page rest: %d \n", pagerst);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    //sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
+                                    //sprintf_f(rs->logs, "[DV] get info %d:%d \n", puimGet->uimGetCnt, puimGet->uimCount);
+
+                                    if (puimCur == puimGet) {
+                                        puimCur = 0;
+                                    }
+
+                                    puimUse = 0;
+
+                                    if (puimCnTH == puimGet) {
+                                        puimCnTH = puimGet->uimNxt;
+                                        
+                                        //sprintf_f(rs->logs, "[DV] find next puim on head \n");                                                
+                                        //sprintf_f(rs->logs, "[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                        
+                                        ix=0;
+                                        puimTmp = puimCnTH;
+                                        while (puimTmp) {
+                                            puimUse = puimTmp;
+                                            //sprintf_f(rs->logs, "[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
+                                            if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                puimNxt = puimUse;
+                                                //sprintf_f(rs->logs, "[DV] match   !!!!\n");
+                                            }
+                                            puimTmp = puimUse->uimNxt;
+                                            ix++;
+                                        }
+                                    } else {
+                                        //sprintf_f(rs->logs, "[DV] find next puim on the middle \n");                                                
+                                        //sprintf_f(rs->logs, "[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+
+                                        ix=0;
+                                        puimTmp = puimCnTH;
+                                        while (puimTmp) {
+                                            puimUse = puimTmp;
+                                            //sprintf_f(rs->logs, "[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
+                                            if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                puimNxt = puimUse;
+                                                //sprintf_f(rs->logs, "[DV] match !!\n");
+                                            }
+                                            puimTmp = puimUse->uimNxt;
+                                            if (puimTmp == puimGet) {
+                                                puimUse->uimNxt = puimGet->uimNxt;
+                                            }                
+                                            puimTmp = puimUse->uimNxt;
+                                            ix++;
+                                        }
+                                    }
+
+                                    if (puimNxt) {
+                                        //sprintf_f(rs->logs, "[DV] puimNxt is valid \n");
+                                        free(puimGet);
+                                        puimGet = puimNxt;
+                                    } else {
+                                        //sprintf_f(rs->logs, "[DV] puimNxt is NULL \n");
+                                        ix = puimGet->uimIdex + 1;
+                                        memset(puimGet, 0, sizeof(struct usbIndex_s));
+                                        puimGet->uimIdex = ix;
+                                        if (puimUse) {
+                                            puimUse->uimNxt = puimGet;
+                                        } else {
+                                            //sprintf_f(rs->logs, "[DV] puimUse is NULL \n");
+                                            puimCnTH = puimGet;
+                                        }                                       
+
+                                        
+                                        clock_gettime(CLOCK_REALTIME, &tidleS);
+                                    }
+
+                                    sprintf_f(rs->logs, "[DV]puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    ix = 0;
+                                    puimTmp = puimCnTH;
+                                    while(puimTmp) {
+                                    
+                                        #if 1
+                                        sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+
+                                        if (puimTmp->uimCount > 0) {
+                                            ix++;
+                                        }
+
+                                        puimTmp = puimTmp->uimNxt;
+                                    }                             
+                                            
+                                    waitCylen = ix;
+                                    sprintf_f(rs->logs, "[DV] wait page size: %d\n", waitCylen);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    //sprintf_f(rs->logs, "[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
+
+                                    chr = 0;
+                                    
+                                    break;
+                                } 
+                                else {
+                                    //sprintf_f(rs->logs, "\n[DV] Error!!! unknown chq: 0x%.2x \n", chq);
+                                    
+                                    if ((!chq) && (!chr) && (puimGet)) {
+                                        if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                            chr = puimGet->uimIdex;
+                                            mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x3f) | 0x40;
+
+                                            pipRet = write(piptx[1], mindexfo, 2);
+                                            if (pipRet < 0) {
+                                                sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+
+                        //sprintf_f(rs->logs, "[DV] puimCnTH: 0x%.8x - 0x%.8x - 4\n", puimCnTH, puimCur);
+                        //sprintf_f(rs->logs, "[DV] cycle count = %d chr: 0x%.2x\n", uimCylcnt, chr);
+                        //usleep(50000);
+
+                        if (uimCylcnt) {
+                            lens = 0;
+                            lens = ring_buf_cons(usbCur, &addrd);                
+                            if (lens <= 0) {
+                                //sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
+                                //usleep(1000);
+                                //lens = ring_buf_cons(usbCur, &addrd);                
+                                continue;
+                            } else {
+                                uimCylcnt = uimCylcnt - 1;
+                            }
+
+                            if ((uimCylcnt == 1) && (lastCylen > 0)){
+                                lens = lastCylen;
+                            }
+
+                            //sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d\n", addrd, lens, uimCylcnt, lastCylen);
+                        
+                            msync(addrd, lens, MS_SYNC);
+                        
+                            //sprintf_f(rs->logs, "[DV] dump 32 - 3\n");
+                            //shmem_dump(addrd, 32);
+                        
+#if 0                   
+                            puscur->pushcnt --;
+
+                            if (puscur->pushcnt == 0) {
+                                sprintf_f(rs->logs, "[DV] the last trunk size is %d \n", lens);
+                            }
+#else
+#endif
+                        }
+                        
+                        if ((lens > 0) && (lens < USB_BUF_SIZE) && (!uimCylcnt)) {
+                            che = 'E';
+                            //sprintf_f(rs->logs, "[DV] the last trunk size is %d %d/%d\n", lens, cntTx, puscur->pushcnt);
+                        }
+                    }
+
+                    if (cntTx == 0) {
+                        clock_gettime(CLOCK_REALTIME, &tstart);
+                        //sprintf_f(rs->logs, "[DV] start time %llu ms \n", time_get_ms(&tstart));
+                    }    
+
+
+                    #if USB_HS_SAVE_RESULT_DV
+                    //wrtsz = fwrite(addrd, 1, lens, fsave);
+                    //sprintf_f(rs->logs, "[DV] usb write file %d / %d !!!\n", wrtsz, lens);
+                    wrtsz = lens;
+                    memcpy(ptmp, addrd, lens);
+                    ptmp += lens;
+                    #endif
+                    
+                    #if 0
+                    sendsz = wrtsz;
+                    #else
+                    sendsz = write(usbfd, addrd, lens);
+                    #endif
+                    
+                    if (sendsz < 0) {
+                    
+                        #if DBG_27_DV
+                        sprintf_f(rs->logs, "[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        #endif
+
+                        #if 0
+                        usbentsTx = 0;
+                        break;
+                        #else
+                        //usleep(5000);
+
+                        if ((errcnt & 0x1fff) == 0) {
+                            sprintf_f(rs->logs, "[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            usleep(50000);
+                        }
+                        errcnt ++;
+                        continue;
+                        #endif
+                        
+                    }
+                    else {
+                    
+                        #if DBG_27_DV
+                        sprintf_f(rs->logs, "[DV] usb TX size: %d, ret: %d \n", lens, sendsz);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        #endif
+
+                        acusz += sendsz;
+                        //errcnt = 0;
+                        
+                        if (lens == sendsz) {
+                            addrd = 0;
+                            lens = 0;
+                            
+                            #if 1
+                            if (che == 'E') break;
+                            #else
+                            if (puscur->pushcnt == 0) break;
+                            #endif
+                            
+                        } else {
+                            lens -= sendsz;
+                            addrd += sendsz;
+                            continue;
+                        }
+                    }
+                            
+                    cntTx ++;
+
+                }
+
+                if ((che == 'E') && (addrd == 0)) {
+
+                    clock_gettime(CLOCK_REALTIME, &tend);
+
+                    usCost = time_diff(&tstart, &tend, 1000);
+                    sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), usCost);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    //msCost = time_diff(&tstart, &tend, 1000000);
+                    throughput = acusz*8.0 / usCost*1.0;
+                    sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, usCost > 1000 ? usCost / 1000 : 1, throughput);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    #if USB_HS_SAVE_RESULT_DV
+                    wrtsz = fwrite(pImage, 1, cntTx*PT_BUF_SIZE, fsave);
+                    sync();
+                    fclose(fsave);
+                    free(pImage);
+                    sprintf_f(rs->logs, "[DV] save file size: %d, ret: %d \n", cntTx*PT_BUF_SIZE, wrtsz);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+
+                    cntTx = 0;
+                    opc = 0;
+                    che = 0;
+
+                    ring_buf_init(usbCur);
+
+/*
+                    datCylcnt += 1;
+                    if (datCylcnt < 2) {
+                        continue;
+                    } else {
+                        opc = 0;
+                    }
+*/
+
+                    continue;
+                }
+                /*
+                else {
+                    continue;
+                }
+                */
+            }
+            else if (cmd == 0x11) {
+                csw[11] = 0;
+                csw[12] = 0;//seqtx;
+
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                if (wrtsz < 0) {
+                    usbentsTx = 0;
+                    continue;
+                }
+                
+                shmem_dump(csw, wrtsz);
+                
+                cmd = 0;
+            }
+            else if (cmd == 0x12) {
+                csw[11] = 0;
+                csw[12] = cswerr;
+
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                if (wrtsz < 0) {
+                    usbentsTx = 0;
+                    continue;
+                }
+                
+                shmem_dump(csw, wrtsz);
+                
+                cmd = 0;
+            }
+            else if (cmd == 0x13) {
+            
+                if (waitCylen) {
+                    csw[11] = waitCylen & 0xff;
+                    csw[12] = 0;
+                } else {
+                    if (pagerst > 1) {
+                        csw[11] = pagerst - 1;
+                        csw[12] = 0;
+                    } else {
+                        if (cswerr) {
+                            if (cswerr == 0x7f) {
+                                csw[11] = 0;
+                                csw[12] = 0;
+                            } else {
+                                csw[11] = 0;
+                                csw[12] = cswerr;
+                            }
+                        } else { /* should not be here */
+                            sprintf_f(rs->logs, "[DV] warnning!! no csw err and page rest == 0! \n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                            csw[11] = 0;
+                            csw[12] = 0;
+                        }
+                    }                        
+                }
+
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                if (wrtsz < 0) {
+                    usbentsTx = 0;
+                    continue;
+                }
+                rwaitCylen = waitCylen;
+                
+                shmem_dump(csw, wrtsz);
+                
+                cmd = 0;
+            }
+            else {
+                /* do nothing */
+            }      
+        }
+            
+
+        if (usbentsRx == 1) {
+
+            #if DBG_27_EPOL
+            sprintf_f(rs->logs, "[ePol] Rx cmd: 0x%.2x, opc: 0x%.2x, dat: 0x%.2x, lastsz: %d, cnt: %d \n", cmd, opc, dat, lastsz, cntTx);
+            print_f(rs->plogs, "P11", rs->logs);
+            #endif
+            
+            while (1) {
+                if ((opc == 0x4c) && (dat == 0x01)) {
+                    recvsz = read(usbfd, ptrecv, USB_META_SIZE);
+                
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb RX size: %d / %d \n====================\n", recvsz, USB_META_SIZE);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif              
+                    
+                    if (recvsz < 0) {
+                        //usbentsRx = 0;
+                        break;
+                    }
+                
+                    dat = 0;
+                    
+                    if (recvsz != USB_META_SIZE) {
+                        sprintf_f(rs->logs, "[DV] read meta failed, receive size: %d \n====================\n", recvsz);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        shmem_dump(ptrecv, recvsz);                        
+                
+                        break;
+                    }
+                
+                
+                    #if DBG_27_DV
+                    shmem_dump(ptrecv, recvsz);
+                    #endif
+                
+                
+                    #if 1 /* save meta */
+                    fsmeta = find_save(ptfilepath, ptfileSaveMeta);
+                    if (fsmeta) {
+                        sprintf_f(rs->logs, "[DV] find save meta [%s] succeed!!! \n", ptfilepath);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        wrtsz = fwrite(ptrecv, 1, recvsz, fsmeta);
+                        sync();
+                        fclose(fsmeta);
+                    }
+                    #endif
+                    
+                    memcpy(metaPt, ptrecv, 512);
+                    msync(metaPt, 512, MS_SYNC);
+                
+                    if ((metaRx->ASP_MAGIC[0] != 0x20) || (metaRx->ASP_MAGIC[1] != 0x14)) {
+                        break;
+                    }
+                    
+                    chq = 'm';
+                    pipRet = write(pipeTx[1], &chq, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                
+                    chd = 'm';
+                    pipRet = write(pipeTxd[1], &chd, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                
+                    #if 1  /* clean msg queue */
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                        else {
+                            //sprintf_f(rs->logs, "[DV] clean pipe get chq: (0x%.2x) \n", chq);
+                        }
+                    }
+                
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                        else {
+                            //sprintf_f(rs->logs, "[DV] clean pipe get chd: (0x%.2x) \n", chd);
+                        }
+                    }
+                
+                    if (puimCnTH) {
+                        ix=0;
+                        puimTmp = puimCnTH;
+                        while(puimTmp) {
+                            sprintf_f(rs->logs, "[DV] clean H %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            puimUse = puimTmp;
+                            puimTmp = puimUse->uimNxt;
+                            ix++;
+                
+                            free(puimUse);
+                        }
+                        puimCnTH = 0;
+                        puimCur = 0;
+                        puimGet = 0;
+                    }
+                
+                    if (puimGet) {
+                        ix=0;
+                        puimTmp = puimGet;
+                        while(puimTmp) {
+                            sprintf_f(rs->logs, "[DV] clean G %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            puimUse = puimTmp;
+                            puimTmp = puimUse->uimNxt;
+                            ix++;
+                
+                            free(puimUse);
+                        }
+                
+                        puimGet = 0;
+                    }
+                
+                    endf = 0;
+                    endm = 0;
+                
+                    uimCylcnt = 0;
+                    datCylcnt = 0;
+                    lastCylen = 0;
+                    waitCylen = 0;
+                    rwaitCylen = 0;
+                
+                    cswerr = 0;
+                    pagerst = 0;
+                    #endif
+                    
+                    break;
+                }
+                else {
+                    recvsz = read(usbfd, ptrecv, 31);
+                
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb RX size: %d / %d \n====================\n", recvsz, 31); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (recvsz < 0) {
+                        usbentsRx = 0;
+                        break;
+                    }
+                    shmem_dump(ptrecv, recvsz);
+                    
+                    if ((ptrecv[0] == 0x55) && (ptrecv[1] == 0x53) && (ptrecv[2] == 0x42)) {
+                        cmd = ptrecv[15];
+                        opc = ptrecv[16];
+                        dat = ptrecv[17];
+                        
+                        sprintf_f(rs->logs, "[DVF] usb get cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        
+                        if (cmd == 0x11) {      
+                        
+                                if ((opc == 0x4c) && (dat == 0x01)) {                     
+                                    continue;
+                                }
+                                else if ((opc == 0x04) && (dat == 0x85)) {
+                                
+                                    puscur = 0;
+                                    //ring_buf_init(pushost->pushring);
+                                    //ring_buf_init(pushost->pgatring);
+                                    while (1) {
+                                        chq = 0;
+                                        pipRet = read(pipeRx[0], &chq, 1);
+                                        if (pipRet < 0) {
+                                            break;
+                                        }
+                                        else {
+                
+                                            #if DBG_27_DV               
+                                            sprintf_f(rs->logs, "[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif                          
+                                            
+                                        }
+                                    }
+                                
+                                    //continue;
+                                    break;
+                                }
+                                else if ((opc == 0x05) && (dat == 0x85)) {
+                                
+                                    puscur = 0;
+                                    //ring_buf_init(pushost->pushring);
+                                    //ring_buf_init(pushost->pgatring);
+                                    while (1) {
+                                        chq = 0;
+                                        pipRet = read(pipeRx[0], &chq, 1);
+                                        if (pipRet < 0) {
+                                            break;
+                                        }
+                                        else {
+                                            
+                                            #if DBG_27_DV               
+                                            sprintf_f(rs->logs, "[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif                          
+                                            
+                                        }
+                                    }
+                                
+                                    //ring_buf_init(pushostd->pushring);
+                                    //ring_buf_init(pushost->pgatring);
+                                    while (1) {
+                                        chd = 0;
+                                        pipRet = read(pipeRxd[0], &chd, 1);
+                                        if (pipRet < 0) {
+                                            break;
+                                        }
+                                        else {
+                
+                                            #if DBG_27_DV               
+                                            sprintf_f(rs->logs, "[DV] clean pipe get chd: %c(0x%.2x) \n", chd, chd);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif                          
+                                        }
+                                    }
+                                
+                                    //continue;
+                                    break;
+                                }
+                                else if ((opc == 0x09) && (dat == 0x85)) {
+                                    puscur = 0;
+                                    break;
+                                }
+                                else if ((opc == 0x0a) && (dat == 0x85)) {
+                                    puscur = 0;
+                                    //continue;
+                                    break;
+                                }
+                                else {
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            
+                        }
+                        else if (cmd == 0x12) {
+                            uimCylcnt = 0;
+                            datCylcnt = 0;
+                            lastCylen = 0;
+                            waitCylen = 0;
+                            clock_gettime(CLOCK_REALTIME, &tidleS);
+                            clock_gettime(CLOCK_REALTIME, &tidleE);                            
+                            
+                            if ((opc == 0x04) && (dat == 0x85)) {                                    
+                                if (!puscur) {
+                                    puscur = pushost;                    
+                
+                                    chq = 'a';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    chq = 'd';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                
+                                    #if 0
+                                    usbCur = puscur->pgatring;
+                                    #else
+                                    usbCur = puscur->pushring;
+                                    #endif
+                                    
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                }
+                                else {
+                                    /* should't be here */
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                                    
+                                acusz = 0;
+                                break;
+                            }
+                            else if ((opc == 0x09) && (dat == 0x85)) {                                    
+                                if (!puscur) {
+                                    puscur = pushost;                    
+                
+                                    chq = 'k';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    chq = 'c';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    #if 0                           
+                                    usbCur = puscur->pgatring;
+                                    #else                           
+                                    usbCur = puscur->pushring;
+                                    #endif                          
+                                    
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                }
+                                else if (puscur == pushost) {
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                    
+                                    chq = 'k';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    chq = 'c';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                
+                                } else {
+                                    /* should't be here */
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat); 
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                                    
+                                acusz = 0;
+                                break;
+                            }
+                            else if ((opc == 0x05) && (dat == 0x85)) {
+                                if (!puscur) {
+                                    puscur = pushost;     
+                                    
+                                    chq = 's';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                
+                                    chd = 's';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    chq = 'p';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                
+                                    chd = 'p';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    #if 0                           
+                                    usbCur = puscur->pgatring;
+                                    #else                           
+                                    usbCur = puscur->pushring;
+                                    #endif                          
+                                    
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                }
+                                else if (puscur == pushost) {
+                                    puscur = pushostd;
+                
+                                    #if 0                           
+                                    usbCur = puscur->pgatring;
+                                    #else                           
+                                    usbCur = puscur->pushring;
+                                    #endif                          
+                                    
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                }
+                                else {
+                                    /* should't be here */
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                                    
+                                acusz = 0;
+                                break;
+                            }
+                            else if ((opc == 0x0a) && (dat == 0x85)) {
+                                if (!puscur) {
+                                    puscur = pushost;                    
+                                    
+                                    chq = 'r';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                
+                                    chd = 'r';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                
+                                    chq = 'q';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                
+                                    chd = 'q';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    #if 0
+                                    usbCur = puscur->pgatring;
+                                    #else
+                                    usbCur = puscur->pushring;
+                                    #endif
+                                    
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                }
+                                else if (puscur == pushost) {
+                                    puscur = pushostd;
+                
+                                    #if 0                           
+                                    usbCur = puscur->pgatring;
+                                    #else                           
+                                    usbCur = puscur->pushring;
+                                    #endif                          
+                                    
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                }
+                                else if (puscur == pushostd) {
+                                    puscur = pushost;
+                
+                                    #if 0                           
+                                    usbCur = puscur->pgatring;
+                                    #else                           
+                                    usbCur = puscur->pushring;
+                                    #endif                          
+                                    
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                    
+                                    chq = 'r';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                
+                                    chd = 'r';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                        
+                                    chq = 'q';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                
+                                    chd = 'q';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                } else {
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown puscur 0x%.8x \n", puscur);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    /* should't be here */
+                                }
+                
+                                if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                                    if ((puimGet->uimIdex % 2) == 1) {
+                                                puscur = pushost;
+                                                usbCur = puscur->pushring;
+                                                piptx = puscur->pushtx;
+                                                piprx = puscur->pushrx; 
+                                    } else {
+                                                puscur = pushostd;
+                                                usbCur = puscur->pushring;
+                                                piptx = puscur->pushtx;
+                                                piprx = puscur->pushrx; 
+                                    }
+                                } else {
+                                    sprintf_f(rs->logs, "[DV] puimGet is null get next \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+                                acusz = 0;
+                                break;
+                            }    
+                            else {
+                                sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                        }
+                        else if (cmd == 0x13) {
+                            switch(opc) {
+                            case 0x09:
+                            case 0x04:
+                                chq = 'b';
+                                pipRet = write(pipeTx[1], &chq, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                                chd = 'b';
+                                pipRet = write(pipeTxd[1], &chd, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                                break;
+                            case 0x05:
+                            case 0x0a:
+                
+                                chq = 'b';
+                                pipRet = write(pipeTx[1], &chq, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            
+                                chd = 'b';
+                                pipRet = write(pipeTxd[1], &chd, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                
+                                break;
+                            default: 
+                                sprintf_f(rs->logs, "\n[DV]  0x0f unknown opc: 0x%.2x \n", opc);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                break;
+                            }
+                            
+                            break;
+                        }
+                        else {
+                            sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            continue;
+                        }
+                    }            
+                }
+            }
+        }
+    }
 
     while(1) {
         ret = rs_ipc_get(rs, &ch, 1);
@@ -47434,7 +49981,7 @@ int main(int argc, char *argv[])
     uint32_t bitset;
     char syscmd[256] = "ls -al";
     struct sysinfo minfo;
-    struct usbHost_s *usbh[2];
+    struct usbHostmem_s *usbh[2];
     uint32_t ut32=0, vt32=0;
     char *chvir;
     
@@ -50093,7 +52640,7 @@ int main(int argc, char *argv[])
     } 
     
     usbh[0] = 0;
-    usbh[0] = aspSalloc(sizeof(struct usbHost_s));
+    usbh[0] = aspSalloc(sizeof(struct usbHostmem_s));
     if (!usbh[0]) {
         sprintf_f(pmrs->log, "allocate for usb struct failed !!! \n");
         print_f(&pmrs->plog, "USB", pmrs->log);
@@ -50194,7 +52741,7 @@ int main(int argc, char *argv[])
     /* USB1 */
     
     usbh[1] = 0;
-    usbh[1] = aspSalloc(sizeof(struct usbHost_s));
+    usbh[1] = aspSalloc(sizeof(struct usbHostmem_s));
     if (!usbh[1]) {
         sprintf_f(pmrs->log, "allocate for usb 1 struct failed !!! \n");
         print_f(&pmrs->plog, "USB", pmrs->log);
@@ -50308,7 +52855,7 @@ int main(int argc, char *argv[])
         printf("open device[%s]\n", usbdevpath0); 
     }
     usb_nonblock_set(pmrs->usbdv);
-        
+
     dbgShowTimeStamp("s11", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
     printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
@@ -50332,7 +52879,7 @@ int main(int argc, char *argv[])
     pipe(pmrs->pipedn[11].rt);
     pipe(pmrs->pipedn[12].rt);
     pipe(pmrs->pipedn[13].rt);
-    pipe(pmrs->pipedn[14].rt);
+    pipe2(pmrs->pipedn[14].rt, O_NONBLOCK);
     
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[1].rt, O_NONBLOCK);
@@ -50632,35 +53179,6 @@ static char **memory_init(int *sz, int tsize, int csize)
     }
     *sz = asz;
     return pma;
-}
-
-static int time_diff(struct timespec *s, struct timespec *e, int unit)
-{
-    unsigned long long cur, tnow, lnow, past, tbef, lpast, gunit;
-    int diff;
-
-    gunit = unit;
-    //clock_gettime(CLOCK_REALTIME, &curtime);
-    cur = s->tv_sec;
-    tnow = s->tv_nsec;
-    lnow = cur * 1000000000+tnow;
-    
-    //clock_gettime(CLOCK_REALTIME, &curtime);
-    past = e->tv_sec;
-    tbef = e->tv_nsec;      
-    lpast = past * 1000000000+tbef; 
-
-    if (lpast < lnow) {
-        diff = -1;
-    } else {
-        diff = (lpast - lnow)/gunit;
-    }
-
-    if (diff == 0) {
-        diff = 1;
-    }
-
-    return diff;
 }
 
 static FILE *find_save(char *dst, char *tmple)
