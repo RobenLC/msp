@@ -27,7 +27,7 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Tha Agu 02 15:20:39 2018 \
+#define MSP_VERSION "Tha Agu 02 17:20:39 2018 \
 xxxxxxxxxx \
 show error msg when p6 get empty string \
 sid size to 13 \
@@ -36854,30 +36854,45 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     ring_buf_init(ringbf[1]);
     ring_buf_init(ringbf[2]);
     ring_buf_init(ringbf[3]);
-    
+
+    ins += 1;
     uphstx = ppup->pushtx;
-    sprintf_f(mrs->log, "[GW] uphstx 0:%d 1:%d\n", uphstx[0], uphstx[1]);
+    sprintf_f(mrs->log, "[GW] uphstx 0:%d 1:%d (%d)\n", uphstx[0], uphstx[1], ins);
     print_f(&mrs->plog, "fs145", mrs->log);
+
+    ins += 1;    
     uphsrx = ppup->pushrx;
-    sprintf_f(mrs->log, "[GW] uphsrx 0:%d 1:%d\n", uphsrx[0], uphsrx[1]);
+    sprintf_f(mrs->log, "[GW] uphsrx 0:%d 1:%d (%d)\n", uphsrx[0], uphsrx[1], ins);
     print_f(&mrs->plog, "fs145", mrs->log);
+
+    ins += 1;
     updvtx = ppup->pgattx;
-    sprintf_f(mrs->log, "[GW] updvtx 0:%d 1:%d\n", updvtx[0], updvtx[1]);
+    sprintf_f(mrs->log, "[GW] updvtx 0:%d 1:%d (%d)\n", updvtx[0], updvtx[1], ins);
     print_f(&mrs->plog, "fs145", mrs->log);
+
+    ins += 1;
     updvrx = ppup->pgatrx;
-    sprintf_f(mrs->log, "[GW] updvrx 0:%d 1:%d\n", updvrx[0], updvrx[1]);
+    sprintf_f(mrs->log, "[GW] updvrx 0:%d 1:%d (%d)\n", updvrx[0], updvrx[1], ins);
     print_f(&mrs->plog, "fs145", mrs->log);
+
+    ins += 1;
     dnhstx = ppdn->pushtx;
-    sprintf_f(mrs->log, "[GW] dnhstx 0:%d 1:%d\n", dnhstx[0], dnhstx[1]);
+    sprintf_f(mrs->log, "[GW] dnhstx 0:%d 1:%d (%d)\n", dnhstx[0], dnhstx[1], ins);
     print_f(&mrs->plog, "fs145", mrs->log);
+
+    ins += 1;
     dnhsrx = ppdn->pushrx;
-    sprintf_f(mrs->log, "[GW] dnhsrx 0:%d 1:%d\n", dnhsrx[0], dnhsrx[1]);
+    sprintf_f(mrs->log, "[GW] dnhsrx 0:%d 1:%d (%d)\n", dnhsrx[0], dnhsrx[1], ins);
     print_f(&mrs->plog, "fs145", mrs->log);
+
+    ins += 1;
     dndvtx = ppdn->pgattx;
-    sprintf_f(mrs->log, "[GW] dndvtx 0:%d 1:%d\n", dndvtx[0], dndvtx[1]);
+    sprintf_f(mrs->log, "[GW] dndvtx 0:%d 1:%d (%d)\n", dndvtx[0], dndvtx[1], ins);
     print_f(&mrs->plog, "fs145", mrs->log);
+
+    ins += 1;
     dndvrx = ppdn->pgatrx;
-    sprintf_f(mrs->log, "[GW] dndvrx 0:%d 1:%d\n", dndvrx[0], dndvrx[1]);
+    sprintf_f(mrs->log, "[GW] dndvrx 0:%d 1:%d (%d)\n", dndvrx[0], dndvrx[1], ins);
     print_f(&mrs->plog, "fs145", mrs->log);
     
     pllfd[0].fd = uphstx[0];
@@ -36905,7 +36920,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     while(1) {
         ptret = poll(pllfd, 5, 2000);
         //sprintf_f(mrs->log, "[GW] ===== poll return %d =====\n", ptret);
-        print_f(&mrs->plog, "fs145", mrs->log);
+        //print_f(&mrs->plog, "fs145", mrs->log);
         if (ptret < 0) {
             perror("poll");
             sprintf_f(mrs->log, "poll failed, errno: %d\n", errno);
@@ -36919,7 +36934,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if ((pllfd[ins].revents & POLLIN) == POLLIN) {
                 
                     read(pllfd[ins].fd, &pllcmd[ins], 1);
-                    sprintf_f(mrs->log, "[GW] pll%d get chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], ptret);
+                    sprintf_f(mrs->log, "[GW] id:%d pipe%d get chr: %c(0x%.2x) total:%d\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins], ptret);
                     print_f(&mrs->plog, "fs145", mrs->log);
                     
                     evcnt++;
@@ -51429,6 +51444,8 @@ int main(int argc, char *argv[])
     struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
     struct aspMetaData_s *metaRx = 0;
     char *metaPt=0;
+    int *spipeTx, *spipeRx, *spipeTxd, *spipeRxd;
+    int *sgateUpTx, *sgateUpRx, *sgateDnTx, *sgateDnRx;
         
     printf("\n        ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
 
@@ -54336,7 +54353,66 @@ int main(int argc, char *argv[])
 
     metaRx = (struct aspMetaData_s *)aspSalloc(sizeof(struct aspMetaData_s));
     metaPt = (char *)metaRx;
+    
+#if 1
+    spipeTx = (int *)aspSalloc(sizeof(int) * 2); 
+    spipeRx = (int *)aspSalloc(sizeof(int) * 2); 
+    spipeTxd = (int *)aspSalloc(sizeof(int) * 2); 
+    spipeRxd = (int *)aspSalloc(sizeof(int) * 2); 
+    
+    sgateUpTx = (int *)aspSalloc(sizeof(int) * 2); 
+    sgateUpRx = (int *)aspSalloc(sizeof(int) * 2); 
+    sgateDnTx = (int *)aspSalloc(sizeof(int) * 2); 
+    sgateDnRx = (int *)aspSalloc(sizeof(int) * 2); 
 
+    pipe2(spipeTx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  pipeTx 0:%d 1:%d\n", spipeTx[0], spipeTx[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    pipe2(spipeRx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  pipeRx 0:%d 1:%d\n", spipeRx[0], spipeRx[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    
+    pipe2(spipeTxd, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  pipeTxd 0:%d 1:%d\n", spipeTxd[0], spipeTxd[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    pipe2(spipeRxd, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  pipeRxd 0:%d 1:%d\n", spipeRxd[0], spipeRxd[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+        
+    pipe2(sgateUpTx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  gateUpTx 0:%d 1:%d\n", sgateUpTx[0], sgateUpTx[1]);        
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    pipe2(sgateUpRx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  gateUpRx 0:%d 1:%d\n", sgateUpRx[0], sgateUpRx[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+        
+    pipe2(sgateDnTx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  gateDnTx 0:%d 1:%d\n", sgateDnTx[0], sgateDnTx[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    pipe2(sgateDnRx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  gateDnRx 0:%d 1:%d\n", sgateDnRx[0], sgateDnRx[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+
+    pushost->pushring = usbTx;
+    pushost->pgatring = gateTx;
+    pushost->puhsmeta = metaPt;
+    pushost->pushrx = spipeRx;
+    pushost->pushtx = spipeTx;
+    pushost->pgattx = sgateUpTx;
+    pushost->pgatrx = sgateUpRx;
+    pushost->pushvaddrtb = tbl0;
+    pushost->ushid = usbid0;
+
+    pushostd->pushring = usbTxd;
+    pushostd->pgatring = gateTxd;
+    pushostd->puhsmeta = metaPt;
+    pushostd->pushrx = spipeRxd;
+    pushostd->pushtx = spipeTxd;
+    pushostd->pgattx = sgateDnTx;
+    pushostd->pgatrx = sgateDnRx;
+    pushostd->pushvaddrtb = tbl1;
+    pushostd->ushid = usbid1;
+#else        
     pushost->pushring = usbTx;
     pushost->pgatring = gateTx;
     pushost->puhsmeta = metaPt;
@@ -54356,7 +54432,7 @@ int main(int argc, char *argv[])
     pushostd->pgatrx = pmrs->pipeup[11].rt;
     pushostd->pushvaddrtb = tbl1;
     pushostd->ushid = usbid1;
-
+#endif
     pmrs->usbhost[0] = pushost;
     pmrs->usbhost[1] = pushostd;
         
