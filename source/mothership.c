@@ -45,6 +45,7 @@ usb recover"
 
 #define LOG_ALL_DISABLE (0)
 
+#define DISABLE_USB  (0)
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 #define RING_BUFF_NUM_USB   (1536)
@@ -53,6 +54,7 @@ usb recover"
 #define TABLE_SLOT_SIZE 4
 #define CYCLE_LEN (20)
 #define USB_CALLBACK_LOOP (1)
+#define DBG_DUMP_DAT32  (0)
 
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -85,7 +87,6 @@ usb recover"
 #define USB_IOCT_LOOP_BUFF_CREATE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_CREATE, b)
 #define USB_IOCT_LOOP_BUFF_PROBE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_PROBE, b)
 #define USB_IOCT_LOOP_BUFF_RELEASE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_RELEASE, b)
-#define DBG_DUMP_DAT32  (0)
 
 #define USB_IOCT_GET_DEVICE_ID(a, b)          ioctl(a, LPIOC_GET_DEVICE_ID(4), b)
 #define USB_IOCT_GET_VID_PID(a, b)          ioctl(a, LPIOC_GET_VID_PID(8), b)
@@ -21348,7 +21349,7 @@ static int stusbscan_119(struct psdata_s *data)
             break;
         case WAIT:
             if (data->ansp0 == 1) {
-                data->result = emb_result(data->result, NEXT);
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
@@ -22156,7 +22157,7 @@ static int ring_buf_init(struct shmem_s *pp)
     pp->lastsz = 0;
     pp->dualsz = 0;
 
-#if 1
+#if 0
     for (idx=0; idx < pp->slotn; idx++) {
         memset(pp->pp[idx], 0x00, pp->chksz);
         msync(pp->pp[idx], pp->chksz, MS_SYNC);
@@ -37521,6 +37522,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             #endif
                             
                         }
+                        else if (pllcmd[ins] == 'x') {
+                            sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            print_f(&mrs->plog, "fs145", mrs->log);
+                            modersp->r = 1;
+                            return 1;  
+                        }
                         else {
                             sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
                             print_f(&mrs->plog, "fs145", mrs->log);
@@ -37758,8 +37765,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if (lens < USB_BUF_SIZE) {
                                 //ring_buf_set_last(ringbf[0], lens);
-                                //sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
+                                sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
+                                print_f(&mrs->plog, "fs145", mrs->log);
                                 //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
                                 indexfo[0] = ((pubffcd[ins]->ubindex >> 6) & 0x3f) | 0xc0;
                                 indexfo[1] = (pubffcd[ins]->ubindex & 0x3f) | 0x40;
@@ -48981,13 +48988,18 @@ static int usbhost(struct procRes_s *rs, char *sp)
     print_f(rs->plogs, sp, rs->logs);
 
 #if 1
+    puhs = rs->pusbhost;
+    if (!puhs) {
+        sprintf_f(rs->logs, "Error!!! usb host not available !!! \n");
+        print_f(rs->plogs, sp, rs->logs);
+        goto end;
+    }
+
     pkcbw = malloc(96);
     if (!pkcbw) {
         sprintf_f(rs->logs, "allocate memory for kernel cbw failed!!! ");
         print_f(rs->plogs, sp, rs->logs);
     }
-
-    puhs = rs->pusbhost;
 
     pTx = puhs->pgatring;
 
@@ -49614,17 +49626,6 @@ end:
 
     if (usbid) close(usbid);
     
-    while (1) {
-        chr = 0;
-        pieRet = read(pPtx[0], &chr, 1);
-        if (pieRet > 0) {
-            sprintf_f(rs->logs, "get chr: %c \n", chr);
-            print_f(rs->plogs, sp, rs->logs);
-        } else {
-            //sprintf_f(rs->logs, "[HS] get chr ret: %d \n", pieRet);
-            usleep(1000);
-        }
-    }
 #endif
 
     while (1) {
@@ -49639,8 +49640,6 @@ end:
         }
     }
 
-
-    p9_end(rs);
     return 0;
 }
 
@@ -49658,7 +49657,10 @@ static int p9(struct procRes_s *rs)
     prctl(PR_SET_NAME, "msp-p9");
 
     while (1) {
-        usbhost(rs, "P9");
+        ret = usbhost(rs, "P9");
+        if (ret) {
+            break;
+        }
     }
 
 
@@ -49716,7 +49718,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char *endf=0, *endm=0;
     char endstr[] = "usb_conti_stop";
     int seqtx=0, lens=0, maxsz=0, pipRet=0, idlet=0, ix=0, waitCylen=0, chr=0, cindex=0, lastCylen=0;
-    char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12];
+    char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12], chn=0;
     char cmdtyp=0, cswerr=0, pagerst=0, che=0;
     int *piptx=0, *piprx=0;
     int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0;
@@ -50779,7 +50781,18 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 rwaitCylen = waitCylen;
                 
                 shmem_dump(csw, wrtsz);
-                
+
+                chn = csw[11];
+
+                if (chn == 0) {
+                    chq = 'x';
+                    pipRet = write(pipeTx[1], &chq, 1);
+                    if (pipRet < 0) {
+                        printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
+                        continue;
+                    }
+                }
+                    
                 cmd = 0;
             }
             else {
@@ -54108,6 +54121,10 @@ int main(int argc, char *argv[])
 
 #endif  //#if DISABLE_SPI
 
+#if DISABLE_USB
+    pmrs->usbhost[0] = 0;
+    pmrs->usbhost[1] = 0;
+#else  //#if DISABLE_USB
     /* USB0 */
     pmrs->usbmfd = open(MODULE_NAME , O_RDWR);
     if(pmrs->usbmfd < 0) {
@@ -54486,7 +54503,8 @@ int main(int argc, char *argv[])
     printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
     printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
     printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
-    
+#endif //#if DISABLE_USB
+
 // IPC
     pipe(pmrs->pipedn[0].rt);
     //pipe2(pmrs->pipedn[0].rt, O_NONBLOCK);
