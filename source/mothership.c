@@ -955,6 +955,8 @@ struct ring_p{
     struct ring_s predual;
     struct ring_s folw;
     struct ring_s psudo;
+    struct ring_s *usbrunnig;
+    struct ring_s *usbgettig;
 };
 
 struct socket_s{
@@ -974,7 +976,9 @@ struct shmem_s{
     struct ring_p *r;
     int lastflg;
     int lastsz;
-    int dualsz; 
+    int dualsz;
+    int *urun;
+    int *uget;
 };
 
 struct modersp_s{
@@ -22157,9 +22161,26 @@ static int ring_buf_init(struct shmem_s *pp)
     pp->lastsz = 0;
     pp->dualsz = 0;
 
-#if 0
+#if 1
+
+    if (pp->r->usbgettig) {
+        pp->r->usbgettig->run = 0;
+        pp->r->usbgettig->seq = 0;
+    }
+
+    if (pp->r->usbrunnig) {
+        pp->r->usbrunnig->run = 0;
+        pp->r->usbrunnig->seq = 0;
+    }
+
     for (idx=0; idx < pp->slotn; idx++) {
-        memset(pp->pp[idx], 0x00, pp->chksz);
+        if (pp->urun) {
+            pp->urun[idx] = 0;
+        }
+        if (pp->uget) {
+            pp->uget[idx] = 0;
+        }
+        memset(pp->pp[idx], 0xa5, pp->chksz);
         msync(pp->pp[idx], pp->chksz, MS_SYNC);
     }
 #endif
@@ -22285,6 +22306,69 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
     return pp->lastflg;
 }
 
+static int ring_buf_prod_tag(struct shmem_s *pp, int usbrn)
+{
+    char str[128];
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+    int gdx=0, glp=0, rlp=0, rdx=0, ttn=0;
+
+    ttn = pp->slotn;
+
+    if (usbrn > ttn) {
+        rlp = usbrn / ttn;
+    } else {
+        rlp = 0;
+    }
+    
+    rdx = usbrn - (rlp * ttn);
+
+    pp->r->usbrunnig->seq = rdx;
+    pp->r->usbrunnig->run = rlp;
+
+    //sprintf_f(str, "cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
+    //print_f(mlogPool, "ring", str);
+    
+    gdx = pp->r->usbgettig->seq;
+    glp = pp->r->usbgettig->run;
+
+    folwn = glp * pp->slotn + gdx;
+    leadn = rlp * pp->slotn + rdx;
+    dist = leadn - folwn;
+
+    msync(pp, sizeof(struct shmem_s), MS_SYNC);
+
+    return dist;
+}
+
+static int ring_buf_prod_u(struct shmem_s *pp, int csz)
+{
+    char str[128];
+    int idx=0, nlp=0;
+    
+    if ((pp->r->lead.seq + 1) < pp->slotn) {
+        pp->r->lead.seq += 1;
+    } else {
+        pp->r->lead.seq = 0;
+        pp->r->lead.run += 1;
+    }
+
+    idx = pp->r->lead.seq;
+    nlp = pp->r->lead.run;
+    
+    pp->urun[idx] = ((nlp & 0xfff) << 20) | csz;
+
+    printf("[R] prod u idx %d:%d csz: %d content: 0x%.8x \n", idx, nlp, csz, pp->urun[idx]);
+
+    msync(pp, sizeof(struct shmem_s), MS_SYNC);
+    
+    //sprintf_f(str, "prod %d %d/\n", pp->r->lead.run, pp->r->lead.seq);
+    //print_f(mlogPool, "ring", str);
+
+    return 0;
+}
+
 static int ring_buf_set_last_actual(struct shmem_s *pp, int size)
 {
     char str[128];
@@ -22366,6 +22450,97 @@ static int ring_buf_prod_dual(struct shmem_s *pp, int sel)
     print_f(mlogPool, "ring", str);
 #endif
     return 0;
+}
+
+static int ring_buf_cons_tag(struct shmem_s *pp)
+{
+    char str[128];
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+    int gdx=0, glp=0, rsz=0, rlp=0, rdx=0, sta=0;
+
+    rdx = pp->r->usbrunnig->seq;
+    rlp = pp->r->usbrunnig->run;
+
+    //sprintf_f(str, "cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
+    //print_f(mlogPool, "ring", str);
+
+    gdx = pp->r->folw.seq;
+    glp = pp->r->folw.run;
+    
+    pp->r->usbgettig->seq = gdx;
+    pp->r->usbgettig->run = glp;
+
+    folwn = glp * pp->slotn + gdx;
+    leadn = rlp * pp->slotn + rdx;
+    dist = leadn - folwn;
+
+    msync(pp, sizeof(struct shmem_s), MS_SYNC);
+
+    return dist;
+}
+
+static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
+{
+    char str[128];
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+    int idx=0, nlp=0, rsz=0, rlp=0, sta=0;
+
+    folwn = pp->r->folw.run * pp->slotn + pp->r->folw.seq;
+    leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
+    dist = leadn - folwn;
+
+    //sprintf_f(str, "cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
+    //print_f(mlogPool, "ring", str);
+
+    if (dist < 1)  return -1;
+
+    if ((pp->r->folw.seq + 1) < pp->slotn) {
+        //*addr = pp->pp[pp->r->folw.seq + 1];
+        //pp->r->folw.seq += 1;
+        idx = pp->r->folw.seq + 1;
+    } else {
+        //*addr = pp->pp[0];
+        //pp->r->folw.seq = 0;
+        //pp->r->folw.run += 1;
+        idx = 0;
+        nlp = pp->r->folw.run + 1;
+    }
+
+    msync(pp->urun, sizeof(int) * RING_BUFF_NUM_USB, MS_SYNC);    
+
+    sta = pp->urun[idx];
+    
+    printf("[R] cons u idx %d:%d content: 0x%.8x \n", idx, nlp, sta);
+    
+    if (!sta) {
+        return -2;
+    }
+
+    rlp = (sta >> 20) & 0xfff;
+    if (rlp != nlp) {
+        return -3;
+    }
+
+    rsz = sta & 0x1ffff;
+    if ((rsz == 0) || (rsz > pp->chksz)) {
+        return -4;
+    }
+
+    pp->urun[idx] = 0;
+    pp->uget[idx] = sta;
+
+    pp->r->folw.seq = idx;
+    pp->r->folw.run = nlp;
+
+    *addr = pp->pp[idx];
+
+    msync(pp, sizeof(struct shmem_s), MS_SYNC);
+
+    return rsz;
 }
 
 static int ring_buf_prod(struct shmem_s *pp)
@@ -36793,7 +36968,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct shmem_s *ringbf[4];
     char *addrd, *addrs;
     uint32_t *add32d, *add32s;
-    int lens=0, szup=0, szdn=0, lastlen=0;
+    int lens=0, szup=0, szdn=0, lastlen=0, ret=0;
     int totsz[4];
     int cycCnt[4];
     int idxInit[4];
@@ -37116,7 +37291,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         #endif
                                             
                                         if (lens < USB_BUF_SIZE) {
-                                            ring_buf_prod(ringbf[ins]);
+                                            ret = ring_buf_prod_u(ringbf[ins], lens);
+                                            sprintf_f(mrs->log, "[GW] prod u ret: %d last\n", ret);
+                                            print_f(&mrs->plog, "fs145", mrs->log);
                                             ring_buf_set_last(ringbf[ins], lens);
                                             
                                             //pllcmd[ins] = pllcmd[ins] & 0x7f;
@@ -37165,7 +37342,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             break;
                                         }
                                         else if (tmpbf) {
-                                            ring_buf_prod(ringbf[ins]);
+                                            ret = ring_buf_prod_u(ringbf[ins], lens);
+                                            sprintf_f(mrs->log, "[GW] prod u ret: %d\n", ret);
+                                            print_f(&mrs->plog, "fs145", mrs->log);
                                             //pubffo->ubbufo= tmpbf;
                                             outbf = tmpbf;
                                             //sprintf_f(mrs->log, "[GW] prod one trunk next outbf == 0x%.8x\n", outbf);
@@ -37544,13 +37723,16 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 //print_f(&mrs->plog, "fs145", mrs->log);
                             } 
                             else if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
-                                lens = ring_buf_cons(ringbf[ins], &addrs);                
+                                lens = ring_buf_cons_u(ringbf[ins], &addrs);                
                                 while (lens <= 0) {
                                     sprintf_f(mrs->log, "[DV] psudo cons ring buff ret: %d \n", lens);
                                     print_f(&mrs->plog, "fs145", mrs->log);
-                                    //usleep(1000);
-                                    lens = ring_buf_cons(ringbf[ins], &addrs);
+                                    usleep(1000);
+                                    lens = ring_buf_cons_u(ringbf[ins], &addrs);
                                 }
+
+                                sprintf_f(mrs->log, "[GW] cons u len: %d - b\n", lens);
+                                print_f(&mrs->plog, "fs145", mrs->log);
                             }
                             else {    
                                 //write(outfd[ins], &pllcmd[ins], 1);
@@ -37561,13 +37743,16 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         }
                         else if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
 
-                            lens = ring_buf_cons(ringbf[ins], &addrs);                
+                            lens = ring_buf_cons_u(ringbf[ins], &addrs);                
                             while (lens <= 0) {
                                 sprintf_f(mrs->log, "[GW] cons ring buff ret: %d \n", lens);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 usleep(1000);
-                                lens = ring_buf_cons(ringbf[ins], &addrs);
+                                lens = ring_buf_cons_u(ringbf[ins], &addrs);
                             }
+
+                            sprintf_f(mrs->log, "[GW] cons u len: %d \n", lens);
+                            print_f(&mrs->plog, "fs145", mrs->log);
 
                             memallocsz += 1;
 
@@ -48948,7 +49133,7 @@ static int usbhost(struct procRes_s *rs, char *sp)
 {
     struct pollfd ptfd[1];
     char ptrecv[32];
-    int ptret=0, recvsz=0, acusz=0, wrtsz=0;
+    int ptret=0, recvsz=0, acusz=0, wrtsz=0, usbrun=0, usbdist=0;
     int cntRecv=0, usCost=0, bufsize=0;
     int bufmax=0, idx=0, printlog=0;
     double throughput=0.0;
@@ -49201,7 +49386,22 @@ static int usbhost(struct procRes_s *rs, char *sp)
                 if (recvsz > len) {
                     sprintf_f(rs->logs, "last trunk size: %d 0x%x\n", recvsz, recvsz);
                     print_f(rs->plogs, sp, rs->logs);
-                    
+
+                    cswst = 0;
+                    if (recvsz > 0xfffff) {
+
+                        cswst = (recvsz >> 20) & 0xff;
+                        
+                        sprintf_f(rs->logs, "get the error status: 0x%.2x\n", cswst);
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        #if 1 /* stop scan if get error status */
+                        if (cswst & 0x7f) {
+                            chr = 'R';                        
+                        }
+                        #endif
+                    } 
+
                     if (recvsz & 0x20000) {
                         sprintf_f(rs->logs, "get the end signal 0x20000 \n");
                         print_f(rs->plogs, sp, rs->logs);
@@ -49212,46 +49412,46 @@ static int usbhost(struct procRes_s *rs, char *sp)
                         chr = 0;
                         #endif
                         
-                        cswst = (recvsz >> 20) & 0xff;
-                        
                         if (cswst == 0x80) {
                             cswst = 0xff;
                         }
 
-                        sprintf_f(rs->logs, "use the error status: 0x%.2x\n", cswst);
-                        print_f(rs->plogs, sp, rs->logs);
-                        
                         recvsz = recvsz  & 0x1ffff;
-                    }
-                    else if (recvsz > 0x40000) {
 
-                        cswst = (recvsz >> 20) & 0xff;
-                        
-                        recvsz = recvsz  & 0x1ffff;
-                        sprintf_f(rs->logs, "get the error status: 0x%.2x\n", cswst);
+                        sprintf_f(rs->logs, "use the error status: 0x%.2x recv: %d\n", cswst, recvsz);
                         print_f(rs->plogs, sp, rs->logs);
-                        
-                        #if 1 /* stop scan if get error status */
-                        if (cswst & 0x7f) {
-                            chr = 'R';                        
-                        }
-                        #endif
-                    } 
-                    else {
-                        sprintf_f(rs->logs, "Error!!! unknow len: %d(0x%.8x) \n", recvsz, recvsz);
-                        print_f(rs->plogs, sp, rs->logs);
-                        continue;
                     }
-                    
+                    else if (recvsz & 0x80000) {
+                        recvsz = recvsz  & 0x1ffff;
+                    }
+                    else {
+                        usbrun = recvsz  & 0xfff;
+                        recvsz = len;
+                        
+                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m1\n", recvsz, usbrun);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
                 }
-                
+                else {
+                    if (recvsz > 0) {
+                        usbrun = recvsz  & 0xffff;
+                        recvsz = len;
+                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m2\n", recvsz, usbrun);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
+                }
+
                 if (recvsz > 0) {
                     
                     #if USB_HS_SAVE_RESULT
                     memcpy(pcur, addr, recvsz);
                     #endif
                     
-                    ring_buf_prod(pTx);        
+                    ring_buf_prod_u(pTx, recvsz);      
+                    usbdist = ring_buf_prod_tag(pTx, usbrun);
+
+                    sprintf_f(rs->logs, "usbdist: %d, usbrun: %d - m2\n", usbdist, usbrun);
+                    print_f(rs->plogs, sp, rs->logs);
                 }
                 
                 if (recvsz < 0) {
@@ -49460,11 +49660,19 @@ static int usbhost(struct procRes_s *rs, char *sp)
                 if (tcnt) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     //usCost = test_time_diff(&utstart, &utend, 1000);
-                    //sprintf_f(rs->logs, "read %d (%d ms)\n", recvsz, usCost/1000);
                 }
                 #endif 
                 
                 if (recvsz > len) {
+                    cswst = 0;
+                    if (recvsz > 0xfffff) {
+                        cswst = (recvsz >> 20) & 0xff;
+                        
+                        /*should not be here*/
+                        sprintf_f(rs->logs, "Error!!! get status: 0x%.2x recv:%d\n", cswst, recvsz);
+                        print_f(rs->plogs, sp, rs->logs);
+                        chr = 'I';
+                    }
                     if (recvsz & 0x20000) {
                         //sprintf_f(rs->logs, "get the end signal 0x20000 \n");
                         
@@ -49474,7 +49682,6 @@ static int usbhost(struct procRes_s *rs, char *sp)
                         chr = 0;
                         #endif
                         
-                        cswst = (recvsz >> 20) & 0xff;
                         if (!cswst) {
                             cswst = 0x7f;
                         }
@@ -49489,19 +49696,26 @@ static int usbhost(struct procRes_s *rs, char *sp)
                         sprintf_f(rs->logs, "Error!!! get status: 0x%.2x recv:%d\n", cswst, recvsz);
                         print_f(rs->plogs, sp, rs->logs);
                     }
-                    else if (recvsz > 0x40000) {
-                        cswst = (recvsz >> 20) & 0xff;
-                        recvsz = recvsz  & 0x1ffff;
-                        /*should not be here*/
-                        sprintf_f(rs->logs, "Error!!!, get csw status: 0x%.2x recv:%d\n", cswst, recvsz);
+                    else if (recvsz & 0x80000) {
+                        recvsz = recvsz  & 0x1ffff;                    
+                    }
+                    else {
+                        usbrun = recvsz  & 0xfff;
+                        recvsz = len;
+                        
+                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 1\n", recvsz, usbrun);
                         print_f(rs->plogs, sp, rs->logs);
-                        chr = 'I';
-                    } else {
-                        sprintf_f(rs->logs, "Error!!! unknow len: %d(0x%.8x) \n", recvsz, recvsz);
-                        print_f(rs->plogs, sp, rs->logs);
-                        continue;
                     }
                     //sprintf_f(rs->logs, "last trunk size: %d \n", recvsz);
+                }
+                else {
+                    if (recvsz > 0) {
+                        usbrun = recvsz  & 0xfff;
+                        recvsz = len;
+
+                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 2\n", recvsz, usbrun);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
                 }
                 
                 if (recvsz > 0) {
@@ -49510,7 +49724,11 @@ static int usbhost(struct procRes_s *rs, char *sp)
                     memcpy(pcur, addr, recvsz);
                     #endif
                     
-                    ring_buf_prod(pTx);        
+                    ring_buf_prod_u(pTx, recvsz);
+                    usbdist = ring_buf_prod_tag(pTx, usbrun);
+
+                    sprintf_f(rs->logs, " usbdist: %d, usbrun: %d - 2\n", usbdist, usbrun);
+                    print_f(rs->plogs, sp, rs->logs);
                 }
                 
                 if (recvsz < 0) {
@@ -50432,20 +50650,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         //sprintf_f(rs->logs, "[DV] puimNxt is valid \n");
                                         free(puimGet);
                                         puimGet = puimNxt;
-                                    } else {
-                                        //sprintf_f(rs->logs, "[DV] puimNxt is NULL \n");
-                                        ix = puimGet->uimIdex + 1;
-                                        memset(puimGet, 0, sizeof(struct usbIndex_s));
-                                        puimGet->uimIdex = ix;
-                                        if (puimUse) {
-                                            puimUse->uimNxt = puimGet;
-                                        } else {
-                                            //sprintf_f(rs->logs, "[DV] puimUse is NULL \n");
-                                            puimCnTH = puimGet;
-                                        }                                       
-
-                                        
-                                        clock_gettime(CLOCK_REALTIME, &tidleS);
                                     }
 
                                     sprintf_f(rs->logs, "[DV]puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
@@ -50468,10 +50672,37 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }                             
                                             
                                     waitCylen = ix;
-                                    sprintf_f(rs->logs, "[DV] wait page size: %d\n", waitCylen);
+                                    sprintf_f(rs->logs, "[DV] wait page size: %d, pagerst: %d\n", waitCylen, pagerst);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     
                                     //sprintf_f(rs->logs, "[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
+
+                                    if ((waitCylen > 0) || (pagerst > 1)) {
+                                        if (!puimNxt) {
+                                            //printf("[DV] puimNxt is NULL \n");
+                                            ix = puimGet->uimIdex + 1;
+                                            memset(puimGet, 0, sizeof(struct usbIndex_s));
+                                            puimGet->uimIdex = ix;
+                                            if (puimUse) {
+                                                puimUse->uimNxt = puimGet;
+                                            } else {
+                                                //printf("[DV] puimUse is NULL \n");
+                                                puimCnTH = puimGet;
+                                            }                                       
+                                    
+                                            clock_gettime(CLOCK_REALTIME, &tidleS);
+                                        }
+                                        
+                                        sprintf_f(rs->logs, "[DV]puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    } else {
+                                        if (!puimNxt) {
+                                            if (puimGet) {
+                                                free(puimGet);
+                                                puimGet = 0;
+                                            }
+                                        }
+                                    }
 
                                     chr = 0;
                                     
@@ -50505,15 +50736,21 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         if (uimCylcnt) {
                             lens = 0;
-                            lens = ring_buf_cons(usbCur, &addrd);                
-                            if (lens <= 0) {
-                                //sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
-                                //usleep(1000);
-                                //lens = ring_buf_cons(usbCur, &addrd);                
-                                continue;
-                            } else {
-                                uimCylcnt = uimCylcnt - 1;
+                            lens = ring_buf_cons_u(usbCur, &addrd);                
+                            while (lens <= 0) {
+                                sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
+                                print_f(rs->plogs, "P11", rs->logs);
+
+                                usleep(1000);
+                                lens = ring_buf_cons_u(usbCur, &addrd);                
                             }
+
+                            uimCylcnt = uimCylcnt - 1;
+
+                            pipRet = ring_buf_cons_tag(usbCur);
+                            
+                            sprintf_f(rs->logs, "[DV] cons tag ret: %d \n", pipRet);
+                            print_f(rs->plogs, "P11", rs->logs);
 
                             if ((uimCylcnt == 1) && (lastCylen > 0)){
                                 lens = lastCylen;
@@ -54365,32 +54602,59 @@ int main(int argc, char *argv[])
 
     usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
     usbTx->pp =  (char **) memory_init_vtable(&usbTx->slotn, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
+    usbTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+    usbTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+
     if (!usbTx->pp) goto end;
     usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+
+    usbTx->r->usbrunnig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+    usbTx->r->usbgettig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+
     usbTx->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
     usbTx->chksz = USB_BUF_SIZE;
     usbTx->svdist = 8;
 
     usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
     usbTxd->pp = (char **) memory_init_vtable(&usbTxd->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+    usbTxd->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+    usbTxd->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
     if (!usbTxd->pp) goto end;
     usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+
+    usbTxd->r->usbrunnig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+    usbTxd->r->usbgettig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+
     usbTxd->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
     usbTxd->chksz = USB_BUF_SIZE;
     usbTxd->svdist = 8;
 
     gateTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
     gateTx->pp = (char **) memory_init_vtable(&gateTx->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0); 
+    gateTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+    gateTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+
     if (!gateTx->pp) goto end;
     gateTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+
+    gateTx->r->usbrunnig = usbTx->r->usbrunnig;
+    gateTx->r->usbgettig = usbTx->r->usbgettig;
+
     gateTx->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
     gateTx->chksz = USB_BUF_SIZE;
     gateTx->svdist = 8;
     
     gateTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
     gateTxd->pp = (char **) memory_init_vtable(&gateTxd->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+    gateTxd->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+    gateTxd->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+
     if (!gateTxd->pp) goto end;
     gateTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+
+    gateTxd->r->usbrunnig = usbTxd->r->usbrunnig;
+    gateTxd->r->usbgettig = usbTxd->r->usbgettig;
+
     gateTxd->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
     gateTxd->chksz = USB_BUF_SIZE;
     gateTxd->svdist = 8;
@@ -54496,7 +54760,6 @@ int main(int argc, char *argv[])
         printf("open device[%s]\n", usbdevpath0); 
     }
     usb_nonblock_set(pmrs->usbdv);
-
 
     dbgShowTimeStamp("s11", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
