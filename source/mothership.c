@@ -1701,7 +1701,7 @@ static int usb_send(char *pts, int usbfd, int len)
     }
 #else
     send = write(usbfd, pts, len);
-    printf("[USB] usb write %d bytes, ret: %d (2)\n", len, send);
+    //printf("[USB] usb write %d bytes, ret: %d (2)\n", len, send);
 #endif
     return send;    
 }
@@ -22359,7 +22359,7 @@ static int ring_buf_prod_u(struct shmem_s *pp, int csz)
     
     pp->urun[idx] = ((nlp & 0xfff) << 20) | csz;
 
-    printf("[R] prod u idx %d:%d csz: %d content: 0x%.8x \n", idx, nlp, csz, pp->urun[idx]);
+    //printf("[R] prod u idx %d:%d csz: %d content: 0x%.8x \n", idx, nlp, csz, pp->urun[idx]);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     
@@ -22401,13 +22401,15 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
 {
     char str[128];
     int tlen=0;
-
+    
+#if 0
     if (size > SPI_TRUNK_SZ) {
         sprintf_f(str, "ERROR!!! set last %d > max %d \n", size, SPI_TRUNK_SZ);
         print_f(mlogPool, "ring", str);
         size = SPI_TRUNK_SZ;
     }
-    
+#endif
+
 #if 0
     tlen = size % MIN_SECTOR_SIZE;
     if (tlen) {
@@ -22418,8 +22420,8 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
     pp->lastsz = size;
     pp->lastflg = 1;
 
-    sprintf_f(str, "set last l:%d f:%d \n", pp->lastsz, pp->lastflg);
-    print_f(mlogPool, "ring", str);
+    //sprintf_f(str, "set last l:%d f:%d \n", pp->lastsz, pp->lastflg);
+    //print_f(mlogPool, "ring", str);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
     return pp->lastflg;
@@ -22514,7 +22516,7 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
 
     sta = pp->urun[idx];
     
-    printf("[R] cons u idx %d:%d content: 0x%.8x \n", idx, nlp, sta);
+    //printf("[R] cons u idx %d:%d content: 0x%.8x \n", idx, nlp, sta);
     
     if (!sta) {
         return -2;
@@ -36940,6 +36942,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
+#define DBG_USB_GATE 0
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     sprintf_f(mrs->log, "usb gate !!!\n");
@@ -37103,7 +37106,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     pllfd[4].fd = -1;
     
     while(1) {
-        ptret = poll(pllfd, 5, 2000);
+        ptret = poll(pllfd, 5, 100);
         //sprintf_f(mrs->log, "[GW] ===== poll return %d =====\n", ptret);
         //print_f(&mrs->plog, "fs145", mrs->log);
         if (ptret < 0) {
@@ -37119,8 +37122,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if ((pllfd[ins].revents & POLLIN) == POLLIN) {
                 
                     read(pllfd[ins].fd, &pllcmd[ins], 1);
+                    
+                    #if 1//DBG_USB_GATE
                     sprintf_f(mrs->log, "[GW] id:%d pipe%d get chr: %c(0x%.2x) total:%d\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins], ptret);
                     print_f(&mrs->plog, "fs145", mrs->log);
+                    #endif
                     
                     evcnt++;
                     if (ptret == evcnt) {
@@ -37292,8 +37298,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             
                                         if (lens < USB_BUF_SIZE) {
                                             ret = ring_buf_prod_u(ringbf[ins], lens);
-                                            sprintf_f(mrs->log, "[GW] prod u ret: %d last\n", ret);
-                                            print_f(&mrs->plog, "fs145", mrs->log);
+                                            //sprintf_f(mrs->log, "[GW] prod u ret: %d last\n", ret);
+                                            //print_f(&mrs->plog, "fs145", mrs->log);
                                             ring_buf_set_last(ringbf[ins], lens);
                                             
                                             //pllcmd[ins] = pllcmd[ins] & 0x7f;
@@ -37343,8 +37349,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         }
                                         else if (tmpbf) {
                                             ret = ring_buf_prod_u(ringbf[ins], lens);
-                                            sprintf_f(mrs->log, "[GW] prod u ret: %d\n", ret);
-                                            print_f(&mrs->plog, "fs145", mrs->log);
+                                            //sprintf_f(mrs->log, "[GW] prod u ret: %d\n", ret);
+                                            //print_f(&mrs->plog, "fs145", mrs->log);
                                             //pubffo->ubbufo= tmpbf;
                                             outbf = tmpbf;
                                             //sprintf_f(mrs->log, "[GW] prod one trunk next outbf == 0x%.8x\n", outbf);
@@ -37463,8 +37469,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             } else if (latcmd[ins] == 0) {
                                 if (ins == 2) {
                                     //write(outfd[ins], &pllcmd[ins], 1);
+                                    
+                                    #if DBG_USB_GATE
                                     sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
                                     print_f(&mrs->plog, "fs145", mrs->log);
+                                    #endif
+                                    
                                     latcmd[ins] = 'q';
                                     latcmd[ins+1] = 'q';
                                     matcmd[ins] = 'f';
@@ -37731,8 +37741,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     lens = ring_buf_cons_u(ringbf[ins], &addrs);
                                 }
 
+                                #if DBG_USB_GATE
                                 sprintf_f(mrs->log, "[GW] cons u len: %d - b\n", lens);
                                 print_f(&mrs->plog, "fs145", mrs->log);
+                                #endif
                             }
                             else {    
                                 //write(outfd[ins], &pllcmd[ins], 1);
@@ -37750,9 +37762,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 usleep(1000);
                                 lens = ring_buf_cons_u(ringbf[ins], &addrs);
                             }
-
+                            
+                            #if DBG_USB_GATE
                             sprintf_f(mrs->log, "[GW] cons u len: %d \n", lens);
                             print_f(&mrs->plog, "fs145", mrs->log);
+                            #endif
 
                             memallocsz += 1;
 
@@ -37990,8 +38004,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     //write(outfd[ins], &pllcmd[ins], 1);
                                     write(outfd[ins], indexfo, 2);
+
+                                    #if DBG_USB_GATE
                                     sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) - middle of transmission count: %d \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins], pubffcd[ins]->ubcylcnt);
                                     print_f(&mrs->plog, "fs145", mrs->log);
+                                    #endif
+                                    
                                     cycCnt[ins] = 0;
                                 }
                             }
@@ -49129,7 +49147,7 @@ static int p8(struct procRes_s *rs)
 }
 
 #define DBG_USB_HS 0
-static int usbhost(struct procRes_s *rs, char *sp)
+static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
     struct pollfd ptfd[1];
     char ptrecv[32];
@@ -49169,7 +49187,7 @@ static int usbhost(struct procRes_s *rs, char *sp)
     char *chvaddr=0;
     struct usbhost_s *puhs=0;
     
-    sprintf_f(rs->logs, "enter usbhost \n");
+    sprintf_f(rs->logs, "enter usbhostd \n");
     print_f(rs->plogs, sp, rs->logs);
 
 #if 1
@@ -49212,14 +49230,20 @@ static int usbhost(struct procRes_s *rs, char *sp)
         ptfd[0].events = POLLIN;
         while(1) {
             tcnt++;
-            ptret = poll(ptfd, 1, 3000);
+            ptret = poll(ptfd, 1, 100);
+
+            #if DBG_USB_HS
             sprintf_f(rs->logs, "poll id:%d evt: 0x%.2x ret: %d - %d\n", ptfd[0].fd ,ptfd[0].revents, ptret, tcnt);
             print_f(rs->plogs, sp, rs->logs);
+            #endif
+            
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
-                sprintf_f(rs->logs, "pipe%d get chr: %c(0x%.2x) \n", pPtx[0], chr, chr);
-                print_f(rs->plogs, sp, rs->logs);
+                if (dlog) {
+                    sprintf_f(rs->logs, "pipe%d get chr: %c(0x%.2x) \n", pPtx[0], chr, chr);
+                    print_f(rs->plogs, sp, rs->logs);
+                }
                 break;
             }
         }
@@ -49311,9 +49335,11 @@ static int usbhost(struct procRes_s *rs, char *sp)
             
             msync(pMta, USB_META_SIZE, MS_SYNC);
             memcpy(ptm, pMta, sizeof(struct aspMetaData_s));
-
-            sprintf_f(rs->logs, "get meta magic number: 0x%.2x, 0x%.2x !!!\n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
-            print_f(rs->plogs, sp, rs->logs);
+            
+            if (dlog) {
+                sprintf_f(rs->logs, "get meta magic number: 0x%.2x, 0x%.2x !!!\n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
+                print_f(rs->plogs, sp, rs->logs);
+            }
 
             #if 0 /* remove ready */    
             insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
@@ -49427,17 +49453,22 @@ static int usbhost(struct procRes_s *rs, char *sp)
                     else {
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
-                        
-                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m1\n", recvsz, usbrun);
-                        print_f(rs->plogs, sp, rs->logs);
+
+                        if (dlog) {
+                            sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m1\n", recvsz, usbrun);
+                            print_f(rs->plogs, sp, rs->logs);
+                        }
                     }
                 }
                 else {
                     if (recvsz > 0) {
                         usbrun = recvsz  & 0xffff;
                         recvsz = len;
-                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m2\n", recvsz, usbrun);
-                        print_f(rs->plogs, sp, rs->logs);
+
+                        if (dlog) {
+                            sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m2\n", recvsz, usbrun);
+                            print_f(rs->plogs, sp, rs->logs);
+                        }
                     }
                 }
 
@@ -49450,7 +49481,7 @@ static int usbhost(struct procRes_s *rs, char *sp)
                     ring_buf_prod_u(pTx, recvsz);      
                     usbdist = ring_buf_prod_tag(pTx, usbrun);
 
-                    sprintf_f(rs->logs, "usbdist: %d, usbrun: %d - m2\n", usbdist, usbrun);
+                    sprintf_f(rs->logs, "usbdist: %d, usbrun: %d recvsz: %d\n", usbdist, usbrun, recvsz);
                     print_f(rs->plogs, sp, rs->logs);
                 }
                 
@@ -49702,9 +49733,11 @@ static int usbhost(struct procRes_s *rs, char *sp)
                     else {
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
-                        
-                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 1\n", recvsz, usbrun);
-                        print_f(rs->plogs, sp, rs->logs);
+
+                        if (dlog) {
+                            sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 1\n", recvsz, usbrun);
+                            print_f(rs->plogs, sp, rs->logs);
+                        }
                     }
                     //sprintf_f(rs->logs, "last trunk size: %d \n", recvsz);
                 }
@@ -49713,8 +49746,10 @@ static int usbhost(struct procRes_s *rs, char *sp)
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
 
-                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 2\n", recvsz, usbrun);
-                        print_f(rs->plogs, sp, rs->logs);
+                        if (dlog) {
+                            sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 2\n", recvsz, usbrun);
+                            print_f(rs->plogs, sp, rs->logs);
+                        }
                     }
                 }
                 
@@ -49727,7 +49762,7 @@ static int usbhost(struct procRes_s *rs, char *sp)
                     ring_buf_prod_u(pTx, recvsz);
                     usbdist = ring_buf_prod_tag(pTx, usbrun);
 
-                    sprintf_f(rs->logs, " usbdist: %d, usbrun: %d - 2\n", usbdist, usbrun);
+                    sprintf_f(rs->logs, "usbdist: %d, usbrun: %d recv: %d \n", usbdist, usbrun, recvsz);
                     print_f(rs->plogs, sp, rs->logs);
                 }
                 
@@ -49861,7 +49896,7 @@ end:
     return 0;
 }
 
-#define LOG_P9_EN (1)
+#define LOG_P9_EN (0)
 static int p9(struct procRes_s *rs)
 {
     int ret=0;
@@ -49875,7 +49910,7 @@ static int p9(struct procRes_s *rs)
     prctl(PR_SET_NAME, "msp-p9");
 
     while (1) {
-        ret = usbhost(rs, "P9");
+        ret = usbhostd(rs, "P9", LOG_P9_EN);
         if (ret) {
             break;
         }
@@ -49886,7 +49921,7 @@ static int p9(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P10_EN (1)
+#define LOG_P10_EN (0)
 static int p10(struct procRes_s *rs)
 {
     int ret=0;
@@ -49900,7 +49935,7 @@ static int p10(struct procRes_s *rs)
     prctl(PR_SET_NAME, "msp-p10");
 
     while (1) {
-        usbhost(rs, "P10");
+        usbhostd(rs, "P10", LOG_P10_EN);
     }
 
 
@@ -49908,7 +49943,7 @@ static int p10(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P11_EN (1)
+#define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
@@ -50018,10 +50053,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             memset(msgret, 0, 64);
             ret = rs_ipc_get_ms(rcmd, msgret, 64, 100);
         }
+        
+#if LOG_P11_EN
         if (ret < 0) {
             sprintf_f(rs->logs, "get cmd retrun ret: %d\n", ret);
             print_f(rs->plogs, "P11", rs->logs);
         }
+#endif
 
         uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 200);
         if (uret < 0) {
@@ -50048,8 +50086,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
         }
         
+#if LOG_P11_EN
         sprintf_f(rs->logs, "[ePol] epoll rx: %d, tx: %d ret: %d \n", usbentsRx, usbentsTx, uret);
         print_f(rs->plogs, "P11", rs->logs);
+#endif
 
         if (usbentsTx == 1) {
             if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09))) {
@@ -50215,8 +50255,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                             }
 
+                            #if LOG_P11_EN
                             sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x pipe%d \n", chq, chr, piprx[0]);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
                             
                             if (chq == 0xff) {
                                 if (chr) {
@@ -50652,8 +50694,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         puimGet = puimNxt;
                                     }
 
-                                    sprintf_f(rs->logs, "[DV]puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                    #if LOG_P11_EN
+                                    sprintf_f(rs->logs, "[DV] puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                                     
                                     ix = 0;
                                     puimTmp = puimCnTH;
@@ -50672,8 +50716,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }                             
                                             
                                     waitCylen = ix;
+
+                                    #if LOG_P11_EN
                                     sprintf_f(rs->logs, "[DV] wait page size: %d, pagerst: %d\n", waitCylen, pagerst);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                                     
                                     //sprintf_f(rs->logs, "[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
 
@@ -50693,8 +50740,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             clock_gettime(CLOCK_REALTIME, &tidleS);
                                         }
                                         
-                                        sprintf_f(rs->logs, "[DV]puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        //sprintf_f(rs->logs, "[DV] puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                        //print_f(rs->plogs, "P11", rs->logs);
                                     } else {
                                         if (!puimNxt) {
                                             if (puimGet) {
@@ -50749,15 +50796,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             pipRet = ring_buf_cons_tag(usbCur);
                             
-                            sprintf_f(rs->logs, "[DV] cons tag ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            //sprintf_f(rs->logs, "[DV] cons tag ret: %d \n", pipRet);
+                            //print_f(rs->plogs, "P11", rs->logs);
 
                             if ((uimCylcnt == 1) && (lastCylen > 0)){
                                 lens = lastCylen;
                             }
 
-                            sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d\n", addrd, lens, uimCylcnt, lastCylen);
+                            #if LOG_P11_EN
+                            sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d dist: %d\n", addrd, lens, uimCylcnt, lastCylen, pipRet);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
                             
                             msync(addrd, lens, MS_SYNC);
 
@@ -51777,6 +51826,7 @@ int main(int argc, char *argv[])
     //dbgShowTimeStamp(pmrs->log, pmrs, NULL, 4, NULL);
 
     pmrs->mspconfig &= ~0x7;
+    pmrs->plog.dislog = 0;
     switch (arg[1]) {
         case 1:
             pmrs->mspconfig |= 0x1;
@@ -55127,7 +55177,7 @@ static FILE *find_save(char *dst, char *tmple)
         sprintf(dst, tmple, i);
         f = fopen(dst, "r");
         if (!f) {
-            printf("open file [%s]\n", dst);
+            //printf("open file [%s]\n", dst);
             break;
         } else {
             //printf("open file [%s] succeed \n", dst);
