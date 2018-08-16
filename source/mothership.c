@@ -45,11 +45,11 @@ usb recover"
 
 #define LOG_ALL_DISABLE (0)
 
-#define DISABLE_USB  (1)
+#define DISABLE_USB  (0)
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 #define RING_BUFF_NUM_USB   (1536)
-#define USB_BUF_SIZE (32768*3)
+#define USB_BUF_SIZE (98304)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
 #define CYCLE_LEN (20)
@@ -1242,6 +1242,7 @@ struct usbIndex_s{
 
 struct usbBuff_s{
     //char bpt[USB_BUF_SIZE];
+    int bsz;
     char *bpt;
     struct usbBuff_s *bn;
 };
@@ -22316,6 +22317,15 @@ static int ring_buf_prod_tag(struct shmem_s *pp, int usbrn)
 
     ttn = pp->slotn;
 
+    gdx = pp->r->usbgettig->seq;
+    glp = pp->r->usbgettig->run;
+
+    folwn = glp * pp->slotn + gdx;
+
+    if ((!usbrn) || (usbrn < 0)) {
+        return folwn;
+    }
+
     if (usbrn > ttn) {
         rlp = usbrn / ttn;
     } else {
@@ -22330,10 +22340,6 @@ static int ring_buf_prod_tag(struct shmem_s *pp, int usbrn)
     //sprintf_f(str, "cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
     //print_f(mlogPool, "ring", str);
     
-    gdx = pp->r->usbgettig->seq;
-    glp = pp->r->usbgettig->run;
-
-    folwn = glp * pp->slotn + gdx;
     //leadn = rlp * pp->slotn + rdx;
     //dist = leadn - folwn;
 
@@ -22401,7 +22407,8 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
 {
     char str[128];
     int tlen=0;
-    
+    int idx=0;
+
 #if 0
     if (size > SPI_TRUNK_SZ) {
         sprintf_f(str, "ERROR!!! set last %d > max %d \n", size, SPI_TRUNK_SZ);
@@ -22416,6 +22423,10 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
         size = size + MIN_SECTOR_SIZE - tlen;
     }
 #endif
+
+    idx = pp->r->lead.seq;
+    
+    pp->urun[idx] |= 0x40000;
 
     pp->lastsz = size;
     pp->lastflg = 1;
@@ -22542,6 +22553,10 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
     *addr = pp->pp[idx];
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
+
+    if (sta & 0x40000) {
+        rsz |= 0x40000;
+    }
 
     return rsz;
 }
@@ -36973,7 +36988,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct shmem_s *ringbf[4];
     char *addrd, *addrs;
     uint32_t *add32d, *add32s;
-    int lens=0, szup=0, szdn=0, lastlen=0, ret=0;
+    int lens=0, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0;
     int totsz[4];
     int cycCnt[4];
     int idxInit[4];
@@ -37265,9 +37280,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     midxfo[1] = (pubffo->ubindex & 0x3f) | 0x40;
                                     cycCnt[ins] = 0;
                                     while (cycCnt[ins] < CYCLE_LEN) {
-                                        lens = ring_buf_get(ringbf[ins], &addrd);
-                                        if (lens <= 0) {
-                                            sprintf_f(mrs->log, "[GW] get ring buffer failed !! ret: %d \n", lens);
+                                        ret = ring_buf_get(ringbf[ins], &addrd);
+                                        if (ret <= 0) {
+                                            sprintf_f(mrs->log, "[GW] get ring buffer failed !! ret: %d \n", ret);
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                             continue;
                                         }
@@ -37276,7 +37291,16 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         
                                         add32s = (uint32_t *) outbf->bpt;                                        
                                         addrs = (char *) *add32s;
-                                        
+                                        lens = outbf->bsz;
+
+                                        if (lens & 0x40000) {
+                                            lasflag = 0x40000;
+                                        } else {
+                                            lasflag = 0;
+                                        }
+                                        lens = lens & 0x1ffff;
+                                        //printf("[GW] get mem buffer len: %d lasflag: 0x%.5x !!  \n", lens, lasflag);
+
                                         tmpbf = outbf->bn;
 
                                         //sprintf_f(mrs->log, "[GW] addrs: 0x%.8x, tmpbf: 0x%.8x lens: %d - %d\n", addrs, tmpbf, lens, cycCnt[ins]);
@@ -37289,7 +37313,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                                 sprintf_f(mrs->log, "\n[GW] get the last trunk size error!!! lens: %d lastlen: %d\n", lens, lastlen);
                                                 print_f(&mrs->plog, "fs145", mrs->log);
                                             } else {
-                                                sprintf_f(mrs->log, "\n[GW] get the last trunk size, lens: %d lastlen: %d\n", lens, lastlen);
+                                                sprintf_f(mrs->log, "\n[GW] get the last trunk size, lens: %d lastlen: %d\n\n", lens, lastlen);
                                                 print_f(&mrs->plog, "fs145", mrs->log);
                                             }
                                         }
@@ -37322,7 +37346,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         shmem_dump(addrd, 32);
                                         #endif
                                             
-                                        if (lens < USB_BUF_SIZE) {
+                                        if ((lens < USB_BUF_SIZE) && (lasflag)) {
                                             ret = ring_buf_prod_u(ringbf[ins], lens);
                                             //sprintf_f(mrs->log, "[GW] prod u ret: %d last\n", ret);
                                             //print_f(&mrs->plog, "fs145", mrs->log);
@@ -37384,7 +37408,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         }
                                         else {
                                             pllcmd[ins] = 0x80;                                    
-                                            sprintf_f(mrs->log, "[GW] idle %d \n", cycCnt[ins]);
+                                            sprintf_f(mrs->log, "[GW] Error!!! idle %d \n", cycCnt[ins]);
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                             break;
                                         }
@@ -37794,6 +37818,15 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 lens = ring_buf_cons_u(ringbf[ins], &addrs);
                             }
                             
+                            if (lens & 0x40000) {
+                                lasflag = 0x40000;
+                            } else {
+                                lasflag = 0;
+                            }
+                            lens = lens & 0x1ffff;
+                            
+                            //printf("[GW] get ring buffer len: %d lasflag: 0x%.5x !!  \n", lens, lasflag);
+
                             #if DBG_USB_GATE
                             sprintf_f(mrs->log, "[GW] cons u len: %d \n", lens);
                             print_f(&mrs->plog, "fs145", mrs->log);
@@ -37964,6 +37997,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             #endif
                             
                             *add32d = (uint32_t)addrs;
+                            curbf->bsz = lens;
 
                             totsz[ins] += lens;
                             //sprintf_f(mrs->log, "[GW] ring%d trunk size: %d, total:%d pllcmd:%c dist:%d\n", ins, lens, totsz[ins], pllcmd[ins], ring_buf_info_len(ringbf[ins]));
@@ -37993,7 +38027,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             if (!lens) {
                                 //sprintf_f(mrs->log, "[GW] ring%d handle meta \n", ins);                            
                                 //print_f(&mrs->plog, "fs145", mrs->log);
-                            } else if (lens < USB_BUF_SIZE) {
+                            } else if ((lens < USB_BUF_SIZE) && (lasflag)) {
                                 //ring_buf_set_last(ringbf[0], lens);
                                 sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
@@ -38014,6 +38048,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 //ring_buf_init(ringbf[ins]);
 
                                 //write(outfd[ins], &pllcmd[ins], 1);
+
+                                curbf->bsz |= lasflag;
+
                                 write(outfd[ins], indexfo, 2);
                                 sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) - end of transmission \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
@@ -49195,7 +49232,7 @@ static int p8(struct procRes_s *rs)
     return 0;
 }
 
-#define DBG_USB_HS 1
+#define DBG_USB_HS 0
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
     struct pollfd ptfd[1];
@@ -49527,12 +49564,16 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         #endif
 
                         recvsz = recvsz  & 0x1ffff;
-
+                        usbrun = -1;
                         //sprintf_f(rs->logs, "use the error status: 0x%.2x recv: %d\n", cswst, recvsz);
                         //print_f(rs->plogs, sp, rs->logs);
                     }
+                    else if (recvsz & 0x40000) {
+                        recvsz = recvsz  & 0x1ffff;
+                    }
                     else if (recvsz & 0x80000) {
                         recvsz = recvsz  & 0x1ffff;
+                        usbrun = -1;
                     }
                     else {
                         usbrun = recvsz  & 0xfff;
@@ -49605,7 +49646,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 acusz += recvsz;
 
-                if (recvsz < len) {
+                if ((recvsz < len) && (usbrun < 0)) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
                     sprintf_f(rs->logs, "loop last ret: %d, the last size: %d \n", ptret, recvsz);
@@ -49639,10 +49680,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             pieRet = write(pPrx[1], &chq, 1);
 
             if (cswst) {
-                chq = 'I';
-                pieRet = write(pPrx[1], &chq, 1);
-                chq = cswst;
-                pieRet = write(pPrx[1], &chq, 1);
+                cplls[0] = 'I';
+                cplls[1] = cswst;
+                pieRet = write(pPrx[1], &cplls, 2);
             }
             
             if (chr == 'h') {
@@ -49789,25 +49829,20 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs, "Error!!! get status: 0x%.2x recv:%d\n", cswst, recvsz);
                         print_f(rs->plogs, sp, rs->logs);
 
-                        chr = 'I';
+                        //chr = 'I';
                     }
+
                     if (recvsz & 0x20000) {
-                        //sprintf_f(rs->logs, "get the end signal 0x20000 \n");
-                        
-                        #if USB_CALLBACK_LOOP 
-                        chr = 'R';
-                        #else
-                        chr = 0;
-                        #endif
-                        
                         recvsz = recvsz  & 0x1ffff;
-                        
-                        /*should not be here*/
-                        sprintf_f(rs->logs, "Error!!! get status: 0x%.2x recv:%d\n", cswst, recvsz);
-                        print_f(rs->plogs, sp, rs->logs);
+                        usbrun = -1;
+                        //printf("[%s] Error!!! data get the end signal 0x20000 recvsz: %d\n", strpath, recvsz);
+                    }
+                    else if (recvsz & 0x40000) {
+                        recvsz = recvsz  & 0x1ffff;
                     }
                     else if (recvsz & 0x80000) {
-                        recvsz = recvsz  & 0x1ffff;                    
+                        recvsz = recvsz  & 0x1ffff;
+                        usbrun = -1;
                     }
                     else {
                         usbrun = recvsz  & 0xfff;
@@ -49884,7 +49919,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 acusz += recvsz;
 
-                if (recvsz < len) {
+                if ((recvsz < len) && (usbrun < 0)) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
                     sprintf_f(rs->logs, "loop last ret: %d, the last size: %d \n", ptret, recvsz);
@@ -49912,6 +49947,33 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
             }
 
+#if 1
+            switch (chr) {
+            case 'd':
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+                break;
+            case 's':
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+                break;
+            case 'q':
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+                break;
+            case 'c':
+                chq = 'Q';
+                pieRet = write(pPrx[1], &chq, 1);
+                break;
+            case 'R':
+                chq = 'R';
+                pieRet = write(pPrx[1], &chq, 1);
+                break;
+            default:
+                printf("[%s] Error!!! data unknown chr: %c \n", chr);
+                break;
+            }
+#else
             if (chr == 'd') {
                 chq = 'Q';
                 pieRet = write(pPrx[1], &chq, 1);
@@ -49931,6 +49993,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 chq = 'R';
                 pieRet = write(pPrx[1], &chq, 1);
             }
+#endif
 
             puhs->pushcnt = tcnt;
 
@@ -50053,9 +50116,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char endstr[] = "usb_conti_stop";
     int seqtx=0, lens=0, maxsz=0, pipRet=0, idlet=0, ix=0, waitCylen=0, chr=0, cindex=0, lastCylen=0;
     char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12], chn=0;
-    char cmdtyp=0, cswerr=0, pagerst=0, che=0;
+    char cmdtyp=0, cswerr=0, pagerst=2, che=0;
     int *piptx=0, *piprx=0;
-    int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0;
+    int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0, lastflag=0;
     int *pipeRx, *pipeRxd, *pipeTx, *pipeTxd;
     int *gateUpTx, *gateUpRx, *gateDnTx, *gateDnRx;
     struct timespec tidleS, tidleE;
@@ -50946,6 +51009,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 lens = ring_buf_cons_u(usbCur, &addrd);                
                             }
 
+                            if (lens & 0x40000) {
+                                lastflag = 0x40000;
+                            } else {
+                                lastflag = 0;
+                            }
+                            lens = lens & 0x1ffff;
+
                             uimCylcnt = uimCylcnt - 1;
 
                             distCylcnt = ring_buf_cons_tag(usbCur);
@@ -50958,7 +51028,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
 
                             #if LOG_P11_EN
-                            sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d dist: %d\n", addrd, lens, uimCylcnt, lastCylen, distCylcnt);
+                            sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d dist: %d lastflag: 0x%.5x\n", addrd, lens, uimCylcnt, lastCylen, distCylcnt, lastflag);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
                             
@@ -50980,7 +51050,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 #endif
                         }
                         
-                        if ((lens > 0) && (lens < USB_BUF_SIZE) && (!uimCylcnt)) {
+                        if ((lens > 0) && (lens < USB_BUF_SIZE) && (!uimCylcnt) && (lastflag)) {
                             che = 'E';
                             //sprintf_f(rs->logs, "[DV] the last trunk size is %d %d/%d\n", lens, cntTx, puscur->pushcnt);
                         }
@@ -51386,6 +51456,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     endf = 0;
                     endm = 0;
                 
+                    distCylcnt = 0;
                     uimCylcnt = 0;
                     datCylcnt = 0;
                     lastCylen = 0;
@@ -51393,7 +51464,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     rwaitCylen = 0;
                 
                     cswerr = 0;
-                    pagerst = 0;
+                    pagerst = 2;
                     #endif
                     
                     sprintf_f(rs->logs, "[DV] clean end \n");
@@ -51531,6 +51602,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             
                         }
                         else if (cmd == 0x12) {
+                            distCylcnt = 0;
                             uimCylcnt = 0;
                             datCylcnt = 0;
                             lastCylen = 0;
