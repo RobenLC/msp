@@ -22262,7 +22262,8 @@ static int ring_buf_get(struct shmem_s *pp, char **addr)
     maxn = pp->slotn; 
 
     dist = leadn - folwn;
-    //sprintf_f(str, "get d:%d, L:%d, f:%d, tot: %d\n", dist, leadn, folwn, maxn);
+    
+    //sprintf_f(str, "rget d:%d, L:%d, f:%d, tot: %d\n", dist, leadn, folwn, maxn);
     //print_f(mlogPool, "ring", str);
 
     if (dist > (pp->slotn - 2))  return -1;
@@ -22515,6 +22516,7 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
         //*addr = pp->pp[pp->r->folw.seq + 1];
         //pp->r->folw.seq += 1;
         idx = pp->r->folw.seq + 1;
+        nlp = pp->r->folw.run;
     } else {
         //*addr = pp->pp[0];
         //pp->r->folw.seq = 0;
@@ -54901,6 +54903,7 @@ int main(int argc, char *argv[])
     memset(pushostd, 0, sizeof(struct usbhost_s));
 
     usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+    
     usbTx->pp =  (char **) memory_init_vtable(&usbTx->slotn, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
     usbTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
     usbTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
