@@ -5842,6 +5842,7 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
         //*addr = pp->pp[pp->r->folw.seq + 1];
         //pp->r->folw.seq += 1;
         idx = pp->r->folw.seq + 1;
+        nlp = pp->r->folw.run;
     } else {
         //*addr = pp->pp[0];
         //pp->r->folw.seq = 0;
