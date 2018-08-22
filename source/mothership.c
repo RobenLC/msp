@@ -52,7 +52,7 @@ usb recover"
 #define USB_BUF_SIZE (98304)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
-#define CYCLE_LEN (20)
+#define CYCLE_LEN (40)
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
 
@@ -36975,7 +36975,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     int *dndvtx=0, *dndvrx=0;
     
     int ptret=0, ins=0, evcnt=0, ons=0, gerr=0;
-    char chp=0, chq=0, cswinf=0, pllinf=0;
+    char chp=0, chq=0, cswinf=0, pllinf=0, chv=0;
     char pllcmd[5];
     char latcmd[5];
     char matcmd[5];
@@ -37238,7 +37238,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
                                 }
                                 
-                                #if 0 /* memory used debug */
+                                #if 1 /* memory used debug */
                                 if (pubffh) {
                                     memsz = 0;
                                     pageidx = 0;
@@ -37612,6 +37612,17 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         }
                         else if (pllcmd[ins] == 'm') {
+                        
+                            /* clean msg queue */
+                            for (ix=0; ix<4; ix++) {
+                                ret = read(infd[ix], &chv, 1);
+                                while (ret > 0) {
+                                    sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                    ret = read(infd[ix], &chv, 1);
+                                }
+                            }
+                        
                             write(outfd[ins], &pllcmd[ins], 1);
                             //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                             //print_f(&mrs->plog, "fs145", mrs->log);
