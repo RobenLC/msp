@@ -1404,7 +1404,7 @@ static char **memory_init(int *sz, int tsize, int csize);
 static int print_f(struct logPool_s *plog, char *head, char *str);
 static int printf_flush(struct logPool_s *plog, FILE *f);
 static int print_dbg(struct logPool_s *plog, char *str, int size);
-static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs);
+static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs, int argc);
 //time measurement, start /stop
 static int time_diff(struct timespec *s, struct timespec *e, int unit);
 //file rw open, save to file for debug
@@ -22425,14 +22425,15 @@ static int ring_buf_set_last(struct shmem_s *pp, int size)
     }
 #endif
 
-    idx = pp->r->lead.seq;
-    
-    pp->urun[idx] |= 0x40000;
+    if (pp->urun) {
+        idx = pp->r->lead.seq;
+        pp->urun[idx] |= 0x40000;
+    }
 
     pp->lastsz = size;
     pp->lastflg = 1;
 
-    //sprintf_f(str, "set last l:%d f:%d \n", pp->lastsz, pp->lastflg);
+    //sprintf_f(str, "set last l:%d f:%d sz:%d min:%d\n", pp->lastsz, pp->lastflg, size, MIN_SECTOR_SIZE);
     //print_f(mlogPool, "ring", str);
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
@@ -23392,7 +23393,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23459,7 +23460,7 @@ end:
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
     
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     printf_flush(&mrs->plog, mrs->flog);
     
@@ -23525,7 +23526,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23584,7 +23585,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23639,7 +23640,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23694,7 +23695,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23749,7 +23750,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23804,7 +23805,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23859,7 +23860,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23914,7 +23915,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -23978,7 +23979,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24034,7 +24035,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24253,7 +24254,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24331,7 +24332,7 @@ end:
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
 
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     printf_flush(&mrs->plog, mrs->flog);    
     
@@ -24412,7 +24413,7 @@ end:
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
 
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     printf_flush(&mrs->plog, mrs->flog);    
     
@@ -24471,7 +24472,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24528,7 +24529,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24585,7 +24586,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24642,7 +24643,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24713,7 +24714,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
     printf_flush(&mrs->plog, mrs->flog);    
     
     return ret;
@@ -24779,7 +24780,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24844,7 +24845,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24900,7 +24901,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -24958,7 +24959,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25019,7 +25020,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25089,7 +25090,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25144,7 +25145,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25199,7 +25200,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25254,7 +25255,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25309,7 +25310,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25366,7 +25367,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25423,7 +25424,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25480,7 +25481,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25537,7 +25538,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25603,7 +25604,7 @@ end:
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
 
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     printf_flush(&mrs->plog, mrs->flog);    
     
@@ -25661,7 +25662,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25722,7 +25723,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25778,7 +25779,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25834,7 +25835,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -25890,7 +25891,7 @@ end:
 
     n = strlen(mrs->log);
     print_dbg(&mrs->plog, mrs->log, n);
-    printf_dbgflush(&mrs->plog, mrs);
+    printf_dbgflush(&mrs->plog, mrs, argc);
 
     return ret;
 }
@@ -26189,16 +26190,26 @@ static int dbg(struct mainRes_s *mrs)
             if (wait < 0) continue;
         }
 
+        //sprintf_f(mrs->log, "get ch:  \n");
+        //print_f(&mrs->plog, "DBG", mrs->log);
+
         ch = 0;
         ret = mrs_ipc_get(mrs, &ch, 1, 6);
         while (ret > 0) {
+            //sprintf_f(mrs->log, "get result ret: %d ch: %c \n",ret, ch);
+            //print_f(&mrs->plog, "DBG", mrs->log);
 
             if (loglen > 0) {
                 plog[loglen] = ch;
                 loglen++;
                 if ((ch == '>') || (loglen == 2048)) {
-
-                    mrs_ipc_put(mrs, plog, loglen, 5);
+                
+                    if (pi == 42) {
+                        mrs_ipc_put(mrs, plog, loglen, 14);
+                    } else {
+                        mrs_ipc_put(mrs, plog, loglen, 5);
+                    }
+                    
                     sprintf_f(mrs->log, "\"%s\"", plog);
                     print_f(&mrs->plog, "DBG", mrs->log);
 
@@ -26219,9 +26230,13 @@ static int dbg(struct mainRes_s *mrs)
             sprintf_f(mrs->log, "command time out :%d, loglen: %d\n", wait, loglen);
             print_f(&mrs->plog, "DBG", mrs->log);
             if (loglen > 0) {
-
-                mrs_ipc_put(mrs, plog, loglen, 5);
-
+            
+                if (pi == 42) {
+                    mrs_ipc_put(mrs, plog, loglen, 14);
+                } else {
+                    mrs_ipc_put(mrs, plog, loglen, 5);
+                }
+                
             }
             wait = -1;
         }
@@ -29831,8 +29846,8 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *s=0, *sc=0;
 
-    //sprintf_f(mrs->log, "%d\n", modersp->v);
-    //print_f(&mrs->plog, "fs68", mrs->log);
+    sprintf_f(mrs->log, "v:%d r:0x%.8x\n", modersp->v, modersp->r);
+    print_f(&mrs->plog, "fs68", mrs->log);
     pfat = &mrs->aspFat;
     sc = pfat->fatSupcur;
 
@@ -29871,6 +29886,10 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
             modersp->r |= 0x1;
             //mrs_ipc_put(mrs, "e", 1, 3);
         }
+        
+        sprintf_f(mrs->log, "get ch:%c v:%d r:0x%.8x\n", ch, modersp->v, modersp->r);
+        print_f(&mrs->plog, "fs68", mrs->log);
+        
         ret = mrs_ipc_get(mrs, &ch, 1, 1);
     }
 
@@ -37611,7 +37630,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 print_f(&mrs->plog, "fs145", mrs->log);
                             }
                         }
-                        else if (pllcmd[ins] == 'm') {
+                        else if ((pllcmd[ins] == 'm') || (pllcmd[ins] == 'n')) {
                         
                             /* clean msg queue */
                             for (ix=0; ix<4; ix++) {
@@ -41944,8 +41963,8 @@ static int p4(struct procRes_s *rs)
                 while (1) {
                     len = ring_buf_cons(rs->pcmdRx, &addr);
 
-                    //sprintf_f(rs->logs, "get ring buff len: %d \n", len);
-                    //print_f(rs->plogs, "P4", rs->logs);         
+                    sprintf_f(rs->logs, "get ring buff len: %d \n", len);
+                    print_f(rs->plogs, "P4", rs->logs);         
 
                     if (len >= 0) {
                         pi++;
@@ -42030,13 +42049,15 @@ static int p4(struct procRes_s *rs)
                             fflush(rs->fdat_s[2]);
 #endif                            
                             totsz += opsz;
-                        } else {
+                        }
+                        else {
                             sprintf_f(rs->logs, "len:%d \n", len);
                             print_f(rs->plogs, "P4", rs->logs);         
                         }
                         
                         rs_ipc_put(rs, "n", 1);
-                    } else {
+                    }
+                    else {
                         sprintf_f(rs->logs, "%c socket tx %d %d %d- end\n", ch, rs->psocket_t->connfd, opsz, pi);
                         print_f(rs->plogs, "P4", rs->logs);         
                         break;
@@ -49332,20 +49353,20 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         ptfd[0].events = POLLIN;
         while(1) {
             tcnt++;
-            ptret = poll(ptfd, 1, 2000);
+            ptret = poll(ptfd, 1, 100);
 
-            //#if DBG_USB_HS
+            #if DBG_USB_HS
             sprintf_f(rs->logs, "poll id:%d evt: 0x%.2x ret: %d - %d\n", ptfd[0].fd ,ptfd[0].revents, ptret, tcnt);
             print_f(rs->plogs, sp, rs->logs);
-            //#endif
+            #endif
             
             if (ptret > 0) {
                 //sleep(2);
                 read(pPtx[0], &chr, 1);
-                //if (dlog) {
+                if (dlog) {
                     sprintf_f(rs->logs, "pipe%d get chr: %c(0x%.2x) \n", pPtx[0], chr, chr);
                     print_f(rs->plogs, sp, rs->logs);
-                //}
+                }
                 break;
             }
         }
@@ -49425,7 +49446,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             cmdchr = cmdMtx[15][1];
             break;
         default:
-            goto end;
+            //goto end;
             break;
         }
 
@@ -50032,8 +50053,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
         }
     }
-end:
 
+
+    end:        
+    
     if (usbid) close(usbid);
     
 #endif
@@ -50313,10 +50336,25 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 pipRet = write(pipeTx[1], &chq, 1);
                 if (pipRet < 0) {
                     printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
-                    continue;
                 }
                 
+                sprintf(msgcmd, "usbidle");
+
+                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
+                print_f(rs->plogs, "P11", rs->logs);
+
+                ret = rs_ipc_get(rcmd, rcmd->logs, 4096);
+                while (ret <= 0) {
+                    ret = rs_ipc_get(rcmd, rcmd->logs, 4096);
+                }
+
+                sprintf_f(rs->logs, "[DV]  get usbscan result: [%s] ret: %d\n", rcmd->logs, ret);
+                print_f(rs->plogs, "P11", rs->logs);
+
+                print_f(rcmd->plogs, "C11", rcmd->logs);
+                
                 cmd = 0;
+                continue;
             }
             else if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09))) {
                 #if USB_HS_SAVE_RESULT_DV
@@ -51214,10 +51252,38 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     //usbentsTx = 0;
                     continue;
                 }
-                
+
+                sprintf_f(rs->logs, "[DV] cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                print_f(rs->plogs, "P11", rs->logs);
                 shmem_dump(csw, wrtsz);
                 
                 cmd = 0;
+                
+                if (opc == 0x4c) {
+                    chq = 'x';
+                    pipRet = write(pipeTx[1], &chq, 1);
+                    if (pipRet < 0) {
+                        printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
+                    }
+                    opc = 0;
+                    
+                    sprintf(msgcmd, "usbidle");
+
+                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
+                print_f(rs->plogs, "P11", rs->logs);
+
+                ret = rs_ipc_get(rcmd, rcmd->logs, 4096);
+                while (ret <= 0) {
+                    ret = rs_ipc_get(rcmd, rcmd->logs, 4096);
+                }
+
+                sprintf_f(rs->logs, "[DV]  get usbscan result: [%s] ret: %d\n", rcmd->logs, ret);
+                
+                    print_f(rcmd->plogs, "C11", rcmd->logs);
+                    
+                    continue;
+                }
+                    
             }
             else if (cmd == 0x12) {
                 csw[11] = 0;
@@ -51314,8 +51380,21 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     pipRet = write(pipeTx[1], &chq, 1);
                     if (pipRet < 0) {
                         printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
-                        continue;
                     }
+                    
+                    sprintf(msgcmd, "usbidle");
+                    
+                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
+                print_f(rs->plogs, "P11", rs->logs);
+
+                ret = rs_ipc_get(rcmd, rcmd->logs, 4096);
+                while (ret <= 0) {
+                    ret = rs_ipc_get(rcmd, rcmd->logs, 4096);
+                }
+
+                sprintf_f(rs->logs, "[DV]  get usbscan result: [%s] ret: %d\n", rcmd->logs, ret);
+                
+                    print_f(rcmd->plogs, "C11", rcmd->logs);
                 }
                     
                 cmd = 0;
@@ -51325,7 +51404,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
 
         }
-            
+        
+        //if (strcmp(msgcmd, "usbscan") == 0) {
+        //    continue;
+        //}
 
         if (usbentsRx == 1) {
 
@@ -51398,9 +51480,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         continue;
                     }
-
-                    sprintf(msgcmd, "usbscan");
-                    rs_ipc_put(rcmd, msgcmd, 7);
 
                     sprintf_f(rs->logs, "[DV] clean start \n");
                     print_f(rs->plogs, "P11", rs->logs);
@@ -51483,6 +51562,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] clean end \n");
                     print_f(rs->plogs, "P11", rs->logs);
 
+                    sprintf(msgcmd, "usbscan");
+                    rs_ipc_put(rcmd, msgcmd, 7);
+
                     break;
                 }
                 else {
@@ -51508,89 +51590,130 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         
                         if (cmd == 0x11) {      
-                        
-                                if ((opc == 0x4c) && (dat == 0x01)) {                     
+                                while (1) {
+                                    chq = 0;
+                                    pipRet = read(pipeRx[0], &chq, 1);
+                                    if (pipRet < 0) {
+                                        break;
+                                    }
+                                    else {
+                                        
+                                        #if DBG_27_DV               
+                                        sprintf_f(rs->logs, "[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif                          
+                                        
+                                    }
+                                }
+                                
+                                //ring_buf_init(pushostd->pushring);
+                                //ring_buf_init(pushost->pgatring);
+                                while (1) {
+                                    chd = 0;
+                                    pipRet = read(pipeRxd[0], &chd, 1);
+                                    if (pipRet < 0) {
+                                        break;
+                                    }
+                                    else {
+                                
+                                        #if DBG_27_DV               
+                                        sprintf_f(rs->logs, "[DV] clean pipe get chd: %c(0x%.2x) \n", chd, chd);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif                          
+                                    }
+                                }
+                                
+                                if ((opc == 0x4c) && (dat == 0x01)) {     
+
+                                    //sprintf(msgcmd, "usbscan");
+                                    //rs_ipc_put(rcmd, msgcmd, 7);
+
                                     continue;
                                 }
                                 else if ((opc == 0x04) && (dat == 0x85)) {
                                 
                                     puscur = 0;
-                                    //ring_buf_init(pushost->pushring);
-                                    //ring_buf_init(pushost->pgatring);
-                                    while (1) {
-                                        chq = 0;
-                                        pipRet = read(pipeRx[0], &chq, 1);
-                                        if (pipRet < 0) {
-                                            break;
-                                        }
-                                        else {
-                
-                                            #if DBG_27_DV               
-                                            sprintf_f(rs->logs, "[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
-                                            print_f(rs->plogs, "P11", rs->logs);
-                                            #endif                          
-                                            
-                                        }
+
+                                    sprintf(msgcmd, "usbscan");
+                                    rs_ipc_put(rcmd, msgcmd, 7);
+
+                                    chq = 'n';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
                                     }
-                                
+                                                                        
                                     //continue;
+
                                     break;
                                 }
                                 else if ((opc == 0x05) && (dat == 0x85)) {
                                 
                                     puscur = 0;
-                                    //ring_buf_init(pushost->pushring);
-                                    //ring_buf_init(pushost->pgatring);
-                                    while (1) {
-                                        chq = 0;
-                                        pipRet = read(pipeRx[0], &chq, 1);
-                                        if (pipRet < 0) {
-                                            break;
-                                        }
-                                        else {
-                                            
-                                            #if DBG_27_DV               
-                                            sprintf_f(rs->logs, "[DV] clean pipe get chq: %c(0x%.2x) \n", chq, chq);
-                                            print_f(rs->plogs, "P11", rs->logs);
-                                            #endif                          
-                                            
-                                        }
+
+                                    sprintf(msgcmd, "usbscan");
+                                    rs_ipc_put(rcmd, msgcmd, 7);
+
+                                    chq = 'n';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
                                     }
-                                
-                                    //ring_buf_init(pushostd->pushring);
-                                    //ring_buf_init(pushost->pgatring);
-                                    while (1) {
-                                        chd = 0;
-                                        pipRet = read(pipeRxd[0], &chd, 1);
-                                        if (pipRet < 0) {
-                                            break;
-                                        }
-                                        else {
-                
-                                            #if DBG_27_DV               
-                                            sprintf_f(rs->logs, "[DV] clean pipe get chd: %c(0x%.2x) \n", chd, chd);
-                                            print_f(rs->plogs, "P11", rs->logs);
-                                            #endif                          
-                                        }
-                                    }
-                                
+                                    
                                     //continue;
                                     break;
                                 }
                                 else if ((opc == 0x09) && (dat == 0x85)) {
                                     puscur = 0;
+
+                                    sprintf(msgcmd, "usbscan");
+                                    rs_ipc_put(rcmd, msgcmd, 7);
+
+                                    chq = 'n';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
                                     break;
                                 }
                                 else if ((opc == 0x0a) && (dat == 0x85)) {
                                     puscur = 0;
-                                    //continue;
-                                    break;
-                                }
-                                else if ((opc == 0x4d) && (dat == 0x00)) {
+                                    
                                     sprintf(msgcmd, "usbscan");
                                     rs_ipc_put(rcmd, msgcmd, 7);
 
+                                    chq = 'n';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    //continue;
+                                    
+                                    break;
+                                }
+                                else if ((opc == 0x4d) && (dat == 0x00)) {
                                     puscur = pushost;                    
+
+                                    sprintf(msgcmd, "usbscan");
+                                    rs_ipc_put(rcmd, msgcmd, 7);
+                                    
+                                    chq = 'n';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
 
                                     chq = 'i';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -55286,14 +55409,21 @@ static int print_dbg(struct logPool_s *plog, char *str, int size)
     return 0;
 }
 
-static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs)
+static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs, int argc)
 {
     msync(plog, sizeof(struct logPool_s), MS_SYNC);
     if (plog->cur == plog->pool) return (-1);
     if (plog->len > plog->max) return (-2);
 
     msync(plog->pool, plog->len, MS_SYNC);
-    mrs_ipc_put(mrs, plog->pool, plog->len, 5);
+
+    //printf("[DBG] get result: [%s] len: %d (%d) \n", plog->pool, plog->len, argc);
+
+    if (argc == 42) {
+        mrs_ipc_put(mrs, plog->pool, plog->len, 14);
+    } else {
+        mrs_ipc_put(mrs, plog->pool, plog->len, 5);
+    }
     
 #if !MSP_SAVE_LOG_TO_FILE
     plog->cur = plog->pool;
