@@ -48,7 +48,7 @@ usb recover"
 #define DISABLE_USB  (0)
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
-#define RING_BUFF_NUM_USB   (1200)//(1728)//(1330)//(1536)
+#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
 #define USB_BUF_SIZE (98304)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -50126,6 +50126,7 @@ static int p10(struct procRes_s *rs)
 #define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
+#define DBG_USB_TIME_MEASURE (1)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -50162,8 +50163,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct shmem_s *usbTx=0, *usbTxd=0, *usbCur=0;
     struct shmem_s *gateTx=0, *gateTxd=0;
     struct timespec tstart, tend;
+#if DBG_USB_TIME_MEASURE
     struct timespec intvalS[2], intvalE[2], *pintval=0;
     int fintvalS[2], fintvalE[2];
+#endif
     struct aspMetaData_s *metaRx = 0;
     double throughput=0.0;
     
@@ -50221,9 +50224,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         print_f(rs->plogs, "P11", rs->logs);
         while(1);
     }
-
+    
+#if DBG_USB_TIME_MEASURE
     memset(fintvalS, 0, sizeof(int) * 2);
     memset(fintvalE, 0, sizeof(int) * 2);
+#endif
 
     cntTx = 0;
     ifx = 0;
@@ -51253,6 +51258,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
+                #if DBG_USB_TIME_MEASURE
                 if (!fintvalE[0]) {
                     clock_gettime(CLOCK_REALTIME, &intvalE[0]);
                     fintvalE[0] = 1;
@@ -51285,6 +51291,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
+                #endif
                 
                 if (wrtsz < 0) {
                     //usbentsTx = 0;
@@ -51345,7 +51352,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                 }
-                
+
+                #if DBG_USB_TIME_MEASURE
                 if (!fintvalE[0]) {
                     clock_gettime(CLOCK_REALTIME, &intvalE[0]);
                     fintvalE[0] = 1;
@@ -51378,6 +51386,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
+                #endif
                 
                 if (wrtsz < 0) {
                     //usbentsTx = 0;
@@ -51436,6 +51445,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
+                #if DBG_USB_TIME_MEASURE
                 if (!fintvalE[0]) {
                     clock_gettime(CLOCK_REALTIME, &intvalE[0]);
                     fintvalE[0] = 1;
@@ -51468,6 +51478,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
+                #endif
                 
                 if (wrtsz < 0) {
                     //usbentsTx = 0;
@@ -51696,7 +51707,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             pintval = &intvalE[1];
                         }
                     }
-
+                    
+                    #if DBG_USB_TIME_MEASURE
                     if (!fintvalS[0]) {
                         clock_gettime(CLOCK_REALTIME, &intvalS[0]);
                         fintvalS[0] = 1;
@@ -51717,7 +51729,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             sprintf_f(rs->logs, "[DVF] RX interval should not be here !!! - 1\n");
                             print_f(rs->plogs, "P11", rs->logs);
                         }
-                    } else {
+                    }
+                    else {
                     
                         if (!fintvalS[1]) {
                             clock_gettime(CLOCK_REALTIME, &intvalS[1]);
@@ -51737,7 +51750,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                         }
                     }
-                    
+                    #endif
                     
                     if ((ptrecv[0] == 0x55) && (ptrecv[1] == 0x53) && (ptrecv[2] == 0x42)) {
                         cmd = ptrecv[15];
@@ -51785,6 +51798,28 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                     //sprintf(msgcmd, "usbscan");
                                     //rs_ipc_put(rcmd, msgcmd, 7);
+
+                                    if (strcmp(msgcmd, "usbscan") == 0) {
+
+                                        chq = 'x';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
+                                        }
+
+                                        sprintf(msgcmd, "usbidle");
+
+                                        sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        ret = rs_ipc_get(rcmd, rcmd->logs, 4096);
+                                        while (ret <= 0) {
+                                            ret = rs_ipc_get(rcmd, rcmd->logs, 4096);
+                                        }
+
+                                        sprintf_f(rs->logs, "[DV] get usbscan result: [%s] ret: %d\n", rcmd->logs, ret);
+                                        print_f(rs->plogs, "P11", rs->logs);                                        
+                                    }
 
                                     continue;
                                 }
