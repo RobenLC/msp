@@ -48,7 +48,7 @@ usb recover"
 #define DISABLE_USB  (0)
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
-#define RING_BUFF_NUM_USB   (1536)
+#define RING_BUFF_NUM_USB   (1200)//(1728)//(1330)//(1536)
 #define USB_BUF_SIZE (98304)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -29846,8 +29846,8 @@ static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *s=0, *sc=0;
 
-    sprintf_f(mrs->log, "v:%d r:0x%.8x\n", modersp->v, modersp->r);
-    print_f(&mrs->plog, "fs68", mrs->log);
+    //sprintf_f(mrs->log, "v:%d r:0x%.8x\n", modersp->v, modersp->r);
+    //print_f(&mrs->plog, "fs68", mrs->log);
     pfat = &mrs->aspFat;
     sc = pfat->fatSupcur;
 
@@ -50162,6 +50162,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct shmem_s *usbTx=0, *usbTxd=0, *usbCur=0;
     struct shmem_s *gateTx=0, *gateTxd=0;
     struct timespec tstart, tend;
+    struct timespec intvalS[2], intvalE[2], *pintval=0;
+    int fintvalS[2], fintvalE[2];
     struct aspMetaData_s *metaRx = 0;
     double throughput=0.0;
     
@@ -50219,6 +50221,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         print_f(rs->plogs, "P11", rs->logs);
         while(1);
     }
+
+    memset(fintvalS, 0, sizeof(int) * 2);
+    memset(fintvalE, 0, sizeof(int) * 2);
 
     cntTx = 0;
     ifx = 0;
@@ -51248,6 +51253,39 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
+                if (!fintvalE[0]) {
+                    clock_gettime(CLOCK_REALTIME, &intvalE[0]);
+                    fintvalE[0] = 1;
+                
+                    if (fintvalE[1]) {
+                
+                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[1] = 0;
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 1\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                } else {
+                
+                    if (!fintvalE[1]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalE[1]);
+                        fintvalE[1] = 1;
+                
+                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[0] = 0;
+                    } else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 2\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                
                 if (wrtsz < 0) {
                     //usbentsTx = 0;
                     continue;
@@ -51307,7 +51345,40 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                 }
-
+                
+                if (!fintvalE[0]) {
+                    clock_gettime(CLOCK_REALTIME, &intvalE[0]);
+                    fintvalE[0] = 1;
+                
+                    if (fintvalE[1]) {
+                
+                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[1] = 0;
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 1\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                } else {
+                
+                    if (!fintvalE[1]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalE[1]);
+                        fintvalE[1] = 1;
+                
+                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[0] = 0;
+                    } else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 2\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                
                 if (wrtsz < 0) {
                     //usbentsTx = 0;
                     continue;
@@ -51365,6 +51436,39 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
+                if (!fintvalE[0]) {
+                    clock_gettime(CLOCK_REALTIME, &intvalE[0]);
+                    fintvalE[0] = 1;
+                
+                    if (fintvalE[1]) {
+                
+                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[1] = 0;
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 1\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                } else {
+                
+                    if (!fintvalE[1]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalE[1]);
+                        fintvalE[1] = 1;
+                
+                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[0] = 0;
+                    } else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 2\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                
                 if (wrtsz < 0) {
                     //usbentsTx = 0;
                     continue;
@@ -51580,6 +51684,60 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                     shmem_dump(ptrecv, recvsz);
+
+                    if ((fintvalE[0]) && (fintvalE[1])) {
+                        sprintf_f(rs->logs, "[DV] get intvalE failed, should not be here!!\n"); 
+                        print_f(rs->plogs, "P11", rs->logs);
+                        pintval = &intvalE[0];                        
+                    } else {
+                        if (fintvalE[0]) {
+                            pintval = &intvalE[0];
+                        } else {
+                            pintval = &intvalE[1];
+                        }
+                    }
+
+                    if (!fintvalS[0]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalS[0]);
+                        fintvalS[0] = 1;
+
+                        if (fintvalS[1]) {
+
+                            usCost = time_diff(pintval, &intvalS[0], 1000);
+                            sprintf_f(rs->logs, "[DV] TX-RX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalS[0]), time_get_ms(pintval), usCost);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            
+                            usCost = time_diff(&intvalS[1], &intvalS[0], 1000);
+                            sprintf_f(rs->logs, "[DV] RX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalS[0]), time_get_ms(&intvalS[1]), usCost);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            fintvalS[1] = 0;
+                        }
+                        else {
+                            sprintf_f(rs->logs, "[DVF] RX interval should not be here !!! - 1\n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                    } else {
+                    
+                        if (!fintvalS[1]) {
+                            clock_gettime(CLOCK_REALTIME, &intvalS[1]);
+                            fintvalS[1] = 1;
+
+                            usCost = time_diff(pintval, &intvalS[1], 1000);
+                            sprintf_f(rs->logs, "[DV] TX-RX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalS[1]), time_get_ms(pintval), usCost);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            
+                            usCost = time_diff(&intvalS[0], &intvalS[1], 1000);
+                            sprintf_f(rs->logs, "[DV] RX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalS[1]), time_get_ms(&intvalS[0]), usCost);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            fintvalS[0] = 0;
+                        } else {
+                            sprintf_f(rs->logs, "[DVF] RX interval should not be here !!! - 2\n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                    }
+                    
                     
                     if ((ptrecv[0] == 0x55) && (ptrecv[1] == 0x53) && (ptrecv[2] == 0x42)) {
                         cmd = ptrecv[15];
@@ -54457,7 +54615,7 @@ int main(int argc, char *argv[])
         sprintf_f(pmrs->log, " get ssid: [%s] size: %d, psk: [%s] size: %d\n", pwfc->wfssid, pwfc->wfsidLen, pwfc->wfpsk, pwfc->wfpskLen);
         print_f(&pmrs->plog, "WIFC", pmrs->log);
     } else {
-        sprintf_f(pmrs->log, " ssid and psk are unavilable!!");
+        sprintf_f(pmrs->log, " ssid and psk are unavilable!!\n");
         print_f(&pmrs->plog, "WIFC", pmrs->log);
     }    
 
@@ -54798,6 +54956,8 @@ int main(int argc, char *argv[])
     pmrs->usbhost[0] = 0;
     pmrs->usbhost[1] = 0;
 #else  //#if DISABLE_USB
+
+#define LOG_PHY_MEM 0
     /* USB0 */
     pmrs->usbmfd = open(MODULE_NAME , O_RDWR);
     if(pmrs->usbmfd < 0) {
@@ -54863,15 +55023,17 @@ int main(int argc, char *argv[])
     }
 
     ix = 0;
-    sprintf_f(pmrs->log, "[%s] addr0: \n", usbhostpath1);
+    sprintf_f(pmrs->log, "[%s] table size: %d, addr0: \n", usbhostpath1, RING_BUFF_NUM_USB);
     print_f(&pmrs->plog, "USB", pmrs->log);
     for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
         ut32 = usbh[0]->ushostblphy[ix];
-        
+
+        #if LOG_PHY_MEM
         if ((ix % 4) == 0) {
             sprintf_f(pmrs->log, "%d: ", ix);
             print_f(&pmrs->plog, "USB", pmrs->log);
         }
+        #endif
 
         ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
         if (ret < 0) {
@@ -54881,13 +55043,16 @@ int main(int argc, char *argv[])
         }
 
         usbh[0]->ushostblvir[ix] = vt32;
+
+        #if LOG_PHY_MEM
         if ((ix % 4) == 3) {
             sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x \n", ut32, vt32);
             print_f(&pmrs->plog, ".", pmrs->log);
         } else {
             sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x ", ut32, vt32);
             print_f(&pmrs->plog, ".", pmrs->log);
-        }        
+        }
+        #endif
         
     }
 
@@ -54909,7 +55074,7 @@ int main(int argc, char *argv[])
 
     pmrs->usbmh[0] = usbh[0];
     
-    sprintf_f(pmrs->log, "setup complete usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbh[0]->ushostid, usbh[0]->ushostpidvid[0], usbh[0]->ushostpidvid[1], usbhostpath1);
+    sprintf_f(pmrs->log, "[%s] setup complete usbid: %d, get pid: 0x%x, vid: 0x%x \n", usbhostpath1, usbh[0]->ushostid, usbh[0]->ushostpidvid[0], usbh[0]->ushostpidvid[1]);
     print_f(&pmrs->plog, "USB", pmrs->log);
 
     /* USB1 */
@@ -54969,15 +55134,17 @@ int main(int argc, char *argv[])
     }
 
     ix = 0;
-    sprintf_f(pmrs->log, "[%s] addr0: \n", usbhostpath2);
+    sprintf_f(pmrs->log, "[%s] table size: %d, addr0: \n", usbhostpath2, RING_BUFF_NUM_USB);
     print_f(&pmrs->plog, "USB", pmrs->log);
     for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
         ut32 = usbh[1]->ushostblphy[ix];
-        
+
+        #if LOG_PHY_MEM
         if ((ix % 4) == 0) {
             sprintf_f(pmrs->log, "%d: ", ix);
             print_f(&pmrs->plog, "USB", pmrs->log);
         }
+        #endif
 
         ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
         if (ret < 0) {
@@ -54987,6 +55154,8 @@ int main(int argc, char *argv[])
         }
 
         usbh[1]->ushostblvir[ix] = vt32;
+
+        #if LOG_PHY_MEM
         if ((ix % 4) == 3) {
             sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x \n", ut32, vt32);
             print_f(&pmrs->plog, ".", pmrs->log);
@@ -54994,7 +55163,7 @@ int main(int argc, char *argv[])
             sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x ", ut32, vt32);
             print_f(&pmrs->plog, ".", pmrs->log);
         }        
-        
+        #endif
     }
 
     sprintf_f(pmrs->log, "\n test \n");
