@@ -56,6 +56,7 @@
 #define USB_IOCT_LOOP_BUFF_CREATE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_CREATE, b)
 #define USB_IOCT_LOOP_BUFF_PROBE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_PROBE, b)
 #define USB_IOCT_LOOP_BUFF_RELEASE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_RELEASE, b)
+
 #define USB_IOCT_GET_DEVICE_ID(a, b)          ioctl(a, LPIOC_GET_DEVICE_ID(4), b)
 #define USB_IOCT_GET_VID_PID(a, b)          ioctl(a, LPIOC_GET_VID_PID(8), b)
 
@@ -2620,11 +2621,10 @@ static char path[256];
     bitset = 1;
     spi_config(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
-#define RING_BUFF_NUM (2)
-#define PT_BUF_SIZE (32768*3)//32768
+#define RING_BUFF_NUM (1536)
+#define PT_BUF_SIZE (98304)//32768
 #define MAX_EVENTS (2)
 #define EPOLLLT (0)
-#define USB_SAVE_RESULT (1)
 #define CBW_CMD_SEND_OPCODE   0x11
 #define CBW_CMD_START_SCAN    0x12
 #define CBW_CMD_READY   0x08
@@ -2795,17 +2795,61 @@ err:
     if (sel == 36){ /* usb printer duplex scan */
         static char ptdevpath[] = "/dev/usb/lp0";
         static char ptfileMeta[] = "/mnt/mmc2/usb/meta.bin";
-        int usbid=0, ptret=0;
+        static char ptfileSave[] = "/mnt/mmc1/output/image%.3d.jpg";
+        char ptfilepath[128];
+        int ptret=0;
         char *ptm=0;
+        
         FILE *fsave=0, *fmeta=0;
         struct aspMetaData_s meta, *pmeta=0;
         char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
-                                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        int mfd;
+        int usbids[2];
+        int ix=0, acucnt=0;
+        int usb0pvid[2];
+        uint32_t *phyaddr0=0, ut32=0;
+        uint32_t *viraddr0=0, vt32=0;
+        uint32_t *tbl0, *tbl1;
+        char *chvir=0, *ptrecv=0, *pkcbw=0;
+        char opc=0, dat=0, cswst=0, chr=0;
+        int recvsz=0, acusz=0, tcnt=0, usbrun=0, usbfolw=0, len=0, wrtsz=0, loopcnt=0;
+        int usCost=0;
+        double throughput=0.0;
+        struct timespec utstart, utend;
+        int pipeInfo[2], pipeBack[2];
+        int pid=0;
+        char ch=0;
+        int looptimes=0;
 
-        usbid = open(ptdevpath, O_RDWR);
-        if (usbid < 0) {
+        if (arg0 > 0) {
+            looptimes = arg0;
+        } else {
+            looptimes = 1;
+        }
+
+        printf("loop time: [%d] !!! \n", looptimes);
+            
+        pipe(pipeInfo);
+        pipe(pipeBack);
+        
+        ptrecv = malloc(32);
+        memset(ptrecv, 0, 32);
+
+        pkcbw = malloc(96);
+        memset(pkcbw, 0, 96);
+        
+        mfd = open(MODULE_NAME , O_RDWR);
+        if(mfd < 0) {
+            printf("open() %s errorn" , MODULE_NAME);
+        } else {
+            printf("open [%s] succeed!!!! \n", MODULE_NAME);
+        }
+        
+        usbids[0] = open(ptdevpath, O_RDWR);
+        if (usbids[0] < 0) {
             printf("can't open device[%s]\n", ptdevpath); 
-            close(usbid);
+            close(usbids[0]);
             goto end;
         }
         else {
@@ -2830,8 +2874,434 @@ err:
             meta.ASP_MAGIC[1] = 0x14;
         }
 
+        ret = USB_IOCT_GET_VID_PID(usbids[0], usb0pvid);
+        if (ret < 0) {
+            printf("[DVF] can't get vid pid for [%s]\n", ptdevpath); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ix = RING_BUFF_NUM;
+        ret = USB_IOCT_LOOP_BUFF_CREATE(usbids[0], &ix);
+        if (ret < 0) {
+            printf("[DVF] can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM, ptdevpath); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        phyaddr0 = malloc(RING_BUFF_NUM*4);
+        viraddr0 = malloc(RING_BUFF_NUM*4);
+        if (!phyaddr0) {
+            printf("[DVF] allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM*4, ptdevpath); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ret = USB_IOCT_LOOP_BUFF_PROBE(usbids[0], phyaddr0);
+        if (ret < 0) {
+            printf("[DVF] can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM, ptdevpath); 
+            close(usbids[0]);
+            goto end;
+        }
+        
+        ix = 0;
+        printf("[DVF] addr0: \n%d: ", ix);
+        for (ix=0; ix < RING_BUFF_NUM; ix++) {
+            ut32 = phyaddr0[ix];
+            printf("p:0x%.8x ", ut32);
+        
+            ret = phy2vir(&vt32, ut32, PT_BUF_SIZE, mfd);
+            if (ret < 0) {
+                printf("[DVF] addr0 phy 2 vir error!!! ret: %d \n", ret);
+                break;
+            }
+            
+            viraddr0[ix] = vt32;
+            printf("v:0x%.8x ", vt32);
+            if ((ix+1) % 4 == 0) {
+                printf("\n%d: ", ix);
+            }
+        }
+
+        printf("[DVF] vaddr0 val check:\n");        
+        for (ix=0; ix < RING_BUFF_NUM; ix++) {
+            chvir = (char *) viraddr0[ix];
+        
+            //printf("0x%.2x ", chvir[0]);
+            if (chvir[0] != (ix & 0xff)) {
+                printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
+            }
+            
+            /*
+            for (ind=1; ind < PT_BUF_SIZE; ind++) {
+                chvir[ind] = (ix + ind) & 0xff;
+            }
+            
+            msync(chvir, PT_BUF_SIZE, MS_SYNC);
+            */
+            
+            //shmem_dump(chvir, 32);
+
+            if ((ix+1) % 16 == 0) {
+                //printf("\n");
+            }
+        }
+        
+        printf("[DVF] usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbids[0], usb0pvid[0], usb0pvid[1], ptdevpath);
+
+        pmeta = &meta;
+        ptm = (char *)pmeta;
+            
+        printf("[DVF] get meta magic number: 0x%.2x, 0x%.2x !!!\n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
+
+        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
+        usb_send(CBW, usbids[0], 31);
+    
+        usb_send(ptm, usbids[0], 512);
+        shmem_dump(ptm, 512);
+                
+        usb_read(ptrecv, usbids[0], 13);
+
+        printf("[DVF] dump 13 bytes");
+        shmem_dump(ptrecv, 13);
+
+        opc = OP_Multi_DUPLEX;
+        dat = OPSUB_USB_Scan;
+            
+        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
+        memcpy(&pkcbw[0], CBW, 32);
+
+        insert_cbw(CBW, CBW_CMD_START_SCAN, opc, dat);
+        memcpy(&pkcbw[32], CBW, 32);            
+
+        insert_cbw(CBW, 0x13, opc, dat);
+        memcpy(&pkcbw[64], CBW, 32);            
+
+#define USB_HS_SAVE_RESULT 0
+#define DBG_USB_HS 1
+
+        /* start loop */
+        ptret = USB_IOCT_LOOP_RESET(usbids[0], &bitset);
+        printf("[DVF] conti read reset ret: %d \n", ptret);
+
+        ptret = USB_IOCT_LOOP_START(usbids[0], pkcbw);
+        printf("[DVF] conti read start ret: %d \n", ptret);
+
+        acucnt = 0;
+            
+        pid = fork();
+
+        if (!pid) {
+
+            while(1) {
+                ret = read(pipeInfo[0], &ch, 1);
+                if (ret > 0) {
+                    printf("[SAVE] get ch: %c \n", ch);
+
+                    if (ch == 'b') {
+                        fsave = find_save(ptfilepath, ptfileSave);
+                        if (!fsave) {
+                            printf("[SAVE] find save failed!!! \n");
+                        } else {
+                            printf("[SAVE] find save [%s] !!! \n", ptfilepath);
+                        }
+                    }
+                    if (ch == 'e') {
+                        break;
+                    }
+                } else {
+                    printf("[SAVE] get ch failed ret: %d \n", ret);
+                }
+            
+                while (1) {
+                    ret = read(pipeInfo[0], &ch, 1);
+                    if (ret > 0) {
+                        //printf("[SAVE] get ch=%c \n", ch);
+                        ix = acucnt % RING_BUFF_NUM;
+                        chvir = (char *) viraddr0[ix];
+
+                        //shmem_dump(chvir, 32);
+
+                        acucnt++;
+
+                        fwrite(chvir, 1, 98304, fsave);
+
+                        if (ch == 'd') {
+                            printf("[SAVE] get ch: %c break\n", ch);
+                            break;
+                        }
+                    } else {
+                        printf("[SAVE] get ch failed ret: %d \n", ret);
+                    }
+                }
+
+                fclose(fsave);
+            
+            }
+
+            write(pipeBack[1], "E", 1);
+            
+            exit(0);  
+        }
+
+        while(1) {
+        
+            recvsz = 0;
+            acusz = 0;
+            tcnt = 0;
+            usbfolw = 0;
+            len = PT_BUF_SIZE;
+
+            write(pipeInfo[1], "b", 1);
+                
+            while(1) {
+                #if 0 /* test drop line */
+                usleep(10000);
+                #endif
+
+                recvsz = USB_IOCT_LOOP_CONTI_READ(usbids[0], &usbfolw);
+
+                usbfolw += 1;
+
+                #if 0                
+                if (tcnt) {
+                    clock_gettime(CLOCK_REALTIME, &utend);
+                    //usCost = test_time_diff(&utstart, &utend, 1000);
+                    //printf("[%s] read %d (%d ms)\n", strpath, recvsz, usCost/1000);
+                }
+                #endif 
+                
+                if (recvsz > len) {
+                    cswst = 0;
+                    if (recvsz > 0xfffff) {
+                        cswst = (recvsz >> 20) & 0xff;
+                        
+                        /*should not be here*/
+                        printf("[DVF] Error!!!, get csw status: 0x%.2x recv:%d\n", cswst, recvsz);
+
+                        //chr = 'I';
+                    }
+                    
+                    if (recvsz & 0x20000) {
+                        recvsz = recvsz  & 0x1ffff;
+                        usbrun = -1;
+                        printf("[DVF] Error!!! data get the end signal 0x20000 recvsz: %d\n", recvsz);
+                    }
+                    else if (recvsz & 0x40000) {
+                        recvsz = recvsz  & 0x1ffff;
+                    }
+                    else if (recvsz & 0x80000) {
+                        recvsz = recvsz  & 0x1ffff;
+                        usbrun = -1;
+                    }
+                    else {
+                        usbrun = recvsz  & 0xfff;
+                        recvsz = len;
+                        
+                        //printf("[%s] recvsz: %d, usbrun: %d - 1\n", strpath, recvsz, usbrun);
+                    }
+                }
+                else {
+                    if (recvsz > 0) {
+                        usbrun = recvsz  & 0xfff;
+                        recvsz = len;
+                        //printf("[%s] recvsz: %d, usbrun: %d - 2\n", strpath, recvsz, usbrun);
+                    }
+                }
+                
+                if (recvsz < 0) {
+                    printf("[DVF] usb read ret: %d\n", recvsz);
+                    continue;
+                    //break;
+                }
+                else if (recvsz == 0) {
+                    //printf("[%s] usb read ret: %d \n", strpath, recvsz);
+                    continue;
+                }
+                else {
+                    /*do nothing*/
+                }
+
+                write(pipeInfo[1], "c", 1);
+
+                #if DBG_USB_HS
+                //printf("[DVF] usb read %d / %d!!\n", recvsz, len);
+                printf(".");
+                #endif
+                
+                //printf("[HS] dump 32 - 0 \n");
+                //msync(addr, recvsz, MS_SYNC);
+                //shmem_dump(addr, 32);
+
+                tcnt ++;
+
+                if (tcnt == 1) {
+                    clock_gettime(CLOCK_REALTIME, &utstart);
+                    printf("[DVF] start ... \n");
+                }
+                
+                acusz += recvsz;
+
+                if ((recvsz < len) && (usbrun < 0)) {
+                    clock_gettime(CLOCK_REALTIME, &utend);
+                    //ring_buf_set_last(pTx, recvsz);
+                    printf("[DVF] loop last ret: %d, the last size: %d \n", ptret, recvsz);
+                    break;
+                }
+
+            }
+
+            usCost = test_time_diff(&utstart, &utend, 1000);
+            throughput = acusz*8.0 / usCost*1.0;
+
+            printf("[DVF] total read size: %d, write file size: %d throughput: %lf Mbits \n", acusz, wrtsz, throughput);
+
+            recvsz = 0;
+            acusz = 0;
+            tcnt = 0;
+            cswst = 0;
+            
+            while(1) {
+            
+                recvsz = USB_IOCT_LOOP_CONTI_READ(usbids[0], &usbfolw);
+
+                usbfolw += 1;
+
+                if (recvsz > len) {
+                    //printf("[%s] last trunk size: %d 0x%x\n", strpath, recvsz, recvsz);
+                    cswst = 0;
+                    if (recvsz > 0xfffff) {
+
+                        cswst = (recvsz >> 20) & 0xff;
+
+                        if (cswst == 0x80) {
+                            cswst = 0x7f;
+                        }
+
+                        if ((cswst & 0x7f) == 0x21) {
+                            cswst = 0x7f;
+                        }
+
+                        printf("[DVF] get the error status: 0x%.2x\n",  cswst);
+                        
+#if 1 /* stop scan if get error status */
+                        if ((cswst & 0x7f) && (cswst != 0x7f)) {
+                            chr = 'R';                        
+                        }
+#endif
+
+                    } 
+                    
+                    if (recvsz & 0x20000) {
+                        printf("[DVF] get the end signal 0x20000 \n");
+                        
+                        chr = 'R';
+
+                        recvsz = recvsz  & 0x1ffff;
+                        usbrun = -1;
+                        
+                        //printf("[%s] use the error status: 0x%.2x recv: %d\n", strpath, cswst, recvsz);
+                    }
+                    else if (recvsz & 0x40000) {
+                        recvsz = recvsz  & 0x1ffff;
+                    }
+                    else if (recvsz & 0x80000) {
+                        recvsz = recvsz  & 0x1ffff;
+                        usbrun = -1;
+                    }
+                    else {
+                        usbrun = recvsz  & 0xfff;
+                        recvsz = len;
+                        
+                        //printf("[%s] recvsz: %d, usbrun: %d - m1\n", strpath, recvsz, usbrun);
+                    }
+                }
+                else {
+                    if (recvsz > 0) {
+                        usbrun = recvsz  & 0xfff;
+                        recvsz = len;
+                        //printf("[%s] recvsz: %d, usbrun: %d - m2\n", strpath, recvsz, usbrun);
+                    }
+                }
+                                
+                if (recvsz < 0) {
+                    printf("[DVF] usb read ret: %d \n", recvsz);
+                    continue;
+                }
+                else if (recvsz == 0) {
+                    continue;
+                }
+                else {
+                    /*do nothing*/
+                }
+
+                write(pipeInfo[1], "d", 1);
+                
+                //printf("[DVF] usb read %d / %d!!\n", recvsz, len);
+                printf(".");
+                
+                //printf("[HS] dump 32 - 0 \n");
+                //msync(addr, recvsz, MS_SYNC);
+                //shmem_dump(addr, 32);
+
+                tcnt ++;
+
+                if (tcnt == 1) {
+                    //clock_gettime(CLOCK_REALTIME, &utstart);
+                    printf("[DVF] start ... \n");
+                }
+                
+                acusz += recvsz;
+
+                if ((recvsz < len) && (usbrun < 0)) {
+                    //clock_gettime(CLOCK_REALTIME, &utend);
+                    //ring_buf_set_last(pTx, recvsz);
+                    printf("[DVF] loop last ret: %d, the last size: %d \n", ptret, recvsz);
+                    break;
+                }
+        
+            }
+            
+            //usCost = test_time_diff(&utstart, &utend, 1000);
+            //throughput = acusz*8.0 / usCost*1.0;
+
+            printf("[DVF] total read size: %d, write file size: %d throughput: %lf Mbits \n", acusz, wrtsz, throughput);
+
+            if (loopcnt == looptimes) {
+                ptret = USB_IOCT_LOOP_STOP(usbids[0], &bitset);
+                printf("[DVF] conti read stop ret: %d \n", ptret);
+            }
+            
+            printf("[DVF] loopcnt: %d chr: 0x%.2x\n", loopcnt, chr);
+
+            if (chr == 'R') {
+                break;
+            }
+            
+            loopcnt++;
+        }
+
+        write(pipeInfo[1], "e", 1);
+            
+        ret = read(pipeBack[0], &ch, 1);
+        if (ret > 0) {
+            ret = USB_IOCT_LOOP_BUFF_RELEASE(usbids[0], &ix);
+            if (ret < 0) {
+                printf("can't release buff failed, size: %d [%s]\n", RING_BUFF_NUM, ptdevpath); 
+                close(usbids[0]);
+                goto end;
+            }
+
+            printf("release buff succeed, size: %d ret: %d \n", RING_BUFF_NUM, ret);
+
+            close(usbids[0]);
+        }
+        
+        goto end;
     }
     
+#define USB_SAVE_RESULT (0)
+#define USB_RX_LOG 0
     if (sel == 35){ /* usb printer duplex scan */
         struct pollfd ptfd[1];
         static char ptdevpath[] = "/dev/usb/lp0";
@@ -2864,9 +3334,15 @@ err:
             printf("open [%s] succeed!!!! \n", MODULE_NAME);
         }
 
+        //while(1);
+
         usbid = open(ptdevpath, O_RDWR);
         if (usbid < 0) {
-            printf("can't open device[%s]\n", ptdevpath); 
+            printf("can't open device[%s] ret: %d \n", ptdevpath, usbid); 
+            
+            perror("open usb");
+            printf("usb create failed, errno: %d\n", errno);
+            exit(EXIT_FAILURE);
             close(usbid);
             goto end;
         }
@@ -2921,7 +3397,7 @@ err:
             viraddr0[ix] = vt32;
             printf("v:0x%.8x ", vt32);
             if ((ix+1) % 4 == 0) {
-                //printf("\n%d: ", ix);
+                printf("\n%d: ", ix);
             }
         }
 
@@ -2948,7 +3424,7 @@ err:
                 //printf("\n");
             }
         }
-        
+
         printf("usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbid, usb0pvid[0], usb0pvid[1], ptdevpath);
 
 #endif
@@ -2992,7 +3468,7 @@ err:
         //insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
         //usb_send(CBW, usbid, 31);
 #if 1//USB_SAVE_RESULT
-        bufmax = 12*1024*1024;
+        bufmax = 100*1024*1024;
         pImage = malloc(bufmax);
         pImage2 = malloc(bufmax);
 #endif
@@ -3041,9 +3517,11 @@ while (looptimes) {
         while(1) {
         
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
-
-            //printf("[HS] read size: %d \n", recvsz);
             
+#if USB_RX_LOG
+            printf("[HS] read size: %d \n", recvsz);
+#endif  
+
             if (recvsz <= 0) {
                 cntRecv++;
                 if (cntRecv > 2) {
@@ -3080,9 +3558,9 @@ while (looptimes) {
         }
 
         usb_read(ptrecv, usbid, 13);
-        shmem_dump(ptrecv, 13);
+        //shmem_dump(ptrecv, 13);
         
-#if 0//USB_SAVE_RESULT
+#if USB_SAVE_RESULT
         wrtsz = fwrite(pImage, 1, acusz, fsave);
 #endif
 
@@ -3122,8 +3600,10 @@ while (looptimes) {
         while(1) {
 
             recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
-
-            //printf("[HS] read size: %d \n", recvsz);
+            
+#if USB_RX_LOG
+            printf("[HS] read size: %d \n", recvsz);
+#endif
             
             if (recvsz <= 0) {
                 cntRecv++;
@@ -3159,9 +3639,9 @@ while (looptimes) {
         }
 
         usb_read(ptrecv, usbid, 13);
-        shmem_dump(ptrecv, 13);
+        //shmem_dump(ptrecv, 13);
         
-#if 0//USB_SAVE_RESULT
+#if USB_SAVE_RESULT
         wrtsz = fwrite(pImage2, 1, acusz, fsave);
 #endif
         printf("total read size: %d, write file size: %d last szie: %d\n", acusz, wrtsz, recvsz);
@@ -3183,7 +3663,7 @@ while (looptimes) {
             usb_send(CBW, usbid, 31);     
 
             usb_read(ptrecv, usbid, 13);
-            shmem_dump(ptrecv, 13);
+            //shmem_dump(ptrecv, 13);
 
             looptimes = ptrecv[11];
 
@@ -3217,8 +3697,10 @@ while (looptimes) {
                     while(1) {
         
                         recvsz = usb_read(pcur, usbid, PT_BUF_SIZE);
-
-                        //printf("[HS] conti read size: %d \n", recvsz);
+                        
+#if USB_RX_LOG
+                        printf("[HS] sread size: %d \n", recvsz);
+#endif
 
                         if (recvsz <= 0) {
                             cntRecv++;
@@ -3253,9 +3735,9 @@ while (looptimes) {
                     }
 
                     usb_read(ptrecv, usbid, 13);
-                    shmem_dump(ptrecv, 13);
+                    //shmem_dump(ptrecv, 13);
         
-#if 0//USB_SAVE_RESULT
+#if USB_SAVE_RESULT
                     wrtsz = fwrite(pImage, 1, acusz, fsave);
 #endif
                     printf("total read size: %d, write file size: %d last szie: %d\n", acusz, wrtsz, recvsz);
@@ -3269,6 +3751,15 @@ while (looptimes) {
             }
         }
 
+        ret = USB_IOCT_LOOP_BUFF_RELEASE(usbid, &ix);
+        if (ret < 0) {
+            printf("can't release buff failed, size: %d [%s]\n", RING_BUFF_NUM, ptdevpath); 
+            close(usbid);
+            goto end;
+        }
+
+        printf("release buff succeed, size: %d ret: %d \n", RING_BUFF_NUM, ret);
+        
         free(pImage);
         free(pImage2);
 
