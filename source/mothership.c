@@ -23075,7 +23075,7 @@ static int mrs_ipc_get(struct mainRes_s *mrs, char *str, int size, int idx)
 
     while(1) {
         tcnt++;
-        ptret = poll(ptfd, 1, 100);
+        ptret = poll(ptfd, 1, 10);
         //sprintf_f(mrs->log, "[%s] poll return %d evt: 0x%.2x - %d\n", mrs->nmrs, ptret, ptfd[0].revents, idx);
         //print_f(&mrs->plog, "IPC", mrs->log);
         if (ptret > 0) {
@@ -37366,11 +37366,13 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
         }
     }
     #endif
-    
+
+    #if 0
     ring_buf_init(ringbf[0]);
     ring_buf_init(ringbf[1]);
     ring_buf_init(ringbf[2]);
     ring_buf_init(ringbf[3]);
+    #endif
 
     ins += 1;
     uphstx = ppup->pushtx;
@@ -38092,18 +38094,18 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         }
                         else if (pllcmd[ins] == 'i') {
                             write(outfd[ins], &pllcmd[ins], 1);
-                            sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            print_f(&mrs->plog, "fs145", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else if (pllcmd[ins] == 'w') {
                             write(outfd[ins], &pllcmd[ins], 1);
-                            sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            print_f(&mrs->plog, "fs145", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else if (pllcmd[ins] == 'y') {
                             write(outfd[ins], &pllcmd[ins], 1);
-                            sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            print_f(&mrs->plog, "fs145", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else {
                             sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
@@ -38983,7 +38985,8 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
         ci = 0; 
         if (cmdt != 'w') {
             //ci = rs_ipc_get(rcmd, &cmd, 1);
-            ci = rs_ipc_get_ms(rcmd, &cmd, 1, 0);
+            ci = rs_ipc_get_ms(rcmd, &cmd, 1, 10);
+            //ci = rs_ipc_get_ms(rcmd, &cmd, 1, 0);
         }
 
 #if 0
@@ -49617,11 +49620,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     struct info16Bit_s *uubs=0;
     struct usbCBWopc_s *dcbwopc=0;
     struct usbCBWpram_s *dcbwpram=0;
-    char *cubsBuff=0, *dubsBuff;
+    char *cubsBuff=0, *dubsBuff=0, *dcswBuff=0;
     
     uubs = &rs->pmch->ubs;
     dubsBuff = &rs->pmch->mshmem[32];
     cubsBuff = rs->pmch->mshmem;
+    dcswBuff = dubsBuff + 64;
     dcbwopc = (struct usbCBWopc_s *)cubsBuff;
     dcbwpram = (struct usbCBWpram_s *)cubsBuff;
     
@@ -49839,7 +49843,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             usb_send(cubsBuff, usbid, 31);
                 
             usb_read(ptrecv, usbid, 13);
-            memcpy(dubsBuff, ptrecv, 13);
+            memcpy(dcswBuff, ptrecv, 13);
 
             #if DBG_USB_HS
             sprintf_f(rs->logs, "dump 13 bytes");
@@ -50395,33 +50399,20 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
         }
         else if (cmdchr == 0x10) {
-            pllst = 0;
 
-            if (uubs) {
-                msync(uubs, sizeof(struct info16Bit_s), MS_SYNC);
-
-                dat = uubs->opinfo & 0xff;
-                opc = (uubs->opinfo >> 8) & 0xff;
-                
-                sprintf_f(rs->logs, "opc: 0x%.2x dat: 0x%.2x \n",opc, dat);
-                print_f(rs->plogs, sp, rs->logs);
-
-            } else {
-                sprintf_f(rs->logs, "cur is null \n!!!");
-                print_f(rs->plogs, sp, rs->logs);
-            }
-
-            sprintf_f(rs->logs, "len:%d addr:0x%.8x direct:%d  dump data:\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
-            print_f(rs->plogs, sp, rs->logs);
-
-            shmem_dump(dubsBuff, msb2lsb(&dcbwpram->pramDataLength));
+            //sprintf_f(rs->logs, "len:%d addr:0x%.8x direct:%d  dump data:\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
+            //print_f(rs->plogs, sp, rs->logs);
 
             //insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
             msync(cubsBuff, SPI_TRUNK_SZ, MS_SYNC);
             usb_send(cubsBuff, usbid, 31);
 
             ret = usb_send(dubsBuff, usbid, msb2lsb(&dcbwpram->pramDataLength));
-                
+            
+            //sprintf_f(rs->logs, "send size: %d dump: \n", ret);
+            //print_f(rs->plogs, sp, rs->logs);
+            //shmem_dump(dubsBuff, msb2lsb(&dcbwpram->pramDataLength));
+            
             usb_read(ptrecv, usbid, 13);
             chvaddr = dubsBuff + ret;
             memcpy(chvaddr, ptrecv, 13);
@@ -50434,32 +50425,17 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             pllst = ptrecv[12];
             
-            sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
+            //print_f(rs->plogs, sp, rs->logs);
 
             cplls[0] = 'J';
             cplls[1] = pllst;
             pieRet = write(pPrx[1], &cplls, 2);
         }
         else if (cmdchr == 0x11) {
-            pllst = 0;
 
-            if (uubs) {
-                msync(uubs, sizeof(struct info16Bit_s), MS_SYNC);
-
-                dat = uubs->opinfo & 0xff;
-                opc = (uubs->opinfo >> 8) & 0xff;
-                
-                sprintf_f(rs->logs, "opc: 0x%.2x dat: 0x%.2x \n",opc, dat);
-                print_f(rs->plogs, sp, rs->logs);
-
-            } else {
-                sprintf_f(rs->logs, "cur is null \n!!!");
-                print_f(rs->plogs, sp, rs->logs);
-            }
-
-            sprintf_f(rs->logs, "len:%d addr:0x%.8x direct:%d\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "len:%d addr:0x%.8x direct:%d\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
+            //print_f(rs->plogs, sp, rs->logs);
 
             msync(cubsBuff, SPI_TRUNK_SZ, MS_SYNC);
             //insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
@@ -50467,9 +50443,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             ret = usb_read(dubsBuff, usbid, msb2lsb(&dcbwpram->pramDataLength));
             
-            sprintf_f(rs->logs, "read size: %d dump: \n", ret);
-            print_f(rs->plogs, sp, rs->logs);
-            shmem_dump(dubsBuff, msb2lsb(&dcbwpram->pramDataLength));
+            //sprintf_f(rs->logs, "read size: %d dump: \n", ret);
+            //print_f(rs->plogs, sp, rs->logs);
+            //shmem_dump(dubsBuff, msb2lsb(&dcbwpram->pramDataLength));
             
             usb_read(ptrecv, usbid, 13);
             chvaddr = dubsBuff + ret;
@@ -50483,8 +50459,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             pllst = ptrecv[12];
             
-            sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
+            //print_f(rs->plogs, sp, rs->logs);
 
             cplls[0] = 'J';
             cplls[1] = pllst;
@@ -50614,11 +50590,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct info16Bit_s *iubs=0;
     struct usbCBWopc_s *ucbwopc=0;
     struct usbCBWpram_s *ucbwpram=0;
-    char *iubsBuff=0, *vubsBuff=0;
+    char *iubsBuff=0, *vubsBuff=0, *vcswBuff=0;
 
     iubs = &rs->pmch->ubs;
     vubsBuff = &rs->pmch->mshmem[32];
     iubsBuff = rs->pmch->mshmem;
+    vcswBuff = vubsBuff + 64;
     ucbwopc = (struct usbCBWopc_s *)iubsBuff;
     ucbwpram = (struct usbCBWpram_s *)iubsBuff;
     
@@ -50840,9 +50817,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 #endif
 
+                #if 0
                 csw[11] = 0;
                 csw[12] = chn;
-
+                #else
+                memcpy(csw, vcswBuff, 13);
+                #endif
+                
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
@@ -50872,6 +50853,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                 shmem_dump(csw, wrtsz);
 
+                #if 0
                 chq = 'x';
                 pipRet = write(pipeTx[1], &chq, 1);
                 if (pipRet < 0) {
@@ -50894,6 +50876,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 print_f(rs->plogs, "P11", rs->logs);
 
                 print_f(rcmd->plogs, "C11", rcmd->logs);
+                #endif
                 
                 cmd = 0;
 
@@ -51872,6 +51855,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 cmd = 0;
                 
+                #if 1
                 if (opc == 0x4c) {
                     chq = 'x';
                     pipRet = write(pipeTx[1], &chq, 1);
@@ -51898,6 +51882,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                     continue;
                 }
+                #endif
                     
             }
             else if (cmd == 0x12) {
@@ -52119,11 +52104,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);
                     break;
                 }
-
+                
+                #if 0
                 sprintf_f(rs->logs, "[DV] read flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
                                               msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
                                               ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
                 print_f(rs->plogs, "P11", rs->logs);
+                #endif
 
                 msync(vubsBuff, msb2lsb(&ucbwpram->pramDataLength), MS_SYNC);
 
@@ -52149,13 +52136,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "[DV] cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump \n", cmd, opc, dat);
-                print_f(rs->plogs, "P11", rs->logs);
-                
-                shmem_dump(vubsBuff, wrtsz);
+                //sprintf_f(rs->logs, "[DV] cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump \n", cmd, opc, dat);
+                //print_f(rs->plogs, "P11", rs->logs);
+                //shmem_dump(vubsBuff, wrtsz);
 
+                #if 0
                 csw[11] = 0;
                 csw[12] = chn;
+                #else
+                memcpy(csw, vcswBuff, 13);
+                #endif
 
                 wrtsz = 0;
                 retry = 0;
@@ -52181,10 +52171,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "[DV] cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump \n", cmd, opc, dat);
-                print_f(rs->plogs, "P11", rs->logs);
-                
-                shmem_dump(csw, wrtsz);
+                //sprintf_f(rs->logs, "[DV] cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump \n", cmd, opc, dat);
+                //print_f(rs->plogs, "P11", rs->logs);
+                //shmem_dump(csw, wrtsz);
                 
                 #if DBG_USB_TIME_MEASURE
                 if (!fintvalE[0]) {
@@ -52221,6 +52210,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 #endif
 
+                #if 0
                 chq = 'x';
                 pipRet = write(pipeTx[1], &chq, 1);
                 if (pipRet < 0) {
@@ -52242,6 +52232,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "[DV]  get usbscan result ret: %d\n", ret);
                 
                 print_f(rcmd->plogs, "C11", rcmd->logs);
+                #endif
                     
                 opc = 0;
                 dat = 0;
@@ -52275,9 +52266,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
                     print_f(rs->plogs, "P11", rs->logs);
                 }
-                
+
+                #if 0
                 csw[11] = 0;
                 csw[12] = chn;
+                #else
+                memcpy(csw, vcswBuff, 13);
+                #endif
 
                 wrtsz = 0;
                 retry = 0;
@@ -52338,6 +52333,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 #endif
 
+                #if 0
                 chq = 'x';
                 pipRet = write(pipeTx[1], &chq, 1);
                 if (pipRet < 0) {
@@ -52359,11 +52355,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "[DV]  get usbscan result ret: %d\n", ret);
                 
                 print_f(rcmd->plogs, "C11", rcmd->logs);
+                #endif
                 
-                sprintf_f(rs->logs, "[DV] opc: (0x%.2x) dump \n", opc);
-                print_f(rs->plogs, "P11", rs->logs);
-                
-                shmem_dump(csw, wrtsz);
+                //sprintf_f(rs->logs, "[DV] opc: (0x%.2x) dump \n", opc);
+                //print_f(rs->plogs, "P11", rs->logs);
+                //shmem_dump(csw, wrtsz);
 
                 opc = 0;
                 
@@ -52424,9 +52420,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);
                 }
                 #endif
-                
+
+                #if 0
                 csw[11] = 0;
                 csw[12] = chn;
+                #else
+                memcpy(csw, vcswBuff, 13);
+                #endif
 
                 wrtsz = 0;
                 retry = 0;
@@ -52652,8 +52652,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] clean end \n");
                     print_f(rs->plogs, "P11", rs->logs);
 
+                    if (strcmp(msgcmd, "usbscan") != 0) {
                     sprintf(msgcmd, "usbscan");
                     rs_ipc_put(rcmd, msgcmd, 7);
+                    }
 
                     break;
                 }
@@ -52664,10 +52666,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
 
+                    #if 0
                     sprintf_f(rs->logs, "[DV] data flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
                                                 msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
                                                 ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
                     print_f(rs->plogs, "P11", rs->logs);
+                    #endif
                     
                     recvsz = read(usbfd, vubsBuff, msb2lsb(&ucbwpram->pramDataLength));
 
@@ -52679,10 +52683,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
                     
-                    sprintf_f(rs->logs, "[DV] dump flash input: \n"); 
-                    print_f(rs->plogs, "P11", rs->logs);
-                    
-                    shmem_dump(vubsBuff, recvsz);
+                    //sprintf_f(rs->logs, "[DV] dump flash input: \n"); 
+                    //print_f(rs->plogs, "P11", rs->logs);
+                    //shmem_dump(vubsBuff, recvsz);
 
                     break;
                 }
@@ -52803,6 +52806,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //sprintf(msgcmd, "usbscan");
                                     //rs_ipc_put(rcmd, msgcmd, 7);
 
+                                    #if 0
                                     if (strcmp(msgcmd, "usbscan") == 0) {
 
                                         chq = 'x';
@@ -52828,6 +52832,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                         print_f(rcmd->plogs, "C11", rcmd->logs);
                                     }
+                                    #endif
 
                                     continue;
                                 }
@@ -52835,8 +52840,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 
                                     puscur = 0;
 
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
                                     sprintf(msgcmd, "usbscan");
                                     rs_ipc_put(rcmd, msgcmd, 7);
+                                    }
 
                                     chq = 'n';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -52854,8 +52861,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 
                                     puscur = 0;
 
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
                                     sprintf(msgcmd, "usbscan");
                                     rs_ipc_put(rcmd, msgcmd, 7);
+                                    }
 
                                     chq = 'n';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -52871,8 +52880,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 else if ((opc == 0x09) && (dat == 0x85)) {
                                     puscur = 0;
 
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
                                     sprintf(msgcmd, "usbscan");
                                     rs_ipc_put(rcmd, msgcmd, 7);
+                                    }
 
                                     chq = 'n';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -52887,8 +52898,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 else if ((opc == 0x0a) && (dat == 0x85)) {
                                     puscur = 0;
                                     
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
                                     sprintf(msgcmd, "usbscan");
                                     rs_ipc_put(rcmd, msgcmd, 7);
+                                    }
 
                                     chq = 'n';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -52909,8 +52922,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     puscur = pushost;                    
 
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
                                     sprintf(msgcmd, "usbscan");
                                     rs_ipc_put(rcmd, msgcmd, 7);
+                                    }
                                     
                                     chq = 'n';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -52954,8 +52969,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     puscur = pushost;                    
 
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
                                     sprintf(msgcmd, "usbscan");
                                     rs_ipc_put(rcmd, msgcmd, 7);
+                                    }
                                     
                                     chq = 'n';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -53368,8 +53385,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             puscur = pushost;                    
 
+                            if (strcmp(msgcmd, "usbscan") != 0) {
                             sprintf(msgcmd, "usbscan");
                             rs_ipc_put(rcmd, msgcmd, 7);
+                            }
 
                             chq = 'n';
                             pipRet = write(pipeTx[1], &chq, 1);
