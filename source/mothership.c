@@ -37310,6 +37310,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct usbBuffLink_s *pubffh=0, *pubffcd[4], *pubfft=0, *pubffm=0, *pubffo=0;
     struct usbBuff_s *curbf=0, *headbf=0, *tmpbf=0, *outbf=0;
 
+    int clrstate=0;
+
     ppup = mrs->usbhost[0];
     ppdn = mrs->usbhost[1];
 
@@ -37459,6 +37461,45 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     infd[3] = dndvtx[1];
 
     pllfd[4].fd = -1;
+
+    while (1) {
+        ret = read(pllfd[1].fd, &chv, 1);
+        while (ret > 0) {
+            ret = read(pllfd[1].fd, &chv, 1);
+        }
+
+        ret = read(pllfd[3].fd, &chv, 1);
+        while (ret > 0) {
+            ret = read(pllfd[3].fd, &chv, 1);
+        }
+        
+        ret = read(pllfd[0].fd, &chv, 1);
+        if ((ret > 0) && (chv == 'n')) {
+            latcmd[0] = 0;
+            latcmd[1] = 0;
+            latcmd[2] = 0;
+            latcmd[3] = 0;
+
+            matcmd[0] = 0;
+            matcmd[1] = 0;
+            matcmd[2] = 0;
+            matcmd[3] = 0;
+
+            idxInit[0] = 1;
+            idxInit[1] = 1;
+            idxInit[2] = 2;
+            idxInit[3] = 2;
+
+            //cswinf = 0;
+
+            totsz[0] = 0;
+            totsz[1] = 0;
+            totsz[2] = 0;
+            totsz[3] = 0;
+
+            break;
+        }
+    }
     
     while(1) {
         ptret = poll(pllfd, 5, 100);
@@ -37478,7 +37519,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                 
                     read(pllfd[ins].fd, &pllcmd[ins], 1);
                     
-                    #if 0//DBG_USB_GATE
+                    #if 1//DBG_USB_GATE
                     sprintf_f(mrs->log, "[GW] id:%d pipe%d get chr: %c(0x%.2x) total:%d\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins], ptret);
                     print_f(&mrs->plog, "fs145", mrs->log);
                     #endif
@@ -37489,9 +37530,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                     }
                 }
             }
-
+            
             evcnt = 0;
             for (ins=0; ins < 5; ins++) {
+            
                 if (pllcmd[ins]) {
                     evcnt++;
                     switch(ins) {
@@ -50644,6 +50686,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         print_f(rs->plogs, "P11", rs->logs);
     }
 
+    #if 1
     evtrs.data.fd = rs->ppipedn->rt[0];
     evtrs.events = EPOLLIN | EPOLLET;
     ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, rs->ppipedn->rt[0], &evtrs);
@@ -50670,6 +50713,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         sprintf_f(rs->logs, "rcmd pipe spoll set ctl failed errno: %ds\n", errno);
         print_f(rs->plogs, "P11", rs->logs);
     }
+    #endif
     
     ptrecv = malloc(USB_BUF_SIZE);
     if (ptrecv) {
@@ -50692,13 +50736,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     
         #if 0
         memset(msgret, 0, 64);
-        ret = rs_ipc_get_ms(rcmd, msgret, 64, 0);
+        ret = rs_ipc_get_ms(rcmd, msgret, 64, 100);
         while (ret > 0) {
             sprintf_f(rs->logs, "get cmd retrun msg: %s ret: %d\n", msgret, ret);
             print_f(rs->plogs, "P11", rs->logs);
             
             memset(msgret, 0, 64);
-            ret = rs_ipc_get_ms(rcmd, msgret, 64, 0);
+            ret = rs_ipc_get_ms(rcmd, msgret, 64, 100);
         }
         #endif
         
@@ -50853,7 +50897,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                 shmem_dump(csw, wrtsz);
 
-                #if 0
+                #if 1
                 chq = 'x';
                 pipRet = write(pipeTx[1], &chq, 1);
                 if (pipRet < 0) {
@@ -52555,6 +52599,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     dbgMeta(msb2lsb(&metaRx->FUNC_BITS), metaRx);
                     #endif
                     
+                    chq = 'n';
+                    pipRet = write(pipeTx[1], &chq, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                    
                     chq = 'm';
                     pipRet = write(pipeTx[1], &chq, 1);
                     if (pipRet < 0) {
@@ -52806,7 +52858,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //sprintf(msgcmd, "usbscan");
                                     //rs_ipc_put(rcmd, msgcmd, 7);
 
-                                    #if 0
+                                    #if 1
                                     if (strcmp(msgcmd, "usbscan") == 0) {
 
                                         chq = 'x';
