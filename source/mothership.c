@@ -50590,7 +50590,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char ch=0;
     
     struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
-    struct epoll_event evtrs, evtrsd, evtrcmd;
+    struct epoll_event evtrs, evtrsd, evtrcmd, evtpipr, evtpiprd;
+    struct pollfd ptfd[1];
     
     int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0;
     #if 1 /* save meta */
@@ -50714,6 +50715,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         print_f(rs->plogs, "P11", rs->logs);
     }
     #endif
+
+    evtpipr.data.fd = pipeRx[0];
+    evtpipr.events = EPOLLIN | EPOLLET;
+    ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, pipeRx[0], &evtpipr);
+    if (ret == -1) {
+        perror ("epoll_ctl");
+        sprintf_f(rs->logs, "rx pipe epoll set ctl failed errno: %ds\n", errno);
+        print_f(rs->plogs, "P11", rs->logs);
+    }
+
+    evtpiprd.data.fd = pipeRxd[0];
+    evtpiprd.events = EPOLLIN | EPOLLET;
+    ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, pipeRxd[0], &evtpiprd);
+    if (ret == -1) {
+        perror ("epoll_ctl");
+        sprintf_f(rs->logs, "rxd pipe epoll set ctl failed errno: %ds\n", errno);
+        print_f(rs->plogs, "P11", rs->logs);
+    }
     
     ptrecv = malloc(USB_BUF_SIZE);
     if (ptrecv) {
@@ -50724,7 +50743,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         print_f(rs->plogs, "P11", rs->logs);
         while(1);
     }
-    
+
+    ptfd[0].fd = pipeRx[0];
+    ptfd[0].events = POLLIN;
+
 #if DBG_USB_TIME_MEASURE
     memset(fintvalS, 0, sizeof(int) * 2);
     memset(fintvalE, 0, sizeof(int) * 2);
@@ -50791,7 +50813,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 else if (getevents[ix].data.fd == rsd->ppipedn->rt[0]) {
                 }
-            
+                else if (getevents[ix].data.fd == pipeRx[0]) {
+                    rxfd = pipeRx[0];
+                }
+                else if (getevents[ix].data.fd == pipeRxd[0]) {
+                    rxfd = pipeRxd[0];
+                }
+
             }
 
             if (!rxfd) {
@@ -50806,7 +50834,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
         if (usbentsTx == 1) {
             if ((cmd == 0x11) && (opc == 0x4d)) {
-                
+
+                #if 0
+                while(1) {
+                    ret = poll(ptfd, 1, 10);
+
+                    if (ret > 0) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+
+                        if (pipRet > 0) {
+                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            break;
+                        }
+                    }
+                }
+                #else
                 while (1) {
                     chq = 0;
                     pipRet = read(pipeRx[0], &chq, 1);
@@ -50814,19 +50859,39 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                 }
+                #endif
 
                 if (chq != 'J') {
                     sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
                     print_f(rs->plogs, "P11", rs->logs);
                 }
-                
-                chn = 0;
+
+
+                #if 0
+                while(1) {
+                    ret = poll(ptfd, 1, 10);
+
+                    if (ret > 0) {
+                        chn = 0;
+                        pipRet = read(pipeRx[0], &chn, 1);
+
+                        if (pipRet > 0) {
+                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            break;
+                        }
+                    }
+                }
+                #else
                 while (1) {
+                    chn = 0;
                     pipRet = read(pipeRx[0], &chn, 1);
                     if (pipRet < 0) {
                         break;
                     }
                 }
+                #endif
                 
                 if (chn) {
                     sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
@@ -51015,6 +51080,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                             }
 
+                            //ptfd[0].fd = piprx[0];
+                            //ptfd[0].events = POLLIN;
+                            
                             chq = 0;
                             pipRet = read(piprx[0], &chq, 1);
                             if (pipRet < 0) {
@@ -52116,7 +52184,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0;
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0xff)) {
-            
+
+                #if 0
+                while(1) {
+                    ret = poll(ptfd, 1, 10);
+
+                    if (ret > 0) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+
+                        if (pipRet > 0) {
+                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            break;
+                        }
+                    }
+                }
+                #else
                 while (1) {
                     chq = 0;
                     pipRet = read(pipeRx[0], &chq, 1);
@@ -52124,19 +52209,38 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                 }
+                #endif
 
                 if (chq != 'J') {
                     sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
                     print_f(rs->plogs, "P11", rs->logs);
                 }
-                
-                chn = 0;
+
+                #if 0
+                while(1) {
+                    ret = poll(ptfd, 1, 10);
+
+                    if (ret > 0) {
+                        chn = 0;
+                        pipRet = read(pipeRx[0], &chn, 1);
+
+                        if (pipRet > 0) {
+                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            break;
+                        }
+                    }
+                }
+                #else
                 while (1) {
+                    chn = 0;
                     pipRet = read(pipeRx[0], &chn, 1);
                     if (pipRet < 0) {
                         break;
                     }
                 }
+                #endif
 
                 if (chn) {
                     sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
@@ -52285,6 +52389,23 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff)) {
 
+                #if 0
+                while(1) {
+                    ret = poll(ptfd, 1, 10);
+
+                    if (ret > 0) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+
+                        if (pipRet > 0) {
+                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            break;
+                        }
+                    }
+                }
+                #else
                 while (1) {
                     chq = 0;
                     pipRet = read(pipeRx[0], &chq, 1);
@@ -52292,19 +52413,38 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                 }
+                #endif
 
                 if (chq != 'J') {
                     sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
                     print_f(rs->plogs, "P11", rs->logs);
                 }
-                
-                chn = 0;
+
+                #if 0
+                while(1) {
+                    ret = poll(ptfd, 1, 10);
+
+                    if (ret > 0) {
+                        chn = 0;
+                        pipRet = read(pipeRx[0], &chn, 1);
+
+                        if (pipRet > 0) {
+                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            break;
+                        }
+                    }
+                }
+                #else
                 while (1) {
+                    chn = 0;
                     pipRet = read(pipeRx[0], &chn, 1);
                     if (pipRet < 0) {
                         break;
                     }
                 }
+                #endif
 
                 if (chn) {
                     sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
@@ -53458,6 +53598,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             //break;
                                     
                             opc = 0xff;
+                            dat = 0;
 
                             if (ucbwpram->pramDirect == 0) { // 0=no data
                             
