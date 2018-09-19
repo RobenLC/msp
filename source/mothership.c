@@ -53162,17 +53162,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = pushost;                    
 
                                     if (strcmp(msgcmd, "usbscan") != 0) {
-                                    sprintf(msgcmd, "usbscan");
-                                    rs_ipc_put(rcmd, msgcmd, 7);
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
+                                        chq = 'n';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     
-                                    chq = 'n';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
-                                    }
 
                                     chq = 'i';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -53578,16 +53578,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             puscur = pushost;                    
 
                             if (strcmp(msgcmd, "usbscan") != 0) {
-                            sprintf(msgcmd, "usbscan");
-                            rs_ipc_put(rcmd, msgcmd, 7);
-                            }
+                                sprintf(msgcmd, "usbscan");
+                                rs_ipc_put(rcmd, msgcmd, 7);
 
-                            chq = 'n';
-                            pipRet = write(pipeTx[1], &chq, 1);
-                            if (pipRet < 0) {
-                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                print_f(rs->plogs, "P11", rs->logs);
-                                continue;
+
+                                chq = 'n';
+                                pipRet = write(pipeTx[1], &chq, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
                             }
 
                             usbCur = puscur->pushring;
