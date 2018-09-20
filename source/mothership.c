@@ -239,6 +239,7 @@ static int *totSalloc=0;
 #define OP_FUNCTEST_18              0x86  
 #define OP_FUNCTEST_19              0x87  
 #define OP_FUNCTEST_20              0x88 
+#define OP_FUNCTEST_21              0x89 
 /* debug */
 
 #define OP_SAVE              0x80
@@ -486,6 +487,7 @@ typedef enum {
     ASPOP_FUNCTEST_18,
     ASPOP_FUNCTEST_19,
     ASPOP_FUNCTEST_20,
+    ASPOP_FUNCTEST_21,
     ASPOP_CROP_01,
     ASPOP_CROP_02, /* 70 */
     ASPOP_CROP_03,
@@ -1058,7 +1060,8 @@ struct aspMetaData_s{
   unsigned char  OP_FUNC_18;               //0x86  
   unsigned char  OP_FUNC_19;               //0x87  
   unsigned char  OP_FUNC_20;               //0x88  
-  unsigned char  OP_RESERVE[20];          // byte[64]
+  unsigned char  OP_FUNC_21;               //0x89  
+  unsigned char  OP_RESERVE[19];          // byte[64]
   
   /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
   struct intMbs_s CROP_POS_1;        //byte[68]
@@ -2342,6 +2345,8 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta)
         print_f(mlogPool, "META", mlog);
         sprintf_f(mlog, "OP_FUNC_20: 0x%.2x      \n",pmeta->OP_FUNC_20);
         print_f(mlogPool, "META", mlog);
+        sprintf_f(mlog, "OP_FUNC_21: 0x%.2x      \n",pmeta->OP_FUNC_21);
+        print_f(mlogPool, "META", mlog);
     }
     
     if (funcbits & ASPMETA_FUNC_CROP) {
@@ -2574,10 +2579,10 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         }
 
         opSt = OP_BLEEDTHROU_ADJUST;
-        opEd = OP_FUNCTEST_20;
+        opEd = OP_FUNCTEST_21;
 
         istr = ASPOP_BLEEDTHROU_ADJUST;
-        iend = ASPOP_FUNCTEST_20;
+        iend = ASPOP_FUNCTEST_21;
         
         pvdst = &pmeta->BLEEDTHROU_ADJUST;
         pvend = &pmeta->OP_FUNC_20;
@@ -53033,8 +53038,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = 0;
 
                                     if (strcmp(msgcmd, "usbscan") != 0) {
-                                    sprintf(msgcmd, "usbscan");
-                                    rs_ipc_put(rcmd, msgcmd, 7);
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
                                     }
 
                                     chq = 'n';
@@ -53054,8 +53059,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = 0;
 
                                     if (strcmp(msgcmd, "usbscan") != 0) {
-                                    sprintf(msgcmd, "usbscan");
-                                    rs_ipc_put(rcmd, msgcmd, 7);
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
                                     }
 
                                     chq = 'n';
@@ -53073,8 +53078,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = 0;
 
                                     if (strcmp(msgcmd, "usbscan") != 0) {
-                                    sprintf(msgcmd, "usbscan");
-                                    rs_ipc_put(rcmd, msgcmd, 7);
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
                                     }
 
                                     chq = 'n';
@@ -53091,8 +53096,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = 0;
                                     
                                     if (strcmp(msgcmd, "usbscan") != 0) {
-                                    sprintf(msgcmd, "usbscan");
-                                    rs_ipc_put(rcmd, msgcmd, 7);
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
                                     }
 
                                     chq = 'n';
@@ -53107,7 +53112,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     break;
                                 }
-                                else if ((opc == 0x4d) && (dat == 0x00)) {
+                                else if ((opc == 0x4d) && (dat == 0x00)) { /* polling status */
 
                                     iubs->opinfo = opc << 8 | dat;
                                     memcpy(iubsBuff, ptrecv, 31);
@@ -53115,17 +53120,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = pushost;                    
 
                                     if (strcmp(msgcmd, "usbscan") != 0) {
-                                    sprintf(msgcmd, "usbscan");
-                                    rs_ipc_put(rcmd, msgcmd, 7);
-                                    }
-                                    
-                                    chq = 'n';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
-                                    }
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
+                                        chq = 'n';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }                                    
 
                                     chq = 'i';
                                     pipRet = write(pipeTx[1], &chq, 1);
@@ -53152,7 +53156,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     break;
                                 }
-                                else {
+                                else { /* unknown opcode */
                                     sprintf_f(rs->logs, "\n[DVF] Warnning!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     
@@ -54395,6 +54399,14 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
+            case ASPOP_FUNCTEST_21:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_21;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
             case ASPOP_CROP_01: 
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_CROP_01;
@@ -55333,6 +55345,14 @@ int main(int argc, char *argv[])
             case ASPOP_FUNCTEST_20:
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_FUNCTEST_20;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNCTEST_21:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_21;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
                 ctb->opMask = ASPOP_MASK_8;
