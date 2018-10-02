@@ -55,7 +55,7 @@ bmp test disable"
 #define USB_BUF_SIZE (98304)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
-#define CYCLE_LEN (5)
+#define CYCLE_LEN (20)
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
 
@@ -51376,7 +51376,7 @@ static int p10(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P11_EN (1)
+#define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (1)
 #define DBG_USB_TIME_MEASURE (1)
@@ -51528,6 +51528,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     }
     #endif
 
+#if 0 /* handle this in command loop */
     evtpipr.data.fd = pipeRx[0];
     evtpipr.events = EPOLLIN | EPOLLLT;
     ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, pipeRx[0], &evtpipr);
@@ -51545,7 +51546,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         sprintf_f(rs->logs, "rxd pipe epoll set ctl failed errno: %ds\n", errno);
         print_f(rs->plogs, "P11", rs->logs);
     }
-    
+#endif
+
     ptrecv = malloc(USB_BUF_SIZE);
     if (ptrecv) {
         sprintf_f(rs->logs, " recv buff alloc succeed! size: %d \n", USB_BUF_SIZE);
@@ -52827,10 +52829,34 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 else if (getevents[ix].data.fd == pipeRx[0]) {
                     rxfd = pipeRx[0];
+                    
+                    memset(msgret, 0, 64);
+                    ret = read(pipeRxd[0], msgret, 64);
+                    while (ret > 0) {
+                        sprintf_f(rs->logs, "get pipeRx ret: %d\n", ret);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        shmem_dump(msgret, ret);
+                        
+                        memset(msgret, 0, 64);
+                        ret = read(pipeRxd[0], msgret, 64);
+                    }
+                    
                     break;
                 }
                 else if (getevents[ix].data.fd == pipeRxd[0]) {
                     rxfd = pipeRxd[0];
+
+                    memset(msgret, 0, 64);
+                    ret = read(pipeRxd[0], msgret, 64);
+                    while (ret > 0) {
+                        sprintf_f(rs->logs, "get pipeRxd ret: %d\n", ret);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        shmem_dump(msgret, ret);
+                        
+                        memset(msgret, 0, 64);
+                        ret = read(pipeRxd[0], msgret, 64);
+                    }
+                    
                     break;
                 }
 
