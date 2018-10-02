@@ -1241,7 +1241,9 @@ struct usbCBWpram_s{
 		uint8_t	              pramreserved0[3];	// 3 byte reserved
 		uint8_t 	              pramType;		// 0x00 ~ 0x0F = Programmer OPCode
 		struct intMbs_s	pramAddress;		// forward to MCU
-		uint8_t	              pramreserved1[10]; 	// forward to MCU
+		uint8_t	              pramreserved1[8]; 	// forward to MCU
+		uint8_t	              ASIC_sel; 	             //  0=Primary ASIC , 1=Secondary ASIC
+		uint8_t	              cs; 	                           // forward to MCU
 		uint8_t	              pramDirect;		// 1=output (BULK OUT), 2=input (BULK IN), 0=no data
 };
 
@@ -54597,67 +54599,74 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0;
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0xff)) {
-
-                #if 0
-                while(1) {
-                    ret = poll(ptfd, 1, 10);
-
-                    if (ret > 0) {
-                        chq = 0;
-                        pipRet = read(pipeRx[0], &chq, 1);
-
+                if (ucbwpram->ASIC_sel) {
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
                         if (pipRet > 0) {
-                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
-                            print_f(rs->plogs, "P11", rs->logs);
-
                             break;
                         }
                     }
-                }
-                #else
-                while (1) {
-                    chq = 0;
-                    pipRet = read(pipeRx[0], &chq, 1);
-                    if (pipRet > 0) {
-                        break;
+                    
+                    if (chd != 'J') {
+                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-                #endif
-
-                if (chq != 'J') {
-                    sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-
-                #if 0
-                while(1) {
-                    ret = poll(ptfd, 1, 10);
-
-                    if (ret > 0) {
-                        chn = 0;
-                        pipRet = read(pipeRx[0], &chn, 1);
-
-                        if (pipRet > 0) {
-                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
-                            print_f(rs->plogs, "P11", rs->logs);
-
+                    
+                    chm = 0;
+                    while (1) {
+                        pipRet = read(pipeRxd[0], &chm, 1);
+                        if (pipRet < 0) {
                             break;
                         }
                     }
-                }
-                #else
-                while (1) {
-                    chn = 0;
-                    pipRet = read(pipeRx[0], &chn, 1);
-                    if (pipRet < 0) {
-                        break;
+                    
+                    if (chm) {
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-                #endif
-
-                if (chn) {
-                    sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                    print_f(rs->plogs, "P11", rs->logs);
+                } else {
+                    while(1) {
+                        ret = poll(ptfd, 1, 10);
+                    
+                        if (ret > 0) {
+                            chq = 0;
+                            pipRet = read(pipeRx[0], &chq, 1);
+                    
+                            if (pipRet > 0) {
+                                sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                                print_f(rs->plogs, "P11", rs->logs);
+                    
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (chq != 'J') {
+                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                    
+                    while(1) {
+                        ret = poll(ptfd, 1, 10);
+                    
+                        if (ret > 0) {
+                            chn = 0;
+                            pipRet = read(pipeRx[0], &chn, 1);
+                    
+                            if (pipRet > 0) {
+                                sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                                print_f(rs->plogs, "P11", rs->logs);
+                    
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (chn) {
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
                 }
                 
                 if (!iubsBuff) {
@@ -54805,69 +54814,77 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 continue;
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff)) {
-
-                #if 0
-                while(1) {
-                    ret = poll(ptfd, 1, 10);
-
-                    if (ret > 0) {
-                        chq = 0;
-                        pipRet = read(pipeRx[0], &chq, 1);
-
+                if (ucbwpram->ASIC_sel) {
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
                         if (pipRet > 0) {
-                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
-                            print_f(rs->plogs, "P11", rs->logs);
-
                             break;
                         }
                     }
-                }
-                #else
-                while (1) {
-                    chq = 0;
-                    pipRet = read(pipeRx[0], &chq, 1);
-                    if (pipRet > 0) {
-                        break;
+                    
+                    if (chd != 'J') {
+                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-                #endif
-
-                if (chq != 'J') {
-                    sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-
-                #if 0
-                while(1) {
-                    ret = poll(ptfd, 1, 10);
-
-                    if (ret > 0) {
-                        chn = 0;
-                        pipRet = read(pipeRx[0], &chn, 1);
-
-                        if (pipRet > 0) {
-                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
-                            print_f(rs->plogs, "P11", rs->logs);
-
+                    
+                    chm = 0;
+                    while (1) {
+                        pipRet = read(pipeRxd[0], &chm, 1);
+                        if (pipRet < 0) {
                             break;
                         }
                     }
-                }
-                #else
-                while (1) {
-                    chn = 0;
-                    pipRet = read(pipeRx[0], &chn, 1);
-                    if (pipRet < 0) {
-                        break;
+                    
+                    if (chm) {
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
-                #endif
-
-                if (chn) {
-                    sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                    print_f(rs->plogs, "P11", rs->logs);
+                else {
+                    while(1) {
+                        ret = poll(ptfd, 1, 10);
+                    
+                        if (ret > 0) {
+                            chq = 0;
+                            pipRet = read(pipeRx[0], &chq, 1);
+                    
+                            if (pipRet > 0) {
+                                sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                                print_f(rs->plogs, "P11", rs->logs);
+                    
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (chq != 'J') {
+                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                    
+                    while(1) {
+                        ret = poll(ptfd, 1, 10);
+                    
+                        if (ret > 0) {
+                            chn = 0;
+                            pipRet = read(pipeRx[0], &chn, 1);
+                    
+                            if (pipRet > 0) {
+                                sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                                print_f(rs->plogs, "P11", rs->logs);
+                    
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (chn) {
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
                 }
-
+                
                 #if 0
                 csw[11] = 0;
                 csw[12] = chn;
@@ -55293,12 +55310,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                     recvsz = read(usbfd, vubsBuff, msb2lsb(&ucbwpram->pramDataLength));
 
-                    chq = 'w';
-                    pipRet = write(pipeTx[1], &chq, 1);
-                    if (pipRet < 0) {
-                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                        print_f(rs->plogs, "P11", rs->logs);
-                        continue;
+                    if (ucbwpram->ASIC_sel) {
+                        chd = 'w';
+                        pipRet = write(pipeTxd[1], &chd, 1);
+                        if (pipRet < 0) {
+                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            continue;
+                        }
+                    } else {
+                        chq = 'w';
+                        pipRet = write(pipeTx[1], &chq, 1);
+                        if (pipRet < 0) {
+                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            continue;
+                        }
                     }
                     
                     //sprintf_f(rs->logs, "[DV] dump flash input: \n"); 
@@ -55998,9 +56025,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             memcpy(iubsBuff, ptrecv, 31);
 
-                            sprintf_f(rs->logs, "[DV] enty flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
+                            sprintf_f(rs->logs, "[DV] enty flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d ASIC: %d \n", 
                                                           msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
-                                                          ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
+                                                          ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect, ucbwpram->ASIC_sel);
                             print_f(rs->plogs, "P11", rs->logs);
 
                             puscur = pushost;                    
@@ -56030,13 +56057,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             dat = 0;
 
                             if (ucbwpram->pramDirect == 0) { // 0=no data
-                            
-                                chq = 'i';
-                                pipRet = write(pipeTx[1], &chq, 1);
-                                if (pipRet < 0) {
-                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    continue;
+                                if (ucbwpram->ASIC_sel) {
+                                    chd = 'i';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                } else {
+                                    chq = 'i';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
                                 }
 
                                 break;
@@ -56046,13 +56082,23 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             else if (ucbwpram->pramDirect == 2) { // 2=input (BULK IN)
                                 dat = 0xff;
-
-                                chq = 'y';
-                                pipRet = write(pipeTx[1], &chq, 1);
-                                if (pipRet < 0) {
-                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    continue;
+                                
+                                if (ucbwpram->ASIC_sel) {
+                                    chd = 'y';
+                                    pipRet = write(pipeTxd[1], &chd, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                } else {
+                                    chq = 'y';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
                                 }
                                 
                                 break;
