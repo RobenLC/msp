@@ -42,6 +42,7 @@ bmp test disable"
 
 #define LOG_ALL_DISABLE (0)
 
+#define ONLY_ONE_USB (1)
 #define DISABLE_USB  (0)
 #if DISABLE_USB
 #define USB_META (0)
@@ -1261,6 +1262,7 @@ struct usbhost_s{
 };
 
 struct usbHostmem_s {
+    char         *ushostname;
     int            ushostid;
     uint32_t  *ushostblvir;
     uint32_t  *ushostblphy;
@@ -1365,7 +1367,7 @@ struct procRes_s{
     int spifd;
     int usbdvid;
     struct usbhost_s *pusbhost;
-    struct usbHostmem_s *pusbmh[2];
+    struct usbHostmem_s *pusbmh;
     struct psdata_s *pstdata;
     struct sdFAT_s *psFat;
     struct sdFatDir_s   *cpyfatDirTr;
@@ -50446,7 +50448,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     struct usbCBWopc_s *dcbwopc=0;
     struct usbCBWpram_s *dcbwpram=0;
     char *cubsBuff=0, *dubsBuff=0, *dcswBuff=0;
-    
+    int pidvid[2];
+    struct usbHostmem_s *puhsinfo;
+
     uubs = &rs->pmch->ubs;
     dubsBuff = &rs->pmch->mshmem[32];
     cubsBuff = rs->pmch->mshmem;
@@ -50458,6 +50462,13 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     print_f(rs->plogs, sp, rs->logs);
 
 #if 1
+    puhsinfo = rs->pusbmh;
+    if (!puhsinfo) {
+        sprintf_f(rs->logs, "Error!!! usb host info not available !!! \n");
+        print_f(rs->plogs, sp, rs->logs);
+        goto end;
+    }
+    
     puhs = rs->pusbhost;
     if (!puhs) {
         sprintf_f(rs->logs, "Error!!! usb host not available !!! \n");
@@ -50479,6 +50490,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
     if (puhs->ushid) {
         usbid = puhs->ushid;
+        sprintf_f(rs->logs, "usb host info [%s] vid: 0x%x pid: 0x%x!!! \n", puhsinfo->ushostname, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+        print_f(rs->plogs, sp, rs->logs);
     } else {
         sprintf_f(rs->logs, "Error!!! device id not available !!! \n");
         print_f(rs->plogs, sp, rs->logs);
@@ -50619,18 +50632,45 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 //dbgMeta(msb2lsb(&meta.FUNC_BITS), &meta);
             }
 
+            ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+            if (ret < 0) {
+                perror("usb get vid pid");
+                sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                print_f(rs->plogs, sp, rs->logs);
+
+                close(usbid);
+
+                //usbid = open(puhsinfo->ushostname, O_RDWR);
+                
+            }
+            
             #if 0 /* remove ready */    
             insert_cbw(CBW, CBW_CMD_READY, OP_Hand_Scan, OPSUB_USB_Scan);
             usb_send(CBW, usbid, 31);
             #endif
 
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
-            usb_send(CBW, usbid, 31);
+            ret = usb_send(CBW, usbid, 31);
+            if (ret < 0) {
+                sprintf_f(rs->logs, "send CBW for meta failed ret: %d !!!\n", ret);
+                print_f(rs->plogs, sp, rs->logs);
+            }
     
-            usb_send(ptm, usbid, USB_META_SIZE);
+            ret = usb_send(ptm, usbid, USB_META_SIZE);
+            if (ret < 0) {
+                sprintf_f(rs->logs, "send 512 byte for meta failed ret: %d !!!\n", ret);
+                print_f(rs->plogs, sp, rs->logs);
+            }
+
             //shmem_dump(ptm, USB_META_SIZE);
                 
-            usb_read(ptrecv, usbid, 13);
+            ret = usb_read(ptrecv, usbid, 13);
+            if (ret < 0) {
+                sprintf_f(rs->logs, "read 13 byte for meta csw failed ret: %d !!!\n", ret);
+                print_f(rs->plogs, sp, rs->logs);
+
+                memset(ptrecv, 0xff, 13);
+            }
             //memcpy(dcswBuff, ptrecv, 13);
             
             #if DBG_USB_HS
@@ -51317,13 +51357,13 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 #endif
 
     while (1) {
-        ret = rs_ipc_get(rs, &ch, 1);
+        ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
 
         if (ret > 0) {
-            sprintf_f(rs->logs, "get ch[0x%.2x] \n", ch);
+            sprintf_f(rs->logs, "break loop!!! get ch[0x%.2x] \n", ch);
             print_f(rs->plogs, sp, rs->logs);
         } else {
-            sprintf_f(rs->logs, "warnning ret: %d \n", ret);
+            sprintf_f(rs->logs, "USB [%s] not available !!\n", puhsinfo->ushostname);
             print_f(rs->plogs, sp, rs->logs);
         }
     }
@@ -51442,6 +51482,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int lenrs=0, act=0, val=0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
+    int usbid01=0, usbid02=0;
     
     pct = rs->pcfgTable;
     pmass = rs->pmetaMass;
@@ -51464,8 +51505,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     prctl(PR_SET_NAME, "msp-p11");
 
     pushost = rs->pusbhost;
+    usbid01 = pushost->ushid;
     pushostd = rsd->pusbhost;
+    usbid02 = pushostd->ushid;
 
+    sprintf_f(rs->logs, "USBID 01: %d, 02: %d \n", usbid01, usbid02);
+    print_f(rs->plogs, "P11", rs->logs);
+    
     metaPt = pushost->puhsmeta;
     metaRx = (struct aspMetaData_s *)metaPt;
 
@@ -51678,20 +51724,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
 
                         chq = 'i';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV] Error!! pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid01) {
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV] Error!! pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
 
                         #if BYPASS_TWO
                         chd = 'i';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid02) {
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                         #endif
 
@@ -51757,21 +51807,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             continue;
                         }
-                    
-                        chq = 'm';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid01) {
+                            chq = 'm';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
-                
-                        chd = 'm';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+
+                        if (usbid02) {
+                            chd = 'm';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                         
                         sprintf_f(rs->logs, "[DV] clean start \n");
@@ -51941,23 +51994,27 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             continue;
                         }
-
-                        chq = 'm';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid01) {
+                            chq = 'm';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
-                
-                        chd = 'm';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        
+                        if (usbid02) {
+                            chd = 'm';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
 
+                        if (usbid01) {
                         while(1) {
                             ret = poll(ptfd, 1, 10);
                         
@@ -51999,49 +52056,55 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
                             print_f(rs->plogs, "P11", rs->logs);
                         }
-                        
+                        }
+
+
                         #if BYPASS_TWO
-                        while (1) {
-                            chd = 0;
-                            pipRet = read(pipeRxd[0], &chd, 1);
-                            if (pipRet > 0) {
-                                break;
+                        if (usbid02) {
+                            while (1) {
+                                chd = 0;
+                                pipRet = read(pipeRxd[0], &chd, 1);
+                                if (pipRet > 0) {
+                                    break;
+                                }
                             }
-                        }
-                        
-                        if (chd != 'J') {
-                            sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                            print_f(rs->plogs, "P11", rs->logs);
-                        }
-                        
-                        chm = 0;
-                        while (1) {
-                            pipRet = read(pipeRxd[0], &chm, 1);
-                            if (pipRet < 0) {
-                                break;
+                            
+                            if (chd != 'J') {
+                                sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                                print_f(rs->plogs, "P11", rs->logs);
                             }
-                        }
-                        
-                        if (chm) {
-                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            
+                            chm = 0;
+                            while (1) {
+                                pipRet = read(pipeRxd[0], &chm, 1);
+                                if (pipRet < 0) {
+                                    break;
+                                }
+                            }
+                            
+                            if (chm) {
+                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
                         }
                         #endif
 
-                        chq = 'a';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  Error!!! pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-
-                        chq = 'd';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  Error!!! pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid01) {
+                            chq = 'a';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  Error!!! pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+    
+                            chq = 'd';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  Error!!! pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                         
                         cmd = 0x12;
@@ -52102,107 +52165,116 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             continue;
                         }
-
-                        chq = 'm';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-                
-                        chd = 'm';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-
-                        while(1) {
-                            ret = poll(ptfd, 1, 10);
-                        
-                            if (ret > 0) {
-                                chq = 0;
-                                pipRet = read(pipeRx[0], &chq, 1);
-                        
-                                if (pipRet > 0) {
-                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                        
-                                    break;
-                                }
+                        if (usbid01) {
+                            chq = 'm';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
                             }
                         }
                         
-                        if (chq != 'J') {
-                            sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                            print_f(rs->plogs, "P11", rs->logs);
-                        }
-                        
-                        while(1) {
-                            ret = poll(ptfd, 1, 10);
-                        
-                            if (ret > 0) {
-                                chn = 0;
-                                pipRet = read(pipeRx[0], &chn, 1);
-                        
-                                if (pipRet > 0) {
-                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                        
-                                    break;
-                                }
+                        if (usbid02) {
+                            chd = 'm';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
                             }
                         }
-                        
-                        if (chn) {
-                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                            print_f(rs->plogs, "P11", rs->logs);
+
+                        if (usbid01) {
+                            while(1) {
+                                ret = poll(ptfd, 1, 10);
+                            
+                                if (ret > 0) {
+                                    chq = 0;
+                                    pipRet = read(pipeRx[0], &chq, 1);
+                            
+                                    if (pipRet > 0) {
+                                        sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                            
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (chq != 'J') {
+                                sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+                            
+                            while(1) {
+                                ret = poll(ptfd, 1, 10);
+                            
+                                if (ret > 0) {
+                                    chn = 0;
+                                    pipRet = read(pipeRx[0], &chn, 1);
+                            
+                                    if (pipRet > 0) {
+                                        sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                            
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (chn) {
+                                sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
                         }
                         
                         #if BYPASS_TWO
-                        while (1) {
-                            chd = 0;
-                            pipRet = read(pipeRxd[0], &chd, 1);
-                            if (pipRet > 0) {
-                                break;
+                        if (usbid02) {
+                            while (1) {
+                                chd = 0;
+                                pipRet = read(pipeRxd[0], &chd, 1);
+                                if (pipRet > 0) {
+                                    break;
+                                }
                             }
-                        }
-                        
-                        if (chd != 'J') {
-                            sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                            print_f(rs->plogs, "P11", rs->logs);
-                        }
-                        
-                        chm = 0;
-                        while (1) {
-                            pipRet = read(pipeRxd[0], &chm, 1);
-                            if (pipRet < 0) {
-                                break;
+                            
+                            if (chd != 'J') {
+                                sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                                print_f(rs->plogs, "P11", rs->logs);
                             }
-                        }
-                        
-                        if (chm) {
-                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            
+                            chm = 0;
+                            while (1) {
+                                pipRet = read(pipeRxd[0], &chm, 1);
+                                if (pipRet < 0) {
+                                    break;
+                                }
+                            }
+                            
+                            if (chm) {
+                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
                         }
                         #endif
-
-                        chq = 'k';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-
-                        chq = 'c';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        
+                        if (usbid01) {
+                            chq = 'k';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+    
+                            chq = 'c';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                         
                         cmd = 0x12;
@@ -52290,123 +52362,138 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             continue;
                         }
-
-                        chq = 'm';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-                
-                        chd = 'm';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-
-                        while(1) {
-                            ret = poll(ptfd, 1, 10);
                         
-                            if (ret > 0) {
-                                chq = 0;
-                                pipRet = read(pipeRx[0], &chq, 1);
-                        
-                                if (pipRet > 0) {
-                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                        
-                                    break;
-                                }
+                        if (usbid01) {
+                            chq = 'm';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
                             }
                         }
                         
-                        if (chq != 'J') {
-                            sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                            print_f(rs->plogs, "P11", rs->logs);
-                        }
-                        
-                        while(1) {
-                            ret = poll(ptfd, 1, 10);
-                        
-                            if (ret > 0) {
-                                chn = 0;
-                                pipRet = read(pipeRx[0], &chn, 1);
-                        
-                                if (pipRet > 0) {
-                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                        
-                                    break;
-                                }
+                        if (usbid02) {
+                            chd = 'm';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
                             }
                         }
-                        
-                        if (chn) {
-                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                            print_f(rs->plogs, "P11", rs->logs);
+
+                        if (usbid01) {
+                            while(1) {
+                                ret = poll(ptfd, 1, 10);
+                            
+                                if (ret > 0) {
+                                    chq = 0;
+                                    pipRet = read(pipeRx[0], &chq, 1);
+                            
+                                    if (pipRet > 0) {
+                                        sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                            
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (chq != 'J') {
+                                sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+                            
+                            while(1) {
+                                ret = poll(ptfd, 1, 10);
+                            
+                                if (ret > 0) {
+                                    chn = 0;
+                                    pipRet = read(pipeRx[0], &chn, 1);
+                            
+                                    if (pipRet > 0) {
+                                        sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                            
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (chn) {
+                                sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
                         }
                         
                         #if BYPASS_TWO
-                        while (1) {
-                            chd = 0;
-                            pipRet = read(pipeRxd[0], &chd, 1);
-                            if (pipRet > 0) {
-                                break;
+                        if (usbid02) {
+                            while (1) {
+                                chd = 0;
+                                pipRet = read(pipeRxd[0], &chd, 1);
+                                if (pipRet > 0) {
+                                    break;
+                                }
                             }
-                        }
-                        
-                        if (chd != 'J') {
-                            sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                            print_f(rs->plogs, "P11", rs->logs);
-                        }
-                        
-                        chm = 0;
-                        while (1) {
-                            pipRet = read(pipeRxd[0], &chm, 1);
-                            if (pipRet < 0) {
-                                break;
+                            
+                            if (chd != 'J') {
+                                sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                                print_f(rs->plogs, "P11", rs->logs);
                             }
-                        }
-                        
-                        if (chm) {
-                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            
+                            chm = 0;
+                            while (1) {
+                                pipRet = read(pipeRxd[0], &chm, 1);
+                                if (pipRet < 0) {
+                                    break;
+                                }
+                            }
+                            
+                            if (chm) {
+                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
                         }
                         #endif
-
-                        chq = 's';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  Error!!! pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid01) {
+                            chq = 's';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  Error!!! pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                        }
+                        
+                        if (usbid02) {
+                            chd = 's';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  Error!!! pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                        }
+                        
+                        if (usbid01) {
+                            chq = 'p';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV] Error!!! pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
 
-                        chd = 's';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  Error!!! pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-
-                        chq = 'p';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV] Error!!! pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-
-                        chd = 'p';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV] Error!!! pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid02) {
+                            chd = 'p';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV] Error!!! pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                         
                         cmd = 0x12;
@@ -52469,123 +52556,139 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             continue;
                         }
-
-                        chq = 'm';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-                
-                        chd = 'm';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-
-                        while(1) {
-                            ret = poll(ptfd, 1, 10);
                         
-                            if (ret > 0) {
-                                chq = 0;
-                                pipRet = read(pipeRx[0], &chq, 1);
-                        
-                                if (pipRet > 0) {
-                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                        
-                                    break;
-                                }
+                        if (usbid01) {
+                            chq = 'm';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
                             }
                         }
-                        
-                        if (chq != 'J') {
-                            sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                            print_f(rs->plogs, "P11", rs->logs);
-                        }
-                        
-                        while(1) {
-                            ret = poll(ptfd, 1, 10);
-                        
-                            if (ret > 0) {
-                                chn = 0;
-                                pipRet = read(pipeRx[0], &chn, 1);
-                        
-                                if (pipRet > 0) {
-                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                        
-                                    break;
-                                }
+
+                        if (usbid02) {
+                            chd = 'm';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
                             }
                         }
-                        
-                        if (chn) {
-                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                            print_f(rs->plogs, "P11", rs->logs);
+
+                        if (usbid01) {
+                            while(1) {
+                                ret = poll(ptfd, 1, 10);
+                            
+                                if (ret > 0) {
+                                    chq = 0;
+                                    pipRet = read(pipeRx[0], &chq, 1);
+                            
+                                    if (pipRet > 0) {
+                                        sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                            
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (chq != 'J') {
+                                sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+                            
+                            while(1) {
+                                ret = poll(ptfd, 1, 10);
+                            
+                                if (ret > 0) {
+                                    chn = 0;
+                                    pipRet = read(pipeRx[0], &chn, 1);
+                            
+                                    if (pipRet > 0) {
+                                        sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                            
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (chn) {
+                                sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
                         }
                         
                         #if BYPASS_TWO
-                        while (1) {
-                            chd = 0;
-                            pipRet = read(pipeRxd[0], &chd, 1);
-                            if (pipRet > 0) {
-                                break;
+                        if (usbid02) {
+                            while (1) {
+                                chd = 0;
+                                pipRet = read(pipeRxd[0], &chd, 1);
+                                if (pipRet > 0) {
+                                    break;
+                                }
                             }
-                        }
-                        
-                        if (chd != 'J') {
-                            sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                            print_f(rs->plogs, "P11", rs->logs);
-                        }
-                        
-                        chm = 0;
-                        while (1) {
-                            pipRet = read(pipeRxd[0], &chm, 1);
-                            if (pipRet < 0) {
-                                break;
+                            
+                            if (chd != 'J') {
+                                sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                                print_f(rs->plogs, "P11", rs->logs);
                             }
-                        }
-                        
-                        if (chm) {
-                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            
+                            chm = 0;
+                            while (1) {
+                                pipRet = read(pipeRxd[0], &chm, 1);
+                                if (pipRet < 0) {
+                                    break;
+                                }
+                            }
+                            
+                            if (chm) {
+                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
                         }
                         #endif
-
-                        chq = 'r';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        
+                        if (usbid01) {
+                            chq = 'r';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
 
-                        chd = 'r';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid02) {
+                            chd = 'r';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                        }
+                        
+                        if (usbid01) {
+                            chq = 'q';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
 
-                        chq = 'q';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
-                        }
-
-                        chd = 'q';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid02) {
+                            chd = 'q';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                         
                         cmd = 0x12;
@@ -52650,21 +52753,25 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         sprintf_f(rs->logs, "stop usb now!!! \n");
                         print_f(rs->plogs, "P11", rs->logs);
-
-                        chq = 'b';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        
+                        if (usbid01) {
+                            chq = 'b';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
-
-                        chd = 'b';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        
+                        if (usbid02) {
+                            chd = 'b';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
 
                         //chq = 'x';
@@ -53979,94 +54086,61 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if ((cmd == 0x11) && (opc == 0x4d)) {
 
-                #if 0
-                while(1) {
-                    ret = poll(ptfd, 1, 10);
-
-                    if (ret > 0) {
+                if (usbid01) {
+                    while (1) {
                         chq = 0;
                         pipRet = read(pipeRx[0], &chq, 1);
-
                         if (pipRet > 0) {
-                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
-                            print_f(rs->plogs, "P11", rs->logs);
-
                             break;
                         }
                     }
-                }
-                #else
-                while (1) {
-                    chq = 0;
-                    pipRet = read(pipeRx[0], &chq, 1);
-                    if (pipRet > 0) {
-                        break;
+    
+                    if (chq != 'J') {
+                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-                #endif
-
-                if (chq != 'J') {
-                    sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-
-
-                #if 0
-                while(1) {
-                    ret = poll(ptfd, 1, 10);
-
-                    if (ret > 0) {
+    
+                    while (1) {
                         chn = 0;
                         pipRet = read(pipeRx[0], &chn, 1);
-
-                        if (pipRet > 0) {
-                            sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
-                            print_f(rs->plogs, "P11", rs->logs);
-
+                        if (pipRet < 0) {
                             break;
                         }
                     }
-                }
-                #else
-                while (1) {
-                    chn = 0;
-                    pipRet = read(pipeRx[0], &chn, 1);
-                    if (pipRet < 0) {
-                        break;
+                    
+                    if (chn) {
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-                #endif
-                
-                if (chn) {
-                    sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                    print_f(rs->plogs, "P11", rs->logs);
                 }
                 
                 #if BYPASS_TWO
-                while (1) {
-                    chd = 0;
-                    pipRet = read(pipeRxd[0], &chd, 1);
-                    if (pipRet > 0) {
-                        break;
+                if (usbid02) {
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
                     }
-                }
-
-                if (chd != 'J') {
-                    sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-                
-                chm = 0;
-                while (1) {
-                    pipRet = read(pipeRxd[0], &chm, 1);
-                    if (pipRet < 0) {
-                        break;
+    
+                    if (chd != 'J') {
+                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-
-                if (chm) {
-                    sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    
+                    chm = 0;
+                    while (1) {
+                        pipRet = read(pipeRxd[0], &chm, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chm) {
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
                 }
                 #endif
 
@@ -54182,56 +54256,60 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if ((cmd == 0x11) && (opc == 0x4c)) {
 
-                while (1) {
-                    chq = 0;
-                    pipRet = read(pipeRx[0], &chq, 1);
-                    if (pipRet > 0) {
-                        break;
+                if (usbid01) {
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chq != 'J') {
+                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+    
+                    while (1) {
+                        chn = 0;
+                        pipRet = read(pipeRx[0], &chn, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                    }
+                    
+                    if (chn) {
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
 
-                if (chq != 'J') {
-                    sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-
-                while (1) {
-                    chn = 0;
-                    pipRet = read(pipeRx[0], &chn, 1);
-                    if (pipRet < 0) {
-                        break;
+                if (usbid02) {
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
                     }
-                }
-                
-                if (chn) {
-                    sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-                
-                while (1) {
-                    chd = 0;
-                    pipRet = read(pipeRxd[0], &chd, 1);
-                    if (pipRet > 0) {
-                        break;
+    
+                    if (chd != 'J') {
+                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-
-                if (chd != 'J') {
-                    sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-                
-                chm = 0;
-                while (1) {
-                    pipRet = read(pipeRxd[0], &chm, 1);
-                    if (pipRet < 0) {
-                        break;
+                    
+                    chm = 0;
+                    while (1) {
+                        pipRet = read(pipeRxd[0], &chm, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
                     }
-                }
-
-                if (chm) {
-                    sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                    print_f(rs->plogs, "P11", rs->logs);
+    
+                    if (chm) {
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
                 }
 
                 #if 0
@@ -54600,72 +54678,77 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0xff)) {
                 if (ucbwpram->ASIC_sel) {
-                    while (1) {
-                        chd = 0;
-                        pipRet = read(pipeRxd[0], &chd, 1);
-                        if (pipRet > 0) {
-                            break;
-                        }
-                    }
-                    
-                    if (chd != 'J') {
-                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                        print_f(rs->plogs, "P11", rs->logs);
-                    }
-                    
-                    chm = 0;
-                    while (1) {
-                        pipRet = read(pipeRxd[0], &chm, 1);
-                        if (pipRet < 0) {
-                            break;
-                        }
-                    }
-                    
-                    if (chm) {
-                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                        print_f(rs->plogs, "P11", rs->logs);
-                    }
-                } else {
-                    while(1) {
-                        ret = poll(ptfd, 1, 10);
-                    
-                        if (ret > 0) {
-                            chq = 0;
-                            pipRet = read(pipeRx[0], &chq, 1);
-                    
+                    if (usbid02) {
+                        while (1) {
+                            chd = 0;
+                            pipRet = read(pipeRxd[0], &chd, 1);
                             if (pipRet > 0) {
-                                sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
-                                print_f(rs->plogs, "P11", rs->logs);
-                    
                                 break;
                             }
                         }
-                    }
-                    
-                    if (chq != 'J') {
-                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                        print_f(rs->plogs, "P11", rs->logs);
-                    }
-                    
-                    while(1) {
-                        ret = poll(ptfd, 1, 10);
-                    
-                        if (ret > 0) {
-                            chn = 0;
-                            pipRet = read(pipeRx[0], &chn, 1);
-                    
-                            if (pipRet > 0) {
-                                sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
-                                print_f(rs->plogs, "P11", rs->logs);
-                    
+                        
+                        if (chd != 'J') {
+                            sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        
+                        chm = 0;
+                        while (1) {
+                            pipRet = read(pipeRxd[0], &chm, 1);
+                            if (pipRet < 0) {
                                 break;
                             }
                         }
+                        
+                        if (chm) {
+                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
                     }
-                    
-                    if (chn) {
-                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                        print_f(rs->plogs, "P11", rs->logs);
+                }
+                else {
+                    if (usbid01) {
+                        while(1) {
+                            ret = poll(ptfd, 1, 10);
+                        
+                            if (ret > 0) {
+                                chq = 0;
+                                pipRet = read(pipeRx[0], &chq, 1);
+                        
+                                if (pipRet > 0) {
+                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                        
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (chq != 'J') {
+                            sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        
+                        while(1) {
+                            ret = poll(ptfd, 1, 10);
+                        
+                            if (ret > 0) {
+                                chn = 0;
+                                pipRet = read(pipeRx[0], &chn, 1);
+                        
+                                if (pipRet > 0) {
+                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                        
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (chn) {
+                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
                     }
                 }
                 
@@ -54815,73 +54898,77 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff)) {
                 if (ucbwpram->ASIC_sel) {
-                    while (1) {
-                        chd = 0;
-                        pipRet = read(pipeRxd[0], &chd, 1);
-                        if (pipRet > 0) {
-                            break;
+                    if (usbid02) {
+                        while (1) {
+                            chd = 0;
+                            pipRet = read(pipeRxd[0], &chd, 1);
+                            if (pipRet > 0) {
+                                break;
+                            }
                         }
-                    }
-                    
-                    if (chd != 'J') {
-                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                        print_f(rs->plogs, "P11", rs->logs);
-                    }
-                    
-                    chm = 0;
-                    while (1) {
-                        pipRet = read(pipeRxd[0], &chm, 1);
-                        if (pipRet < 0) {
-                            break;
+                        
+                        if (chd != 'J') {
+                            sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                            print_f(rs->plogs, "P11", rs->logs);
                         }
-                    }
-                    
-                    if (chm) {
-                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                        print_f(rs->plogs, "P11", rs->logs);
+                        
+                        chm = 0;
+                        while (1) {
+                            pipRet = read(pipeRxd[0], &chm, 1);
+                            if (pipRet < 0) {
+                                break;
+                            }
+                        }
+                        
+                        if (chm) {
+                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
                     }
                 }
                 else {
-                    while(1) {
-                        ret = poll(ptfd, 1, 10);
-                    
-                        if (ret > 0) {
-                            chq = 0;
-                            pipRet = read(pipeRx[0], &chq, 1);
-                    
-                            if (pipRet > 0) {
-                                sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
-                                print_f(rs->plogs, "P11", rs->logs);
-                    
-                                break;
+                    if (usbid01) {
+                        while(1) {
+                            ret = poll(ptfd, 1, 10);
+                        
+                            if (ret > 0) {
+                                chq = 0;
+                                pipRet = read(pipeRx[0], &chq, 1);
+                        
+                                if (pipRet > 0) {
+                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                        
+                                    break;
+                                }
                             }
                         }
-                    }
-                    
-                    if (chq != 'J') {
-                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                        print_f(rs->plogs, "P11", rs->logs);
-                    }
-                    
-                    while(1) {
-                        ret = poll(ptfd, 1, 10);
-                    
-                        if (ret > 0) {
-                            chn = 0;
-                            pipRet = read(pipeRx[0], &chn, 1);
-                    
-                            if (pipRet > 0) {
-                                sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
-                                print_f(rs->plogs, "P11", rs->logs);
-                    
-                                break;
+                        
+                        if (chq != 'J') {
+                            sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        
+                        while(1) {
+                            ret = poll(ptfd, 1, 10);
+                        
+                            if (ret > 0) {
+                                chn = 0;
+                                pipRet = read(pipeRx[0], &chn, 1);
+                        
+                                if (pipRet > 0) {
+                                    sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                        
+                                    break;
+                                }
                             }
                         }
-                    }
-                    
-                    if (chn) {
-                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                        print_f(rs->plogs, "P11", rs->logs);
+                        
+                        if (chn) {
+                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
                     }
                 }
                 
@@ -54988,58 +55075,61 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 continue;
             }
             else if (opc == 0xff) {
-                
-                while (1) {
-                    chq = 0;
-                    pipRet = read(pipeRx[0], &chq, 1);
-                    if (pipRet > 0) {
-                        break;
+                if (usbid01) {
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
                     }
-                }
-
-                if (chq != 'J') {
-                    sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-                
-                chn = 0;
-                while (1) {
-                    pipRet = read(pipeRx[0], &chn, 1);
-                    if (pipRet < 0) {
-                        break;
+    
+                    if (chq != 'J') {
+                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-
-                if (chn) {
-                    sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    
+                    chn = 0;
+                    while (1) {
+                        pipRet = read(pipeRx[0], &chn, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chn) {
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
                 }
 
                 #if BYPASS_TWO
-                while (1) {
-                    chd = 0;
-                    pipRet = read(pipeRxd[0], &chd, 1);
-                    if (pipRet > 0) {
-                        break;
+                if (usbid02) {
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
                     }
-                }
-
-                if (chd != 'J') {
-                    sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
-                
-                chm = 0;
-                while (1) {
-                    pipRet = read(pipeRxd[0], &chm, 1);
-                    if (pipRet < 0) {
-                        break;
+    
+                    if (chd != 'J') {
+                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                        print_f(rs->plogs, "P11", rs->logs);
                     }
-                }
-
-                if (chm) {
-                    sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    
+                    chm = 0;
+                    while (1) {
+                        pipRet = read(pipeRxd[0], &chm, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chm) {
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
                 }
                 #endif
 
@@ -55189,21 +55279,25 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         continue;
                     }
-                    
-                    chq = 'm';
-                    pipRet = write(pipeTx[1], &chq, 1);
-                    if (pipRet < 0) {
-                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                        print_f(rs->plogs, "P11", rs->logs);
-                        continue;
+
+                    if (usbid01) {
+                        chq = 'm';
+                        pipRet = write(pipeTx[1], &chq, 1);
+                        if (pipRet < 0) {
+                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            continue;
+                        }
                     }
-                
-                    chd = 'm';
-                    pipRet = write(pipeTxd[1], &chd, 1);
-                    if (pipRet < 0) {
-                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                        print_f(rs->plogs, "P11", rs->logs);
-                        continue;
+
+                    if (usbid02) {
+                        chd = 'm';
+                        pipRet = write(pipeTxd[1], &chd, 1);
+                        if (pipRet < 0) {
+                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            continue;
+                        }
                     }
 
                     sprintf_f(rs->logs, "[DV] clean start \n");
@@ -55311,20 +55405,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     recvsz = read(usbfd, vubsBuff, msb2lsb(&ucbwpram->pramDataLength));
 
                     if (ucbwpram->ASIC_sel) {
-                        chd = 'w';
-                        pipRet = write(pipeTxd[1], &chd, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid02) {
+                            chd = 'w';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                     } else {
-                        chq = 'w';
-                        pipRet = write(pipeTx[1], &chq, 1);
-                        if (pipRet < 0) {
-                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                            print_f(rs->plogs, "P11", rs->logs);
-                            continue;
+                        if (usbid01) {
+                            chq = 'w';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                     }
                     
@@ -55582,21 +55680,25 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     }                                    
 
-                                    chq = 'i';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid01) {
+                                        chq = 'i';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     
                                     #if BYPASS_TWO
-                                    chd = 'i';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid02) {
+                                        chd = 'i';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     #endif
 
@@ -55628,22 +55730,25 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     }
                                     
-
-                                    chq = 'i';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid01) {
+                                        chq = 'i';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
 
                                     #if BYPASS_TWO
-                                    chd = 'i';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid02) {
+                                        chd = 'i';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     #endif
 
@@ -55672,21 +55777,23 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if ((opc == 0x04) && (dat == 0x85)) {                                    
                                 if (!puscur) {
                                     puscur = pushost;                    
-                
-                                    chq = 'a';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
-                                    }
                                     
-                                    chq = 'd';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid01) {
+                                        chq = 'a';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                        
+                                        chq = 'd';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                 
                                     #if 0
@@ -55711,21 +55818,23 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             else if ((opc == 0x09) && (dat == 0x85)) {                                    
                                 if (!puscur) {
                                     puscur = pushost;                    
-                
-                                    chq = 'k';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
-                                    }
                                     
-                                    chq = 'c';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid01) {
+                                        chq = 'k';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                        
+                                        chq = 'c';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     
                                     #if 0                           
@@ -55742,20 +55851,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     piptx = puscur->pushtx;
                                     piprx = puscur->pushrx; 
                                     
-                                    chq = 'k';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
-                                    }
-                                    
-                                    chq = 'c';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid01) {
+                                        chq = 'k';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                        
+                                        chq = 'c';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                 
                                 } else {
@@ -55771,37 +55882,45 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             else if ((opc == 0x05) && (dat == 0x85)) {
                                 if (!puscur) {
                                     puscur = pushost;     
-                                    
-                                    chq = 's';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
-                                    }
-                
-                                    chd = 's';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid01) {
+                                        chq = 's';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     
-                                    chq = 'p';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid02) {
+                                        chd = 's';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
-                                
-                                    chd = 'p';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid01) {
+                                        chq = 'p';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
+
+                                    if (usbid02) {
+                                        chd = 'p';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     
                                     #if 0                           
@@ -55838,37 +55957,45 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             else if ((opc == 0x0a) && (dat == 0x85)) {
                                 if (!puscur) {
                                     puscur = pushost;                    
-                                    
-                                    chq = 'r';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid01) {
+                                        chq = 'r';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
-                                
-                                    chd = 'r';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid02) {
+                                        chd = 'r';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
-                
-                                    chq = 'q';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid01) {
+                                        chq = 'q';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
-                                
-                                    chd = 'q';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid02) {
+                                        chd = 'q';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     
                                     #if 0
@@ -55903,37 +56030,45 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     piptx = puscur->pushtx;
                                     piprx = puscur->pushrx; 
-                                    
-                                    chq = 'r';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid01) {
+                                        chq = 'r';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
-                                
-                                    chd = 'r';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid02) {
+                                        chd = 'r';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
-                                        
-                                    chq = 'q';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid01) {
+                                        chq = 'q';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
-                                
-                                    chd = 'q';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+
+                                    if (usbid02) {
+                                        chd = 'q';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                     
                                 } else {
@@ -56058,20 +56193,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             if (ucbwpram->pramDirect == 0) { // 0=no data
                                 if (ucbwpram->ASIC_sel) {
-                                    chd = 'i';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid02) {
+                                        chd = 'i';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                 } else {
-                                    chq = 'i';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid01) {
+                                        chq = 'i';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                 }
 
@@ -56084,20 +56223,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 dat = 0xff;
                                 
                                 if (ucbwpram->ASIC_sel) {
-                                    chd = 'y';
-                                    pipRet = write(pipeTxd[1], &chd, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid02) {
+                                        chd = 'y';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                 } else {
-                                    chq = 'y';
-                                    pipRet = write(pipeTx[1], &chq, 1);
-                                    if (pipRet < 0) {
-                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        continue;
+                                    if (usbid01) {
+                                        chq = 'y';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
                                     }
                                 }
                                 
@@ -58868,106 +59011,111 @@ int main(int argc, char *argv[])
         goto end;
     }
     
+    usbh[0]->ushostname = usbhostpath1;
     usbh[0]->ushostid = open(usbhostpath1, O_RDWR);
     if (usbh[0]->ushostid < 0) {
         sprintf_f(pmrs->log, "can't open device[%s]\n", usbhostpath1); 
         print_f(&pmrs->plog, "USB", pmrs->log);
         close(usbh[0]->ushostid);
-        goto end;
+
+        usbh[0]->ushostid = 0;
+        
+        //goto end;
     } else {
         sprintf_f(pmrs->log, "open device[%s] usbid: %d \n", usbhostpath1, usbh[0]->ushostid); 
         print_f(&pmrs->plog, "USB", pmrs->log);
-    }
 
-    ret = USB_IOCT_GET_VID_PID(usbh[0]->ushostid, usbh[0]->ushostpidvid);
-    if (ret < 0) {
-        sprintf_f(pmrs->log, "can't get vid pid for [%s]\n", usbhostpath1); 
-        print_f(&pmrs->plog, "USB", pmrs->log);
-        close(usbh[0]->ushostid);
-        goto end;
-    }
-        
-    ix = RING_BUFF_NUM_USB;
-    ret = USB_IOCT_LOOP_BUFF_CREATE(usbh[0]->ushostid, &ix);
-    if (ret < 0) {
-        sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath1); 
-        print_f(&pmrs->plog, "USB", pmrs->log);
-        close(usbh[0]->ushostid);
-        goto end;
-    }
-
-    usbh[0]->ushostblvir = aspSalloc(RING_BUFF_NUM_USB*4);
-    usbh[0]->ushostblphy = aspSalloc(RING_BUFF_NUM_USB*4);
-
-    if ((!usbh[0]->ushostblphy) || (!usbh[0]->ushostblvir)) {
-        sprintf_f(pmrs->log, "allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM_USB*4, usbhostpath1); 
-        print_f(&pmrs->plog, "USB", pmrs->log);
-        close(usbh[0]->ushostid);
-        goto end;
-    }
-
-    ret = USB_IOCT_LOOP_BUFF_PROBE(usbh[0]->ushostid, usbh[0]->ushostblphy);
-    if (ret < 0) {
-        sprintf_f(pmrs->log, "can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath1); 
-        print_f(&pmrs->plog, "USB", pmrs->log);
-        close(usbh[0]->ushostid);
-        goto end;
-    }
-
-    ix = 0;
-    sprintf_f(pmrs->log, "[%s] table size: %d, addr0: \n", usbhostpath1, RING_BUFF_NUM_USB);
-    print_f(&pmrs->plog, "USB", pmrs->log);
-    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
-        ut32 = usbh[0]->ushostblphy[ix];
-
-        #if LOG_PHY_MEM
-        if ((ix % 4) == 0) {
-            sprintf_f(pmrs->log, "%d: ", ix);
-            print_f(&pmrs->plog, "USB", pmrs->log);
-        }
-        #endif
-
-        ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
+        ret = USB_IOCT_GET_VID_PID(usbh[0]->ushostid, usbh[0]->ushostpidvid);
         if (ret < 0) {
-            sprintf_f(pmrs->log, "addr0 phy 2 vir error!!! ret: %d \n", ret);
+            sprintf_f(pmrs->log, "can't get vid pid for [%s]\n", usbhostpath1); 
             print_f(&pmrs->plog, "USB", pmrs->log);
+            close(usbh[0]->ushostid);
             goto end;
         }
-
-        usbh[0]->ushostblvir[ix] = vt32;
-
-        #if LOG_PHY_MEM
-        if ((ix % 4) == 3) {
-            sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x \n", ut32, vt32);
-            print_f(&pmrs->plog, ".", pmrs->log);
-        } else {
-            sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x ", ut32, vt32);
-            print_f(&pmrs->plog, ".", pmrs->log);
+            
+        ix = RING_BUFF_NUM_USB;
+        ret = USB_IOCT_LOOP_BUFF_CREATE(usbh[0]->ushostid, &ix);
+        if (ret < 0) {
+            sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath1); 
+            print_f(&pmrs->plog, "USB", pmrs->log);
+            close(usbh[0]->ushostid);
+            goto end;
         }
-        #endif
+        
+        usbh[0]->ushostblvir = aspSalloc(RING_BUFF_NUM_USB*4);
+        usbh[0]->ushostblphy = aspSalloc(RING_BUFF_NUM_USB*4);
+        
+        if ((!usbh[0]->ushostblphy) || (!usbh[0]->ushostblvir)) {
+            sprintf_f(pmrs->log, "allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM_USB*4, usbhostpath1); 
+            print_f(&pmrs->plog, "USB", pmrs->log);
+            close(usbh[0]->ushostid);
+            goto end;
+        }
+        
+        ret = USB_IOCT_LOOP_BUFF_PROBE(usbh[0]->ushostid, usbh[0]->ushostblphy);
+        if (ret < 0) {
+            sprintf_f(pmrs->log, "can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath1); 
+            print_f(&pmrs->plog, "USB", pmrs->log);
+            close(usbh[0]->ushostid);
+            goto end;
+        }
+        
+        ix = 0;
+        sprintf_f(pmrs->log, "[%s] table size: %d, addr0: \n", usbhostpath1, RING_BUFF_NUM_USB);
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+            ut32 = usbh[0]->ushostblphy[ix];
+        
+            #if LOG_PHY_MEM
+            if ((ix % 4) == 0) {
+                sprintf_f(pmrs->log, "%d: ", ix);
+                print_f(&pmrs->plog, "USB", pmrs->log);
+            }
+            #endif
+        
+            ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
+            if (ret < 0) {
+                sprintf_f(pmrs->log, "addr0 phy 2 vir error!!! ret: %d \n", ret);
+                print_f(&pmrs->plog, "USB", pmrs->log);
+                goto end;
+            }
+        
+            usbh[0]->ushostblvir[ix] = vt32;
+        
+            #if LOG_PHY_MEM
+            if ((ix % 4) == 3) {
+                sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+                print_f(&pmrs->plog, ".", pmrs->log);
+            } else {
+                sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x ", ut32, vt32);
+                print_f(&pmrs->plog, ".", pmrs->log);
+            }
+            #endif
+            
+        }
+        
+        sprintf_f(pmrs->log, "\n test \n");
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        
+        for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+            chvir = (char *) usbh[0]->ushostblvir[ix];
+            
+            #if 0
+            printf(" %d: \n", ix);            
+            shmem_dump(chvir, 16);
+            #endif
+        
+            if (chvir[0] != (ix & 0xff)) {
+                printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
+            }   
+        }
+        
+        pmrs->usbmh[0] = usbh[0];
+        
+        sprintf_f(pmrs->log, "[%s] setup complete usbid: %d, get pid: 0x%x, vid: 0x%x \n", usbhostpath1, usbh[0]->ushostid, usbh[0]->ushostpidvid[0], usbh[0]->ushostpidvid[1]);
+        print_f(&pmrs->plog, "USB", pmrs->log);
         
     }
-
-    sprintf_f(pmrs->log, "\n test \n");
-    print_f(&pmrs->plog, "USB", pmrs->log);
-
-    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
-        chvir = (char *) usbh[0]->ushostblvir[ix];
-        
-#if 0
-        printf(" %d: \n", ix);            
-        shmem_dump(chvir, 16);
-#endif
-
-        if (chvir[0] != (ix & 0xff)) {
-            printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
-        }   
-    }
-
-    pmrs->usbmh[0] = usbh[0];
-    
-    sprintf_f(pmrs->log, "[%s] setup complete usbid: %d, get pid: 0x%x, vid: 0x%x \n", usbhostpath1, usbh[0]->ushostid, usbh[0]->ushostpidvid[0], usbh[0]->ushostpidvid[1]);
-    print_f(&pmrs->plog, "USB", pmrs->log);
 
     /* USB1 */
     
@@ -58978,108 +59126,127 @@ int main(int argc, char *argv[])
         print_f(&pmrs->plog, "USB", pmrs->log);
         goto end;
     }
-    
+
+    usbh[1]->ushostname = usbhostpath2;
     usbh[1]->ushostid = open(usbhostpath2, O_RDWR);
     if (usbh[1]->ushostid < 0) {
         sprintf_f(pmrs->log, "can't open device[%s]\n", usbhostpath2); 
         print_f(&pmrs->plog, "USB", pmrs->log);
         close(usbh[1]->ushostid);
-        goto end;
+
+        usbh[1]->ushostid = 0;
+        
+        //#if !ONLY_ONE_USB
+        //goto end;
+        //#endif
+        
     } else {
         sprintf_f(pmrs->log, "open device[%s] usbid: %d \n", usbhostpath2, usbh[1]->ushostid); 
         print_f(&pmrs->plog, "USB", pmrs->log);
-    }
 
-    ret = USB_IOCT_GET_VID_PID(usbh[1]->ushostid, usbh[1]->ushostpidvid);
-    if (ret < 0) {
-        sprintf_f(pmrs->log, "can't get vid pid for [%s]\n", usbhostpath2); 
-        print_f(&pmrs->plog, "USB", pmrs->log);
-        close(usbh[1]->ushostid);
-        goto end;
-    }
-        
-    ix = RING_BUFF_NUM_USB;
-    ret = USB_IOCT_LOOP_BUFF_CREATE(usbh[1]->ushostid, &ix);
-    if (ret < 0) {
-        sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath2); 
-        print_f(&pmrs->plog, "USB", pmrs->log);
-        close(usbh[1]->ushostid);
-        goto end;
-    }
-
-    usbh[1]->ushostblvir = aspSalloc(RING_BUFF_NUM_USB*4);
-    usbh[1]->ushostblphy = aspSalloc(RING_BUFF_NUM_USB*4);
-
-    if ((!usbh[1]->ushostblphy) || (!usbh[1]->ushostblvir)) {
-        sprintf_f(pmrs->log, "allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM_USB*4, usbhostpath2); 
-        print_f(&pmrs->plog, "USB", pmrs->log);
-        close(usbh[1]->ushostid);
-        goto end;
-    }
-        
-    ret = USB_IOCT_LOOP_BUFF_PROBE(usbh[1]->ushostid, usbh[1]->ushostblphy);
-    if (ret < 0) {
-        sprintf_f(pmrs->log, "can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath2); 
-        print_f(&pmrs->plog, "USB", pmrs->log);
-        close(usbh[1]->ushostid);
-        goto end;
-    }
-
-    ix = 0;
-    sprintf_f(pmrs->log, "[%s] table size: %d, addr0: \n", usbhostpath2, RING_BUFF_NUM_USB);
-    print_f(&pmrs->plog, "USB", pmrs->log);
-    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
-        ut32 = usbh[1]->ushostblphy[ix];
-
-        #if LOG_PHY_MEM
-        if ((ix % 4) == 0) {
-            sprintf_f(pmrs->log, "%d: ", ix);
-            print_f(&pmrs->plog, "USB", pmrs->log);
-        }
-        #endif
-
-        ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
+        ret = USB_IOCT_GET_VID_PID(usbh[1]->ushostid, usbh[1]->ushostpidvid);
         if (ret < 0) {
-            sprintf_f(pmrs->log, "addr0 phy 2 vir error!!! ret: %d \n", ret);
+            sprintf_f(pmrs->log, "can't get vid pid for [%s]\n", usbhostpath2); 
             print_f(&pmrs->plog, "USB", pmrs->log);
+            close(usbh[1]->ushostid);
             goto end;
         }
+            
+        ix = RING_BUFF_NUM_USB;
+        ret = USB_IOCT_LOOP_BUFF_CREATE(usbh[1]->ushostid, &ix);
+        if (ret < 0) {
+            sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath2); 
+            print_f(&pmrs->plog, "USB", pmrs->log);
+            close(usbh[1]->ushostid);
+            goto end;
+        }
+        
+        usbh[1]->ushostblvir = aspSalloc(RING_BUFF_NUM_USB*4);
+        usbh[1]->ushostblphy = aspSalloc(RING_BUFF_NUM_USB*4);
+        
+        if ((!usbh[1]->ushostblphy) || (!usbh[1]->ushostblvir)) {
+            sprintf_f(pmrs->log, "allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM_USB*4, usbhostpath2); 
+            print_f(&pmrs->plog, "USB", pmrs->log);
+            close(usbh[1]->ushostid);
+            goto end;
+        }
+            
+        ret = USB_IOCT_LOOP_BUFF_PROBE(usbh[1]->ushostid, usbh[1]->ushostblphy);
+        if (ret < 0) {
+            sprintf_f(pmrs->log, "can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath2); 
+            print_f(&pmrs->plog, "USB", pmrs->log);
+            close(usbh[1]->ushostid);
+            goto end;
+        }
+        
+        ix = 0;
+        sprintf_f(pmrs->log, "[%s] table size: %d, addr0: \n", usbhostpath2, RING_BUFF_NUM_USB);
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+            ut32 = usbh[1]->ushostblphy[ix];
+        
+            #if LOG_PHY_MEM
+            if ((ix % 4) == 0) {
+                sprintf_f(pmrs->log, "%d: ", ix);
+                print_f(&pmrs->plog, "USB", pmrs->log);
+            }
+            #endif
+        
+            ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
+            if (ret < 0) {
+                sprintf_f(pmrs->log, "addr0 phy 2 vir error!!! ret: %d \n", ret);
+                print_f(&pmrs->plog, "USB", pmrs->log);
+                goto end;
+            }
+        
+            usbh[1]->ushostblvir[ix] = vt32;
+        
+            #if LOG_PHY_MEM
+            if ((ix % 4) == 3) {
+                sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+                print_f(&pmrs->plog, ".", pmrs->log);
+            } else {
+                sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x ", ut32, vt32);
+                print_f(&pmrs->plog, ".", pmrs->log);
+            }        
+            #endif
+        }
+        
+        sprintf_f(pmrs->log, "\n test \n");
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        
+        for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+            chvir = (char *) usbh[1]->ushostblvir[ix];
+        
+            #if 0
+            printf(" %d: \n", ix);            
+            shmem_dump(chvir, 16);
+            #endif
+        
+            if (chvir[0] != (ix & 0xff)) {
+                printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
+            }   
+        }
+        
+        pmrs->usbmh[1] = usbh[1];
+        
+        sprintf_f(pmrs->log, "setup complete usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbh[1]->ushostid, usbh[1]->ushostpidvid[0], usbh[1]->ushostpidvid[1], usbhostpath2);
+        print_f(&pmrs->plog, "USB", pmrs->log);
 
-        usbh[1]->ushostblvir[ix] = vt32;
-
-        #if LOG_PHY_MEM
-        if ((ix % 4) == 3) {
-            sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x \n", ut32, vt32);
-            print_f(&pmrs->plog, ".", pmrs->log);
-        } else {
-            sprintf_f(pmrs->log, "p:0x%.8x v:0x%.8x ", ut32, vt32);
-            print_f(&pmrs->plog, ".", pmrs->log);
-        }        
-        #endif
     }
 
-    sprintf_f(pmrs->log, "\n test \n");
-    print_f(&pmrs->plog, "USB", pmrs->log);
 
-    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
-        chvir = (char *) usbh[1]->ushostblvir[ix];
-
-#if 0
-        printf(" %d: \n", ix);            
-        shmem_dump(chvir, 16);
-#endif
-
-        if (chvir[0] != (ix & 0xff)) {
-            printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
-        }   
-    }
-
-    pmrs->usbmh[1] = usbh[1];
-    
-    sprintf_f(pmrs->log, "setup complete usbid: %d, get pid: 0x%x, vid: 0x%x [%s]\n", usbh[1]->ushostid, usbh[1]->ushostpidvid[0], usbh[1]->ushostpidvid[1], usbhostpath2);
-    print_f(&pmrs->plog, "USB", pmrs->log);
-
-    if (usbh[0]->ushostpidvid[1] < usbh[1]->ushostpidvid[1]) {
+    if (usbh[0]->ushostpidvid[1] == usbh[1]->ushostpidvid[1]) {
+        sprintf_f(pmrs->log, "Warnning!!! primary and second vid are the same!!! 0:0x%x 1:0x%x \n", usbh[0]->ushostpidvid[1], usbh[1]->ushostpidvid[1]);
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        pmrs->usbmh[0] = usbh[0];
+        pmrs->usbmh[1] = usbh[1];
+    } else if ((usbh[0]->ushostid == 0) || (usbh[1]->ushostid == 0)) {
+        sprintf_f(pmrs->log, "Warnning!!! primary and second not all available!!! usbid0: %d usbid1: %d \n", usbh[0]->ushostid, usbh[1]->ushostid);
+        print_f(&pmrs->plog, "USB", pmrs->log);
+        pmrs->usbmh[0] = usbh[0];
+        pmrs->usbmh[1] = usbh[1];
+    } else if (usbh[0]->ushostpidvid[1] < usbh[1]->ushostpidvid[1]) {
         pmrs->usbmh[0] = usbh[0];
         pmrs->usbmh[1] = usbh[1];
     } else {
@@ -59087,90 +59254,93 @@ int main(int argc, char *argv[])
         pmrs->usbmh[1] = usbh[0];
     }
 
+    metaRx = (struct aspMetaData_s *)aspSalloc(sizeof(struct aspMetaData_s));
+    metaPt = (char *)metaRx;
+
     usbid0 = pmrs->usbmh[0]->ushostid;
     usbid1 = pmrs->usbmh[1]->ushostid;
     tbl0 = pmrs->usbmh[0]->ushostblvir;
     tbl1 = pmrs->usbmh[1]->ushostblvir;    
 
-    pushost = (struct usbhost_s *)aspSalloc(sizeof(struct usbhost_s));
-    memset(pushost, 0, sizeof(struct usbhost_s));
-    pushostd = (struct usbhost_s *)aspSalloc(sizeof(struct usbhost_s));
-    memset(pushostd, 0, sizeof(struct usbhost_s));
+    if (pmrs->usbmh[0]->ushostid == 0) {
+        sprintf_f(pmrs->log, "Error!!! USB not available \n");
+        print_f(&pmrs->plog, "USB", pmrs->log);
+    } else {
 
-    usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
-    
-    usbTx->pp =  (char **) memory_init_vtable(&usbTx->slotn, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
-    usbTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
-    usbTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        usbTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+        
+        usbTx->pp =  (char **) memory_init_vtable(&usbTx->slotn, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
+        usbTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        usbTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        
+        if (!usbTx->pp) goto end;
+        usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+        
+        usbTx->r->usbrunnig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+        usbTx->r->usbgettig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+        
+        usbTx->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
+        usbTx->chksz = USB_BUF_SIZE;
+        usbTx->svdist = 8;
+        
+        gateTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+        gateTx->pp = (char **) memory_init_vtable(&gateTx->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0); 
+        gateTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        gateTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        
+        if (!gateTx->pp) goto end;
+        gateTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+        
+        gateTx->r->usbrunnig = usbTx->r->usbrunnig;
+        gateTx->r->usbgettig = usbTx->r->usbgettig;
+        
+        gateTx->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
+        gateTx->chksz = USB_BUF_SIZE;
+        gateTx->svdist = 8;
+    }
 
-    if (!usbTx->pp) goto end;
-    usbTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
 
-    usbTx->r->usbrunnig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
-    usbTx->r->usbgettig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+        
+    if (pmrs->usbmh[1]->ushostid == 0) {
+        sprintf_f(pmrs->log, "Error!!! USB not available \n");
+        print_f(&pmrs->plog, "USB", pmrs->log);
+    } else {
 
-    usbTx->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
-    usbTx->chksz = USB_BUF_SIZE;
-    usbTx->svdist = 8;
+        usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+        usbTxd->pp = (char **) memory_init_vtable(&usbTxd->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+        usbTxd->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        usbTxd->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        if (!usbTxd->pp) goto end;
+        usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+        
+        usbTxd->r->usbrunnig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+        usbTxd->r->usbgettig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
+        
+        usbTxd->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
+        usbTxd->chksz = USB_BUF_SIZE;
+        usbTxd->svdist = 8;
+        
+        gateTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
+        gateTxd->pp = (char **) memory_init_vtable(&gateTxd->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+        gateTxd->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        gateTxd->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
+        
+        if (!gateTxd->pp) goto end;
+        gateTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
+        
+        gateTxd->r->usbrunnig = usbTxd->r->usbrunnig;
+        gateTxd->r->usbgettig = usbTxd->r->usbgettig;
+        
+        gateTxd->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
+        gateTxd->chksz = USB_BUF_SIZE;
+        gateTxd->svdist = 8;
+    }
 
-    usbTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
-    usbTxd->pp = (char **) memory_init_vtable(&usbTxd->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
-    usbTxd->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
-    usbTxd->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
-    if (!usbTxd->pp) goto end;
-    usbTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
-
-    usbTxd->r->usbrunnig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
-    usbTxd->r->usbgettig = (struct ring_s *)aspSalloc(sizeof(struct ring_s));
-
-    usbTxd->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
-    usbTxd->chksz = USB_BUF_SIZE;
-    usbTxd->svdist = 8;
-
-    gateTx = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
-    gateTx->pp = (char **) memory_init_vtable(&gateTx->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0); 
-    gateTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
-    gateTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
-
-    if (!gateTx->pp) goto end;
-    gateTx->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
-
-    gateTx->r->usbrunnig = usbTx->r->usbrunnig;
-    gateTx->r->usbgettig = usbTx->r->usbgettig;
-
-    gateTx->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
-    gateTx->chksz = USB_BUF_SIZE;
-    gateTx->svdist = 8;
-    
-    gateTxd = (struct shmem_s *)aspSalloc(sizeof(struct shmem_s));
-    gateTxd->pp = (char **) memory_init_vtable(&gateTxd->slotn, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
-    gateTxd->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
-    gateTxd->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
-
-    if (!gateTxd->pp) goto end;
-    gateTxd->r = (struct ring_p *)aspSalloc(sizeof(struct ring_p));
-
-    gateTxd->r->usbrunnig = usbTxd->r->usbrunnig;
-    gateTxd->r->usbgettig = usbTxd->r->usbgettig;
-
-    gateTxd->totsz = RING_BUFF_NUM_USB*TABLE_SLOT_SIZE;
-    gateTxd->chksz = USB_BUF_SIZE;
-    gateTxd->svdist = 8;
-
-    metaRx = (struct aspMetaData_s *)aspSalloc(sizeof(struct aspMetaData_s));
-    metaPt = (char *)metaRx;
-    
-#if 1
     spipeTx = (int *)aspSalloc(sizeof(int) * 2); 
     spipeRx = (int *)aspSalloc(sizeof(int) * 2); 
-    spipeTxd = (int *)aspSalloc(sizeof(int) * 2); 
-    spipeRxd = (int *)aspSalloc(sizeof(int) * 2); 
-    
     sgateUpTx = (int *)aspSalloc(sizeof(int) * 2); 
     sgateUpRx = (int *)aspSalloc(sizeof(int) * 2); 
-    sgateDnTx = (int *)aspSalloc(sizeof(int) * 2); 
-    sgateDnRx = (int *)aspSalloc(sizeof(int) * 2); 
-
+    
     pipe2(spipeTx, O_NONBLOCK);
     sprintf_f(pmrs->log, "[DV]  pipeTx 0:%d 1:%d\n", spipeTx[0], spipeTx[1]);
     print_f(&pmrs->plog, "USB", pmrs->log);
@@ -59178,27 +59348,16 @@ int main(int argc, char *argv[])
     sprintf_f(pmrs->log, "[DV]  pipeRx 0:%d 1:%d\n", spipeRx[0], spipeRx[1]);
     print_f(&pmrs->plog, "USB", pmrs->log);
     
-    pipe2(spipeTxd, O_NONBLOCK);
-    sprintf_f(pmrs->log, "[DV]  pipeTxd 0:%d 1:%d\n", spipeTxd[0], spipeTxd[1]);
-    print_f(&pmrs->plog, "USB", pmrs->log);
-    pipe2(spipeRxd, O_NONBLOCK);
-    sprintf_f(pmrs->log, "[DV]  pipeRxd 0:%d 1:%d\n", spipeRxd[0], spipeRxd[1]);
-    print_f(&pmrs->plog, "USB", pmrs->log);
-        
     pipe2(sgateUpTx, O_NONBLOCK);
     sprintf_f(pmrs->log, "[DV]  gateUpTx 0:%d 1:%d\n", sgateUpTx[0], sgateUpTx[1]);        
     print_f(&pmrs->plog, "USB", pmrs->log);
     pipe2(sgateUpRx, O_NONBLOCK);
     sprintf_f(pmrs->log, "[DV]  gateUpRx 0:%d 1:%d\n", sgateUpRx[0], sgateUpRx[1]);
     print_f(&pmrs->plog, "USB", pmrs->log);
-        
-    pipe2(sgateDnTx, O_NONBLOCK);
-    sprintf_f(pmrs->log, "[DV]  gateDnTx 0:%d 1:%d\n", sgateDnTx[0], sgateDnTx[1]);
-    print_f(&pmrs->plog, "USB", pmrs->log);
-    pipe2(sgateDnRx, O_NONBLOCK);
-    sprintf_f(pmrs->log, "[DV]  gateDnRx 0:%d 1:%d\n", sgateDnRx[0], sgateDnRx[1]);
-    print_f(&pmrs->plog, "USB", pmrs->log);
-
+    
+    pushost = (struct usbhost_s *)aspSalloc(sizeof(struct usbhost_s));
+    memset(pushost, 0, sizeof(struct usbhost_s));
+    
     pushost->pushring = usbTx;
     pushost->pgatring = gateTx;
     pushost->puhsmeta = metaPt;
@@ -59208,7 +59367,29 @@ int main(int argc, char *argv[])
     pushost->pgatrx = sgateUpRx;
     pushost->pushvaddrtb = tbl0;
     pushost->ushid = usbid0;
-
+    
+    spipeTxd = (int *)aspSalloc(sizeof(int) * 2); 
+    spipeRxd = (int *)aspSalloc(sizeof(int) * 2); 
+    sgateDnTx = (int *)aspSalloc(sizeof(int) * 2); 
+    sgateDnRx = (int *)aspSalloc(sizeof(int) * 2); 
+    
+    pipe2(spipeTxd, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  pipeTxd 0:%d 1:%d\n", spipeTxd[0], spipeTxd[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    pipe2(spipeRxd, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  pipeRxd 0:%d 1:%d\n", spipeRxd[0], spipeRxd[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+        
+    pipe2(sgateDnTx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  gateDnTx 0:%d 1:%d\n", sgateDnTx[0], sgateDnTx[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    pipe2(sgateDnRx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  gateDnRx 0:%d 1:%d\n", sgateDnRx[0], sgateDnRx[1]);
+    print_f(&pmrs->plog, "USB", pmrs->log);
+    
+    pushostd = (struct usbhost_s *)aspSalloc(sizeof(struct usbhost_s));
+    memset(pushostd, 0, sizeof(struct usbhost_s));
+    
     pushostd->pushring = usbTxd;
     pushostd->pgatring = gateTxd;
     pushostd->puhsmeta = metaPt;
@@ -59218,27 +59399,7 @@ int main(int argc, char *argv[])
     pushostd->pgatrx = sgateDnRx;
     pushostd->pushvaddrtb = tbl1;
     pushostd->ushid = usbid1;
-#else        
-    pushost->pushring = usbTx;
-    pushost->pgatring = gateTx;
-    pushost->puhsmeta = metaPt;
-    pushost->pushrx = pmrs->pipedn[12].rt;
-    pushost->pushtx = pmrs->pipeup[12].rt;
-    pushost->pgattx = pmrs->pipedn[10].rt;
-    pushost->pgatrx = pmrs->pipeup[10].rt;
-    pushost->pushvaddrtb = tbl0;
-    pushost->ushid = usbid0;
 
-    pushostd->pushring = usbTxd;
-    pushostd->pgatring = gateTxd;
-    pushostd->puhsmeta = metaPt;
-    pushostd->pushrx = pmrs->pipedn[13].rt;
-    pushostd->pushtx = pmrs->pipeup[13].rt;
-    pushostd->pgattx = pmrs->pipedn[11].rt;
-    pushostd->pgatrx = pmrs->pipeup[11].rt;
-    pushostd->pushvaddrtb = tbl1;
-    pushostd->ushid = usbid1;
-#endif
     pmrs->usbhost[0] = pushost;
     pmrs->usbhost[1] = pushostd;
         
@@ -59725,13 +59886,13 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbrotate = &mrs->bmpRotate;
 
     rs->usbdvid = mrs->usbdv;
-    rs->pusbmh[0] = mrs->usbmh[0];
-    rs->pusbmh[1] = mrs->usbmh[1];
 
     if ((idx == 10) || (idx == 12)) { 
         rs->pusbhost = mrs->usbhost[0];
+        rs->pusbmh = mrs->usbmh[0];
     } else if ((idx == 11) || (idx == 13)) {
         rs->pusbhost = mrs->usbhost[1];
+        rs->pusbmh = mrs->usbmh[1];
     } else {
         rs->pusbhost = 0;
     }
