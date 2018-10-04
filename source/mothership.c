@@ -51479,7 +51479,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct aspMetaData_s *ptmetaout=0, *ptmetain=0;
     struct aspMetaData_s *ptmetainduo=0;
     char *addrs=0;
-    int lenrs=0, act=0, val=0;
+    int lenrs=0, act=0, val=0, lenflh=0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int usbid01=0, usbid02=0;
@@ -51539,7 +51539,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
     usbfd = rs->usbdvid;
     eventRx.data.fd = rs->usbdvid;
-    eventRx.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
     ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, rs->usbdvid, &eventRx);
     if (ret == -1) {
         perror ("epoll_ctl");
@@ -51635,7 +51635,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         }
         #endif
 
-        uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 100);
+        uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 500);
         if (uret < 0) {
             perror("epoll_wait");
             sprintf_f(rs->logs, "[ePol] failed errno: %d ret: %d\n", errno, uret);
@@ -51644,6 +51644,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             //sprintf_f(rs->logs, "[ePol] timeout errno: %d ret: %d\n", errno, uret);
             //print_f(rs->plogs, "P11", rs->logs);
         } else {
+            //sprintf_f(rs->logs, "[ePol] ret: %d\n", uret);
+            //print_f(rs->plogs, "P11", rs->logs);
+
             rxfd = 0;
             for (ix = 0; ix < uret; ix++) {
                 if (getevents[ix].data.fd == usbfd) {
@@ -54764,11 +54767,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                               ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
                 print_f(rs->plogs, "P11", rs->logs);
                 #endif
-
-                msync(vubsBuff, msb2lsb(&ucbwpram->pramDataLength), MS_SYNC);
+                lenflh = msb2lsb(&ucbwpram->pramDataLength);
+                msync(vubsBuff, lenflh, MS_SYNC);
 
                 while (1) {
-                    wrtsz = write(usbfd, vubsBuff, msb2lsb(&ucbwpram->pramDataLength));
+                    wrtsz = write(usbfd, vubsBuff, lenflh);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -54789,7 +54792,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                //sprintf_f(rs->logs, "[DV] cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump \n", cmd, opc, dat);
+                //sprintf_f(rs->logs, "[DV] flash read-data size: %d send: %d dump: \n", lenflh, wrtsz);
                 //print_f(rs->plogs, "P11", rs->logs);
                 //shmem_dump(vubsBuff, wrtsz);
 
@@ -54824,9 +54827,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                //sprintf_f(rs->logs, "[DV] cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump \n", cmd, opc, dat);
-                //print_f(rs->plogs, "P11", rs->logs);
-                //shmem_dump(csw, wrtsz);
+                sprintf_f(rs->logs, "[DV] flasg read cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump: \n", cmd, opc, dat);
+                print_f(rs->plogs, "P11", rs->logs);
+                shmem_dump(csw, wrtsz);
                 
                 #if DBG_USB_TIME_MEASURE
                 if (!fintvalE[0]) {
@@ -55002,7 +55005,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     //usbentsTx = 0;
                     continue;
                 }
-                
+
+                sprintf_f(rs->logs, "[DV] flash write cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump: \n", cmd, opc, dat);
+                print_f(rs->plogs, "P11", rs->logs);
+                shmem_dump(csw, wrtsz);
+
                 #if DBG_USB_TIME_MEASURE
                 if (!fintvalE[0]) {
                     clock_gettime(CLOCK_REALTIME, &intvalE[0]);
@@ -55066,10 +55073,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 #endif
                 
-                //sprintf_f(rs->logs, "[DV] opc: (0x%.2x) dump \n", opc);
-                //print_f(rs->plogs, "P11", rs->logs);
-                //shmem_dump(csw, wrtsz);
-
                 opc = 0;
                 
                 continue;
@@ -55164,7 +55167,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "[DV] opc: (0x%.2x) dump \n", opc);
+                sprintf_f(rs->logs, "[DV] poll cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump: \n", cmd, opc, dat);
                 print_f(rs->plogs, "P11", rs->logs);
 
                 shmem_dump(csw, wrtsz);
@@ -55401,8 +55404,20 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
                     print_f(rs->plogs, "P11", rs->logs);
                     #endif
-                    
-                    recvsz = read(usbfd, vubsBuff, msb2lsb(&ucbwpram->pramDataLength));
+
+                    lenflh = msb2lsb(&ucbwpram->pramDataLength);
+                    while (1) {
+                        recvsz = read(usbfd, vubsBuff, lenflh);
+                        if (recvsz == lenflh) {
+                            break;
+                        } else {
+                            sprintf_f(rs->logs, "[DV] flash write-data size: %d recv: %d retry !!!\n", lenflh, recvsz);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                    }
+                    //sprintf_f(rs->logs, "[DV] flash write-data size: %d recv: %d \n",lenflh, recvsz);
+                    //print_f(rs->plogs, "P11", rs->logs);
+                    //shmem_dump(vubsBuff, lenflh);
 
                     if (ucbwpram->ASIC_sel) {
                         if (usbid02) {
