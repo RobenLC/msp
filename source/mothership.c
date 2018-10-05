@@ -26922,7 +26922,7 @@ static int dbg(struct mainRes_s *mrs)
 
     p0_init(mrs);
 
-    prctl(PR_SET_NAME, "dbg");
+    prctl(PR_SET_NAME, "msp-dbg");
     //sprintf(argv[0], "msp-dbg");
     
     plog = aspMemalloc(2048, 8);
@@ -39511,7 +39511,7 @@ static int p0(struct mainRes_s *mrs)
         print_f(&mrs->plog, "P0", mrs->log);
     }
     
-    prctl(PR_SET_NAME, "p0");
+    prctl(PR_SET_NAME, "msp-p0");
     //sprintf(argv[0], "msp-p0");
     
     struct fselec_s afselec[PS_NUM] = {{ 0, fs00},{ 1, fs01},{ 2, fs02},{ 3, fs03},{ 4, fs04},
@@ -50413,7 +50413,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     double throughput=0.0;
     struct timespec tstart, tend;
     struct aspMetaData_s meta, *pmeta=0;
-    int len=0, pieRet=0, ret=0;
+    int len=0, pieRet=0, ret=0, err=0;
     char *ptm=0, *pcur=0, *addr=0;
     char chr=0, opc=0, dat=0, chq=0, ch=0;
     char cplls[2];
@@ -50638,7 +50638,16 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                 print_f(rs->plogs, sp, rs->logs);
 
-                close(usbid);
+                ptret = RING_BUFF_NUM_USB;
+                err = USB_IOCT_LOOP_BUFF_RELEASE(usbid, &ptret);
+                sprintf_f(rs->logs, "release usb buffer errno:%d ret: %d \n", errno, err);
+                print_f(rs->plogs, sp, rs->logs);
+                
+                err = close(usbid);
+                sprintf_f(rs->logs, "close usb errno:%d ret: %d \n", errno, err);
+                print_f(rs->plogs, sp, rs->logs);
+
+                //exit(0);
 
                 //usbid = open(puhsinfo->ushostname, O_RDWR);
                 
@@ -59277,6 +59286,9 @@ int main(int argc, char *argv[])
     tbl0 = pmrs->usbmh[0]->ushostblvir;
     tbl1 = pmrs->usbmh[1]->ushostblvir;    
 
+    //close(usbid0);
+    //close(usbid1);
+    
     if (pmrs->usbmh[0]->ushostid == 0) {
         sprintf_f(pmrs->log, "Error!!! USB not available \n");
         print_f(&pmrs->plog, "USB", pmrs->log);
@@ -59594,7 +59606,8 @@ int main(int argc, char *argv[])
                                                 pmrs->sid[11] = fork();
                                                 if (!pmrs->sid[11]) {
                                                     p11(&rs[12], &rs[13], &rs[14]);
-                                                } else {              
+                                                } else {
+                                                    
                                                     len = strlen(argv[0]);
                                                     memset(argv[0], 0, len);
                                                     sprintf(argv[0], "func");
