@@ -30,7 +30,7 @@ int pipe2(int pipefd[2], int flags);
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0])) 
 
-#define SPI_DISABLE (1)
+#define SPI_DISABLE (0)
 //#define MALLOC_CHECK_ 0 
 #define SPI_AT_CPHA  0x02          /* clock phase */
 #define SPI_AT_CPOL  0x01          /* clock polarity */
@@ -8032,8 +8032,8 @@ static char spi1[] = "/dev/spidev32766.0";
     int ret; 
 
     arg0 = 0;
-	arg1 = 0;
-	arg2 = 0;
+    arg1 = 0;
+    arg2 = 0;
     /* scanner default setting */
     mode &= ~SPI_AT_MODE_3;
     mode |= SPI_AT_MODE_3;
