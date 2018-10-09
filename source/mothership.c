@@ -37839,7 +37839,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     char pollfo[2];
     int outfd[MAX_145_EVENT];
     int infd[MAX_145_EVENT];
-    char chu=0, chs=0;
+    char chu=0, chs=0, cmdex=0;
     int uidx=12, sidx=13, lenrt=0;
 
     struct shmem_s *ringbf[4];
@@ -38432,6 +38432,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                             
                                             scnt = scnt + 1;
+                                            cycCnt[ins] = 0;
                                         
                                             break;
                                         }
@@ -38689,6 +38690,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                             //cswinf = 0;
 
+                            cmdex = 0;
+
                             if (pubffh) {
                                 memsz = 0;
                                 pageidx = 0;
@@ -38857,7 +38860,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         break;
                     case 1:
                     case 3:
-                        
+                    
+                        #if 0
                         if (latcmd[ins] == 'b') {
                             if (pllcmd[ins] == 'B') {
                                 write(outfd[ins], &pllcmd[ins], 1);
@@ -38874,7 +38878,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 }
 
                                 #if DBG_USB_GATE
-                                sprintf_f(mrs->log, "[GW] cons u len: %d - b\n", lens);
+                                sprintf_f(mrs->log, "[GW] psudo cons u len: %d - b\n", lens);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 #endif
                             }
@@ -38886,6 +38890,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             break;
                         }
                         else if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
+                        #else
+                        if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
+                        #endif
 
                             lens = ring_buf_cons_u(ringbf[ins], &addrs);                
                             while (lens <= 0) {
@@ -38931,6 +38938,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     } else {
                                         idxInit[ins] += 1;
                                     }
+
+                                    if (!cmdex) {
+                                        cmdex = latcmd[ins];
+                                    }
+                                    
                                     /*
                                     if (idxInit[ins] > 63) {
                                         idxInit[ins] = idxInit[ins] % 64;
@@ -38958,12 +38970,22 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                             //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 5);
                             //print_f(&mrs->plog, "fs145", mrs->log);
-                            
-                            if (!pubffcd[ins]) {
 
+
+                            if (!pubffcd[ins]) {
+                            
+                                if (((cmdex) && (latcmd[ins] != cmdex))) {
+
+                                    #if DBG_USB_GATE
+                                    sprintf_f(mrs->log, "[GW] warnning !! latcmd[ins] != cmdex  0x%.2x : 0x%.2x \n", latcmd[ins], cmdex); 
+                                    print_f(&mrs->plog, "fs145", mrs->log);  
+                                    #endif
+                                    
+                                    break;
+                                }
                                 //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 6);
                                 //print_f(&mrs->plog, "fs145", mrs->log);
-                                
+
                                 pubffcd[ins] = malloc(sizeof(struct usbBuffLink_s));
                                 if (pubffcd[ins]) {
                                     memset(pubffcd[ins], 0, sizeof(struct usbBuffLink_s));
@@ -39132,7 +39154,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 curbf->bsz |= lasflag;
 
                                 write(outfd[ins], indexfo, 2);
-                                sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d- end of transmission \n", ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt);
+                                sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: %d- end of transmission \n", 
+                                                              ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 cycCnt[ins] = 0;
                             }
@@ -50420,7 +50443,7 @@ static int p8(struct procRes_s *rs)
     return 0;
 }
 
-#define DBG_USB_HS 0
+#define DBG_USB_HS (0)
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
     struct pollfd ptfd[1];
@@ -50907,7 +50930,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 else {
                     /*do nothing*/
                 }
-
+                
+                #if DBG_USB_HS
+                sprintf_f(rs->logs, "usb read %d / %d!!(0x%.2x)\n ", recvsz, len, cmdchr);
+                print_f(rs->plogs, sp, rs->logs);
+                #endif
+                
                 //sprintf_f(rs->logs, "usb read %d / %d!!\n", recvsz, len);
                 //print_f(rs->plogs, sp, rs->logs);
                 
@@ -50919,8 +50947,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                 if (tcnt == 1) {
                     clock_gettime(CLOCK_REALTIME, &utstart);
-                    sprintf_f(rs->logs, "start ... \n");
-                    print_f(rs->plogs, sp, rs->logs);
+                    //sprintf_f(rs->logs, "start ... \n");
+                    //print_f(rs->plogs, sp, rs->logs);
                 }
                 
                 #if USB_HS_SAVE_RESULT        
@@ -51186,7 +51214,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 
                 #if DBG_USB_HS
-                sprintf_f(rs->logs, "usb read %d / %d!!\n ", recvsz, len);
+                sprintf_f(rs->logs, "usb read %d / %d!!(0x%.2x)\n ", recvsz, len, cmdchr);
                 print_f(rs->plogs, sp, rs->logs);
                 #endif
                 
@@ -51198,8 +51226,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                 if (tcnt == 1) {
                     clock_gettime(CLOCK_REALTIME, &utstart);
-                    sprintf_f(rs->logs, "start ... \n");
-                    print_f(rs->plogs, sp, rs->logs);
+                    //sprintf_f(rs->logs, "start ... \n");
+                    //print_f(rs->plogs, sp, rs->logs);
                 }
                 
                 #if USB_HS_SAVE_RESULT        
@@ -51479,7 +51507,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     uint32_t usbentsRx=0, usbentsTx=0, getents=0;
     int usbfd=0;
     char *addrd=0, *palloc=0;
-    int uimCylcnt=0, datCylcnt=0, distCylcnt=0;
+    int uimCylcnt=0, datCylcnt=0, distCylcnt=0, maxCylcnt=0;
     struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0;
     char *endf=0, *endm=0;
     char endstr[] = "usb_conti_stop";
@@ -51932,6 +51960,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lastCylen = 0;
                         waitCylen = 0;
                         rwaitCylen = 0;
+                        maxCylcnt = 0;
                 
                         cswerr = 0;
                         pagerst = 2;
@@ -51984,6 +52013,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lastCylen = 0;
                         waitCylen = 0;
                         rwaitCylen = 0;
+                        maxCylcnt = 0;
                         
                         cswerr = 0;
                         pagerst = 2;
@@ -52155,6 +52185,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lastCylen = 0;
                         waitCylen = 0;
                         rwaitCylen = 0;
+                        maxCylcnt = 0;
                         
                         cswerr = 0;
                         pagerst = 2;
@@ -52320,6 +52351,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         datCylcnt = 0;
                         lastCylen = 0;
                         waitCylen = 0;
+                        maxCylcnt = 0;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
                         clock_gettime(CLOCK_REALTIME, &tidleE);                            
@@ -52350,6 +52382,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lastCylen = 0;
                         waitCylen = 0;
                         rwaitCylen = 0;
+                        maxCylcnt = 0;
                         
                         cswerr = 0;
                         pagerst = 2;
@@ -52544,6 +52577,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lastCylen = 0;
                         waitCylen = 0;
                         rwaitCylen = 0;
+                        maxCylcnt = 0;
                         
                         cswerr = 0;
                         pagerst = 2;
@@ -52734,6 +52768,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         datCylcnt = 0;
                         lastCylen = 0;
                         waitCylen = 0;
+                        maxCylcnt = 0;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
                         clock_gettime(CLOCK_REALTIME, &tidleE);                            
@@ -52844,6 +52879,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lastCylen = 0;
                         waitCylen = 0;
                         rwaitCylen = 0;
+                        maxCylcnt = 0;
                         
                         cswerr = 0;
                         //pagerst = 2;
@@ -52895,6 +52931,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lastCylen = 0;
                         waitCylen = 0;
                         rwaitCylen = 0;
+                        maxCylcnt = 0;
                         
                         cswerr = 0;
                         //pagerst = 2;
@@ -52941,6 +52978,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         datCylcnt = 0;
                         lastCylen = 0;
                         waitCylen = 0;
+                        maxCylcnt = 0;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
                         clock_gettime(CLOCK_REALTIME, &tidleE);                            
@@ -53075,8 +53113,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             //pipRet = read(piprx[0], &chq, 1);
                             pipRet = poll(ptfdc, 1, 100);
                             if (pipRet <= 0) {
-                                sprintf_f(rs->logs, "[DV] get pipe(%d) ret: %d timeout - 1\n", piprx[0], pipRet);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                //sprintf_f(rs->logs, "[DV] get pipe(%d) ret: %d timeout - 1\n", piprx[0], pipRet);
+                                //print_f(rs->plogs, "P11", rs->logs);
                                 //usleep(100000);
                                 //continue;
                                 //break;
@@ -53781,7 +53819,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                     }
 
-                    if (cntTx == 0) {
+                    if (cntTx == 1) {
                         clock_gettime(CLOCK_REALTIME, &tstart);
                         //sprintf_f(rs->logs, "[DV] start time %llu ms \n", time_get_ms(&tstart));
                     }    
@@ -54106,6 +54144,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);
                     #endif
 
+                    maxCylcnt = cntTx;
                     cntTx = 0;
                     opc = 0;
                     che = 0;
@@ -54607,8 +54646,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         csw[11] = pagerst - 1;
                         csw[12] = 0;
                     } else {
-                        if (distCylcnt > 1) {
-                            sprintf_f(rs->logs, "[DV] no csw err and page rest == 0! dist: %d \n", distCylcnt);
+                        if (distCylcnt > maxCylcnt) {
+                            sprintf_f(rs->logs, "[DV] no csw err and page rest == 0! dist: %d > max: %d \n", distCylcnt, maxCylcnt);
                             print_f(rs->plogs, "P11", rs->logs);
                             csw[11] = 1;
                             csw[12] = 0;
@@ -55418,7 +55457,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     lastCylen = 0;
                     waitCylen = 0;
                     rwaitCylen = 0;
-                
+                    maxCylcnt = 0;
+                    
                     cswerr = 0;
                     pagerst = 2;
                     #endif
@@ -55828,6 +55868,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             datCylcnt = 0;
                             lastCylen = 0;
                             waitCylen = 0;
+                            maxCylcnt = 0;
                             clock_gettime(CLOCK_REALTIME, &tidleS);
                             clock_gettime(CLOCK_REALTIME, &tidleE);                            
                             
