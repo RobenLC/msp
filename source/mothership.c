@@ -1123,6 +1123,45 @@ struct aspMetaData_s{
   unsigned char available[324];
 };
 
+struct aspMetaDataviaUSB_s{
+  unsigned char  ASP_MAGIC_ASPC[4];  //byte[4] "ASPC"
+  unsigned char IMG_HIGH[2];                   // byte[6] 
+  unsigned char  WIDTH_RESERVE[5];    // byte[11]
+  unsigned char IMG_WIDTH[2];                // byte[13]
+  unsigned char  MCROP_RESERVE[51];   // byte[64]
+  
+  struct intMbs_s CROP_POS_1;        //byte[68]
+  struct intMbs_s CROP_POS_2;        //byte[72]
+  struct intMbs_s CROP_POS_3;        //byte[76]
+  struct intMbs_s CROP_POS_4;        //byte[80]
+  struct intMbs_s CROP_POS_5;        //byte[84]
+  struct intMbs_s CROP_POS_6;        //byte[88]
+  struct intMbs_s CROP_POS_7;        //byte[92]
+  struct intMbs_s CROP_POS_8;        //byte[96]
+  struct intMbs_s CROP_POS_9;        //byte[100]
+  struct intMbs_s CROP_POS_10;        //byte[104]
+  struct intMbs_s CROP_POS_11;        //byte[108]
+  struct intMbs_s CROP_POS_12;        //byte[112]
+  struct intMbs_s CROP_POS_13;        //byte[116]
+  struct intMbs_s CROP_POS_14;        //byte[120]
+  struct intMbs_s CROP_POS_15;        //byte[124]
+  struct intMbs_s CROP_POS_16;        //byte[128]
+  struct intMbs_s CROP_POS_17;        //byte[132]
+  struct intMbs_s CROP_POS_18;        //byte[136]
+  unsigned char  Start_Pos_1st;         //byte[137]
+  unsigned char  Start_Pos_2nd;        //byte[138]
+  unsigned char  End_Pos_All;            //byte[139]
+  unsigned char  Start_Pos_RSV;        //byte[140], not using for now
+  unsigned char  YLine_Gap;               //byte[141]
+  unsigned char  Start_YLine_No;       //byte[142]
+  unsigned short YLines_Recorded;     //byte[144] 16bits
+  unsigned char EPOINT_RESERVE0[16];         //byte[160]
+  unsigned char EPOINT_RESERVE1[64];         //byte[224]
+  unsigned char ASP_MAGIC_YL[2];    //byte[226]
+  unsigned short MPIONT_LEN;           //byte[228] 16bits  
+  unsigned char EXTRA_POINT[4];    //byte[232]
+};
+
 struct aspMetaMass_s{
     int massUsed;
     int massMax;
@@ -1310,6 +1349,7 @@ struct mainRes_s{
     int smode;
     int usbmfd;
     int usbdv;
+    char *usbdvname;
     struct usbhost_s *usbhost[2];
     struct usbHostmem_s *usbmh[2];
     struct psdata_s stdata;
@@ -1343,11 +1383,13 @@ struct mainRes_s{
     struct logPool_s plog;
     struct aspWaitRlt_s wtg;
     struct apWifiConfig_s wifconf;
+    struct aspMetaDataviaUSB_s  metaUsb;
     struct aspMetaData_s metaout;
     struct aspMetaData_s metain;
     struct aspMetaMass_s metaMass;
     struct aspCrop36_s      crop32;
     struct aspCropExtra_s  cropex;
+    struct aspMetaDataviaUSB_s  metaUsbDuo;
     struct aspMetaData_s  metainDuo;
     struct aspMetaMass_s metaMassDuo;
     struct aspCrop36_s       crop32Duo;
@@ -1372,6 +1414,7 @@ struct procRes_s{
     uint32_t *pmsconfig;
     int spifd;
     int usbdvid;
+    char *usvdvname;
     struct usbhost_s *pusbhost;
     struct usbHostmem_s *pusbmh[2];
     struct psdata_s *pstdata;
@@ -1413,10 +1456,12 @@ struct procRes_s{
     struct socket_s *psocket_v;
     struct apWifiConfig_s *pwifconf;
     struct aspMetaData_s *pmetaout;
+    struct aspMetaDataviaUSB_s *pmetausb;
     struct aspMetaData_s *pmetain;
     struct aspMetaMass_s *pmetaMass;
     struct aspCrop36_s *pcrop32;
     struct aspCropExtra_s *pcropex;
+    struct aspMetaDataviaUSB_s *pmetausbduo;
     struct aspMetaData_s *pmetainduo;
     struct aspMetaMass_s *pmetaMassduo;
     struct aspCrop36_s *pcrop32duo;
@@ -2257,6 +2302,104 @@ static dbgBitmapHeader(struct bitmapHeader_s *ph, int len)
     return 0;
 }
 
+static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb) 
+{
+    char mlog[256];
+    char *pch=0;
+    int ix=0;
+    
+    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+    
+    sprintf_f(mlog, "********************************************\n");
+    print_f(mlogPool, "METAU", mlog);
+    
+    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_ASPC: %c %c %c %c\n", pmetausb->ASP_MAGIC_ASPC, pmetausb->ASP_MAGIC_ASPC[0], pmetausb->ASP_MAGIC_ASPC[1], 
+                  pmetausb->ASP_MAGIC_ASPC[2], pmetausb->ASP_MAGIC_ASPC[3]);
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(0x%.8x) IMG_HIGH: 0x%.2x 0x%.2x (%d)   \n",&(pmetausb->IMG_HIGH), pmetausb->IMG_HIGH[0], pmetausb->IMG_HIGH[1], 
+                   pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8)); 
+    print_f(mlogPool, "METAU", mlog);
+
+    for (ix=0; ix < 5; ix++) {
+    sprintf_f(mlog, "(0x%.8x) WIDTH_RESERVE[%d]: 0x%.2x    \n",&(pmetausb->WIDTH_RESERVE[ix]), ix, pmetausb->WIDTH_RESERVE[ix]); 
+    print_f(mlogPool, "METAU", mlog);
+    }
+
+    sprintf_f(mlog, "(0x%.8x) IMG_WIDTH: 0x%.2x 0x%.2x (%d)   \n",&(pmetausb->IMG_WIDTH), pmetausb->IMG_WIDTH[0], pmetausb->IMG_WIDTH[1], 
+                   pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8)); 
+    print_f(mlogPool, "METAU", mlog);
+
+    for (ix=0; ix < 51; ix++) {
+    sprintf_f(mlog, "(0x%.8x) MCROP_RESERVE[%d]: 0x%.2x    \n",&(pmetausb->MCROP_RESERVE[ix]), ix, pmetausb->MCROP_RESERVE[ix]); 
+    print_f(mlogPool, "METAU", mlog);
+    }
+
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_01: %d, %d\n", (&pmetausb->CROP_POS_1), msb2lsb(&pmetausb->CROP_POS_1) >> 16, msb2lsb(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_02: %d, %d\n", &pmetausb->CROP_POS_2, msb2lsb(&pmetausb->CROP_POS_2) >> 16, msb2lsb(&pmetausb->CROP_POS_2) & 0xffff);                      //byte[72]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_03: %d, %d\n", &pmetausb->CROP_POS_3, msb2lsb(&pmetausb->CROP_POS_3) >> 16, msb2lsb(&pmetausb->CROP_POS_3) & 0xffff);                      //byte[76]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_04: %d, %d\n", &pmetausb->CROP_POS_4, msb2lsb(&pmetausb->CROP_POS_4) >> 16, msb2lsb(&pmetausb->CROP_POS_4) & 0xffff);                      //byte[80]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_05: %d, %d\n", &pmetausb->CROP_POS_5, msb2lsb(&pmetausb->CROP_POS_5) >> 16, msb2lsb(&pmetausb->CROP_POS_5) & 0xffff);                      //byte[84]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_06: %d, %d\n", &pmetausb->CROP_POS_6, msb2lsb(&pmetausb->CROP_POS_6) >> 16, msb2lsb(&pmetausb->CROP_POS_6) & 0xffff);                      //byte[88]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_07: %d, %d\n", &pmetausb->CROP_POS_7, msb2lsb(&pmetausb->CROP_POS_7) >> 16, msb2lsb(&pmetausb->CROP_POS_7) & 0xffff);                      //byte[92]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_08: %d, %d\n", &pmetausb->CROP_POS_8, msb2lsb(&pmetausb->CROP_POS_8) >> 16, msb2lsb(&pmetausb->CROP_POS_8) & 0xffff);                      //byte[96]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_09: %d, %d\n", &pmetausb->CROP_POS_9, msb2lsb(&pmetausb->CROP_POS_9) >> 16, msb2lsb(&pmetausb->CROP_POS_9) & 0xffff);                      //byte[100]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_10: %d, %d\n", &pmetausb->CROP_POS_10, msb2lsb(&pmetausb->CROP_POS_10) >> 16, msb2lsb(&pmetausb->CROP_POS_10) & 0xffff);                      //byte[104]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_11: %d, %d\n", &pmetausb->CROP_POS_11, msb2lsb(&pmetausb->CROP_POS_11) >> 16, msb2lsb(&pmetausb->CROP_POS_11) & 0xffff);                      //byte[108]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_12: %d, %d\n", &pmetausb->CROP_POS_12, msb2lsb(&pmetausb->CROP_POS_12) >> 16, msb2lsb(&pmetausb->CROP_POS_12) & 0xffff);                      //byte[112]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_13: %d, %d\n", &pmetausb->CROP_POS_13, msb2lsb(&pmetausb->CROP_POS_13) >> 16, msb2lsb(&pmetausb->CROP_POS_13) & 0xffff);                      //byte[116]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_14: %d, %d\n", &pmetausb->CROP_POS_14, msb2lsb(&pmetausb->CROP_POS_14) >> 16, msb2lsb(&pmetausb->CROP_POS_14) & 0xffff);                      //byte[120]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_15: %d, %d\n", &pmetausb->CROP_POS_15, msb2lsb(&pmetausb->CROP_POS_15) >> 16, msb2lsb(&pmetausb->CROP_POS_15) & 0xffff);                      //byte[124]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_16: %d, %d\n", &pmetausb->CROP_POS_16, msb2lsb(&pmetausb->CROP_POS_16) >> 16, msb2lsb(&pmetausb->CROP_POS_16) & 0xffff);                      //byte[128]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_17: %d, %d\n", &pmetausb->CROP_POS_17, msb2lsb(&pmetausb->CROP_POS_17) >> 16, msb2lsb(&pmetausb->CROP_POS_17) & 0xffff);                      //byte[132]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_18: %d, %d\n", &pmetausb->CROP_POS_18, msb2lsb(&pmetausb->CROP_POS_18) >> 16, msb2lsb(&pmetausb->CROP_POS_18) & 0xffff);                      //byte[136]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) YLine_Gap: %.d      \n", &pmetausb->YLine_Gap, pmetausb->YLine_Gap); 
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) Start_YLine_No: %d      \n", &pmetausb->Start_YLine_No, pmetausb->Start_YLine_No); 
+    print_f(mlogPool, "METAU", mlog);
+    pch = (char *)&pmetausb->YLines_Recorded;
+    sprintf_f(mlog, "(0x%.8x) YLines_Recorded: %d      \n", &pmetausb->YLines_Recorded, (pch[0] << 8) | pch[1]); 
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(0x%.8x) EPOINT_RESERVE0      \n", pmetausb->EPOINT_RESERVE0); 
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(0x%.8x) EPOINT_RESERVE1      \n", pmetausb->EPOINT_RESERVE1); 
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_YL: 0x%.2x 0x%.2x\n", pmetausb->ASP_MAGIC_YL, pmetausb->ASP_MAGIC_YL[0], pmetausb->ASP_MAGIC_YL[1]);
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(0x%.8x) MPIONT_LEN: %d      \n", &pmetausb->MPIONT_LEN, pmetausb->MPIONT_LEN); 
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(0x%.8x) EXTRA_POINT      \n", pmetausb->EXTRA_POINT);
+    print_f(mlogPool, "METAU", mlog);
+
+
+    sprintf_f(mlog, "********************************************\n");
+    print_f(mlogPool, "METAU", mlog);
+    return 0;
+}
+
 static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta) 
 {
     char mlog[256];
@@ -3024,6 +3167,243 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
     msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
 
     return act;
+}
+
+static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, char *pdata, int dmax) 
+{
+    int i=0, act=0;
+    int opSt=0, opEd=0;
+    int istr=0, iend=0, idx=0, ret=0;
+    char *pvdst=0, *pvend=0;
+    struct intMbs_s *pt=0;
+    struct aspMetaDataviaUSB_s *pmetausb=0, *pmetainput=0;
+    struct aspMetaMass_s *pmass=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+    unsigned char linGap=0, linStart=0;
+    unsigned short linRec=0, linLength=0;
+    unsigned int val=0;
+    char *pch=0;
+
+    if ((!mrs) && (!rs)) return -1;
+    if ((!pdata) || (!dmax)) return -2;
+    
+    if (mrs) {
+        pmetausb = &mrs->metaUsb;
+        pct = mrs->configTable;
+        pmass = &mrs->metaMass;
+    } else {
+        pmetausb = rs->pmetausb;
+        pct = rs->pcfgTable;
+        pmass = rs->pmetaMass;
+    }
+    
+    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+    
+    if ((pmetausb->ASP_MAGIC_ASPC[0] != 'A') || (pmetausb->ASP_MAGIC_ASPC[1] != 'S') || 
+        (pmetausb->ASP_MAGIC_ASPC[2] != 'P') || (pmetausb->ASP_MAGIC_ASPC[3] != 'C')) {
+        return -31;
+    }
+
+    pt = &(pmetausb->CROP_POS_1);
+    for (i = ASPOP_CROP_01; i <= ASPOP_CROP_06; i++) {
+        pct[i].opValue = msb2lsb(pt);
+        pct[i].opStatus = ASPOP_STA_UPD;
+
+        //printf("%d. 0x%.8x \n", i, pct[i].opValue);
+        
+        pt++;
+    }
+
+    for (i = ASPOP_CROP_07; i <= ASPOP_CROP_18; i++) {
+        pct[i].opValue = msb2lsb(pt);
+        pct[i].opStatus = ASPOP_STA_UPD;
+
+        //printf("%d. 0x%.8x \n", i, pct[i].opValue);
+        
+        pt++;
+    }
+
+    pct[ASPOP_IMG_LEN].opValue = pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8);
+    pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_UPD;    
+
+
+    linGap = pmetausb->YLine_Gap;
+    linStart = pmetausb->Start_YLine_No;
+
+    pch = (char *)&(pmetausb->YLines_Recorded);
+    val = pch[0] << 8 | pch[1];
+    linRec = val;
+    
+   // shmem_dump((char *)&pmetausb->CROP_POS_1, 128);
+    //printf(" gap: %d, startLin: %d yline: %d \n", linGap, linStart, linRec);
+
+    if ((pdata[0] == 'Y') && (pdata[1] == 'L')) {
+        pch = &pdata[2];
+        val = pch[0] << 8 | pch[1];
+        linLength = val;
+    }
+    
+    if (linRec) {
+        pmass->massGap = linGap;
+        pmass->massStart = linStart;
+        pmass->massRecd = linRec;
+        pmass->massUsed = linLength;
+
+        cfgTableSet(pct, ASPOP_XCROP_GAT, linGap);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR, linStart);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC, linRec);
+            
+    }
+    else if (linLength) {
+        linRec = linLength / 4;
+        pmass->massGap = linGap;
+        pmass->massStart = linStart;
+        pmass->massRecd = linRec;
+        pmass->massUsed = linLength;
+
+        cfgTableSet(pct, ASPOP_XCROP_GAT, linGap);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR, linStart);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC, linRec);
+            
+    }
+    else {
+        pmass->massGap = 0;
+        pmass->massStart = 0;
+        pmass->massRecd = 0;
+        pmass->massUsed = 0;
+        
+        cfgTableSet(pct, ASPOP_XCROP_GAT, 0);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR, 0);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC, 0);
+    }
+
+    if (linLength) {
+        pch = &pdata[4];
+        if (linLength > (dmax - 4)) {
+            linLength = dmax - 4;
+        }
+
+        memcpy(pmass->masspt, pch, linLength);
+    }
+    
+    msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
+
+    return 0;
+}
+
+static int aspMetaReleaseviaUsbDuo(struct mainRes_s *mrs, struct procRes_s *rs, char *pdata, int dmax) 
+{
+    int i=0, act=0;
+    int opSt=0, opEd=0;
+    int istr=0, iend=0, idx=0, ret=0;
+    char *pvdst=0, *pvend=0;
+    struct intMbs_s *pt=0;
+    struct aspMetaDataviaUSB_s *pmetausbduo=0, *pmetainput=0;
+    struct aspMetaMass_s *pmassduo=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+    unsigned char linGap=0, linStart=0;
+    unsigned short linRec=0, linLength=0;
+    unsigned int val=0;
+    char *pch=0;
+
+    if ((!mrs) && (!rs)) return -1;
+    if ((!pdata) || (!dmax)) return -2;
+    
+    if (mrs) {
+        pmetausbduo = &mrs->metaUsbDuo;
+        pct = mrs->configTable;
+        pmassduo = &mrs->metaMassDuo;
+    } else {
+        pmetausbduo = rs->pmetausbduo;
+        pct = rs->pcfgTable;
+        pmassduo = rs->pmetaMassduo;
+    }
+    
+    msync(pmetausbduo, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+    
+    if ((pmetausbduo->ASP_MAGIC_ASPC[0] != 'A') || (pmetausbduo->ASP_MAGIC_ASPC[1] != 'S') || 
+        (pmetausbduo->ASP_MAGIC_ASPC[2] != 'P') || (pmetausbduo->ASP_MAGIC_ASPC[3] != 'C')) {
+        return -31;
+    }
+
+    pt = &(pmetausbduo->CROP_POS_1);
+    for (i = ASPOP_CROP_01_DUO; i <= ASPOP_CROP_06_DUO; i++) {
+        pct[i].opValue = msb2lsb(pt);
+        pct[i].opStatus = ASPOP_STA_UPD;
+        pt++;
+    }
+
+    for (i = ASPOP_CROP_07_DUO; i <= ASPOP_CROP_18_DUO; i++) {
+        pct[i].opValue = msb2lsb(pt);
+        pct[i].opStatus = ASPOP_STA_UPD;
+        pt++;
+    }
+
+    pct[ASPOP_IMG_LEN_DUO].opValue = pmetausbduo->IMG_HIGH[0] | (pmetausbduo->IMG_HIGH[1] << 8);
+    pct[ASPOP_IMG_LEN_DUO].opStatus = ASPOP_STA_UPD;    
+
+    linGap = pmetausbduo->YLine_Gap;
+    linStart = pmetausbduo->Start_YLine_No;
+
+    pch = (char *)&(pmetausbduo->YLines_Recorded);
+    val = pch[0] << 8 | pch[1];
+    linRec = val;
+
+    //shmem_dump((char *)&pmetausbduo->CROP_POS_1, 128);
+    //printf(" gap: %d, startLin: %d yline: %d \n", linGap, linStart, linRec);
+
+    if ((pdata[0] == 'Y') && (pdata[1] == 'L')) {
+        pch = &pdata[2];
+        val = pch[0] << 8 | pch[1];
+        linLength = val;
+    }
+    
+    if (linRec) {
+        pmassduo->massGap = linGap;
+        pmassduo->massStart = linStart;
+        pmassduo->massRecd = linRec;
+        pmassduo->massUsed = linLength;
+
+        cfgTableSet(pct, ASPOP_XCROP_GAT_DUO, linGap);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR_DUO, linStart);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC_DUO, linRec);
+            
+    }
+    else if (linLength) {
+        linRec = linLength / 4;
+        pmassduo->massGap = linGap;
+        pmassduo->massStart = linStart;
+        pmassduo->massRecd = linRec;
+        pmassduo->massUsed = linLength;
+
+        cfgTableSet(pct, ASPOP_XCROP_GAT_DUO, linGap);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR_DUO, linStart);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC_DUO, linRec);
+            
+    }
+    else {
+        pmassduo->massGap = 0;
+        pmassduo->massStart = 0;
+        pmassduo->massRecd = 0;
+        pmassduo->massUsed = 0;
+        
+        cfgTableSet(pct, ASPOP_XCROP_GAT_DUO, 0);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR_DUO, 0);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC_DUO, 0);
+    }
+
+    if (linLength) {
+        pch = &pdata[4];
+        if (linLength > (dmax - 4)) {
+            linLength = dmax - 4;
+        }
+
+        memcpy(pmassduo->masspt, pch, linLength);
+    }
+    
+    msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
+
+    return 0;
 }
 
 #define LOG_DEBUG_MEMALLOC (0)
@@ -39397,16 +39777,16 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 pllinf = 0;
                                 gerr = read(pllfd[ins].fd, &pllinf, 1);
                             }
-                            
-                            sprintf_f(mrs->log, "[GW] id:%d get poll status: 0x%.2x !!!\n", ins, pllinf);
-                            print_f(&mrs->plog, "fs145", mrs->log);
+
+                            //sprintf_f(mrs->log, "[GW] id:%d get poll status: 0x%.2x !!!\n", ins, pllinf);
+                            //print_f(&mrs->plog, "fs145", mrs->log);
 
                             pollfo[0] = 'J';
                             pollfo[1] = pllinf;
                             write(outfd[ins], pollfo, 2);
                             
-                            sprintf_f(mrs->log, "[GW] id:%d out%d put info: %c + 0x%.2x \n", ins, outfd[ins], pollfo[0], pollfo[1]);  
-                            print_f(&mrs->plog, "fs145", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] id:%d out%d put info: %c + 0x%.2x \n", ins, outfd[ins], pollfo[0], pollfo[1]);  
+                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else {
                             sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
@@ -45121,7 +45501,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "failed to get ch1 ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for ch1 ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -45138,7 +45518,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "failed to get ch2 ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for ch2 ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -51244,8 +51624,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 dat = uubs->opinfo & 0xff;
                 opc = (uubs->opinfo >> 8) & 0xff;
                 
-                sprintf_f(rs->logs, "opc: 0x%.2x dat: 0x%.2x \n",opc, dat);
-                print_f(rs->plogs, sp, rs->logs);
+                //sprintf_f(rs->logs, "opc: 0x%.2x dat: 0x%.2x \n",opc, dat);
+                //print_f(rs->plogs, sp, rs->logs);
 
             } else {
                 sprintf_f(rs->logs, "cur is null \n!!!");
@@ -51269,8 +51649,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             pllst = ptrecv[12];
             
-            sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
+            //print_f(rs->plogs, sp, rs->logs);
 
             cplls[0] = 'J';
             cplls[1] = pllst;
@@ -51966,10 +52346,11 @@ static int p10(struct procRes_s *rs)
     return 0;
 }
 
+#define LOG_FLASH  (0)
 #define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
-#define DBG_USB_TIME_MEASURE (1)
+#define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
@@ -52032,9 +52413,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int usbid01=0, usbid02=0;
+    struct aspMetaDataviaUSB_s *ptmetausb=0, *ptmetausbduo=0;
+    int lenbs=0, shfmeta=0;
+    char *pshfmeta=0;
     
     pct = rs->pcfgTable;
     pmass = rs->pmetaMass;
+    ptmetausb = rs->pmetausb;
+    ptmetausbduo = rs->pmetausbduo;
     ptmetain = rs->pmetain;
     pmassduo = rs->pmetaMassduo;
     ptmetainduo = rs->pmetainduo;
@@ -53814,8 +54200,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         if (recvsz == lenflh) {
                             break;
                         } else {
+                        
+                            #if LOG_FLASH
                             sprintf_f(rs->logs, "[DV] flash write-data size: %d recv: %d retry !!!\n", lenflh, recvsz);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
+                            
                         }
                     }
                     //sprintf_f(rs->logs, "[DV] flash write-data size: %d recv: %d \n",lenflh, recvsz);
@@ -53862,7 +54252,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         usbentsRx = 0;
                         break;
                     }
-                    shmem_dump(ptrecv, recvsz);
+
+                    //shmem_dump(ptrecv, recvsz);
                     
                     #if DBG_USB_TIME_MEASURE
                     if ((fintvalE[0]) && (fintvalE[1])) {
@@ -53884,12 +54275,18 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         if (fintvalS[1]) {
 
                             usCost = time_diff(pintval, &intvalS[0], 1000);
+                            
+                            #if LOG_FLASH
                             sprintf_f(rs->logs, "[DV] TX-RX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalS[0]), time_get_ms(pintval), usCost);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
                             
                             usCost = time_diff(&intvalS[1], &intvalS[0], 1000);
+                            
+                            #if LOG_FLASH
                             sprintf_f(rs->logs, "[DV] RX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalS[0]), time_get_ms(&intvalS[1]), usCost);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
 
                             fintvalS[1] = 0;
                         }
@@ -53924,9 +54321,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         cmd = ptrecv[15];
                         opc = ptrecv[16];
                         dat = ptrecv[17];
-                        
+
+                        if ((cmd >= 0x00) && (cmd <= 0x0f)) {
+                            printf("\r");
+                        } else {
+                            shmem_dump(ptrecv, recvsz);
+                        }
+
+                        #if LOG_FLASH
                         sprintf_f(rs->logs, "[DVF] usb get cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);
                         print_f(rs->plogs, "P11", rs->logs);
+                        #endif
                         
                         if (cmd == 0x11) {      
                                 while (1) {
@@ -54579,10 +54984,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             memcpy(iubsBuff, ptrecv, 31);
 
+                            #if LOG_FLASH
                             sprintf_f(rs->logs, "[DV] enty flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d ASIC: %d \n", 
                                                           msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
                                                           ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect, ucbwpram->ASIC_sel);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #else
+                            switch (ucbwpram->pramDirect) {
+                            case 1:
+                                printf("write...");
+                                break;
+                            case 2:
+                                printf("read...");
+                                break;
+                            default:
+                                printf("...");
+                                break;
+                            }
+                            #endif
 
                             puscur = pushost;                    
 
@@ -54676,7 +55095,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             continue;
                         }
-                    }            
+                    }         
+                    else {
+                        sprintf_f(rs->logs, "[DV] Error!!! unknown data dump size: %d \n", recvsz);
+                        print_f(rs->plogs, "P11", rs->logs);
+
+                        shmem_dump(ptrecv, recvsz);
+                    }
                 }
             }
         }
@@ -55417,6 +55842,41 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             if ((uimCylcnt == 1) && (lastCylen > 0)){
                                 lens = lastCylen;
+                                lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                                
+                                shfmeta = lens % 512;
+                                if (shfmeta < lenbs) {
+                                    sprintf_f(rs->logs, "Error!!! usb meta len less than expected len: %d expect: %d \n", shfmeta, lenbs);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+
+                                sprintf_f(rs->logs, "dume usb meta size: %d / %d \n", shfmeta, lens);
+                                print_f(rs->plogs, "P11", rs->logs);
+
+                                pshfmeta = addrd + (lens - shfmeta);
+
+                                //shmem_dump(pshfmeta, shfmeta);
+
+                                if (rxfd == rs->ppipedn->rt[0]) {
+                                    sprintf_f(rs->logs, "usb meta cp to primary size: %d dist size: %d\n", shfmeta, lenbs);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    memset(ptmetausb, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memcpy(ptmetausb, pshfmeta, shfmeta);
+                                    
+                                    //dbgMetaUsb(ptmetausb);
+                                } else if (rxfd == rsd->ppipedn->rt[0]) {
+                                    sprintf_f(rs->logs, "usb meta cp to secondary size: %d dist size: %d\n", shfmeta, lenbs);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    memset(ptmetausbduo, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memcpy(ptmetausbduo, pshfmeta, shfmeta);    
+                                    
+                                    //dbgMetaUsb(ptmetausbduo);
+                                } else {
+                                    sprintf_f(rs->logs, "usb meta forward to pc \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
                             }
 
                             #if LOG_P11_EN
@@ -55468,11 +55928,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     if (rxfd == rs->ppipedn->rt[0]) {
                         sendsz = lens;
                         if (che == 'E') {    
-                            memcpy((char *)ptmetain, addrd, sizeof(struct aspMetaData_s));
-                            addrd += 512;
-                            //shmem_dump((char *)ptmetain, sizeof(struct aspMetaData_s));
-                            dbgMeta(msb2lsb(&ptmetain->FUNC_BITS), ptmetain);
-                            act = aspMetaRelease(msb2lsb(&ptmetain->FUNC_BITS), 0, rs);
+                            sprintf_f(rs->logs, "usb extra meta dump size: %d\n", lens); 
+                            print_f(rs->plogs, "P11", rs->logs);                     
+                            //shmem_dump(addrd, lens);
+                            
+                            //dbgMeta(msb2lsb(&ptmetain->FUNC_BITS), ptmetain);
+                            act = aspMetaReleaseviaUsb(0, rs, addrd, lens);
 
                             if (act < 0) {
                                 //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
@@ -55480,10 +55941,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!ret: %d\n", act); 
                                 print_f(rs->plogs, "P11", rs->logs);                     
 
-                                sprintf_f(rs->logs, "act:0x%.8x, metamass gap:%d, start:%d, record:%d, used:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd, pmass->massUsed); 
+                                sprintf_f(rs->logs, "metamass gap:%d, start:%d, record:%d, used:%d\n", pmass->massGap, pmass->massStart, pmass->massRecd, pmass->massUsed); 
                                 print_f(rs->plogs, "P11", rs->logs);  
-
-                                //shmem_dump((char *)ptmetain, sizeof(struct aspMetaData_s));
 
                                 #if 1 /* bypass the error for impl */
                                 lsb2Msb(&ptmetain->FUNC_BITS, (ASPMETA_FUNC_CROP | ASPMETA_FUNC_IMGLEN));
@@ -55495,6 +55954,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 pmass->massRecd = 0;
                                 pdt = &pct[ASPOP_IMG_LEN];
+                                sprintf_f(rs->logs, "usb meta get img len: %d\n", pdt->opValue); 
+                                print_f(rs->plogs, "P11", rs->logs);                     
+
                                 if (cswerr) {
                                     pdt->opValue = 0;
                                 } else {
@@ -55504,35 +55966,29 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             }
                             else {
-                                sprintf_f(rs->logs, "release meta data, ret: 0x%.8x\n", act); 
+                                sprintf_f(rs->logs, "release extra meta data act: %d\n", act); 
                                 print_f(rs->plogs, "P11", rs->logs);   
                                 
                                 /* mechanism to stop scan, not good */
                                 pdt = &pct[ASPOP_IMG_LEN];
+                                sprintf_f(rs->logs, "usb meta get img len: %d\n", pdt->opValue); 
+                                print_f(rs->plogs, "P11", rs->logs);                     
+                                
+                                #if 0
                                 if (cswerr) {
                                     pdt->opValue = 0;
                                 } else {
                                     pdt->opValue = 3552;
                                 }
+                                #endif
 
-                                if (act & ASPMETA_FUNC_CROP) {
-                                    cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
+                                cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
 
-                                    sprintf_f(rs->logs, "Yline_recorder: %d!!\n", val); 
-                                    print_f(rs->plogs, "P11", rs->logs);  
+                                sprintf_f(rs->logs, "Yline_recorder: %d!!\n", val); 
+                                print_f(rs->plogs, "P11", rs->logs);  
 
-                                    if (val > 1) {
-                                        memcpy(pmass->masspt, addrd, (sendsz - 512));
-                                        pmass->massUsed = sendsz - 512;
-                                        msync(pmass->masspt, pmass->massUsed, MS_SYNC);
-
-                                        sprintf_f(rs->logs, "act:0x%.8x, metamass gap:%d, start:%d, record:%d, used:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd, pmass->massUsed); 
-                                        print_f(rs->plogs, "P11", rs->logs);  
-                                    } else {
-                                        sprintf_f(rs->logs, "record line: %d (0: not crop, 1: 18 points crop)go next \n", val); 
-                                        print_f(rs->plogs, "P11", rs->logs);  
-                                    }
-                                }
+                                sprintf_f(rs->logs, "act: %d, metamass gap:%d, start:%d, record:%d, used:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd, pmass->massUsed); 
+                                print_f(rs->plogs, "P11", rs->logs);  
                             }
 
                             cmd = 0;
@@ -55582,23 +56038,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     else if (rxfd == rsd->ppipedn->rt[0]) {
                         sendsz = lens;
                         if (che == 'E') {
-                            memcpy((char *)ptmetainduo, addrd, sizeof(struct aspMetaData_s));
-                            addrd += 512;
-                            //shmem_dump((char *)ptmetain, sizeof(struct aspMetaData_s));
-                            dbgMeta(msb2lsb(&ptmetainduo->FUNC_BITS), ptmetainduo);
-                            act = aspMetaReleaseDuo(msb2lsb(&ptmetainduo->FUNC_BITS), 0, rs);
+                            sprintf_f(rs->logs, "usb extra meta duo dump size: %d\n", lens); 
+                            print_f(rs->plogs, "P11", rs->logs);                     
+                            //shmem_dump(addrd, lens);
+                            
+                            //dbgMeta(msb2lsb(&ptmetain->FUNC_BITS), ptmetain);
+                            act = aspMetaReleaseviaUsbDuo(0, rs, addrd, lens);
 
                             if (act < 0) {
                                 //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
                                 
-                                sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!ret: %d\n", act); 
+                                sprintf_f(rs->logs, "ERROR!!! wrong extra meta duo data, break!!ret: %d\n", act); 
                                 print_f(rs->plogs, "P11", rs->logs);                     
 
-                                sprintf_f(rs->logs, "act:%d, duo metamass gap:%d, start:%d, record:%d, used:%d\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd, pmassduo->massUsed); 
+                                sprintf_f(rs->logs, "duo metamass gap:%d, start:%d, record:%d, used:%d\n", pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd, pmassduo->massUsed); 
                                 print_f(rs->plogs, "P11", rs->logs);  
                                 
-                                //shmem_dump((char *)ptmetainduo, sizeof(struct aspMetaData_s));
-
                                 #if 1 /* bypass the error for impl */
                                 lsb2Msb(&ptmetainduo->FUNC_BITS, (ASPMETA_FUNC_CROP | ASPMETA_FUNC_IMGLEN));
                                 
@@ -55609,6 +56064,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 pmassduo->massRecd = 0;
                                 pdt = &pct[ASPOP_IMG_LEN_DUO];
+                                
+                                sprintf_f(rs->logs, "usb meta get duo img len: %d\n", pdt->opValue); 
+                                print_f(rs->plogs, "P11", rs->logs);                     
+                                
                                 if (cswerr) {
                                     pdt->opValue = 0;
                                 } else {
@@ -55618,36 +56077,30 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 
                             }
                             else {
-                                sprintf_f(rs->logs, "release duo meta data, ret: 0x%.8x\n", act); 
+                                sprintf_f(rs->logs, "release duo extra meta data act: %d\n", act); 
                                 print_f(rs->plogs, "P11", rs->logs);                     
 
                                 /* mechanism to stop scan, not good */
                                 pdt = &pct[ASPOP_IMG_LEN_DUO];
+                                
+                                sprintf_f(rs->logs, "usb meta get duo img len: %d\n", pdt->opValue); 
+                                print_f(rs->plogs, "P11", rs->logs);                     
+
+                                #if 0
                                 if (cswerr) {
                                     pdt->opValue = 0;
                                 } else {
                                     pdt->opValue = 3552;
                                 }
-                                
-                                if (act & ASPMETA_FUNC_CROP) {
-                                    cfgTableGet(pct, ASPOP_XCROP_LINREC_DUO, &val);
+                                #endif
 
-                                    sprintf_f(rs->logs, "Yline_recorder duo: %d!!\n", val); 
-                                    print_f(rs->plogs, "P11", rs->logs);  
+                                cfgTableGet(pct, ASPOP_XCROP_LINREC_DUO, &val);
 
-                                    if (val > 1) {
-                                    
-                                        memcpy(pmassduo->masspt, addrd, (sendsz - 512));
-                                        pmassduo->massUsed = sendsz - 512;
-                                        msync(pmassduo->masspt, pmassduo->massUsed, MS_SYNC);
+                                sprintf_f(rs->logs, "Yline_recorder duo: %d!!\n", val); 
+                                print_f(rs->plogs, "P11", rs->logs);  
 
-                                        sprintf_f(rs->logs, "act:0x%.8x, metamass duo gap:%d, start:%d, record:%d, used:%d\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd, pmassduo->massUsed); 
-                                        print_f(rs->plogs, "P11", rs->logs);  
-                                    } else {
-                                        sprintf_f(rs->logs, "duo record line: %d (0: not crop, 1: 18 points crop)go next \n", val); 
-                                        print_f(rs->plogs, "P11", rs->logs);  
-                                    }
-                                }
+                                sprintf_f(rs->logs, "act: %d, metamass duo gap:%d, start:%d, record:%d, used:%d\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd, pmassduo->massUsed); 
+                                print_f(rs->plogs, "P11", rs->logs);  
                             }
 
                             cmd = 0;
@@ -56426,8 +56879,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                         
                         if (chm) {
+                        
+                            #if LOG_FLASH 
                             sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
+                            
                         }
                     }
                 }
@@ -56441,8 +56898,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 pipRet = read(pipeRx[0], &chq, 1);
                         
                                 if (pipRet > 0) {
+                                
+                                    #if LOG_FLASH 
                                     sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                         
                                     break;
                                 }
@@ -56462,8 +56922,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 pipRet = read(pipeRx[0], &chn, 1);
                         
                                 if (pipRet > 0) {
+                                
+                                    #if LOG_FLASH 
                                     sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                         
                                     break;
                                 }
@@ -56471,8 +56934,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                         
                         if (chn) {
+                        
+                            #if LOG_FLASH 
                             sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
                         }
                     }
                 }
@@ -56549,9 +57015,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
+                #if LOG_FLASH 
                 sprintf_f(rs->logs, "[DV] flasg read cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump: \n", cmd, opc, dat);
                 print_f(rs->plogs, "P11", rs->logs);
                 shmem_dump(csw, wrtsz);
+                #else
+                printf("\rdone      \r");
+                #endif
                 
                 #if DBG_USB_TIME_MEASURE
                 if (!fintvalE[0]) {
@@ -56661,8 +57131,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 pipRet = read(pipeRx[0], &chq, 1);
                         
                                 if (pipRet > 0) {
+                                
+                                    #if LOG_FLASH
                                     sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chq);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                         
                                     break;
                                 }
@@ -56682,8 +57155,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 pipRet = read(pipeRx[0], &chn, 1);
                         
                                 if (pipRet > 0) {
+
+                                    #if LOG_FLASH
                                     sprintf_f(rs->logs, "[DV] cmd:0x%.2x opc:0x%.2x get chr:0x%.2x \n", cmd, opc, chn);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                         
                                     break;
                                 }
@@ -56691,8 +57167,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                         
                         if (chn) {
+
+                            #if LOG_FLASH
                             sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
+                            
                         }
                     }
                 }
@@ -56728,9 +57208,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
+                #if LOG_FLASH
                 sprintf_f(rs->logs, "[DV] flash write cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump: \n", cmd, opc, dat);
                 print_f(rs->plogs, "P11", rs->logs);
                 shmem_dump(csw, wrtsz);
+                #else
+                printf("\rdone      \r");
+                #endif
 
                 #if DBG_USB_TIME_MEASURE
                 if (!fintvalE[0]) {
@@ -56888,7 +57372,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     //usbentsTx = 0;
                     continue;
                 }
-
+                
                 sprintf_f(rs->logs, "[DV] poll cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump: \n", cmd, opc, dat);
                 print_f(rs->plogs, "P11", rs->logs);
 
@@ -60109,6 +60593,7 @@ int main(int argc, char *argv[])
     pmrs->usbhost[0] = pushost;
     pmrs->usbhost[1] = pushostd;
         
+    #if 1
     pmrs->usbdv = open(usbdevpath, O_RDWR);
     if (pmrs->usbdv <= 0) {
         printf("can't open device[%s]!!\n", usbdevpath); 
@@ -60118,13 +60603,17 @@ int main(int argc, char *argv[])
             goto end;
         }
         else {
+            pmrs->usbdvname = usbdevpath0;
             printf("open device[%s]\n", usbdevpath0); 
         }
     }
     else {
-        printf("open device[%s]\n", usbdevpath0); 
+        pmrs->usbdvname = usbdevpath;
+        printf("open device[%s]\n", usbdevpath); 
     }
-    usb_nonblock_set(pmrs->usbdv);
+    //close(pmrs->usbdv);
+    //pmrs->usbdv = 0;
+    #endif
 
     dbgShowTimeStamp("s11", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
@@ -60580,8 +61069,10 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pnetIntfs = mrs->netIntfs;
     rs->pwifconf = &mrs->wifconf;
     rs->pmetaout = &mrs->metaout;
+    rs->pmetausb = &mrs->metaUsb;
     rs->pmetain = &mrs->metain;
     rs->pmetaMass = &mrs->metaMass;
+    rs->pmetausbduo = &mrs->metaUsbDuo;
     rs->pmetainduo= &mrs->metainDuo;
     rs->pmetaMassduo= &mrs->metaMassDuo;
 
@@ -60598,6 +61089,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbrotate = &mrs->bmpRotate;
 
     rs->usbdvid = mrs->usbdv;
+    rs->usvdvname = mrs->usbdvname;
 
     if ((idx == 10) || (idx == 12)) { 
         rs->pusbhost = mrs->usbhost[0];
