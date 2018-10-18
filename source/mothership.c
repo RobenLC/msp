@@ -38217,7 +38217,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define DBG_USB_GATE 1
+#define DBG_USB_GATE 0
 #define MAX_145_EVENT (9)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -42737,7 +42737,7 @@ static int socket_nonblock_set (int sfd)
 }
 
 #define MSP_P4_SAVE_DAT (0)
-#define LOG_P4_TX_EN  (1)
+#define LOG_P4_TX_EN  (0)
 static int p4(struct procRes_s *rs)
 {
     CFLOAT flsize, fltime;
@@ -50118,7 +50118,7 @@ static int p6(struct procRes_s *rs)
 }
 
 #define MSP_P7_SAVE_DAT (0)
-#define LOG_P7_TX_EN (1)
+#define LOG_P7_TX_EN (0)
 static int p7(struct procRes_s *rs)
 {
     char chbuf[32];
@@ -50289,6 +50289,10 @@ static int p7(struct procRes_s *rs)
 
                 while (1) {
                     len = ring_buf_cons(rs->pcmdTx, &addr);
+
+                    sprintf_f(rs->logs, "get ring buff len: %d \n", len);
+                    print_f(rs->plogs, "P7", rs->logs);         
+
                     if (len >= 0) {
                         tx++;
                     
@@ -56212,7 +56216,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     memcpy(addrs, addrd, lenrs);
                                     addrd += lenrs;
 
-                                    #if 1
+                                    #if 0
                                     sprintf_f(rs->logs, "[DV] ring buff copy %d / %d!!!\n", lenrs, sendsz);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     #endif
@@ -56323,7 +56327,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     memcpy(addrs, addrd, lenrs);
                                     addrd += lenrs;
 
-                                    #if 1
+                                    #if 0
                                     sprintf_f(rs->logs, "[DV] duo ring buff copy %d / %d!!!\n", lenrs, sendsz);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     #endif
