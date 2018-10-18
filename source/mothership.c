@@ -59,6 +59,7 @@ fa734d1a3d "
 #define CYCLE_LEN (40)
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
+#define MOVE_MUTX_TO_FRONT_P6  (1)
 
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -554,6 +555,8 @@ typedef enum {
     ASPOP_XCROP_LINREC_DUO,
     ASPOP_RAW_SIZE_DUO,
     ASPOP_MULTI_LOOP,
+    ASPOP_SCAN_STATUS,
+    ASPOP_SCAN_STATUS_DUO,
     ASPOP_CODE_MAX, /* 121 */
 } aspOpCode_e;
 
@@ -8133,6 +8136,22 @@ static int cfgTableUpd(struct aspConfig_s *table, int idx, uint32_t val)
         p->opValue = val;
         p->opStatus = ASPOP_STA_UPD;
     }
+
+    return 0;
+}
+
+static int cfgTableClr(struct aspConfig_s *table, int idx)
+{
+    struct aspConfig_s *p=0;
+    int ret=0;
+
+    if (!table) return -1;
+    if (idx >= ASPOP_CODE_MAX) return -1;
+
+    p = &table[idx];
+    if (!p) return -2;
+
+    p->opStatus = ASPOP_STA_NONE;
 
     return 0;
 }
@@ -38198,7 +38217,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define DBG_USB_GATE 0
+#define DBG_USB_GATE 1
 #define MAX_145_EVENT (9)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -38231,7 +38250,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct shmem_s *ringbf[4];
     char *addrd, *addrs;
     uint32_t *add32d, *add32s;
-    int lens=0, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0;
+    int lens=0, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0, csws=0;
     int totsz[MAX_145_EVENT];
     int cycCnt[MAX_145_EVENT];
     int idxInit[MAX_145_EVENT];
@@ -38491,7 +38510,30 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         if (pllcmd[ins] == 'N') {
                             sprintf_f(mrs->log, "[GW] WiFi end transmit count: %d / %d!!! \n", modersp->c, modersp->v);
                             print_f(&mrs->plog, "fs145", mrs->log);
+                            
+                            val = 0;
+                            ret = cfgTableGetChk(mrs->configTable, ASPOP_MULTI_LOOP, &val, ASPOP_STA_WR);    
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_MULTI_LOOP !!! ret: %d val: %d \n", ins, ret, val);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                            }
 
+                            csws = 0;
+                            cfgTableGetChk(mrs->configTable, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_SCAN_STATUS !!! ret: %d csws: 0x%.2x \n", ins, ret, csws);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "pll%d get ASPOP_SCAN_STATUS(0x%.2x) ASPOP_MULTI_LOOP(%d) \n", ins, csws, val);
+                            print_f(&mrs->plog, "fs145", mrs->log);
+
+                            #if 1 /* test stopping multiple scan */
+                            if ((csws) && (val)) {
+                                cfgTableUpd(mrs->configTable, ASPOP_IMG_LEN, 0);
+                            }
+                            #endif
+                                
                             if (modersp->t) {
                                 mrs_ipc_put(mrs, "d", 1, 7);
                             } else {
@@ -38504,7 +38546,30 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         if (pllcmd[ins] == 'N') {
                             sprintf_f(mrs->log, "[GW] WiFi end duo transmit count: %d / %d!!! \n", modersp->c, modersp->v);
                             print_f(&mrs->plog, "fs145", mrs->log);
+                            
+                            val = 0;
+                            ret = cfgTableGetChk(mrs->configTable, ASPOP_MULTI_LOOP, &val, ASPOP_STA_WR);    
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_MULTI_LOOP !!! ret: %d val: %d \n", ins, ret, val);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                            }
 
+                            csws = 0;
+                            cfgTableGetChk(mrs->configTable, ASPOP_SCAN_STATUS_DUO, &csws, ASPOP_STA_UPD);
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_SCAN_STATUS_DUO !!! ret: %d csws: 0x%.2x \n", ins, ret, csws);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "pll%d get ASPOP_SCAN_STATUS_DUO(0x%.2x) ASPOP_MULTI_LOOP(%d) \n", ins, csws, val);
+                            print_f(&mrs->plog, "fs145", mrs->log);
+
+                            #if 1 /* test stopping multiple scan */
+                            if ((csws) && (val)) {
+                                cfgTableUpd(mrs->configTable, ASPOP_IMG_LEN_DUO, 0);
+                            }
+                            #endif
+                            
                             if (modersp->t) {
                                 mrs_ipc_put(mrs, "d", 1, 7);
                             } else {
@@ -39759,13 +39824,18 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             print_f(&mrs->plog, "fs145", mrs->log);
 
                             if (pubffcd[ins]) {
-                                pubffcd[ins]->ubcswerr = cswinf;
-                                //sprintf_f(mrs->log, "[GW] id:%d conti read set error status 0x%.2x, contenter id: %d \n", ins, cswinf, pubffcd[ins]->ubindex);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
+                                if (pubffcd[ins]->ubcswerr == 0) {
+                                    pubffcd[ins]->ubcswerr = cswinf;
+                                    //sprintf_f(mrs->log, "[GW] id:%d conti read set error status 0x%.2x, contenter id: %d \n", ins, cswinf, pubffcd[ins]->ubindex);
+                                    //print_f(&mrs->plog, "fs145", mrs->log);
 
-                                pubffcd[ins] = 0;
+                                    pubffcd[ins] = 0;
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] Error!!! id:%d conti read set error status failed alread been set val: 0x%.2x !!!\n", ins, pubffcd[ins]->ubcswerr);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                }
                             } else {
-                                sprintf_f(mrs->log, "[GW] id:%d conti read set error status failed, contenter is null  !!!\n", ins);
+                                sprintf_f(mrs->log, "[GW] Error!!! id:%d conti read set error status failed contenter is null !!!\n", ins);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                             }
                             
@@ -44890,6 +44960,24 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (OCR hex)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
 
+            #if MOVE_MUTX_TO_FRONT_P6
+            while (ch != 'c') {
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
+                if (ret > 0) {
+                    if (ch == 'c') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            #endif
+            
             pdt = &pct[ASPOP_IMG_LEN];
             
             cnt = 0;
@@ -44923,9 +45011,10 @@ static int p6(struct procRes_s *rs)
             ch = 0;
 
             pdt->opStatus = ASPOP_STA_APP;
-            
+
+            #if !MOVE_MUTX_TO_FRONT_P6
             while (ch != 'c') {
-                ret = rs_ipc_get(rs, &ch, 1);
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
                 if (ret > 0) {
                     if (ch == 'c') {
                         sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
@@ -44935,10 +45024,11 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
+            #endif
 
             msync(&pct[ASPOP_IMG_LEN], sizeof(struct aspConfig_s), MS_SYNC);
             
@@ -45018,6 +45108,41 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (imglen)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
 
+            #if MOVE_MUTX_TO_FRONT_P6
+            ch = 0;
+            while (ch != 'd') {
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
+                if (ret > 0) {
+                    if (ch == 'd') {
+                        sprintf_f(rs->logs, "succeed to get ch1 == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch1 == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "wait for d1 ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            ch = 0;
+            while (ch != 'd') {
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
+                if (ret > 0) {
+                    if (ch == 'd') {
+                        sprintf_f(rs->logs, "succeed to get ch2 == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch2 == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "wait for d2 ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            #endif
+            
             /* first page */
             pdt = &pct[ASPOP_IMG_LEN];
             cnt = 0;
@@ -45489,9 +45614,10 @@ static int p6(struct procRes_s *rs)
                 }
             }
 
+            #if !MOVE_MUTX_TO_FRONT_P6
             ch = 0;
             while (ch != 'd') {
-                ret = rs_ipc_get_ms(rs, &ch, 1, 100);
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
                 if (ret > 0) {
                     if (ch == 'd') {
                         sprintf_f(rs->logs, "succeed to get ch1 == %c\n", ch);
@@ -45501,14 +45627,13 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for ch1 ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for d1 ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
-
             ch = 0;
             while (ch != 'd') {
-                ret = rs_ipc_get_ms(rs, &ch, 1, 100);
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
                 if (ret > 0) {
                     if (ch == 'd') {
                         sprintf_f(rs->logs, "succeed to get ch2 == %c\n", ch);
@@ -45518,10 +45643,11 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for ch2 ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for d2 ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
+            #endif
 
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
             
@@ -45654,7 +45780,26 @@ static int p6(struct procRes_s *rs)
         if (opcode == 0x22) { /* send img length*/
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (imglen)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
-                
+            
+            #if MOVE_MUTX_TO_FRONT_P6
+            ch = 0;
+            while (ch != 'c') {
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
+                if (ret > 0) {
+                    if (ch == 'c') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "warnning!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            #endif
+            
             pdt = &pct[ASPOP_IMG_LEN];
             cnt = 0;
             while (pdt->opStatus != ASPOP_STA_UPD) {
@@ -45691,10 +45836,10 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
-
+            #if !MOVE_MUTX_TO_FRONT_P6
             ch = 0;
             while (ch != 'c') {
-                ret = rs_ipc_get(rs, &ch, 1);
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
                 if (ret > 0) {
                     if (ch == 'c') {
                         sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
@@ -45704,10 +45849,11 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
+            #endif
             
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
@@ -46013,6 +46159,41 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (CROP duo)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
 
+            #if MOVE_MUTX_TO_FRONT_P6
+            ch = 0; 
+            while (ch != 'd') {
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
+                if (ret > 0) {
+                    if (ch == 'd') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "wait for d1 ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            ch = 0; 
+            while (ch != 'd') {
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
+                if (ret > 0) {
+                    if (ch == 'd') {
+                        sprintf_f(rs->logs, "duo succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "duo wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "wait for d2 ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            #endif
+            
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
             print_f(rs->plogs, "P6", rs->logs);
@@ -47715,10 +47896,11 @@ static int p6(struct procRes_s *rs)
                 print_f(rs->plogs, "P6", rs->logs);
             }          
 #endif
-                
+
+            #if !MOVE_MUTX_TO_FRONT_P6
             ch = 0; 
             while (ch != 'd') {
-                ret = rs_ipc_get(rs, &ch, 1);
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
                 if (ret > 0) {
                     if (ch == 'd') {
                         sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
@@ -47728,14 +47910,13 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for d1 ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
-
             ch = 0; 
             while (ch != 'd') {
-                ret = rs_ipc_get(rs, &ch, 1);
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
                 if (ret > 0) {
                     if (ch == 'd') {
                         sprintf_f(rs->logs, "duo succeed to get ch == %c\n", ch);
@@ -47745,10 +47926,11 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "duo failed to get ch ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for d2 ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
+            #endif
 
             if (pmass->massRecd) {
                 sprintf_f(rs->logs, "reset Record line and used buffer size, recd: %d, used: %d, duo recd: %d, used: %d\n", 
@@ -47781,6 +47963,25 @@ static int p6(struct procRes_s *rs)
         if (opcode == 0x19) { /* send CROP info (new)*/
             sprintf_f(rs->logs, "handle opcode: 0x%x param: 0x%x (CROP new)\n", opcode, param);
             print_f(rs->plogs, "P6", rs->logs);
+
+            #if MOVE_MUTX_TO_FRONT_P6
+            ch = 0;
+            while (ch != 'c') {
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
+                if (ret > 0) {
+                    if (ch == 'c') {
+                        sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    } else {
+                        sprintf_f(rs->logs, "wrong!! ch == %c \n", ch);
+                        print_f(rs->plogs, "P6", rs->logs);    
+                    }
+                } else {
+                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
+                    print_f(rs->plogs, "P6", rs->logs);    
+                }
+            }
+            #endif
             
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
@@ -48654,9 +48855,10 @@ static int p6(struct procRes_s *rs)
             }
 #endif
 
+            #if !MOVE_MUTX_TO_FRONT_P6
             ch = 0;
             while (ch != 'c') {
-                ret = rs_ipc_get(rs, &ch, 1);
+                ret = rs_ipc_get_ms(rs, &ch, 1, 500);
                 if (ret > 0) {
                     if (ch == 'c') {
                         sprintf_f(rs->logs, "succeed to get ch == %c\n", ch);
@@ -48666,10 +48868,11 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
+            #endif
             
             if (pmass->massRecd) {
                 sprintf_f(rs->logs, "reset Record line and used buffer size, recd: %d, used: %d\n", 
@@ -50844,7 +51047,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     int len=0, pieRet=0, ret=0, err=0;
     char *ptm=0, *pcur=0, *addr=0;
     char chr=0, opc=0, dat=0, chq=0, ch=0;
-    char cplls[2];
+    char cplls[4];
     char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     char *pkcbw=0;
@@ -51857,14 +52060,15 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             puhs->pushcnt = tcnt;
 
-            chq = 'E';
-            pieRet = write(pPrx[1], &chq, 1);
-
             if (cswst) {
-                cplls[0] = 'I';
-                cplls[1] = cswst;
-                pieRet = write(pPrx[1], &cplls, 2);
-            }
+                cplls[0] = 'E';
+                cplls[1] = 'I';
+                cplls[2] = cswst;
+                pieRet = write(pPrx[1], &cplls, 3);
+            } else {
+                chq = 'E';
+                pieRet = write(pPrx[1], &chq, 1);
+            }            
             
             if (chr == 'h') {
                 //chq = 'H';
@@ -52409,7 +52613,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct aspMetaData_s *ptmetaout=0, *ptmetain=0;
     struct aspMetaData_s *ptmetainduo=0;
     char *addrs=0;
-    int lenrs=0, act=0, val=0, lenflh=0;
+    int lenrs=0, act=0, val=0, lenflh=0, err=0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int usbid01=0, usbid02=0;
@@ -52713,7 +52917,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         #endif
                 
                 
-                        #if 1 /* save meta */
+                        #if 0 /* save meta */
                         fsmeta = find_save(ptfilepath, ptfileSaveWifiMeta);
                         if (fsmeta) {
                             sprintf_f(rs->logs, "[DV] find save wifi meta [%s] succeed!!! \n", ptfilepath);
@@ -52784,7 +52988,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         sprintf_f(rs->logs, "[DV] clean start \n");
                         print_f(rs->plogs, "P11", rs->logs);
 
-                        #if 1  /* clean msg queue */
+                        #if 0  /* clean msg queue */
                         while (1) {
                             chq = 0;
                             pipRet = read(pipeRx[0], &chq, 1);
@@ -54034,7 +54238,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     shmem_dump(ptrecv, recvsz);
                     #endif
                 
-                    #if 1 /* save meta */
+                    #if 0 /* save meta */
                     fsmeta = find_save(ptfilepath, ptfileSaveMeta);
                     if (fsmeta) {
                         sprintf_f(rs->logs, "[DV] find save meta [%s] succeed!!! \n", ptfilepath);
@@ -55928,8 +56132,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     if (rxfd == rs->ppipedn->rt[0]) {
                         sendsz = lens;
                         if (che == 'E') {    
-                            sprintf_f(rs->logs, "usb extra meta dump size: %d\n", lens); 
-                            print_f(rs->plogs, "P11", rs->logs);                     
+                            //sprintf_f(rs->logs, "usb extra meta dump size: %d\n", lens); 
+                            //print_f(rs->plogs, "P11", rs->logs);                     
                             //shmem_dump(addrd, lens);
                             
                             //dbgMeta(msb2lsb(&ptmetain->FUNC_BITS), ptmetain);
@@ -55938,8 +56142,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (act < 0) {
                                 //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
                                 
-                                sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!ret: %d\n", act); 
-                                print_f(rs->plogs, "P11", rs->logs);                     
+                                sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!ret: %d size: %d\n", act, lens); 
+                                print_f(rs->plogs, "P11", rs->logs);       
+                                shmem_dump(addrd, lens);
 
                                 sprintf_f(rs->logs, "metamass gap:%d, start:%d, record:%d, used:%d\n", pmass->massGap, pmass->massStart, pmass->massRecd, pmass->massUsed); 
                                 print_f(rs->plogs, "P11", rs->logs);  
@@ -55953,15 +56158,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 aspMetaRelease(msb2lsb(&ptmetain->FUNC_BITS), 0, rs);
 
                                 pmass->massRecd = 0;
-                                pdt = &pct[ASPOP_IMG_LEN];
-                                sprintf_f(rs->logs, "usb meta get img len: %d\n", pdt->opValue); 
+                                
+                                err = cfgTableGet(pct, ASPOP_IMG_LEN, &val);
+                                sprintf_f(rs->logs, "usb meta get img len: %d err: %d\n", val, err); 
                                 print_f(rs->plogs, "P11", rs->logs);                     
-
-                                if (cswerr) {
-                                    pdt->opValue = 0;
-                                } else {
-                                    pdt->opValue = 3552;
-                                }
+                                
+                                val = cswerr;
+                                cfgTableUpd(pct, ASPOP_SCAN_STATUS, val);
                                 #endif
 
                             }
@@ -55969,21 +56172,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 sprintf_f(rs->logs, "release extra meta data act: %d\n", act); 
                                 print_f(rs->plogs, "P11", rs->logs);   
                                 
-                                /* mechanism to stop scan, not good */
-                                pdt = &pct[ASPOP_IMG_LEN];
-                                sprintf_f(rs->logs, "usb meta get img len: %d\n", pdt->opValue); 
-                                print_f(rs->plogs, "P11", rs->logs);                     
-                                
-                                #if 0
+                                /* mechanism to stop scan */
+                                val = cswerr;
+                                cfgTableUpd(pct, ASPOP_SCAN_STATUS, val);
+
+                                #if 0 /* test stopping multiple scan */
                                 if (cswerr) {
-                                    pdt->opValue = 0;
-                                } else {
-                                    pdt->opValue = 3552;
+                                    val = 0;
+                                    cfgTableUpd(pct, ASPOP_IMG_LEN, val);
                                 }
                                 #endif
 
+                                err = cfgTableGet(pct, ASPOP_IMG_LEN, &val);
+                                sprintf_f(rs->logs, "usb meta get img len: %d err: %d, cswerr: 0x%.2x\n", val, err, cswerr); 
+                                print_f(rs->plogs, "P11", rs->logs);                     
+                                
                                 cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
-
                                 sprintf_f(rs->logs, "Yline_recorder: %d!!\n", val); 
                                 print_f(rs->plogs, "P11", rs->logs);  
 
@@ -56008,8 +56212,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     memcpy(addrs, addrd, lenrs);
                                     addrd += lenrs;
 
+                                    #if 1
                                     sprintf_f(rs->logs, "[DV] ring buff copy %d / %d!!!\n", lenrs, sendsz);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                             
                                     ring_buf_prod(rs->pcmdRx);
                                     
@@ -56038,8 +56244,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     else if (rxfd == rsd->ppipedn->rt[0]) {
                         sendsz = lens;
                         if (che == 'E') {
-                            sprintf_f(rs->logs, "usb extra meta duo dump size: %d\n", lens); 
-                            print_f(rs->plogs, "P11", rs->logs);                     
+                            //sprintf_f(rs->logs, "usb extra meta duo dump size: %d\n", lens); 
+                            //print_f(rs->plogs, "P11", rs->logs);                     
                             //shmem_dump(addrd, lens);
                             
                             //dbgMeta(msb2lsb(&ptmetain->FUNC_BITS), ptmetain);
@@ -56048,8 +56254,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (act < 0) {
                                 //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
                                 
-                                sprintf_f(rs->logs, "ERROR!!! wrong extra meta duo data, break!!ret: %d\n", act); 
-                                print_f(rs->plogs, "P11", rs->logs);                     
+                                sprintf_f(rs->logs, "ERROR!!! wrong extra meta duo data, break!!ret: %d size: %d\n", act, lens); 
+                                print_f(rs->plogs, "P11", rs->logs);      
+                                shmem_dump(addrd, lens);
 
                                 sprintf_f(rs->logs, "duo metamass gap:%d, start:%d, record:%d, used:%d\n", pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd, pmassduo->massUsed); 
                                 print_f(rs->plogs, "P11", rs->logs);  
@@ -56063,39 +56270,35 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 aspMetaReleaseDuo(msb2lsb(&ptmetainduo->FUNC_BITS), 0, rs);
 
                                 pmassduo->massRecd = 0;
-                                pdt = &pct[ASPOP_IMG_LEN_DUO];
-                                
-                                sprintf_f(rs->logs, "usb meta get duo img len: %d\n", pdt->opValue); 
+
+                                err = cfgTableGet(pct, ASPOP_IMG_LEN_DUO, &val);                                
+                                sprintf_f(rs->logs, "usb meta get duo img len: %d err: %d\n", val, err); 
                                 print_f(rs->plogs, "P11", rs->logs);                     
                                 
-                                if (cswerr) {
-                                    pdt->opValue = 0;
-                                } else {
-                                    pdt->opValue = 3552;
-                                }
+                                val = cswerr;
+                                cfgTableUpd(pct, ASPOP_SCAN_STATUS_DUO, val);
                                 #endif
-                                
                             }
                             else {
                                 sprintf_f(rs->logs, "release duo extra meta data act: %d\n", act); 
                                 print_f(rs->plogs, "P11", rs->logs);                     
 
-                                /* mechanism to stop scan, not good */
-                                pdt = &pct[ASPOP_IMG_LEN_DUO];
-                                
-                                sprintf_f(rs->logs, "usb meta get duo img len: %d\n", pdt->opValue); 
-                                print_f(rs->plogs, "P11", rs->logs);                     
+                                /* mechanism to stop scan */
+                                val = cswerr;
+                                cfgTableUpd(pct, ASPOP_SCAN_STATUS_DUO, val);
 
-                                #if 0
+                                #if 0 /* test stopping multiple scan */
                                 if (cswerr) {
-                                    pdt->opValue = 0;
-                                } else {
-                                    pdt->opValue = 3552;
+                                    val = 0;
+                                    cfgTableUpd(pct, ASPOP_IMG_LEN_DUO, val);
                                 }
                                 #endif
 
-                                cfgTableGet(pct, ASPOP_XCROP_LINREC_DUO, &val);
+                                err = cfgTableGet(pct, ASPOP_IMG_LEN_DUO, &val);
+                                sprintf_f(rs->logs, "usb meta get duo img len: %d err: %d, cswerr: 0x%.2x\n", val, err, cswerr); 
+                                print_f(rs->plogs, "P11", rs->logs);                     
 
+                                cfgTableGet(pct, ASPOP_XCROP_LINREC_DUO, &val);
                                 sprintf_f(rs->logs, "Yline_recorder duo: %d!!\n", val); 
                                 print_f(rs->plogs, "P11", rs->logs);  
 
@@ -56119,9 +56322,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                     memcpy(addrs, addrd, lenrs);
                                     addrd += lenrs;
-                                    
+
+                                    #if 1
                                     sprintf_f(rs->logs, "[DV] duo ring buff copy %d / %d!!!\n", lenrs, sendsz);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                                     
                                     ring_buf_prod(rs->pcmdTx);
                                     
@@ -58504,6 +58709,22 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
+            case ASPOP_SCAN_STATUS:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_STATUS_DUO:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
             default: break;
             }
         }
@@ -59550,6 +59771,22 @@ int main(int argc, char *argv[])
                 ctb->opBitlen = 32;
                 break;
             case ASPOP_MULTI_LOOP: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_STATUS:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0x0;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_STATUS_DUO:
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_NONE;
                 ctb->opType = ASPOP_TYPE_VALUE;
