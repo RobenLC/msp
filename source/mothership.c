@@ -31,8 +31,8 @@
 7ce2220b87"
 
 
-#define DISABLE_SPI  (1)
-#define DISABLE_USB  (0)
+#define DISABLE_SPI  (0)
+#define DISABLE_USB  (1)
 #define SPI1_ENABLE (1) 
 
 #if SPI1_ENABLE
@@ -254,6 +254,7 @@ static int *totSalloc=0;
 #define OP_FUNCTEST_19              0x87  
 #define OP_FUNCTEST_20              0x88 
 #define OP_FUNCTEST_21              0x89 
+#define OP_FUNCTEST_22              0x8a
 /* debug */
 
 #define OP_SAVE              0x80
@@ -336,7 +337,7 @@ static int *totSalloc=0;
 //#define CROP_SELEC_RATIO (100.0)
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
-#define CROP_MIGRATE_TO_APP (1)
+#define CROP_MIGRATE_TO_APP (0)
 #define CFLOAT double
 
 #define FAT_DIRPOOL_IDX_MAX   (65535)
@@ -503,6 +504,7 @@ typedef enum {
     ASPOP_FUNCTEST_19,
     ASPOP_FUNCTEST_20,
     ASPOP_FUNCTEST_21,
+    ASPOP_FUNCTEST_22,
     ASPOP_CROP_01,
     ASPOP_CROP_02, /* 70 */
     ASPOP_CROP_03,
@@ -1078,7 +1080,8 @@ struct aspMetaData_s{
   unsigned char  OP_FUNC_19;               //0x87  
   unsigned char  OP_FUNC_20;               //0x88  
   unsigned char  OP_FUNC_21;               //0x89  
-  unsigned char  OP_RESERVE[19];          // byte[64]
+  unsigned char  OP_FUNC_22;               //0x8a
+  unsigned char  OP_RESERVE[18];          // byte[64]
   
   /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
   struct intMbs_s CROP_POS_1;        //byte[68]
@@ -2742,13 +2745,13 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         }
 
         opSt = OP_BLEEDTHROU_ADJUST;
-        opEd = OP_FUNCTEST_21;
+        opEd = OP_FUNCTEST_22;
 
         istr = ASPOP_BLEEDTHROU_ADJUST;
-        iend = ASPOP_FUNCTEST_21;
+        iend = ASPOP_FUNCTEST_22;
         
         pvdst = &pmeta->BLEEDTHROU_ADJUST;
-        pvend = &pmeta->OP_FUNC_21;
+        pvend = &pmeta->OP_FUNC_22;
 
         for (idx = istr; idx <= iend; idx++) {
             if ((pct[idx].opStatus & ASPOP_STA_CON) && (pct[idx].opCode == opSt)) {
@@ -2965,13 +2968,13 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         }
 
         opSt = OP_BLEEDTHROU_ADJUST;
-        opEd = OP_FUNCTEST_21;
+        opEd = OP_FUNCTEST_22;
 
         istr = ASPOP_BLEEDTHROU_ADJUST;
-        iend = ASPOP_FUNCTEST_21;
+        iend = ASPOP_FUNCTEST_22;
         
         pvdst = &pmeta->BLEEDTHROU_ADJUST;
-        pvend = &pmeta->OP_FUNC_21;
+        pvend = &pmeta->OP_FUNC_22;
 
         for (idx = istr; idx <= iend; idx++) {
             if (pct[idx].opCode == opSt) {
@@ -47463,7 +47466,7 @@ static int p6(struct procRes_s *rs)
                               , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
-#if CROP_MIGRATE_TO_APP
+#if 1//CROP_MIGRATE_TO_APP
                     vhi = (int)pcpex->crpexLfPots[i*2+1];
                     cxm = (int)pcpex->crpexLfPots[i*2+0];
                     cxn = (int)pcpex->crpexRtPots[i*2+0];
@@ -47904,7 +47907,7 @@ static int p6(struct procRes_s *rs)
                               , pcpexduo->crpexLfPots[i*2+0], pcpexduo->crpexLfPots[i*2+1], pcpexduo->crpexRtPots[i*2+0], pcpexduo->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
-#if CROP_MIGRATE_TO_APP
+#if 1//CROP_MIGRATE_TO_APP
                     vhi = (int)pcpexduo->crpexLfPots[i*2+1];
                     cxm = (int)pcpexduo->crpexLfPots[i*2+0];
                     cxn = (int)pcpexduo->crpexRtPots[i*2+0];
@@ -48443,7 +48446,7 @@ static int p6(struct procRes_s *rs)
                     default:
                         break;
                 }
-#if CROP_MIGRATE_TO_APP
+#if 1//CROP_MIGRATE_TO_APP
                 if (n > (P6_SEND_BUFF_SIZE - 16)) n = (P6_SEND_BUFF_SIZE - 16);
                 
                 memcpy(&sendbuf[5], rs->logs, n);
@@ -48891,7 +48894,7 @@ static int p6(struct procRes_s *rs)
                               , pcpex->crpexLfPots[i*2+0], pcpex->crpexLfPots[i*2+1], pcpex->crpexRtPots[i*2+0], pcpex->crpexRtPots[i*2+1]);
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
-#if CROP_MIGRATE_TO_APP
+#if 1//CROP_MIGRATE_TO_APP
                     vhi = (int)pcpex->crpexLfPots[i*2+1];
                     cxm = (int)pcpex->crpexLfPots[i*2+0];
                     cxn = (int)pcpex->crpexRtPots[i*2+0];
@@ -58552,6 +58555,14 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
+            case ASPOP_FUNCTEST_22:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_22;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
             case ASPOP_CROP_01: 
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_CROP_01;
@@ -59522,6 +59533,14 @@ int main(int argc, char *argv[])
             case ASPOP_FUNCTEST_21:
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_FUNCTEST_21;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_FUNCTEST_22:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_FUNCTEST_22;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
                 ctb->opMask = ASPOP_MASK_8;
