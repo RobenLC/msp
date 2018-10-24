@@ -31,8 +31,8 @@
 7ce2220b87"
 
 
-#define DISABLE_SPI  (0)
-#define DISABLE_USB  (1)
+#define DISABLE_SPI  (1)
+#define DISABLE_USB  (0)
 #define SPI1_ENABLE (1) 
 
 #if SPI1_ENABLE
@@ -52736,7 +52736,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 {
     int ret=0;
     char ch=0;
-    
+    char syscmd11[256] = "ls -al";
     struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
     struct epoll_event evtrs, evtrsd, evtrcmd, evtpipr, evtpiprd;
     struct pollfd ptfd[1];
@@ -52757,7 +52757,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char endTran[64] = {};
     char *ptrecv=0, *metaPt=0;
     uint8_t cmd=0, opc=0, dat=0;
-    uint32_t usbentsRx=0, usbentsTx=1, getents=0;
+    uint32_t usbentsRx=0, usbentsTx=0, getents=0;
     int usbfd=0;
     char *addrd=0, *palloc=0;
     int uimCylcnt=0, datCylcnt=0, distCylcnt=0, maxCylcnt=0;
@@ -52789,7 +52789,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct aspMetaData_s *ptmetaout=0, *ptmetain=0;
     struct aspMetaData_s *ptmetainduo=0;
     char *addrs=0;
-    int lenrs=0, act=0, val=0, lenflh=0, err=0;
+    int lenrs=0, act=0, val=0, lenflh=0, err=0, fsrcv=0, idlcnt=0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int usbid01=0, usbid02=0;
@@ -52852,17 +52852,20 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         print_f(rs->plogs, "P11", rs->logs);
     }
 
-    usb_nonblock_set(rs->usbdvid);
-
     usbfd = rs->usbdvid;
-    eventRx.data.fd = rs->usbdvid;
-    eventRx.events = EPOLLIN | EPOLLLT;
-    //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
-    ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, rs->usbdvid, &eventRx);
-    if (ret == -1) {
-        perror ("epoll_ctl");
-        sprintf_f(rs->logs, "rs usb spoll set ctl failed errno: %ds\n", errno);
-        print_f(rs->plogs, "P11", rs->logs);
+
+    if (usbfd) {
+        usb_nonblock_set(usbfd);
+
+        eventRx.data.fd = usbfd;
+        eventRx.events = EPOLLIN | EPOLLLT;
+        //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
+        ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
+        if (ret == -1) {
+            perror ("epoll_ctl");
+            sprintf_f(rs->logs, "rs usb spoll set ctl failed errno: %ds\n", errno);
+            print_f(rs->plogs, "P11", rs->logs);
+        }
     }
 
     #if 0
@@ -52964,6 +52967,65 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         }
         #endif
 
+        if (!usbfd) {
+            rs->usbdvid = open(rs->usvdvname, O_RDWR);
+            if (rs->usbdvid <= 0) {
+                printf("can't open device[%s]!!\n", rs->usvdvname); 
+                close(rs->usbdvid);
+                rs->usbdvid = 0;
+                idlcnt ++;
+            }
+            else {
+                //printf("open device[%s]\n", rs->usvdvname); 
+            }
+
+            if (rs->usbdvid) {
+                usb_nonblock_set(rs->usbdvid);
+                recvsz = read(rs->usbdvid, ptrecv, 31);
+                if (recvsz < 0) {
+                    close(rs->usbdvid);
+                    rs->usbdvid = 0;
+                    //printf("close device[%s]\n", rs->usvdvname); 
+                    idlcnt ++;
+                } else {
+                    if (recvsz == 31) {
+                        usbfd = rs->usbdvid;
+                        fsrcv = recvsz;
+                        usbentsRx = 1;
+                        usbentsTx = 1;
+
+                        usb_nonblock_set(usbfd);
+
+                        eventRx.data.fd = usbfd;
+                        eventRx.events = EPOLLIN | EPOLLLT;
+                        //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
+                        ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
+                        if (ret == -1) {
+                            perror ("epoll_ctl");
+                            sprintf_f(rs->logs, "rs usb spoll set ctl failed errno: %ds\n", errno);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                    } else {
+                        close(rs->usbdvid);
+                        rs->usbdvid = 0;
+                        printf("close device[%s] recvsz: %d\n", rs->usvdvname, recvsz); 
+                    }
+                }
+            }
+
+            if ((idlcnt > 30) && (!usbfd)) {
+                sprintf(syscmd11, "/root/module/gadgetRemove.sh");
+                ret = doSystemCmd(syscmd11);
+                if (!ret) {
+                    sprintf(syscmd11, "/root/module/gadgetLaunch.sh");
+                    ret = doSystemCmd(syscmd11);
+                }
+                
+                idlcnt = 0;            
+            }
+
+        }
+        
         uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 500);
         if (uret < 0) {
             perror("epoll_wait");
@@ -52972,6 +53034,41 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         } else if (uret == 0) {
             //sprintf_f(rs->logs, "[ePol] timeout errno: %d ret: %d\n", errno, uret);
             //print_f(rs->plogs, "P11", rs->logs);
+            if (usbfd) {
+                idlcnt++;
+
+                if (idlcnt > 100) {
+                    
+                    ret = epoll_ctl (epollfd, EPOLL_CTL_DEL, usbfd, NULL);
+                    if (ret == -1) {
+                        perror ("epoll_ctl");
+                        sprintf_f(rs->logs, "rs usb spoll del ctl failed errno: %ds\n", errno);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+
+                    close(rs->usbdvid);
+                    rs->usbdvid = 0;
+                    usbfd = 0;
+                    idlcnt = 0;
+                    usbentsRx = 0;
+                    usbentsTx = 0;
+                    //sprintf_f(rs->logs, "close device[%s] idle \n", rs->usvdvname); 
+                    //print_f(rs->plogs, "P11", rs->logs);
+
+                    sprintf(syscmd11, "/root/module/gadgetRemove.sh");
+                    ret = doSystemCmd(syscmd11);
+                    if (!ret) {
+                        sprintf(syscmd11, "/root/module/gadgetLaunch.sh");
+                        ret = doSystemCmd(syscmd11);
+                    }
+
+                    continue;
+                }
+                else {
+                    //sprintf_f(rs->logs, "pc usb idle cnt: %d\n", idlcnt);
+                    //print_f(rs->plogs, "P11", rs->logs);
+                }
+            }
         } else {
             //sprintf_f(rs->logs, "[ePol] ret: %d\n", uret);
             //print_f(rs->plogs, "P11", rs->logs);
@@ -54374,7 +54471,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 continue;
             }
         }
-        
+            
 #if LOG_P11_EN
         sprintf_f(rs->logs, "[ePol] epoll rx: %d, tx: %d ret: %d \n", usbentsRx, usbentsTx, uret);
         print_f(rs->plogs, "P11", rs->logs);
@@ -54629,8 +54726,19 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     #endif
                     
                     if (recvsz < 0) {
-                        usbentsRx = 0;
-                        break;
+                        if (fsrcv) {
+                            recvsz = fsrcv;
+                            fsrcv = 0;
+
+                            sprintf_f(rs->logs, "[DV] first usb RX size: %d / %d \n====================\n", recvsz, 31); 
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            shmem_dump(ptrecv, recvsz);
+                            usbentsRx = 0;                            
+                        } else {
+                            usbentsRx = 0;
+                            break;
+                        }
                     }
 
                     //shmem_dump(ptrecv, recvsz);
@@ -61040,8 +61148,8 @@ int main(int argc, char *argv[])
         pmrs->usbdvname = usbdevpath;
         printf("open device[%s]\n", usbdevpath); 
     }
-    //close(pmrs->usbdv);
-    //pmrs->usbdv = 0;
+    close(pmrs->usbdv);
+    pmrs->usbdv = 0;
     #endif
 
     dbgShowTimeStamp("s11", pmrs, NULL, 2, NULL);
