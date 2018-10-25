@@ -51236,10 +51236,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     char ptfilepath[128];
     #endif
     
-    char cmdMtx[18][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
+    char cmdMtx[19][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
     					    {'q', 0x02},{'r', 0x04},{'g', 0x05},{'e', 0x06},{'f', 0x07},
     					    {'b', 0x08},{'h', 0x07}, {'c', 0x02}, {'k', 0x04}, {'o', 0x07},
-    					    {'i', 0x09}, {'w', 0x10}, {'y', 0x11}};
+    					    {'i', 0x09}, {'w', 0x10}, {'y', 0x11}, {'z', 0x12}};
     uint8_t cmdchr=0;
     struct shmem_s *pTx=0;
     char *pMta=0;
@@ -51681,6 +51681,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             break;
         case 'y':
             cmdchr = cmdMtx[17][1];
+            break;
+        case 'z':
+            cmdchr = cmdMtx[18][1];
             break;
         default:
             //goto end;
@@ -52655,6 +52658,190 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             cplls[1] = pllst;
             pieRet = write(pPrx[1], &cplls, 2);
         }
+        else if (cmdchr == 0x12) {
+            sprintf_f(rs->logs, "check usb alive vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+            print_f(rs->plogs, sp, rs->logs);
+
+            ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+            if (ret < 0) {
+                perror("usb get vid pid");
+                sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                print_f(rs->plogs, sp, rs->logs);
+                
+                err = close(usbid);
+                sprintf_f(rs->logs, "close usb errno:%d ret: %d \n", errno, err);
+                print_f(rs->plogs, sp, rs->logs);
+
+
+                usbid = open(puhsinfo->ushostname, O_RDWR);
+                
+                if (usbid < 0) {
+                    sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                    print_f(rs->plogs, sp, rs->logs);
+                    goto end;
+                } else {
+                
+                    sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
+                    print_f(rs->plogs, sp, rs->logs);
+                
+                    ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                    if (ret < 0) {
+                        sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        close(usbid);
+                        goto end;
+                    }
+                
+                    if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
+                        sprintf_f(rs->logs,  "vid pid for [%s] not match vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x\n", 
+                                                       puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        close(usbid);
+                        
+                        if (puhsinfo->ushostid == puhsinfom[0]->ushostid) {
+                            chvir = puhsinfom[0]->ushostname;
+                            puhsinfom[0]->ushostname = puhsinfom[1]->ushostname;
+                            puhsinfom[1]->ushostname = chvir;
+                        } else {
+                            chvir = puhsinfom[1]->ushostname;
+                            puhsinfom[1]->ushostname = puhsinfom[0]->ushostname;
+                            puhsinfom[0]->ushostname = chvir;
+                        }
+                
+                        usbid = open(puhsinfo->ushostname, O_RDWR);
+                
+                        if (usbid < 0) {
+                            sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                            print_f(rs->plogs, sp, rs->logs);
+                            goto end;
+                        } else {
+                
+                            sprintf_f(rs->logs, "open device[%s] usbid: %d - 2\n", puhsinfo->ushostname, usbid); 
+                            print_f(rs->plogs, sp, rs->logs);
+                
+                            ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                            if (ret < 0) {
+                                sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
+                                print_f(rs->plogs, sp, rs->logs);
+                                close(usbid);
+                                goto end;
+                            }
+                
+                            if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
+                                sprintf_f(rs->logs,  "vid pid for [%s] not match vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x - 2\n", 
+                                                               puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
+                                print_f(rs->plogs, sp, rs->logs);
+                                
+                                close(usbid);
+                                goto end;
+                            }
+                        }
+                    }
+
+                    bitset = RING_BUFF_NUM_USB;
+                    ret = USB_IOCT_LOOP_BUFF_PRESET(usbid, &bitset);
+                    if (ret < 0) {
+                        sprintf_f(rs->logs,  "can't pre-set buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        close(usbid);
+                        goto end;
+                    }
+                
+                    if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
+                        sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        close(usbid);
+                        goto end;
+                    }
+                    
+                    ret = USB_IOCT_LOOP_BUFF_SET(usbid, puhsinfo->ushostblphy);
+                    if (ret < 0) {
+                        sprintf_f(rs->logs,  "can't set phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        close(usbid);
+                        goto end;
+                    }
+   
+                    sprintf_f(rs->logs,  "setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
+                    print_f(rs->plogs, sp, rs->logs);
+                }
+
+                #if 0
+                tbl0 = puhsinfo->ushostblvir;
+                
+                if (usbTx->pp) {
+                    ppt = memory_init_vtable(usbTx->pp, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);
+                    if (ppt != usbTx->pp) {
+                        sprintf_f(rs->logs,  "Error!!! memory_init_vtable failed ret: 0x%.8x should be 0x%.8x \n", ppt, usbTx->pp);
+                        print_f(rs->plogs, sp, rs->logs);
+                        close(usbid);
+                        goto end;
+                    }
+                }
+                else {
+                    usbTx->pp = memory_init_vtable(usbTx->pp, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
+                }
+                
+                if (!usbTx->pp) {
+                    close(usbid);
+                    goto end;
+                }
+
+                if (gateTx->pp) {
+                    ppt = memory_init_vtable(gateTx->pp, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);
+                    if (ppt != gateTx->pp) {
+                        sprintf_f(rs->logs,  "Error!!! memory_init_vtable failed ret: 0x%.8x should be 0x%.8x \n", ppt, gateTx->pp);
+                        print_f(rs->plogs, sp, rs->logs);
+                        close(usbid);
+                        goto end;
+                    }
+                }
+                else {
+                    gateTx->pp = memory_init_vtable(gateTx->pp, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
+                }
+                
+                if (!gateTx->pp) {
+                    close(usbid);
+                    goto end;
+                }
+                #endif
+                
+            }
+
+            #if 1 /* forward opc: 0x4f to ASIC */
+            pllst = 0;
+            
+            msync(cubsBuff, SPI_TRUNK_SZ, MS_SYNC);
+            usb_send(cubsBuff, usbid, 31);
+                
+            usb_read(ptrecv, usbid, 13);
+            memcpy(dcswBuff, ptrecv, 13);
+
+            #if DBG_USB_HS
+            sprintf_f(rs->logs, "dump 13 bytes");
+            print_f(rs->plogs, sp, rs->logs);
+            shmem_dump(ptrecv, 13);
+            #endif
+            
+            pllst = ptrecv[12];
+            
+            //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
+            //print_f(rs->plogs, sp, rs->logs);
+
+            cplls[0] = 'J';
+            cplls[1] = pllst;
+            pieRet = write(pPrx[1], &cplls, 2);
+            #else
+            cplls[0] = 'J';
+            cplls[1] = pllst;
+            pieRet = write(pPrx[1], &cplls, 2);
+            #endif
+        } 
+        else {
+            sprintf_f(rs->logs, "unknown cmd chr: 0x%.2x \n", cmdchr);
+            print_f(rs->plogs, sp, rs->logs);
+        }
     }
 
 
@@ -52789,7 +52976,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct aspMetaData_s *ptmetaout=0, *ptmetain=0;
     struct aspMetaData_s *ptmetainduo=0;
     char *addrs=0;
-    int lenrs=0, act=0, val=0, lenflh=0, err=0, fsrcv=0, idlcnt=0;
+    int lenrs=0, act=0, val=0, lenflh=0, err=0, fsrcv=0, idlcnt=0, pollcnt=0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int usbid01=0, usbid02=0;
@@ -53013,12 +53200,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
             }
 
-            if ((idlcnt > 30) && (!usbfd)) {
+            if ((idlcnt > 150) && (!usbfd)) {
                 sprintf(syscmd11, "/root/module/gadgetRemove.sh");
                 ret = doSystemCmd(syscmd11);
                 if (!ret) {
                     sprintf(syscmd11, "/root/module/gadgetLaunch.sh");
                     ret = doSystemCmd(syscmd11);
+
+                    usleep(2000000);
                 }
                 
                 idlcnt = 0;            
@@ -53034,6 +53223,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         } else if (uret == 0) {
             //sprintf_f(rs->logs, "[ePol] timeout errno: %d ret: %d\n", errno, uret);
             //print_f(rs->plogs, "P11", rs->logs);
+            #if 0 /* disable idle disconnect */
             if (usbfd) {
                 idlcnt++;
 
@@ -53060,6 +53250,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     if (!ret) {
                         sprintf(syscmd11, "/root/module/gadgetLaunch.sh");
                         ret = doSystemCmd(syscmd11);
+
+                        usleep(2000000);
                     }
 
                     continue;
@@ -53068,6 +53260,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     //sprintf_f(rs->logs, "pc usb idle cnt: %d\n", idlcnt);
                     //print_f(rs->plogs, "P11", rs->logs);
                 }
+            }
+            #endif
+
+            if (pollcnt == 0) {
+                pollcnt ++;
+            } else {
+                pollcnt ++;
             }
         } else {
             //sprintf_f(rs->logs, "[ePol] ret: %d\n", uret);
@@ -55020,6 +55219,52 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     break;
                                 }
+                                else if ((opc == 0x4f) && (dat == 0x00)) { /* ASIC reset check alive */
+                                    memcpy(iubsBuff, ptrecv, 31);
+                                    
+                                    puscur = pushost;                    
+
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
+                                        chq = 'n';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }                                    
+
+                                    if (usbid01) {
+                                        chq = 'z';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
+                                    
+                                    #if BYPASS_TWO
+                                    if (usbid02) {
+                                        chd = 'z';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
+                                    #endif
+
+                                    usbCur = puscur->pushring;
+
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                    
+                                    break;
+                                }
                                 else { /* unknown opcode */
                                     sprintf_f(rs->logs, "\n[DVF] Warnning!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);
                                     print_f(rs->plogs, "P11", rs->logs);
@@ -56739,7 +56984,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 */
             }
-            else if ((cmd == 0x11) && (opc == 0x4d)) {
+            else if ((cmd == 0x11) && ((opc == 0x4d) || (opc == 0x4f))) {
 
                 if (usbid01) {
                     while (1) {
