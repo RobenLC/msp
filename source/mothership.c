@@ -337,7 +337,7 @@ static int *totSalloc=0;
 //#define CROP_SELEC_RATIO (100.0)
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
-#define CROP_MIGRATE_TO_APP (0)
+#define CROP_MIGRATE_TO_APP (1)
 #define CFLOAT double
 
 #define FAT_DIRPOOL_IDX_MAX   (65535)
@@ -1310,6 +1310,9 @@ struct usbhost_s{
     int *pgatrx;
     int *pgattx;
     int pushcnt;
+    int pushrmcnt;
+    int pushcswerr;
+    
     uint32_t *pushvaddrtb;
 };
 
@@ -52011,6 +52014,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             usbfolw = 0;
             
+            puhs->pushcnt = 0;
+            puhs->pushrmcnt = 0;
+            puhs->pushcswerr = -1;
+            
             pllst = ptrecv[12];
             
             sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
@@ -52147,6 +52154,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                         #if 1 /* stop scan if get error status */
                         if ((cswst & 0x7f) && (cswst != 0x7f)) {
+                        
+                            puhs->pushcswerr = cswst;
+                            
                             chr = 'R';                        
                         }
                         #endif
@@ -52278,7 +52288,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
             }
 
-            puhs->pushcnt = tcnt;
+            //puhs->pushcnt = tcnt;
+            if (puhs->pushcswerr > 0) {
+                puhs->pushcnt += 1;
+            }
 
             if (cswst) {
                 cplls[0] = 'E';
@@ -52606,7 +52619,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             }
 #endif
 
-            puhs->pushcnt = tcnt;
+            //puhs->pushcnt = tcnt;
 
             chq = 'E';
             pieRet = write(pPrx[1], &chq, 1);
@@ -52994,7 +53007,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char endstr[] = "usb_conti_stop";
     int seqtx=0, lens=0, maxsz=0, pipRet=0, idlet=0, ix=0, waitCylen=0, chr=0, cindex=0, lastCylen=0;
     char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12], chn=0, chm=0, chw=0, chy=0;;
-    char cmdtyp=0, cswerr=0, pagerst=2, che=0;
+    char cmdtyp=0, cswerr=0, pagerst=2, che=0, cswstatus[2];
     int *piptx=0, *piprx=0;
     int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0, lastflag=0;
     int *pipeRx, *pipeRxd, *pipeTx, *pipeTxd;
@@ -53758,6 +53771,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         maxCylcnt = 0;
                         
                         cswerr = 0;
+                        cswstatus[0] = 0;
+                        cswstatus[1] = 0;
                         pagerst = 2;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
@@ -53943,6 +53958,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         maxCylcnt = 0;
                         
                         cswerr = 0;
+                        cswstatus[0] = 0;
+                        cswstatus[1] = 0;
+
                         pagerst = 2;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
@@ -54154,6 +54172,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         maxCylcnt = 0;
                         
                         cswerr = 0;
+                        cswstatus[0] = 0;
+                        cswstatus[1] = 0;
+
                         pagerst = 2;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
@@ -54363,6 +54384,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         maxCylcnt = 0;
                         
                         cswerr = 0;
+                        cswstatus[0] = 0;
+                        cswstatus[1] = 0;
+
                         pagerst = 2;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
@@ -54679,6 +54703,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         maxCylcnt = 0;
                         
                         cswerr = 0;
+                        cswstatus[0] = 0;
+                        cswstatus[1] = 0;
+
                         //pagerst = 2;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
@@ -54731,6 +54758,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         maxCylcnt = 0;
                         
                         cswerr = 0;
+                        cswstatus[0] = 0;
+                        cswstatus[1] = 0;
+
                         //pagerst = 2;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
@@ -55015,6 +55045,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     maxCylcnt = 0;
                     
                     cswerr = 0;
+                    cswstatus[0] = 0;
+                    cswstatus[1] = 0;
+
                     pagerst = 2;
                     #endif
                     
@@ -56080,12 +56113,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 if (puimGet) {
                                     if ((puimGet->uimCount == 0) && ((opc == 0x0a) || (opc == 0x05))) {
                                         clock_gettime(CLOCK_REALTIME, &tidleE);
-                                        idlet = time_diff(&tidleS, &tidleE, 1000000);
+                                        idlet = time_diff(&tidleS, &tidleE, 5000000);
 
                                         sprintf_f(rs->logs, "[DV] wait id %d for %d ms \n", puimGet->uimIdex, idlet);
                                         print_f(rs->plogs, "P11", rs->logs);
 
-                                        if (idlet > 3000) {
+                                        if (idlet > 60000) {
                                             clock_gettime(CLOCK_REALTIME, &tidleS);
 
                                             if (puimCnTH == puimGet) {
@@ -56866,6 +56899,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 
                                 val = cswerr;
                                 cfgTableUpd(pct, ASPOP_SCAN_STATUS, val);
+                                cswstatus[0] = cswerr;
+                                
                                 #endif
 
                             }
@@ -56876,6 +56911,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 /* mechanism to stop scan */
                                 val = cswerr;
                                 cfgTableUpd(pct, ASPOP_SCAN_STATUS, val);
+                                cswstatus[0] = cswerr;
 
                                 #if 0 /* test stopping multiple scan */
                                 if (cswerr) {
@@ -56895,6 +56931,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 sprintf_f(rs->logs, "act: %d, metamass gap:%d, start:%d, record:%d, used:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd, pmass->massUsed); 
                                 print_f(rs->plogs, "P11", rs->logs);  
                             }
+
+                            puscur->pushrmcnt += 1;
+                            
+                            sprintf_f(rs->logs, "usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x)\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr); 
+                            print_f(rs->plogs, "P11", rs->logs);                     
 
                             cmd = 0;
 
@@ -56923,6 +56964,31 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     rs_ipc_put(rs, "p", 1);
 
                                     if (lenrs < SPI_TRUNK_SZ) {
+
+#if 0//JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                if (ret) {
+                    fformat = 0;
+                }
+                
+                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+                    sprintf_f(rs->logs, "fformat: 0x%x !!!\n", fformat);
+                    print_f(rs->plogs, "P2", rs->logs);    
+
+                    /* search the offset of 0xffd9 */
+                    ret = findEOF(addr, opsz);
+                    if (ret > 0) {
+                        memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    } else {
+                        sprintf_f(rs->logs, "warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                        print_f(rs->plogs, "P2", rs->logs);    
+                    }
+
+                    sprintf_f(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
+                    print_f(rs->plogs, "P2", rs->logs);    
+                }
+#endif
+                                    
                                         ring_buf_set_last(rs->pcmdRx, lenrs);
                                         rs_ipc_put(rs, "d", 1);
                                     }
@@ -56978,6 +57044,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 
                                 val = cswerr;
                                 cfgTableUpd(pct, ASPOP_SCAN_STATUS_DUO, val);
+                                cswstatus[1] = cswerr;
+                                
                                 #endif
                             }
                             else {
@@ -56985,9 +57053,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 print_f(rs->plogs, "P11", rs->logs);                     
 
                                 /* mechanism to stop scan */
-                                val = cswerr;
-                                cfgTableUpd(pct, ASPOP_SCAN_STATUS_DUO, val);
-
+                                if (cswstatus[0] > 0) {
+                                    val = cswstatus[0];
+                                    cfgTableUpd(pct, ASPOP_SCAN_STATUS_DUO, val);
+                                    cswstatus[1] = val;
+                                } else {
+                                    val = cswerr;
+                                    cfgTableUpd(pct, ASPOP_SCAN_STATUS_DUO, val);
+                                    cswstatus[1] = cswerr;
+                                }
+                                
                                 #if 0 /* test stopping multiple scan */
                                 if (cswerr) {
                                     val = 0;
@@ -57006,6 +57081,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 sprintf_f(rs->logs, "act: %d, metamass duo gap:%d, start:%d, record:%d, used:%d\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd, pmassduo->massUsed); 
                                 print_f(rs->plogs, "P11", rs->logs);  
                             }
+
+                            puscur->pushrmcnt += 1;
+
+                            sprintf_f(rs->logs, "usb duo scan cnt: %d, rm: %d, cswerr: %d (0x%.2x)\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr); 
+                            print_f(rs->plogs, "P11", rs->logs);                     
 
                             cmd = 0;
 
@@ -57034,6 +57114,29 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     rs_ipc_put(rsd, "p", 1);
                             
                                     if (lenrs < SPI_TRUNK_SZ) {
+#if 0//JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                if (ret) {
+                    fformat = 0;
+                }
+                
+                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+                    sprintf_f(rs->logs, "fformat: 0x%x !!!\n", fformat);
+                    print_f(rs->plogs, "P2", rs->logs);    
+
+                    /* search the offset of 0xffd9 */
+                    ret = findEOF(addr, opsz);
+                    if (ret > 0) {
+                        memset(addr + ret + 2, 0xff, opsz - ret - 2);
+                    } else {
+                        sprintf_f(rs->logs, "warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                        print_f(rs->plogs, "P2", rs->logs);    
+                    }
+
+                    sprintf_f(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
+                    print_f(rs->plogs, "P2", rs->logs);    
+                }
+#endif
                                         ring_buf_set_last(rs->pcmdTx, lenrs);
                                         rs_ipc_put(rsd, "d", 1);
                                     }
@@ -57734,8 +57837,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0;
             }
             else if (cmd == 0x13) {
-            
-                if (waitCylen) {
+
+                if (cswerr) {
+                    csw[11] = 0;
+                    csw[12] = cswerr;
+                }
+                else if (waitCylen) {
                     csw[11] = waitCylen & 0xff;
                     csw[12] = 0;
                 } else {
@@ -57748,16 +57855,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             csw[11] = 1;
                             csw[12] = 0;
-                        } else {
-                            if (cswerr) {
-                                csw[11] = 0;
-                                csw[12] = cswerr;
-                            } else { /* should not be here */
-                                sprintf_f(rs->logs, "[DV] warnning!! no csw err and page rest == 0! dist: %d \n", distCylcnt);
-                                print_f(rs->plogs, "P11", rs->logs);
-                                csw[11] = 0;
-                                csw[12] = 0;
-                            }
+                        } else { /* should not be here */
+                            sprintf_f(rs->logs, "[DV] warnning!! no csw err and page rest == 0! dist: %d \n", distCylcnt);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            csw[11] = 0;
+                            csw[12] = 0;
                         }
                     }                        
                 }
