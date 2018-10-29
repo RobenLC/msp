@@ -1804,36 +1804,57 @@ static int usb_send(char *pts, int usbfd, int len)
 
 static int usb_read(char *ptr, int usbfd, int len)
 {
-    int ret=0, recv=0;
+    int ret=0, recv=-1, cnt=0;
     
 #if 0
     struct pollfd pllfd[1];
     if (!ptr) return -1;
     if (!usbfd) return -2;
 
+    memset(pllfd, 0x0, sizeof(struct pollfd));
+    
+    usb_nonblock_set(usbfd);
+    
     pllfd[0].fd = usbfd;
     pllfd[0].events = POLLIN;
     
     while(1) {
-        ret = poll(pllfd, 1, -1);
-        //printf("[UR] usb poll ret: %d \n", ret);
-        if (ret < 0) {
+        ret = poll(pllfd, 1, 500);
+        
+        #if USB_TX_LOG
+        printf("[UR] usb poll ret: %d \n", ret);
+        #endif
+        
+        if (ret <= 0) {
             printf("[UR] usb poll failed ret: %d\n", ret);
             break;
         }
 
-        if (ret && (pllfd[0].revents & POLLIN)) {
+        #if USB_TX_LOG
+        printf("[UR] usb revents: 0x%.x / 0x%.x\n", pllfd[0].revents, pllfd[0].events);
+        #endif
+        
+        if ((pllfd[0].revents & POLLIN) == POLLIN) {
+
+            while (cnt < len) {
+            //recv = read(usbfd, ptr, len);
+            recv = read(usbfd, ptr, 1);
             
-            recv = read(pllfd[0].fd, ptr, len);
+            #if USB_TX_LOG
+            printf("[UR] usb read %d bytes, ret: %d (1) cnt: %d\n", len, recv, cnt);
+            #endif   
             
-#if USB_TX_LOG
-            printf("[UR] usb read %d bytes, ret: %d (1)\n", len, recv);
-#endif
+            if (recv == 1) {
+                cnt ++;
+                ptr ++;
+            }
+            }
 
             break;
-        }                
+        }
     }
 #else
+    //usb_nonblock_set(usbfd);
     recv = read(usbfd, ptr, len);
     //printf("[USB] usb read %d bytes, ret: %d (2)\n", len, recv);
 #endif
@@ -5176,7 +5197,7 @@ static int cpyPGrp(int start, int len, CFLOAT *grp, CFLOAT **cpgp, int max)
 
 static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
 {
-#define CROP_LINE_DIST  (32.0)
+#define CROP_LINE_DIST  (90.0)
     int i=0, tot=0, ret=0, head=0, glen=0, id=0;
     int cntLf=0, cntRt=0, contL=0, contR=0;
     CFLOAT *p1, *p2;
@@ -6416,7 +6437,7 @@ static int setRotateP4(struct aspCrop36_s *pcp36, CFLOAT *rotateP4)
 static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 {
 #define ACCEPT_OFFSET (1000.0)
-#define ACCEPT_FINAL_OFFSET_RADIO (0.1)
+#define ACCEPT_FINAL_OFFSET_RADIO (0.3)
 #define ACCEPT_COMPU_OFFSET_RADIO (0.5)
 
     CFLOAT *vLU=0, *vLD=0, *vRU=0, *vRD=0;
@@ -51687,6 +51708,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             break;
         default:
             //goto end;
+            sprintf_f(rs->logs, "default chr: 0x%.2x (%c) \n", chr, chr);
+            print_f(rs->plogs, sp, rs->logs);
+
             break;
         }
 
@@ -52017,22 +52041,39 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             //insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
             //usb_send(CBW, usbid, 31);
             
+            #if 1//DBG_USB_HS
+            sprintf_f(rs->logs, "dump 31 bytes");
+            print_f(rs->plogs, sp, rs->logs);
+            shmem_dump(cubsBuff, 31);
+            #endif
+
             msync(cubsBuff, SPI_TRUNK_SZ, MS_SYNC);
             usb_send(cubsBuff, usbid, 31);
-                
-            usb_read(ptrecv, usbid, 13);
-            memcpy(dcswBuff, ptrecv, 13);
 
-            #if DBG_USB_HS
-            sprintf_f(rs->logs, "dump 13 bytes");
-            print_f(rs->plogs, sp, rs->logs);
-            shmem_dump(ptrecv, 13);
-            #endif
+                
+            ptret = usb_read(ptrecv, usbid, 13);
             
-            pllst = ptrecv[12];
+            if (ptret > 0) {
+                memcpy(dcswBuff, ptrecv, 13);
+
+                #if 1//DBG_USB_HS
+                sprintf_f(rs->logs, "dump 13 bytes");
+                print_f(rs->plogs, sp, rs->logs);
+                shmem_dump(ptrecv, 13);
+                #endif
             
-            //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
-            //print_f(rs->plogs, sp, rs->logs);
+                pllst = ptrecv[12];
+                
+                #if DBG_USB_HS
+                sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
+                print_f(rs->plogs, sp, rs->logs);
+                #endif
+            } else {
+                sprintf_f(rs->logs, "read 13 bytes failed, ret: %d\n", ptret); 
+                print_f(rs->plogs, sp, rs->logs);
+
+                pllst = 0xff;
+            }
 
             cplls[0] = 'J';
             cplls[1] = pllst;
@@ -52944,7 +52985,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char endTran[64] = {};
     char *ptrecv=0, *metaPt=0;
     uint8_t cmd=0, opc=0, dat=0;
-    uint32_t usbentsRx=0, usbentsTx=0, getents=0;
+    uint32_t usbentsRx=0, usbentsTx=1, getents=0;
     int usbfd=0;
     char *addrd=0, *palloc=0;
     int uimCylcnt=0, datCylcnt=0, distCylcnt=0, maxCylcnt=0;
@@ -52983,7 +53024,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct aspMetaDataviaUSB_s *ptmetausb=0, *ptmetausbduo=0;
     int lenbs=0, shfmeta=0;
     char *pshfmeta=0;
-    
+    char wfcmd[8][2] = {{'p', 0x01}, {'m', 0x02}, {'s', 0x03}, {'r', 0x04}, {'t', 0x05}, {'n', 0x06}, {'q', 0x07}, {'o', 0x08}};
+
     pct = rs->pcfgTable;
     pmass = rs->pmetaMass;
     ptmetausb = rs->pmetausb;
@@ -53154,6 +53196,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         }
         #endif
 
+        #if 0
         if (!usbfd) {
             rs->usbdvid = open(rs->usvdvname, O_RDWR);
             if (rs->usbdvid <= 0) {
@@ -53214,6 +53257,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
 
         }
+        #endif
         
         uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 500);
         if (uret < 0) {
@@ -53223,6 +53267,70 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         } else if (uret == 0) {
             //sprintf_f(rs->logs, "[ePol] timeout errno: %d ret: %d\n", errno, uret);
             //print_f(rs->plogs, "P11", rs->logs);
+            
+            #if 1
+            if (!usbfd) {
+                rs->usbdvid = open(rs->usvdvname, O_RDWR);
+                if (rs->usbdvid <= 0) {
+                    printf("can't open device[%s]!!\n", rs->usvdvname); 
+                    close(rs->usbdvid);
+                    rs->usbdvid = 0;
+                    idlcnt ++;
+                }
+                else {
+                    //printf("open device[%s]\n", rs->usvdvname); 
+                }
+            
+                if (rs->usbdvid) {
+                    usb_nonblock_set(rs->usbdvid);
+                    recvsz = read(rs->usbdvid, ptrecv, 31);
+                    if (recvsz < 0) {
+                        close(rs->usbdvid);
+                        rs->usbdvid = 0;
+                        //printf("close device[%s]\n", rs->usvdvname); 
+                        idlcnt ++;
+                    } else {
+                        if (recvsz == 31) {
+                            usbfd = rs->usbdvid;
+                            fsrcv = recvsz;
+                            usbentsRx = 1;
+                            usbentsTx = 1;
+            
+                            usb_nonblock_set(usbfd);
+            
+                            eventRx.data.fd = usbfd;
+                            eventRx.events = EPOLLIN | EPOLLLT;
+                            //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
+                            ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
+                            if (ret == -1) {
+                                perror ("epoll_ctl");
+                                sprintf_f(rs->logs, "rs usb spoll set ctl failed errno: %ds\n", errno);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+                        } else {
+                            close(rs->usbdvid);
+                            rs->usbdvid = 0;
+                            printf("close device[%s] recvsz: %d\n", rs->usvdvname, recvsz); 
+                        }
+                    }
+                }
+            
+                if ((idlcnt > 150) && (!usbfd)) {
+                    sprintf(syscmd11, "/root/module/gadgetRemove.sh");
+                    ret = doSystemCmd(syscmd11);
+                    if (!ret) {
+                        sprintf(syscmd11, "/root/module/gadgetLaunch.sh");
+                        ret = doSystemCmd(syscmd11);
+            
+                        usleep(2000000);
+                    }
+                    
+                    idlcnt = 0;            
+                }
+            
+            }
+            #endif
+        
             #if 0 /* disable idle disconnect */
             if (usbfd) {
                 idlcnt++;
@@ -53264,6 +53372,70 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             #endif
 
             if (pollcnt == 0) {
+                cmd = 0x11;
+                opc = 0x4e;
+                dat = 0x00;
+
+                iubs->opinfo = opc << 8 | dat;
+                memcpy(iubsBuff, cbw, 31);
+                iubsBuff[15] = cmd;
+                iubsBuff[16] = opc;
+                iubsBuff[17] = dat;
+                
+                sprintf_f(rs->logs, "[DVl] BOOT-UP sync opc: 0x4d dump \n");
+                print_f(rs->plogs, "P11", rs->logs);
+
+                shmem_dump(iubsBuff, 31);
+                
+                puscur = pushost;                    
+
+                #if 0
+                sprintf(msgcmd, "usbscan");
+
+
+                chq = 'n';
+                pipRet = write(pipeTx[1], &chq, 1);
+                if (pipRet < 0) {
+                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    continue;
+                }
+                
+                #else
+                if (strcmp(msgcmd, "usbscan") != 0) {
+                    sprintf(msgcmd, "usbscan");
+                    rs_ipc_put(rcmd, msgcmd, 7);
+                    chq = 'n';
+                    pipRet = write(pipeTx[1], &chq, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                }      
+                #endif
+
+                chq = 'i';
+                if (usbid01) {
+                    pipRet = write(pipeTx[1], &chq, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV] Error!! pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                }
+
+                #if BYPASS_TWO
+                chd = 'i';
+                if (usbid02) {
+                    pipRet = write(pipeTxd[1], &chd, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                }
+                #endif
                 pollcnt ++;
             } else {
                 pollcnt ++;
@@ -56985,7 +57157,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 */
             }
             else if ((cmd == 0x11) && ((opc == 0x4d) || (opc == 0x4f))) {
-
+            //else if ((cmd == 0x11) && (opc == 0x4d)) {
+            
                 if (usbid01) {
                     while (1) {
                         chq = 0;
@@ -57323,6 +57496,102 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);
                 }
 
+                cmd = 0;
+                
+                continue;
+            }
+            else if ((cmd == 0x11) && (opc == 0x4e)) {
+                if (usbid01) {
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chq != 'J') {
+                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+    
+                    while (1) {
+                        chn = 0;
+                        pipRet = read(pipeRx[0], &chn, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                    }
+                    
+                    if (chn) {
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+
+                #if BYPASS_TWO
+                if (usbid02) {
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chd != 'J') {
+                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                    
+                    chm = 0;
+                    while (1) {
+                        pipRet = read(pipeRxd[0], &chm, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chm) {
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                #endif
+
+                
+                #if 1
+                msgret[0] = 'x';
+                if ((chm) || (chn)) {
+                    msgret[1] = 0x02;
+                } else {
+                    msgret[1] = 0x01;
+                }
+                
+                pipRet = write(pipeTx[1], &msgret, 2);                
+                if (pipRet < 0) {
+                    printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
+                }
+                
+                sprintf(msgcmd, "usbidle");
+
+                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
+                print_f(rs->plogs, "P11", rs->logs);
+
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                if (ret > 0) {
+                    rcmd->logs[ret] = '\n';
+
+                    sprintf_f(rs->logs, "[DV]  get usbscan result ret: %d\n", ret);
+                    print_f(rs->plogs, "P11", rs->logs);   
+
+                    print_f(rcmd->plogs, "C11", rcmd->logs);
+                } else {
+                    sprintf_f(rs->logs, "[DV] cmd no message \n");
+                    print_f(rs->plogs, "P11", rs->logs);
+                }
+                #endif
+                
                 cmd = 0;
                 
                 continue;
