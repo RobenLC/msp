@@ -62,6 +62,7 @@
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
 #define USB_BOOTUP_SYNC (1)
+#define USB_ALIVE_POLLING (0)
 
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -51311,7 +51312,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     char *pMta=0;
     int *pPtx=0, *pPrx=0;
     struct timespec utstart, utend;
-    int tcnt=0;
+    int tcnt=0, polcnt=0;
     int bitset=0, ix=0;
     char cswst=0, pllst=0;
     uint32_t *virtbl;
@@ -51666,6 +51667,153 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 break;
             }
+
+            #if USB_ALIVE_POLLING 
+            else {
+                polcnt ++;
+                if (polcnt % 10) {
+                    continue;
+                }
+                
+                ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                if (ret < 0) {
+                    perror("usb get vid pid");
+                    sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                    print_f(rs->plogs, sp, rs->logs);
+                    
+                    err = close(usbid);
+                    sprintf_f(rs->logs, "close usb errno:%d ret: %d \n", errno, err);
+                    print_f(rs->plogs, sp, rs->logs);
+                
+                
+                    usbid = open(puhsinfo->ushostname, O_RDWR);
+                    
+                    if (usbid < 0) {
+                        sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        continue;
+                    } else {
+                    
+                        sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
+                        print_f(rs->plogs, sp, rs->logs);
+                    
+                        ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                        if (ret < 0) {
+                            sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
+                            print_f(rs->plogs, sp, rs->logs);
+                            close(usbid);
+                            continue;
+                        }
+                    
+                        if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
+                            sprintf_f(rs->logs,  "vid pid for [%s] not match vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x\n", 
+                                                           puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
+                            print_f(rs->plogs, sp, rs->logs);
+                
+                            close(usbid);
+                            
+                            if (puhsinfo->ushostid == puhsinfom[0]->ushostid) {
+                                chvir = puhsinfom[0]->ushostname;
+                                puhsinfom[0]->ushostname = puhsinfom[1]->ushostname;
+                                puhsinfom[1]->ushostname = chvir;
+                            } else {
+                                chvir = puhsinfom[1]->ushostname;
+                                puhsinfom[1]->ushostname = puhsinfom[0]->ushostname;
+                                puhsinfom[0]->ushostname = chvir;
+                            }
+                    
+                            usbid = open(puhsinfo->ushostname, O_RDWR);
+                    
+                            if (usbid < 0) {
+                                sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                                print_f(rs->plogs, sp, rs->logs);
+                                continue;
+                            } else {
+                    
+                                sprintf_f(rs->logs, "open device[%s] usbid: %d - 2\n", puhsinfo->ushostname, usbid); 
+                                print_f(rs->plogs, sp, rs->logs);
+                    
+                                ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                                if (ret < 0) {
+                                    sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
+                                    print_f(rs->plogs, sp, rs->logs);
+                                    close(usbid);
+                                    continue;
+                                }
+                    
+                                if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
+                                    sprintf_f(rs->logs,  "vid pid for [%s] not match vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x - 2\n", 
+                                                                   puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
+                                    print_f(rs->plogs, sp, rs->logs);
+                                    
+                                    close(usbid);
+                                    continue;
+                                }
+                            }
+                        }
+                
+                        bitset = RING_BUFF_NUM_USB;
+                        ret = USB_IOCT_LOOP_BUFF_PRESET(usbid, &bitset);
+                        if (ret < 0) {
+                            sprintf_f(rs->logs,  "can't pre-set buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
+                            print_f(rs->plogs, sp, rs->logs);
+                            close(usbid);
+                            continue;
+                        }
+                    
+                        if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
+                            sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                            print_f(rs->plogs, sp, rs->logs);
+                            close(usbid);
+                            continue;
+                        }
+                        
+                        ret = USB_IOCT_LOOP_BUFF_SET(usbid, puhsinfo->ushostblphy);
+                        if (ret < 0) {
+                            sprintf_f(rs->logs,  "can't set phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
+                            print_f(rs->plogs, sp, rs->logs);
+                            close(usbid);
+                            continue;
+                        }
+
+                        /*reconnect suceed here*/
+                        sprintf_f(rs->logs,  "setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, 0x4D, 0x00);
+                        ret = usb_send(CBW, usbid, 31);
+                        if (ret < 0) {
+                            sprintf_f(rs->logs, "send CBW for meta failed ret: %d !!!\n", ret);
+                            print_f(rs->plogs, sp, rs->logs);
+                            continue;
+                        }
+                        
+                        shmem_dump(CBW, 31);
+                        
+                        ret = usb_read(ptrecv, usbid, 13);
+                        if (ret < 0) {
+                            sprintf_f(rs->logs, "read 13 byte for meta csw failed ret: %d !!!\n", ret);
+                            print_f(rs->plogs, sp, rs->logs);
+                            continue;
+                        }
+
+                        #if DBG_USB_HS            
+                        sprintf_f(rs->logs, "dump 13 bytes");
+                        print_f(rs->plogs, sp, rs->logs);
+                        shmem_dump(ptrecv, 13);
+                        #endif
+            
+                    }
+                    
+                }
+                else {
+                    sprintf_f(rs->logs, "poll usb alive vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                    print_f(rs->plogs, sp, rs->logs);
+                }
+            }
+            #endif // #if USB_ALIVE_POLLING 
+            
         }
         
         memset(ptrecv, 0, 32);
@@ -51801,7 +51949,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 if (usbid < 0) {
                     sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                     print_f(rs->plogs, sp, rs->logs);
-                    goto end;
+                    continue;
                 } else {
                 
                     sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
@@ -51812,7 +51960,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                 
                     if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
@@ -51837,7 +51985,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (usbid < 0) {
                             sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                             print_f(rs->plogs, sp, rs->logs);
-                            goto end;
+                            continue;
                         } else {
                 
                             sprintf_f(rs->logs, "open device[%s] usbid: %d - 2\n", puhsinfo->ushostname, usbid); 
@@ -51848,7 +51996,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                                 print_f(rs->plogs, sp, rs->logs);
                                 close(usbid);
-                                goto end;
+                                continue;
                             }
                 
                             if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
@@ -51857,7 +52005,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 print_f(rs->plogs, sp, rs->logs);
                                 
                                 close(usbid);
-                                goto end;
+                                continue;
                             }
                         }
                     }
@@ -51867,7 +52015,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     if(memfd < 0) {
                         perror("/dev/mem open failed");
                         close(usbid);
-                        goto end;
+                        continue;
                     } else {
                         sprintf_f(rs->logs,  "open [%s] succeed!!!! \n", MODULE_NAME);
                         print_f(rs->plogs, sp, rs->logs);
@@ -51881,7 +52029,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't pre-set buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                     #else
                     bitset = RING_BUFF_NUM_USB;
@@ -51890,7 +52038,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                     #endif
                 
@@ -51898,7 +52046,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                     
                     #if 1
@@ -51907,7 +52055,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't set phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                     #else
                     ret = USB_IOCT_LOOP_BUFF_PROBE(usbid, puhsinfo->ushostblphy);
@@ -51915,7 +52063,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't probe phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                 
                     sprintf_f(rs->logs,  "[%s] table size: %d, addr0: \n", puhsinfo->ushostname, RING_BUFF_NUM_USB);
@@ -51935,7 +52083,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             sprintf_f(rs->logs,  "addr0 phy 2 vir error!!! ret: %d \n", ret);
                             print_f(rs->plogs, sp, rs->logs);
                             close(usbid);
-                            goto end;
+                            continue;
                         }
                 
                         puhsinfo->ushostblvir[ix] = vt32;
@@ -51983,7 +52131,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "Error!!! memory_init_vtable failed ret: 0x%.8x should be 0x%.8x \n", ppt, usbTx->pp);
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                 }
                 else {
@@ -51992,7 +52140,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 if (!usbTx->pp) {
                     close(usbid);
-                    goto end;
+                    continue;
                 }
 
                 if (gateTx->pp) {
@@ -52001,7 +52149,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "Error!!! memory_init_vtable failed ret: 0x%.8x should be 0x%.8x \n", ppt, gateTx->pp);
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                 }
                 else {
@@ -52010,7 +52158,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 if (!gateTx->pp) {
                     close(usbid);
-                    goto end;
+                    continue;
                 }
                 #endif
                 
@@ -52774,7 +52922,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 if (usbid < 0) {
                     sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                     print_f(rs->plogs, sp, rs->logs);
-                    goto end;
+                    continue;
                 } else {
                 
                     sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
@@ -52785,7 +52933,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                 
                     if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
@@ -52810,7 +52958,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (usbid < 0) {
                             sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                             print_f(rs->plogs, sp, rs->logs);
-                            goto end;
+                            continue;
                         } else {
                 
                             sprintf_f(rs->logs, "open device[%s] usbid: %d - 2\n", puhsinfo->ushostname, usbid); 
@@ -52821,7 +52969,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                                 print_f(rs->plogs, sp, rs->logs);
                                 close(usbid);
-                                goto end;
+                                continue;
                             }
                 
                             if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
@@ -52830,7 +52978,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 print_f(rs->plogs, sp, rs->logs);
                                 
                                 close(usbid);
-                                goto end;
+                                continue;
                             }
                         }
                     }
@@ -52841,14 +52989,14 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't pre-set buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                 
                     if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
                         sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                     
                     ret = USB_IOCT_LOOP_BUFF_SET(usbid, puhsinfo->ushostblphy);
@@ -52856,7 +53004,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't set phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
    
                     sprintf_f(rs->logs,  "setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
@@ -52872,7 +53020,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "Error!!! memory_init_vtable failed ret: 0x%.8x should be 0x%.8x \n", ppt, usbTx->pp);
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                 }
                 else {
@@ -52881,7 +53029,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 if (!usbTx->pp) {
                     close(usbid);
-                    goto end;
+                    continue;
                 }
 
                 if (gateTx->pp) {
@@ -52890,7 +53038,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "Error!!! memory_init_vtable failed ret: 0x%.8x should be 0x%.8x \n", ppt, gateTx->pp);
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        goto end;
+                        continue;
                     }
                 }
                 else {
@@ -52899,7 +53047,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 if (!gateTx->pp) {
                     close(usbid);
-                    goto end;
+                    continue;
                 }
                 #endif
                 
@@ -59719,7 +59867,7 @@ int main(int argc, char *argv[])
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_NONE;
                 ctb->opType = ASPOP_TYPE_VALUE;
-                ctb->opValue = 0xffff;
+                ctb->opValue = 0;
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
@@ -59727,7 +59875,7 @@ int main(int argc, char *argv[])
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_NONE;
                 ctb->opType = ASPOP_TYPE_VALUE;
-                ctb->opValue = 0xffff;
+                ctb->opValue = 0;
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
