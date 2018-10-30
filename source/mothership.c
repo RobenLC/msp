@@ -61,6 +61,7 @@
 #define CYCLE_LEN (40)
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
+#define USB_BOOTUP_SYNC (1)
 
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -291,6 +292,7 @@ static int *totSalloc=0;
 #define MAX_PDF_W (1600.0)
 
 #define JPG_FFD9_CUT (1)
+#define JPG_FFD9_RANGE (1024)
 
 #define CROP_USE_META (1)
 #define SCANGO_CHECK (1)
@@ -560,6 +562,8 @@ typedef enum {
     ASPOP_MULTI_LOOP,
     ASPOP_SCAN_STATUS,
     ASPOP_SCAN_STATUS_DUO,
+    ASPOP_SCAN_WIDTH,
+    ASPOP_SCAN_WIDTH_DUO,
     ASPOP_CODE_MAX, /* 121 */
 } aspOpCode_e;
 
@@ -2038,9 +2042,14 @@ static int aspSortD(CFLOAT * pdb, int size)
     return 0;
 }
 
-static int scanWidthConvert(int tag)
+static int scanWidthConvert(int tag, int widt)
 {
     int val=0;
+
+    if (widt) {
+        return widt;
+    }
+    
     switch (tag) {
     case DEFAULTWIDTH_NONE:
         val -1;
@@ -3259,6 +3268,8 @@ static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, cha
     pct[ASPOP_IMG_LEN].opValue = pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8);
     pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_UPD;    
 
+    pct[ASPOP_SCAN_WIDTH].opValue = pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8);
+    pct[ASPOP_SCAN_WIDTH].opStatus = ASPOP_STA_UPD;        
 
     linGap = pmetausb->YLine_Gap;
     linStart = pmetausb->Start_YLine_No;
@@ -3373,7 +3384,10 @@ static int aspMetaReleaseviaUsbDuo(struct mainRes_s *mrs, struct procRes_s *rs, 
     }
 
     pct[ASPOP_IMG_LEN_DUO].opValue = pmetausbduo->IMG_HIGH[0] | (pmetausbduo->IMG_HIGH[1] << 8);
-    pct[ASPOP_IMG_LEN_DUO].opStatus = ASPOP_STA_UPD;    
+    pct[ASPOP_IMG_LEN_DUO].opStatus = ASPOP_STA_UPD;   
+    
+    pct[ASPOP_SCAN_WIDTH_DUO].opValue = pmetausbduo->IMG_WIDTH[0] | (pmetausbduo->IMG_WIDTH[1] << 8);
+    pct[ASPOP_SCAN_WIDTH_DUO].opStatus = ASPOP_STA_UPD;        
 
     linGap = pmetausbduo->YLine_Gap;
     linStart = pmetausbduo->Start_YLine_No;
@@ -34346,7 +34360,11 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
         t = val << 8 | tmp;
-        w = scanWidthConvert(t);
+
+        val = 0;
+        ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+        
+        w = scanWidthConvert(t, val);
         sprintf_f(mrs->log, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
         print_f(&mrs->plog, "fs98", mrs->log);
 
@@ -45342,7 +45360,11 @@ static int p6(struct procRes_s *rs)
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
-                w = scanWidthConvert(t);
+
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+
+                w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
                 
@@ -45503,7 +45525,11 @@ static int p6(struct procRes_s *rs)
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
-                w = scanWidthConvert(t);
+
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH_DUO, &val, ASPOP_STA_UPD);
+
+                w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
                 
@@ -46004,7 +46030,11 @@ static int p6(struct procRes_s *rs)
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
-                w = scanWidthConvert(t);
+                
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+
+                w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
                 
@@ -46480,7 +46510,11 @@ static int p6(struct procRes_s *rs)
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
-                w = scanWidthConvert(t);
+                
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+
+                w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
                 
@@ -46641,7 +46675,11 @@ static int p6(struct procRes_s *rs)
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
-                w = scanWidthConvert(t);
+                
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH_DUO, &val, ASPOP_STA_UPD);
+
+                w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
                 
@@ -48261,7 +48299,11 @@ static int p6(struct procRes_s *rs)
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
-                w = scanWidthConvert(t);
+
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+
+                w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);                
                 
@@ -53038,6 +53080,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int lenbs=0, shfmeta=0;
     char *pshfmeta=0;
     char wfcmd[8][2] = {{'p', 0x01}, {'m', 0x02}, {'s', 0x03}, {'r', 0x04}, {'t', 0x05}, {'n', 0x06}, {'q', 0x07}, {'o', 0x08}};
+    uint32_t fformat=0;
+    int opsz=0, lrst=0;
 
     pct = rs->pcfgTable;
     pmass = rs->pmetaMass;
@@ -53385,6 +53429,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             #endif
 
             if (pollcnt == 0) {
+                
+                #if USB_BOOTUP_SYNC
                 cmd = 0x11;
                 opc = 0x4e;
                 dat = 0x00;
@@ -53449,6 +53495,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
                 #endif
+                #endif //#if USB_BOOTUP_SYNC
+                
                 pollcnt ++;
             } else {
                 pollcnt ++;
@@ -56964,31 +57012,33 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     rs_ipc_put(rs, "p", 1);
 
                                     if (lenrs < SPI_TRUNK_SZ) {
+                                        
+                                        #if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                                        ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                                        if (ret) {
+                                            fformat = 0;
+                                        }
 
-#if 0//JPG_FFD9_CUT /* find 0xcffd9 in jpg */
-                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
-                if (ret) {
-                    fformat = 0;
-                }
-                
-                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
-                    sprintf_f(rs->logs, "fformat: 0x%x !!!\n", fformat);
-                    print_f(rs->plogs, "P2", rs->logs);    
+                                        lrst = lenrs % 512;
+                                        opsz = lenrs - lrst;
+                                        lrst = opsz - JPG_FFD9_RANGE;
 
-                    /* search the offset of 0xffd9 */
-                    ret = findEOF(addr, opsz);
-                    if (ret > 0) {
-                        memset(addr + ret + 2, 0xff, opsz - ret - 2);
-                    } else {
-                        sprintf_f(rs->logs, "warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
-                        print_f(rs->plogs, "P2", rs->logs);    
-                    }
+                                        if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
 
-                    sprintf_f(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
-                    print_f(rs->plogs, "P2", rs->logs);    
-                }
-#endif
-                                    
+                                            /* search the offset of 0xffd9 */
+                                            ret = findEOF(addrs + lrst, JPG_FFD9_RANGE);
+                                            if (ret > 0) {
+                                            memset(addrs + lrst + ret + 2, 0xff, JPG_FFD9_RANGE - ret - 2);
+                                            } else {
+                                                sprintf_f(rs->logs, "[DV] warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                                                print_f(rs->plogs, "P11", rs->logs);    
+                                            }
+
+                                            sprintf_f(rs->logs, "[DV] JPG_FFD9_CUT fformat: 0x%x, len: %d ret: %d, range: %d\n", fformat, lenrs, ret, JPG_FFD9_RANGE);
+                                            print_f(rs->plogs, "P11", rs->logs);    
+                                        }
+                                        #endif
+                                        
                                         ring_buf_set_last(rs->pcmdRx, lenrs);
                                         rs_ipc_put(rs, "d", 1);
                                     }
@@ -57114,29 +57164,33 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     rs_ipc_put(rsd, "p", 1);
                             
                                     if (lenrs < SPI_TRUNK_SZ) {
-#if 0//JPG_FFD9_CUT /* find 0xcffd9 in jpg */
-                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
-                if (ret) {
-                    fformat = 0;
-                }
-                
-                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
-                    sprintf_f(rs->logs, "fformat: 0x%x !!!\n", fformat);
-                    print_f(rs->plogs, "P2", rs->logs);    
 
-                    /* search the offset of 0xffd9 */
-                    ret = findEOF(addr, opsz);
-                    if (ret > 0) {
-                        memset(addr + ret + 2, 0xff, opsz - ret - 2);
-                    } else {
-                        sprintf_f(rs->logs, "warnning!!! file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
-                        print_f(rs->plogs, "P2", rs->logs);    
-                    }
+                                        #if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                                        ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                                        if (ret) {
+                                            fformat = 0;
+                                        }
 
-                    sprintf_f(rs->logs, "fformat: 0x%x, ret: %d \n", fformat, ret);
-                    print_f(rs->plogs, "P2", rs->logs);    
-                }
-#endif
+                                        lrst = lenrs % 512;
+                                        opsz = lenrs - lrst;
+                                        lrst = opsz - JPG_FFD9_RANGE;
+
+                                        if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+
+                                            /* search the offset of 0xffd9 */
+                                            ret = findEOF(addrs + lrst, JPG_FFD9_RANGE);
+                                            if (ret > 0) {
+                                            memset(addrs + lrst + ret + 2, 0xff, JPG_FFD9_RANGE - ret - 2);
+                                            } else {
+                                                sprintf_f(rs->logs, "[DV] warnning!!! duo file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                                                print_f(rs->plogs, "P11", rs->logs);    
+                                            }
+
+                                            sprintf_f(rs->logs, "[DV] JPG_FFD9_CUT duo fformat: 0x%x, len: %d ret: %d, range: %d\n", fformat, lenrs, ret, JPG_FFD9_RANGE);
+                                            print_f(rs->plogs, "P11", rs->logs);    
+                                        }
+                                        #endif
+                                        
                                         ring_buf_set_last(rs->pcmdTx, lenrs);
                                         rs_ipc_put(rsd, "d", 1);
                                     }
@@ -57156,6 +57210,34 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     }
                     else {
+                        if ((lens < USB_BUF_SIZE) && (che != 'E')) {
+                            #if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                            if (ret) {
+                                fformat = 0;
+                            }
+                            
+                            lrst = lens % 512;
+                            opsz = lens - lrst;
+                            lrst = opsz - JPG_FFD9_RANGE;
+                            
+                            if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+                            
+                                /* search the offset of 0xffd9 */
+                                ret = findEOF(addrd + lrst, JPG_FFD9_RANGE);
+                                if (ret > 0) {
+                                    memset(addrd + lrst + ret + 2, 0xff, JPG_FFD9_RANGE - ret - 2);
+                                } else {
+                                    sprintf_f(rs->logs, "[DV] warnning!!! USB file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                                    print_f(rs->plogs, "P11", rs->logs);    
+                                }
+                            
+                                sprintf_f(rs->logs, "[DV] JPG_FFD9_CUT USB fformat: 0x%x, len: %d ret: %d, range: %d\n", fformat, lens, ret, JPG_FFD9_RANGE);
+                                print_f(rs->plogs, "P11", rs->logs);    
+                            }
+                            #endif
+                        }
+                        
                         sendsz = write(usbfd, addrd, lens);
                     }
                     #endif
@@ -59633,6 +59715,22 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
+            case ASPOP_SCAN_WIDTH:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_WIDTH_DUO:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
             default: break;
             }
         }
@@ -60703,6 +60801,22 @@ int main(int argc, char *argv[])
                 ctb->opBitlen = 32;
                 break;
             case ASPOP_SCAN_STATUS_DUO:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_WIDTH:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_WIDTH_DUO:
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_NONE;
                 ctb->opType = ASPOP_TYPE_VALUE;
