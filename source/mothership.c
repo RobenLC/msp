@@ -28,7 +28,8 @@
 //#include <mysql.h>
 //main()
 #define MSP_VERSION "Mon Oct 29 17:15:27 2018 \
-6aad759ce9" 
+6aad759ce9 \
+new crop fix" 
 
 
 #define DISABLE_SPI  (1)
@@ -305,7 +306,7 @@ static int *totSalloc=0;
 #define CROP_MAX_NUM_META (18)
 
 #define CHECK_SOCKET_STATUS (0)
-//#define DEBUG_CROP_ENABLE 
+#define DEBUG_CROP_ENABLE 
 #ifdef DEBUG_CROP_ENABLE
 #define CROP_CALCU_DETAIL (0)
 #define CROP_CALCU_PROCESS (1)
@@ -340,7 +341,7 @@ static int *totSalloc=0;
 //#define CROP_SELEC_RATIO (100.0)
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
-#define CROP_MIGRATE_TO_APP (1)
+#define CROP_MIGRATE_TO_APP (0)
 #define CFLOAT double
 
 #define FAT_DIRPOOL_IDX_MAX   (65535)
@@ -4722,6 +4723,8 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
 #if LOG_CROP_MOSTRL
     printf("[RTLF] distance Up = %lf, distance Down = %lf, max distance = %lf\n", distUp, distDn, maxD);
 #endif    
+
+    #if 0
     if ((distUp > maxD) && (distDn > maxD)) {
         printf("[RTLF] distance Up or Dn out of range !!!!!!\n");
         err++;
@@ -4732,6 +4735,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
             printf("[RTLF] Error!!! get new rect four points failed!!!, ret: %d\n", ret);
         }    
     }
+    #endif
     
     if (distUp > maxD) {
         distLf = calcuDistance(&pn[6*2], csDn);
@@ -4923,8 +4927,8 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
 {
     int ret=0;
     int solidFlag = 0;
-    int talR = 10;
-    int talH = 20;
+    int talR = 5;
+    int talH = 60;
     CFLOAT honMin = 50.0;
     int rdegL = 90 - talR;
     int rdegH = 90 + talR;
@@ -4991,12 +4995,26 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
     memcpy(csDn1, pcp36->crp36CsDn, sizeof(CFLOAT)*2);
     memcpy(mostLf1, pcp36->crp36MsLf, sizeof(CFLOAT)*2);
     memcpy(mostRt1, pcp36->crp36MsRt, sizeof(CFLOAT)*2);
-    
+
+    #if 1
     memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
     memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
     memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
     memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);        
-    
+    #else
+    memset(pcp36->crp36P1, 0, sizeof(CFLOAT)*2);    
+    memset(pcp36->crp36P2, 0, sizeof(CFLOAT)*2);    
+    memset(pcp36->crp36P3, 0, sizeof(CFLOAT)*2);    
+    memset(pcp36->crp36P4, 0, sizeof(CFLOAT)*2);        
+    #endif
+
+#if LOG_CROP_ROT36
+    printf("[crp36] org most left = (%lf, %lf)\n", mostLf1[0], mostLf1[1]);
+    printf("[crp36] org cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
+    printf("[crp36] org most right = (%lf, %lf)\n", mostRt1[0], mostRt1[1]);
+    printf("[crp36] org cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+#endif
+
     CFLOAT shif=0;
     CFLOAT csLineRU[3];
     CFLOAT csLineLU[3];
@@ -5030,14 +5048,14 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
     getParallelVectorFromV(newCsLineRU, csUp1, csLineRU);
     
     int fstLevel = 0;
+    int secLevel = 0;
     fstLevel = (solidFlag >> 0) & 0xf;        
-    
+    secLevel = (solidFlag >> 4) & 0xf;
+
     switch(fstLevel) {
     case (0x1 | 0x2 | 0x4 | 0x8):
     case (0x1 | 0x4 | 0x8):
-    case (0x1 | 0x8):
-    case (0x1 | 0x4):
-    case (0x1):
+    case (0x2 | 0x4 | 0x8):
         ret = getCross(csLineLD, newCsLineLU, newMostLf);
         if (ret != 0) {
             printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
@@ -5048,17 +5066,18 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
             printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
         }
 #if LOG_CROP_ROT36
-        printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
+        printf("[crp36] set most left = (%lf, %lf)\n", mostLf1[0], mostLf1[1]);
         printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
-        printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
+        printf("[crp36] set most right = (%lf, %lf)\n", mostRt1[0], mostRt1[1]);
         printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
 #endif
-        memcpy(pcp36->crp36P1, newMostLf, sizeof(CFLOAT)*2);    
+        memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
         memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
-        memcpy(pcp36->crp36P3, newMostRt, sizeof(CFLOAT)*2);    
+        memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
         memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);        
         break;
-    case(0x2):
+    case (0x1):
+    case (0x2):
         ret = getCross(csLineRD, newCsLineRU, newMostRt);
         if (ret != 0) {
             printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
@@ -5070,19 +5089,19 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
         }            
 
 #if LOG_CROP_ROT36
-        printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
-        printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
-        printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
-        printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+        printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 0);
+        printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 1);
+        printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 0);
+        printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 1);
 #endif
-        memcpy(pcp36->crp36P1, newMostLf, sizeof(CFLOAT)*2);    
+
+        //memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
         memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
-        memcpy(pcp36->crp36P3, newMostRt, sizeof(CFLOAT)*2);    
+        //memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
         memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);            
 
         break;
     case (0x2 | 0x4):
-    case (0x4):
         ret = getCross(csLineRD, newCsLineRU, newMostRt);
         if (ret != 0) {
             printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n",ret);
@@ -5093,45 +5112,245 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
             printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
         }            
 #if LOG_CROP_ROT36
-        printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
-        printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
-        printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
-        printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+        printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 1);
+        printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 0);
+        printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 0);
+        printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 1);
 #endif
-        memcpy(pcp36->crp36P1, newMostLf, sizeof(CFLOAT)*2);    
-        memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
-        memcpy(pcp36->crp36P3, newMostRt, sizeof(CFLOAT)*2);    
+        memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+        //memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+        //memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
         memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
         break;
     case (0x2 | 0x8):
-    case (0x8):
         ret = getCross(csLineLD, newCsLineLU, newMostLf);
         if (ret != 0) {
             printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
         }            
-
     
         ret = getCross(csLineRD, newCsLineRU, newMostRt);
         if (ret != 0) {
             printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
         }
 #if LOG_CROP_ROT36
-        printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
-        printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
-        printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
-        printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+        printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 0);
+        printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 0);
+        printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 1);
+        printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 1);
 #endif
-        memcpy(pcp36->crp36P1, newMostLf, sizeof(CFLOAT)*2);    
-        memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
-        memcpy(pcp36->crp36P3, newMostRt, sizeof(CFLOAT)*2);    
+        //memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+        //memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+        memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
         memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+        break;
+    case (0x1 | 0x4):
+        ret = getCross(csLineRD, newCsLineRU, newMostRt);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n",ret);
+        }
+
+        ret = getCross(csLineLD, newCsLineLU, newMostLf);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+        }            
+#if LOG_CROP_ROT36
+        printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 1);
+        printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 1);
+        printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 0);
+        printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 0);
+#endif
+        memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+        memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+        //memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+        //memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+        break;
+    case (0x1 | 0x8):
+        ret = getCross(csLineLD, newCsLineLU, newMostLf);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+        }            
+    
+        ret = getCross(csLineRD, newCsLineRU, newMostRt);
+        if (ret != 0) {
+            printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+        }
+#if LOG_CROP_ROT36
+        printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 0);
+        printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 1);
+        printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 1);
+        printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 0);
+#endif
+        //memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+        memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+        memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+        //memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+        break;
+    case (0x4):
+        switch (secLevel) {
+            case (0x1):
+                ret = getCross(csLineLD, newCsLineLU, newMostLf);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+                }            
+
+                ret = getCross(csLineRD, newCsLineRU, newMostRt);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+                }
+
+                #if LOG_CROP_ROT36        
+                printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 1);
+                printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 0);
+                printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 0);
+                printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 1);
+                #endif
+
+                memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+                //memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+                //memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+                break;
+            case (0x2):
+                ret = getCross(csLineLD, newCsLineLU, newMostLf);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+                }            
+
+                ret = getCross(csLineRD, newCsLineRU, newMostRt);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+                }
+
+                #if LOG_CROP_ROT36        
+                printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 1);
+                printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 1);
+                printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 0);
+                printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 0);
+                #endif
+
+                memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+                //memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+                //memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+                break;
+            default:
+                ret = getCross(csLineLD, newCsLineLU, newMostLf);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+                }            
+
+                ret = getCross(csLineRD, newCsLineRU, newMostRt);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+                }
+
+                #if LOG_CROP_ROT36        
+                printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 1);
+                printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 1);
+                printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 0);
+                printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 1);
+                #endif
+
+                memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+                //memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+                break;
+        }
+        break;
+    case (0x8):
+        switch (secLevel) {
+            case (0x1):
+                ret = getCross(csLineLD, newCsLineLU, newMostLf);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+                }            
+
+                ret = getCross(csLineRD, newCsLineRU, newMostRt);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+                }
+
+                #if LOG_CROP_ROT36        
+                printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 0);
+                printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 1);
+                printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 1);
+                printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 1);
+                #endif
+
+                //memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+                break;
+            case (0x2):
+                ret = getCross(csLineLD, newCsLineLU, newMostLf);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+                }            
+
+                ret = getCross(csLineRD, newCsLineRU, newMostRt);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+                }
+
+                #if LOG_CROP_ROT36        
+                printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 0);
+                printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 1);
+                printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 1);
+                printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 1);
+                #endif
+
+                //memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+                break;
+            default:
+                ret = getCross(csLineLD, newCsLineLU, newMostLf);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most left failed!!!, ret: %d\n", ret);
+                }            
+
+                ret = getCross(csLineRD, newCsLineRU, newMostRt);
+                if (ret != 0) {
+                    printf("[crp36] Error!!! get new most right failed!!!, ret: %d\n", ret);
+                }
+
+                #if LOG_CROP_ROT36        
+                printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 0);
+                printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 1);
+                printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 1);
+                printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 1);
+                #endif
+
+                //memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+                memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);         
+                break;
+        }
         break;
     default:
         if (fstLevel == 0) {
+            #if 0
             ret = getRectPoint(pcp36);
             if (ret != 0) {
                 printf("[crp36] Error!!! get new rect four points failed!!!, ret: %d \n", ret);
             }
+            #else
+#if LOG_CROP_ROT36
+            printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 0);
+            printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 0);
+            printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 0);
+            printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 0);
+#endif
+
+            //memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
+            memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
+            //memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
+            memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);        
+            #endif
         } else {
             getParallelVectorFromV(newCsLineLU, csUp1, csLineLU);
             getParallelVectorFromV(newCsLineRU, csUp1, csLineRU);
@@ -5146,15 +5365,15 @@ static int getCrop36RotatePoints(struct aspCrop36_s *pcp36)
                 printf("[crp36] Error!!! get new most left failed!!!, ret: %d \n",ret);
             }
 #if LOG_CROP_ROT36
-            printf("[crp36] set most left = (%lf, %lf)\n", newMostLf[0], newMostLf[1]);
-            printf("[crp36] set cross up = (%lf, %lf)\n", csUp1[0], csUp1[1]);
-            printf("[crp36] set most right = (%lf, %lf)\n", newMostRt[0], newMostRt[1]);
-            printf("[crp36] set cross down = (%lf, %lf)\n", csDn1[0], csDn1[1]);
+            printf("[crp36] set most left = (%lf, %lf) (%d)\n", mostLf1[0], mostLf1[1], 0);
+            printf("[crp36] set cross up = (%lf, %lf) (%d)\n", csUp1[0], csUp1[1], 0);
+            printf("[crp36] set most right = (%lf, %lf) (%d)\n", mostRt1[0], mostRt1[1], 0);
+            printf("[crp36] set cross down = (%lf, %lf) (%d)\n", csDn1[0], csDn1[1], 0);
 #endif
 
-            memcpy(pcp36->crp36P1, newMostLf, sizeof(CFLOAT)*2);    
+            //memcpy(pcp36->crp36P1, mostLf1, sizeof(CFLOAT)*2);    
             memcpy(pcp36->crp36P2, csUp1, sizeof(CFLOAT)*2);    
-            memcpy(pcp36->crp36P3, newMostRt, sizeof(CFLOAT)*2);    
+            //memcpy(pcp36->crp36P3, mostRt1, sizeof(CFLOAT)*2);    
             memcpy(pcp36->crp36P4, csDn1, sizeof(CFLOAT)*2);                     
         }
         break;
@@ -5387,12 +5606,23 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             distP2Bef = -1;
         }
         
-        if ((distP2Bef > 500) || (distP2P > 300.0)) {
+#if LOG_CROP_FINDBASELINE
+        printf("%d.  =  (%lf, %lf) \n", i, distP2Bef, distP2P);    
+#endif
+
+        //if ((distP2Bef > 500) || (distP2P > 500.0)) {
+        if ((distP2P > 1000.0) && ((pcpex->crpexLfAbs[i*2+1] - pcpex->crpexLfAbs[i*2+0]) > 5)) {
             contL++;
 
             pc0[0] = pc2[0];
             pc0[1] = pc2[1];
+#if LOG_CROP_FINDBASELINE
+            printf("keep %d.  =  (%d -> 1%d) \n", i, pcpex->crpexLfAbs[i*2+0], pcpex->crpexLfAbs[i*2+1]);    
+#endif
         } else {
+        #if LOG_CROP_FINDBASELINE
+            printf("drop %d.  =  (%d -> 1%d) \n", i, pcpex->crpexLfAbs[i*2+0], pcpex->crpexLfAbs[i*2+1]);    
+#endif
             pcpex->crpexLfAbs[i*2+0] = -1;
             pcpex->crpexLfAbs[i*2+1] = -1;        
         }
@@ -5420,14 +5650,26 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             distP2Bef = -1;
         }
 
-        if ((distP2Bef > 500) || (distP2P > 300.0)) {
+#if LOG_CROP_FINDBASELINE
+        printf("%d.  =  (%lf, %lf) \n", i, distP2Bef, distP2P);    
+#endif
+        if ((distP2P > 1000.0) && ((pcpex->crpexRtAbs[i*2+1] - pcpex->crpexRtAbs[i*2+0]) > 5)) {
+        //if ((distP2Bef > 500) || (distP2P > 500.0)) {
             contR++;
 
             pc0[0] = pc2[0];
             pc0[1] = pc2[1];
+#if LOG_CROP_FINDBASELINE
+            printf("keep %d.  =  (%d -> 1%d) \n", i, pcpex->crpexRtAbs[i*2+0], pcpex->crpexRtAbs[i*2+1]);    
+#endif
+
         } else {
+#if LOG_CROP_FINDBASELINE
+            printf("drop %d.  =  (%d -> 1%d) \n", i, pcpex->crpexRtAbs[i*2+0], pcpex->crpexRtAbs[i*2+1]);    
+#endif
+
             pcpex->crpexRtAbs[i*2+0] = -1;
-            pcpex->crpexRtAbs[i*2+1] = -1;        
+            pcpex->crpexRtAbs[i*2+1] = -1;      
         }
         
     }
@@ -6455,8 +6697,8 @@ static int setRotateP4(struct aspCrop36_s *pcp36, CFLOAT *rotateP4)
 static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 {
 #define ACCEPT_OFFSET (1000.0)
-#define ACCEPT_FINAL_OFFSET_RADIO (0.3)
-#define ACCEPT_COMPU_OFFSET_RADIO (0.5)
+#define ACCEPT_FINAL_OFFSET_RADIO (1.0)
+#define ACCEPT_COMPU_OFFSET_RADIO (0.8)
 
     CFLOAT *vLU=0, *vLD=0, *vRU=0, *vRD=0;
     CFLOAT linLU[3], linLD[3], linRU[3], linRD[3];
@@ -44786,7 +45028,7 @@ static int atFindIdx(char *str, char ch)
 #define LOG_P6_RX_EN    (1)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
-#define LOG_P6_CROP_EN    (0)
+#define LOG_P6_CROP_EN    (1)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
@@ -44830,6 +45072,7 @@ static int p6(struct procRes_s *rs)
     struct aspCrop36_s *pcp36, *pcp36duo;
     struct aspCropExtra_s *pcpex, *pcpexduo;
     CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
+    CFLOAT mostlft[2], mostrgt[2], lftgrp[10][2], rgtgrp[10][2], fhi=0.0, fwh=0.0, fwe=0.0;
     CFLOAT selecPic = 0.0, selecBase = 100.0, selecRatio = 0.0, selecCur = 0, selecMax = 0;
     int ipic=0, icur=0;
 
@@ -46825,7 +47068,7 @@ static int p6(struct procRes_s *rs)
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
 #if LOG_P6_CROP_EN
-                            sprintf_f(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            sprintf_f(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i+1, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
                             sendbuf[3] = 'C';
@@ -46925,7 +47168,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);                                        
-#if LOG_P6_CROP_EN
+#if 0//LOG_P6_CROP_EN
                 sendbuf[5+n] = '\0'; 
                 sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -46974,7 +47217,7 @@ static int p6(struct procRes_s *rs)
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
 #if LOG_P6_CROP_EN
-                            sprintf_f(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            sprintf_f(rs->logs, "duo CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i+1, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
                             sendbuf[3] = 'c';
@@ -47083,7 +47326,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if LOG_P6_CROP_EN
+#if 0//LOG_P6_CROP_EN
                 sendbuf[5+n] = '\0';                
                 sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -47137,6 +47380,8 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, " crop36 calcu cross down, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
 #endif
+
+            #if 1
             if (ret) {
                 getRectPoint(pcp36);
             } else {
@@ -47161,7 +47406,43 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36);
                 }
             }
-#endif
+            #else
+
+            if (ret) {
+                //getRectPoint(pcp36);
+            }
+            
+            ret = calcuMostRtLf(pcp36);
+            
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, " crop36 calcu most RightLeft, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            #endif
+            
+            ret = calcuCrossUpLine(pcp36);
+
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, " crop36 calcu cross line up, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            #endif
+
+            ret = calcuCrossDnLine(pcp36);
+
+            #if CROP_CALCU_PROCESS                    
+            sprintf_f(rs->logs, " crop36 calcu cross line down, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            #endif
+
+            ret = getCrop36RotatePoints(pcp36);
+
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, " crop36 get rotate points, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            #endif
+            
+            #endif
+            
+#endif // #if !CROP_MIGRATE_TO_APP
 
             cpn = 0;
             pcp36duo->crp36Pots[cpn*2+0] = 100;
@@ -47189,6 +47470,8 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, " duo crop36 calcu cross down, ret = %d\n", ret);
             print_f(rs->plogs, "P6", rs->logs);
 #endif
+
+            #if 1
             if (ret) {
                 getRectPoint(pcp36duo);
             } else {
@@ -47213,7 +47496,45 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36duo);
                 }
             }
-#endif
+
+            #else
+            
+            if (ret) {
+                //getRectPoint(pcp36duo);
+            }
+
+            ret = calcuMostRtLf(pcp36duo);
+            
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, " crop36 calcu most RightLeft, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            #endif
+
+            ret = calcuCrossUpLine(pcp36duo);
+
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, " crop36 calcu cross line up, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            #endif
+
+            ret = calcuCrossDnLine(pcp36duo);
+
+            #if CROP_CALCU_PROCESS                    
+            sprintf_f(rs->logs, " crop36 calcu cross line down, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            #endif
+
+            ret = getCrop36RotatePoints(pcp36duo);
+
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, " crop36 get rotate points, ret = %d\n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            #endif
+            
+            #endif
+            
+#endif // #if !CROP_MIGRATE_TO_APP
+            
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
 
             masRecd = pmass->massRecd;
@@ -47522,7 +47843,35 @@ static int p6(struct procRes_s *rs)
 
                 aspSortD(pcpex->crpexLfPots, cpx); /* max sort = 1024 */
                 aspSortD(pcpex->crpexRtPots, cpx); /* max sort = 1024 */
+
+                ret = getRotateP1(pcp36, mostlft);
+                #if LOG_P6_CROP_EN
+                if (!ret) {
+                    sprintf_f(rs->logs, "duo get most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
                 
+                fwh = mostlft[1] - (gap * 2);
+                if (fwh < 0.0) {
+                    fwh = 0.0;
+                }
+
+                ret = getRotateP3(pcp36, mostrgt);
+                #if LOG_P6_CROP_EN
+                if (!ret) {
+                    sprintf_f(rs->logs, "duo get most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
+                
+                fwe = mostrgt[1] - (gap * 2);
+                if (fwe < 0.0) {
+                    fwe = 0.0;
+                }
+                
+                cnt = 0; 
+                ix = 0;
                 for (i = 0; i < cpx; i++) {
 #if LOG_P6_CROP_EN
                     sprintf_f(rs->logs, "duo %d. L%lf, %lf R%lf, %lf \n", i
@@ -47550,6 +47899,24 @@ static int p6(struct procRes_s *rs)
                     sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
+                    fhi = (CFLOAT)vhi;
+                    if (cnt < 4) {
+                        if (fhi > fwh) {
+                            lftgrp[cnt][0] = cxm;
+                            lftgrp[cnt][1] = fhi;
+
+                            cnt ++;
+                        }
+                    }
+
+                    if (ix < 4) {
+                        if (fhi > fwe) {
+                            rgtgrp[ix][0] = cxn;
+                            rgtgrp[ix][1] = fhi;
+
+                            ix ++;
+                        }
+                    }
 #endif
                 }
                 
@@ -47561,6 +47928,47 @@ static int p6(struct procRes_s *rs)
             } 
 
 #if !CROP_MIGRATE_TO_APP
+            /* fix most left and most right shift */  
+            fhi = 0.0; fwh = 0.0; fwe = 0.0;
+            for (ix=0; ix < 4; ix++) {
+
+                sprintf_f(rs->logs, "duo left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                fhi += lftgrp[ix][0] - mostlft[0];
+                fwh += lftgrp[ix][0];
+            }
+
+            fwe = fhi / 4.0;
+            if (fwe > 15.0) {
+                mostlft[0] = fwh / 4.0;
+                setRotateP1(pcp36, mostlft);
+
+                sprintf_f(rs->logs, "duo correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+
+            }
+
+            fhi = 0.0; fwh = 0.0; fwe = 0.0;
+            for (ix=0; ix < 4; ix++) {
+
+                sprintf_f(rs->logs, "duo right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                fhi += mostrgt[0] - rgtgrp[ix][0];
+                fwh += rgtgrp[ix][0];
+            }
+            
+            fwe = fhi / 4.0;
+            if (fwe > 15.0) {
+                mostrgt[0] = fwh / 4.0;
+                setRotateP3(pcp36, mostrgt);
+
+                sprintf_f(rs->logs, "duo correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+
+            }
+            
             /* second stage of cropping algorithm */
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
             findLine(pcp36, pcpex);
@@ -47964,6 +48372,32 @@ static int p6(struct procRes_s *rs)
                 aspSortD(pcpexduo->crpexLfPots, cpx); /* max sort = 1024 */
                 aspSortD(pcpexduo->crpexRtPots, cpx); /* max sort = 1024 */
                 
+                ret = getRotateP1(pcp36duo, mostlft);
+                #if LOG_P6_CROP_EN
+                if (!ret) {
+                    sprintf_f(rs->logs, "get most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
+                
+                fwh = mostlft[1] - (gap * 2);
+                if (fwh < 0.0) {
+                    fwh = 0.0;
+                }
+
+                ret = getRotateP3(pcp36duo, mostrgt);
+                #if LOG_P6_CROP_EN
+                if (!ret) {
+                    sprintf_f(rs->logs, "get most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
+                
+                fwe = mostrgt[1] - (gap * 2);
+                if (fwe < 0.0) {
+                    fwe = 0.0;
+                }
+                
                 for (i = 0; i < cpx; i++) {
 #if LOG_P6_CROP_EN
                     sprintf_f(rs->logs, " duo %d. L%lf, %lf R%lf, %lf \n", i
@@ -47991,6 +48425,24 @@ static int p6(struct procRes_s *rs)
                     sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
+                    fhi = (CFLOAT)vhi;
+                    if (cnt < 4) {
+                        if (fhi > fwh) {
+                            lftgrp[cnt][0] = cxm;
+                            lftgrp[cnt][1] = fhi;
+
+                            cnt ++;
+                        }
+                    }
+
+                    if (ix < 4) {
+                        if (fhi > fwe) {
+                            rgtgrp[ix][0] = cxn;
+                            rgtgrp[ix][1] = fhi;
+
+                            ix ++;
+                        }
+                    }
 #endif
                 }
                 
@@ -48001,11 +48453,53 @@ static int p6(struct procRes_s *rs)
 
             } 
 #if !CROP_MIGRATE_TO_APP
+            /* fix most left and most right shift */  
+            fhi = 0.0; fwh = 0.0; fwe = 0.0;
+            for (ix=0; ix < 4; ix++) {
+
+                sprintf_f(rs->logs, "left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
+                print_f(rs->plogs, "P6", rs->logs);
+                
+                fhi += lftgrp[ix][0] - mostlft[0];
+                fwh += lftgrp[ix][0];
+            }
+
+            fwe = fhi / 4.0;
+            if (fwe > 15.0) {
+                mostlft[0] = fwh / 4.0;
+                setRotateP1(pcp36, mostlft);
+
+                sprintf_f(rs->logs, "correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+
+            }
+
+            fhi = 0.0; fwh = 0.0; fwe = 0.0;
+            for (ix=0; ix < 4; ix++) {
+
+                sprintf_f(rs->logs, "right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
+                print_f(rs->plogs, "P6", rs->logs);
+
+                fhi += mostrgt[0] - rgtgrp[ix][0];
+                fwh += rgtgrp[ix][0];
+            }
+            
+            fwe = fhi / 4.0;
+            if (fwe > 15.0) {
+                mostrgt[0] = fwh / 4.0;
+                setRotateP3(pcp36, mostrgt);
+
+                sprintf_f(rs->logs, "correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+
+            }
+            
             /* second stage of cropping algorithm */
             msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
             findLine(pcp36duo, pcpexduo);
             msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
             ret = findUniPoints(pcp36duo, pcpexduo);
+            
             if (!ret) {
                 msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
                 calcuLine(pcpexduo);
@@ -48422,7 +48916,7 @@ static int p6(struct procRes_s *rs)
                         pdt = &pct[idx];
                         if (pdt->opStatus == ASPOP_STA_UPD) {
 #if LOG_P6_CROP_EN
-                            sprintf_f(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
+                            sprintf_f(rs->logs, "CROP%.2d. [0x%.8x]     {%d,  %d}  \n", i+1, pdt->opValue, pdt->opValue >> 16, pdt->opValue & 0xffff); 
                             print_f(rs->plogs, "P6", rs->logs);  
 #endif
                             sendbuf[3] = 'C';
@@ -48522,7 +49016,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if LOG_P6_CROP_EN
+#if 0//LOG_P6_CROP_EN
                 sendbuf[5+n] = '\0';         
                 sprintf_f(rs->logs, "socket send CROP%.2d [ %s \n], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
@@ -48976,7 +49470,7 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if 0
+#if 1
                     sendbuf[5+n] = '\0';
                     sendbuf[5+n+1] = '\0';
                     sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
@@ -51684,7 +52178,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     err = close(usbid);
                     sprintf_f(rs->logs, "close usb errno:%d ret: %d \n", errno, err);
                     print_f(rs->plogs, sp, rs->logs);
-                
                 
                     usbid = open(puhsinfo->ushostname, O_RDWR);
                     
