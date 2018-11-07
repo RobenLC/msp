@@ -10,6 +10,7 @@
 #include <sys/epoll.h>
 #include <sys/prctl.h>
 #include <sys/sysinfo.h> 
+#include <sys/types.h>
 #include <linux/types.h> 
 #include <linux/spi/spidev.h> 
 //#include <sys/times.h> 
@@ -23,6 +24,7 @@
 #include <sys/stat.h>  
 #include <netdb.h>
 #include <ifaddrs.h>
+#include <linux/if_link.h>
 #include <math.h>
 #include <errno.h> 
 //#include <mysql.h>
@@ -62,8 +64,12 @@ new crop fix"
 #define CYCLE_LEN (40)
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
-#define USB_BOOTUP_SYNC (1)
+#define USB_BOOTUP_SYNC (0)
 #define USB_ALIVE_POLLING (0)
+#define WIRELESS_INT           "wlan0"
+#define WIRELESS_INT_WPA  "wlan1"
+#define AP_AUTO (0)
+#define AP_CLR_STATUS (0)
 
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -22371,6 +22377,8 @@ static int stusbscan_119(struct psdata_s *data)
                 data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 2) {
                 data->result = emb_result(data->result, EVTMAX);
+            } else if (data->ansp0 == 3) {
+                data->result = emb_result(data->result, EVTMAX);
             } else if (data->ansp0 == 0xed) {
                 data->result = emb_result(data->result, EVTMAX);
             }
@@ -26445,8 +26453,8 @@ static int cmdfunc_meta_opcode(int argc, char *argv[])
 
     n = 0; rsp = 0;
     /* set data for update to scanner */
-    //pkt->opcode = OP_META_DAT;
-    //pkt->data = ASPMETA_POWON_INIT;
+    pkt->opcode = OP_META_DAT;
+    pkt->data = ASPMETA_POWON_INIT;
 
     clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
     
@@ -35380,7 +35388,7 @@ static int fs106(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs106", mrs->log);
 
-    sprintf(syscmd, "kill -9 $(ps aux | grep 'mlan0' | awk '{print $1}')");
+    sprintf(syscmd, "kill -9 $(ps aux | grep '%s' | awk '{print $1}')", WIRELESS_INT);
     ret = doSystemCmd(syscmd);
 
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
@@ -35392,14 +35400,14 @@ static int fs106(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs106", mrs->log);
 
-    sprintf(syscmd, "ifconfig mlan0 down");
+    sprintf(syscmd, "ifconfig %s down", WIRELESS_INT);
     ret = doSystemCmd(syscmd);
 
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs106", mrs->log);
 
     memset(mrs->netIntfs, 0, 16);
-    sprintf(mrs->netIntfs, "%s", "mlan0");
+    sprintf(mrs->netIntfs, "%s", WIRELESS_INT);
     msync(mrs->netIntfs, 16, MS_SYNC);
 
     modersp->r = 1; 
@@ -35412,7 +35420,7 @@ static int fs107(struct mainRes_s *mrs, struct modersp_s *modersp)
     char syscmd[256] = "ls -al";
     
     FILE *faptpe=0;
-    char aptypestr[32] = "wlan0";
+    char aptypestr[32] = WIRELESS_INT;
     int itypelen=0;
     
     faptpe = fopen("/root/config/aptype", "r");
@@ -35429,13 +35437,13 @@ static int fs107(struct mainRes_s *mrs, struct modersp_s *modersp)
             sprintf(mrs->netIntfs, "%s", aptypestr);
         } else {
             memset(mrs->netIntfs, 0, 16);
-            sprintf(mrs->netIntfs, "wlan0");
+            sprintf(mrs->netIntfs, WIRELESS_INT);
         }
 
         fclose(faptpe);
     } else {
         memset(mrs->netIntfs, 0, 16);
-        sprintf(mrs->netIntfs, "wlan0");
+        sprintf(mrs->netIntfs, WIRELESS_INT);
     }
     
     sprintf_f(mrs->log, "launch Direct mode ...\n");
@@ -35477,12 +35485,18 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf(syscmd, "/root/script/wpa_conf.sh \\\"%s\\\" \\\"%s\\\" /etc/wpa_supplicant.conf ", pwfc ->wfssid, pwfc->wfpsk);
     ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -imlan0 -Dnl80211 -dd");
+    sprintf(syscmd, "cp /root/script/interfaces_8723bu_wpa /etc/network/interfaces");
     ret = doSystemCmd(syscmd);
 
-    sleep(3);
+    sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -i%s -Dnl80211 -dd", WIRELESS_INT);
+    ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "udhcpc -i mlan0 -t 10 -n");
+    sleep(1);
+
+    sprintf(syscmd, "udhcpc -i %s -t 5 -n", WIRELESS_INT);
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "ping 192.168.1.255 -w 3");
     ret = doSystemCmd(syscmd);
 
     sprintf(syscmd, "ifconfig");
@@ -47900,6 +47914,7 @@ static int p6(struct procRes_s *rs)
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
                     fhi = (CFLOAT)vhi;
+                    
                     if (cnt < 4) {
                         if (fhi > fwh) {
                             lftgrp[cnt][0] = cxm;
@@ -47932,8 +47947,10 @@ static int p6(struct procRes_s *rs)
             fhi = 0.0; fwh = 0.0; fwe = 0.0;
             for (ix=0; ix < 4; ix++) {
 
+                #if LOG_P6_CROP_EN
                 sprintf_f(rs->logs, "duo left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 
                 fhi += lftgrp[ix][0] - mostlft[0];
                 fwh += lftgrp[ix][0];
@@ -47944,16 +47961,20 @@ static int p6(struct procRes_s *rs)
                 mostlft[0] = fwh / 4.0;
                 setRotateP1(pcp36, mostlft);
 
+                #if 1//LOG_P6_CROP_EN
                 sprintf_f(rs->logs, "duo correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
             }
 
             fhi = 0.0; fwh = 0.0; fwe = 0.0;
             for (ix=0; ix < 4; ix++) {
 
+                #if LOG_P6_CROP_EN
                 sprintf_f(rs->logs, "duo right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
                 fhi += mostrgt[0] - rgtgrp[ix][0];
                 fwh += rgtgrp[ix][0];
@@ -47964,8 +47985,10 @@ static int p6(struct procRes_s *rs)
                 mostrgt[0] = fwh / 4.0;
                 setRotateP3(pcp36, mostrgt);
 
+                #if 1//LOG_P6_CROP_EN
                 sprintf_f(rs->logs, "duo correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
             }
             
@@ -48375,7 +48398,7 @@ static int p6(struct procRes_s *rs)
                 ret = getRotateP1(pcp36duo, mostlft);
                 #if LOG_P6_CROP_EN
                 if (!ret) {
-                    sprintf_f(rs->logs, "get most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                    sprintf_f(rs->logs, "duo get most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
                     print_f(rs->plogs, "P6", rs->logs);
                 }
                 #endif
@@ -48388,7 +48411,7 @@ static int p6(struct procRes_s *rs)
                 ret = getRotateP3(pcp36duo, mostrgt);
                 #if LOG_P6_CROP_EN
                 if (!ret) {
-                    sprintf_f(rs->logs, "get most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                    sprintf_f(rs->logs, "duo get most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
                     print_f(rs->plogs, "P6", rs->logs);
                 }
                 #endif
@@ -48397,7 +48420,8 @@ static int p6(struct procRes_s *rs)
                 if (fwe < 0.0) {
                     fwe = 0.0;
                 }
-                
+
+                cnt = 0; ix = 0;
                 for (i = 0; i < cpx; i++) {
 #if LOG_P6_CROP_EN
                     sprintf_f(rs->logs, " duo %d. L%lf, %lf R%lf, %lf \n", i
@@ -48457,8 +48481,10 @@ static int p6(struct procRes_s *rs)
             fhi = 0.0; fwh = 0.0; fwe = 0.0;
             for (ix=0; ix < 4; ix++) {
 
-                sprintf_f(rs->logs, "left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
+                #if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "left duo apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 
                 fhi += lftgrp[ix][0] - mostlft[0];
                 fwh += lftgrp[ix][0];
@@ -48469,16 +48495,20 @@ static int p6(struct procRes_s *rs)
                 mostlft[0] = fwh / 4.0;
                 setRotateP1(pcp36, mostlft);
 
-                sprintf_f(rs->logs, "correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                #if 1//LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "correct duo most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
             }
 
             fhi = 0.0; fwh = 0.0; fwe = 0.0;
             for (ix=0; ix < 4; ix++) {
 
-                sprintf_f(rs->logs, "right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
+                #if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "right duo apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
                 fhi += mostrgt[0] - rgtgrp[ix][0];
                 fwh += rgtgrp[ix][0];
@@ -48489,8 +48519,10 @@ static int p6(struct procRes_s *rs)
                 mostrgt[0] = fwh / 4.0;
                 setRotateP3(pcp36, mostrgt);
 
-                sprintf_f(rs->logs, "correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                #if 1//LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "correct duo most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
             }
             
@@ -49449,6 +49481,34 @@ static int p6(struct procRes_s *rs)
                 aspSortD(pcpex->crpexLfPots, cpx); /* max sort = 1024 */
                 aspSortD(pcpex->crpexRtPots, cpx); /* max sort = 1024 */
                 
+                ret = getRotateP1(pcp36, mostlft);
+                #if LOG_P6_CROP_EN
+                if (!ret) {
+                    sprintf_f(rs->logs, "get most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
+                
+                fwh = mostlft[1] - (gap * 2);
+                if (fwh < 0.0) {
+                    fwh = 0.0;
+                }
+
+                ret = getRotateP3(pcp36, mostrgt);
+                #if LOG_P6_CROP_EN
+                if (!ret) {
+                    sprintf_f(rs->logs, "get most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                }
+                #endif
+                
+                fwe = mostrgt[1] - (gap * 2);
+                if (fwe < 0.0) {
+                    fwe = 0.0;
+                }
+                
+                cnt = 0; 
+                ix = 0;
                 for (i = 0; i < cpx; i++) {
 #if LOG_P6_CROP_EN
                     sprintf_f(rs->logs, "%d. L%lf, %lf R%lf, %lf \n", i
@@ -49470,12 +49530,31 @@ static int p6(struct procRes_s *rs)
                     sendbuf[5+n+1] = '\n';
                     sendbuf[5+n+2] = '\0';
                     ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-#if 1
+#if 0
                     sendbuf[5+n] = '\0';
                     sendbuf[5+n+1] = '\0';
                     sprintf(rs->logs, "socket send, %d. [%s], ret:%d\n", cpx, &sendbuf[5], ret);
                     print_f(rs->plogs, "P6", rs->logs);
 #endif
+                    fhi = (CFLOAT)vhi;
+                    
+                    if (cnt < 4) {
+                        if (fhi > fwh) {
+                            lftgrp[cnt][0] = cxm;
+                            lftgrp[cnt][1] = fhi;
+
+                            cnt ++;
+                        }
+                    }
+
+                    if (ix < 4) {
+                        if (fhi > fwe) {
+                            rgtgrp[ix][0] = cxn;
+                            rgtgrp[ix][1] = fhi;
+
+                            ix ++;
+                        }
+                    }
 #endif
                 }
                 
@@ -49495,6 +49574,55 @@ static int p6(struct procRes_s *rs)
 #endif
 
 #if !CROP_MIGRATE_TO_APP
+            /* fix most left and most right shift */  
+            fhi = 0.0; fwh = 0.0; fwe = 0.0;
+            for (ix=0; ix < 4; ix++) {
+
+                #if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
+                print_f(rs->plogs, "P6", rs->logs);
+                #endif
+                
+                fhi += lftgrp[ix][0] - mostlft[0];
+                fwh += lftgrp[ix][0];
+            }
+
+            fwe = fhi / 4.0;
+            if (fwe > 15.0) {
+                mostlft[0] = fwh / 4.0;
+                setRotateP1(pcp36, mostlft);
+
+                #if 1//LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+                #endif
+
+            }
+
+            fhi = 0.0; fwh = 0.0; fwe = 0.0;
+            for (ix=0; ix < 4; ix++) {
+
+                #if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
+                print_f(rs->plogs, "P6", rs->logs);
+                #endif
+
+                fhi += mostrgt[0] - rgtgrp[ix][0];
+                fwh += rgtgrp[ix][0];
+            }
+            
+            fwe = fhi / 4.0;
+            if (fwe > 15.0) {
+                mostrgt[0] = fwh / 4.0;
+                setRotateP3(pcp36, mostrgt);
+
+                #if 1//LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                print_f(rs->plogs, "P6", rs->logs);
+                #endif
+
+            }
+            
             /* second stage of cropping algorithm */
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
             findLine(pcp36, pcpex);
@@ -51501,12 +51629,44 @@ int get_in_port(struct sockaddr *sa){
     return ntohs(((struct sockaddr_in6*)sa)->sin6_port);
 }
 
+int getaddoffset(char *na, char *lstn) 
+{
+    char dot = '.';
+    int len=0, cnt=0, id=0, lsn=0;
+    
+    if ((!na) || (!lstn)) return -1;
+
+    len = strlen(na);
+
+    if (len > 16) return -2;
+
+    printf("input: %s \n", na);
+
+    while (id < len) {
+        if (na[id] == dot) {
+            cnt++;
+        }
+
+        if (cnt == 3) {
+            lsn = atoi(&na[id+1]);
+            *lstn = lsn;
+
+            printf("offset: %d, last number: %d \n", id, lsn);
+            break;
+        }
+
+        id++;
+    }
+
+    return id;
+}
+
 #define LOG_P8_EN (1)
 static int p8(struct procRes_s *rs)
 {
 #define RECVLEN 1024
 #define MYPORT "8000"
-    int ret=0, n=0, tot=0, len=0, cltport=0;
+    int ret=0, n=0, tot=0, len=0, cltport=0, rpcnt=0, offset=0, neql=0;
     char *recvbuf=0, *sendbuf=0;
     char ack[8] = "ack\n\0";
     char *cltaddr=0;
@@ -51521,11 +51681,15 @@ static int p8(struct procRes_s *rs)
     int rv, sockfd, sockback;
 
     struct ifaddrs *ifaddr, *ifa;
-
+    char ifname[128], lastnum=0;
+    int family=0;
+    struct rtnl_link_stats *stats = 0;
+    
     prctl(PR_SET_NAME, "msp-p8");
     //sprintf(argv[0], "msp-p8-udp-listen");
     
     memset(&hints, 0, sizeof(hints));
+    memset(ifname, 0, 128);
 
     sprintf_f(rs->logs, "p8\n");
     print_f(rs->plogs, "P8", rs->logs);
@@ -51552,6 +51716,7 @@ static int p8(struct procRes_s *rs)
     while (1) {
         usleep(100000);
 
+        #if 0
         if (getifaddrs(&ifaddr) == -1) {
             perror("getifaddrs");        
             //exit(EXIT_FAILURE);    
@@ -51588,6 +51753,7 @@ static int p8(struct procRes_s *rs)
         if (strlen(sendbuf) == 0) {
             continue;
         }
+        #endif
         
         if ((rv = getaddrinfo(NULL, MYPORT, &hints, &servinfo)) != 0) {
             fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));	
@@ -51658,6 +51824,7 @@ static int p8(struct procRes_s *rs)
         if ((rv = getaddrinfo(d, port, &clients, &clintinfo)) != 0) {
             fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));	
             close(sockfd);
+            freeaddrinfo(clintinfo);
             continue;
         }
 
@@ -51675,6 +51842,149 @@ static int p8(struct procRes_s *rs)
             continue;
         }
 
+        #if 1
+        if (getifaddrs(&ifaddr) == -1) {
+            perror("getifaddrs");        
+            //exit(EXIT_FAILURE);    
+            continue;
+        }
+        
+        offset = getaddoffset(d, &lastnum);
+
+        memset(sendbuf, 0, RECVLEN);
+        tot = 0;
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == NULL)
+                continue;
+
+               #if 0
+               family = ifa->ifa_addr->sa_family;
+
+               /* Display interface name and family (including symbolic
+                  form of the latter for the common families) */
+               printf("%-8s %s (%d)\n",
+                      ifa->ifa_name,
+                      (family == AF_PACKET) ? "AF_PACKET" :
+                      (family == AF_INET) ? "AF_INET" :
+                      (family == AF_INET6) ? "AF_INET6" : "???",
+                      family);
+
+               /* For an AF_INET* interface address, display the address */
+
+               if (family == AF_INET || family == AF_INET6) {
+                   ret = getnameinfo(ifa->ifa_addr,
+                           (family == AF_INET) ? sizeof(struct sockaddr_in) :
+                                                 sizeof(struct sockaddr_in6),
+                           s, NI_MAXHOST,
+                           NULL, 0, NI_NUMERICHOST);
+                   if (ret != 0) {
+                       printf("getnameinfo() failed: %s\n", gai_strerror(ret));
+                       //exit(EXIT_FAILURE);
+                   }
+
+                   printf("\t\taddress: <%s>\n", s);
+
+               } else if (family == AF_PACKET && ifa->ifa_data != NULL) {
+                   stats = (struct rtnl_link_stats *)ifa->ifa_data;
+                   
+                   printf("\t\ttx_packets = %10u; rx_packets = %10u\n"
+                          "\t\ttx_bytes   = %10u; rx_bytes   = %10u\n",
+                          stats->tx_packets, stats->rx_packets,
+                          stats->tx_bytes, stats->rx_bytes);
+                   
+               }
+               #endif
+
+            ret=getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),s, INET_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
+
+            memset(ifname, 0, 128);
+            strcpy(ifname, rs->pnetIntfs);
+            if((strcmp(ifa->ifa_name, ifname)==0)&&(ifa->ifa_addr->sa_family==AF_INET)) {
+                if (ret != 0) {
+                    printf("getnameinfo() failed: %s\n", gai_strerror(ret));
+                    //exit(EXIT_FAILURE);
+                    continue;
+                }
+#if LOG_P8_EN
+                printf("\tInterface : <%s> (%s)\n",ifa->ifa_name, ifname);
+                printf("\t  Address : <%s>\n", s);
+#endif
+                sprintf(rs->logs, "_M_IP_%s_ ", s);
+                dbgShowTimeStamp(rs->logs, NULL, rs, 8, NULL);
+                
+                n = getaddoffset(s, &lastnum);
+                if ((n > 0) && (n == offset)) {
+                    neql = strncmp(d, s, n);
+                    if (neql == 0) {
+                        sprintf(&sendbuf[tot], "iface: %s addr: %s port: %d, \n", ifname, s, 8000);
+                        tot = strlen(sendbuf);
+                    }
+                }
+
+                //break;
+            }
+
+            memset(ifname, 0, 128);
+            strcpy(ifname, WIRELESS_INT);
+            if((strcmp(ifa->ifa_name, ifname)==0)&&(ifa->ifa_addr->sa_family==AF_INET)) {
+                if (ret != 0) {
+                    printf("getnameinfo() failed: %s\n", gai_strerror(ret));
+                    //exit(EXIT_FAILURE);
+                    continue;
+                }
+#if LOG_P8_EN
+                printf("\tInterface : <%s> (%s)\n",ifa->ifa_name, ifname);
+                printf("\t  Address : <%s>\n", s);
+#endif
+                sprintf(rs->logs, "_M_IP_%s_ ", s);
+                dbgShowTimeStamp(rs->logs, NULL, rs, 8, NULL);
+                
+                n = getaddoffset(s, &lastnum);
+                if ((n > 0) && (n == offset)) {
+                    neql = strncmp(d, s, n);
+                    if (neql == 0) {
+                        sprintf(&sendbuf[tot], "iface: %s addr: %s port: %d, \n", ifname, s, 8000);
+                        tot = strlen(sendbuf);
+                    }
+                }
+                //break;
+            }
+            
+            memset(ifname, 0, 128);
+            strcpy(ifname, WIRELESS_INT_WPA);
+            if((strcmp(ifa->ifa_name, ifname)==0)&&(ifa->ifa_addr->sa_family==AF_INET)) {
+                if (ret != 0) {
+                    printf("getnameinfo() failed: %s\n", gai_strerror(ret));
+                    //exit(EXIT_FAILURE);
+                    continue;
+                }
+#if LOG_P8_EN
+                printf("\tInterface : <%s> (%s)\n",ifa->ifa_name, ifname);
+                printf("\t  Address : <%s>\n", s);
+#endif
+                sprintf(rs->logs, "_M_IP_%s_ ", s);
+                dbgShowTimeStamp(rs->logs, NULL, rs, 8, NULL);
+                
+                n = getaddoffset(s, &lastnum);
+                if ((n > 0) && (n == offset)) {
+                    neql = strncmp(d, s, n);
+                    if (neql == 0) {
+                        sprintf(&sendbuf[tot], "iface: %s addr: %s port: %d, \n", ifname, s, 8000);
+                        tot = strlen(sendbuf);
+                    }
+                }
+                //break;
+            }
+
+
+        }
+        freeifaddrs(ifaddr);
+
+        if (strlen(sendbuf) == 0) {
+            continue;
+        }
+        #endif
+        
         n = strlen(sendbuf);
         sendbuf[n] = '\0';
         saddr = (struct sockaddr_in *)c->ai_addr;
@@ -51683,14 +51993,22 @@ static int p8(struct procRes_s *rs)
         printf("listener: sendto packet contains \"%s\", size: %d, addr: %s \n", sendbuf, n, inet_ntop(AF_INET, &(saddr->sin_addr), d, INET_ADDRSTRLEN));	
 #endif
 
-        if (n = sendto(sockback, sendbuf, n+1 , 0, c->ai_addr, c->ai_addrlen) == -1) {
-            perror("sendto");
-            close(sockback);
-            continue;
+        rpcnt = 0;
+        while (rpcnt < 1) {
+            n = sendto(sockback, sendbuf, n+1 , 0, c->ai_addr, c->ai_addrlen);
+            if (n <= 0) {
+                perror("sendto");
+                break;
+            }
+            usleep(30000);
+            rpcnt ++;
         }
 
+        printf("listener: repeat cnt %d \n", rpcnt);	
+        
         freeaddrinfo(clintinfo);
         close(sockback);
+        close(sockfd);
     }
 
 #else
@@ -54082,7 +54400,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 iubsBuff[16] = opc;
                 iubsBuff[17] = dat;
                 
-                sprintf_f(rs->logs, "[DVl] BOOT-UP sync opc: 0x4d dump \n");
+                sprintf_f(rs->logs, "[DVl] BOOT-UP sync opc: 0x4e dump \n");
                 print_f(rs->plogs, "P11", rs->logs);
 
                 shmem_dump(iubsBuff, 31);
@@ -58327,6 +58645,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 continue;
             }
             else if ((cmd == 0x11) && (opc == 0x4e)) {
+                chm = 0xff;
+                chn = 0xff;
                 if (usbid01) {
                     while (1) {
                         chq = 0;
@@ -58388,10 +58708,15 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 #if 1
                 msgret[0] = 'x';
-                if ((chm) || (chn)) {
-                    msgret[1] = 0x02;
-                } else {
-                    msgret[1] = 0x01;
+                if ((chm == 0xff) && (chn == 0xff)) {
+                    msgret[1] = 0x03;
+                }
+                else {
+                    if ((chm == 0) || (chn == 0)) {
+                        msgret[1] = 0x01;
+                    } else {
+                        msgret[1] = 0x02;
+                    }
                 }
                 
                 pipRet = write(pipeTx[1], &msgret, 2);                
@@ -59415,6 +59740,7 @@ int main(int argc, char *argv[])
     ret = doSystemCmd(syscmd);
 
 // launchAP or directAccess
+    #if AP_CLR_STATUS
     /* clear status */
     sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
     ret = doSystemCmd(syscmd);
@@ -59428,17 +59754,18 @@ int main(int argc, char *argv[])
     sprintf(syscmd, "ifconfig uap0 down");
     ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "kill -9 $(ps aux | grep 'mlan0' | awk '{print $1}')");
+    sprintf(syscmd, "kill -9 $(ps aux | grep '%s' | awk '{print $1}')", WIRELESS_INT);
     ret = doSystemCmd(syscmd);
         
     sprintf(syscmd, "kill -9 $(ps aux | grep 'wpa_supplicant' | awk '{print $1}')");
     ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "ifconfig mlan0 down");
+    sprintf(syscmd, "ifconfig %s down", WIRELESS_INT);
     ret = doSystemCmd(syscmd);
     
     sprintf_f(pmrs->log, "network interface: %s \n", pmrs->netIntfs);
     print_f(&pmrs->plog, "inet", pmrs->log);
+    #endif
 
     sleep(1);
 
@@ -61504,7 +61831,7 @@ int main(int argc, char *argv[])
         sprintf(syscmd, "/root/script/iw_con.sh");
         ret = doSystemCmd(syscmd);
         memset(pmrs->netIntfs, 0, 16);
-        sprintf(pmrs->netIntfs, "%s", "mlan0");
+        sprintf(pmrs->netIntfs, "%s", WIRELESS_INT);
     }
     #else
     /* read AP config */
@@ -61585,7 +61912,7 @@ int main(int argc, char *argv[])
     printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
     printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
-    
+    #if AP_AUTO
     /* AP mode launch or not */
     int isLaunch = 0;
     char s[INET_ADDRSTRLEN];
@@ -61608,19 +61935,25 @@ int main(int argc, char *argv[])
             sprintf(syscmd, "/root/script/wpa_conf.sh \\\"%s\\\" \\\"%s\\\" /etc/wpa_supplicant.conf ", pwfc ->wfssid, pwfc->wfpsk);
             ret = doSystemCmd(syscmd);
 
-            sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -imlan0 -Dnl80211 -dd");
+            sprintf(syscmd, "cp /root/script/interfaces_8723bu_wpa /etc/network/interfaces");
             ret = doSystemCmd(syscmd);
 
-            sleep(3);
+            sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -i%s -Dnl80211 -dd", WIRELESS_INT);
+            ret = doSystemCmd(syscmd);
 
-            sprintf(syscmd, "udhcpc -i mlan0 -t 3 -n");
+            sleep(1);
+
+            sprintf(syscmd, "udhcpc -i %s -t 5 -n", WIRELESS_INT);
+            ret = doSystemCmd(syscmd);
+
+            sprintf(syscmd, "ping 192.168.1.255 -w 3");
             ret = doSystemCmd(syscmd);
 
             sprintf_f(pmrs->log, "exec [%s]...\n", syscmd);
             print_f(&pmrs->plog, "APM", pmrs->log);
 
             memset(pmrs->netIntfs, 0, 16);
-            sprintf(pmrs->netIntfs, "%s", "mlan0");
+            sprintf(pmrs->netIntfs, "%s", WIRELESS_INT);
 
             ret = getifaddrs(&ifaddr);
             if (ret == -1) {
@@ -61665,7 +61998,7 @@ int main(int argc, char *argv[])
     }
 
     FILE *faptpe=0;
-    char aptypestr[32] = "wlan0";
+    char aptypestr[32] = WIRELESS_INT;
     int itypelen=0;
     memset(aptypestr, 0, 32);
     
@@ -61690,12 +62023,12 @@ int main(int argc, char *argv[])
                 sprintf(pmrs->netIntfs, "%s", aptypestr);
             } else {
                 memset(pmrs->netIntfs, 0, 16);
-                sprintf(pmrs->netIntfs, "wlan0");
+                sprintf(pmrs->netIntfs, WIRELESS_INT);
             }
             fclose(faptpe);
         } else {
             memset(pmrs->netIntfs, 0, 16);
-            sprintf(pmrs->netIntfs, "wlan0");
+            sprintf(pmrs->netIntfs, WIRELESS_INT);
         }
         
         sprintf(syscmd, "/root/script/launchAP_now.sh");
@@ -61721,7 +62054,7 @@ int main(int argc, char *argv[])
     printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
     printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
     printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
-
+    #endif
     
     #endif
     /* CROP */
