@@ -68,8 +68,8 @@ new crop fix"
 #define USB_ALIVE_POLLING (0)
 #define WIRELESS_INT           "wlan0"
 #define WIRELESS_INT_WPA  "wlan1"
-#define AP_AUTO (0)
-#define AP_CLR_STATUS (0)
+#define AP_AUTO (1)
+#define AP_CLR_STATUS (1)
 
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -1420,6 +1420,7 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
     char netIntfs[16];
+    char netIntwpa[16];
     char *dbglog;
 };
 
@@ -1493,6 +1494,7 @@ struct procRes_s{
     struct bitmapRotate_s *pbrotate;
     struct logPool_s *plogs;
     char *pnetIntfs;
+    char *pnetIntwpa;
 };
 
 struct aspMemAsign_s *aspMemAsign=0;
@@ -35367,6 +35369,7 @@ static int fs106(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 // launchAP or directAccess
     /* clear status */
+    #if 0 /* not to kill directAccess mode */
     sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
     ret = doSystemCmd(syscmd);
 
@@ -35388,11 +35391,24 @@ static int fs106(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs106", mrs->log);
 
-    sprintf(syscmd, "kill -9 $(ps aux | grep '%s' | awk '{print $1}')", WIRELESS_INT);
+    sprintf(syscmd, "kill -9 $(ps aux | grep '%s' | awk '{print $1}')", mrs->netIntfs);
     ret = doSystemCmd(syscmd);
 
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs106", mrs->log);
+
+    sprintf(syscmd, "ifconfig %s down", mrs->netIntfs);
+    ret = doSystemCmd(syscmd);
+
+    sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs106", mrs->log);
+    
+    sprintf(syscmd, "kill -9 $(ps aux | grep '%s' | awk '{print $1}')", mrs->netIntwpa);
+    ret = doSystemCmd(syscmd);
+
+    sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs106", mrs->log);
+    #endif
 
     sprintf(syscmd, "kill -9 $(ps aux | grep 'wpa_supplicant' | awk '{print $1}')");
     ret = doSystemCmd(syscmd);
@@ -35400,15 +35416,21 @@ static int fs106(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs106", mrs->log);
 
-    sprintf(syscmd, "ifconfig %s down", WIRELESS_INT);
+    sprintf(syscmd, "ifconfig %s down", mrs->netIntwpa);
     ret = doSystemCmd(syscmd);
 
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
     print_f(&mrs->plog, "fs106", mrs->log);
 
+    #if 0
     memset(mrs->netIntfs, 0, 16);
     sprintf(mrs->netIntfs, "%s", WIRELESS_INT);
     msync(mrs->netIntfs, 16, MS_SYNC);
+    
+    memset(mrs->netIntwpa, 0, 16);
+    sprintf(mrs->netIntwpa, "%s", WIRELESS_INT_WPA);
+    msync(mrs->netIntwpa, 16, MS_SYNC);
+    #endif
 
     modersp->r = 1; 
     return 1;
@@ -35456,7 +35478,7 @@ static int fs107(struct mainRes_s *mrs, struct modersp_s *modersp)
     print_f(&mrs->plog, "fs107", mrs->log);
     
     msync(mrs->netIntfs, 16, MS_SYNC);
-    sprintf_f(mrs->log, "interface = [%s] \n", mrs->netIntfs);
+    sprintf_f(mrs->log, "AP interface = [%s] \n", mrs->netIntfs);
     print_f(&mrs->plog, "fs107", mrs->log);
     
     modersp->r = 1; 
@@ -35468,6 +35490,11 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
     int ret;
     char syscmd[256] = "ls -al";
     struct apWifiConfig_s *pwfc=0;
+    FILE *faptpe=0;
+    char aptypestr[32] = WIRELESS_INT;
+    int itypelen=0;
+
+    memset(aptypestr, 0, 32);
 
     pwfc = &mrs->wifconf;
     if ((pwfc->wfpskLen > 0) && (pwfc->wfsidLen > 0)) {
@@ -35480,29 +35507,55 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
+    memset(mrs->netIntwpa, 0, 16);
+    faptpe = fopen("/root/config/wpatype", "r");
+    if (faptpe) {
+        itypelen = fread(aptypestr, 1, 32, faptpe);
+        if ((itypelen > 0) && (itypelen < 32)) {
+            aptypestr[itypelen] = '\0';
+            if (aptypestr[itypelen-1] == '\n') {
+                aptypestr[itypelen-1] = '\0';
+            }
+            if (aptypestr[itypelen-1] == '\r') {
+                aptypestr[itypelen-1] = '\0';
+            }
+            sprintf(mrs->netIntwpa, "%s", aptypestr);
+        } else {
+            memset(mrs->netIntwpa, 0, 16);
+            sprintf(mrs->netIntwpa, WIRELESS_INT_WPA);
+        }
+
+        fclose(faptpe);
+    } else {
+        memset(mrs->netIntwpa, 0, 16);
+        sprintf(mrs->netIntwpa, WIRELESS_INT_WPA);
+    }
     /* launch wpa connect */
     //sprintf(syscmd, "/root/script/iw_con.sh");
     sprintf(syscmd, "/root/script/wpa_conf.sh \\\"%s\\\" \\\"%s\\\" /etc/wpa_supplicant.conf ", pwfc ->wfssid, pwfc->wfpsk);
     ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "cp /root/script/interfaces_8723bu_wpa /etc/network/interfaces");
-    ret = doSystemCmd(syscmd);
+    //sprintf(syscmd, "cp /root/script/interfaces_8723bu_wpa /etc/network/interfaces");
+    //ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -i%s -Dnl80211 -dd", WIRELESS_INT);
+    sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -i%s -Dnl80211 -dd", mrs->netIntwpa);
     ret = doSystemCmd(syscmd);
 
     sleep(1);
 
-    sprintf(syscmd, "udhcpc -i %s -t 5 -n", WIRELESS_INT);
+    sprintf(syscmd, "udhcpc -i %s -t 5 -n", mrs->netIntwpa);
     ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "ping 192.168.1.255 -w 3");
-    ret = doSystemCmd(syscmd);
+    //sprintf(syscmd, "ping 192.168.1.255 -w 3");
+    //ret = doSystemCmd(syscmd);
 
     sprintf(syscmd, "ifconfig");
     ret = doSystemCmd(syscmd);
 
     sprintf_f(mrs->log, "exec [%s]...\n", syscmd);
+    print_f(&mrs->plog, "fs108", mrs->log);
+
+    sprintf_f(mrs->log, "wpa interface: [%s]\n", mrs->netIntwpa);
     print_f(&mrs->plog, "fs108", mrs->log);
 
     sync();
@@ -35517,13 +35570,19 @@ static int fs109(struct mainRes_s *mrs, struct modersp_s *modersp)
     char paramFilePath[128] = "/root/scaner/scannerParam.bin";
     FILE *f;
     struct aspConfig_s *pct=0;
-    
+
+    sprintf_f(mrs->log, "update scanner pamameters !!!\n");
+    print_f(&mrs->plog, "fs109", mrs->log);
+
     pct = mrs->configTable;
     len = ASPOP_CODE_MAX*sizeof(struct aspConfig_s);
 
     msync(pct, len, MS_SYNC);
+
+    sprintf_f(mrs->log, "ASPOP_AP_MODE opc: 0x%x, status: 0x%x, value: %d\n", pct[ASPOP_AP_MODE].opCode, pct[ASPOP_AP_MODE].opStatus, pct[ASPOP_AP_MODE].opValue);
+    print_f(&mrs->plog, "fs109", mrs->log);
     
-    f = fopen(paramFilePath, "w+");
+    f = fopen(paramFilePath, "w");
     if (f) {
         fwrite(pct, 1, len, f);
         fflush(f);
@@ -51640,7 +51699,7 @@ int getaddoffset(char *na, char *lstn)
 
     if (len > 16) return -2;
 
-    printf("input: %s \n", na);
+    //printf("input: %s \n", na);
 
     while (id < len) {
         if (na[id] == dot) {
@@ -51651,7 +51710,7 @@ int getaddoffset(char *na, char *lstn)
             lsn = atoi(&na[id+1]);
             *lstn = lsn;
 
-            printf("offset: %d, last number: %d \n", id, lsn);
+            //printf("offset: %d, last number: %d \n", id, lsn);
             break;
         }
 
@@ -59616,7 +59675,7 @@ int main(int argc, char *argv[])
     char *metaPt=0;
     int *spipeTx, *spipeRx, *spipeTxd, *spipeRxd;
     int *sgateUpTx, *sgateUpRx, *sgateDnTx, *sgateDnRx;
-        
+
     printf("\n        ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
 
     aspMemAsign = (struct aspMemAsign_s *)mmap(NULL, sizeof(struct aspMemAsign_s) * MSP_P_NUM, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -59739,7 +59798,7 @@ int main(int argc, char *argv[])
     sprintf(syscmd, "mkdir -p /mnt/mmc2/tx");
     ret = doSystemCmd(syscmd);
 
-// launchAP or directAccess
+    // launchAP or directAccess
     #if AP_CLR_STATUS
     /* clear status */
     sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
@@ -59756,14 +59815,23 @@ int main(int argc, char *argv[])
 
     sprintf(syscmd, "kill -9 $(ps aux | grep '%s' | awk '{print $1}')", WIRELESS_INT);
     ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "kill -9 $(ps aux | grep '%s' | awk '{print $1}')", WIRELESS_INT_WPA);
+    ret = doSystemCmd(syscmd);
         
     sprintf(syscmd, "kill -9 $(ps aux | grep 'wpa_supplicant' | awk '{print $1}')");
     ret = doSystemCmd(syscmd);
 
     sprintf(syscmd, "ifconfig %s down", WIRELESS_INT);
     ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "ifconfig %s down", WIRELESS_INT_WPA);
+    ret = doSystemCmd(syscmd);
     
-    sprintf_f(pmrs->log, "network interface: %s \n", pmrs->netIntfs);
+    sprintf_f(pmrs->log, "AP network interface: %s \n", pmrs->netIntfs);
+    print_f(&pmrs->plog, "inet", pmrs->log);
+
+    sprintf_f(pmrs->log, "WPA network interface: %s \n", pmrs->netIntwpa);
     print_f(&pmrs->plog, "inet", pmrs->log);
     #endif
 
@@ -60433,7 +60501,7 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
-            #if 1 /* test AP mode */
+            #if 0 /* test AP mode */
             case ASPOP_AP_MODE: 
                 ctb->opStatus = ASPOP_STA_APP; //default for debug ASPOP_STA_NONE;
                 ctb->opCode = OP_AP_MODEN;
@@ -61866,7 +61934,20 @@ int main(int argc, char *argv[])
 
             if ((wfcLen >= 8) && (wfcLen <=63)) {
                 readLen = fread(pwfc->wfpsk, 1, wfcLen, fpsk);
+
+                //sprintf_f(pmrs->log, "psk len: %d str: [%s] - 1 \n", readLen, pwfc->wfpsk);
+                //print_f(&pmrs->plog, "WIFC", pmrs->log);
+
                 pwfc->wfpsk[readLen] = '\0';
+                readLen = strlen(pwfc->wfpsk);
+                if ((readLen > 0) && ((pwfc->wfpsk[readLen-1] == '\n') || (pwfc->wfpsk[readLen-1] == '\r'))) {
+                    pwfc->wfpsk[readLen-1] = '\0';
+                }
+                readLen = strlen(pwfc->wfpsk);
+                
+                sprintf_f(pmrs->log, "psk len: %d str: [%s] \n", readLen, pwfc->wfpsk);
+                print_f(&pmrs->plog, "WIFC", pmrs->log);
+
                 pwfc->wfpskLen = readLen;
             } else {
                 sprintf_f(pmrs->log, " file size error !!! filesize:%d, readLen: %d\n", wfcLen, readLen);
@@ -61896,7 +61977,20 @@ int main(int argc, char *argv[])
 
             if ((wfcLen > 0) && (wfcLen <= 32)) {
                 readLen = fread(pwfc->wfssid, 1, wfcLen, fssid);
+                
+                //sprintf_f(pmrs->log, "ssid len: %d str: [%s] - 1 \n", readLen, pwfc->wfssid);
+                //print_f(&pmrs->plog, "WIFC", pmrs->log);
+
                 pwfc->wfssid[readLen] = '\0';
+                readLen = strlen(pwfc->wfssid);
+                if ((readLen > 0) && ((pwfc->wfssid[readLen-1] == '\n') || (pwfc->wfssid[readLen-1] == '\r'))) {
+                    pwfc->wfssid[readLen-1] = '\0';
+                }
+                readLen = strlen(pwfc->wfssid);
+                
+                sprintf_f(pmrs->log, "ssid len: %d str: [%s] \n", readLen, pwfc->wfssid);
+                print_f(&pmrs->plog, "WIFC", pmrs->log);
+                                
                 pwfc->wfsidLen = readLen;
             } else {
                 sprintf_f(pmrs->log, " file size error !!! filesize:%d, readLen: %d\n", wfcLen, readLen);
@@ -61916,13 +62010,21 @@ int main(int argc, char *argv[])
     /* AP mode launch or not */
     int isLaunch = 0;
     char s[INET_ADDRSTRLEN];
+    char d[INET_ADDRSTRLEN];
     struct ifaddrs *ifaddr, *ifa;
-
+    
+    FILE *faptpe=0;
+    char aptypestr[32] = WIRELESS_INT, lastnum=0;
+    int itypelen=0, addroffset=0;
+    
     ctb = &pmrs->configTable[ASPOP_AP_MODE];
     if (ctb->opCode != OP_AP_MODEN) {        
         sprintf_f(pmrs->log, " WARNING!!! get wrong opcode value 0x%x", ctb->opCode);
         print_f(&pmrs->plog, "APM", pmrs->log);
     }
+
+    sprintf_f(pmrs->log, "opc: 0x%x, status: 0x%x, value: %d \n", ctb->opCode, ctb->opStatus, ctb->opValue);
+    print_f(&pmrs->plog, "APM", pmrs->log);
 
     if (ctb->opValue == APM_AP) {
         /* launch wpa connect */
@@ -61931,29 +62033,53 @@ int main(int argc, char *argv[])
             sprintf_f(pmrs->log, "launch AP mode ... ssid: \"%s\", psk: \"%s\"\n", pwfc ->wfssid, pwfc->wfpsk);
             print_f(&pmrs->plog, "APM", pmrs->log);
 
+            faptpe = 0;
+            memset(aptypestr, 0, 32);
+            memset(pmrs->netIntwpa, 0, 16);
+            faptpe = fopen("/root/config/wpatype", "r");
+            if (faptpe) {
+                itypelen = fread(aptypestr, 1, 16, faptpe);
+                if ((itypelen > 0) && (itypelen < 16)) {
+                    aptypestr[itypelen] = '\0';
+                    if (aptypestr[itypelen-1] == '\n') {
+                        aptypestr[itypelen-1] = '\0';
+                    }
+
+                    if (aptypestr[itypelen-1] == '\r') {
+                        aptypestr[itypelen-1] = '\0';
+                    }
+                    sprintf(pmrs->netIntwpa, "%s", aptypestr);
+                } else {
+                    memset(pmrs->netIntwpa, 0, 16);
+                    sprintf(pmrs->netIntwpa, WIRELESS_INT_WPA);
+                }
+                fclose(faptpe);
+                faptpe = 0;
+            } else {
+                memset(pmrs->netIntwpa, 0, 16);
+                sprintf(pmrs->netIntwpa, WIRELESS_INT_WPA);
+            }
+        
             /* launch wpa connect */
             sprintf(syscmd, "/root/script/wpa_conf.sh \\\"%s\\\" \\\"%s\\\" /etc/wpa_supplicant.conf ", pwfc ->wfssid, pwfc->wfpsk);
             ret = doSystemCmd(syscmd);
 
-            sprintf(syscmd, "cp /root/script/interfaces_8723bu_wpa /etc/network/interfaces");
-            ret = doSystemCmd(syscmd);
+            //sprintf(syscmd, "cp /root/script/interfaces_8723bu_wpa /etc/network/interfaces");
+            //ret = doSystemCmd(syscmd);
 
-            sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -i%s -Dnl80211 -dd", WIRELESS_INT);
+            sprintf(syscmd, "wpa_supplicant -B -c /etc/wpa_supplicant.conf -i%s -Dnl80211 -dd", pmrs->netIntwpa);
             ret = doSystemCmd(syscmd);
 
             sleep(1);
 
-            sprintf(syscmd, "udhcpc -i %s -t 5 -n", WIRELESS_INT);
-            ret = doSystemCmd(syscmd);
-
-            sprintf(syscmd, "ping 192.168.1.255 -w 3");
+            sprintf(syscmd, "udhcpc -i %s -t 5 -n", pmrs->netIntwpa);
             ret = doSystemCmd(syscmd);
 
             sprintf_f(pmrs->log, "exec [%s]...\n", syscmd);
             print_f(&pmrs->plog, "APM", pmrs->log);
 
-            memset(pmrs->netIntfs, 0, 16);
-            sprintf(pmrs->netIntfs, "%s", WIRELESS_INT);
+            sprintf_f(pmrs->log, "WPA interface: [%s]\n", pmrs->netIntwpa);
+            print_f(&pmrs->plog, "APM", pmrs->log);
 
             ret = getifaddrs(&ifaddr);
             if (ret == -1) {
@@ -61967,18 +62093,30 @@ int main(int argc, char *argv[])
 
                     ret=getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),s, INET_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
                     if (ret != 0) {
-                        printf("getnameinfo() failed: %s\n", gai_strerror(ret));
+                        //printf("[%s] getnameinfo() failed: %s\n", ifa->ifa_name, gai_strerror(ret));
                         //exit(EXIT_FAILURE);
                         continue;
                     }
                     
-                    if((strcmp(ifa->ifa_name, pmrs->netIntfs)==0) && (ifa->ifa_addr->sa_family == AF_INET)) {
+                    if((strcmp(ifa->ifa_name, pmrs->netIntwpa)==0) && (ifa->ifa_addr->sa_family == AF_INET)) {
 
                         printf("\tInterface : <%s>\n",ifa->ifa_name );
                         printf("\t  Address : <%s>\n", s);
 
-                        sprintf_f(pmrs->log, "iface: %s addr: %s", pmrs->netIntfs, s);
+                        sprintf_f(pmrs->log, "iface: %s addr: %s", pmrs->netIntwpa, s);
                         print_f(&pmrs->plog, "APM", pmrs->log);
+
+                        addroffset = getaddoffset(s, &lastnum);
+                        memset(d, 0, INET_ADDRSTRLEN);
+
+                        memcpy(d, s, addroffset);
+                        sprintf(&d[addroffset], "%d", 1);
+
+                        sprintf_f(pmrs->log, "ping gatway ip: %s \n", d);
+                        print_f(&pmrs->plog, "APM", pmrs->log);
+
+                        sprintf(syscmd, "ping %s -w 3", d);
+                        ret = doSystemCmd(syscmd);
 
                         isLaunch = 1;
                     }
@@ -61996,19 +62134,16 @@ int main(int argc, char *argv[])
             print_f(&pmrs->plog, "APM", pmrs->log);
         }
     }
-
-    FILE *faptpe=0;
-    char aptypestr[32] = WIRELESS_INT;
-    int itypelen=0;
-    memset(aptypestr, 0, 32);
     
-    if (!isLaunch) {
+    if (ctb->opValue) {
         /* launch AP  */
-        sprintf(syscmd, "/root/script/clr_all.sh");
-        ret = doSystemCmd(syscmd);
+        //sprintf(syscmd, "/root/script/clr_all.sh");
+        //ret = doSystemCmd(syscmd);
+        //sleep(1);
 
-        sleep(1);
-
+        memset(aptypestr, 0, 32);
+        memset(pmrs->netIntfs, 0, 16);
+        
         faptpe = fopen("/root/config/aptype", "r");
         if (faptpe) {
             itypelen = fread(aptypestr, 1, 16, faptpe);
@@ -62034,7 +62169,7 @@ int main(int argc, char *argv[])
         sprintf(syscmd, "/root/script/launchAP_now.sh");
         ret = doSystemCmd(syscmd);
         
-        sprintf_f(pmrs->log, "interface = [%s] \n", pmrs->netIntfs);
+        sprintf_f(pmrs->log, "AP interface = [%s] \n", pmrs->netIntfs);
         print_f(&pmrs->plog, "WIFC", pmrs->log);
 
         //shmem_dump(pmrs->netIntfs, 16);
@@ -63308,6 +63443,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->psFat = &mrs->aspFat;
     rs->cpyfatDirTr = 0;
     rs->pnetIntfs = mrs->netIntfs;
+    rs->pnetIntwpa = mrs->netIntwpa;
     rs->pwifconf = &mrs->wifconf;
     rs->pmetaout = &mrs->metaout;
     rs->pmetausb = &mrs->metaUsb;
