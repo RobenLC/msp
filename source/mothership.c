@@ -31,7 +31,7 @@
 //main()
 #define MSP_VERSION "Mon Oct 29 17:15:27 2018 \
 6aad759ce9 \
-new crop fix" 
+new crop fix new AP mode" 
 
 
 #define DISABLE_SPI  (1)
@@ -66,8 +66,14 @@ new crop fix"
 #define DBG_DUMP_DAT32  (0)
 #define USB_BOOTUP_SYNC (0)
 #define USB_ALIVE_POLLING (0)
+
+#if 1
 #define WIRELESS_INT           "wlan0"
 #define WIRELESS_INT_WPA  "wlan1"
+#else /* SPI simulator setting */
+#define WIRELESS_INT           "uap0"
+#define WIRELESS_INT_WPA  "mlan0"
+#endif
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
 
@@ -312,7 +318,7 @@ static int *totSalloc=0;
 #define CROP_MAX_NUM_META (18)
 
 #define CHECK_SOCKET_STATUS (0)
-#define DEBUG_CROP_ENABLE 
+//#define DEBUG_CROP_ENABLE 
 #ifdef DEBUG_CROP_ENABLE
 #define CROP_CALCU_DETAIL (0)
 #define CROP_CALCU_PROCESS (1)
@@ -347,7 +353,7 @@ static int *totSalloc=0;
 //#define CROP_SELEC_RATIO (100.0)
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
-#define CROP_MIGRATE_TO_APP (0)
+#define CROP_MIGRATE_TO_APP (1)
 #define CFLOAT double
 
 #define FAT_DIRPOOL_IDX_MAX   (65535)
@@ -62566,7 +62572,7 @@ int main(int argc, char *argv[])
         ix = RING_BUFF_NUM_USB;
         ret = USB_IOCT_LOOP_BUFF_CREATE(usbh[0]->ushostid, &ix);
         if (ret < 0) {
-            sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath1); 
+            sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s] ret: %d\n", RING_BUFF_NUM_USB, usbhostpath1, ret); 
             print_f(&pmrs->plog, "USB", pmrs->log);
             close(usbh[0]->ushostid);
             goto end;
@@ -62685,7 +62691,7 @@ int main(int argc, char *argv[])
         ix = RING_BUFF_NUM_USB;
         ret = USB_IOCT_LOOP_BUFF_CREATE(usbh[1]->ushostid, &ix);
         if (ret < 0) {
-            sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, usbhostpath2); 
+            sprintf_f(pmrs->log, "can't create buff failed, size: %d [%s] ret: %d \n", RING_BUFF_NUM_USB, usbhostpath2, ret); 
             print_f(&pmrs->plog, "USB", pmrs->log);
             close(usbh[1]->ushostid);
             goto end;
