@@ -30,8 +30,7 @@
 //#include <mysql.h>
 //main()
 #define MSP_VERSION "Mon Oct 29 17:15:27 2018 \
-6aad759ce9 \
-new crop fix new AP mode" 
+6aad759ce9 " 
 
 
 #define DISABLE_SPI  (1)
@@ -45107,7 +45106,7 @@ static int atFindIdx(char *str, char ch)
 #define LOG_P6_RX_EN    (1)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
-#define LOG_P6_CROP_EN    (1)
+#define LOG_P6_CROP_EN    (0)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
