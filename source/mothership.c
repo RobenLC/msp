@@ -63,7 +63,7 @@
 #define CYCLE_LEN (40)
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
-#define USB_BOOTUP_SYNC (0)
+#define USB_BOOTUP_SYNC (1)          // notice this 
 #define USB_ALIVE_POLLING (0)
 
 #if 1
@@ -63237,6 +63237,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 {
     return 0;
 }
+//#define print_f  ////
 #else 
 static int print_f(struct logPool_s *plog, char *head, char *str)
 {
