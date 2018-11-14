@@ -29,8 +29,9 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Mon Nov 12 11:56:07 2018 \
-657a15ee4e"
+#define MSP_VERSION "Tue Nov 13 15:37:57 2018 \
+0894a42fd7 \
+AP concurrent mode bootup sync"
 
 
 #define DISABLE_SPI  (1)
