@@ -54338,7 +54338,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
         }
         #endif
-        
+        rxfd = 0;
         uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 500);
         if (uret < 0) {
             perror("epoll_wait");
@@ -54524,14 +54524,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             } else {
                 pollcnt ++;
             }
-        } else {
+            //continue;
+        }
+        else {
             //sprintf_f(rs->logs, "[ePol] ret: %d\n", uret);
             //print_f(rs->plogs, "P11", rs->logs);
 
             rxfd = 0;
             for (ix = 0; ix < uret; ix++) {
                 if (getevents[ix].data.fd == usbfd) {
-                    rxfd = getevents[ix].data.fd;
+                
                     getents = getevents[ix].events;
 
                     if (getents & EPOLLIN) {
@@ -54541,6 +54543,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     if (getents & EPOLLOUT) {
                         usbentsTx = 1;
                     }
+                    
+                    rxfd = getevents[ix].data.fd;
                     break;
                 }
                 else if (getevents[ix].data.fd == rcmd->ppipedn->rt[0]) {
@@ -54553,7 +54557,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         memset(msgret, 0, 64);
                         ret = rs_ipc_get_ms(rcmd, msgret, 64, 0);
                     }
-                    break;
+                    //break;
+                    //continue;
                 } 
                 else if (getevents[ix].data.fd == rs->ppipedn->rt[0]) {
 
@@ -55687,7 +55692,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
 
                     rxfd = rs->ppipedn->rt[0];
-                    
                     break;
                 }
                 else if (getevents[ix].data.fd == rsd->ppipedn->rt[0]) {
@@ -55901,11 +55905,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
 
                     rxfd = rsd->ppipedn->rt[0];
-                    
                     break;
                 }
                 else if (getevents[ix].data.fd == pipeRx[0]) {
-                    rxfd = pipeRx[0];
                     
                     memset(msgret, 0, 64);
                     ret = read(pipeRxd[0], msgret, 64);
@@ -55917,11 +55919,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         memset(msgret, 0, 64);
                         ret = read(pipeRxd[0], msgret, 64);
                     }
-                    
+
+                    rxfd = pipeRx[0];
                     break;
                 }
                 else if (getevents[ix].data.fd == pipeRxd[0]) {
-                    rxfd = pipeRxd[0];
 
                     memset(msgret, 0, 64);
                     ret = read(pipeRxd[0], msgret, 64);
@@ -55933,7 +55935,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         memset(msgret, 0, 64);
                         ret = read(pipeRxd[0], msgret, 64);
                     }
-                    
+
+                    rxfd = pipeRxd[0];
                     break;
                 }
 
