@@ -63,10 +63,10 @@
 #define CYCLE_LEN (40)
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
-#define USB_BOOTUP_SYNC (1)          // notice this 
-#define USB_ALIVE_POLLING (0)
+#define USB_BOOTUP_SYNC (1)                 // notice this 
+#define USB_ALIVE_POLLING (0)               // notice this 
 
-#if 1
+#if 1                                                          // notice this 
 #define WIRELESS_INT           "wlan0"
 #define WIRELESS_INT_WPA  "wlan1"
 #else /* SPI simulator setting */
@@ -352,7 +352,7 @@ static int *totSalloc=0;
 //#define CROP_SELEC_RATIO (100.0)
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
-#define CROP_MIGRATE_TO_APP (1)
+#define CROP_MIGRATE_TO_APP (0)
 #define CFLOAT double
 
 #define FAT_DIRPOOL_IDX_MAX   (65535)
@@ -52673,7 +52673,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             continue;
                         }
 
-                        #if DBG_USB_HS            
+                        #if 1 //DBG_USB_HS            
                         sprintf_f(rs->logs, "dump 13 bytes");
                         print_f(rs->plogs, sp, rs->logs);
                         shmem_dump(ptrecv, 13);
@@ -52682,10 +52682,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     }
                     
                 }
+                #if DBG_USB_HS
                 else {
                     sprintf_f(rs->logs, "poll usb alive vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                     print_f(rs->plogs, sp, rs->logs);
                 }
+                #endif
             }
             #endif // #if USB_ALIVE_POLLING 
             
@@ -54359,6 +54361,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 else {
                     //printf("open device[%s]\n", rs->usvdvname); 
+                    #if 0
+                    sprintf_f(rs->logs, "open device[%s]\n", rs->usvdvname);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
                 }
             
                 if (rs->usbdvid) {
@@ -54371,6 +54377,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         idlcnt ++;
                     } else {
                         if (recvsz == 31) {
+
+                            idlcnt = 0;
+                            
                             usbfd = rs->usbdvid;
                             fsrcv = recvsz;
                             usbentsRx = 1;
@@ -54395,7 +54404,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
             
-                if ((idlcnt > 150) && (!usbfd)) {
+                if ((idlcnt > 10) && (!usbfd)) {
+                    sprintf_f(rs->logs, "open device[%s] re-launch idlcnt: %d \n", rs->usvdvname, idlcnt);
+                    print_f(rs->plogs, "P11", rs->logs);
+
                     sprintf(syscmd11, "/root/module/gadgetRemove.sh");
                     ret = doSystemCmd(syscmd11);
                     if (!ret) {
@@ -54411,11 +54423,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             #endif
         
-            #if 0 /* disable idle disconnect */
+            #if 1 /* disable idle disconnect */
             if (usbfd) {
                 idlcnt++;
 
-                if (idlcnt > 100) {
+                if (idlcnt > 20) {
                     
                     ret = epoll_ctl (epollfd, EPOLL_CTL_DEL, usbfd, NULL);
                     if (ret == -1) {
@@ -54445,8 +54457,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
                 else {
-                    //sprintf_f(rs->logs, "pc usb idle cnt: %d\n", idlcnt);
-                    //print_f(rs->plogs, "P11", rs->logs);
+                    #if 0 
+                    sprintf_f(rs->logs, "pc usb idle cnt: %d\n", idlcnt);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
                 }
             }
             #endif
@@ -54545,6 +54559,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                     
                     rxfd = getevents[ix].data.fd;
+
+                    idlcnt = 0;
                     break;
                 }
                 else if (getevents[ix].data.fd == rcmd->ppipedn->rt[0]) {
