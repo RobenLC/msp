@@ -54418,7 +54418,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
             
-                if ((idlcnt > 20) && (!usbfd)) {
+                if ((idlcnt > 16) && (!usbfd)) {
                     sprintf_f(rs->logs, "open device[%s] re-launch idlcnt: %d \n", rs->usvdvname, idlcnt);
                     print_f(rs->plogs, "P11", rs->logs);
 
@@ -54441,7 +54441,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             if (usbfd) {
                 idlcnt++;
 
-                if (idlcnt > 80) {
+                if (idlcnt > 120) {
                     
                     ret = epoll_ctl (epollfd, EPOLL_CTL_DEL, usbfd, NULL);
                     if (ret == -1) {
@@ -55728,6 +55728,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
 
                     rxfd = rs->ppipedn->rt[0];
+                    idlcnt = 0;
                     break;
                 }
                 else if (getevents[ix].data.fd == rsd->ppipedn->rt[0]) {
@@ -55941,6 +55942,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
 
                     rxfd = rsd->ppipedn->rt[0];
+                    idlcnt = 0;
                     break;
                 }
                 else if (getevents[ix].data.fd == pipeRx[0]) {
