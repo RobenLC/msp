@@ -64,7 +64,7 @@
 #define USB_CALLBACK_LOOP (1)
 #define DBG_DUMP_DAT32  (0)
 #define USB_BOOTUP_SYNC (1)                 // notice this 
-#define USB_ALIVE_POLLING (0)               // notice this 
+#define USB_ALIVE_POLLING (1)               // notice this 
 
 #if 1                                                          // notice this 
 #define WIRELESS_INT           "wlan0"
@@ -352,7 +352,7 @@ static int *totSalloc=0;
 //#define CROP_SELEC_RATIO (100.0)
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
-#define CROP_MIGRATE_TO_APP (0)
+#define CROP_MIGRATE_TO_APP (1)
 #define CFLOAT double
 
 #define FAT_DIRPOOL_IDX_MAX   (65535)
@@ -52656,7 +52656,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
                         print_f(rs->plogs, sp, rs->logs);
 
-                        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, 0x4D, 0x00);
+                        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, 0x4e, 0x00);
                         ret = usb_send(CBW, usbid, 31);
                         if (ret < 0) {
                             sprintf_f(rs->logs, "send CBW for meta failed ret: %d !!!\n", ret);
