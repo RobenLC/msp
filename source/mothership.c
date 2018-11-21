@@ -66,7 +66,7 @@
 #define DBG_DUMP_DAT32  (0)
 #define USB_BOOTUP_SYNC (1)                 // notice this 
 #define USB_ALIVE_POLLING (1)               // notice this 
-
+#define USB_PC_IDLE_CHK (1)
 #if 1                                                          // notice this 
 #define WIRELESS_INT           "wlan0"
 #define WIRELESS_INT_WPA  "wlan1"
@@ -52657,29 +52657,30 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
                         print_f(rs->plogs, sp, rs->logs);
 
-                        insert_cbw(CBW, CBW_CMD_SEND_OPCODE, 0x4e, 0x00);
-                        ret = usb_send(CBW, usbid, 31);
-                        if (ret < 0) {
-                            sprintf_f(rs->logs, "send CBW for meta failed ret: %d !!!\n", ret);
-                            print_f(rs->plogs, sp, rs->logs);
-                            continue;
-                        }
+                        if ((puhsinfo->ushostpidvid[1] != 0x0a01) && (puhsinfo->ushostpidvid[1] != 0x0a02)) {
+                            insert_cbw(CBW, CBW_CMD_SEND_OPCODE, 0x4e, 0x00);
+                            ret = usb_send(CBW, usbid, 31);
+                            if (ret < 0) {
+                                sprintf_f(rs->logs, "send CBW for meta failed ret: %d !!!\n", ret);
+                                print_f(rs->plogs, sp, rs->logs);
+                                continue;
+                            }
                         
-                        shmem_dump(CBW, 31);
+                            shmem_dump(CBW, 31);
                         
-                        ret = usb_read(ptrecv, usbid, 13);
-                        if (ret < 0) {
-                            sprintf_f(rs->logs, "read 13 byte for meta csw failed ret: %d !!!\n", ret);
-                            print_f(rs->plogs, sp, rs->logs);
-                            continue;
-                        }
+                            ret = usb_read(ptrecv, usbid, 13);
+                            if (ret < 0) {
+                                sprintf_f(rs->logs, "read 13 byte for meta csw failed ret: %d !!!\n", ret);
+                                print_f(rs->plogs, sp, rs->logs);
+                                continue;
+                            }
 
-                        #if 1 //DBG_USB_HS            
-                        sprintf_f(rs->logs, "dump 13 bytes");
-                        print_f(rs->plogs, sp, rs->logs);
-                        shmem_dump(ptrecv, 13);
-                        #endif
-            
+                            #if 1 //DBG_USB_HS            
+                            sprintf_f(rs->logs, "dump 13 bytes");
+                            print_f(rs->plogs, sp, rs->logs);
+                            shmem_dump(ptrecv, 13);
+                            #endif
+                        }            
                     }
                     
                 }
@@ -54108,7 +54109,20 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char wfcmd[8][2] = {{'p', 0x01}, {'m', 0x02}, {'s', 0x03}, {'r', 0x04}, {'t', 0x05}, {'n', 0x06}, {'q', 0x07}, {'o', 0x08}};
     uint32_t fformat=0;
     int opsz=0, lrst=0;
+    struct usbHostmem_s *pusbinfom[2];
 
+    pusbinfom[0] = rs->pusbmh[0];
+    if (!pusbinfom[0]) {
+        sprintf_f(rs->logs, "Error!!! usb host 0 info not available !!! \n");
+        print_f(rs->plogs, "P11", rs->logs);
+    }
+
+    pusbinfom[1] = rs->pusbmh[1];
+    if (!pusbinfom[1]) {
+        sprintf_f(rs->logs, "Error!!! usb host 1 info not available !!! \n");
+        print_f(rs->plogs, "P11", rs->logs);
+    }
+    
     pct = rs->pcfgTable;
     pmass = rs->pmetaMass;
     ptmetausb = rs->pmetausb;
@@ -54405,7 +54419,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
             
-                if ((idlcnt > 10) && (!usbfd)) {
+                if ((idlcnt > 20) && (!usbfd)) {
                     sprintf_f(rs->logs, "open device[%s] re-launch idlcnt: %d \n", rs->usvdvname, idlcnt);
                     print_f(rs->plogs, "P11", rs->logs);
 
@@ -54424,11 +54438,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             #endif
         
-            #if 1 /* disable idle disconnect */
+            #if USB_PC_IDLE_CHK /* idle disconnect */
             if (usbfd) {
                 idlcnt++;
 
-                if (idlcnt > 20) {
+                if (idlcnt > 80) {
                     
                     ret = epoll_ctl (epollfd, EPOLL_CTL_DEL, usbfd, NULL);
                     if (ret == -1) {
@@ -54466,78 +54480,84 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             #endif
 
-            if (pollcnt == 0) {
-                
-                #if USB_BOOTUP_SYNC
-                cmd = 0x11;
-                opc = 0x4e;
-                dat = 0x00;
-
-                iubs->opinfo = opc << 8 | dat;
-                memcpy(iubsBuff, cbw, 31);
-                iubsBuff[15] = cmd;
-                iubsBuff[16] = opc;
-                iubsBuff[17] = dat;
-                
-                sprintf_f(rs->logs, "[DVl] BOOT-UP sync opc: 0x4e dump \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
-                shmem_dump(iubsBuff, 31);
-                
-                puscur = pushost;                    
-
-                #if 0
-                sprintf(msgcmd, "usbscan");
-
-
-                chq = 'n';
-                pipRet = write(pipeTx[1], &chq, 1);
-                if (pipRet < 0) {
-                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                    print_f(rs->plogs, "P11", rs->logs);
-                    continue;
-                }
-                
-                #else
-                if (strcmp(msgcmd, "usbscan") != 0) {
-                    sprintf(msgcmd, "usbscan");
-                    rs_ipc_put(rcmd, msgcmd, 7);
-                    chq = 'n';
-                    pipRet = write(pipeTx[1], &chq, 1);
-                    if (pipRet < 0) {
-                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                        print_f(rs->plogs, "P11", rs->logs);
-                        continue;
+            if ((pusbinfom[0]) && (pusbinfom[1])) {
+                if ((pusbinfom[0]->ushostpidvid[1] != 0x0a01) && (pusbinfom[0]->ushostpidvid[1] != 0x0a02)) {
+                    if ((pusbinfom[1]->ushostpidvid[1] != 0x0a01) && (pusbinfom[1]->ushostpidvid[1] != 0x0a02)) {
+                        if (pollcnt == 0) {
+                            
+                            #if USB_BOOTUP_SYNC
+                            cmd = 0x11;
+                            opc = 0x4e;
+                            dat = 0x00;
+                        
+                            iubs->opinfo = opc << 8 | dat;
+                            memcpy(iubsBuff, cbw, 31);
+                            iubsBuff[15] = cmd;
+                            iubsBuff[16] = opc;
+                            iubsBuff[17] = dat;
+                            
+                            sprintf_f(rs->logs, "[DVl] BOOT-UP sync opc: 0x4e dump \n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        
+                            shmem_dump(iubsBuff, 31);
+                            
+                            puscur = pushost;                    
+                        
+                            #if 0
+                            sprintf(msgcmd, "usbscan");
+                        
+                        
+                            chq = 'n';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                            
+                            #else
+                            if (strcmp(msgcmd, "usbscan") != 0) {
+                                sprintf(msgcmd, "usbscan");
+                                rs_ipc_put(rcmd, msgcmd, 7);
+                                chq = 'n';
+                                pipRet = write(pipeTx[1], &chq, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            }      
+                            #endif
+                        
+                            chq = 'i';
+                            if (usbid01) {
+                                pipRet = write(pipeTx[1], &chq, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV] Error!! pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            }
+                        
+                            #if BYPASS_TWO
+                            chd = 'i';
+                            if (usbid02) {
+                                pipRet = write(pipeTxd[1], &chd, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            }
+                            #endif
+                            #endif //#if USB_BOOTUP_SYNC
+                            
+                            pollcnt ++;
+                        } else {
+                            pollcnt ++;
+                        }
                     }
-                }      
-                #endif
-
-                chq = 'i';
-                if (usbid01) {
-                    pipRet = write(pipeTx[1], &chq, 1);
-                    if (pipRet < 0) {
-                        sprintf_f(rs->logs, "[DV] Error!! pipe send meta ret: %d \n", pipRet);
-                        print_f(rs->plogs, "P11", rs->logs);
-                        continue;
-                    }
                 }
-
-                #if BYPASS_TWO
-                chd = 'i';
-                if (usbid02) {
-                    pipRet = write(pipeTxd[1], &chd, 1);
-                    if (pipRet < 0) {
-                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                        print_f(rs->plogs, "P11", rs->logs);
-                        continue;
-                    }
-                }
-                #endif
-                #endif //#if USB_BOOTUP_SYNC
-                
-                pollcnt ++;
-            } else {
-                pollcnt ++;
             }
             //continue;
         }
