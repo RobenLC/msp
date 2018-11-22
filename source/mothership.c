@@ -39672,6 +39672,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                             //print_f(&mrs->plog, "fs145", mrs->log);
                         }
+                        else if (pllcmd[ins] == 'z') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                            //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            //print_f(&mrs->plog, "fs145", mrs->log);
+                        }
                         else {
                             sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
                             print_f(&mrs->plog, "fs145", mrs->log);
@@ -56681,7 +56686,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                                 else {
                                     /* should't be here */
-                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown state,  puscur != null usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     continue;
                                 }
@@ -56745,7 +56750,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                                 } else {
                                     /* should't be here */
-                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat); 
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown state opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x \n",cmd, opc, dat); 
                                     print_f(rs->plogs, "P11", rs->logs);
                                     continue;
                                 }
@@ -56820,7 +56825,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                                 else {
                                     /* should't be here */
-                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown state here usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     continue;
                                 }
@@ -56971,7 +56976,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 break;
                             }    
                             else {
-                                sprintf_f(rs->logs, "\n[DVF] Error!!! unknown usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
+                                sprintf_f(rs->logs, "\n[DVF] Error!!! unknown state for multiple duplex scan usb opc, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
                                 print_f(rs->plogs, "P11", rs->logs);
                                 continue;
                             }
