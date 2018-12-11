@@ -66,7 +66,8 @@ f099d15b4d"
 #define DBG_DUMP_DAT32  (0)
 #define USB_BOOTUP_SYNC (1)                 // notice this 
 #define USB_ALIVE_POLLING (1)               // notice this 
-#define USB_PC_IDLE_CHK (1)
+#define USB_PC_IDLE_CHK (0)
+#define USB_RECVLEN_ZERO_HANDLER   (0)
 #if 1                                                          // notice this 
 #define WIRELESS_INT           "wlan0"
 #define WIRELESS_INT_WPA  "wlan1"
@@ -40369,7 +40370,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 #endif
 
-#define LOG_P0_EN (0)
+#define LOG_P0_EN (1)
 static int p0(struct mainRes_s *mrs)
 {
 #define PS_NUM 155
@@ -53302,7 +53303,18 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //break;
                 }
                 else if (recvsz == 0) {
+                    #if USB_RECVLEN_ZERO_HANDLER
+                    ring_buf_prod_u(pTx, recvsz);      
+                    usbfolw = ring_buf_prod_tag(pTx, usbrun);
+
+                    #if 1 //DBG_USB_HS
+                    sprintf_f(rs->logs, "usbfolw: %d, usbrun: %d recvsz: %d\n", usbfolw, usbrun, recvsz);
+                    print_f(rs->plogs, sp, rs->logs);
+                    #endif
+                    
+                    #else
                     continue;
+                    #endif
                 }
                 else {
                     /*do nothing*/
@@ -53588,7 +53600,21 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 else if (recvsz == 0) {
                     //sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
+                    #if USB_RECVLEN_ZERO_HANDLER
+                    
+                    ring_buf_prod_u(pTx, recvsz);      
+                    usbfolw = ring_buf_prod_tag(pTx, usbrun);
+
+                    #if 1 //DBG_USB_HS
+                    sprintf_f(rs->logs, "usbfolw: %d, usbrun: %d recvsz: %d\n", usbfolw, usbrun, recvsz);
+                    print_f(rs->plogs, sp, rs->logs);
+                    #endif
+                    
+                    #else
+                    
                     continue;
+                    
+                    #endif
                 }
                 else {
                     /*do nothing*/
@@ -54396,7 +54422,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             //sprintf_f(rs->logs, "[ePol] timeout errno: %d ret: %d\n", errno, uret);
             //print_f(rs->plogs, "P11", rs->logs);
             
-            #if 1
+            #if 1 //
             if (!usbfd) {
                 rs->usbdvid = open(rs->usvdvname, O_RDWR);
                 if (rs->usbdvid <= 0) {
@@ -54449,7 +54475,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                     }
                 }
-            
+
+                #if USB_PC_IDLE_CHK
                 if ((idlcnt > 16) && (!usbfd)) {
                     sprintf_f(rs->logs, "open device[%s] re-launch idlcnt: %d \n", rs->usvdvname, idlcnt);
                     print_f(rs->plogs, "P11", rs->logs);
@@ -54465,6 +54492,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                     idlcnt = 0;            
                 }
+                #endif
             
             }
             #endif
@@ -56075,6 +56103,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     msync((char*)ptmetain, 512, MS_SYNC);
 
                     if ((metaRx->ASP_MAGIC[0] != 0x20) || (metaRx->ASP_MAGIC[1] != 0x14)) {
+                        sprintf_f(rs->logs, "[DV]  Error!!! magic number wrong 0x%.2x 0x%.2x \n", metaRx->ASP_MAGIC[0], metaRx->ASP_MAGIC[1]);
+                        print_f(rs->plogs, "P11", rs->logs);
                         break;
                     }
                     pipRet = aspMetaRelease(msb2lsb(&ptmetain->FUNC_BITS), 0, rs);
