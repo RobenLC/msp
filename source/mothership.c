@@ -66,7 +66,8 @@
 #define USB_BOOTUP_SYNC (1)                 // notice this 
 #define USB_ALIVE_POLLING (1)               // notice this 
 #define USB_PC_IDLE_CHK (0)
-#define USB_RECVLEN_ZERO_HANDLER   (0)
+#define USB_RECVLEN_ZERO_HANDLER   (1)
+
 #if 1                                                          // notice this 
 #define WIRELESS_INT           "wlan0"
 #define WIRELESS_INT_WPA  "wlan1"
@@ -23981,10 +23982,12 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
     sta = pp->urun[idx];
     
     //printf("[R] cons u idx %d:%d content: 0x%.8x \n", idx, nlp, sta);
-    
+
+    #if !USB_RECVLEN_ZERO_HANDLER
     if (!sta) {
         return -2;
     }
+    #endif
 
     rlp = (sta >> 20) & 0xfff;
     if (rlp != nlp) {
@@ -23993,9 +23996,20 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
     }
 
     rsz = sta & 0x1ffff;
+    
+    #if USB_RECVLEN_ZERO_HANDLER
+    
+    if (rsz > pp->chksz) {
+        return -4;
+    }
+    
+    #else
+    
     if ((rsz == 0) || (rsz > pp->chksz)) {
         return -4;
     }
+    
+    #endif
 
     pp->urun[idx] = 0;
     pp->uget[idx] = sta;
@@ -38620,7 +38634,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct shmem_s *ringbf[4];
     char *addrd, *addrs;
     uint32_t *add32d, *add32s;
-    int lens=0, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0, csws=0;
+    int lens=-1, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0, csws=0;
     int totsz[MAX_145_EVENT];
     int cycCnt[MAX_145_EVENT];
     int idxInit[MAX_145_EVENT];
@@ -39721,7 +39735,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         #endif
 
                             lens = ring_buf_cons_u(ringbf[ins], &addrs);                
-                            while (lens <= 0) {
+                            while (lens < 0) {
                                 sprintf_f(mrs->log, "[GW] cons ring buff ret: %d \n", lens);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 usleep(1000);
@@ -39941,7 +39955,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         //sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) \n", ins, infd[ins], matcmd[ins-1], matcmd[ins-1]);
                                         //print_f(&mrs->plog, "fs145", mrs->log);
                                     
-                                        lens = 0;                                    
+                                        lens = -1;                                    
                                     } else {
                                         sprintf_f(mrs->log, "[GW] ring%d meta size: %d \n", ins, lens);
                                         print_f(&mrs->plog, "fs145", mrs->log);
@@ -39952,7 +39966,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 }
                             }
                             
-                            if (!lens) {
+                            if (lens < 0) {
                                 //sprintf_f(mrs->log, "[GW] ring%d handle meta \n", ins);                            
                                 //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if ((lens < USB_BUF_SIZE) && (lasflag)) {
@@ -53195,7 +53209,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             }
             
             while(1) {
-            
+                usbrun = -1;
+                
                 #if 0 /* test drop line */
                 usleep(5);
                 #endif
@@ -53253,6 +53268,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     }
                     else if (recvsz & 0x40000) {
                         recvsz = recvsz  & 0x1ffff;
+                        usbrun = 0;
                     }
                     else if (recvsz & 0x80000) {
                         recvsz = recvsz  & 0x1ffff;
@@ -53303,13 +53319,18 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 else if (recvsz == 0) {
                     #if USB_RECVLEN_ZERO_HANDLER
-                    ring_buf_prod_u(pTx, recvsz);      
-                    usbfolw = ring_buf_prod_tag(pTx, usbrun);
 
-                    #if 1 //DBG_USB_HS
-                    sprintf_f(rs->logs, "usbfolw: %d, usbrun: %d recvsz: %d\n", usbfolw, usbrun, recvsz);
-                    print_f(rs->plogs, sp, rs->logs);
-                    #endif
+                    if (usbrun == 0) {
+                        ring_buf_prod_u(pTx, recvsz);      
+                        usbfolw = ring_buf_prod_tag(pTx, usbrun);
+
+                        #if 1 //DBG_USB_HS
+                        sprintf_f(rs->logs, "usbfolw: %d, usbrun: %d recvsz: %d\n", usbfolw, usbrun, recvsz);
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                    } else {
+                        continue;
+                    }
                     
                     #else
                     continue;
@@ -53345,7 +53366,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 acusz += recvsz;
 
-                if ((recvsz < len) && (usbrun < 0)) {
+                if (((recvsz > 0) && (recvsz < len)) && (usbrun < 0)) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
                     sprintf_f(rs->logs, "loop last ret: %d, the last size: %d \n", ptret, recvsz);
@@ -53509,7 +53530,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             }
             
             while(1) {
-            
+
+                usbrun = -1;
+                
                 #if 0 /* test drop line */
                 usleep(10000);
                 #endif
@@ -53548,6 +53571,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     }
                     else if (recvsz & 0x40000) {
                         recvsz = recvsz  & 0x1ffff;
+                        usbrun = 0;
                     }
                     else if (recvsz & 0x80000) {
                         recvsz = recvsz  & 0x1ffff;
@@ -53601,13 +53625,18 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
                     #if USB_RECVLEN_ZERO_HANDLER
                     
-                    ring_buf_prod_u(pTx, recvsz);      
-                    usbfolw = ring_buf_prod_tag(pTx, usbrun);
+                    if (usbrun == 0) {
+                    
+                        ring_buf_prod_u(pTx, recvsz);      
+                        usbfolw = ring_buf_prod_tag(pTx, usbrun);
 
-                    #if 1 //DBG_USB_HS
-                    sprintf_f(rs->logs, "usbfolw: %d, usbrun: %d recvsz: %d\n", usbfolw, usbrun, recvsz);
-                    print_f(rs->plogs, sp, rs->logs);
-                    #endif
+                        #if 1 //DBG_USB_HS
+                        sprintf_f(rs->logs, "usbfolw: %d, usbrun: %d recvsz: %d\n", usbfolw, usbrun, recvsz);
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                    } else {
+                        continue;
+                    }
                     
                     #else
                     
@@ -53642,7 +53671,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 acusz += recvsz;
 
-                if ((recvsz < len) && (usbrun < 0)) {
+                if (((recvsz > 0) && (recvsz < len)) && (usbrun < 0)) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     ring_buf_set_last(pTx, recvsz);
                     sprintf_f(rs->logs, "loop last ret: %d, the last size: %d \n", ptret, recvsz);
@@ -54070,7 +54099,7 @@ static int p9(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P10_EN (0)
+#define LOG_P10_EN (1)
 static int p10(struct procRes_s *rs)
 {
     int ret=0;
@@ -57935,7 +57964,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         if (uimCylcnt) {
                             lens = 0;
                             lens = ring_buf_cons_u(usbCur, &addrd);                
-                            while (lens <= 0) {
+                            while (lens < 0) {
                                 sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
                                 print_f(rs->plogs, "P11", rs->logs);
 
@@ -58029,7 +58058,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &tstart);
                         //sprintf_f(rs->logs, "[DV] start time %llu ms \n", time_get_ms(&tstart));
                     }    
-
 
                     #if USB_HS_SAVE_RESULT_DV
                     //wrtsz = fwrite(addrd, 1, lens, fsave);
@@ -58368,8 +58396,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             #endif
                         }
-                        
+
+                        #if USB_RECVLEN_ZERO_HANDLER
+                        if (lens == 0) {
+                            sendsz = lens;
+                        } else {
+                            sendsz = write(usbfd, addrd, lens);
+                        }
+                        #else
                         sendsz = write(usbfd, addrd, lens);
+                        #endif
+                        
                     }
                     #endif
                     
