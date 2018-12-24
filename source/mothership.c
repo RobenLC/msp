@@ -66,7 +66,7 @@
 #define USB_BOOTUP_SYNC (1)                 // notice this 
 #define USB_ALIVE_POLLING (1)               // notice this 
 #define USB_PC_IDLE_CHK (0)
-#define USB_RECVLEN_ZERO_HANDLER   (1)
+#define USB_RECVLEN_ZERO_HANDLE   (1)
 
 #if 1                                                          // notice this 
 #define WIRELESS_INT           "wlan0"
@@ -23983,7 +23983,7 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
     
     //printf("[R] cons u idx %d:%d content: 0x%.8x \n", idx, nlp, sta);
 
-    #if !USB_RECVLEN_ZERO_HANDLER
+    #if !USB_RECVLEN_ZERO_HANDLE
     if (!sta) {
         return -2;
     }
@@ -23997,7 +23997,7 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
 
     rsz = sta & 0x1ffff;
     
-    #if USB_RECVLEN_ZERO_HANDLER
+    #if USB_RECVLEN_ZERO_HANDLE
     
     if (rsz > pp->chksz) {
         return -4;
@@ -43984,8 +43984,10 @@ static int p4(struct procRes_s *rs)
                 while (1) {
                     len = ring_buf_cons(rs->pcmdRx, &addr);
 
+                    #if LOG_P4_TX_EN
                     sprintf_f(rs->logs, "get ring buff len: %d \n", len);
                     print_f(rs->plogs, "P4", rs->logs);         
+                    #endif
 
                     if (len >= 0) {
                         pi++;
@@ -51235,8 +51237,10 @@ static int p7(struct procRes_s *rs)
                 while (1) {
                     len = ring_buf_cons(rs->pcmdTx, &addr);
 
+                    #if LOG_P7_TX_EN
                     sprintf_f(rs->logs, "get ring buff len: %d \n", len);
                     print_f(rs->plogs, "P7", rs->logs);         
+                    #endif
 
                     if (len >= 0) {
                         tx++;
@@ -53318,7 +53322,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //break;
                 }
                 else if (recvsz == 0) {
-                    #if USB_RECVLEN_ZERO_HANDLER
+                    #if USB_RECVLEN_ZERO_HANDLE
 
                     if (usbrun == 0) {
                         ring_buf_prod_u(pTx, recvsz);      
@@ -53623,7 +53627,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 else if (recvsz == 0) {
                     //sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
-                    #if USB_RECVLEN_ZERO_HANDLER
+                    #if USB_RECVLEN_ZERO_HANDLE
                     
                     if (usbrun == 0) {
                     
@@ -54099,7 +54103,7 @@ static int p9(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P10_EN (1)
+#define LOG_P10_EN (0)
 static int p10(struct procRes_s *rs)
 {
     int ret=0;
@@ -54270,7 +54274,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
         eventRx.data.fd = usbfd;
         eventRx.events = EPOLLIN | EPOLLLT;
-        //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
         ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
         if (ret == -1) {
             perror ("epoll_ctl");
@@ -54278,19 +54281,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             print_f(rs->plogs, "P11", rs->logs);
         }
     }
-
-    #if 0
-    eventTx.data.fd = rs->usbdvid;
-    eventTx.events = EPOLLOUT | EPOLLET;
-    ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, rs->usbdvid, &eventTx);
-    if (ret == -1) {
-        perror ("epoll_ctl");
-        sprintf_f(rs->logs, "rs usb spoll set ctl failed errno: %ds\n", errno);
-        print_f(rs->plogs, "P11", rs->logs);
-    }
-    #endif
     
-    #if 1
     evtrs.data.fd = rs->ppipedn->rt[0];
     evtrs.events = EPOLLIN | EPOLLLT;
     ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, rs->ppipedn->rt[0], &evtrs);
@@ -54317,27 +54308,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         sprintf_f(rs->logs, "rcmd pipe spoll set ctl failed errno: %ds\n", errno);
         print_f(rs->plogs, "P11", rs->logs);
     }
-    #endif
-
-#if 0 /* handle this in command loop */
-    evtpipr.data.fd = pipeRx[0];
-    evtpipr.events = EPOLLIN | EPOLLLT;
-    ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, pipeRx[0], &evtpipr);
-    if (ret == -1) {
-        perror ("epoll_ctl");
-        sprintf_f(rs->logs, "rx pipe epoll set ctl failed errno: %ds\n", errno);
-        print_f(rs->plogs, "P11", rs->logs);
-    }
-
-    evtpiprd.data.fd = pipeRxd[0];
-    evtpiprd.events = EPOLLIN | EPOLLLT;
-    ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, pipeRxd[0], &evtpiprd);
-    if (ret == -1) {
-        perror ("epoll_ctl");
-        sprintf_f(rs->logs, "rxd pipe epoll set ctl failed errno: %ds\n", errno);
-        print_f(rs->plogs, "P11", rs->logs);
-    }
-#endif
 
     ptrecv = malloc(USB_BUF_SIZE);
     if (ptrecv) {
@@ -54489,7 +54459,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             
                             eventRx.data.fd = usbfd;
                             eventRx.events = EPOLLIN | EPOLLLT;
-                            //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
                             ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
                             if (ret == -1) {
                                 perror ("epoll_ctl");
@@ -54590,19 +54559,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             
                             puscur = pushost;                    
                         
-                            #if 0
-                            sprintf(msgcmd, "usbscan");
-                        
-                        
-                            chq = 'n';
-                            pipRet = write(pipeTx[1], &chq, 1);
-                            if (pipRet < 0) {
-                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                print_f(rs->plogs, "P11", rs->logs);
-                                continue;
-                            }
-                            
-                            #else
                             if (strcmp(msgcmd, "usbscan") != 0) {
                                 sprintf(msgcmd, "usbscan");
                                 rs_ipc_put(rcmd, msgcmd, 7);
@@ -54614,7 +54570,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     continue;
                                 }
                             }      
-                            #endif
                         
                             chq = 'i';
                             if (usbid01) {
@@ -54681,8 +54636,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         memset(msgret, 0, 64);
                         ret = rs_ipc_get_ms(rcmd, msgret, 64, 0);
                     }
-                    //break;
-                    //continue;
                 } 
                 else if (getevents[ix].data.fd == rs->ppipedn->rt[0]) {
 
@@ -54793,9 +54746,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             break;
                         }
 
-                        #if 1
                         dbgMeta(msb2lsb(&metaRx->FUNC_BITS), metaRx);
-                        #endif
                         
                         #if 1
                         sprintf(msgcmd, "usbscan");
@@ -55022,18 +54973,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 continue;
                             }
                         }
-
-                        #if 0
-                        if (usbid02) {
-                            chd = 'm';
-                            pipRet = write(pipeTxd[1], &chd, 1);
-                            if (pipRet < 0) {
-                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                print_f(rs->plogs, "P11", rs->logs);
-                                continue;
-                            }
-                        }
-                        #endif
 
                         if (usbid01) {
                         while(1) {
@@ -57563,7 +57502,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
                                             mindexfo[1] = (chr & 0x3f) | 0x40;
 
-                                            //pipRet = write(piptx[1], &chr, 1);
                                             pipRet = write(piptx[1], mindexfo, 2);
                                             if (pipRet < 0) {
                                                 sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
@@ -58084,11 +58022,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
                                 
                                 sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!ret: %d size: %d\n", act, lens); 
-                                print_f(rs->plogs, "P11", rs->logs);       
+                                print_f(rs->plogs, "P11", rs->logs);
                                 shmem_dump(addrd, lens);
 
                                 sprintf_f(rs->logs, "metamass gap:%d, start:%d, record:%d, used:%d\n", pmass->massGap, pmass->massStart, pmass->massRecd, pmass->massUsed); 
-                                print_f(rs->plogs, "P11", rs->logs);  
+                                print_f(rs->plogs, "P11", rs->logs);
 
                                 #if 1 /* bypass the error for impl */
                                 lsb2Msb(&ptmetain->FUNC_BITS, (ASPMETA_FUNC_CROP | ASPMETA_FUNC_IMGLEN));
@@ -58113,7 +58051,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             else {
                                 sprintf_f(rs->logs, "release extra meta data act: %d\n", act); 
-                                print_f(rs->plogs, "P11", rs->logs);   
+                                print_f(rs->plogs, "P11", rs->logs);
                                 
                                 /* mechanism to stop scan */
                                 val = cswerr;
@@ -58129,14 +58067,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 err = cfgTableGet(pct, ASPOP_IMG_LEN, &val);
                                 sprintf_f(rs->logs, "usb meta get img len: %d err: %d, cswerr: 0x%.2x\n", val, err, cswerr); 
-                                print_f(rs->plogs, "P11", rs->logs);                     
+                                print_f(rs->plogs, "P11", rs->logs);
                                 
                                 cfgTableGet(pct, ASPOP_XCROP_LINREC, &val);
                                 sprintf_f(rs->logs, "Yline_recorder: %d!!\n", val); 
-                                print_f(rs->plogs, "P11", rs->logs);  
+                                print_f(rs->plogs, "P11", rs->logs);
 
                                 sprintf_f(rs->logs, "act: %d, metamass gap:%d, start:%d, record:%d, used:%d\n", act, pmass->massGap, pmass->massStart, pmass->massRecd, pmass->massUsed); 
-                                print_f(rs->plogs, "P11", rs->logs);  
+                                print_f(rs->plogs, "P11", rs->logs);
                             }
 
                             puscur->pushrmcnt += 1;
@@ -58397,7 +58335,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             #endif
                         }
 
-                        #if USB_RECVLEN_ZERO_HANDLER
+                        #if USB_RECVLEN_ZERO_HANDLE
                         if (lens == 0) {
                             sendsz = lens;
                         } else {
@@ -58417,7 +58355,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         #endif
 
-                        #if 0
+                        #if 1 /* break and let others has cpu time */
                         usbentsTx = 0;
                         break;
                         #else
