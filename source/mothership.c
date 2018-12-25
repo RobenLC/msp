@@ -38675,43 +38675,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     int ix=0, iv=0;
     char *taddr=0;
-    
-    #if 0
-    for (iv = 0; iv < 4; iv++) {
-        ix = 0;
-        sprintf_f(mrs->log, "\n[GW] ring %d buff test: \n%d: ", iv, ix);
-        print_f(&mrs->plog, "fs145", mrs->log);
-        
-        ptret = 0; 
-        //ring_buf_init(ringbf[iv]);
-        while(1) {
-            ptret = ring_buf_get(ringbf[iv], &taddr);
-            
-            printf("%d. [0x%.8x]=0x%.2x \n", ix, taddr, *taddr);
-            
-            shmem_dump(taddr, 16);
-            ix++;
-
-            ring_buf_prod(ringbf[iv]);
-            
-            if (ptret <= 0) {
-                sprintf_f(mrs->log, "\n");
-                break;
-            }
-
-            if ((ix % 4) == 0) {
-                //printf("\n%d: ", ix);
-            }
-        }
-    }
-    #endif
-
-    #if 0
-    ring_buf_init(ringbf[0]);
-    ring_buf_init(ringbf[1]);
-    ring_buf_init(ringbf[2]);
-    ring_buf_init(ringbf[3]);
-    #endif
 
     ins += 1;
     uphstx = ppup->pushtx;
@@ -39133,14 +39096,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     write(infd[ins], &pllcmd[ins], 1);
                                     sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) no outbf\n", ins, infd[ins], pllcmd[ins], pllcmd[ins]);
                                     print_f(&mrs->plog, "fs145", mrs->log);
-                                    //pubffm = pubffo->ubnxt;                                        
-                                    //pubffh = pubffm;
                                 } else if (mindex == pubffo->ubindex) { 
                                 
-                                    //pllcmd[ins] = pubffo->ubindex & 0x7f;
                                     midxfo[0] = ((pubffo->ubindex >> 6) & 0x3f) | 0x80;
                                     midxfo[1] = (pubffo->ubindex & 0x3f) | 0x40;
-                                    //cycCnt[ins] = 0;
 
                                     if ((pubffo->ubmetasize) && (pubffo->ublastsize)) {
                                         smax = pubffo->ubcylcnt - cycCnt[ins] + 2;
@@ -39172,12 +39131,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             lasflag = 0;
                                         }
                                         lens = lens & 0x1ffff;
-                                        //printf("[GW] get mem buffer len: %d lasflag: 0x%.5x !!  \n", lens, lasflag);
 
                                         tmpbf = outbf->bn;
-
-                                        //sprintf_f(mrs->log, "[GW] addrs: 0x%.8x, tmpbf: 0x%.8x lens: %d tot: %d acu: %d - %d\n", addrs, tmpbf, lens, pubffo->ubcylcnt, cycCnt[ins], scnt);
-                                        //print_f(&mrs->plog, "fs145", mrs->log);
                                         
                                         if ((!tmpbf) && (pubffo->ubmetasize)) {
                                             lens = pubffo->ubmetasize;
@@ -39221,11 +39176,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             
                                         if ((lens < USB_BUF_SIZE) && (lasflag)) {
                                             ret = ring_buf_prod_u(ringbf[ins], lens);
-                                            //sprintf_f(mrs->log, "[GW] prod u ret: %d last\n", ret);
-                                            //print_f(&mrs->plog, "fs145", mrs->log);
                                             ring_buf_set_last(ringbf[ins], lens);
                                             
-                                            //pllcmd[ins] = pllcmd[ins] & 0x7f;
                                             pllcmd[ins] = 0x7f;
                                             cswinf = pubffo->ubcswerr;
                                             
@@ -39235,8 +39187,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             while (headbf) {
                                                 tmpbf = headbf;                                            
                                                 headbf = tmpbf->bn;
-                                                //sprintf_f(mrs->log, "[GW] clean buf addr: 0x%.8x\n", tmpbf);
-                                                //print_f(&mrs->plog, "fs145", mrs->log);
                                                 free(tmpbf->bpt);
                                                 free(tmpbf);
                                             }
@@ -39244,15 +39194,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         
                                             if(pubffh == pubffo) {
                                                 pubffh = pubffo->ubnxt;
-                                                //sprintf_f(mrs->log, "[GW] remove current buf addr: 0x%.8x ,head: 0x%.8x\n", pubffo, pubffh);
-                                                //print_f(&mrs->plog, "fs145", mrs->log);
                                             } else {
                                                 pubffm = pubffh;
                                                 while (pubffm) {
                                                     if (pubffm->ubnxt == pubffo) {
                                                         pubffm->ubnxt = pubffo->ubnxt;
-                                                        //sprintf_f(mrs->log, "[GW] remove current buf addr: 0x%.8x\n", pubffo);
-                                                        //print_f(&mrs->plog, "fs145", mrs->log);
                                                         break;
                                                     }
                                                     pubffm = pubffm->ubnxt;
@@ -39273,12 +39219,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         }
                                         else if (tmpbf) {
                                             ret = ring_buf_prod_u(ringbf[ins], lens);
-                                            //sprintf_f(mrs->log, "[GW] prod u ret: %d\n", ret);
-                                            //print_f(&mrs->plog, "fs145", mrs->log);
-                                            //pubffo->ubbufo= tmpbf;
                                             outbf = tmpbf;
-                                            //sprintf_f(mrs->log, "[GW] prod one trunk next outbf == 0x%.8x\n", outbf);
-                                            //print_f(&mrs->plog, "fs145", mrs->log);
                                         }
                                         else {
                                             //pllcmd[ins] = 0x80;                                    
@@ -39338,18 +39279,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         minfo[9] = (char)(pageidx | 0x80); // 7  // 8
                                         
                                         write(infd[ins], &minfo, 10);
-                                        //sprintf_f(mrs->log, "[GW] in%d id:%d put minfo: 0x%.2x + %d + %c(0x%.2x) + %d\n", ins, infd[ins], minfo[0], minfo[1], minfo[2], minfo[2], lastlen);            
-                                        //print_f(&mrs->plog, "fs145", mrs->log);
                                     }
                                     else {
-                                        //write(infd[ins], &pllcmd[ins], 1);
                                         write(infd[ins], midxfo, 2);
-                                        //sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);            
-                                        //print_f(&mrs->plog, "fs145", mrs->log);
                                     }
                                 }      
                                 else {                                   
-                                    //write(infd[ins], &pllcmd[ins], 1);
                                     sprintf_f(mrs->log, "[GW] WARNNING!!! in%d id:%d cur index: %d get index: %d NOT handle buffer\n", ins, infd[ins], pubffo->ubindex, mindex);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 }
@@ -39361,14 +39296,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             matcmd[ins] = 'h';
                             matcmd[ins+1] = 'h';
                             write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else if (pllcmd[ins] == 's') {
                             if (ins == 2) {
-                                //write(outfd[ins], &pllcmd[ins], 1);
-                                //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);                                
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                                 latcmd[ins] = 's';
                                 latcmd[ins+1] = 's';
                                 matcmd[ins] = 'h';
@@ -39389,8 +39319,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 print_f(&mrs->plog, "fs145", mrs->log);
 
                                 write(outfd[ins], &latcmd[ins], 1);
-                                //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], latcmd[ins], latcmd[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if (latcmd[ins] == 'R') {
                                 sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c waiting \n", ins, latcmd[ins], pllcmd[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
@@ -39428,8 +39356,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 print_f(&mrs->plog, "fs145", mrs->log);
 
                                 write(outfd[ins], &latcmd[ins], 1);
-                                //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], latcmd[ins], latcmd[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if (latcmd[ins] == 'R') {
                                 sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c waiting \n", ins, latcmd[ins], pllcmd[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
@@ -39447,39 +39373,25 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         }
                         else if ((pllcmd[ins] == 'p') || (pllcmd[ins] == 'r') || (pllcmd[ins] == 'a') || (pllcmd[ins] == 'k')) {
                             if ((latcmd[ins] == 'q') || (latcmd[ins] == 'c')) {
-                                //sprintf_f(mrs->log, "[GW] already trigger multiple scan latcmd[%d]:%c pllcmd:%c \n", ins, latcmd[ins], pllcmd[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if ((latcmd[ins] == 'e') || (latcmd[ins] == 'R')) {
-                                //sprintf_f(mrs->log, "[GW] already stop multiple scan latcmd[%d]:%c pllcmd:%c\n", ins, latcmd[ins], pllcmd[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if (pllcmd[ins] == 'a') {
                                 write(outfd[ins], &pllcmd[ins], 1);
-                                //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if (pllcmd[ins] == 'k') {
                                 write(outfd[ins], &pllcmd[ins], 1);
-                                //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if (latcmd[ins] == 0) {
                                 sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 if (ins == 2) {
                                     write(outfd[ins], &pllcmd[ins], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
                                 }
                                 
                                 totsz[ins] =0;
                                 totsz[ins+1] = 0;
-                                //ring_buf_init(ringbf[ins]);
-                                //ring_buf_init(ringbf[ins+1]);
                             } else if (latcmd[ins] == 's') {
                                 sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 if (ins == 2) {
                                     write(outfd[ins], &pllcmd[ins], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
                                 }
                             }
                             else {
@@ -39500,8 +39412,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         
                             write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
 
                             latcmd[0] = 0;
                             latcmd[1] = 0;
@@ -39560,35 +39470,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 pubffh = 0;
                             }
                             
-                            #if 0
-                            for (iv = ins; iv < (ins+1); iv++) {
-                                ix = 0;
-                                sprintf_f(mrs->log, "[GW] m cmd ring %d buff test: \n%d: ", iv, ix);
-                                print_f(&mrs->plog, "fs145", mrs->log);
-                                ptret = 0; 
-                                ring_buf_init(ringbf[iv]);
-                                while(1) {
-                                    ptret = ring_buf_get(ringbf[iv], &taddr);
-                                    sprintf_f(mrs->log, "[0x%.8x]=0x%.2x ", taddr, *taddr);
-                                    print_f(&mrs->plog, "fs145", mrs->log);
-                                    ix++;
-                            
-                                    ring_buf_prod(ringbf[iv]);
-                                    
-                                    if (ptret <= 0) {
-                                        sprintf_f(mrs->log, "\n");
-                                        print_f(&mrs->plog, "fs145", mrs->log);
-                                        break;
-                                    }
-                            
-                                    if ((ix % 4) == 0) {
-                                        sprintf_f(mrs->log, "\n%d: ", ix);
-                                        print_f(&mrs->plog, "fs145", mrs->log);
-                                    }
-                                }
-                            }
-                            #endif
-                            
                             totsz[ins] =0;
                             totsz[ins+1] = 0;
                             ring_buf_init(ringbf[ins]);
@@ -39596,61 +39477,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         }
                         else if (pllcmd[ins] == 'b') {
                             write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
-                            
-                            #if 0
-                            latcmd[ins] = pllcmd[ins];
-                            latcmd[ins+1] = pllcmd[ins];
-
-                            matcmd[0] = 0;
-                            matcmd[1] = 0;
-                            matcmd[2] = 0;
-                            matcmd[3] = 0;
-
-                            pubffcd[0] = 0;
-                            pubffcd[1] = 0;
-                            pubffcd[2] = 0;
-                            pubffcd[3] = 0;
-
-                            idxInit[0] = 1;
-                            idxInit[1] = 1;
-                            idxInit[2] = 2;
-                            idxInit[3] = 2;
-
-                            if (pubffh) {
-                                memsz = 0;
-                                pageidx = 0;
-                                
-                                pubffm = pubffh;
-                                while (pubffm) {
-                                    pageidx += 1;
-
-                                    headbf = pubffm->ubbufh;
-                                    while (headbf) {
-                                        memsz += USB_BUF_SIZE;
-                                        tmpbf = headbf;                                            
-                                        headbf = tmpbf->bn;
-                                        //sprintf_f(mrs->log, "[GW] clean mem addr: 0x%.8x\n", tmpbf);
-                                        //print_f(&mrs->plog, "fs145", mrs->log);
-                                        free(tmpbf);
-                                    }
-                                    
-                                    tmpbf = 0;
-                                            
-                                    sprintf_f(mrs->log, "[GW] clean memory used: %d - %d idx: 0x%.2x \n", memsz, pageidx, pubffm->ubindex);
-                                    print_f(&mrs->plog, "fs145", mrs->log);
-
-                                    pubfft = pubffm;
-                                    pubffm = pubfft->ubnxt;
-
-                                    free(pubfft);
-                                }
-
-                                pubffh = 0;
-                            }
-                            #endif
-                            
                         }
                         else if (pllcmd[ins] == 'x') {
                             sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
@@ -39674,23 +39500,15 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         }
                         else if (pllcmd[ins] == 'i') {
                             write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else if (pllcmd[ins] == 'w') {
                             write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else if (pllcmd[ins] == 'y') {
                             write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else if (pllcmd[ins] == 'z') {
                             write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] id%d pipe%d put chr: %c(0x%.2x) \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else {
                             sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
@@ -39701,38 +39519,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                     case 1:
                     case 3:
                     
-                        #if 0
-                        if (latcmd[ins] == 'b') {
-                            if (pllcmd[ins] == 'B') {
-                                write(outfd[ins], &pllcmd[ins], 1);
-                                //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) - stop of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
-                            } 
-                            else if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
-                                lens = ring_buf_cons_u(ringbf[ins], &addrs);                
-                                while (lens <= 0) {
-                                    sprintf_f(mrs->log, "[DV] psudo cons ring buff ret: %d \n", lens);
-                                    print_f(&mrs->plog, "fs145", mrs->log);
-                                    usleep(1000);
-                                    lens = ring_buf_cons_u(ringbf[ins], &addrs);
-                                }
-
-                                #if DBG_USB_GATE
-                                sprintf_f(mrs->log, "[GW] psudo cons u len: %d - b\n", lens);
-                                print_f(&mrs->plog, "fs145", mrs->log);
-                                #endif
-                            }
-                            else {    
-                                //write(outfd[ins], &pllcmd[ins], 1);
-                                //sprintf_f(mrs->log, "[GW] id:%d no handle chr: %c(0x%.2x) - stop of transmission !!! \n", ins, pllcmd[ins], pllcmd[ins]);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
-                            }
-                            break;
-                        }
-                        else if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
-                        #else
                         if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
-                        #endif
 
                             lens = ring_buf_cons_u(ringbf[ins], &addrs);                
                             while (lens < 0) {
@@ -39748,8 +39535,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 lasflag = 0;
                             }
                             lens = lens & 0x1ffff;
-                            
-                            //printf("[GW] get ring buffer len: %d lasflag: 0x%.5x !!  \n", lens, lasflag);
 
                             #if DBG_USB_GATE
                             sprintf_f(mrs->log, "[GW] cons u len: %d \n", lens);
@@ -39758,22 +39543,16 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                             memallocsz += 1;
 
-                            //sprintf_f(mrs->log, "[GW] memallocsz : %d ch%d \n", memallocsz, ins);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
-
                             if (!pubffh) {
                                 pubffh = malloc(sizeof(struct usbBuffLink_s));
-                                //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 1);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                                 
                                 if (pubffh) {
-                                    //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 2);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     memset(pubffh, 0, sizeof(struct usbBuffLink_s));
                                     
                                     pubffh->ubindex = idxInit[ins];
 
-                                    if ((latcmd[ins] == 'q') || (latcmd[ins] == 'Q')) { 
+                                    if ((latcmd[ins] == 'q') || (latcmd[ins] == 'Q')) {
                                         idxInit[ins] += 2;
                                     } else {
                                         idxInit[ins] += 1;
@@ -39782,12 +39561,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     if (!cmdex) {
                                         cmdex = latcmd[ins];
                                     }
-                                    
-                                    /*
-                                    if (idxInit[ins] > 63) {
-                                        idxInit[ins] = idxInit[ins] % 64;
-                                    }
-                                    */
+
                                     sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 1\n", ins, pubffh->ubindex, idxInit[ins], latcmd[ins]);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 } else {
@@ -39795,22 +39569,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 }
 
-                                //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 3);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
-                                
                                 pubffcd[ins] = pubffh;
                             }
 
-                            //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 4);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
-                            
                             if (!pubffh) {
                                 break;
                             }
-
-                            //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 5);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
-
 
                             if (!pubffcd[ins]) {
                             
@@ -39823,8 +39587,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     
                                     break;
                                 }
-                                //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 6);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
 
                                 pubffcd[ins] = malloc(sizeof(struct usbBuffLink_s));
                                 if (pubffcd[ins]) {
@@ -39836,11 +39598,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     } else {
                                         idxInit[ins] += 1;
                                     }
-                                    /*
-                                    if (idxInit[ins] > 63) {
-                                        idxInit[ins] = idxInit[ins] % 64;
-                                    }
-                                    */
+
                                     sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 2\n", ins, pubffcd[ins]->ubindex, idxInit[ins], latcmd[ins]);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                     
@@ -39852,25 +39610,18 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
 
                                     pubffm->ubnxt = pubffcd[ins];
-                                } else {
+                                }
+                                else {
                                     sprintf_f(mrs->log, "[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 }
                             }
 
-                            //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 7);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
-                            
                             if (!pubffcd[ins]) {
                                 break;
                             }
-
-                            //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 8);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                             
                             if (!pubffcd[ins]->ubbufh) {
-                                //sprintf_f(mrs->log, "[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 1);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                                 pubffcd[ins]->ubbufh= malloc(sizeof(struct usbBuff_s));
                                 if (pubffcd[ins]->ubbufh) {
                                     
@@ -39888,15 +39639,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     break;
                                 }
                                 
-                                //sprintf_f(mrs->log, "[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 2);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
-                                
                                 curbf = pubffcd[ins]->ubbufh;
                                 pubffcd[ins]->ubbufc = curbf;
                             }
                             else {
-                                //sprintf_f(mrs->log, "[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 3);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 curbf = pubffcd[ins]->ubbufc;
                                 tmpbf = malloc(sizeof(struct usbBuff_s));
                                 if (tmpbf) {
@@ -39912,12 +39659,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     curbf->bn = tmpbf;
                                     pubffcd[ins]->ubbufc = tmpbf;
                                 }
-                                //sprintf_f(mrs->log, "[GW] h : 0x%.8x c: 0x%.8x ch%d - %d.%d \n", pubffcd[ins]->ubbufh, pubffcd[ins]->ubbufc, ins, 8, 4);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                             }
-
-                            //sprintf_f(mrs->log, "[GW] pubffh : 0x%.8x pubffcd[ins]: 0x%.8x ch%d - %d \n", pubffh, pubffcd[ins], ins, 9);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                             
                             curbf = pubffcd[ins]->ubbufc;
 
@@ -39940,9 +39682,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                             totsz[ins] += lens;
                             
-                            //sprintf_f(mrs->log, "[GW] ring%d trunk size: %d, total:%d pllcmd:%c dist:%d\n", ins, lens, totsz[ins], pllcmd[ins], ring_buf_info_len(ringbf[ins]));
-                            //print_f(&mrs->plog, "fs145", mrs->log);
-                            
                             if (pllcmd[ins] == 'E') {
                                 if ((matcmd[ins] == 'Q') ||(matcmd[ins] == 'D')) {
                                     if (pubffcd[ins]->ublastsize == 0) {
@@ -39951,10 +39690,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         print_f(&mrs->plog, "fs145", mrs->log);
 
                                         write(infd[ins], &matcmd[ins-1], 1);
-                                        
-                                        //sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) \n", ins, infd[ins], matcmd[ins-1], matcmd[ins-1]);
-                                        //print_f(&mrs->plog, "fs145", mrs->log);
-                                    
+                                                                            
                                         lens = -1;                                    
                                     } else {
                                         sprintf_f(mrs->log, "[GW] ring%d meta size: %d \n", ins, lens);
@@ -39967,10 +39703,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                             
                             if (lens < 0) {
-                                //sprintf_f(mrs->log, "[GW] ring%d handle meta \n", ins);                            
-                                //print_f(&mrs->plog, "fs145", mrs->log);
                             } else if ((lens < USB_BUF_SIZE) && (lasflag)) {
-                                //ring_buf_set_last(ringbf[0], lens);
                                 sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
@@ -39981,16 +39714,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     sprintf_f(mrs->log, "\n[GW] WARNNING!!! pubffcd[ins]->ubindex: %d \n", pubffcd[ins]->ubindex);                                
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 }
-                                //pubffcd[ins]->ubcylcnt = 0;
-                                
-                                //pubffcd[ins] = 0; /* move to 'I' handle */
 
                                 totsz[ins] = 0;
                                 
-                                //ring_buf_init(ringbf[ins]);
-
-                                //write(outfd[ins], &pllcmd[ins], 1);
-
                                 curbf->bsz |= lasflag;
 
                                 write(outfd[ins], indexfo, 2);
@@ -40003,17 +39729,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 cycCnt[ins] += 1;                            
                                 pubffcd[ins]->ubcylcnt += 1;
 
-                                //sprintf_f(mrs->log, "[GW] count %d:%d %d\n", cycCnt[ins], pubffcd[ins]->ubcylcnt, CYCLE_LEN);
-                                //print_f(&mrs->plog, "fs145", mrs->log);
-
                                 if ((cycCnt[ins] > CYCLE_LEN) && (pubffcd[ins]->ubcylcnt > CYCLE_LEN)) {
                                     /* send back index */
                                     //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
                                     indexfo[0] = ((pubffcd[ins]->ubindex >> 6) & 0x3f) | 0xc0;
                                     indexfo[1] = (pubffcd[ins]->ubindex & 0x3f) | 0x40;
 
-
-                                    //write(outfd[ins], &pllcmd[ins], 1);
                                     write(outfd[ins], indexfo, 2);
 
                                     #if DBG_USB_GATE
@@ -40024,10 +39745,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     cycCnt[ins] -= CYCLE_LEN;
                                 }
                             }
-
-                            //write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins], evcnt);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else if (pllcmd[ins] == 'S') {
                             if (ins == 3) {
@@ -40035,22 +39752,17 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if (latcmd[ons] == 's') {
                                     chq = 'p';
                                     write(outfd[ons], &chq, 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], chq, chq);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     write(outfd[ons], &latcmd[ons], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], latcmd[ons], latcmd[ons]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 } else if (latcmd[ons] == 'q') {
                                     chq = 'r';
                                     write(outfd[ons], &chq, 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], chq, chq);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     write(outfd[ons], &latcmd[ons], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], latcmd[ons], latcmd[ons]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 } else {
-                                    //sprintf_f(mrs->log, "\n\n[GW] Warnning!!! late command not exist !!! ins:%d ons:%d\n", ins, ons);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     chq = 'r';
                                     write(outfd[ons], &chq, 1);
                                     sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], chq, chq);
@@ -40064,15 +39776,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 ons = 2;
                                 if (latcmd[ons] == 's') {
                                     write(outfd[ons], &latcmd[ons], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], latcmd[ons], latcmd[ons]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 } else if (latcmd[ons] == 'q') {
                                     write(outfd[ons], &latcmd[ons], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], latcmd[ons], latcmd[ons]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 } else {
-                                    //sprintf_f(mrs->log, "\n\n[GW] error!!! late command not exist !!! ins:%d ons:%d\n", ins, ons);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     chq = 'q';
                                     write(outfd[ons], &chq, 1);
                                     sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], chq, chq);
@@ -40081,15 +39790,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         }
                         else if (pllcmd[ins] == 'Q') {
-                            //write(infd[ins], &matcmd[ins-1], 1);
-                            //sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) \n", ins, infd[ins], matcmd[ins-1], matcmd[ins-1]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
+
                             matcmd[ins] = pllcmd[ins];
                         }
                         else if (pllcmd[ins] == 'O') {
-                            //write(infd[ins], &matcmd[ins-1], 1);
-                            //sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) \n", ins, infd[ins], matcmd[ins-1], matcmd[ins-1]);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
+
                             matcmd[ins] = 'o';
                             
                             write(infd[ins], &latcmd[ins], 1);
@@ -40103,11 +39808,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     latcmd[0] = 'q';
                                     latcmd[2] = 'q';
                                     write(outfd[2], &latcmd[2], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", 2, outfd[2], latcmd[2], latcmd[2]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     write(outfd[0], &latcmd[0], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", 0, outfd[0], latcmd[0], latcmd[0]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 }
                                 else if (latcmd[0] == 'R') {
                                     latcmd[3] = 's';
@@ -40123,11 +39826,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     latcmd[0] = 'q';
                                     latcmd[2] = 'q';
                                     write(outfd[2], &latcmd[2], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", 2, outfd[2], latcmd[2], latcmd[2]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     write(outfd[0], &latcmd[0], 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", 0, outfd[0], latcmd[0], latcmd[0]);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 }
                                 else if (latcmd[2] == 'R') {
                                     latcmd[1] = 's';
@@ -40147,11 +39848,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     latcmd[2] = 'e';
                                     chq = 'g';
                                     write(outfd[0], &chq, 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", 0, outfd[0], chq, chq);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     write(outfd[2], &chq, 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", 2, outfd[2], chq, chq);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 }
                                 else if (latcmd[0] == 'Q') {
                                     latcmd[1] = 's';
@@ -40168,11 +39867,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     latcmd[2] = 'e';
                                     chq = 'g';
                                     write(outfd[0], &chq, 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", 0, outfd[0], chq, chq);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                     write(outfd[2], &chq, 1);
-                                    //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", 2, outfd[2], chq, chq);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
+
                                 }
                                 else if (latcmd[2] == 'Q') {
                                     latcmd[3] = 's';
@@ -40192,8 +39889,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else if (pllcmd[ins] == 'B') {
-                            //write(outfd[ins], &pllcmd[ins], 1);
-                            //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) - stall of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                             sprintf_f(mrs->log, "[GW] id:%d conti read stop !!!\n", ins);
                             print_f(&mrs->plog, "fs145", mrs->log);
                         }
@@ -40205,18 +39900,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 gerr = read(pllfd[ins].fd, &cswinf, 1);
                             }
                             
-                            //write(outfd[ins], &pllcmd[ins], 1);
-                            //write(outfd[ins], &cswinf, 1);
-                            //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) - stall of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            
                             sprintf_f(mrs->log, "[GW] id:%d conti read get csw status: %c + 0x%.2x !!!\n", ins, pllcmd[ins], cswinf);
                             print_f(&mrs->plog, "fs145", mrs->log);
 
                             if (pubffcd[ins]) {
                                 if (pubffcd[ins]->ubcswerr == 0) {
                                     pubffcd[ins]->ubcswerr = cswinf;
-                                    //sprintf_f(mrs->log, "[GW] id:%d conti read set error status 0x%.2x, contenter id: %d \n", ins, cswinf, pubffcd[ins]->ubindex);
-                                    //print_f(&mrs->plog, "fs145", mrs->log);
 
                                     pubffcd[ins] = 0;
                                 } else {
@@ -40237,15 +39926,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 gerr = read(pllfd[ins].fd, &pllinf, 1);
                             }
 
-                            //sprintf_f(mrs->log, "[GW] id:%d get poll status: 0x%.2x !!!\n", ins, pllinf);
-                            //print_f(&mrs->plog, "fs145", mrs->log);
-
                             pollfo[0] = 'J';
                             pollfo[1] = pllinf;
                             write(outfd[ins], pollfo, 2);
                             
-                            //sprintf_f(mrs->log, "[GW] id:%d out%d put info: %c + 0x%.2x \n", ins, outfd[ins], pollfo[0], pollfo[1]);  
-                            //print_f(&mrs->plog, "fs145", mrs->log);
                         }
                         else {
                             sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
@@ -52814,7 +52498,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         print_f(rs->plogs, sp, rs->logs);
         #endif
 
-        if (cmdchr == 0x01) { 
+        if (cmdchr == 0x01) {
             pmeta = &meta;
             ptm = (char *)pmeta;
             
@@ -52844,7 +52528,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 err = close(usbid);
                 sprintf_f(rs->logs, "close usb errno:%d ret: %d \n", errno, err);
                 print_f(rs->plogs, sp, rs->logs);
-
 
                 usbid = open(puhsinfo->ushostname, O_RDWR);
                 
@@ -54127,7 +53810,7 @@ static int p10(struct procRes_s *rs)
 
 #define LOG_FLASH  (0)
 #define LOG_P11_EN (0)
-#define DBG_27_EPOL (0)
+#define DBG_27_EPOL (1)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
@@ -54223,8 +53906,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     iubs = &rs->pmch->ubs;
     vubsBuff = &rs->pmch->mshmem[32];
     iubsBuff = rs->pmch->mshmem;
-    //lenflh = msb2lsb(&ucbwpram->pramDataLength);
-    //vcswBuff = vubsBuff + lenflh;
     vcswBuff = vubsBuff + 16384;
     ucbwopc = (struct usbCBWopc_s *)iubsBuff;
     ucbwpram = (struct usbCBWpram_s *)iubsBuff;
@@ -54330,86 +54011,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     cntTx = 0;
     ifx = 0;
     while (1) {
-    
-        #if 0
-        memset(msgret, 0, 64);
-        ret = rs_ipc_get_ms(rcmd, msgret, 64, 100);
-        while (ret > 0) {
-            sprintf_f(rs->logs, "get cmd retrun msg: %s ret: %d\n", msgret, ret);
-            print_f(rs->plogs, "P11", rs->logs);
-            
-            memset(msgret, 0, 64);
-            ret = rs_ipc_get_ms(rcmd, msgret, 64, 100);
-        }
 
-        if (ret < 0) {
-            sprintf_f(rs->logs, "get cmd retrun ret: %d\n", ret);
-            print_f(rs->plogs, "P11", rs->logs);
-        }
-        #endif
-
-        #if 0
-        if (!usbfd) {
-            rs->usbdvid = open(rs->usvdvname, O_RDWR);
-            if (rs->usbdvid <= 0) {
-                printf("can't open device[%s]!!\n", rs->usvdvname); 
-                close(rs->usbdvid);
-                rs->usbdvid = 0;
-                idlcnt ++;
-            }
-            else {
-                //printf("open device[%s]\n", rs->usvdvname); 
-            }
-
-            if (rs->usbdvid) {
-                usb_nonblock_set(rs->usbdvid);
-                recvsz = read(rs->usbdvid, ptrecv, 31);
-                if (recvsz < 0) {
-                    close(rs->usbdvid);
-                    rs->usbdvid = 0;
-                    //printf("close device[%s]\n", rs->usvdvname); 
-                    idlcnt ++;
-                } else {
-                    if (recvsz == 31) {
-                        usbfd = rs->usbdvid;
-                        fsrcv = recvsz;
-                        usbentsRx = 1;
-                        usbentsTx = 1;
-
-                        usb_nonblock_set(usbfd);
-
-                        eventRx.data.fd = usbfd;
-                        eventRx.events = EPOLLIN | EPOLLLT;
-                        //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
-                        ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
-                        if (ret == -1) {
-                            perror ("epoll_ctl");
-                            sprintf_f(rs->logs, "rs usb spoll set ctl failed errno: %ds\n", errno);
-                            print_f(rs->plogs, "P11", rs->logs);
-                        }
-                    } else {
-                        close(rs->usbdvid);
-                        rs->usbdvid = 0;
-                        printf("close device[%s] recvsz: %d\n", rs->usvdvname, recvsz); 
-                    }
-                }
-            }
-
-            if ((idlcnt > 150) && (!usbfd)) {
-                sprintf(syscmd11, "/root/module/gadgetRemove.sh");
-                ret = doSystemCmd(syscmd11);
-                if (!ret) {
-                    sprintf(syscmd11, "/root/module/gadgetLaunch.sh");
-                    ret = doSystemCmd(syscmd11);
-
-                    usleep(2000000);
-                }
-                
-                idlcnt = 0;            
-            }
-
-        }
-        #endif
         rxfd = 0;
         uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 500);
         if (uret < 0) {
@@ -54417,10 +54019,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             sprintf_f(rs->logs, "[ePol] failed errno: %d ret: %d\n", errno, uret);
             print_f(rs->plogs, "P11", rs->logs);
         } else if (uret == 0) {
-            //sprintf_f(rs->logs, "[ePol] timeout errno: %d ret: %d\n", errno, uret);
-            //print_f(rs->plogs, "P11", rs->logs);
             
-            #if 1 //
+            #if 1
             if (!usbfd) {
                 rs->usbdvid = open(rs->usvdvname, O_RDWR);
                 if (rs->usbdvid <= 0) {
@@ -54604,8 +54204,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             //continue;
         }
         else {
-            //sprintf_f(rs->logs, "[ePol] ret: %d\n", uret);
-            //print_f(rs->plogs, "P11", rs->logs);
 
             rxfd = 0;
             for (ix = 0; ix < uret; ix++) {
@@ -56383,8 +55981,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                 }
                                 
-                                //ring_buf_init(pushostd->pushring);
-                                //ring_buf_init(pushost->pgatring);
                                 while (1) {
                                     chd = 0;
                                     pipRet = read(pipeRxd[0], &chd, 1);
@@ -56401,9 +55997,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                                 
                                 if ((opc == 0x4c) && (dat == 0x01)) {     
-
-                                    //sprintf(msgcmd, "usbscan");
-                                    //rs_ipc_put(rcmd, msgcmd, 7);
 
                                     #if 1
                                     if (strcmp(msgcmd, "usbscan") == 0) {
@@ -56476,7 +56069,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         continue;
                                     }
                                     
-                                    //continue;
                                     break;
                                 }
                                 else if ((opc == 0x09) && (dat == 0x85)) {
@@ -56512,8 +56104,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         print_f(rs->plogs, "P11", rs->logs);
                                         continue;
                                     }
-                                    
-                                    //continue;
                                     
                                     break;
                                 }
@@ -56980,7 +56570,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     }
                                     
-                                } else {
+                                }
+                                else {
                                     sprintf_f(rs->logs, "\n[DVF] Error!!! unknown puscur 0x%.8x \n", puscur);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     /* should't be here */
@@ -57108,8 +56699,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             piptx = puscur->pushtx;
                             piprx = puscur->pushrx; 
-
-                            //break;
                                     
                             opc = 0xff;
                             dat = 0;
@@ -57210,7 +56799,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 #endif
 
                 while (1) {       
-                    #if DBG_27_DV
+                    #if 0//DBG_27_DV
                     sprintf_f(rs->logs, "[DV] addrd: 0x%.8x cylcnt: %d:%d pipe%d\n", addrd, uimCylcnt, datCylcnt, piprx[0]);
                     print_f(rs->plogs, "P11", rs->logs);
                     #endif
@@ -57223,7 +56812,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
 
                             if (endf) {
-                                //sprintf_f(rs->logs, "[DV] conti stop endf: (%s) seqtx:%d puimCnTH: 0x%.8x \n", endf, seqtx, puimCnTH);
                                 if (!puimCnTH) {
                                     if (endm) {
                                         addrd = endm;
@@ -57249,14 +56837,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             ptfdc[0].events = POLLIN;
                             
                             chq = 0;
-                            //pipRet = read(piprx[0], &chq, 1);
+
                             pipRet = poll(ptfdc, 1, 100);
                             if (pipRet <= 0) {
-                                //sprintf_f(rs->logs, "[DV] get pipe(%d) ret: %d timeout - 1\n", piprx[0], pipRet);
-                                //print_f(rs->plogs, "P11", rs->logs);
-                                //usleep(100000);
-                                //continue;
-                                //break;
                                 if (puimGet) {
                                     if ((puimGet->uimCount == 0) && ((opc == 0x0a) || (opc == 0x05))) {
                                         clock_gettime(CLOCK_REALTIME, &tidleE);
@@ -57333,10 +56916,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             waitCylen = ix;
                                             sprintf_f(rs->logs, "[DV] wait page size: %d timeout\n", waitCylen);
                                             print_f(rs->plogs, "P11", rs->logs);
-                                            //sprintf_f(rs->logs, "[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
 
                                             chr = 0;
-                                            //puimGet = 0;
 
                                             if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
                                                 if ((puimGet->uimIdex % 2) == 1) {
@@ -57368,16 +56949,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 print_f(rs->plogs, "P11", rs->logs);
                                 #endif
                             }
-
-                            //continue;
                             
                             if (chq == 0xff) {
                                 if (chr) {
-                                    //chr = (puimCnTH->uimIdex & 0x7f) | 0x80;
+                                
                                     mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
                                     mindexfo[1] = (chr & 0x3f) | 0x40;
                                         
-                                    //pipRet = write(piptx[1], &chr, 1);
                                     pipRet = write(piptx[1], mindexfo, 2);
                                     if (pipRet < 0) {
                                         sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d act 0x80\n", piptx[1], chr, pipRet);
@@ -57410,6 +56988,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                     #endif                                                
                                 }
+                                
                                 #if 0
                                 else {
                                     addrd = endf;
@@ -57424,7 +57003,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 while (pipRet < 0) {
                                     pipRet = read(piprx[0], &chq, 1);
                                 }
-                                //sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x pipe%d -2 \n", chq, chr, piprx[0]);
 
                                 if ((chq & 0xc0) == 0x40) {
                                     cindexfo[1] = chq;
@@ -57445,7 +57023,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     memset(puimCnTH, 0, sizeof(struct usbIndex_s));
 
-                                    //puimCnTH->uimIdex = chq & 0x7f;
                                     puimCnTH->uimIdex = cindex;
                                     puimGet = puimCnTH;
                                         
@@ -57454,7 +57031,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
                                         mindexfo[1] = (chr & 0x3f) | 0x40;
 
-                                        //pipRet = write(piptx[1], &chr, 1);
                                         pipRet = write(piptx[1], mindexfo, 2);
                                         if (pipRet < 0) {
                                             sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
@@ -57468,7 +57044,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
                                         mindexfo[1] = (chr & 0x3f) | 0x40;
 
-                                        //pipRet = write(piptx[1], &chr, 1);
                                         pipRet = write(piptx[1], mindexfo, 2);
                                         if (pipRet < 0) {
                                             sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
@@ -57493,7 +57068,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }                             
                                 }
                                 #endif
-                                //sprintf_f(rs->logs, "[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 0\n", puimCnTH, puimCur, puimGet, chr);
 
                                 if (puimGet) {
                                     if (!chr) {
@@ -57573,12 +57147,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                 }
                                 
-                                //sprintf_f(rs->logs, "[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 1\n", puimCnTH, puimCur, puimGet, chr);
                                 if (puimCur) {
-                                    //sprintf_f(rs->logs, "[DV] puimCur index: %d - %d:%d \n", puimCur->uimIdex, puimCur->uimGetCnt, puimCur->uimCount);
                                     if (puimCur->uimIdex == cindex) {
                                         puimCur->uimCount += 1;
-                                    } else {
+                                    }
+                                    else {
                                         sprintf_f(rs->logs, "\n[DV] current puim index not mach %d:%d \n\n", puimCur->uimIdex, cindex);
                                         print_f(rs->plogs, "P11", rs->logs);
 
@@ -57645,18 +57218,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             puimCur = puimTmp;
                                         }
                                     }
-                                }
-                                    
-                                //sprintf_f(rs->logs, "[DV] puimCnTH: 0x%.8x:0x%.8x:0x%.8x chr: 0x%.2x - 2\n", puimCnTH, puimCur, puimGet, chr);
-                                    
+                                }  
                             }
                             else if ((chq & 0xc0) == 0x80) {
-                                //sprintf_f(rs->logs, "[DV] get ring buff response !!! chq: %c(0x%.2x) \n", chq, chq);
-                                
                                 if (!puimGet) {
                                     sprintf_f(rs->logs, "\n[DV] Error!!! puimCur is null \n");
                                     print_f(rs->plogs, "P11", rs->logs);
-                                } else {
+                                }
+                                else {
 
                                     if (!chr) {
                                         //sprintf_f(rs->logs, "\n[DV] Warnning !!! chr == 0 not make sense !!!\n");
@@ -57668,8 +57237,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     while (pipRet < 0) {
                                         pipRet = read(piprx[0], &chq, 1);
                                     }
-
-                                    //sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x pipe%d -3 \n", chq, chr, piprx[0]);
                                     
                                     if ((chq & 0xc0) == 0x40) {
                                         cindexfo[1] = chq;
@@ -57683,8 +57250,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     if (puimGet->uimIdex == cindex) {
                                         puimGet->uimGetCnt += 1;
-
-                                        //sprintf_f(rs->logs, "[DV] current count: %d:%d \n", puimGet->uimGetCnt, puimGet->uimCount);
                                         
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
                                             chr = puimGet->uimIdex;
@@ -57692,7 +57257,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
                                             mindexfo[1] = (chr & 0x3f) | 0x40;
 
-                                            //pipRet = write(piptx[1], &chr, 1);
                                             pipRet = write(piptx[1], mindexfo, 2);
                                             if (pipRet < 0) {
                                                 sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
@@ -57700,8 +57264,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 continue;
                                             }
                                         } else {
-                                            //sprintf_f(rs->logs, "[DV] %d:%d wait for new data \n", puimGet->uimGetCnt, puimGet->uimCount);
-                                            //print_f(rs->plogs, "P11", rs->logs);
                                             chr = 0;
                                         }
 
@@ -57718,7 +57280,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             else {
                                 if (chq == 0x7f) {
                                     puimGet->uimGetCnt += 1;
-                                    //chq = 'E';
 
                                     memset(cinfo, 0, 12);
                                     pipRet = read(piprx[0], cinfo, 9);
@@ -57736,8 +57297,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     lastCylen  = lastCylen << 8;
                                     lastCylen |= cinfo[3];
-
-                                    //sprintf_f(rs->logs, "[DV] 0x%.2x:0x%.2x:0x%.2x:0x%.2x = lastlen: %d\n", cinfo[2], cinfo[3], cinfo[4], cinfo[5], lastCylen);
                                     
                                     uimCylcnt = (cinfo[0] & 0x7f) | ((cinfo[1] & 0x7f) << 7);
                                     
@@ -57758,7 +57317,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
                                     print_f(rs->plogs, "P11", rs->logs);
-                                    //sprintf_f(rs->logs, "[DV] get info %d:%d \n", puimGet->uimGetCnt, puimGet->uimCount);
 
                                     if (puimCur == puimGet) {
                                         puimCur = 0;
@@ -57769,33 +57327,23 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     if (puimCnTH == puimGet) {
                                         puimCnTH = puimGet->uimNxt;
                                         
-                                        //sprintf_f(rs->logs, "[DV] find next puim on head \n");                                                
-                                        //sprintf_f(rs->logs, "[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                        
                                         ix=0;
                                         puimTmp = puimCnTH;
                                         while (puimTmp) {
                                             puimUse = puimTmp;
-                                            //sprintf_f(rs->logs, "[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
                                             if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
                                                 puimNxt = puimUse;
-                                                //sprintf_f(rs->logs, "[DV] match   !!!!\n");
                                             }
                                             puimTmp = puimUse->uimNxt;
                                             ix++;
                                         }
                                     } else {
-                                        //sprintf_f(rs->logs, "[DV] find next puim on the middle \n");                                                
-                                        //sprintf_f(rs->logs, "[DV] %d %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-
                                         ix=0;
                                         puimTmp = puimCnTH;
                                         while (puimTmp) {
                                             puimUse = puimTmp;
-                                            //sprintf_f(rs->logs, "[DV]     %d - %d %d:%d\n", ix, puimUse->uimIdex, puimUse->uimGetCnt, puimUse->uimCount);
                                             if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
                                                 puimNxt = puimUse;
-                                                //sprintf_f(rs->logs, "[DV] match !!\n");
                                             }
                                             puimTmp = puimUse->uimNxt;
                                             if (puimTmp == puimGet) {
@@ -57807,7 +57355,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
 
                                     if (puimNxt) {
-                                        //sprintf_f(rs->logs, "[DV] puimNxt is valid \n");
                                         free(puimGet);
                                         puimGet = puimNxt;
                                     }
@@ -57839,27 +57386,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     sprintf_f(rs->logs, "[DV] wait page size: %d, pagerst: %d\n", waitCylen, pagerst);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     #endif
-                                    
-                                    //sprintf_f(rs->logs, "[DV] new puimGets index = %d cmd type: %c(0x%.2x)\n", puimGet->uimIdex, cmdtyp, cmdtyp);
 
                                     if ((waitCylen > 0) || (pagerst > 1)) {
                                         if (!puimNxt) {
-                                            //printf("[DV] puimNxt is NULL \n");
+
                                             ix = puimGet->uimIdex + 1;
                                             memset(puimGet, 0, sizeof(struct usbIndex_s));
                                             puimGet->uimIdex = ix;
                                             if (puimUse) {
                                                 puimUse->uimNxt = puimGet;
                                             } else {
-                                                //printf("[DV] puimUse is NULL \n");
                                                 puimCnTH = puimGet;
                                             }                                       
                                     
                                             clock_gettime(CLOCK_REALTIME, &tidleS);
                                         }
                                         
-                                        //sprintf_f(rs->logs, "[DV] puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                        //print_f(rs->plogs, "P11", rs->logs);
                                     } else {
                                         if (!puimNxt) {
                                             if (puimGet) {
@@ -57874,8 +57416,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     break;
                                 } 
                                 else {
-                                    //sprintf_f(rs->logs, "\n[DV] Error!!! unknown chq: 0x%.2x \n", chq);
-                                    
                                     if ((!chq) && (!chr) && (puimGet)) {
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
                                             chr = puimGet->uimIdex;
@@ -57894,10 +57434,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                             }
                         }
-
-                        //sprintf_f(rs->logs, "[DV] puimCnTH: 0x%.8x - 0x%.8x - 4\n", puimCnTH, puimCur);
-                        //sprintf_f(rs->logs, "[DV] cycle count = %d chr: 0x%.2x\n", uimCylcnt, chr);
-                        //usleep(50000);
 
                         if (uimCylcnt) {
                             lens = 0;
@@ -57921,8 +57457,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             distCylcnt = ring_buf_cons_tag(usbCur);
                             cntTx++;
-                            //sprintf_f(rs->logs, "[DV] cons tag ret: %d \n", pipRet);
-                            //print_f(rs->plogs, "P11", rs->logs);
 
                             if ((uimCylcnt == 1) && (lastCylen > 0)){
                                 lens = lastCylen;
@@ -57988,13 +57522,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         
                         if ((lens > 0) && (lens < USB_BUF_SIZE) && (!uimCylcnt) && (lastflag)) {
                             che = 'E';
-                            //sprintf_f(rs->logs, "[DV] the last trunk size is %d %d/%d\n", lens, cntTx, puscur->pushcnt);
                         }
                     }
 
                     if (cntTx == 1) {
                         clock_gettime(CLOCK_REALTIME, &tstart);
-                        //sprintf_f(rs->logs, "[DV] start time %llu ms \n", time_get_ms(&tstart));
                     }    
 
                     #if USB_HS_SAVE_RESULT_DV
@@ -58011,16 +57543,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     if (rxfd == rs->ppipedn->rt[0]) {
                         sendsz = lens;
                         if (che == 'E') {    
-                            //sprintf_f(rs->logs, "usb extra meta dump size: %d\n", lens); 
-                            //print_f(rs->plogs, "P11", rs->logs);                     
-                            //shmem_dump(addrd, lens);
-                            
+                            //shmem_dump(addrd, lens);                            
                             //dbgMeta(msb2lsb(&ptmetain->FUNC_BITS), ptmetain);
                             act = aspMetaReleaseviaUsb(0, rs, addrd, lens);
 
                             if (act < 0) {
-                                //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
-                                
                                 sprintf_f(rs->logs, "ERROR!!! wrong meta data, break!!ret: %d size: %d\n", act, lens); 
                                 print_f(rs->plogs, "P11", rs->logs);
                                 shmem_dump(addrd, lens);
@@ -58158,16 +57685,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     else if (rxfd == rsd->ppipedn->rt[0]) {
                         sendsz = lens;
                         if (che == 'E') {
-                            //sprintf_f(rs->logs, "usb extra meta duo dump size: %d\n", lens); 
-                            //print_f(rs->plogs, "P11", rs->logs);                     
                             //shmem_dump(addrd, lens);
                             
                             //dbgMeta(msb2lsb(&ptmetain->FUNC_BITS), ptmetain);
                             act = aspMetaReleaseviaUsbDuo(0, rs, addrd, lens);
 
                             if (act < 0) {
-                                //cfgTableSet(pct, ASPOP_IMG_LEN, 0);
-                                
                                 sprintf_f(rs->logs, "ERROR!!! wrong extra meta duo data, break!!ret: %d size: %d\n", act, lens); 
                                 print_f(rs->plogs, "P11", rs->logs);      
                                 shmem_dump(addrd, lens);
@@ -58355,7 +57878,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         #endif
 
-                        #if 1 /* break and let others has cpu time */
+                        #if 0 /* break and let others has cpu time */
                         usbentsTx = 0;
                         break;
                         #else
@@ -58397,9 +57920,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             continue;
                         }
                     }
-                            
-                    //cntTx ++;
-
                 }
 
                 if ((che == 'E') && (addrd == 0)) {
@@ -58409,7 +57929,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     usCost = time_diff(&tstart, &tend, 1000);
                     sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), usCost);
                     print_f(rs->plogs, "P11", rs->logs);
-                    //msCost = time_diff(&tstart, &tend, 1000000);
                     throughput = acusz*8.0 / usCost*1.0;
                     sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, usCost > 1000 ? usCost / 1000 : 1, throughput);
                     print_f(rs->plogs, "P11", rs->logs);
@@ -58428,27 +57947,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     opc = 0;
                     che = 0;
 
-                    //ring_buf_init(usbCur);
-
-/*
-                    datCylcnt += 1;
-                    if (datCylcnt < 2) {
-                        continue;
-                    } else {
-                        opc = 0;
-                    }
-*/
-
                     continue;
                 }
-                /*
-                else {
-                    continue;
-                }
-                */
             }
             else if ((cmd == 0x11) && ((opc == 0x4d) || (opc == 0x4f))) {
-            //else if ((cmd == 0x11) && (opc == 0x4d)) {
 
                 if (ucbwpram->ASIC_sel) {
                 
@@ -58562,7 +58064,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
 
                 #if 1
-                //chq = 'x';
                 msgret[0] = 'x';
                 if ((chm) || (chn)) {
                     msgret[1] = 0x02;
@@ -58774,7 +58275,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 #endif
                 
-                //chq = 'x';
                 msgret[0] = 'x';
                 msgret[1] = 0x01;
                 pipRet = write(pipeTx[1], &msgret, 2);
@@ -59064,6 +58564,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             csw[11] = 1;
                             csw[12] = 0;
+                        } else if (distCylcnt > 0) {
+                            sprintf_f(rs->logs, "[DV] no csw err and page rest == 0! dist: %d > 0\n", distCylcnt);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            csw[11] = 1;
+                            csw[12] = 0;
                         } else { /* should not be here */
                             sprintf_f(rs->logs, "[DV] warnning!! no csw err and page rest == 0! dist: %d \n", distCylcnt);
                             print_f(rs->plogs, "P11", rs->logs);
@@ -59138,7 +58643,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 chn = csw[11];
 
                 if (chn == 0) {
-                    //chq = 'x';
                     msgret[0] = 'x';
                     msgret[1] = 0x01;
                     pipRet = write(pipeTx[1], &msgret, 2);
@@ -59294,8 +58798,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                //sprintf_f(rs->logs, "[DV] flash read-data size: %d send: %d dump: \n", lenflh, wrtsz);
-                //print_f(rs->plogs, "P11", rs->logs);
                 //shmem_dump(vubsBuff, wrtsz);
 
                 #if 0
@@ -59692,7 +59194,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                 shmem_dump(csw, wrtsz);
 
-                //chq = 'x';
                 msgret[0] = 'x';
                 msgret[1] = 0x01;
                 pipRet = write(pipeTx[1], &msgret, 2);
