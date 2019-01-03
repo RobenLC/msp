@@ -90,6 +90,8 @@
 #define IOCNR_CONTI_BUFF_RELEASE    15
 #define IOCNR_CONTI_BUFF_SET           16
 #define IOCNR_CONTI_BUFF_PRESET    17
+#define IOCNR_CONTI_READ_PAUSE     18
+#define IOCNR_CONTI_READ_RESTART    19
 
 #define USB_IOC_CONTI_READ_START  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_START, 0)
 #define USB_IOC_CONTI_READ_STOP    _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_STOP, 0)
@@ -101,6 +103,8 @@
 #define USB_IOC_CONTI_BUFF_RELEASE  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_RELEASE, 0)
 #define USB_IOC_CONTI_BUFF_SET  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_SET, 0)
 #define USB_IOC_CONTI_BUFF_PRESET  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_BUFF_PRESET, 0)
+#define USB_IOC_CONTI_READ_PAUSE   _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_PAUSE, 0)
+#define USB_IOC_CONTI_READ_RESTART  _IOC(_IOC_NONE, 'P', IOCNR_CONTI_READ_RESTART, 0)
 
 #define LPIOC_GET_DEVICE_ID(len)     _IOC(_IOC_READ, 'P', IOCNR_GET_DEVICE_ID, len) 
 #define LPIOC_GET_VID_PID(len) _IOC(_IOC_READ, 'P', IOCNR_GET_VID_PID, len)
@@ -115,6 +119,8 @@
 #define USB_IOCT_LOOP_BUFF_RELEASE(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_RELEASE, b)
 #define USB_IOCT_LOOP_BUFF_SET(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_SET, b)
 #define USB_IOCT_LOOP_BUFF_PRESET(a, b)     ioctl(a, USB_IOC_CONTI_BUFF_PRESET, b)
+#define USB_IOCT_LOOP_READ_PAUSE(a, b)     ioctl(a, USB_IOC_CONTI_READ_PAUSE, b)
+#define USB_IOCT_LOOP_READ_RESTART(a, b)     ioctl(a, USB_IOC_CONTI_READ_RESTART, b)
 
 #define USB_IOCT_GET_DEVICE_ID(a, b)          ioctl(a, LPIOC_GET_DEVICE_ID(4), b)
 #define USB_IOCT_GET_VID_PID(a, b)          ioctl(a, LPIOC_GET_VID_PID(8), b)
@@ -53168,9 +53174,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             }
 
             if (cswst) {
-                cplls[0] = 'E';
-                cplls[1] = 'I';
-                cplls[2] = cswst;
+                cplls[0] = 'I';
+                cplls[1] = cswst;
+                cplls[2] = 'E';
                 pieRet = write(pPrx[1], &cplls, 3);
             } else {
                 chq = 'E';
@@ -58025,6 +58031,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 print_f(rs->plogs, "P11", rs->logs);    
                             }
                             #endif
+
+                            sprintf_f(rs->logs, "zebra usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x)\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr); 
+                            print_f(rs->plogs, "P11", rs->logs);    
                         }
 
                         #if USB_RECVLEN_ZERO_HANDLE
@@ -58716,7 +58725,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if (cmd == 0x13) { /* usbentsTx == 1*/
 
-                if (cswerr) {
+                if ((cswerr) && (cswerr != 0x21)) {
                     csw[11] = 0;
                     csw[12] = cswerr;
                 }
