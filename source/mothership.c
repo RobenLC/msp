@@ -39796,6 +39796,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                                               ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 cycCnt[ins] = 0;
+
+                                pubffcd[ins] = 0;
                             }
                             else {
                                 cycCnt[ins] += 1;                            
@@ -39980,7 +39982,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if (pubffcd[ins]->ubcswerr == 0) {
                                     pubffcd[ins]->ubcswerr = cswinf;
 
-                                    pubffcd[ins] = 0;
+                                    //pubffcd[ins] = 0;
                                 } else {
                                     sprintf_f(mrs->log, "[GW] Error!!! id:%d conti read set error status failed alread been set val: 0x%.2x !!!\n", ins, pubffcd[ins]->ubcswerr);
                                     print_f(&mrs->plog, "fs145", mrs->log);
@@ -53174,9 +53176,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             }
 
             if (cswst) {
+
+
                 cplls[0] = 'I';
                 cplls[1] = cswst;
                 cplls[2] = 'E';
+                
                 pieRet = write(pPrx[1], &cplls, 3);
             } else {
                 chq = 'E';
