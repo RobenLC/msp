@@ -53568,7 +53568,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     if (!upa) {
                         ix = upa;
                         
-                        if (ufr) {
+                        if (ufr == 1) {
                             USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
                                 
                             puhsinfo->ushostpause = 1;
@@ -53608,6 +53608,14 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 }
                             }
                         }
+                    }
+                    else if (upa == 2) {
+                        USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                                
+                        puhsinfo->ushostpause += 1;
+                                                                
+                        sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- 3\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
+                        print_f(rs->plogs, sp, rs->logs);
                     }
                     #endif
                     
@@ -57096,7 +57104,59 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                                 break;
                             default: 
-                                sprintf_f(rs->logs, "\n[DV]  0x0f unknown opc: 0x%.2x \n", opc);
+                                sprintf_f(rs->logs, "\n[DV]  0x13 unknown opc: 0x%.2x \n", opc);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                break;
+                            }
+                            
+                            break;
+                        }
+                        else if (cmd == 0x14) {
+                            switch(opc) {
+                            case 0x09:
+                            case 0x04:
+                                pinfushost->ushostresume = -1;
+                                pinfushostd->ushostresume = -1;
+
+                                pinfushost->ushostpause = 2;
+                                pinfushostd->ushostpause = 2;                                        
+                                break;
+                            case 0x05:
+                            case 0x0a:
+                                pinfushost->ushostresume = -1;
+                                pinfushostd->ushostresume = -1;
+
+                                pinfushost->ushostpause = 2;
+                                pinfushostd->ushostpause = 2;                                        
+                                break;
+                            default: 
+                                sprintf_f(rs->logs, "\n[DV]  0x14 unknown opc: 0x%.2x \n", opc);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                break;
+                            }
+                            
+                            break;
+                        }
+                        else if (cmd == 0x15) {
+                            switch(opc) {
+                            case 0x09:
+                            case 0x04:
+                                pinfushost->ushostresume = 2;
+                                pinfushostd->ushostresume = 0;
+
+                                pinfushost->ushostpause = 0;
+                                pinfushostd->ushostpause = 0;                                        
+                                break;
+                            case 0x05:
+                            case 0x0a:
+                                pinfushost->ushostresume = 1;
+                                pinfushostd->ushostresume = 2;
+
+                                pinfushost->ushostpause = 0;
+                                pinfushostd->ushostpause = 0;                                        
+                                break;
+                            default: 
+                                sprintf_f(rs->logs, "\n[DV]  0x15 unknown opc: 0x%.2x \n", opc);
                                 print_f(rs->plogs, "P11", rs->logs);
                                 break;
                             }
@@ -58585,7 +58645,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
                     
-                    sprintf_f(rs->logs, "[DV] opc: (0x%.2x) dump \n", opc);
+                    sprintf_f(rs->logs, "[DV] 0x11 0x4d 0x4f opc: (0x%.2x) dump \n", opc);
                     print_f(rs->plogs, "P11", rs->logs);
                     
                     shmem_dump(csw, wrtsz);
@@ -58763,7 +58823,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
 
-                    sprintf_f(rs->logs, "[DV] cmd: (0x%.2x) opc: (0x%.2x) dump \n", cmd, opc);
+                    sprintf_f(rs->logs, "[DV] 0x11 0x4c meat cmd: (0x%.2x) opc: (0x%.2x) dump \n", cmd, opc);
                     print_f(rs->plogs, "P11", rs->logs);
                     shmem_dump(csw, wrtsz);
                 }
@@ -58999,7 +59059,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "[DV] cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                sprintf_f(rs->logs, "[DV] 0x11 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
                 print_f(rs->plogs, "P11", rs->logs);
                 shmem_dump(csw, wrtsz);
                 
@@ -59069,6 +59129,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
                 
+                sprintf_f(rs->logs, "[DV] 0x12 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                print_f(rs->plogs, "P11", rs->logs);
+
                 shmem_dump(csw, wrtsz);
                 
                 cmd = 0;
@@ -59166,6 +59229,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 rwaitCylen = waitCylen;
                 
+                sprintf_f(rs->logs, "[DV] 0x13 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                print_f(rs->plogs, "P11", rs->logs);
+
                 shmem_dump(csw, wrtsz);
 
                 chn = csw[11];
@@ -59199,6 +59265,178 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                     
                 cmd = 0;
+            }
+            else if (cmd == 0x14) { /* usbentsTx == 1*/
+
+                if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
+                    csw[11] = 0;
+                    csw[12] = cswerr;
+                }
+                else if (waitCylen) {
+                    csw[11] = waitCylen & 0xff;
+                    csw[12] = 0;
+                } else {
+                    if (pagerst > 1) {
+                        csw[11] = pagerst - 1;
+                        csw[12] = 0;
+                    } else {
+                        if (distCylcnt > maxCylcnt) {
+                            sprintf_f(rs->logs, "[DV] pa no csw err and page rest == 0! dist: %d > max: %d \n", distCylcnt, maxCylcnt);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            csw[11] = 1;
+                            csw[12] = 0;
+                        } else if (distCylcnt > 0) {
+                            sprintf_f(rs->logs, "[DV] pa no csw err and page rest == 0! dist: %d > 0\n", distCylcnt);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            csw[11] = 1;
+                            csw[12] = 0;
+                        } else { /* should not be here */
+                            sprintf_f(rs->logs, "[DV] pa warnning!! no csw err and page rest == 0! dist: %d \n", distCylcnt);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            csw[11] = 0;
+                            csw[12] = 0;
+                        }
+                    }                        
+                }
+
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                #if DBG_USB_TIME_MEASURE
+                if (!fintvalE[0]) {
+                    clock_gettime(CLOCK_REALTIME, &intvalE[0]);
+                    fintvalE[0] = 1;
+                
+                    if (fintvalE[1]) {
+                
+                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[1] = 0;
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 1\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                } else {
+                
+                    if (!fintvalE[1]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalE[1]);
+                        fintvalE[1] = 1;
+                
+                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[0] = 0;
+                    } else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 2\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                #endif
+                
+                if (wrtsz < 0) {
+                    //usbentsTx = 0;
+                    continue;
+                }
+                rwaitCylen = waitCylen;
+                
+                sprintf_f(rs->logs, "[DV] 0x14 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                print_f(rs->plogs, "P11", rs->logs);
+
+                shmem_dump(csw, wrtsz);
+
+                chn = csw[11];
+                    
+                cmd = 0;
+            }
+            else if (cmd == 0x15) { /* usbentsTx == 1*/
+                csw[11] = 0;
+                csw[12] = 0;//seqtx;
+
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                #if DBG_USB_TIME_MEASURE
+                if (!fintvalE[0]) {
+                    clock_gettime(CLOCK_REALTIME, &intvalE[0]);
+                    fintvalE[0] = 1;
+                
+                    if (fintvalE[1]) {
+                
+                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[1] = 0;
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 1\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                } else {
+                
+                    if (!fintvalE[1]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalE[1]);
+                        fintvalE[1] = 1;
+                
+                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[0] = 0;
+                    } else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 2\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                #endif
+                
+                if (wrtsz < 0) {
+                    //usbentsTx = 0;
+                    continue;
+                }
+
+                sprintf_f(rs->logs, "[DV] 0x15 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                print_f(rs->plogs, "P11", rs->logs);
+                shmem_dump(csw, wrtsz);
+                
+                cmd = 0;
+                    
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0xff)) { /* usbentsTx == 1*/
                 if (ucbwpram->ASIC_sel) {
