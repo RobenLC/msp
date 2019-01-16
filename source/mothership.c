@@ -53058,17 +53058,25 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             //cswst = 0x21;                        
                             //puhs->pushcswerr = cswst;
                         }
-                        if ((cswst & 0x7f) == 0x23) {
+                        else if ((cswst & 0x7f) == 0x23) {
                             cswst = 0x7f;
                             //cswst = 0x21;                        
                             //puhs->pushcswerr = cswst;
+                        } else 
+                        #endif
+                        #if 1 /* stop scan if get error status */
+                        if ((cswst & 0x7f) && (cswst != 0x7f)) {
+                        
+                            puhs->pushcswerr = cswst;
+                            
+                            chr = 'R';                        
                         }
                         #endif
 
                         sprintf_f(rs->logs, "get the error status: 0x%.2x (org: 0x%.2x)\n", cswst, csworg & 0x7f);
                         print_f(rs->plogs, sp, rs->logs);
 
-                        #if 1 /* stop scan if get error status */
+                        #if 0 /* stop scan if get error status */
                         if ((cswst & 0x7f) && (cswst != 0x7f)) {
                         
                             puhs->pushcswerr = cswst;
@@ -53091,7 +53099,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         recvsz = recvsz  & 0x1ffff;
                         usbrun = -1;
 
-                        #if 0 /* stop scan by default status */
+                        #if 1 /* stop scan by default status */
                         if (cswst == 0x7f) {
                             cswst = 0x21;                        
                             puhs->pushcswerr = cswst;
@@ -53587,7 +53595,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             }
                         } else {
                             usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
-                            usbthrhld = puhsinfo->ushostbtrkpageavg * 2 + 1;
+                            usbthrhld = puhsinfo->ushostbtrkpageavg * 3 + 1;
                             if (usbthrhld) {
                                 if (usbdist < usbthrhld) {
                                     USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
@@ -59067,8 +59075,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
             }
             else if (cmd == 0x12) { /* usbentsTx == 1*/
-                csw[11] = 0;
-                csw[12] = cswerr;
+
+                if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
+                    csw[11] = 0;
+                    csw[12] = cswerr;
+                } else {
+                    csw[11] = 0;
+                    csw[12] = 0;
+                }
 
                 wrtsz = 0;
                 retry = 0;
@@ -59138,7 +59152,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if (cmd == 0x13) { /* usbentsTx == 1*/
 
-                if ((cswerr) && (cswerr != 0x21)) {
+                if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
                     csw[11] = 0;
                     csw[12] = cswerr;
                 }
