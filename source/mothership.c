@@ -29,8 +29,8 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Fri Jan 11 16:23:59 2019 \
-47c876876f"
+#define MSP_VERSION "Wed Jan 16 09:44:59 2019 \
+7ddfc66117"
 
 
 #define DISABLE_SPI  (1)
