@@ -56,8 +56,8 @@
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (1536)
-#define USB_BUF_SIZE (98304)
+#define RING_BUFF_NUM_USB   (3200) //(1536) (3200)
+#define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
 #define CYCLE_LEN (40)
@@ -39123,7 +39123,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     break;
                                 }
 
-                                mindex = ((chindex[0] & 0x3f) << 6) | (chindex[1] & 0x3f);
+                                mindex = ((chindex[0] & 0x3f) << 5) | (chindex[1] & 0x1f);
 
                                 sprintf_f(mrs->log, "[GW] pll%d get midx: %d(0x%.2x:0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, mindex, chindex[0], chindex[1], pubffo, pubffh);
                                 print_f(&mrs->plog, "fs145", mrs->log);
@@ -39183,8 +39183,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 } else if (mindex == pubffo->ubindex) { 
                                 
-                                    midxfo[0] = ((pubffo->ubindex >> 6) & 0x3f) | 0x80;
-                                    midxfo[1] = (pubffo->ubindex & 0x3f) | 0x40;
+                                    midxfo[0] = ((pubffo->ubindex >> 5) & 0x3f) | 0x80;
+                                    midxfo[1] = (pubffo->ubindex & 0x1f) | 0x40;
 
                                     if ((pubffo->ubmetasize) && (pubffo->ublastsize)) {
                                         smax = pubffo->ubcylcnt - cycCnt[ins] + 2;
@@ -39805,8 +39805,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
-                                indexfo[0] = ((pubffcd[ins]->ubindex >> 6) & 0x3f) | 0xc0;
-                                indexfo[1] = (pubffcd[ins]->ubindex & 0x3f) | 0x40;
+                                indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
+                                indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
 
                                 if ((pubffcd[ins]->ubindex >> 12) > 0) {
                                     sprintf_f(mrs->log, "\n[GW] WARNNING!!! pubffcd[ins]->ubindex: %d \n", pubffcd[ins]->ubindex);                                
@@ -39832,8 +39832,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if ((cycCnt[ins] > CYCLE_LEN) && (pubffcd[ins]->ubcylcnt > CYCLE_LEN)) {
                                     /* send back index */
                                     //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
-                                    indexfo[0] = ((pubffcd[ins]->ubindex >> 6) & 0x3f) | 0xc0;
-                                    indexfo[1] = (pubffcd[ins]->ubindex & 0x3f) | 0x40;
+                                    indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
+                                    indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
 
                                     write(outfd[ins], indexfo, 2);
 
@@ -57479,8 +57479,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (chq == 0xff) {
                                 if (chr) {
                                 
-                                    mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
-                                    mindexfo[1] = (chr & 0x3f) | 0x40;
+                                    mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                    mindexfo[1] = (chr & 0x1f) | 0x40;
                                         
                                     pipRet = write(piptx[1], mindexfo, 2);
                                     if (pipRet < 0) {
@@ -57538,7 +57538,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     continue;
                                 }
 
-                                cindex = ((cindexfo[0] & 0x3f) << 6) | (cindexfo[1] & 0x3f);
+                                cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
 
                                 if (!puimCnTH) {
                                     puimCnTH = malloc(sizeof(struct usbIndex_s));
@@ -57554,8 +57554,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         
                                     if (!chr) {
                                         chr = puimGet->uimIdex;
-                                        mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
-                                        mindexfo[1] = (chr & 0x3f) | 0x40;
+                                        mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x1f) | 0x40;
 
                                         pipRet = write(piptx[1], mindexfo, 2);
                                         if (pipRet < 0) {
@@ -57567,8 +57567,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         sprintf_f(rs->logs, "[DV] warring!!! puimCnTH == 0, and chr == %d \n", chr);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         chr = puimGet->uimIdex;
-                                        mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
-                                        mindexfo[1] = (chr & 0x3f) | 0x40;
+                                        mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x1f) | 0x40;
 
                                         pipRet = write(piptx[1], mindexfo, 2);
                                         if (pipRet < 0) {
@@ -57599,8 +57599,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     if (!chr) {
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
                                             chr = puimGet->uimIdex;
-                                            mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
-                                            mindexfo[1] = (chr & 0x3f) | 0x40;
+                                            mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x1f) | 0x40;
 
                                             pipRet = write(piptx[1], mindexfo, 2);
                                             if (pipRet < 0) {
@@ -57649,8 +57649,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             if (puimGet->uimGetCnt < puimGet->uimCount) {
                                                 chr = puimGet->uimIdex;
 
-                                                mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
-                                                mindexfo[1] = (chr & 0x3f) | 0x40;
+                                                mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                                mindexfo[1] = (chr & 0x1f) | 0x40;
 
                                                 pipRet = write(piptx[1], mindexfo, 2);
                                                 if (pipRet < 0) {
@@ -57772,7 +57772,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         continue;
                                     }
 
-                                    cindex = ((cindexfo[0] & 0x3f) << 6) | (cindexfo[1] & 0x3f);
+                                    cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
                                     
                                     if (puimGet->uimIdex == cindex) {
                                         puimGet->uimGetCnt += 1;
@@ -57780,8 +57780,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
                                             chr = puimGet->uimIdex;
 
-                                            mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
-                                            mindexfo[1] = (chr & 0x3f) | 0x40;
+                                            mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x1f) | 0x40;
 
                                             pipRet = write(piptx[1], mindexfo, 2);
                                             if (pipRet < 0) {
@@ -57945,8 +57945,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     if ((!chq) && (!chr) && (puimGet)) {
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
                                             chr = puimGet->uimIdex;
-                                            mindexfo[0] = ((chr >> 6) & 0x3f) | 0xc0;
-                                            mindexfo[1] = (chr & 0x3f) | 0x40;
+                                            mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x1f) | 0x40;
 
                                             pipRet = write(piptx[1], mindexfo, 2);
                                             if (pipRet < 0) {
