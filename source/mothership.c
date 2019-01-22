@@ -30,8 +30,8 @@
 //#include <mysql.h>
 //main()
 #define MSP_VERSION "Thu Jan 17 11:23:05 2019 \
-a6dbe4dcec"
-
+a6dbe4dcec \
+<disable p11 fs145 log>"
 
 #define DISABLE_SPI  (1)
 #define DISABLE_USB  (0)
@@ -786,6 +786,19 @@ typedef enum {
     ASPMETA_FUNC_SDRD = 0b00100000,
     ASPMETA_FUNC_SDWT = 0b01000000,
 } aspMetaFuncbit_e;
+
+
+typedef enum {
+    CSW_STATUS_USER_ABORT = 0x01,
+    CSW_STATUS_NO_PAPER = 0x02,
+    CSW_STATUS_COVER_OPEN = 0x04,
+    CSW_STATUS_SCAN_ERROR = 0x08,
+    CSW_STATUS_USER_SCAN = 0x10,
+    CSW_STATUS_GENERIC_FAIL = 0x20,
+    CSW_STATUS_USB_FAIL = 0x40,
+    CSW_STATUS_PAUSE_FAIL = 0x80,
+} aspCSWErrCode_e;
+
 
 struct apWifiConfig_s{
     char wfssid[36];
@@ -39146,7 +39159,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
                                 }
                                 
-                                #if 1 /* memory used debug */
+                                #if 0 /* memory used debug */
                                 if (pubffh) {
                                     memsz = 0;
                                     pageidx = 0;
@@ -52903,7 +52916,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 sprintf_f(rs->logs, "read 13 byte for meta csw failed ret: %d !!!\n", ret);
                 print_f(rs->plogs, sp, rs->logs);
 
-                memset(ptrecv, 0xff, 13);
+                memset(ptrecv, 0, 13);
+                memcpy(ptrecv, CBW, 8);                
+                ptrecv[12] = CSW_STATUS_USB_FAIL;
             }
             memcpy(dcswBuff, ptrecv, 13);
             
@@ -52983,7 +52998,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 sprintf_f(rs->logs, "read 13 bytes failed, ret: %d\n", ptret); 
                 print_f(rs->plogs, sp, rs->logs);
 
-                pllst = 0xff;
+                memcpy(dcswBuff, cubsBuff, 8);      
+                dcswBuff[12] = CSW_STATUS_USB_FAIL;
+                pllst = dcswBuff[12];
             }
 
             cplls[0] = 'J';
@@ -53799,20 +53816,51 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             //sprintf_f(rs->logs, "len:%d addr:0x%.8x direct:%d  dump data:\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
             //print_f(rs->plogs, sp, rs->logs);
-
+            
+            pllst = 0;
+            
             //insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
             msync(cubsBuff, SPI_TRUNK_SZ, MS_SYNC);
-            usb_send(cubsBuff, usbid, 31);
+            ret = usb_send(cubsBuff, usbid, 31);
+            if (ret <= 0) {
+                sprintf_f(rs->logs, "usb send cbw error ret: %d \n", ret);
+                print_f(rs->plogs, sp, rs->logs);
 
-            ret = usb_send(dubsBuff, usbid, msb2lsb(&dcbwpram->pramDataLength));
+                pllst = CSW_STATUS_USB_FAIL;
+            }
+
+            if (!pllst) {
+                ret = usb_send(dubsBuff, usbid, msb2lsb(&dcbwpram->pramDataLength));
+                if (ret <= 0) {
+                    sprintf_f(rs->logs, "usb read data size %d error ret: %d \n", msb2lsb(&dcbwpram->pramDataLength), ret);
+                    print_f(rs->plogs, sp, rs->logs);
+
+                    pllst = CSW_STATUS_USB_FAIL;
+                }
+            }
             
             //sprintf_f(rs->logs, "send size: %d dump: \n", ret);
             //print_f(rs->plogs, sp, rs->logs);
             //shmem_dump(dubsBuff, msb2lsb(&dcbwpram->pramDataLength));
-            
-            usb_read(ptrecv, usbid, 13);
+            if (!pllst) {            
+                ret = usb_read(ptrecv, usbid, 13);
+                if (ret <= 0) {
+                    sprintf_f(rs->logs, "usb read csw size %d error ret: %d \n", 13, ret);
+                    print_f(rs->plogs, sp, rs->logs);
 
-            memcpy(dcswBuff, ptrecv, 13);
+                    pllst = CSW_STATUS_USB_FAIL;
+                }
+            }
+
+            if (pllst) {
+                memcpy(dcswBuff, cubsBuff, 8);      
+                dcswBuff[12] = pllst;
+            }
+            else {
+                memcpy(dcswBuff, ptrecv, 13);
+                pllst = ptrecv[12];
+            }
+            
             //chvaddr = dubsBuff + ret;
             //memcpy(chvaddr, ptrecv, 13);
 
@@ -53821,8 +53869,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             print_f(rs->plogs, sp, rs->logs);
             shmem_dump(ptrecv, 13);
             #endif
-            
-            pllst = ptrecv[12];
             
             //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
             //print_f(rs->plogs, sp, rs->logs);
@@ -53835,28 +53881,56 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             //sprintf_f(rs->logs, "len:%d addr:0x%.8x direct:%d\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
             //print_f(rs->plogs, sp, rs->logs);
+            pllst = 0;
 
             msync(cubsBuff, SPI_TRUNK_SZ, MS_SYNC);
             //insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
-            usb_send(cubsBuff, usbid, 31);
+            ret = usb_send(cubsBuff, usbid, 31);
+            if (ret <= 0) {
+                sprintf_f(rs->logs, "usb send error ret: %d \n", ret);
+                print_f(rs->plogs, sp, rs->logs);
 
-            ret = usb_read(dubsBuff, usbid, msb2lsb(&dcbwpram->pramDataLength));
+                pllst = CSW_STATUS_USB_FAIL;
+            }
+
+            if (!pllst) {
+                ret = usb_read(dubsBuff, usbid, msb2lsb(&dcbwpram->pramDataLength));
+                if (ret <= 0) {
+                    sprintf_f(rs->logs, "usb read size %d error ret: %d \n", msb2lsb(&dcbwpram->pramDataLength), ret);
+                    print_f(rs->plogs, sp, rs->logs);
+
+                    pllst = CSW_STATUS_USB_FAIL;
+                }
+            }
             
             //sprintf_f(rs->logs, "read size: %d dump: \n", ret);
             //print_f(rs->plogs, sp, rs->logs);
             //shmem_dump(dubsBuff, msb2lsb(&dcbwpram->pramDataLength));
             
-            usb_read(ptrecv, usbid, 13);
-            
-            memcpy(dcswBuff, ptrecv, 13);
+            if (!pllst) {
+                ret = usb_read(ptrecv, usbid, 13);
+                if (ret <= 0) {
+                    sprintf_f(rs->logs, "usb read size %d error ret: %d \n", 13, ret);
+                    print_f(rs->plogs, sp, rs->logs);
+
+                    pllst = CSW_STATUS_USB_FAIL;
+                }
+            }
+
+            if (pllst) {
+                memcpy(dcswBuff, cubsBuff, 8);      
+                dcswBuff[12] = pllst;
+            }
+            else {
+                memcpy(dcswBuff, ptrecv, 13);        
+                pllst = ptrecv[12];
+            }
 
             #if DBG_USB_HS
             sprintf_f(rs->logs, "dump 13 bytes");
             print_f(rs->plogs, sp, rs->logs);
             shmem_dump(ptrecv, 13);
             #endif
-            
-            pllst = ptrecv[12];
             
             //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
             //print_f(rs->plogs, sp, rs->logs);
@@ -53868,6 +53942,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         else if (cmdchr == 0x12) {
             sprintf_f(rs->logs, "check usb alive vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
             print_f(rs->plogs, sp, rs->logs);
+
+            pllst = 0;
 
             ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
             if (ret < 0) {
@@ -53885,7 +53961,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 if (usbid < 0) {
                     sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                     print_f(rs->plogs, sp, rs->logs);
-                    continue;
+                    
+                    pllst = CSW_STATUS_USB_FAIL;
+                    
+                    //continue;
                 } else {
                 
                     sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
@@ -53896,7 +53975,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
-                        continue;
+                        
+                        pllst = CSW_STATUS_USB_FAIL;
+                        
+                        //continue;
                     }
                 
                     if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
@@ -53921,7 +54003,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (usbid < 0) {
                             sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                             print_f(rs->plogs, sp, rs->logs);
-                            continue;
+
+                            pllst = CSW_STATUS_USB_FAIL;
+                            
+                            //continue;
                         } else {
                 
                             sprintf_f(rs->logs, "open device[%s] usbid: %d - 2\n", puhsinfo->ushostname, usbid); 
@@ -53932,7 +54017,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                                 print_f(rs->plogs, sp, rs->logs);
                                 close(usbid);
-                                continue;
+
+                                pllst = CSW_STATUS_USB_FAIL;
+                                
+                                //continue;
                             }
                 
                             if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
@@ -53941,37 +54029,60 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 print_f(rs->plogs, sp, rs->logs);
                                 
                                 close(usbid);
-                                continue;
+
+                                pllst = CSW_STATUS_USB_FAIL;
+                                
+                                //continue;
                             }
                         }
                     }
 
-                    bitset = RING_BUFF_NUM_USB;
-                    ret = USB_IOCT_LOOP_BUFF_PRESET(usbid, &bitset);
-                    if (ret < 0) {
-                        sprintf_f(rs->logs,  "can't pre-set buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
-                        print_f(rs->plogs, sp, rs->logs);
-                        close(usbid);
-                        continue;
+                    if (!pllst) {
+                        bitset = RING_BUFF_NUM_USB;
+                        ret = USB_IOCT_LOOP_BUFF_PRESET(usbid, &bitset);
+                        if (ret < 0) {
+                            sprintf_f(rs->logs,  "can't pre-set buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
+                            print_f(rs->plogs, sp, rs->logs);
+                            close(usbid);
+                        
+                            pllst = CSW_STATUS_USB_FAIL;
+                            
+                            //continue;
+                        }
                     }
-                
-                    if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
-                        sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
-                        print_f(rs->plogs, sp, rs->logs);
-                        close(usbid);
-                        continue;
+
+                    if (!pllst) {
+                        if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
+                            sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                            print_f(rs->plogs, sp, rs->logs);
+                            close(usbid);
+                        
+                            pllst = CSW_STATUS_USB_FAIL;
+                            
+                            //continue;
+                        }
                     }
-                    
-                    ret = USB_IOCT_LOOP_BUFF_SET(usbid, puhsinfo->ushostblphy);
-                    if (ret < 0) {
-                        sprintf_f(rs->logs,  "can't set phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
-                        print_f(rs->plogs, sp, rs->logs);
-                        close(usbid);
-                        continue;
+
+                    if (!pllst) {
+                        ret = USB_IOCT_LOOP_BUFF_SET(usbid, puhsinfo->ushostblphy);
+                        if (ret < 0) {
+                            sprintf_f(rs->logs,  "can't set phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
+                            print_f(rs->plogs, sp, rs->logs);
+                            close(usbid);
+                        
+                            pllst = CSW_STATUS_USB_FAIL;
+                            
+                            //continue;
+                        }
                     }
-   
-                    sprintf_f(rs->logs,  "setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
-                    print_f(rs->plogs, sp, rs->logs);
+
+                    if (!pllst) {
+                        sprintf_f(rs->logs,  "setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
+                        print_f(rs->plogs, sp, rs->logs);
+                    } else {
+                        sprintf_f(rs->logs,  "usb check alive failed!!pllst: 0x%.2x usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", pllst, puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
                 }
 
                 #if 0
@@ -54016,7 +54127,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
             }
 
-            #if 1 /* forward opc: 0x4f to ASIC */
+            #if 0 /* forward opc: 0x4f to ASIC */
             pllst = 0;
             
             msync(cubsBuff, SPI_TRUNK_SZ, MS_SYNC);
@@ -54047,6 +54158,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 print_f(rs->plogs, sp, rs->logs);
 
                 memset(ptrecv, 0xff, 13);
+                ptrecv[12] = CSW_STATUS_USB_FAIL;
             }
             
             memcpy(dcswBuff, ptrecv, 13);
@@ -54066,6 +54178,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             cplls[1] = pllst;
             pieRet = write(pPrx[1], &cplls, 2);
             #else
+
+            memset(ptrecv, 0x0, 13);
+            memcpy(ptrecv, cubsBuff, 8);
+            ptrecv[12] = pllst;
+            
             cplls[0] = 'J';
             cplls[1] = pllst;
             pieRet = write(pPrx[1], &cplls, 2);
@@ -56261,7 +56378,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
 
-                    #if 0
+                    #if LOG_FLASH /* debug flash read/write */
                     sprintf_f(rs->logs, "[DV] data flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
                                                 msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
                                                 ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
@@ -56282,9 +56399,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             
                         }
                     }
-                    //sprintf_f(rs->logs, "[DV] flash write-data size: %d recv: %d \n",lenflh, recvsz);
-                    //print_f(rs->plogs, "P11", rs->logs);
-                    //shmem_dump(vubsBuff, lenflh);
+
+                    #if LOG_FLASH /* debug flash read/write */
+                    sprintf_f(rs->logs, "[DV] flash write-data size: %d recv: %d \n",lenflh, recvsz);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    shmem_dump(vubsBuff, lenflh);
+                    #endif
 
                     if (ucbwpram->ASIC_sel) {
                         if (usbid02) {
@@ -56338,7 +56458,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                     }
 
-                    //shmem_dump(ptrecv, recvsz);
+                    #if LOG_FLASH /* should close */
+                    shmem_dump(ptrecv, recvsz);
+                    #endif
                     
                     #if DBG_USB_TIME_MEASURE
                     if ((fintvalE[0]) && (fintvalE[1])) {
@@ -57894,7 +58016,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puimTmp = puimCnTH;
                                     while(puimTmp) {
                                     
-                                        #if 1
+                                        #if LOG_P11_EN
                                         sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
@@ -58621,11 +58743,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     if (ucbwpram->ASIC_sel) {                        
                         if ((chm) || (!usbid02)) {
-                            csw[12] = 0x20;
+                            csw[12] = chm;
                         }
                     } else {
                         if ((chn) || (!usbid01)) {
-                            csw[12] = 0x20;
+                            csw[12] = chn;
                         }
                     }
 
@@ -59547,7 +59669,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     break;
                 }
                 
-                #if 0
+                #if LOG_FLASH /* debug flash read/write */
                 sprintf_f(rs->logs, "[DV] read flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
                                               msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
                                               ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
@@ -59578,7 +59700,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                //shmem_dump(vubsBuff, wrtsz);
+                #if LOG_FLASH /* debug flash read/write */
+                shmem_dump(vubsBuff, wrtsz);
+                #endif
 
                 #if 0
                 csw[11] = 0;
