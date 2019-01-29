@@ -31,7 +31,7 @@
 //main()
 #define MSP_VERSION "Thu Jan 17 11:23:05 2019 \
 a6dbe4dcec \
-<disable p11 fs145 log>"
+handle usb error"
 
 #define DISABLE_SPI  (1)
 #define DISABLE_USB  (0)
@@ -1342,6 +1342,28 @@ struct usbCBWpram_s{
 		uint8_t	              pramDirect;		// 1=output (BULK OUT), 2=input (BULK IN), 0=no data
 };
 
+struct usbCBWfile_s{
+		struct intMbs_s 	pramID; 			// 0x55534243 
+		struct intMbs_s 	pramTag;			// sent by host , and device will send it back in CSW
+		struct intMbs_s 	pramDataLength;	// data length between CBW and CSW , 0 = no data 
+		uint8_t	              pramFileId[2];	       // file id for linux access
+		uint8_t	              pramWrtorRd[1];	       // write or read access to fileid
+		uint8_t 	              pramType;		      // 0x0B = file access OPCode
+		struct intMbs_s	pramAddress;		// address to MCU
+		struct intMbs_s	pramFilesize;	       // file size for file id
+		uint8_t	              pramreserved1[4]; 	// forward to MCU
+		uint8_t	              ASIC_sel; 	             //  0=Primary ASIC , 1=Secondary ASIC
+		uint8_t	              cs; 	                           // forward to MCU
+		uint8_t	              pramDirect;		// 1=output (BULK OUT), 2=input (BULK IN), 0=no data
+};
+
+struct usbCSWfile_s{
+		struct intMbs_s 	pramID; 			// 0x55534243 
+		struct intMbs_s 	pramTag;			// sent by host , and device will send it back in CSW
+		struct intMbs_s 	pramFilesize;	      // file size of current file id
+		uint8_t	              pramStatus;		      // status of file id access
+};
+
 struct usbhost_s{
     int ushid;
     struct shmem_s *pushring;
@@ -1400,6 +1422,12 @@ struct usbBuffLink_s{
     int ubmetasize;
     int ubcylcnt;
     int ubcswerr;
+};
+
+struct usbfileid_s{
+    int usbfileidnx;
+    int usbfilesize;
+    int usbfileaddr;
 };
 
 struct mainRes_s{
@@ -1561,6 +1589,8 @@ static int time_diff(struct timespec *s, struct timespec *e, int unit);
 //file rw open, save to file for debug
 static int file_save_get(FILE **fp, char *path1);
 static FILE *find_save(char *dst, char *tmple);
+static FILE *find_read(char *dst);
+static FILE *find_write(char *dst);
 //res put in
 static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx);
 //p0: control, monitor, and debug
@@ -38640,6 +38670,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf_f(mrs->log, "usb gate !!!\n");
     print_f(&mrs->plog, "fs145", mrs->log);
 
+    char filenames[] = "/root/scaner/id_%d.bin";
+    char idfile[128];
+    FILE *filefd=0;
     struct usbhost_s *ppup, *ppdn;
     struct pollfd pllfd[MAX_145_EVENT];
     int *dvtx=0, *dvrx=0;
@@ -38666,7 +38699,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct shmem_s *ringbf[4];
     char *addrd, *addrs;
     uint32_t *add32d, *add32s;
-    int lens=-1, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0, csws=0, mlen=0, cswd=0, dlen=0;
+    int lens=-1, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0, csws=0, mlen=0, cswd=0, dlen=0, len=0;
+    int wfileid=0, acusz=0, maxsz=0, fileidcnt=0;
     int totsz[MAX_145_EVENT];
     int cycCnt[MAX_145_EVENT];
     int idxInit[MAX_145_EVENT];
@@ -39079,6 +39113,115 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                             sprintf_f(mrs->log, "[GW] end transmit count: %d !!! \n", modersp->v);
                             print_f(&mrs->plog, "fs145", mrs->log);
+                        } else {
+
+                            switch(pllcmd[ins]) {
+                            case 'e':
+                                ret = mrs_ipc_get(mrs, minfo, 2, 12);
+                                if (ret == 2) {
+                                    acusz = 0;
+                                    filefd = 0;
+                                    
+                                    wfileid = (minfo[0] << 8) | minfo[1];
+
+                                    #if 1 /* debug */
+                                    if (wfileid == 0) {
+                                        wfileid = fileidcnt;
+                                        fileidcnt ++;
+                                    }
+                                    #endif
+
+                                    sprintf(idfile, filenames, wfileid);
+                                    filefd = find_write(idfile);
+                                    
+                                    sprintf_f(mrs->log, "[GW] wget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, filefd);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] wget file id failed ret: %d !!! \n", ret);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                }
+                                break;
+                            case 'f':
+                                len = 0;
+                                len = ring_buf_cons(&mrs->cmdRx, &addrs);
+                                while (len <= 0) {
+                                    sprintf_f(mrs->log, "[GW] wget cons len: %d \n",len);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+
+                                    usleep(100000);
+
+                                    len = ring_buf_cons(&mrs->cmdRx, &addrs);
+                                }
+
+                                if (filefd) {
+                                    ret = fwrite(addrs, 1, len, filefd);
+                                    acusz += len;
+                                    
+                                    sprintf_f(mrs->log, "[GW] wget write: %d(%d) acusz: %d \n",ret, len, acusz);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+
+                                    if (ret != len) {
+                                        sprintf_f(mrs->log, "[GW] warnning!!! wget write size %d but ret %d \n",len, ret);
+                                        print_f(&mrs->plog, "fs145", mrs->log);
+                                    }
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] error!! wget filefd: %d len: %d \n",filefd, len);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                }
+                                
+                                break;
+                            case 'g':
+                                sprintf_f(mrs->log, "[GW] wget write end last: %d acusz: %d \n", len, acusz);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+
+                                fflush(filefd);
+                                fclose(filefd);
+                                sync();
+
+                                filefd = 0;
+                                
+                                filefd = find_read(idfile);
+
+                                ret = fseek(filefd, 0, SEEK_END);
+                                if (ret) {
+                                    sprintf_f(mrs->log, "[GW] wget file seek failed!! ret:%d \n", ret);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                } 
+
+                                maxsz = ftell(filefd);
+                                sprintf_f(mrs->log, "[GW] wget file [%s] size: %d \n", idfile, maxsz);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+
+                                minfo[0] = 'w';
+                                minfo[1] = (maxsz >> 24) & 0xff;
+                                minfo[2] = (maxsz >> 16) & 0xff;
+                                minfo[3] = (maxsz >> 8) & 0xff;
+                                minfo[4] = (maxsz >> 0) & 0xff;
+
+                                mrs_ipc_put(mrs, minfo, 5, 12);
+                                
+                                break;
+                            case 'h':
+                                ret = mrs_ipc_get(mrs, minfo, 2, 12);
+                                if (ret == 2) {
+                                    acusz = 0;
+                                    filefd = 0;
+                                    
+                                    wfileid = (minfo[0] << 8) | minfo[1];
+                                    
+                                    sprintf(idfile, filenames, wfileid);
+                                    filefd = find_write(idfile);
+                                    
+                                    sprintf_f(mrs->log, "[GW] rget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, filefd);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] rget file id failed ret: %d !!! \n", ret);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                }
+                                break;
+                            default:
+                                break;
+                            }
                         }
 
                         break;
@@ -54281,12 +54424,13 @@ static int p10(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_FLASH  (0)
+#define LOG_FLASH  (1)
 #define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
+#define OP_WRITE_FILE (0x01)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -54323,7 +54467,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12], chn=0, chm=0, chw=0, chy=0;;
     char cmdtyp=0, cswerr=0, pagerst=2, che=0, cswstatus[2];
     int *piptx=0, *piprx=0;
-    int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0, lastflag=0;
+    int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0, lastflag=0, filesz=0;
     int *pipeRx, *pipeRxd, *pipeTx, *pipeTxd;
     int *gateUpTx, *gateUpRx, *gateDnTx, *gateDnRx;
     struct timespec tidleS, tidleE;
@@ -54340,6 +54484,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct info16Bit_s *iubs=0;
     struct usbCBWopc_s *ucbwopc=0;
     struct usbCBWpram_s *ucbwpram=0;
+    struct usbCBWfile_s *ucbwfile=0;
     char *iubsBuff=0, *vubsBuff=0, *vcswBuff=0;
     struct aspMetaData_s *ptmetaout=0, *ptmetain=0;
     struct aspMetaData_s *ptmetainduo=0;
@@ -54390,6 +54535,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     vcswBuff = vubsBuff + 16384;
     ucbwopc = (struct usbCBWopc_s *)iubsBuff;
     ucbwpram = (struct usbCBWpram_s *)iubsBuff;
+    ucbwfile = (struct usbCBWfile_s *)iubsBuff;
     
     sprintf_f(rs->logs, "p11\n");
     print_f(rs->plogs, "P11", rs->logs);
@@ -56371,6 +56517,75 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     break;
                 }
+                else if ((cmd == OP_WRITE_FILE) && (opc == 0xff) && (dat == 0)) {
+                    if (!iubsBuff) {
+                        sprintf_f(rs->logs, "\n[DVF] Error !!! file read iubsBuff is null!!!! cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        break;
+                    }
+                    sprintf_f(rs->logs, "[DV] file access rx filesz: %d \n", filesz);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    
+                    //lenflh = msb2lsb(&ucbwfile->pramDataLength);
+                    //filesz = lenflh;
+
+                    while (1) {
+                        lenrs = 0;
+                        lenrs = ring_buf_get(rs->pcmdRx, &addrs);
+
+                        if (lenrs > 0) {
+                            if (lenrs >= filesz) {
+                                lenrs = filesz;
+                            }
+
+                            recvsz = 0;
+                            while (1) {
+                                recvsz = read(usbfd, addrs, lenrs);
+                                if (recvsz > 0) {
+                                    if (recvsz != lenrs) {
+                                        sprintf_f(rs->logs, "\n[DVB] Error !!! usb file read recvsz: %d (%d)  \n",recvsz, lenrs);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+
+                                    filesz = filesz - recvsz;
+                                    break;
+                                } else {
+                                    continue;
+                                }                        
+                            }
+
+                            sprintf_f(rs->logs, "[DVB] usb file read recvsz: %d (%d) remain: %d  \n",recvsz, lenrs, filesz);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            ring_buf_prod(rs->pcmdRx);
+                            
+                            rs_ipc_put(rs, "f", 1);
+                            
+                            if (lenrs < SPI_TRUNK_SZ) {
+                                ring_buf_set_last(rs->pcmdRx, lenrs);
+                                rs_ipc_put(rs, "g", 1);
+
+                                if (filesz != 0) {
+                                    sprintf_f(rs->logs, "\n[DVB] Error !!! remain filesz: %d\n",filesz);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+                                break;
+                            }
+                        }
+                        else {
+                            sprintf_f(rs->logs, "[DVB] get buff ret:%d  (%d)\n",recvsz, filesz);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            usleep(100000);
+                        }
+                    }
+
+                    if (filesz == 0) {
+                        break;
+                    }
+                }
+                else if ((cmd == OP_WRITE_FILE) && (opc == 0xff) && (dat == 0xff)) {
+                }
                 else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0)) {
                     if (!iubsBuff) {
                         sprintf_f(rs->logs, "\n[DVF] Error !!! iubsBuff is null!!!! cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
@@ -56529,7 +56744,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         opc = ptrecv[16];
                         dat = ptrecv[17];
 
-                        if ((cmd >= 0x00) && (cmd <= 0x0f)) {
+                        if (cmd == OP_WRITE_FILE) {
+                            shmem_dump(ptrecv, recvsz);
+                        }
+                        else if ((cmd >= 0x00) && (cmd <= 0x0f)) {
                             printf("\r");
                         } else {
                             shmem_dump(ptrecv, recvsz);
@@ -57292,6 +57510,105 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             
                             break;
+                        }
+                        else if (cmd == OP_WRITE_FILE) {
+                            if (!iubsBuff) {
+                                sprintf_f(rs->logs, "\n[DVF] Error !!! iubsBuff is null!!!! cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                            
+                            //memset(iubsBuff, 0, SPI_TRUNK_SZ);
+
+                            memcpy(iubsBuff, ptrecv, 31);
+
+                            sprintf_f(rs->logs, "[DV] file access dlen: %d, fileid: %d, wrtrd: %d, addr: 0x%.8x, fsize: %d, direct: %d \n"
+                                                        , msb2lsb(&ucbwfile->pramDataLength), (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1]
+                                                        , ucbwfile->pramWrtorRd[0], ucbwfile->pramAddress, ucbwfile->pramFilesize, ucbwfile->pramDirect);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            lenflh = msb2lsb(&ucbwfile->pramDataLength);
+                            filesz = lenflh;
+                    
+                            if (strcmp(msgcmd, "usbscan") != 0) {
+                                sprintf(msgcmd, "usbscan");
+                                rs_ipc_put(rcmd, msgcmd, 7);
+
+                                chq = 'n';
+                                pipRet = write(pipeTx[1], &chq, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            }
+
+                            opc = 0xff;
+                            dat = 0;
+
+                            if (ucbwfile->pramDirect == 0) { // 0=no data
+                                if (ucbwfile->ASIC_sel) {
+                                    if (usbid02) {
+                                        chd = 'i';
+                                        pipRet = write(pipeTxd[1], &chd, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
+                                } else {
+                                    if (usbid01) {
+                                        chq = 'i';
+                                        pipRet = write(pipeTx[1], &chq, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                break;
+                            }
+                            else if (ucbwfile->pramDirect == 1) { // 1=output (BULK OUT)
+
+                                ring_buf_init(rs->pcmdRx);
+
+                                lenflh = (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1];
+                                
+                                endTran[0] = 'e';
+                                endTran[1] = ucbwfile->pramFileId[0];
+                                endTran[2] = ucbwfile->pramFileId[1];
+
+                                sprintf_f(rs->logs, "[DVB] direct: 1 fileid: %d \n", lenflh);
+                                print_f(rs->plogs, "P11", rs->logs);
+
+                                rs_ipc_put(rs, endTran, 3);                                
+                                continue;
+                            }
+                            else if (ucbwfile->pramDirect == 2) { // 2=input (BULK IN)
+                                dat = 0xff;
+                                
+                                ring_buf_init(rs->pcmdRx);
+                                
+                                lenflh = (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1];
+                                
+                                endTran[0] = 'h';
+                                endTran[1] = ucbwfile->pramFileId[0];
+                                endTran[2] = ucbwfile->pramFileId[1];
+
+                                sprintf_f(rs->logs, "[DVB] direct: 2 fileid: %d \n", lenflh);
+                                print_f(rs->plogs, "P11", rs->logs);
+
+                                rs_ipc_put(rs, endTran, 3);      
+                                break;
+                            }
+                            else {
+                                sprintf_f(rs->logs, "\n[DVF] Error!!! unknown sendfile pramDirect: %d, cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",ucbwfile->pramDirect, cmd, opc, dat);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
                         }
                         else if ((cmd >= 0x00) && (cmd <= 0x0f)) {
                             if (!iubsBuff) {
@@ -58288,7 +58605,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 val = cswerr;
                                 cfgTableUpd(pct, ASPOP_SCAN_STATUS, val);
                                 cswstatus[0] = cswerr;
-                                
                                 #endif
 
                             }
@@ -59573,6 +59889,131 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 cmd = 0;
                     
+            }
+            else if ((cmd == OP_WRITE_FILE) && (opc == 0xff) && (dat == 0)) { /* usbentsTx == 1*/
+                sprintf_f(rs->logs, "[DV] usbentsTx 0x0b cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", cmd, opc, dat); 
+                print_f(rs->plogs, "P11", rs->logs);
+
+                chy = 0;
+                ret = rs_ipc_get_ms(rs, &chy, 1, 100);
+                while (ret < 0) {
+                    sprintf_f(rs->logs, "[DVB] write file response: 0x.2%x ret: %d \n", chy, ret);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    ret = rs_ipc_get_ms(rs, &chy, 1, 100);
+                }
+
+                if (chy == 'w') {
+                    ret = rs_ipc_get_ms(rs, msgret, 4, 100);
+                    while (ret < 0) {
+                        
+                        sprintf_f(rs->logs, "[DVB] write file lengh ret: %d \n", ret);
+                        print_f(rs->plogs, "P11", rs->logs);
+
+                        ret = rs_ipc_get_ms(rs, msgret, 4, 100);
+                    }
+                    
+                    filesz = msb2lsb(&ucbwfile->pramDataLength);
+
+                    if (ret == 4) {
+                        recvsz = msgret[3];
+                        recvsz |= msgret[2] << 8;
+                        recvsz |= msgret[1] << 16;
+                        recvsz |= msgret[0] << 24;
+                        sprintf_f(rs->logs, "[DVB] write file lengh: %d (%d)\n", recvsz, filesz);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    } else {
+                        sprintf_f(rs->logs, "[DVB] error!!! write file lengh ret: %d != 4\n", ret);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+
+                    memcpy(&csw[4], &iubsBuff[4], 4);
+                    
+                    csw[8] = msgret[0];                    
+                    csw[9] = msgret[1];
+                    csw[10] = msgret[2];
+                    csw[11] = msgret[3];
+                    csw[12] = 0;//seqtx;
+
+                    wrtsz = 0;
+                    retry = 0;
+                    while (1) {
+                        wrtsz = write(usbfd, csw, 13);
+
+                        #if DBG_27_DV
+                        sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                        print_f(rs->plogs, "P11", rs->logs);
+                        #endif
+                    
+                        if (wrtsz > 0) {
+                            break;
+                        }
+                        retry++;
+                        if (retry > 32768) {
+                            break;
+                        }
+                    }
+
+                    #if DBG_USB_TIME_MEASURE
+                    if (!fintvalE[0]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalE[0]);
+                        fintvalE[0] = 1;
+                
+                        if (fintvalE[1]) {
+                
+                            usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                            sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                            print_f(rs->plogs, "P11", rs->logs);
+                
+                            fintvalE[1] = 0;
+                        }
+                        else {
+                            sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 1\n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                    } else {
+                
+                        if (!fintvalE[1]) {
+                            clock_gettime(CLOCK_REALTIME, &intvalE[1]);
+                            fintvalE[1] = 1;
+                
+                            usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                            sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                            print_f(rs->plogs, "P11", rs->logs);
+                
+                            fintvalE[0] = 0;
+                        } else {
+                            sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 2\n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                    }
+                    #endif
+                
+                    if (wrtsz < 0) {
+                        //usbentsTx = 0;
+                        sprintf_f(rs->logs, "[DV] Error!!! send csw failed for 0x0b cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                        print_f(rs->plogs, "P11", rs->logs);
+
+                        continue;
+                    }
+                    
+                    sprintf_f(rs->logs, "[DV] 0x0b cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    shmem_dump(csw, wrtsz);
+
+                    csw[8] = 0;
+                    csw[9] = 0;
+                    csw[10] = 0;
+                    csw[11] = 0;
+                    
+                    cmd = 0;
+                    opc = 0;
+
+                }
+                else {
+                    sprintf_f(rs->logs, "[DV] Error!!! 0x0b get write file result ch: %c cmd: 0x%.2x opc: 0x%.2x\n", chy, cmd, opc); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                }
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0xff)) { /* usbentsTx == 1*/
                 if (ucbwpram->ASIC_sel) {
@@ -63872,6 +64313,38 @@ static char **memory_init(int *sz, int tsize, int csize)
     }
     *sz = asz;
     return pma;
+}
+
+static FILE *find_read(char *dst)
+{
+    FILE *f=0;
+
+    f = fopen(dst, "r");
+    if (!f) {
+        //printf("open file [%s]\n", dst);
+    } else {
+        //printf("open file [%s] succeed \n", dst);
+        //fclose(f);
+        return f;
+    }
+
+    return f;
+}
+
+static FILE *find_write(char *dst)
+{
+    FILE *f=0;
+
+    f = fopen(dst, "w");
+    if (!f) {
+        //printf("open file [%s] failed!!\n", dst);
+    } else {
+        //printf("open file [%s] succeed \n", dst);
+        //fclose(f);
+        return f;
+    }
+
+    return f;
 }
 
 static FILE *find_save(char *dst, char *tmple)
