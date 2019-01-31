@@ -1843,6 +1843,15 @@ static int insert_cbw(char *cbw, char cmd, char opc, char dat)
     return 0;
 }
 
+static int insert_filecbw(char *cbw, struct usbCBWfile_s *dwfile)
+{
+    if (!cbw) return -1;
+
+    memcpy(cbw, (char *)dwfile, 32);
+
+    return 0;
+}
+
 #define USB_TX_LOG 0
 static int usb_send(char *pts, int usbfd, int len)
 {
@@ -52163,11 +52172,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     char ptfilepath[128];
     #endif
     
-    char cmdMtx[21][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
+    char cmdMtx[23][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
     					    {'q', 0x02},{'r', 0x04},{'g', 0x05},{'e', 0x06},{'f', 0x07},
     					    {'b', 0x08},{'h', 0x07}, {'c', 0x02}, {'k', 0x04}, {'o', 0x07},
     					    {'i', 0x09}, {'w', 0x10}, {'y', 0x11}, {'z', 0x12}, {'t', 0x13},
-    					    {'v', 0x14}};
+    					    {'v', 0x14}, {'x', 0x15}, {'u', 0x16}}; /* j l n */
     uint8_t cmdchr=0;
     struct shmem_s *pTx=0;
     char *pMta=0;
@@ -52182,10 +52191,13 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     struct info16Bit_s *uubs=0;
     struct usbCBWopc_s *dcbwopc=0;
     struct usbCBWpram_s *dcbwpram=0;
-    char *cubsBuff=0, *dubsBuff=0, *dcswBuff=0;
+    struct usbCBWfile_s *dcbwfile=0, *dcpyfile=0;
+    char *cubsBuff=0, *dubsBuff=0, *dcswBuff=0, *erasBuff=0, *cbwcpy=0;
+    char *actbuff=0;
     int pidvid[2];
     struct usbHostmem_s *puhsinfom[2], *puhsinfo=0, *puhsinfrd=0;
-    uint32_t ut32=0, vt32=0;
+    uint32_t ut32=0, vt32=0, tagtaddr=0, erasaddr=0, actaddr=0;
+    int eraslen=0, erasoffset=0, actlen=0, txlen=0;
     int memfd=0;
     char *chvir=0;
     struct shmem_s *usbTx=0, *gateTx=0;
@@ -52195,10 +52207,14 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     uubs = &rs->pmch->ubs;
     dubsBuff = &rs->pmch->mshmem[32];
     cubsBuff = rs->pmch->mshmem;
-    dcswBuff = dubsBuff + 16384;
+    dcswBuff = dubsBuff + 1024;
     dcbwopc = (struct usbCBWopc_s *)cubsBuff;
     dcbwpram = (struct usbCBWpram_s *)cubsBuff;
-    
+    dcbwfile = (struct usbCBWfile_s *)cubsBuff;
+    erasBuff = dcswBuff + 4096;
+    cbwcpy = erasBuff + 32;
+    dcpyfile = (struct usbCBWfile_s *)cbwcpy;
+
     sprintf_f(rs->logs, "enter usbhostd \n");
     print_f(rs->plogs, sp, rs->logs);
 
@@ -52770,6 +52786,32 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         case 'v':
             cmdchr = cmdMtx[20][1];
             break;
+        case 'x':
+            cmdchr = cmdMtx[21][1];
+
+            #if 1
+            tagtaddr = msb2lsb(&dcbwfile->pramAddress);
+            #else
+            ret = read(pPtx[0], cplls, 4);
+            if (ret == 4) {
+                tagtaddr = (cplls[0] << 24) & 0xff;
+                tagtaddr |= (cplls[1] << 16) & 0xff;
+                tagtaddr |= (cplls[2] << 8) & 0xff;
+                tagtaddr |= (cplls[3] << 0) & 0xff;
+                
+                sprintf_f(rs->logs, "get target address: 0x%.8x \n", tagtaddr);
+                print_f(rs->plogs, sp, rs->logs);
+                
+            } else {
+                sprintf_f(rs->logs, "error!! get target address failed!! ret: %d \n", ret);
+                print_f(rs->plogs, sp, rs->logs);
+            }
+            #endif
+            
+            break;
+        case 'u':
+            cmdchr = cmdMtx[22][1];
+            break;
         default:
             //goto end;
             sprintf_f(rs->logs, "default chr: 0x%.2x (%c) \n", chr, chr);
@@ -53088,6 +53130,366 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             cplls[0] = 'J';
             cplls[1] = pllst;
             pieRet = write(pPrx[1], &cplls, 2);
+        }
+        else if (cmdchr == 0x16) {
+
+            if (erasoffset) {
+            
+                lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
+                lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
+                dcpyfile->pramDirect = 1;
+                dcpyfile->pramType = 1;
+                
+                actlen = erasoffset;
+                actaddr = erasaddr;
+                actbuff = erasBuff;
+
+                while (actlen) {
+
+                    if (actlen < 512) {
+                        txlen = actlen;
+                        actlen = 0;
+                    } else {
+                        actlen -= 512;
+                        txlen = 512;
+                    }
+
+                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
+                    lsb2Msb(&dcpyfile->pramDataLength, txlen);                          
+
+                    msync(cbwcpy, 32, MS_SYNC);
+
+                    #if 1//DBG_USB_HS
+                    sprintf_f(rs->logs, "dump 31 bytes");
+                    print_f(rs->plogs, sp, rs->logs);
+                    shmem_dump(cbwcpy, 31);
+                    #endif
+
+                    usb_send(cbwcpy, usbid, 31);
+
+                    usb_send(actbuff, usbid, txlen);
+
+                    ptret = usb_read(ptrecv, usbid, 13);
+                    if (ptret > 0) {
+                        memcpy(dcswBuff, ptrecv, 13);
+
+                        #if 1//DBG_USB_HS
+                        sprintf_f(rs->logs, "dump 13 bytes");
+                        print_f(rs->plogs, sp, rs->logs);
+                        shmem_dump(ptrecv, 13);
+                        #endif
+            
+                        pllst = ptrecv[12];
+                    
+                        if (pllst) break;
+                
+                        #if DBG_USB_HS
+                        sprintf_f(rs->logs, "0x16 poll status: 0x%.2x \n", pllst); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                    } else {
+                        sprintf_f(rs->logs, "0x16 read 13 bytes failed, ret: %d\n", ptret); 
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        memcpy(dcswBuff, cbwcpy, 8);      
+                        dcswBuff[12] = CSW_STATUS_USB_FAIL;
+                        pllst = dcswBuff[12];
+
+                        break;
+                    }
+                    
+                    actaddr += txlen;
+                    actbuff += txlen;
+                
+                }
+                
+                if ((actlen) || (pllst)) {
+                    sprintf_f(rs->logs, "error!!! 0x16 write failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    print_f(rs->plogs, sp, rs->logs);
+                    
+                    cplls[0] = 'U';
+                    cplls[1] = pllst;
+                    pieRet = write(pPrx[1], &cplls, 2);
+
+                    eraslen = 0;
+                }
+                
+            }
+
+            actlen = eraslen;
+            //actaddr = erasaddr;
+
+            while (actlen) {                
+
+                len = ring_buf_cons(rs->pcmdRx, &addr);
+                while (len <= 0) {
+                    sprintf_f(rs->logs, "PENDING 0x16 cons ring get len: %d \n", len);
+                    print_f(rs->plogs, sp, rs->logs);
+
+                    usleep(100000);
+                    len = ring_buf_cons(rs->pcmdRx, &addr);
+                }
+
+                sprintf_f(rs->logs, "0x16 cons ring get len: %d / %d \n", len, actlen);
+                print_f(rs->plogs, sp, rs->logs);
+
+                if (actlen >= len) {
+                    actlen -= len;
+                } else {
+                    len = actlen;
+
+                    sprintf_f(rs->logs, "WARNNING !! 0x16 last len not match %d / %d \n", len, actlen);
+                    print_f(rs->plogs, sp, rs->logs);
+                }
+
+                while (len) {
+
+                    if (len < 512) {
+                        txlen = len;
+                        len = 0;
+                    } else {
+                        txlen = 512;
+                        len -= 512;
+                    }
+
+                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
+                    lsb2Msb(&dcpyfile->pramDataLength, txlen);
+                    
+                    msync(cbwcpy, 32, MS_SYNC);
+                
+                    #if 1//DBG_USB_HS
+                    sprintf_f(rs->logs, "dump 31 bytes");
+                    print_f(rs->plogs, sp, rs->logs);
+                    shmem_dump(cbwcpy, 31);
+                    #endif
+            
+                    usb_send(cbwcpy, usbid, 31);
+
+                    usb_send(addr, usbid, txlen);
+
+                    ptret = usb_read(ptrecv, usbid, 13);
+            
+                    if (ptret > 0) {
+                        memcpy(dcswBuff, ptrecv, 13);
+
+                        #if 1//DBG_USB_HS
+                        sprintf_f(rs->logs, "dump 13 bytes");
+                        print_f(rs->plogs, sp, rs->logs);
+                        shmem_dump(ptrecv, 13);
+                        #endif
+            
+                        pllst = ptrecv[12];
+                    
+                        if (pllst) break;
+                
+                        #if DBG_USB_HS
+                        sprintf_f(rs->logs, "0x15 poll status: 0x%.2x \n", pllst); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                    } else {
+                        sprintf_f(rs->logs, "0x15 read 13 bytes failed, ret: %d\n", ptret); 
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        memcpy(dcswBuff, cbwcpy, 8);      
+                        dcswBuff[12] = CSW_STATUS_USB_FAIL;
+                        pllst = dcswBuff[12];
+
+                        break;
+                    }
+
+                    if (len == 0) {
+                        break;
+                    }
+            
+                    actaddr += txlen;
+                    addr += txlen;
+                
+                }
+
+                if ((len) || (pllst)) {
+                    sprintf_f(rs->logs, "error!!! 0x15 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    print_f(rs->plogs, sp, rs->logs);
+                    
+                    cplls[0] = 'X';
+                    cplls[1] = pllst;
+                    pieRet = write(pPrx[1], &cplls, 2);
+
+                    txlen = 0;
+                }
+
+            }
+        
+        }
+        else if (cmdchr == 0x15) {
+            pllst = 0;
+            eraslen = 0;
+            erasoffset = 0;
+            
+            if (tagtaddr) {
+                eraslen = msb2lsb(&dcbwfile->pramDataLength);
+                erasoffset = tagtaddr % 0x1000;
+                if (erasoffset) {
+                    erasaddr = tagtaddr - erasoffset;
+                } else {
+                    erasaddr = tagtaddr;
+                }
+            }
+
+            if (erasoffset) {
+                memset(erasBuff, 0, 4096);
+                memset(cbwcpy, 0, 32);
+
+                lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
+                lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
+                lsb2Msb(&dcpyfile->pramDataLength, 512);      
+                dcpyfile->pramDirect = 2;
+                //lsb2Msb(&dcpyfile->pramAddress, erasaddr);
+
+                actlen = erasoffset;
+                actaddr = erasaddr;
+                actbuff = erasBuff;
+
+                while (actlen) {
+                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
+
+                    msync(cbwcpy, 32, MS_SYNC);
+
+                    #if 1//DBG_USB_HS
+                    sprintf_f(rs->logs, "dump 31 bytes");
+                    print_f(rs->plogs, sp, rs->logs);
+                    shmem_dump(cbwcpy, 31);
+                    #endif
+
+                    usb_send(cbwcpy, usbid, 31);
+
+                    usb_read(actbuff, usbid, 512);
+
+                    ptret = usb_read(ptrecv, usbid, 13);
+                    if (ptret > 0) {
+                        memcpy(dcswBuff, ptrecv, 13);
+
+                        #if 1//DBG_USB_HS
+                        sprintf_f(rs->logs, "dump 13 bytes");
+                        print_f(rs->plogs, sp, rs->logs);
+                        shmem_dump(ptrecv, 13);
+                        #endif
+            
+                        pllst = ptrecv[12];
+                    
+                        if (pllst) break;
+                
+                        #if DBG_USB_HS
+                        sprintf_f(rs->logs, "0x15 poll status: 0x%.2x \n", pllst); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                    } else {
+                        sprintf_f(rs->logs, "0x15 read 13 bytes failed, ret: %d\n", ptret); 
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        memcpy(dcswBuff, cbwcpy, 8);      
+                        dcswBuff[12] = CSW_STATUS_USB_FAIL;
+                        pllst = dcswBuff[12];
+
+                        break;
+                    }
+                    
+                    actaddr += 512;
+                    actbuff += 512;
+                
+                    if (actlen) {
+                        if (actlen < 512) {
+                            actlen = 0;
+                        } else {
+                            actlen -= 512;
+                        }
+                    }    
+                }
+
+                if ((actlen) || (pllst)) {
+                    sprintf_f(rs->logs, "error!!! 0x15 READ B4 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    print_f(rs->plogs, sp, rs->logs);
+                    
+                    cplls[0] = 'X';
+                    cplls[1] = pllst;
+                    pieRet = write(pPrx[1], &cplls, 2);
+
+                    eraslen = 0;
+                }
+            }
+
+            if (eraslen) {
+                //insert_filecbw(cbwcpy, dcbwfile);
+                memset(cbwcpy, 0, 32);
+
+                lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
+                lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
+
+                actlen = eraslen + erasoffset;
+                actaddr = erasaddr;
+
+                while (actlen) {
+                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
+
+                    msync(cbwcpy, 32, MS_SYNC);
+                
+                    #if 1//DBG_USB_HS
+                    sprintf_f(rs->logs, "dump 31 bytes");
+                    print_f(rs->plogs, sp, rs->logs);
+                    shmem_dump(cbwcpy, 31);
+                    #endif
+            
+                    usb_send(cbwcpy, usbid, 31);
+
+                    ptret = usb_read(ptrecv, usbid, 13);
+            
+                    if (ptret > 0) {
+                        memcpy(dcswBuff, ptrecv, 13);
+
+                        #if 1//DBG_USB_HS
+                        sprintf_f(rs->logs, "dump 13 bytes");
+                        print_f(rs->plogs, sp, rs->logs);
+                        shmem_dump(ptrecv, 13);
+                        #endif
+            
+                        pllst = ptrecv[12];
+                    
+                        if (pllst) break;
+                
+                        #if DBG_USB_HS
+                        sprintf_f(rs->logs, "0x15 poll status: 0x%.2x \n", pllst); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                    } else {
+                        sprintf_f(rs->logs, "0x15 read 13 bytes failed, ret: %d\n", ptret); 
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        memcpy(dcswBuff, cbwcpy, 8);      
+                        dcswBuff[12] = CSW_STATUS_USB_FAIL;
+                        pllst = dcswBuff[12];
+
+                        break;
+                    }
+            
+                    actaddr += 0x1000;
+                
+                    if (actlen) {
+                        if (actlen < 0x1000) {
+                            actlen = 0;
+                        } else {
+                            actlen -= 0x1000;
+                        }
+                    }
+                }
+
+                if ((actlen) || (pllst)) {
+                    sprintf_f(rs->logs, "error!!! 0x15 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    print_f(rs->plogs, sp, rs->logs);
+                }
+
+                cplls[0] = 'X';
+                cplls[1] = pllst;
+                pieRet = write(pPrx[1], &cplls, 2);
+            }
         }
         else if (cmdchr == 0x09) { 
             pllst = 0;
@@ -54430,7 +54832,7 @@ static int p10(struct procRes_s *rs)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
-#define OP_WRITE_FILE (0x01)
+#define OP_WRITE_FILE (0x0b)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -54532,7 +54934,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     iubs = &rs->pmch->ubs;
     vubsBuff = &rs->pmch->mshmem[32];
     iubsBuff = rs->pmch->mshmem;
-    vcswBuff = vubsBuff + 16384;
+    vcswBuff = vubsBuff + 1024;
     ucbwopc = (struct usbCBWopc_s *)iubsBuff;
     ucbwpram = (struct usbCBWpram_s *)iubsBuff;
     ucbwfile = (struct usbCBWfile_s *)iubsBuff;
