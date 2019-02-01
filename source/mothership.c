@@ -39218,8 +39218,19 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     
                                     wfileid = (minfo[0] << 8) | minfo[1];
                                     
+                                    #if 1 /* debug */
+                                    if (wfileid == 0) {
+                                        wfileid = fileidcnt;
+                                        fileidcnt --;
+                                        if (fileidcnt < 0) fileidcnt = 0;
+                                    }
+                                    #endif
+                                    
                                     sprintf(idfile, filenames, wfileid);
-                                    filefd = find_write(idfile);
+                                    filefd = find_read(idfile);
+                                    if (filefd) {
+                                        write(outfd[0], "x", 1);
+                                    }
                                     
                                     sprintf_f(mrs->log, "[GW] rget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, filefd);
                                     print_f(&mrs->plog, "fs145", mrs->log);
@@ -40195,7 +40206,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             pollfo[0] = 'J';
                             pollfo[1] = pllinf;
                             write(outfd[ins], pollfo, 2);
-                            
                         }
                         else if (pllcmd[ins] == 'T') {
                             chq = 't';
@@ -40215,6 +40225,25 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         }
                         #endif
+                        else if (pllcmd[ins] == 'X') {
+                            pllinf = 0;                        
+                            gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            while (gerr < 0) {
+                                pllinf = 0;
+                                gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            }
+                            
+                            sprintf_f(mrs->log, "[GW] id:%d write file erase get ch: %c pllinf: 0x%.2x \n", ins, pllcmd[ins], pllinf);
+                            print_f(&mrs->plog, "fs145", mrs->log);
+
+                            if (!pllinf) {
+                                write(infd[ins], "u", 1);    
+                            } else {
+                                pollfo[0] = 'X';
+                                pollfo[1] = pllinf;
+                                write(outfd[ins], pollfo, 2);
+                            }
+                        }
                         else {
                             sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
                             print_f(&mrs->plog, "fs145", mrs->log);
@@ -52196,8 +52225,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     char *actbuff=0;
     int pidvid[2];
     struct usbHostmem_s *puhsinfom[2], *puhsinfo=0, *puhsinfrd=0;
-    uint32_t ut32=0, vt32=0, tagtaddr=0, erasaddr=0, actaddr=0;
-    int eraslen=0, erasoffset=0, actlen=0, txlen=0;
+    uint32_t ut32=0, vt32=0, tagtaddr=0, erasaddr=0, actaddr=0, tgendaddr=0, erendaddr=0;
+    int eraslen=0, erasoffset=0, actlen=0, txlen=0, erendoffset=0;
     int memfd=0;
     char *chvir=0;
     struct shmem_s *usbTx=0, *gateTx=0;
@@ -53215,9 +53244,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 
             }
+            else {
+                actaddr = tagtaddr;
+            }
 
             actlen = eraslen;
-            //actaddr = erasaddr;
 
             while (actlen) {                
 
@@ -53328,12 +53359,22 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             if (tagtaddr) {
                 eraslen = msb2lsb(&dcbwfile->pramDataLength);
                 erasoffset = tagtaddr % 0x1000;
+                tgendaddr = tagtaddr + eraslen;
+                erendoffset = tgendaddr % 0x1000;
                 if (erasoffset) {
                     erasaddr = tagtaddr - erasoffset;
                 } else {
                     erasaddr = tagtaddr;
                 }
+
+                if (erendoffset) {
+                    erendaddr = tgendaddr + erendoffset;
+                } else {
+                    erendaddr = tgendaddr;
+                }
             }
+
+            /* todo: read before erase to save data */
 
             if (erasoffset) {
                 memset(erasBuff, 0, 4096);
