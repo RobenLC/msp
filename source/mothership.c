@@ -39293,19 +39293,21 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     if (len > maxsz) {
                                         len = maxsz;
-                                    } else {
-                                        maxsz -= len;
                                     }
-
-                                    ret = fread(addrs, 1, len, filefd);
-                                    if (ret != len) {
-                                        sprintf_f(mrs->log, "[GW] read rfile failed ret: %d \n",len);
-                                        print_f(&mrs->plog, "fs145", mrs->log);
-                                        break;
-                                    }
+                                    
+                                    maxsz -= len;
                                     
                                     sprintf_f(mrs->log, "[GW] read rfile len: %d last: %d\n",len, maxsz);
                                     print_f(&mrs->plog, "fs145", mrs->log);
+
+                                    ret = fread(addrs, 1, len, filefd);
+                                    if (ret != len) {
+                                        sprintf_f(mrs->log, "[GW] read rfile failed ret: %d (%d) \n",ret, len);
+                                        print_f(&mrs->plog, "fs145", mrs->log);
+
+                                        ring_buf_prod(&mrs->cmdRx);    
+                                        break;
+                                    }                                    
 
                                     ring_buf_prod(&mrs->cmdRx);    
                                     
@@ -39314,6 +39316,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 ring_buf_set_last(&mrs->cmdRx, len);
 
                                 fclose(filefd);
+                                filefd = 0;
 
                                 break;
                             case 'j':
@@ -57248,35 +57251,40 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lenrs = ring_buf_get(rs->pcmdRx, &addrs);
 
                         if (lenrs > 0) {
-                            if (lenrs >= filesz) {
+                            if (lenrs > filesz) {
                                 lenrs = filesz;
                             }
 
-                            recvsz = 0;
-                            while (1) {
-                                recvsz = read(usbfd, addrs, lenrs);
-                                if (recvsz > 0) {
-                                    if (recvsz != lenrs) {
-                                        sprintf_f(rs->logs, "\n[DVB] Error !!! usb file read recvsz: %d (%d)  \n",recvsz, lenrs);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                    }
+                            filesz = filesz - lenrs;
 
-                                    filesz = filesz - recvsz;
-                                    break;
+                            sprintf_f(rs->logs, "[DVB] usb file read recvsz: %d remain: %d  \n", lenrs, filesz);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            recvsz = lenrs;
+                            errcnt = 0;
+                            while (recvsz) {
+                                ret = read(usbfd, addrs, recvsz);
+                                if (ret > 0) {
+                                    sprintf_f(rs->logs, "\n[DVB] usb file read recvsz: %d (%d)  \n",ret, recvsz);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    recvsz -= ret;
+                                    addrs += ret;
                                 } else {
+                                    errcnt++;
+                                    if (errcnt > 100) {
+                                        break;
+                                    }
+                                    usleep(100000);
                                     continue;
                                 }                        
                             }
 
-                            sprintf_f(rs->logs, "[DVB] usb file read recvsz: %d (%d) remain: %d  \n",recvsz, lenrs, filesz);
-                            print_f(rs->plogs, "P11", rs->logs);
-
                             ring_buf_prod(rs->pcmdRx);
-                            
-                            rs_ipc_put(rs, "f", 1);
                             
                             if (lenrs < SPI_TRUNK_SZ) {
                                 ring_buf_set_last(rs->pcmdRx, lenrs);
+                                rs_ipc_put(rs, "f", 1);
                                 rs_ipc_put(rs, "g", 1);
 
                                 if (filesz != 0) {
@@ -57285,9 +57293,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                                 break;
                             }
+
+                            rs_ipc_put(rs, "f", 1);
+                            
                         }
                         else {
-                            sprintf_f(rs->logs, "[DVB] get buff ret:%d  (%d)\n",recvsz, filesz);
+                            sprintf_f(rs->logs, "[DVB] get buff ret:%d  (%d)\n",lenrs, filesz);
                             print_f(rs->plogs, "P11", rs->logs);
 
                             usleep(100000);
@@ -58242,7 +58253,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             sprintf_f(rs->logs, "[DV] file access dlen: %d, fileid: %d, wrtrd: %d, addr: 0x%.8x, fsize: %d, direct: %d \n"
                                                         , msb2lsb(&ucbwfile->pramDataLength), (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1]
-                                                        , ucbwfile->pramWrtorRd[0], ucbwfile->pramAddress, ucbwfile->pramFilesize, ucbwfile->pramDirect);
+                                                        , ucbwfile->pramWrtorRd[0], msb2lsb(&ucbwfile->pramAddress), msb2lsb(&ucbwfile->pramFilesize), ucbwfile->pramDirect);
                             print_f(rs->plogs, "P11", rs->logs);
 
                             lenflh = msb2lsb(&ucbwfile->pramDataLength);
@@ -58264,29 +58275,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             opc = 0xff;
                             dat = 0;
 
-                            if (ucbwfile->pramDirect == 0) { // 0=no data
-                                if (ucbwfile->ASIC_sel) {
-                                    if (usbid02) {
-                                        chd = 'i';
-                                        pipRet = write(pipeTxd[1], &chd, 1);
-                                        if (pipRet < 0) {
-                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                            print_f(rs->plogs, "P11", rs->logs);
-                                            continue;
-                                        }
-                                    }
-                                } else {
-                                    if (usbid01) {
-                                        chq = 'i';
-                                        pipRet = write(pipeTx[1], &chq, 1);
-                                        if (pipRet < 0) {
-                                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                            print_f(rs->plogs, "P11", rs->logs);
-                                            continue;
-                                        }
-                                    }
-                                }
-
+                            if (!lenflh) {
+                                //ring_buf_init(rs->pcmdRx);
+                                sprintf_f(rs->logs, "[DV] file access data length: %d \n", lenflh);
+                                print_f(rs->plogs, "P11", rs->logs);
                                 break;
                             }
                             else if (ucbwfile->pramDirect == 1) { // 1=output (BULK OUT)
@@ -60615,7 +60607,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 chy = 0;
                 ret = rs_ipc_get_ms(rs, &chy, 1, 100);
                 while (ret < 0) {
-                    sprintf_f(rs->logs, "[DVB] write file response: 0x.2%x ret: %d \n", chy, ret);
+                    sprintf_f(rs->logs, "[DVB] write file response: 0x%.2x ret: %d \n", chy, ret);
                     print_f(rs->plogs, "P11", rs->logs);
 
                     ret = rs_ipc_get_ms(rs, &chy, 1, 100);
@@ -60744,7 +60736,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 chy = 0;
                 ret = rs_ipc_get_ms(rs, &chy, 1, 100);
                 while (ret < 0) {
-                    sprintf_f(rs->logs, "[DVB] write file response: 0x.2%x ret: %d \n", chy, ret);
+                    sprintf_f(rs->logs, "[DVB] write file response: 0x%.2x ret: %d \n", chy, ret);
                     print_f(rs->plogs, "P11", rs->logs);
 
                     ret = rs_ipc_get_ms(rs, &chy, 1, 100);
@@ -60784,24 +60776,45 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     csw[12] = 0;//seqtx;
 
                 }
-                
-                lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
-                while (lenrs <= 0) {
-                    sprintf_f(rs->logs, "[DVB] get rbuf failed ret: %d \n", lenrs);
+
+                while (recvsz) {
+                    lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
+                    while (lenrs <= 0) {
+                        sprintf_f(rs->logs, "[DVB] get rbuf failed ret: %d \n", lenrs);
+                        print_f(rs->plogs, "P11", rs->logs);
+
+                        usleep(100000);
+                        lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
+                    }
+
+                    recvsz -= lenrs;
+
+                    sprintf_f(rs->logs, "[DVB] 0x0b rusb send %d - %d\n", lenrs, recvsz);
                     print_f(rs->plogs, "P11", rs->logs);
 
-                    usleep(100000);
-                    lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
+                    errcnt = 0;
+                    while (lenrs) {
+                        wrtsz = write(usbfd, addrs, lenrs);
+                        if (wrtsz <= 0) {
+                            errcnt++;
+
+                            if (errcnt > 100) {
+                                break;
+                            }
+                            usleep(100000);
+                            continue;
+                        }
+
+                        lenrs -= wrtsz;
+                        addrs += wrtsz;
+                    }
                 }
 
-                wrtsz = write(usbfd, addrs, lenrs);
-
-                sprintf_f(rs->logs, "[DVB] 0x0b rusb send %d (%d)\n", wrtsz, lenrs);
-                print_f(rs->plogs, "P11", rs->logs);
-                
-                if (lenrs < SPI_TRUNK_SZ) {
-                    opc = 0;
+                if (recvsz) {
+                    csw[12] = 0x40;//seqtx;
                 }
+
+                opc = 0;
                 
             }
             else if ((cmd == OP_WRITE_FILE) && (opc == 0) && (dat == 0xff)) { /* usbentsTx == 1*/
