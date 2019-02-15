@@ -38670,7 +38670,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define DBG_USB_GATE (1)
+#define DBG_USB_GATE (0)
 #define MAX_145_EVENT (9)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -40423,6 +40423,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                             break;
                                         }
+                                        
+                                        //sprintf_f(mrs->log, "[GW] dump memory %d bytes: \n", lens);
+                                        //print_f(&mrs->plog, "fs145", mrs->log);
+                                        //shmem_dump(addrs, lens);
 
                                         ring_buf_prod(&mrs->cmdRx);
                                     }
@@ -52386,7 +52390,7 @@ static int p8(struct procRes_s *rs)
     return 0;
 }
 
-#define DBG_USB_HS (1)
+#define DBG_USB_HS (0)
 #define DBG_USB_FLW (0)
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
@@ -53431,7 +53435,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     usb_send(cbwcpy, usbid, 31);
 
+                    shmem_dump(actbuff, 512);
+                    
                     usb_send(actbuff, usbid, txlen);
+                    
+                    shmem_dump(actbuff, 512);
 
                     ptret = usb_read(ptrecv, usbid, 13);
                     if (ptret > 0) {
@@ -53535,6 +53543,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     usb_send(cbwcpy, usbid, 31);
 
                     usb_send(addr, usbid, txlen);
+                    
+                    //sprintf_f(rs->logs, "dump memory %d bytes", txlen);
+                    //print_f(rs->plogs, sp, rs->logs);
+                    //shmem_dump(addr, txlen);
 
                     ptret = usb_read(ptrecv, usbid, 13);
             
@@ -53591,9 +53603,15 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
                 dcpyfile->pramDirect = 1;
                 dcpyfile->pramType = 1;
-                
-                actlen = erendoffset;
-                actaddr = erendaddr - erendoffset;
+
+                actlen = (0x1000 - erendoffset);
+                if (actlen % 512) {
+                    actlen = actlen % 512;
+                    actlen = (0x1000 - erendoffset) - actlen;
+                }
+
+                actaddr = erendaddr - actlen;
+                //actaddr = erendaddr - erendoffset;
                 actbuff = erendBuff;
 
                 while (actlen) {
@@ -53622,7 +53640,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     usb_send(cbwcpy, usbid, 31);
 
+                    shmem_dump(actbuff, 512);
+                    
                     usb_send(actbuff, usbid, txlen);
+
+                    shmem_dump(actbuff, 512);
 
                     ptret = usb_read(ptrecv, usbid, 13);
                     if (ptret > 0) {
@@ -53694,8 +53716,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 erendoffset = tgendaddr % 0x1000;
                 
                 if (erasoffset) {
-                    if (erasoffset % 512) {
-                        sprintf_f(rs->logs, "warnning!! the erasoffset not correct: %d \n", erasoffset);
+                    if (erasoffset % 64) {
+                        sprintf_f(rs->logs, "warnning!! the erasoffset not multiplex of 64 %d \n", erasoffset);
                         print_f(rs->plogs, sp, rs->logs);
                     }
                     
@@ -53705,8 +53727,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
 
                 if (erendoffset) {
-                    if (erendoffset % 512) {
-                        sprintf_f(rs->logs, "warnning!! the erendoffset not correct: %d \n", erendoffset);
+                    if (erendoffset % 64) {
+                        sprintf_f(rs->logs, "warnning!! the erendoffset not multiplex of 64 %d \n", erendoffset);
                         print_f(rs->plogs, sp, rs->logs);
                     }
 
@@ -53715,6 +53737,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     erendaddr = tgendaddr;
                 }
             }
+
+            sprintf_f(rs->logs, "erasaddr: 0x%.8x erasoffset: %d \n", erasaddr, erasoffset);
+            print_f(rs->plogs, sp, rs->logs);
+            sprintf_f(rs->logs, "erendaddr: 0x%.8x erendoffset: %d \n", erendaddr, erendoffset);
+            print_f(rs->plogs, sp, rs->logs);
 
             memset(erasBuff, 0, 4096);
             memset(erendBuff, 0, 4096);
@@ -53732,6 +53759,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 //lsb2Msb(&dcpyfile->pramAddress, erasaddr);
 
                 actlen = erasoffset;
+                if (actlen % 64) {
+                    len = actlen % 64;
+                    actlen += (64 - len);
+                }
+                
                 actaddr = erasaddr;
                 actbuff = erasBuff;
 
@@ -53748,7 +53780,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     usb_send(cbwcpy, usbid, 31);
 
+                    shmem_dump(actbuff, 512);
+                    
                     usb_read(actbuff, usbid, 512);
+
+                    shmem_dump(actbuff, 512);
 
                     ptret = usb_read(ptrecv, usbid, 13);
                     if (ptret > 0) {
@@ -53814,9 +53850,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 dcpyfile->pramDirect = 2;
                 
                 actlen = (0x1000 - erendoffset);
-                if (actlen % 512) {
-                    actlen = 512 - (actlen % 512);
-                    actlen = (0x1000 - erendoffset) + actlen;
+                if (actlen % 64) {
+                    actlen = actlen % 64;
+                    actlen = (0x1000 - erendoffset) - actlen;
                 }
 
                 actaddr = erendaddr - actlen;
@@ -53835,7 +53871,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     usb_send(cbwcpy, usbid, 31);
 
+                    shmem_dump(actbuff, 512);
+                    
                     usb_read(actbuff, usbid, 512);
+
+                    shmem_dump(actbuff, 512);
 
                     ptret = usb_read(ptrecv, usbid, 13);
                     if (ptret > 0) {
@@ -61152,7 +61192,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (chq == 'H') {
                                 while (1) {
                                     pipRet = read(pipeRx[0], msgret, 4);
-                                    if (pipRet < 0) {
+                                    if (pipRet > 0) {
                                         break;
                                     }
                                 }
@@ -61165,14 +61205,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     recvsz |= msgret[0] << 24;
                                 }
                                 
-                                sprintf_f(rs->logs, "[DV] polld ch: %c, file length: %d \n", chq, recvsz);
+                                sprintf_f(rs->logs, "[DV] polld ch: %c, file length: %d ret: %d\n", chq, recvsz, pipRet);
                                 print_f(rs->plogs, "P11", rs->logs);    
                             } 
                             else if ((chq == 'X') || (chq == 'U')) {
                                 chn = 0;
                                 while (1) {
                                     pipRet = read(pipeRx[0], &chn, 4);
-                                    if (pipRet < 0) {
+                                    if (pipRet > 0) {
                                         break;
                                     }
                                 }
@@ -61209,7 +61249,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (chd == 'H') {
                                 while (1) {
                                     pipRet = read(pipeRxd[0], msgret, 4);
-                                    if (pipRet < 0) {
+                                    if (pipRet > 0) {
                                         break;
                                     }
                                 }
@@ -61222,14 +61262,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     recvsz |= msgret[0] << 24;
                                 }
                                 
-                                sprintf_f(rs->logs, "[DV] polld ch: %c, file length: %d \n", chd, recvsz);
+                                sprintf_f(rs->logs, "[DV] polld ch: %c, file length: %d ret: %d \n", chd, recvsz, pipRet);
                                 print_f(rs->plogs, "P11", rs->logs);    
                             }
                             else if ((chd == 'X') || (chd == 'U')) {
                                 chm = 0;
                                 while (1) {
                                     pipRet = read(pipeRxd[0], &chm, 4);
-                                    if (pipRet < 0) {
+                                    if (pipRet > 0) {
                                         break;
                                     }
                                 }
