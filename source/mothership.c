@@ -1364,6 +1364,19 @@ struct usbCSWfile_s{
 		uint8_t	              pramStatus;		      // status of file id access
 };
 
+struct usbFileidContent_s{
+		char       usfdid[4];
+		uint32_t  usfdsize;
+		uint32_t  usfdAddr;
+};
+
+struct usbFileidAccess_s{
+		char                                  usfacMagicBegin[4];
+		int                                     usfacLength;
+		struct usbFileidContent_s  *usfacPt;
+		char                                  usfacMagicEnd[4];
+};
+
 struct usbhost_s{
     int ushid;
     struct shmem_s *pushring;
@@ -1439,6 +1452,7 @@ struct mainRes_s{
     int usbmfd;
     int usbdv;
     char *usbdvname;
+    struct usbFileidAccess_s usbfile;
     struct usbhost_s *usbhost[2];
     struct usbHostmem_s *usbmh[2];
     struct psdata_s stdata;
@@ -1505,6 +1519,7 @@ struct procRes_s{
     int spifd;
     int usbdvid;
     char *usvdvname;
+    struct usbFileidAccess_s *pusbfile;
     struct usbhost_s *pusbhost;
     struct usbHostmem_s *pusbmh[2];
     struct psdata_s *pstdata;
@@ -39923,6 +39938,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         else if (pllcmd[ins] == 'u') {
                             write(outfd[ins], &pllcmd[ins], 1);
                         }
+                        else if (pllcmd[ins] == '0') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
                         else {
                             sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
                             print_f(&mrs->plog, "fs145", mrs->log);
@@ -52419,11 +52437,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     char ptfilepath[128];
     #endif
     
-    char cmdMtx[23][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
+    char cmdMtx[24][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
     					    {'q', 0x02},{'r', 0x04},{'g', 0x05},{'e', 0x06},{'f', 0x07},
     					    {'b', 0x08},{'h', 0x07}, {'c', 0x02}, {'k', 0x04}, {'o', 0x07},
     					    {'i', 0x09}, {'w', 0x10}, {'y', 0x11}, {'z', 0x12}, {'t', 0x13},
-    					    {'v', 0x14}, {'j', 0x15}, {'u', 0x16}}; /* j l n */
+    					    {'v', 0x14}, {'j', 0x15}, {'u', 0x16}, {'0', 0x17}}; /* j l n */
     uint8_t cmdchr=0;
     struct shmem_s *pTx=0;
     char *pMta=0;
@@ -52827,7 +52845,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             #if USB_ALIVE_POLLING 
             else {
                 polcnt ++;
-                if (polcnt % 6) {
+                if (polcnt % 10) {
                     continue;
                 }
                 
@@ -52836,7 +52854,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     print_f(rs->plogs, sp, rs->logs);
                 }
 
-                #if 0
+                #if 1
                 sprintf_f(rs->logs, "USB device[%s] id: %d vid: 0x%.2x pid: 0x%.2x usbid: %d \n", puhsinfo->ushostname, 
                                puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], usbid); 
                 print_f(rs->plogs, sp, rs->logs);
@@ -52876,11 +52894,14 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         
                         puhsinfo->ushostpidvid[0] = pidvid[0];
                         puhsinfo->ushostpidvid[1] = pidvid[1];
-                        
+
+                        ret = -1;
                     }
                 }
-
-                ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                else {
+                    ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                }
+                
                 if (ret < 0) {
                     perror("usb get vid pid");
                     sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
@@ -53179,6 +53200,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             break;
         case 'u':
             cmdchr = cmdMtx[22][1];
+            break;
+        case '0':
+            cmdchr = cmdMtx[23][1];
             break;
         default:
             //goto end;
@@ -53508,6 +53532,190 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             cplls[0] = 'J';
             cplls[1] = pllst;
             pieRet = write(pPrx[1], &cplls, 2);
+        }
+        else if (cmdchr == 0x17) {
+            sprintf_f(rs->logs, "reset to rom usb wait for reset timeout vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+            print_f(rs->plogs, sp, rs->logs);
+
+            usleep(1500000);
+
+            if (usbid) {
+                close(usbid);
+                usbid = 0;
+            }
+            
+            pllst = 0;
+            usbid = open(puhsinfo->ushostname, O_RDWR);
+            if (usbid <= 0) {
+                sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                print_f(rs->plogs, sp, rs->logs);
+                    
+                pllst = CSW_STATUS_USB_FAIL;
+                usbid = 0;
+
+                cplls[0] = 'J';
+                cplls[1] = pllst;
+                pieRet = write(pPrx[1], &cplls, 2);
+
+                continue;
+            }
+            
+            sprintf_f(rs->logs, "reset to rom usb vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+            print_f(rs->plogs, sp, rs->logs);
+
+            pidvid[0] = 0;
+            pidvid[1] = 0;
+
+            ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+            if (ret < 0) {
+                perror("usb get vid pid");
+                sprintf_f(rs->logs, "alive get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                print_f(rs->plogs, sp, rs->logs);
+                
+                err = close(usbid);
+                usbid = 0;
+                
+                sprintf_f(rs->logs, "alive close usb errno:%d ret: %d \n", errno, err);
+                print_f(rs->plogs, sp, rs->logs);
+
+                usbid = open(puhsinfo->ushostname, O_RDWR);
+                
+                if (usbid <= 0) {
+                    sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                    print_f(rs->plogs, sp, rs->logs);
+                    
+                    pllst = CSW_STATUS_USB_FAIL;
+                    usbid = 0;
+                    
+                    cplls[0] = 'J';
+                    cplls[1] = pllst;
+                    pieRet = write(pPrx[1], &cplls, 2);
+
+                    continue;
+                } else {
+                    sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
+                    print_f(rs->plogs, sp, rs->logs);
+
+                    pidvid[0] = 0;
+                    pidvid[1] = 0;
+                    ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                    if (ret < 0) {
+                        sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
+                        print_f(rs->plogs, sp, rs->logs);
+                        
+                        close(usbid);
+                        usbid = 0;
+                        
+                        pllst = CSW_STATUS_USB_FAIL;
+
+                        cplls[0] = 'J';
+                        cplls[1] = pllst;
+                        pieRet = write(pPrx[1], &cplls, 2);
+
+                        continue;
+                    }
+                                        
+                    if ((usbid != 0) && (pidvid[0] != 0) && (pidvid[1] != 0)) {
+                        sprintf_f(rs->logs,  "check alive vid pid for [%s] vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x\n", 
+                                                       puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        puhsinfo->ushostpidvid[0] = pidvid[0];
+                        puhsinfo->ushostpidvid[1] = pidvid[1];
+                        if (puhsinfo->ushostid) {
+                            puhsinfo->ushostid = usbid;
+                        }
+
+                        if (pidvid[1] == 0x0a01) {
+                            pllst = 0xa1;
+                        }
+                    }
+                }                
+            }
+            else {
+                if ((usbid != 0) && (pidvid[0] != 0) && (pidvid[1] != 0)) {
+                    sprintf_f(rs->logs,  "check alive vid pid for [%s] vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x - 2\n", 
+                                                       puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
+                    print_f(rs->plogs, sp, rs->logs);
+
+                    puhsinfo->ushostpidvid[0] = pidvid[0];
+                    puhsinfo->ushostpidvid[1] = pidvid[1];
+                    if (puhsinfo->ushostid) {
+                        puhsinfo->ushostid = usbid;
+                    }
+
+                    if (pidvid[1] == 0x0a01) {
+                        pllst = 0xa1;
+                    }
+                }                        
+            }
+
+            if (pllst == 0xa1) {
+                sprintf_f(rs->logs,  "reset to rom flash mode usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
+                print_f(rs->plogs, sp, rs->logs);
+            } else {
+                sprintf_f(rs->logs,  "reset to ram pllst: 0x%.2x usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", pllst, puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
+                print_f(rs->plogs, sp, rs->logs);
+            }
+
+            if ((puhsinfo->ushostid) && (pllst != 0xa1)) {
+                bitset = RING_BUFF_NUM_USB;
+                ret = USB_IOCT_LOOP_BUFF_PRESET(usbid, &bitset);
+                if (ret < 0) {
+                    sprintf_f(rs->logs,  "can't pre-set buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
+                    print_f(rs->plogs, sp, rs->logs);
+                    close(usbid);
+                    usbid = 0;
+                
+                    pllst = CSW_STATUS_USB_FAIL;
+            
+                    cplls[0] = 'J';
+                    cplls[1] = pllst;
+                    pieRet = write(pPrx[1], &cplls, 2);
+            
+                    continue;
+                }
+            
+                if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
+                    sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                    print_f(rs->plogs, sp, rs->logs);
+                    close(usbid);
+                    usbid = 0;
+                
+                    pllst = CSW_STATUS_USB_FAIL;
+                    
+                    cplls[0] = 'J';
+                    cplls[1] = pllst;
+                    pieRet = write(pPrx[1], &cplls, 2);
+            
+                    continue;
+                }
+            
+                ret = USB_IOCT_LOOP_BUFF_SET(usbid, puhsinfo->ushostblphy);
+                if (ret < 0) {
+                    sprintf_f(rs->logs,  "can't set phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
+                    print_f(rs->plogs, sp, rs->logs);
+                    close(usbid);
+                    usbid = 0;
+                
+                    pllst = CSW_STATUS_USB_FAIL;
+                    
+                    cplls[0] = 'J';
+                    cplls[1] = pllst;
+                    pieRet = write(pPrx[1], &cplls, 2);
+            
+                    continue;
+                }  
+            }
+            
+            memset(ptrecv, 0x0, 13);
+            memcpy(ptrecv, cubsBuff, 8);
+            ptrecv[12] = pllst;
+            
+            cplls[0] = 'J';
+            cplls[1] = pllst;
+            pieRet = write(pPrx[1], &cplls, 2);
+        
         }
         else if (cmdchr == 0x16) {
 
@@ -55140,21 +55348,24 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             pllst = 0;
 
+            pidvid[0] = 0;
+            pidvid[1] = 0;
+
             ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
             if (ret < 0) {
                 perror("usb get vid pid");
-                sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                sprintf_f(rs->logs, "alive get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                 print_f(rs->plogs, sp, rs->logs);
                 
                 err = close(usbid);
                 usbid = 0;
-                sprintf_f(rs->logs, "close usb errno:%d ret: %d \n", errno, err);
+                
+                sprintf_f(rs->logs, "alive close usb errno:%d ret: %d \n", errno, err);
                 print_f(rs->plogs, sp, rs->logs);
-
 
                 usbid = open(puhsinfo->ushostname, O_RDWR);
                 
-                if (usbid < 0) {
+                if (usbid <= 0) {
                     sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                     print_f(rs->plogs, sp, rs->logs);
                     
@@ -55166,11 +55377,14 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                     sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
                     print_f(rs->plogs, sp, rs->logs);
-                
+
+                    pidvid[0] = 0;
+                    pidvid[1] = 0;
                     ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
                     if (ret < 0) {
                         sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
+                        
                         close(usbid);
                         usbid = 0;
                         
@@ -55178,12 +55392,23 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         
                         //continue;
                     }
-                
-                    if ((pidvid[0] != puhsinfo->ushostpidvid[0]) || (pidvid[1] != puhsinfo->ushostpidvid[1])) {
-                        sprintf_f(rs->logs,  "vid pid for [%s] not match vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x\n", 
+                                        
+                    if ((usbid != 0) && (pidvid[0] != 0) && (pidvid[1] != 0)) {
+                        sprintf_f(rs->logs,  "check alive vid pid for [%s] vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x\n", 
                                                        puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                         print_f(rs->plogs, sp, rs->logs);
 
+                        puhsinfo->ushostpidvid[0] = pidvid[0];
+                        puhsinfo->ushostpidvid[1] = pidvid[1];
+                        if (puhsinfo->ushostid) {
+                            puhsinfo->ushostid = usbid;
+                        }
+
+                        if (pidvid[1] == 0x0a01) {
+                            pllst = 0xa1;
+                        }
+                        
+                        #if 0
                         close(usbid);
                         usbid = 0;
                         
@@ -55236,6 +55461,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 //continue;
                             }
                         }
+                        #endif
                     }
 
                     if (!pllst) {
@@ -55284,7 +55510,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs,  "check alive setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
                         print_f(rs->plogs, sp, rs->logs);
                     } else {
-                        sprintf_f(rs->logs,  "usb check alive failed!!pllst: 0x%.2x usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", pllst, puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
+                        sprintf_f(rs->logs,  "usb check alive !!pllst: 0x%.2x usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", pllst, puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
                         print_f(rs->plogs, sp, rs->logs);
                     }
                 }
@@ -55329,6 +55555,23 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 #endif
                 
+            }
+            else {
+                if ((usbid != 0) && (pidvid[0] != 0) && (pidvid[1] != 0)) {
+                    sprintf_f(rs->logs,  "check alive vid pid for [%s] vid: 0x%.4x pid: 0x%.4x expect 0x%.4x 0x%.4x - 2\n", 
+                                                       puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
+                    print_f(rs->plogs, sp, rs->logs);
+
+                    puhsinfo->ushostpidvid[0] = pidvid[0];
+                    puhsinfo->ushostpidvid[1] = pidvid[1];
+                    if (puhsinfo->ushostid) {
+                        puhsinfo->ushostid = usbid;
+                    }
+
+                    if (pidvid[1] == 0x0a01) {
+                        pllst = 0xa1;
+                    }
+                }                        
             }
 
             #if 0 /* forward opc: 0x4f to ASIC */
@@ -55492,10 +55735,14 @@ static int p10(struct procRes_s *rs)
 #define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
 #define OP_WRITE_FILE (0x0b)
+#define OP_RESET_ROM (0x0c)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
     char ch=0;
+    char fileidpoll[64] = "/root/scaner/fileidpll.bin";
+    char *fileidbuff=0;
+    FILE *fdpll=0;
     char syscmd11[256] = "ls -al";
     struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
     struct epoll_event evtrs, evtrsd, evtrcmd, evtpipr, evtpiprd;
@@ -55562,7 +55809,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int opsz=0, lrst=0;
     struct usbHostmem_s *pinfushost=0, *pinfushostd=0, *pinfcur=0;
     int udist=0, uthrhld=0, upas=0, ursm=0;
-
+    struct usbFileidAccess_s *pubf=0;
+    struct usbFileidContent_s *pubfidc=0, *pubfidnxt=0;
+    
+    pubf = rs->pusbfile;
+    
     pinfushost = rs->pusbmh[0];
     if (!pinfushost) {
         sprintf_f(rs->logs, "Error!!! usb host 0 info not available !!! \n");
@@ -57877,8 +58128,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         cmd = ptrecv[15];
                         opc = ptrecv[16];
                         dat = ptrecv[17];
-
-                        if (cmd == OP_WRITE_FILE) {
+                        
+                        if (cmd == OP_RESET_ROM) {
+                            shmem_dump(ptrecv, recvsz);
+                        }
+                        else if (cmd == OP_WRITE_FILE) {
                             shmem_dump(ptrecv, recvsz);
                         }
                         else if ((cmd >= 0x00) && (cmd <= 0x0f)) {
@@ -58645,21 +58899,248 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             
                             break;
                         }
+                        else if (cmd == OP_RESET_ROM) {
+                            memcpy(iubsBuff, ptrecv, 31);
+                            
+                            sprintf_f(rs->logs, "[DV] reset ASIC to rom flash, select: %d \n"
+                                                        , ucbwfile->ASIC_sel);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            act = ucbwfile->ASIC_sel;
+
+                            if (strcmp(msgcmd, "usbscan") != 0) {
+                                sprintf(msgcmd, "usbscan");
+                                rs_ipc_put(rcmd, msgcmd, 7);
+
+                                chq = 'n';
+                                pipRet = write(pipeTx[1], &chq, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            }
+
+                            opc = 0xff;
+                            dat = 0;
+
+                            switch (act) {
+                            case 0: /* primary */
+                                sprintf(syscmd11, "/root/module/romPri.sh");
+                                ret = doSystemCmd(syscmd11);
+                                break;
+                            case 1: /* secondary */
+                                sprintf(syscmd11, "/root/module/romSec.sh");
+                                ret = doSystemCmd(syscmd11);
+                                break;
+                            default:
+                                sprintf_f(rs->logs, "[DV] Error!! unknown select %d \n", act);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                break;
+                            }
+
+                            if (usbid01) {
+                                pinfushost->ushostpidvid[0] = 0;
+                                pinfushost->ushostpidvid[1] = 0;
+                                
+                                endTran[0] = '0';
+
+                                pipRet = write(pipeTx[1], endTran, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV] send pri reset to rom ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            }
+                            if (usbid02) {
+                                pinfushostd->ushostpidvid[0] = 0;
+                                pinfushostd->ushostpidvid[1] = 0;
+                                
+                                endTran[0] = '0';
+
+                                pipRet = write(pipeTxd[1], endTran, 1);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV] send sec reset to rom ret: %d \n", pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            }
+                            
+                            break;
+                        }
                         else if (cmd == OP_WRITE_FILE) {
                             if (!iubsBuff) {
                                 sprintf_f(rs->logs, "\n[DVF] Error !!! iubsBuff is null!!!! cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
                                 print_f(rs->plogs, "P11", rs->logs);
                                 continue;
                             }
-                            
+                            act = (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1];
+
+                            fdpll = fopen(fileidpoll, "r");
+                            if (fdpll) {
+                                ret = fread(msgret, 1, 4, fdpll);
+                                if (ret == 4) {
+                                    msgret[4] = '\0';
+                                    sprintf_f(rs->logs, "[DV] fileid poll [%s] magic: [%s] \n", fileidpoll, msgret);
+                                    print_f(rs->plogs, "P11", rs->logs);                                
+                                    err = strncmp(msgret, pubf->usfacMagicBegin, 4);
+                                    if (err) {
+                                        sprintf_f(rs->logs, "[DV] Error!! compare magic failed magic: [%s] \n", msgret);
+                                        print_f(rs->plogs, "P11", rs->logs);                                
+
+                                        fclose(fdpll);
+                                        fdpll = 0;
+                                    }
+                                } else {
+                                    sprintf_f(rs->logs, "[DV] error read fileid poll [%s] failed ret: %d \n", fileidpoll, ret);
+                                    print_f(rs->plogs, "P11", rs->logs);                                
+
+                                    fclose(fdpll);
+                                    fdpll = 0;
+                                }
+
+                            }
+                            else {
+                                sprintf_f(rs->logs, "[DV] fileid poll open file: [%s] failed\n", fileidpoll);
+                                print_f(rs->plogs, "P11", rs->logs);                                
+                            }
+
+                            if (fdpll) {
+                                ret = fread(msgret, 1, 4, fdpll);
+                                if (ret == 4) {
+                                    lens = msgret[0];
+                                    lens |= msgret[1] << 8;
+                                    lens |= msgret[2] << 16;
+                                    lens |= msgret[3] << 24;
+                                    sprintf_f(rs->logs, "[DV] read fileid poll length: %d \n", lens);
+                                    print_f(rs->plogs, "P11", rs->logs); 
+
+                                    if (lens < 32768) {
+                                        fileidbuff = malloc(lens + 1024);
+                                        if (fileidbuff) {
+                                            err = fread(fileidbuff, 1, lens, fdpll);
+                                            if (err == lens) {
+                                                //sprintf_f(rs->logs, "[DV] read fileid poll data content dump \n");
+                                                //print_f(rs->plogs, "P11", rs->logs); 
+                                                //shmem_dump(fileidbuff, lens);
+
+                                                pubf->usfacPt = (struct usbFileidContent_s  *)fileidbuff;
+
+                                                ret = fread(msgret, 1, 4, fdpll);
+                                                if (ret == 4) {
+                                                    msgret[4] = '\0';
+                                                    err = strncmp(msgret, pubf->usfacMagicEnd, 4);
+                                                    if (err) {
+                                                        sprintf_f(rs->logs, "[DV] Error!! compare end magic failed magic: [%s] \n", msgret);
+                                                        print_f(rs->plogs, "P11", rs->logs);                                
+
+                                                        fclose(fdpll);
+                                                        fdpll = 0;
+                                                    } else {
+                                                        pubf->usfacLength = lens;
+
+                                                        sprintf_f(rs->logs, "[DV] read fileid poll succeed!! length: %d \n", pubf->usfacLength);
+                                                        print_f(rs->plogs, "P11", rs->logs); 
+                                                    }
+                                                } else {
+                                                    sprintf_f(rs->logs, "[DV] read fileid poll end magic failed ret: %d (%d) \n", ret, 4);
+                                                    print_f(rs->plogs, "P11", rs->logs); 
+
+                                                    fclose(fdpll);
+                                                    fdpll = 0;
+                                                }
+                                                
+                                            } else {
+                                                sprintf_f(rs->logs, "[DV] read fileid poll data content failed ret: %d (%d) \n", err, lens);
+                                                print_f(rs->plogs, "P11", rs->logs); 
+
+                                                fclose(fdpll);
+                                                fdpll = 0;
+                                            }
+                                        } else {
+                                            sprintf_f(rs->logs, "[DV] Error!!! memory allocate length: %d failed!!\n", lens);
+                                            print_f(rs->plogs, "P11", rs->logs); 
+                                        }
+                                        
+                                    }
+                                } else {
+                                    sprintf_f(rs->logs, "[DV] error read fileid poll length failed ret: %d \n", ret);
+                                    print_f(rs->plogs, "P11", rs->logs);                                
+                                }
+                            }
+
+                            if (fdpll) {
+                                fclose(fdpll);
+                                fdpll = 0;
+                            }
+
+                            if (pubf->usfacLength) {
+                                val = sizeof(struct usbFileidContent_s);
+                                err = pubf->usfacLength % val;
+
+                                if (err) {
+                                    sprintf_f(rs->logs, "[DV] error read fileid poll length failed not multiplex of %d, lens: %d \n", val, pubf->usfacLength);
+                                    print_f(rs->plogs, "P11", rs->logs);                                
+                                    pubf->usfacLength = 0;
+                                    fileidbuff = 0;
+                                    free(pubf->usfacPt);
+
+                                    lens = 0;
+                                } else {
+                                    lens = pubf->usfacLength / val;
+                                }
+                            }
+
+                            pubfidnxt = 0;
+
+                            if(lens) {
+                                pubfidc = pubf->usfacPt;
+                                
+                                for(ix=0; ix < lens; ix++) {
+                                    getents = pubfidc[ix].usfdid[0] | (pubfidc[ix].usfdid[1] << 8);
+                                    if (getents == act) {
+                                        pubfidnxt = &pubfidc[ix];
+                                    }
+
+                                    #if 0
+                                    sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d \n", ix, getents, pubfidc[ix].usfdid[2], 
+                                                    pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize);
+                                    print_f(rs->plogs, "P11", rs->logs);                                
+                                    #endif
+                                }
+                            } else {
+                                fileidbuff = malloc(1024);
+                                if (fileidbuff) {
+                                    pubf->usfacLength = 0;
+                                    pubf->usfacPt = (struct usbFileidContent_s  *)fileidbuff;
+                                }
+                                sprintf_f(rs->logs, "    [empty] \n");
+                                print_f(rs->plogs, "P11", rs->logs);                                
+                            }
+
+                            if (pubfidnxt == 0) {
+                                val = sizeof(struct usbFileidContent_s);
+                                pubfidnxt = &pubf->usfacPt[lens];
+                                pubf->usfacLength += val;
+                            }
+
                             //memset(iubsBuff, 0, SPI_TRUNK_SZ);
 
                             memcpy(iubsBuff, ptrecv, 31);
 
-                            sprintf_f(rs->logs, "[DV] file access dlen: %d, fileid: %d, wrtrd: %d, addr: 0x%.8x, fsize: %d, direct: %d \n"
-                                                        , msb2lsb(&ucbwfile->pramDataLength), (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1]
-                                                        , ucbwfile->pramWrtorRd[0], msb2lsb(&ucbwfile->pramAddress), msb2lsb(&ucbwfile->pramFilesize), ucbwfile->pramDirect);
+                            sprintf_f(rs->logs, "[DV] file access dlen: %d, fileid: %d, wrtrd: %d, addr: 0x%.8x, fsize: %d, direct: %d select: %d\n"
+                                                        , msb2lsb(&ucbwfile->pramDataLength), act, ucbwfile->pramWrtorRd[0], msb2lsb(&ucbwfile->pramAddress)
+                                                        , msb2lsb(&ucbwfile->pramFilesize) , ucbwfile->pramDirect, ucbwfile->ASIC_sel);
+                                                        
                             print_f(rs->plogs, "P11", rs->logs);
+
+                            /* save to fileid poll */
+                            pubfidnxt->usfdAddr = msb2lsb(&ucbwfile->pramAddress);
+                            pubfidnxt->usfdid[0] = ucbwfile->pramFileId[1];
+                            pubfidnxt->usfdid[1] = ucbwfile->pramFileId[0];
+                            pubfidnxt->usfdid[2] = '=';
+                            pubfidnxt->usfdid[3] = ucbwfile->ASIC_sel;
+                            pubfidnxt->usfdsize = msb2lsb(&ucbwfile->pramDataLength);
 
                             lenflh = msb2lsb(&ucbwfile->pramDataLength);
                             filesz = lenflh;
@@ -61206,11 +61687,79 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         recvsz |= msgret[2] << 8;
                         recvsz |= msgret[1] << 16;
                         recvsz |= msgret[0] << 24;
+
                         sprintf_f(rs->logs, "[DVB] read file lengh: %d (%d)\n", recvsz, filesz);
                         print_f(rs->plogs, "P11", rs->logs);
+
+                        if (pubfidnxt) {
+                            if (pubfidnxt->usfdsize != recvsz) {
+                                pubfidnxt->usfdsize = 0;
+                            }
+                            
+                            fdpll = fopen(fileidpoll, "w+");
+                            if (fdpll) {
+                                addrs = (char *)pubf;
+                                ret = fwrite(addrs, 1, 8, fdpll);
+                                if (ret != 8) {
+                                    fclose(fdpll);
+                                    fdpll = 0;
+                                }
+                            }
+
+                            sprintf_f(rs->logs, "[DVB] [%s] save fileid poll lengh: %d\n", fileidpoll, pubf->usfacLength);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            lens = pubf->usfacLength;
+                            if (fdpll) {
+                                addrs = (char *)pubf->usfacPt;
+                                ret = fwrite(addrs, 1, lens, fdpll);
+                                if (ret != lens) {
+                                    fclose(fdpll);
+                                    fdpll = 0;
+                                }
+                            }
+
+                            if (fdpll) {
+                                addrs = (char *)pubf->usfacMagicEnd;
+                                ret = fwrite(addrs, 1, 4, fdpll);
+                                if (ret != 4) {
+                                    fclose(fdpll);
+                                    fdpll = 0;
+                                }
+                            }
+
+                            if (fdpll) {
+                                fflush(fdpll);
+                                fclose(fdpll);
+                                sync();
+
+                                sprintf_f(rs->logs, "[DVB] [%s] save fileid poll succeed!!!\n", fileidpoll);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+
+                            #if 1
+                            pubfidc = pubf->usfacPt;
+                            val = sizeof(struct usbFileidContent_s);
+                            lens = lens / val;
+                            for(ix=0; ix < lens; ix++) {
+                                getents = pubfidc[ix].usfdid[0] | (pubfidc[ix].usfdid[1] << 8);
+
+                                sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d \n", ix, getents, pubfidc[ix].usfdid[2], 
+                                                pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize);
+                                print_f(rs->plogs, "P11", rs->logs);                                
+                            }
+                            #endif
+                            
+                        }
                     } else {
                         sprintf_f(rs->logs, "[DVB] error!!! read file lengh ret: %d != 4\n", ret);
                         print_f(rs->plogs, "P11", rs->logs);
+                    }
+
+                    if (pubf->usfacPt) {
+                        pubf->usfacLength = 0;
+                        free(pubf->usfacPt);
+                        pubf->usfacPt = 0;
                     }
 
                     memcpy(&csw[4], &iubsBuff[4], 4);
@@ -61558,6 +62107,107 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                 }
 
+            }
+            else if  ((cmd == OP_RESET_ROM) && (opc == 0xff) && (dat == 0)) { /* usbentsTx == 1*/
+                act = ucbwfile->ASIC_sel;
+                
+                sprintf_f(rs->logs, "[DV] wait reset to rom select: %d\n", act);
+                print_f(rs->plogs, "P11", rs->logs);
+
+                if (usbid01) {
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+
+                    if (chq == 'J') {
+                        while (1) {
+                            pipRet = read(pipeRx[0], msgret, 1);
+                            if (pipRet > 0) {
+                                break;
+                            }
+                        }
+                        
+                        chn = 0;
+                        if (pipRet > 0) {
+                            chn = msgret[0];
+                        }
+                        
+                        sprintf_f(rs->logs, "[DV] rom rest polld ch: %c, result: %d ret: %d\n", chq, chn, pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    } 
+                    else {
+                        sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! \n", chq);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    }
+                }
+                
+                if (usbid02) {
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+                    
+                    if (chd == 'J') {
+                        while (1) {
+                            pipRet = read(pipeRxd[0], msgret, 1);
+                            if (pipRet > 0) {
+                                break;
+                            }
+                        }
+                        
+                        chm = 0;
+                        if (pipRet > 0) {
+                            chm = msgret[0];
+                        }
+                        
+                        sprintf_f(rs->logs, "[DV] rom sec reset polld ch: %c, result: %d ret: %d \n", chd, chm, pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! \n", chd);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    }
+                }
+                
+                if ((chn == 0xa1) || (chm == 0xa1)) {
+                    csw[12] = 0;
+                } else {
+                    csw[12] = 1; 
+                }
+                
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+                    
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                sprintf_f(rs->logs, "[DV] 0x0c cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x dump csw: \n", cmd, opc, dat); 
+                print_f(rs->plogs, "P11", rs->logs);
+                shmem_dump(csw, wrtsz);
+                    
+                cmd = 0;
+                dat = 0;
+                opc = 0;
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0xff)) { /* usbentsTx == 1*/
                 if (ucbwpram->ASIC_sel) {
@@ -62167,6 +62817,7 @@ int main(int argc, char *argv[])
     char *metaPt=0;
     int *spipeTx, *spipeRx, *spipeTxd, *spipeRxd;
     int *sgateUpTx, *sgateUpRx, *sgateDnTx, *sgateDnRx;
+    struct usbFileidAccess_s *pusbf=0;
 
     printf("\n        ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
 
@@ -65468,7 +66119,20 @@ int main(int argc, char *argv[])
 
     pmrs->usbhost[0] = pushost;
     pmrs->usbhost[1] = pushostd;
-        
+
+    /* reset file id */
+    pusbf = &pmrs->usbfile;
+    pusbf->usfacMagicBegin[0] = 'f';
+    pusbf->usfacMagicBegin[1] = 'i';
+    pusbf->usfacMagicBegin[2] = 'l';
+    pusbf->usfacMagicBegin[3] = 'e';
+    pusbf->usfacLength = 0;
+    pusbf->usfacPt = 0;
+    pusbf->usfacMagicEnd[0] = 'c';
+    pusbf->usfacMagicEnd[1] = 'r';
+    pusbf->usfacMagicEnd[2] = 'o';
+    pusbf->usfacMagicEnd[3] = 'm';
+    
     #if 1
     pmrs->usbdv = open(usbdevpath, O_RDWR);
     if (pmrs->usbdv <= 0) {
@@ -66012,6 +66676,8 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     } else {
         rs->pusbhost = 0;
     }
+
+    rs->pusbfile = &mrs->usbfile;
     
     return 0;
 }
