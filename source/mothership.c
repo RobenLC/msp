@@ -1778,6 +1778,7 @@ static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
 static char **memory_init_vtable(char **pbuf, int tsize, int csize, uint32_t *tbl);
+static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf);
 
 static unsigned long long int time_get_ms(struct timespec *s)
 {
@@ -52854,7 +52855,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     print_f(rs->plogs, sp, rs->logs);
                 }
 
-                #if 1
+                #if 0
                 sprintf_f(rs->logs, "USB device[%s] id: %d vid: 0x%.2x pid: 0x%.2x usbid: %d \n", puhsinfo->ushostname, 
                                puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], usbid); 
                 print_f(rs->plogs, sp, rs->logs);
@@ -55813,6 +55814,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct usbFileidContent_s *pubfidc=0, *pubfidnxt=0;
     
     pubf = rs->pusbfile;
+    fileidbuff = malloc(32768 + 12);
+    if (!fileidbuff) {
+        sprintf_f(rs->logs, "Error!!! file id buff memory allocate failed  !!! \n");
+        print_f(rs->plogs, "P11", rs->logs);
+    }
     
     pinfushost = rs->pusbmh[0];
     if (!pinfushost) {
@@ -58974,6 +58980,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 print_f(rs->plogs, "P11", rs->logs);
                                 continue;
                             }
+                            memcpy(iubsBuff, ptrecv, 31);
+                            
                             act = (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1];
 
                             fdpll = fopen(fileidpoll, "r");
@@ -59006,6 +59014,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
 
                             if (fdpll) {
+                                pubf->usfacLength = 0;
                                 ret = fread(msgret, 1, 4, fdpll);
                                 if (ret == 4) {
                                     lens = msgret[0];
@@ -59016,8 +59025,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rs->plogs, "P11", rs->logs); 
 
                                     if (lens < 32768) {
-                                        fileidbuff = malloc(lens + 1024);
                                         if (fileidbuff) {
+
+                                            memset(fileidbuff, 0, 32768);
+                                            
                                             err = fread(fileidbuff, 1, lens, fdpll);
                                             if (err == lens) {
                                                 //sprintf_f(rs->logs, "[DV] read fileid poll data content dump \n");
@@ -59064,7 +59075,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         
                                     }
                                 } else {
-                                    sprintf_f(rs->logs, "[DV] error read fileid poll length failed ret: %d \n", ret);
+                                    sprintf_f(rs->logs, "[DV] error read fileid poll length failed ret: %d len: %d too large\n", ret, lens);
                                     print_f(rs->plogs, "P11", rs->logs);                                
                                 }
                             }
@@ -59082,8 +59093,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     sprintf_f(rs->logs, "[DV] error read fileid poll length failed not multiplex of %d, lens: %d \n", val, pubf->usfacLength);
                                     print_f(rs->plogs, "P11", rs->logs);                                
                                     pubf->usfacLength = 0;
-                                    fileidbuff = 0;
-                                    free(pubf->usfacPt);
 
                                     lens = 0;
                                 } else {
@@ -59098,22 +59107,20 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 
                                 for(ix=0; ix < lens; ix++) {
                                     getents = pubfidc[ix].usfdid[0] | (pubfidc[ix].usfdid[1] << 8);
+                                    
                                     if (getents == act) {
                                         pubfidnxt = &pubfidc[ix];
                                     }
 
-                                    #if 0
-                                    sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d \n", ix, getents, pubfidc[ix].usfdid[2], 
-                                                    pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize);
+                                    #if 1
+                                    sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d getid: %d\n", ix, getents, pubfidc[ix].usfdid[2], 
+                                                    pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize, act);
                                     print_f(rs->plogs, "P11", rs->logs);                                
                                     #endif
                                 }
                             } else {
-                                fileidbuff = malloc(1024);
-                                if (fileidbuff) {
-                                    pubf->usfacLength = 0;
-                                    pubf->usfacPt = (struct usbFileidContent_s  *)fileidbuff;
-                                }
+                                pubf->usfacLength = 0;
+                                pubf->usfacPt = (struct usbFileidContent_s  *)fileidbuff;
                                 sprintf_f(rs->logs, "    [empty] \n");
                                 print_f(rs->plogs, "P11", rs->logs);                                
                             }
@@ -59125,8 +59132,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
 
                             //memset(iubsBuff, 0, SPI_TRUNK_SZ);
-
-                            memcpy(iubsBuff, ptrecv, 31);
 
                             sprintf_f(rs->logs, "[DV] file access dlen: %d, fileid: %d, wrtrd: %d, addr: 0x%.8x, fsize: %d, direct: %d select: %d\n"
                                                         , msb2lsb(&ucbwfile->pramDataLength), act, ucbwfile->pramWrtorRd[0], msb2lsb(&ucbwfile->pramAddress)
@@ -61560,6 +61565,37 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         recvsz |= msgret[0] << 24;
                         sprintf_f(rs->logs, "[DVB] write file lengh: %d (%d)\n", recvsz, filesz);
                         print_f(rs->plogs, "P11", rs->logs);
+
+                        if (pubfidnxt) {
+                            if (pubfidnxt->usfdsize != recvsz) {
+                                pubfidnxt->usfdsize = 0;
+                            }
+
+                            ret = fileid_save(fileidpoll, pubf);
+                            if(!ret) {
+                                sprintf_f(rs->logs, "[DVB] fileid write file succeed ret: %d\n", ret);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            } else {
+                                sprintf_f(rs->logs, "[DVB] Error!! fileid write file failed!!! ret: %d\n", ret);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+
+                            
+                            pubfidnxt = 0;
+                            
+                            #if 1
+                            pubfidc = pubf->usfacPt;
+                            val = sizeof(struct usbFileidContent_s);
+                            lens = lens / val;
+                            for(ix=0; ix < lens; ix++) {
+                                getents = pubfidc[ix].usfdid[0] | (pubfidc[ix].usfdid[1] << 8);
+
+                                sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d \n", ix, getents, pubfidc[ix].usfdid[2], 
+                                                pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize);
+                                print_f(rs->plogs, "P11", rs->logs);                                
+                            }
+                            #endif  
+                        }
                     } else {
                         sprintf_f(rs->logs, "[DVB] error!!! write file lengh ret: %d != 4\n", ret);
                         print_f(rs->plogs, "P11", rs->logs);
@@ -61695,50 +61731,21 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (pubfidnxt->usfdsize != recvsz) {
                                 pubfidnxt->usfdsize = 0;
                             }
-                            
-                            fdpll = fopen(fileidpoll, "w+");
-                            if (fdpll) {
-                                addrs = (char *)pubf;
-                                ret = fwrite(addrs, 1, 8, fdpll);
-                                if (ret != 8) {
-                                    fclose(fdpll);
-                                    fdpll = 0;
-                                }
-                            }
 
-                            sprintf_f(rs->logs, "[DVB] [%s] save fileid poll lengh: %d\n", fileidpoll, pubf->usfacLength);
-                            print_f(rs->plogs, "P11", rs->logs);
-
-                            lens = pubf->usfacLength;
-                            if (fdpll) {
-                                addrs = (char *)pubf->usfacPt;
-                                ret = fwrite(addrs, 1, lens, fdpll);
-                                if (ret != lens) {
-                                    fclose(fdpll);
-                                    fdpll = 0;
-                                }
-                            }
-
-                            if (fdpll) {
-                                addrs = (char *)pubf->usfacMagicEnd;
-                                ret = fwrite(addrs, 1, 4, fdpll);
-                                if (ret != 4) {
-                                    fclose(fdpll);
-                                    fdpll = 0;
-                                }
-                            }
-
-                            if (fdpll) {
-                                fflush(fdpll);
-                                fclose(fdpll);
-                                sync();
-
-                                sprintf_f(rs->logs, "[DVB] [%s] save fileid poll succeed!!!\n", fileidpoll);
+                            ret = fileid_save(fileidpoll, pubf);
+                            if(!ret) {
+                                sprintf_f(rs->logs, "[DVB] fileid write file succeed ret: %d\n", ret);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            } else {
+                                sprintf_f(rs->logs, "[DVB] Error!! fileid write file failed!!! ret: %d\n", ret);
                                 print_f(rs->plogs, "P11", rs->logs);
                             }
 
+                            pubfidnxt = 0;
+                            
                             #if 1
                             pubfidc = pubf->usfacPt;
+                            lens = pubf->usfacLength;
                             val = sizeof(struct usbFileidContent_s);
                             lens = lens / val;
                             for(ix=0; ix < lens; ix++) {
@@ -61751,15 +61758,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             #endif
                             
                         }
-                    } else {
+                    }
+                    else {
                         sprintf_f(rs->logs, "[DVB] error!!! read file lengh ret: %d != 4\n", ret);
                         print_f(rs->plogs, "P11", rs->logs);
-                    }
-
-                    if (pubf->usfacPt) {
-                        pubf->usfacLength = 0;
-                        free(pubf->usfacPt);
-                        pubf->usfacPt = 0;
                     }
 
                     memcpy(&csw[4], &iubsBuff[4], 4);
@@ -66603,6 +66605,60 @@ static int file_save_get(FILE **fp, char *path1)
     f = fopen(dst, "w");
 
     *fp = f;
+    return 0;
+}
+
+static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf) 
+{
+    FILE *fdpll=0;
+    char *addrs=0;
+    int lens=0, ret=0;
+    
+    fdpll = fopen(fileidpoll, "w+");
+    if (fdpll) {
+        addrs = (char *)pubf;
+        ret = fwrite(addrs, 1, 8, fdpll);
+        if (ret != 8) {
+            fclose(fdpll);
+            fdpll = 0;
+
+            return -1;
+        }
+    }
+    
+    printf("[DVB] [%s] save fileid poll lengh: %d\n", fileidpoll, pubf->usfacLength);
+    
+    lens = pubf->usfacLength;
+    if (fdpll) {
+        addrs = (char *)pubf->usfacPt;
+        ret = fwrite(addrs, 1, lens, fdpll);
+        if (ret != lens) {
+            fclose(fdpll);
+            fdpll = 0;
+
+            return -2;
+        }
+    }
+    
+    if (fdpll) {
+        addrs = (char *)pubf->usfacMagicEnd;
+        ret = fwrite(addrs, 1, 4, fdpll);
+        if (ret != 4) {
+            fclose(fdpll);
+            fdpll = 0;
+
+            return -3;
+        }
+    }
+    
+    if (fdpll) {
+        fflush(fdpll);
+        fclose(fdpll);
+        sync();
+    
+        printf("[DVB] [%s] save fileid poll succeed!!!\n", fileidpoll);
+    }
+
     return 0;
 }
 
