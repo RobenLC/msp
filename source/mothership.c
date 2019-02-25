@@ -55827,7 +55827,6 @@ static int p10(struct procRes_s *rs)
 #define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
 #define OP_WRITE_FILE (0x0b)
-#define OP_RESET_ROM (0x0c)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -58292,10 +58291,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         opc = ptrecv[16];
                         dat = ptrecv[17];
                         
-                        if (cmd == OP_RESET_ROM) {
-                            shmem_dump(ptrecv, recvsz);
-                        }
-                        else if (cmd == OP_WRITE_FILE) {
+                        if (cmd == OP_WRITE_FILE) {
                             shmem_dump(ptrecv, recvsz);
                         }
                         else if ((cmd >= 0x00) && (cmd <= 0x0f)) {
@@ -59062,243 +59058,202 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             
                             break;
                         }
-                        else if (cmd == OP_RESET_ROM) {
-                            memcpy(iubsBuff, ptrecv, 31);
-                            
-                            sprintf_f(rs->logs, "[DV] reset ASIC to rom flash, select: %d \n"
-                                                        , ucbwfile->ASIC_sel);
-                            print_f(rs->plogs, "P11", rs->logs);
-
-                            act = ucbwfile->ASIC_sel;
-
-                            if (strcmp(msgcmd, "usbscan") != 0) {
-                                sprintf(msgcmd, "usbscan");
-                                rs_ipc_put(rcmd, msgcmd, 7);
-
-                                chq = 'n';
-                                pipRet = write(pipeTx[1], &chq, 1);
-                                if (pipRet < 0) {
-                                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    continue;
-                                }
-                            }
-
-                            opc = 0xff;
-                            dat = 0;
-
-                            switch (act) {
-                            case 0: /* primary */
-                                sprintf(syscmd11, "/root/module/romPri.sh");
-                                ret = doSystemCmd(syscmd11);
-                                break;
-                            case 1: /* secondary */
-                                sprintf(syscmd11, "/root/module/romSec.sh");
-                                ret = doSystemCmd(syscmd11);
-                                break;
-                            default:
-                                sprintf_f(rs->logs, "[DV] Error!! unknown select %d \n", act);
-                                print_f(rs->plogs, "P11", rs->logs);
-                                break;
-                            }
-
-                            if (usbid01) {
-                                pinfushost->ushostpidvid[0] = 0;
-                                pinfushost->ushostpidvid[1] = 0;
-                                
-                                endTran[0] = '0';
-
-                                pipRet = write(pipeTx[1], endTran, 1);
-                                if (pipRet < 0) {
-                                    sprintf_f(rs->logs, "[DV] send pri reset to rom ret: %d \n", pipRet);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    continue;
-                                }
-                            }
-                            if (usbid02) {
-                                pinfushostd->ushostpidvid[0] = 0;
-                                pinfushostd->ushostpidvid[1] = 0;
-                                
-                                endTran[0] = '0';
-
-                                pipRet = write(pipeTxd[1], endTran, 1);
-                                if (pipRet < 0) {
-                                    sprintf_f(rs->logs, "[DV] send sec reset to rom ret: %d \n", pipRet);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    continue;
-                                }
-                            }
-                            
-                            break;
-                        }
                         else if (cmd == OP_WRITE_FILE) {
                             if (!iubsBuff) {
                                 sprintf_f(rs->logs, "\n[DVF] Error !!! iubsBuff is null!!!! cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
                                 print_f(rs->plogs, "P11", rs->logs);
                                 continue;
                             }
-                            memcpy(iubsBuff, ptrecv, 31);
                             
+                            memcpy(iubsBuff, ptrecv, 31);
+                            val = ucbwfile->pramWrtorRd[0];
                             act = (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1];
-
-                            if (!pubf->usfacPt) {
-                                fdpll = fopen(fileidpoll, "r");
-                                if (fdpll) {
-                                    ret = fread(msgret, 1, 4, fdpll);
-                                    if (ret == 4) {
-                                        msgret[4] = '\0';
-                                        sprintf_f(rs->logs, "[DV] fileid poll [%s] magic: [%s] \n", fileidpoll, msgret);
-                                        print_f(rs->plogs, "P11", rs->logs);                                
-                                        err = strncmp(msgret, pubf->usfacMagicBegin, 4);
-                                        if (err) {
-                                            sprintf_f(rs->logs, "[DV] Error!! compare magic failed magic: [%s] \n", msgret);
+                            lenflh = msb2lsb(&ucbwfile->pramDataLength);
+                            
+                            switch (val) {
+                            case 1: // write
+                            case 2: // read
+                            case 3: // wrt trigger
+                            
+                                if (!pubf->usfacPt) {
+                                    fdpll = fopen(fileidpoll, "r");
+                                    if (fdpll) {
+                                        ret = fread(msgret, 1, 4, fdpll);
+                                        if (ret == 4) {
+                                            msgret[4] = '\0';
+                                            sprintf_f(rs->logs, "[DV] fileid poll [%s] magic: [%s] \n", fileidpoll, msgret);
                                             print_f(rs->plogs, "P11", rs->logs);                                
-                                
+                                            err = strncmp(msgret, pubf->usfacMagicBegin, 4);
+                                            if (err) {
+                                                sprintf_f(rs->logs, "[DV] Error!! compare magic failed magic: [%s] \n", msgret);
+                                                print_f(rs->plogs, "P11", rs->logs);                                
+                                    
+                                                fclose(fdpll);
+                                                fdpll = 0;
+                                            }
+                                        } else {
+                                            sprintf_f(rs->logs, "[DV] error read fileid poll [%s] failed ret: %d \n", fileidpoll, ret);
+                                            print_f(rs->plogs, "P11", rs->logs);                                
+                                    
                                             fclose(fdpll);
                                             fdpll = 0;
                                         }
-                                    } else {
-                                        sprintf_f(rs->logs, "[DV] error read fileid poll [%s] failed ret: %d \n", fileidpoll, ret);
-                                        print_f(rs->plogs, "P11", rs->logs);                                
-                                
-                                        fclose(fdpll);
-                                        fdpll = 0;
+                                    
                                     }
-                                
-                                }
-                                else {
-                                    sprintf_f(rs->logs, "[DV] fileid poll open file: [%s] failed\n", fileidpoll);
-                                    print_f(rs->plogs, "P11", rs->logs);                                
-                                }
-                                
-                                if (fdpll) {
-                                    pubf->usfacLength = 0;
-                                    ret = fread(msgret, 1, 4, fdpll);
-                                    if (ret == 4) {
-                                        lens = msgret[0];
-                                        lens |= msgret[1] << 8;
-                                        lens |= msgret[2] << 16;
-                                        lens |= msgret[3] << 24;
-                                        sprintf_f(rs->logs, "[DV] read fileid poll length: %d \n", lens);
-                                        print_f(rs->plogs, "P11", rs->logs); 
-                                
-                                        if (lens < 32768) {
-                                            if (fileidbuff) {
-                                
-                                                memset(fileidbuff, 0, 32768);
-                                                
-                                                err = fread(fileidbuff, 1, lens, fdpll);
-                                                if (err == lens) {
-                                                    //sprintf_f(rs->logs, "[DV] read fileid poll data content dump \n");
-                                                    //print_f(rs->plogs, "P11", rs->logs); 
-                                                    //shmem_dump(fileidbuff, lens);
-                                
-                                                    pubf->usfacPt = (struct usbFileidContent_s  *)fileidbuff;
-                                
-                                                    ret = fread(msgret, 1, 4, fdpll);
-                                                    if (ret == 4) {
-                                                        msgret[4] = '\0';
-                                                        err = strncmp(msgret, pubf->usfacMagicEnd, 4);
-                                                        if (err) {
-                                                            sprintf_f(rs->logs, "[DV] Error!! compare end magic failed magic: [%s] \n", msgret);
-                                                            print_f(rs->plogs, "P11", rs->logs);                                
-                                
+                                    else {
+                                        sprintf_f(rs->logs, "[DV] fileid poll open file: [%s] failed\n", fileidpoll);
+                                        print_f(rs->plogs, "P11", rs->logs);                                
+                                    }
+                                    
+                                    if (fdpll) {
+                                        pubf->usfacLength = 0;
+                                        ret = fread(msgret, 1, 4, fdpll);
+                                        if (ret == 4) {
+                                            lens = msgret[0];
+                                            lens |= msgret[1] << 8;
+                                            lens |= msgret[2] << 16;
+                                            lens |= msgret[3] << 24;
+                                            sprintf_f(rs->logs, "[DV] read fileid poll length: %d \n", lens);
+                                            print_f(rs->plogs, "P11", rs->logs); 
+                                    
+                                            if (lens < 32768) {
+                                                if (fileidbuff) {
+                                    
+                                                    memset(fileidbuff, 0, 32768);
+                                                    
+                                                    err = fread(fileidbuff, 1, lens, fdpll);
+                                                    if (err == lens) {
+                                                        //sprintf_f(rs->logs, "[DV] read fileid poll data content dump \n");
+                                                        //print_f(rs->plogs, "P11", rs->logs); 
+                                                        //shmem_dump(fileidbuff, lens);
+                                    
+                                                        pubf->usfacPt = (struct usbFileidContent_s  *)fileidbuff;
+                                    
+                                                        ret = fread(msgret, 1, 4, fdpll);
+                                                        if (ret == 4) {
+                                                            msgret[4] = '\0';
+                                                            err = strncmp(msgret, pubf->usfacMagicEnd, 4);
+                                                            if (err) {
+                                                                sprintf_f(rs->logs, "[DV] Error!! compare end magic failed magic: [%s] \n", msgret);
+                                                                print_f(rs->plogs, "P11", rs->logs);                                
+                                    
+                                                                fclose(fdpll);
+                                                                fdpll = 0;
+                                                            } else {
+                                                                pubf->usfacLength = lens;
+                                    
+                                                                sprintf_f(rs->logs, "[DV] read fileid poll succeed!! length: %d \n", pubf->usfacLength);
+                                                                print_f(rs->plogs, "P11", rs->logs); 
+                                                            }
+                                                        } else {
+                                                            sprintf_f(rs->logs, "[DV] read fileid poll end magic failed ret: %d (%d) \n", ret, 4);
+                                                            print_f(rs->plogs, "P11", rs->logs); 
+                                    
                                                             fclose(fdpll);
                                                             fdpll = 0;
-                                                        } else {
-                                                            pubf->usfacLength = lens;
-                                
-                                                            sprintf_f(rs->logs, "[DV] read fileid poll succeed!! length: %d \n", pubf->usfacLength);
-                                                            print_f(rs->plogs, "P11", rs->logs); 
                                                         }
+                                                        
                                                     } else {
-                                                        sprintf_f(rs->logs, "[DV] read fileid poll end magic failed ret: %d (%d) \n", ret, 4);
+                                                        sprintf_f(rs->logs, "[DV] read fileid poll data content failed ret: %d (%d) \n", err, lens);
                                                         print_f(rs->plogs, "P11", rs->logs); 
-                                
+                                    
                                                         fclose(fdpll);
                                                         fdpll = 0;
                                                     }
-                                                    
                                                 } else {
-                                                    sprintf_f(rs->logs, "[DV] read fileid poll data content failed ret: %d (%d) \n", err, lens);
+                                                    sprintf_f(rs->logs, "[DV] Error!!! memory allocate length: %d failed!!\n", lens);
                                                     print_f(rs->plogs, "P11", rs->logs); 
-                                
-                                                    fclose(fdpll);
-                                                    fdpll = 0;
                                                 }
-                                            } else {
-                                                sprintf_f(rs->logs, "[DV] Error!!! memory allocate length: %d failed!!\n", lens);
-                                                print_f(rs->plogs, "P11", rs->logs); 
+                                                
                                             }
-                                            
+                                        } else {
+                                            sprintf_f(rs->logs, "[DV] error read fileid poll length failed ret: %d len: %d too large\n", ret, lens);
+                                            print_f(rs->plogs, "P11", rs->logs);                                
                                         }
-                                    } else {
-                                        sprintf_f(rs->logs, "[DV] error read fileid poll length failed ret: %d len: %d too large\n", ret, lens);
-                                        print_f(rs->plogs, "P11", rs->logs);                                
                                     }
-                                }
-                                
-                                if (fdpll) {
-                                    fclose(fdpll);
-                                    fdpll = 0;
-                                }
-                                
-                                if (pubf->usfacLength) {
-                                    val = sizeof(struct usbFileidContent_s);
-                                    err = pubf->usfacLength % val;
-                                
-                                    if (err) {
-                                        sprintf_f(rs->logs, "[DV] error read fileid poll length failed not multiplex of %d, lens: %d \n", val, pubf->usfacLength);
-                                        print_f(rs->plogs, "P11", rs->logs);                                
-                                        pubf->usfacLength = 0;
-                                
-                                        lens = 0;
-                                    } else {
-                                        lens = pubf->usfacLength / val;
-                                    }
-                                }
-                                
-                                pubfidnxt = 0;
-                                
-                                if(lens) {
-                                    pubfidc = pubf->usfacPt;
                                     
-                                    for(ix=0; ix < lens; ix++) {
-                                        getents = pubfidc[ix].usfdid[0] | (pubfidc[ix].usfdid[1] << 8);
-                                        
-                                        if (getents == act) {
-                                            pubfidnxt = &pubfidc[ix];
-                                        }
-                                
-                                        #if 1
-                                        sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d getid: %d\n", ix, getents, pubfidc[ix].usfdid[2], 
-                                                        pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize, act);
-                                        print_f(rs->plogs, "P11", rs->logs);                                
-                                        #endif
+                                    if (fdpll) {
+                                        fclose(fdpll);
+                                        fdpll = 0;
                                     }
-                                } else {
-                                    pubf->usfacLength = 0;
-                                    pubf->usfacPt = (struct usbFileidContent_s  *)fileidbuff;
-                                    sprintf_f(rs->logs, "    [empty] \n");
-                                    print_f(rs->plogs, "P11", rs->logs);                                
+
+                                    //sprintf_f(rs->logs, " lens = %d, fileidlen = %d - 1\n", lens, pubf->usfacLength);
+                                    //print_f(rs->plogs, "P11", rs->logs);                                
+
+                                    lens = 0;
+                                    if (pubf->usfacLength) {
+                                        lenrs = sizeof(struct usbFileidContent_s);
+                                        err = pubf->usfacLength % lenrs;
+                                    
+                                        if (err) {
+                                            sprintf_f(rs->logs, "[DV] error read fileid poll length failed not multiplex of %d, lens: %d \n", lenrs, pubf->usfacLength);
+                                            print_f(rs->plogs, "P11", rs->logs);                                
+                                            pubf->usfacLength = 0;
+                                    
+                                            lens = 0;
+                                        } else {
+                                            lens = pubf->usfacLength / lenrs;
+                                        }
+                                    }
+                                    
+                                    pubfidnxt = 0;
+                                    
+                                    //sprintf_f(rs->logs, " lens = %d, fileidlen = %d - 2\n", lens, pubf->usfacLength);
+                                    //print_f(rs->plogs, "P11", rs->logs);                                
+
+                                    if (lens) {
+                                        pubfidc = pubf->usfacPt;
+                                        
+                                        for(ix=0; ix < lens; ix++) {
+                                            getents = pubfidc[ix].usfdid[0] | (pubfidc[ix].usfdid[1] << 8);
+                                            
+                                            if (getents == act) {
+                                                pubfidnxt = &pubfidc[ix];
+                                            }
+                                    
+                                            #if 1
+                                            sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d getid: %d\n", ix, getents, pubfidc[ix].usfdid[2], 
+                                                            pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize, act);
+                                            print_f(rs->plogs, "P11", rs->logs);                                
+                                            #endif
+                                        }
+                                    } else {
+                                        pubf->usfacLength = 0;
+                                        pubf->usfacPt = (struct usbFileidContent_s  *)fileidbuff;
+                                        sprintf_f(rs->logs, "    [empty] \n");
+                                        print_f(rs->plogs, "P11", rs->logs);                                
+                                    }
+                                    
+                                    if ((pubfidnxt == 0) && (val == 1)) {
+                                        lenrs = sizeof(struct usbFileidContent_s);
+                                        pubfidnxt = &pubf->usfacPt[lens];
+                                        pubf->usfacLength += lenrs;
+                                    }
                                 }
-                                
-                                if (pubfidnxt == 0) {
-                                    val = sizeof(struct usbFileidContent_s);
-                                    pubfidnxt = &pubf->usfacPt[lens];
-                                    pubf->usfacLength += val;
+                                else {
+                                    sprintf_f(rs->logs, "[DV]  Error!! fileid access buff is not null!! \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
                                 }
+
+                                break;
+                            case 4: // rd
+                                break;
+                            case 5: // clear
+                                break;
+                            case 6: // reset to DL mode
+                                break;
+                            default:
+                                break;
                             }
+
 
                             //memset(iubsBuff, 0, SPI_TRUNK_SZ);
 
                             sprintf_f(rs->logs, "[DV] file access dlen: %d, fileid: %d, wrtrd: %d, addr: 0x%.8x, fsize: %d, direct: %d select: %d\n"
                                                         , msb2lsb(&ucbwfile->pramDataLength), act, ucbwfile->pramWrtorRd[0], msb2lsb(&ucbwfile->pramAddress)
                                                         , msb2lsb(&ucbwfile->pramFilesize) , ucbwfile->pramDirect, ucbwfile->ASIC_sel);
-                                                        
                             print_f(rs->plogs, "P11", rs->logs);
 
-                            lenflh = msb2lsb(&ucbwfile->pramDataLength);
                             filesz = lenflh;
                     
                             if (strcmp(msgcmd, "usbscan") != 0) {
@@ -59323,13 +59278,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 act = ucbwfile->ASIC_sel;
                                 sprintf_f(rs->logs, "[DV] file access data length: %d, sel: %d, wr: %d \n", lenflh, act, val);
                                 print_f(rs->plogs, "P11", rs->logs);
-                                
-                                opc = 0;
-                                dat = 0xff;
-                                
+                                                                
                                 switch (val) {
-                                case 2: // wrt
-                                
+                                case 1:
+                                case 2:
+                                    sprintf_f(rs->logs, "[DV] Error RWD field with data length == 0");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    break;
+                                case 3: // wrt
+                                    opc = 0;
+                                    dat = 0xff;
+
                                     pubfidc = pubf->usfacPt;
                                     lenbs = sizeof(struct usbFileidContent_s);
                                     lens = pubf->usfacLength / lenbs;
@@ -59396,7 +59355,71 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     }
                                     break;
-                                case 1: // rd
+                                case 4: // rd
+                                    break;
+                                case 5: // clear
+                                    opc = val;
+                                    dat = 0xff;
+                                    
+                                    pubf->usfacLength = 0;
+                                    
+                                    sprintf_f(rs->logs, "[DV] clear bin file to ASIC !!\n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    sprintf(syscmd11, "/root/module/scanrmall.sh");
+                                    ret = doSystemCmd(syscmd11);
+                                    break;
+                                case 6: // reset to DL mode
+                                    opc = val;
+                                    dat = 0xff;
+                                    
+                                    sprintf_f(rs->logs, "[DV] reset ASIC to rom flash, select: %d \n"
+                                                                , ucbwfile->ASIC_sel);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    act = ucbwfile->ASIC_sel;
+                                                                        
+                                    switch (act) {
+                                    case 0: /* primary */
+                                        sprintf(syscmd11, "/root/module/romPri.sh");
+                                        ret = doSystemCmd(syscmd11);
+                                        break;
+                                    case 1: /* secondary */
+                                        sprintf(syscmd11, "/root/module/romSec.sh");
+                                        ret = doSystemCmd(syscmd11);
+                                        break;
+                                    default:
+                                        sprintf_f(rs->logs, "[DV] Error!! unknown select %d \n", act);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        break;
+                                    }
+                                    
+                                    if (usbid01) {
+                                        pinfushost->ushostpidvid[0] = 0;
+                                        pinfushost->ushostpidvid[1] = 0;
+                                        
+                                        endTran[0] = '0';
+                                    
+                                        pipRet = write(pipeTx[1], endTran, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV] send pri reset to rom ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
+                                    if (usbid02) {
+                                        pinfushostd->ushostpidvid[0] = 0;
+                                        pinfushostd->ushostpidvid[1] = 0;
+                                        
+                                        endTran[0] = '0';
+                                    
+                                        pipRet = write(pipeTxd[1], endTran, 1);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV] send sec reset to rom ret: %d \n", pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
                                     break;
                                 default:
                                     break;
@@ -62157,7 +62180,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     chd = 0;
                     
                     switch (val) {
-                    case 2: // wrt
+                    case 3: // wrt
                         if (!act) {
                             if (usbid01) {
                                 while (1) {
@@ -62272,9 +62295,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                         }
                         break;
-                    case 1: // rd
+                    case 4: // rd
+                        sprintf_f(rs->logs, "[DV] error!!! not support read trigger !!\n");
+                        print_f(rs->plogs, "P11", rs->logs);    
                         break;
                     default:
+                        sprintf_f(rs->logs, "[DV] error!!! unknown trigger val: %d !!\n", val);
+                        print_f(rs->plogs, "P11", rs->logs);    
                         break;
                     }
                     
@@ -62295,6 +62322,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         lenbs = sizeof(struct usbFileidContent_s);
                         lens = pubf->usfacLength / lenbs;
                         act = ucbwfile->ASIC_sel;
+
+                        sprintf_f(rs->logs, "[DVB] fileid len: %d, sizeof: %d, num: %d \n", pubf->usfacLength, lenbs, lens);
+                        print_f(rs->plogs, "P11", rs->logs);
+                            
 
                         for(ix=0; ix < lens; ix++) {
                             getents = pubfidc->usfdid[0] | (pubfidc->usfdid[1] << 8);
@@ -62355,6 +62386,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 } 
                 else {
+                    pubf->usfacPt = 0;
+                    
                     csw[8] = 0;
                     csw[9] = 0;
                     csw[10] = 0;
@@ -62420,7 +62453,40 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     opc = 0;
                 }
             }
-            else if  ((cmd == OP_RESET_ROM) && (opc == 0xff) && (dat == 0)) { /* usbentsTx == 1*/
+            else if ((cmd == OP_WRITE_FILE) && (opc == 5) && (dat == 0xff)) { /* usbentsTx == 1*/
+                sync();
+                sync();
+                sync();
+                
+                csw[12] = 0;
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+                    
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                sprintf_f(rs->logs, "[DV] 0x0b clear cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x dump csw: \n", cmd, opc, dat); 
+                print_f(rs->plogs, "P11", rs->logs);
+                shmem_dump(csw, wrtsz);
+                    
+                cmd = 0;
+                dat = 0;
+                opc = 0;
+            }
+            else if ((cmd == OP_WRITE_FILE) && (opc == 6) && (dat == 0xff)) { /* usbentsTx == 1*/
                 act = ucbwfile->ASIC_sel;
                 
                 sprintf_f(rs->logs, "[DV] wait reset to rom select: %d\n", act);
