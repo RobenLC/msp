@@ -52474,7 +52474,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     int pidvid[2];
     struct usbHostmem_s *puhsinfom[2], *puhsinfo=0, *puhsinfrd=0;
     uint32_t ut32=0, vt32=0, tagtaddr=0, erasaddr=0, actaddr=0, tgendaddr=0, erendaddr=0;
-    int eraslen=0, erasoffset=0, actlen=0, txlen=0, erendoffset=0, fixlen=0;
+    int eraslen=0, erasoffset=0, actlen=0, txlen=0, erendoffset=0, fixlen=64;
     int memfd=0;
     char *chvir=0;
     struct shmem_s *usbTx=0, *gateTx=0;
@@ -52660,6 +52660,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     sprintf_f(rs->logs,  "vid pid for [%s] match vid: 0x%.4x pid: 0x%.4x (0x%.4x 0x%.4x) \n", 
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                     print_f(rs->plogs, sp, rs->logs);
+
+                    if (puhsinfo->ushostpidvid[1] == 0x0a01) {
+                        fixlen = 64;
+                    } else {
+                        fixlen = 512;
+                    }
                 }
                 
                 #if 0
@@ -53795,11 +53801,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (txlen < 64) {
                             txlen = 64;
                         }
+                        actlen = 0;
                     } else {
                         txlen = fixlen;
+                        actlen -= txlen;                    
                     }
 
-                    actlen -= txlen;                    
 
                     lsb2Msb(&dcpyfile->pramAddress, actaddr);
                     lsb2Msb(&dcpyfile->pramDataLength, txlen);                          
@@ -54018,12 +54025,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (txlen < 64) {
                             txlen = 64;
                         }
-
+                        actlen = 0;
                     } else {
                         txlen = fixlen;
+                        actlen -= txlen;
                     }
 
-                    actlen -= txlen;
                     
                     lsb2Msb(&dcpyfile->pramAddress, actaddr);
                     lsb2Msb(&dcpyfile->pramDataLength, txlen);                          
@@ -54183,12 +54190,13 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (txlen < 64) {
                             txlen = 64;
                         }
+                        actlen = 0;
 
                     } else {
                         txlen = fixlen;
+                        actlen -= txlen;
                     }
 
-                    actlen -= txlen;
                     lsb2Msb(&dcpyfile->pramDataLength, txlen);      
                     
                     #if DBG_USB_HS
@@ -54284,12 +54292,13 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (txlen < 64) {
                             txlen = 64;
                         }
+                        actlen = 0;
 
                     } else {
                         txlen = fixlen;
+                        actlen -= txlen;
                     }
 
-                    actlen -= txlen;
                     lsb2Msb(&dcpyfile->pramDataLength, txlen);      
 
                     #if DBG_USB_HS
