@@ -29,9 +29,9 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Thu Jan 17 11:23:05 2019 \
-a6dbe4dcec \
-handle usb error"
+#define MSP_VERSION "Mon Feb 25 09:31:32 2019 \
+26cca1ef6f"
+
 
 #define DISABLE_SPI  (1)
 #define DISABLE_USB  (0)
