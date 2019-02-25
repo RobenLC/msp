@@ -56184,9 +56184,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
             if ((pinfushost) && (pinfushostd)) {
                 if (pollcnt == 0) {
-                    if ((pinfushost->ushostpidvid[1] != 0) && 
+                    if (((pinfushost->ushostpidvid[1] != 0) && 
                          (pinfushost->ushostpidvid[1] != 0x0a01) && 
-                         (pinfushost->ushostpidvid[1] != 0x0a02)) {
+                         (pinfushost->ushostpidvid[1] != 0x0a02)) &&
+                         ((pinfushostd->ushostpidvid[1] != 0) && 
+                         (pinfushostd->ushostpidvid[1] != 0x0a01) && 
+                         (pinfushostd->ushostpidvid[1] != 0x0a02))) {
                         #if USB_BOOTUP_SYNC
                         cmd = 0x11;
                         opc = 0x4e;
@@ -56228,7 +56231,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                         }
                         
-                        #if 0//BYPASS_TWO
+                        #if 1//BYPASS_TWO
                         chd = 'i';
                         if (usbid02) {
                             pipRet = write(pipeTxd[1], &chd, 1);
@@ -56241,6 +56244,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         #endif
                         #endif //#if USB_BOOTUP_SYNC
                     }
+                    #if 0
                     if ((pinfushostd->ushostpidvid[1] != 0) && 
                          (pinfushostd->ushostpidvid[1] != 0x0a01) && 
                          (pinfushostd->ushostpidvid[1] != 0x0a02)) {
@@ -56300,6 +56304,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         #endif
                         #endif //#if USB_BOOTUP_SYNC
                     }
+                    #endif
                     pollcnt ++;
                 }
                 else {
@@ -60998,7 +61003,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     shmem_dump(csw, wrtsz);
                 }
 
-                #if 0
                 msgret[0] = 'x';
                 if ((chm) || (chn)) {
                     msgret[1] = 0x02;
@@ -61027,7 +61031,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] cmd no message \n");
                     print_f(rs->plogs, "P11", rs->logs);
                 }
-                #endif
                 
                 cmd = 0;
 
