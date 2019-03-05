@@ -38693,7 +38693,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf_f(mrs->log, "usb gate !!!\n");
     print_f(&mrs->plog, "fs145", mrs->log);
 
-    char filenames[] = "/root/scaner/id_%d.bin";
+    char filenames[] = "/root/scaner/id_%.5d.bin";
     char idfile[128];
     FILE *filefd=0;
     struct usbhost_s *ppup, *ppdn;
@@ -55900,7 +55900,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char ch=0;
     char fileidpoll[64] = "/root/scaner/fileidpll.bin";
     char *fileidbuff=0;
-    FILE *fdpll=0;
+    FILE *fdpll=0, *fdrd=0;
     char syscmd11[256] = "ls -al";
     struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
     struct epoll_event evtrs, evtrsd, evtrcmd, evtpipr, evtpiprd;
@@ -61975,6 +61975,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             else if ((cmd == OP_WRITE_FILE) && (opc == 0xff) && (dat == 0xff)) { /* usbentsTx == 1*/
                 lenflh = (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1];
                 act = ucbwfile->ASIC_sel;
+                recvsz = 0;
                 
                 sprintf_f(rs->logs, "[DVB] 0x0b send fileid back, fileid: %d, select: %d\n", lenflh, act);
                 print_f(rs->plogs, "P11", rs->logs);
@@ -62000,7 +62001,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         ret = rs_ipc_get_ms(rs, msgret, 4, 100);
                     }
                     
-                    filesz = msb2lsb(&ucbwfile->pramDataLength);
+                    //filesz = msb2lsb(&ucbwfile->pramDataLength);
 
                     if (ret == 4) {
                         recvsz = msgret[3];
@@ -62012,35 +62013,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
 
                         if (pubfidnxt) {
-                            if (pubfidnxt->usfdsize != recvsz) {
+                            if ((pubfidnxt->usfdsize != recvsz) || (filesz != recvsz)) {
                                 pubfidnxt->usfdsize = 0;
+                                pubfidnxt = 0;
                             }
-
-                            ret = fileid_save(fileidpoll, pubf);
-                            if(!ret) {
-                                sprintf_f(rs->logs, "[DVB] fileid write file succeed ret: %d\n", ret);
-                                print_f(rs->plogs, "P11", rs->logs);
-                            } else {
-                                sprintf_f(rs->logs, "[DVB] Error!! fileid write file failed!!! ret: %d\n", ret);
-                                print_f(rs->plogs, "P11", rs->logs);
-                            }
-
-                            pubfidnxt = 0;
-                            
-                            #if 1
-                            pubfidc = pubf->usfacPt;
-                            lens = pubf->usfacLength;
-                            val = sizeof(struct usbFileidContent_s);
-                            lens = lens / val;
-                            for(ix=0; ix < lens; ix++) {
-                                getents = pubfidc[ix].usfdid[0] | (pubfidc[ix].usfdid[1] << 8);
-
-                                sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d \n", ix, getents, pubfidc[ix].usfdid[2], 
-                                                pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize);
-                                print_f(rs->plogs, "P11", rs->logs);                                
-                            }
-                            #endif
-                            
                         }
                     }
                     else {
@@ -62059,60 +62035,175 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                 }
 
-                memset(msgret, 0, 64);
-                pubf->usfacPt = 0;
-                loopcnt = 0;
-                
-                while (recvsz) {
-                    lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
-                    while (lenrs <= 0) {
-                        sprintf_f(rs->logs, "[DVB] get rbuf failed ret: %d \n", lenrs);
-                        print_f(rs->plogs, "P11", rs->logs);
+                if ((recvsz) && (pubfidnxt)) {
 
-                        usleep(100000);
-                        lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
-                    }
-
-                    recvsz -= lenrs;
-
-                    if (loopcnt == 0) {
-                        memcpy(msgret, addrs, 4);
-                    }
-
-                    sprintf_f(rs->logs, "[DVB] %d. 0x0b rusb send %d remain: %d\n", loopcnt, lenrs, recvsz);
-                    print_f(rs->plogs, "P11", rs->logs);
-                    loopcnt ++;
+                    memset(msgret, 0, 64);
+                    //pubf->usfacPt = 0;
+                    loopcnt = 0;
+                    filesz = pubfidnxt->usfdsize;
                     
-                    errcnt = 0;
-                    while (lenrs) {
-                        wrtsz = write(usbfd, addrs, lenrs);
-                        if (wrtsz <= 0) {
-                            errcnt++;
-
-                            if (errcnt > 100) {
-                                break;
-                            }
+                    while (filesz) {
+                        lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
+                        while (lenrs <= 0) {
+                            sprintf_f(rs->logs, "[DVB] get rbuf failed ret: %d \n", lenrs);
+                            print_f(rs->plogs, "P11", rs->logs);
+                    
                             usleep(100000);
-                            continue;
+                            lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
                         }
-
-                        lenrs -= wrtsz;
-                        addrs += wrtsz;
+                    
+                        filesz -= lenrs;
+                    
+                        if (loopcnt == 0) {
+                            memcpy(msgret, addrs, 4);
+                        }
+                    
+                        sprintf_f(rs->logs, "[DVB] %d. 0x0b rusb send %d remain: %d\n", loopcnt, lenrs, filesz);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        loopcnt ++;
+                        
+                        errcnt = 0;
+                        while (lenrs) {
+                            wrtsz = write(usbfd, addrs, lenrs);
+                            if (wrtsz <= 0) {
+                                errcnt++;
+                    
+                                if (errcnt > 100) {
+                                    break;
+                                }
+                                usleep(100000);
+                                continue;
+                            }
+                    
+                            lenrs -= wrtsz;
+                            addrs += wrtsz;
+                        }
                     }
+                    
+                    if (filesz) {
+                        csw[12] = 0x40;//seqtx;
+                    }
+                    else if ((lenflh == 1) || (lenflh == 2)) {
+                        err = memcmp(msgret, elfhead, 4);
+                        if (!err) {
+                            csw[12] = 0;
+                            
+                            sprintf(syscmd11, "/root/scaner/id_%.5d.bin", lenflh);
+                            fdrd = fopen(syscmd11, "r");
+
+                            if (fdrd) {
+                                ret = fseek(fdrd, 0, SEEK_END);
+                                if (ret) {
+                                    sprintf_f(rs->logs, " file seek failed!! ret:%d \n", ret);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    fclose(fdrd);
+                                    fdrd = 0;
+                                }
+                            }
+
+                            if (fdrd) {
+                                filesz = ftell(fdrd);
+                                sprintf_f(rs->logs, " file [%s] size: %d expect: %d\n", syscmd11, filesz, recvsz);
+                                print_f(rs->plogs, "P11", rs->logs);
+
+                                ret = fseek(fdrd, 0, SEEK_SET);
+                                if (ret) {
+                                    sprintf_f(rs->logs, " file seek failed!! ret:%d \n", ret);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    fclose(fdrd);
+                                    fdrd = 0;
+                                }
+                            }
+                            
+                            if (fdrd) {
+                                memset(msgret, 0, 64);
+                                if (filesz == recvsz) {
+                                    lens = fread(msgret, 1, 4, fdrd);
+                                    if (lens == 4) {
+                                        ret = memcmp(msgret, elfhead, 4);
+                                        if (ret) {
+                                            csw[12] = lenflh;
+                                        }
+                                    }
+                                    else {
+                                        csw[12] = lenflh;
+                                    }
+                                } else {
+                                    csw[12] = lenflh;
+                                }
+
+                                fclose(fdrd);
+                                fdrd = 0;
+                            }
+                            else {
+                                csw[12] = lenflh;
+                            }
+
+                            if (!csw[12]) {
+                                if (lenflh == 1) {
+                                    sprintf(syscmd11, "cp /root/scaner/id_00001.bin /root/MSP_rel.bin");
+                                    ret = doSystemCmd(syscmd11);
+                                    
+                                    sprintf(syscmd11, "chmod 777 /root/MSP_rel.bin");
+                                    ret = doSystemCmd(syscmd11);
+
+                                } else {
+                                    sprintf(syscmd11, "cp /lib/modules/4.4.68/kernel/drivers/usb/class/usblp.ko /lib/modules/4.4.68/kernel/drivers/usb/class/usblp_old.ko");
+                                    ret = doSystemCmd(syscmd11);
+                                    
+                                    sprintf(syscmd11, "cp /root/scaner/id_00002.bin /lib/modules/4.4.68/kernel/drivers/usb/class/usblp.ko");
+                                    ret = doSystemCmd(syscmd11);
+                                }
+
+                                sync();
+                                sync();
+                                sync();
+                            }
+                        }
+                        else {
+                            csw[12] = lenflh;
+                        }
+                    }
+
+                    if (csw[12] == 0) {
+                        ret = fileid_save(fileidpoll, pubf);
+                        if(!ret) {
+                            sprintf_f(rs->logs, "[DVB] fileid write file succeed ret: %d\n", ret);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        } else {
+                            sprintf_f(rs->logs, "[DVB] Error!! fileid write file failed!!! ret: %d\n", ret);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        
+                        #if 1
+                        pubfidc = pubf->usfacPt;
+                        lens = pubf->usfacLength;
+                        val = sizeof(struct usbFileidContent_s);
+                        lens = lens / val;
+                        for(ix=0; ix < lens; ix++) {
+                            getents = pubfidc[ix].usfdid[0] | (pubfidc[ix].usfdid[1] << 8);
+
+                            sprintf_f(rs->logs, "    [%d] %d %c %d, addr: 0x%x size: %d \n", ix, getents, pubfidc[ix].usfdid[2], 
+                                            pubfidc[ix].usfdid[3], pubfidc[ix].usfdAddr, pubfidc[ix].usfdsize);
+                            print_f(rs->plogs, "P11", rs->logs);                                
+                        }
+                        #endif
+                    }
+                }
+                else {
+                    
+                    csw[8] = 0;
+                    csw[9] = 0;
+                    csw[10] = 0;
+                    csw[11] = 0;
+                    csw[12] = CSW_STATUS_USB_FAIL;
                 }
                 
-                if (recvsz) {
-                    csw[12] = 0x40;//seqtx;
-                }
-                else if ((lenflh == 1) || (lenflh == 2)) {
-                    err = memcmp(msgret, elfhead, 4);
-                    if (!err) {
-                        csw[12] = 0;
-                    } else {
-                        csw[12] = lenflh;
-                    }
-                }
-
+                pubfidnxt = 0;
+                pubf->usfacPt = 0;
+                
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
