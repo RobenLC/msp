@@ -52871,7 +52871,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             #if USB_ALIVE_POLLING 
             else {
                 polcnt ++;
-                if (polcnt % 10) {
+                if (polcnt % 2) {
                     continue;
                 }
                 
@@ -53727,6 +53727,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                             if (pidvid[1] == 0x0a01) {
                                 pllst = 0xa1;
+                            } else {
+                                pllst = pidvid[1] & 0xff;
                             }
                         }
                     }                
@@ -53752,6 +53754,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (pidvid[1] == 0x0a01) {
                             pllst = 0xa1;
                         }
+                        else {
+                            pllst = pidvid[1] & 0xff;
+                        }
                     }         
                     else {
                         err = close(usbid);
@@ -53768,7 +53773,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 print_f(rs->plogs, sp, rs->logs);
             }
 
-            if ((puhsinfo->ushostid) && (!pllst)) {
+            if ((puhsinfo->ushostid) && (pllst == 0)) {
                 bitset = RING_BUFF_NUM_USB;
                 ret = USB_IOCT_LOOP_BUFF_PRESET(usbid, &bitset);
                 if (ret < 0) {
@@ -55909,6 +55914,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     static char ptfileSaveWifiMeta[] = "/mnt/mmc2/usb/wmeta_%.3d.bin";
     FILE *fsmeta=0;
     #endif
+    char elfhead[4] = {0x7f, 0x45, 0x4c, 0x46};
     char cbw[32] = {0x55, 0x53, 0x42, 0x43, 0x20, 0x14, 0x20, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11,
                              0x4d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff};
     char csw[16] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff};
@@ -55952,7 +55958,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct aspMetaData_s *ptmetaout=0, *ptmetain=0;
     struct aspMetaData_s *ptmetainduo=0;
     char *addrs=0;
-    int lenrs=0, act=0, val=0, lenflh=0, err=0, fsrcv=0, idlcnt=0, pollcnt=0;
+    int lenrs=0, act=0, val=0, lenflh=0, err=0, fsrcv=0, idlcnt=0, pollcnt=0, loopcnt=0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int usbid01=0, usbid02=0;
@@ -58132,78 +58138,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                 }
-#if 0
-                else if ((cmd == OP_WRITE_FILE) && (opc == 0) && (dat == 0xff)) {
-                    sprintf_f(rs->logs, "[DVB] 0x0b find next fileid for writting \n");
-                    print_f(rs->plogs, "P11", rs->logs);
-                    pubfidnxt = 0;
-                    
-                    if (pubf->usfacPt == 0) {
-                        sprintf_f(rs->logs, "[DVB] Error !!! 0x0b find next fileid usfacPt is null \n");
-                        print_f(rs->plogs, "P11", rs->logs);
-                        break;
-                    }
-
-                    pubfidc = pubf->usfacPt;
-                    lenbs = sizeof(struct usbFileidContent_s);
-                    lens = pubf->usfacLength / lenbs;
-                    act = ucbwfile->ASIC_sel;
-
-                    for(ix=0; ix < lens; ix++) {
-                        getents = pubfidc->usfdid[0] | (pubfidc->usfdid[1] << 8);
-
-                        #if 1
-                        sprintf_f(rs->logs, "    srhwrt - [%d] %d %c %d, addr: 0x%x size: %d select: %d\n", ix, getents, pubfidc->usfdid[2], 
-                                       pubfidc->usfdid[3], pubfidc->usfdAddr, pubfidc->usfdsize, act);
-                        print_f(rs->plogs, "P11", rs->logs);                                
-                        #endif
-
-                        if ((pubfidc->usfdsize != 0) && (pubfidc->usfdid[3] == act)) {
-                            pubfidnxt = pubfidc;
-                            break;
-                        }
-                        pubfidc++;
-                    }
-
-                    if (pubfidnxt == 0) {
-                        pubf->usfacPt = 0;
-                        break;
-                    }
-                    
-                    if (!act) {
-                        if (usbid01) {
-                            endTran[0] = 'j';
-                            endTran[1] = pubfidnxt->usfdid[1];
-                            endTran[2] = pubfidnxt->usfdid[0];
-                            //endTran[1] = ucbwfile->pramFileId[0];
-                            //endTran[2] = ucbwfile->pramFileId[1];
-
-                            pipRet = write(pipeTx[1], endTran, 3);
-                            if (pipRet < 0) {
-                                sprintf_f(rs->logs, "[DV] send erase section ret: %d \n", pipRet);
-                                print_f(rs->plogs, "P11", rs->logs);
-                                continue;
-                            }
-                        }
-                    } else {
-                        if (usbid02) {
-                            endTran[0] = 'j';
-                            endTran[1] = pubfidnxt->usfdid[1];
-                            endTran[2] = pubfidnxt->usfdid[0];
-                            //endTran[1] = ucbwfile->pramFileId[0];
-                            //endTran[2] = ucbwfile->pramFileId[1];
-
-                            pipRet = write(pipeTxd[1], endTran, 3);
-                            if (pipRet < 0) {
-                                sprintf_f(rs->logs, "[DV] send erase section ret: %d \n", pipRet);
-                                print_f(rs->plogs, "P11", rs->logs);
-                                continue;
-                            }
-                        }
-                    }
-                    break;
-                }
-#endif
                 else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0)) {
                     if (!iubsBuff) {
                         sprintf_f(rs->logs, "\n[DVF] Error !!! iubsBuff is null!!!! cmd: 0x%.2x opc: 0x%.2x, dat: 0x%.2x  \n",cmd, opc, dat);
@@ -58268,7 +58202,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     break;
                 }
                 else {
-                    recvsz = read(usbfd, ptrecv, 31);
+                    if (fsrcv) {
+                        recvsz = fsrcv;
+                        fsrcv = 0;
+
+                        sprintf_f(rs->logs, "[DV] first usb RX size: %d / %d \n====================\n", recvsz, 31); 
+                        print_f(rs->plogs, "P11", rs->logs);
+
+                        shmem_dump(ptrecv, recvsz);
+                    } else {
+                        recvsz = read(usbfd, ptrecv, 31);
+                    }
                 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb RX size: %d / %d \n====================\n", recvsz, 31); 
@@ -58276,19 +58220,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     #endif
                     
                     if (recvsz < 0) {
-                        if (fsrcv) {
-                            recvsz = fsrcv;
-                            fsrcv = 0;
-
-                            sprintf_f(rs->logs, "[DV] first usb RX size: %d / %d \n====================\n", recvsz, 31); 
-                            print_f(rs->plogs, "P11", rs->logs);
-
-                            shmem_dump(ptrecv, recvsz);
-                            usbentsRx = 0;                            
-                        } else {
-                            usbentsRx = 0;
-                            break;
-                        }
+                        usbentsRx = 0;
+                        break;
                     }
 
                     #if LOG_FLASH /* should close */
@@ -59313,6 +59246,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 break;
                             case 6: // reset to DL mode
                                 break;
+                            case 7: // reset ASIC
+                                break;
                             default:
                                 break;
                             }
@@ -59480,6 +59415,35 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                     pinfushostd->ushostpidvid[0] = 0;
                                     pinfushostd->ushostpidvid[1] = 0;
+                                    
+                                    endTran[0] = '0';
+                                    
+                                    pipRet = write(pipeTxd[1], endTran, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV] send sec reset to rom ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    break;
+                                case 7: // reset ASIC
+                                    opc = 7;
+                                    dat = 0xff;
+                                    
+                                    sprintf_f(rs->logs, "[DV] reset ASIC \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    sprintf(syscmd11, "/root/module/romRst.sh");
+                                    ret = doSystemCmd(syscmd11);
+                                                                                                          
+                                    endTran[0] = '0';
+                                    
+                                    pipRet = write(pipeTx[1], endTran, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV] send pri reset to rom ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
                                     
                                     endTran[0] = '0';
                                     
@@ -62009,9 +61973,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
             }
             else if ((cmd == OP_WRITE_FILE) && (opc == 0xff) && (dat == 0xff)) { /* usbentsTx == 1*/
-                sprintf_f(rs->logs, "[DVB] 0x0b send fileid back \n");
-                print_f(rs->plogs, "P11", rs->logs);
+                lenflh = (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1];
                 act = ucbwfile->ASIC_sel;
+                
+                sprintf_f(rs->logs, "[DVB] 0x0b send fileid back, fileid: %d, select: %d\n", lenflh, act);
+                print_f(rs->plogs, "P11", rs->logs);
                 
                 rs_ipc_put(rs, "i", 1);
                 
@@ -62093,7 +62059,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                 }
 
+                memset(msgret, 0, 64);
                 pubf->usfacPt = 0;
+                loopcnt = 0;
                 
                 while (recvsz) {
                     lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
@@ -62107,9 +62075,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     recvsz -= lenrs;
 
-                    sprintf_f(rs->logs, "[DVB] 0x0b rusb send %d - %d\n", lenrs, recvsz);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    if (loopcnt == 0) {
+                        memcpy(msgret, addrs, 4);
+                    }
 
+                    sprintf_f(rs->logs, "[DVB] %d. 0x0b rusb send %d remain: %d\n", loopcnt, lenrs, recvsz);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    loopcnt ++;
+                    
                     errcnt = 0;
                     while (lenrs) {
                         wrtsz = write(usbfd, addrs, lenrs);
@@ -62127,9 +62100,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         addrs += wrtsz;
                     }
                 }
-
+                
                 if (recvsz) {
                     csw[12] = 0x40;//seqtx;
+                }
+                else if ((lenflh == 1) || (lenflh == 2)) {
+                    err = memcmp(msgret, elfhead, 4);
+                    if (!err) {
+                        csw[12] = 0;
+                    } else {
+                        csw[12] = lenflh;
+                    }
                 }
 
                 wrtsz = 0;
@@ -62756,6 +62737,231 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
 
                 sprintf_f(rs->logs, "[DV] rom csw[12]: %d, act: %d, n: 0x%.2x, m:0x%.2x - 2\n", csw[12], act, chn, chm);
+                print_f(rs->plogs, "P11", rs->logs);
+
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+                    
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                sprintf_f(rs->logs, "[DV] 0x0c cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x dump csw: \n", cmd, opc, dat); 
+                print_f(rs->plogs, "P11", rs->logs);
+                shmem_dump(csw, wrtsz);
+                    
+                cmd = 0;
+                dat = 0;
+                opc = 0;
+            }
+            else if ((cmd == OP_WRITE_FILE) && (opc == 7) && (dat == 0xff)) { /* usbentsTx == 1*/
+                
+                sprintf_f(rs->logs, "[DV] wait reset ASIC \n");
+                print_f(rs->plogs, "P11", rs->logs);
+
+                while (1) {
+                    chq = 0;
+                    pipRet = read(pipeRx[0], &chq, 1);
+                    if (pipRet > 0) {
+                        break;
+                    }
+                }
+
+                if (chq == 'J') {
+                    while (1) {
+                        pipRet = read(pipeRx[0], msgret, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+                    
+                    chn = 0;
+                    if (pipRet > 0) {
+                        chn = msgret[0];
+                    }
+                    
+                    sprintf_f(rs->logs, "[DV] rom rest polld ch: %c, result: %d ret: %d\n", chq, chn, pipRet);
+                    print_f(rs->plogs, "P11", rs->logs);    
+                } 
+                else {
+                    sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! \n", chq);
+                    print_f(rs->plogs, "P11", rs->logs);    
+                }
+                while (1) {
+                    chd = 0;
+                    pipRet = read(pipeRxd[0], &chd, 1);
+                    if (pipRet > 0) {
+                        break;
+                    }
+                }
+                
+                if (chd == 'J') {
+                    while (1) {
+                        pipRet = read(pipeRxd[0], msgret, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+                    
+                    chm = 0;
+                    if (pipRet > 0) {
+                        chm = msgret[0];
+                    }
+                    
+                    sprintf_f(rs->logs, "[DV] rom sec reset polld ch: %c, result: %d ret: %d \n", chd, chm, pipRet);
+                    print_f(rs->plogs, "P11", rs->logs);    
+                }
+                else {
+                    sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! \n", chd);
+                    print_f(rs->plogs, "P11", rs->logs);    
+                }
+
+                if ((chn == 0x03) || (chm == 0x04)) {
+                    csw[12] = 0;
+                }
+                else if ((chn == 0x04) || (chm == 0x03)) {
+                    csw[12] = 2;
+                }
+                else {
+                    csw[12] = 1; 
+                }
+
+                sprintf_f(rs->logs, "[DV] rom csw[12]: 0x%.2x, chn: 0x%.2x, chm:0x%.2x \n", csw[12], chn, chm);
+                print_f(rs->plogs, "P11", rs->logs);
+
+                if (csw[12] == 2) {
+                    changename = pinfushostd->ushostname;
+                    pinfushostd->ushostname = pinfushost->ushostname;
+                    pinfushost->ushostname = changename;
+                    
+                    sprintf_f(rs->logs, "[DV] rom pri[%s] sec[%s] \n", pinfushost->ushostname, pinfushostd->ushostname);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    pinfushost->ushostpidvid[0] = 0;
+                    pinfushost->ushostpidvid[1] = 0;
+
+                    pinfushostd->ushostpidvid[0] = 0;
+                    pinfushostd->ushostpidvid[1] = 0;
+
+                    endTran[0] = '0';
+
+                    pipRet = write(pipeTx[1], endTran, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV] send pri reset to rom ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                    sprintf_f(rs->logs, "[DV] rom pri send command ret:  \n", pipRet);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    endTran[0] = '0';
+                    
+                    pipRet = write(pipeTxd[1], endTran, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV] send sec reset to rom ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                    sprintf_f(rs->logs, "[DV] rom sec send command ret:  \n", pipRet);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+                    
+                    sprintf_f(rs->logs, "[DV] wait pri 0x17 ch: %c \n", chq);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    if (chq == 'J') {
+                        while (1) {
+                            pipRet = read(pipeRx[0], msgret, 1);
+                            if (pipRet > 0) {
+                                break;
+                            }
+                        }
+                        
+                        chn = 0;
+                        if (pipRet > 0) {
+                            chn = msgret[0];
+                        }
+                        
+                        sprintf_f(rs->logs, "[DV] rom rest polld ch: %c, result: %d ret: %d - 2\n", chq, chn, pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    } 
+                    else {
+                        sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! - 2\n", chq);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    }
+
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+                    
+                    sprintf_f(rs->logs, "[DV] wait sec 0x17 ch: %c \n", chd);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    if (chd == 'J') {
+                        while (1) {
+                            pipRet = read(pipeRxd[0], msgret, 1);
+                            if (pipRet > 0) {
+                                break;
+                            }
+                        }
+                        
+                        chm = 0;
+                        if (pipRet > 0) {
+                            chm = msgret[0];
+                        }
+                        
+                        sprintf_f(rs->logs, "[DV] rom sec reset polld ch: %c, result: %d ret: %d - 2\n", chd, chm, pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! - 2\n", chd);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    } 
+                }
+
+                if ((chn == 0x03) && (chm == 0x04)) {
+                    csw[12] = 0;
+                }
+                else {
+                    if ((chn == 0x03) && (chm != 0x04)) {
+                        csw[12] = 2; 
+                    }
+                    else if ((chn != 0x03) && (chm == 0x04)) {
+                        csw[12] = 1; 
+                    }
+                    else if ((chn != 0x03) && (chm != 0x04)) {
+                        csw[12] = 3; 
+                    } 
+                    else {
+                        csw[12] = CSW_STATUS_USB_FAIL; 
+                    }
+
+                }
+
+                sprintf_f(rs->logs, "[DV] rom csw[12]: 0x%.2x, chn: 0x%.2x, chm:0x%.2x - 2\n", csw[12], chn, chm);
                 print_f(rs->plogs, "P11", rs->logs);
 
                 wrtsz = 0;
