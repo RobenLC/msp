@@ -39181,8 +39181,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     ret = fwrite(addrs, 1, len, filefd);
                                     acusz += len;
                                     
-                                    sprintf_f(mrs->log, "[GW] wget write: %d(%d) acusz: %d \n",ret, len, acusz);
-                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                    //sprintf_f(mrs->log, "[GW] wget write: %d(%d) acusz: %d \n",ret, len, acusz);
+                                    //print_f(&mrs->plog, "fs145", mrs->log);
 
                                     if (ret != len) {
                                         sprintf_f(mrs->log, "[GW] warnning!!! wget write size %d but ret %d \n",len, ret);
@@ -39195,8 +39195,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 
                                 break;
                             case 'g':
-                                sprintf_f(mrs->log, "[GW] wget write end last: %d acusz: %d \n", len, acusz);
-                                print_f(&mrs->plog, "fs145", mrs->log);
+                                //sprintf_f(mrs->log, "[GW] wget write end last: %d acusz: %d \n", len, acusz);
+                                //print_f(&mrs->plog, "fs145", mrs->log);
 
                                 fflush(filefd);
                                 fclose(filefd);
@@ -39314,8 +39314,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     
                                     maxsz -= len;
                                     
-                                    sprintf_f(mrs->log, "[GW] read rfile len: %d last: %d\n",len, maxsz);
-                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                    //sprintf_f(mrs->log, "[GW] read rfile len: %d last: %d\n",len, maxsz);
+                                    //print_f(&mrs->plog, "fs145", mrs->log);
 
                                     ret = fread(addrs, 1, len, filefd);
                                     if (ret != len) {
@@ -58086,16 +58086,18 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             filesz = filesz - lenrs;
 
+                            #if LOG_P11_EN
                             sprintf_f(rs->logs, "[DVB] usb file read recvsz: %d remain: %d  \n", lenrs, filesz);
                             print_f(rs->plogs, "P11", rs->logs);
+                            #endif
 
                             recvsz = lenrs;
                             errcnt = 0;
                             while (recvsz) {
                                 ret = read(usbfd, addrs, recvsz);
                                 if (ret > 0) {
-                                    sprintf_f(rs->logs, "\n[DVB] usb file read recvsz: %d (%d)  \n",ret, recvsz);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "\n[DVB] usb file read recvsz: %d (%d)  \n",ret, recvsz);
+                                    //print_f(rs->plogs, "P11", rs->logs);
 
                                     recvsz -= ret;
                                     addrs += ret;
@@ -62057,9 +62059,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         if (loopcnt == 0) {
                             memcpy(msgret, addrs, 4);
                         }
-                    
+
+                        #if LOG_P11_EN
                         sprintf_f(rs->logs, "[DVB] %d. 0x0b rusb send %d remain: %d\n", loopcnt, lenrs, filesz);
                         print_f(rs->plogs, "P11", rs->logs);
+                        #endif
+                        
                         loopcnt ++;
                         
                         errcnt = 0;
