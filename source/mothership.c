@@ -52951,7 +52951,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
 
-                        usbid = 0;
+                        usbid = -1;
 
                         continue;
                     } else {
@@ -52966,7 +52966,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                             print_f(rs->plogs, sp, rs->logs);
                             close(usbid);
-                            usbid = 0;
+                            usbid = -1;
                             
                             continue;
                         }
@@ -52979,14 +52979,18 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                             close(usbid);
                             usbid = 0;
-                    
+                            
+                            chvir = puhsinfom[0]->ushostname;
+                            puhsinfom[0]->ushostname = puhsinfom[1]->ushostname;
+                            puhsinfom[1]->ushostname = chvir;
+                            
                             usbid = open(puhsinfo->ushostname, O_RDWR);
                     
                             if (usbid <= 0) {
                                 sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
                                 print_f(rs->plogs, sp, rs->logs);
 
-                                usbid = 0;
+                                usbid = -1;
                                 
                                 continue;
                             } else {
@@ -53001,7 +53005,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                     sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                                     print_f(rs->plogs, sp, rs->logs);
                                     close(usbid);
-                                    usbid = 0;
+                                    usbid = -1;
                                     
                                     continue;
                                 }
@@ -53012,7 +53016,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                     print_f(rs->plogs, sp, rs->logs);
                                     
                                     close(usbid);
-                                    usbid = 0;
+                                    usbid = -1;
                                     
                                     continue;
                                 }
@@ -53044,7 +53048,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             sprintf_f(rs->logs,  "can't pre-set buff failed, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
                             print_f(rs->plogs, sp, rs->logs);
                             close(usbid);
-                            usbid = 0;
+                            usbid = -1;
                             continue;
                         }
 
@@ -53053,7 +53057,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
                             print_f(rs->plogs, sp, rs->logs);
                             close(usbid);
-                            usbid = 0;
+                            usbid = -1;
                             continue;
                         }
 
@@ -53063,7 +53067,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             sprintf_f(rs->logs,  "can't set phy addr, size: %d [%s]\n", RING_BUFF_NUM_USB, puhsinfo->ushostname); 
                             print_f(rs->plogs, sp, rs->logs);
                             close(usbid);
-                            usbid = 0;
+                            usbid = -1;
                             continue;
                         }
 
