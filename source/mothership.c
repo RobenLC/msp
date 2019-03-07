@@ -29,9 +29,15 @@
 #include <errno.h> 
 //#include <mysql.h>
 //main()
-#define MSP_VERSION "Wed Mar 6 15:02:13 2019 \
-d6b4d5ad70"
+// version example: MSP Version v0.0.01,Wed Mar 16 15:02:13 2019 d6b4d5ad70,2019.12.17 14:48:18
 
+static char mver[] = "MSP Version v0.0.01"; // 19 
+static char gitcommit[] = "Wed Mar 16 15:02:13 2019 d6b4d5ad70"; // 35
+static char buildtime[] = __TIMESTAMP__; // 24 
+
+#define MSP_VERSION mver
+#define MSP_GIT gitcommit
+#define MSP_TIME buildtime
 
 #define DISABLE_SPI  (1)
 #define DISABLE_USB  (0)
@@ -53777,7 +53783,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 print_f(rs->plogs, sp, rs->logs);
             }
 
-            if ((puhsinfo->ushostid) && (pllst == 0)) {
+            if (puhsinfo->ushostid) {
                 bitset = RING_BUFF_NUM_USB;
                 ret = USB_IOCT_LOOP_BUFF_PRESET(usbid, &bitset);
                 if (ret < 0) {
@@ -59254,6 +59260,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 break;
                             case 7: // reset ASIC
                                 break;
+                            case 8: // total reset
+                                break;
+                            case 9: // get version
+                                break;
                             default:
                                 break;
                             }
@@ -59460,6 +59470,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         continue;
                                     }
                                     
+                                    break;
+                                case 8: // total reset
+                                    sprintf_f(rs->logs, "[DV] reset all \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    sprintf(syscmd11, "restart");
+                                    ret = doSystemCmd(syscmd11);
+
+                                    break;
+                                case 9: // get version
+                                    opc = 9;
+                                    dat = 0xff;
+
+                                    lens = strlen(MSP_VERSION);
+                                    
+                                    sprintf_f(rs->logs, "[DV] get version [%s] len: %d\n", MSP_VERSION, lens);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
                                     break;
                                 default:
                                     break;
@@ -62874,6 +62902,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 while (1) {
                     chq = 0;
                     pipRet = read(pipeRx[0], &chq, 1);
+                    
+                    //sprintf_f(rs->logs, "[dbg] get chq: %c ret: %d \n", chq, pipRet);
+                    //print_f(rs->plogs, "P11", rs->logs);
+
                     if (pipRet > 0) {
                         break;
                     }
@@ -62896,9 +62928,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);    
                 } 
                 else {
+                    while (1) {
+                        pipRet = read(pipeRx[0], msgret, 1);
+                        if (pipRet <= 0) {
+                            break;
+                        }
+                    }
+                    
                     sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! \n", chq);
                     print_f(rs->plogs, "P11", rs->logs);    
                 }
+                
                 while (1) {
                     chd = 0;
                     pipRet = read(pipeRxd[0], &chd, 1);
@@ -62924,6 +62964,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);    
                 }
                 else {
+                    while (1) {
+                        pipRet = read(pipeRxd[0], msgret, 1);
+                        if (pipRet <= 0) {
+                            break;
+                        }
+                    }
+                    
                     sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! \n", chd);
                     print_f(rs->plogs, "P11", rs->logs);    
                 }
@@ -62941,7 +62988,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "[DV] rom csw[12]: 0x%.2x, chn: 0x%.2x, chm:0x%.2x \n", csw[12], chn, chm);
                 print_f(rs->plogs, "P11", rs->logs);
 
-                if (csw[12] == 2) {
+                if (csw[12]) {
                     changename = pinfushostd->ushostname;
                     pinfushostd->ushostname = pinfushost->ushostname;
                     pinfushost->ushostname = changename;
@@ -63005,6 +63052,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);    
                     } 
                     else {
+                        while (1) {
+                            pipRet = read(pipeRx[0], msgret, 1);
+                            if (pipRet <= 0) {
+                                break;
+                            }
+                        }
+                        
                         sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! - 2\n", chq);
                         print_f(rs->plogs, "P11", rs->logs);    
                     }
@@ -63037,6 +63091,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);    
                     }
                     else {
+                        while (1) {
+                            pipRet = read(pipeRxd[0], msgret, 1);
+                            if (pipRet <= 0) {
+                                break;
+                            }
+                        }
+                        
                         sprintf_f(rs->logs, "[DV] error!!! polld ch : %c unexpected!! - 2\n", chd);
                         print_f(rs->plogs, "P11", rs->logs);    
                     } 
@@ -63084,6 +63145,94 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
 
                 sprintf_f(rs->logs, "[DV] 0x0c cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x dump csw: \n", cmd, opc, dat); 
+                print_f(rs->plogs, "P11", rs->logs);
+                shmem_dump(csw, wrtsz);
+                    
+                cmd = 0;
+                dat = 0;
+                opc = 0;
+            }
+            else if ((cmd == OP_WRITE_FILE) && (opc == 9) && (dat == 0xff)) { /* usbentsTx == 1*/
+
+                lenflh = 0;
+                memset(ptrecv, 0x20, 128);
+
+                ptrecv[lenflh] = '[';
+                lenflh += 1;
+                
+                lens = strlen(MSP_VERSION);
+                if (lens > 19) {
+                    lens = 19;
+                }
+                strncpy(&ptrecv[lenflh], MSP_VERSION, lens);
+                lenflh += lens;
+                ptrecv[lenflh] = ',';
+                lenflh += 1;
+                
+                lens = strlen(MSP_GIT);
+                if (lens > 35) {
+                    lens = 35;
+                }
+                strncpy(&ptrecv[lenflh], MSP_GIT, lens);
+                lenflh += lens;
+                ptrecv[lenflh] = ',';
+                lenflh += 1;
+
+                lens = strlen(MSP_TIME);
+                if (lens > 24) {
+                    lens = 24;
+                }
+                strncpy(&ptrecv[lenflh], MSP_TIME, lens);
+                lenflh += lens;
+
+                ptrecv[lenflh] = ']';
+                lenflh += 1;
+
+                if (lenflh > 128) {
+                    sprintf_f(rs->logs, "error!!! wrong version total size: \n", lenflh); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                }
+
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, ptrecv, 128);
+                    
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                csw[12] = 0; 
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = write(usbfd, csw, 13);
+                    
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                sprintf_f(rs->logs, "[DV] OP_WRITE_FILE get version opc: 0x%.2x dat: 0x%.2x dump csw: \n", opc, dat); 
                 print_f(rs->plogs, "P11", rs->logs);
                 shmem_dump(csw, wrtsz);
                     
@@ -63701,7 +63850,7 @@ int main(int argc, char *argv[])
     int *sgateUpTx, *sgateUpRx, *sgateDnTx, *sgateDnRx;
     struct usbFileidAccess_s *pusbf=0;
 
-    printf("\n        ============ <MSP VERSION: %s> ===========\n\n", MSP_VERSION);    
+    printf("\n        ======= <%s, git version: %s, build time: %s> =======\n\n", MSP_VERSION, MSP_GIT, MSP_TIME);    
 
     aspMemAsign = (struct aspMemAsign_s *)mmap(NULL, sizeof(struct aspMemAsign_s) * MSP_P_NUM, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     memset(aspMemAsign, 0, sizeof(struct aspMemAsign_s) * MSP_P_NUM);
