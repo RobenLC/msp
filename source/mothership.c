@@ -52877,7 +52877,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             #if USB_ALIVE_POLLING 
             else {
                 polcnt ++;
-                if (polcnt % 2) {
+                if (polcnt % 6) {
                     continue;
                 }
                 
@@ -52893,6 +52893,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 #endif
 
                 if (!usbid) {
+                    #if 1
                     sprintf_f(rs->logs, "open device[%s] id: %d  usbid: %d \n", puhsinfo->ushostname, puhsinfo->ushostid, usbid); 
                     print_f(rs->plogs, sp, rs->logs);
 
@@ -52935,6 +52936,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                         ret = -1;
                     }
+                    #endif
                 }
                 else {
                     ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
@@ -66980,8 +66982,31 @@ int main(int argc, char *argv[])
     } else if ((usbh[0]->ushostid == 0) || (usbh[1]->ushostid == 0)) {
         sprintf_f(pmrs->log, "Warnning!!! primary and second not all available!!! usbid0: %d usbid1: %d \n", usbh[0]->ushostid, usbh[1]->ushostid);
         print_f(&pmrs->plog, "USB", pmrs->log);
-        pmrs->usbmh[0] = usbh[0];
-        pmrs->usbmh[1] = usbh[1];
+
+        if ((usbh[0]->ushostid == 0) && (usbh[1]->ushostid == 0)) {
+            pmrs->usbmh[0] = usbh[0];
+            pmrs->usbmh[1] = usbh[1];
+        } else {
+            if (usbh[0]->ushostid == 0) {
+                sprintf_f(pmrs->log, "Error!!! should not be here usb0==0 but usb1!=0 !!! usbid0: %d usbid1: %d \n", usbh[0]->ushostid, usbh[1]->ushostid);
+                print_f(&pmrs->plog, "USB", pmrs->log);
+                pmrs->usbmh[0] = usbh[0];
+                pmrs->usbmh[1] = usbh[1];
+            }
+            else if (usbh[0]->ushostpidvid[1] == 0x0a03) {
+                pmrs->usbmh[0] = usbh[0];
+                pmrs->usbmh[1] = usbh[1];
+            }
+            else if (usbh[0]->ushostpidvid[1] == 0x0a04) {
+                pmrs->usbmh[0] = usbh[1];
+                pmrs->usbmh[1] = usbh[0];
+            } else {
+                pmrs->usbmh[0] = usbh[0];
+                pmrs->usbmh[1] = usbh[1];
+            }
+        }
+    } else if (usbh[0]->ushostpidvid[1] == 0x0a04) {
+
     } else if (usbh[0]->ushostpidvid[1] < usbh[1]->ushostpidvid[1]) {
         pmrs->usbmh[0] = usbh[0];
         pmrs->usbmh[1] = usbh[1];
