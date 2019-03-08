@@ -55380,9 +55380,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
         }
         else if (cmdchr == 0x10) {
-
-            //sprintf_f(rs->logs, "len:%d addr:0x%.8x direct:%d  dump data:\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
-            //print_f(rs->plogs, sp, rs->logs);
+            #if DBG_USB_HS
+            sprintf_f(rs->logs, "0x10 len:%d addr:0x%.8x direct:%d \n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
+            print_f(rs->plogs, sp, rs->logs);
+            #endif
             
             pllst = 0;
             
@@ -55445,9 +55446,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             pieRet = write(pPrx[1], &cplls, 2);
         }
         else if (cmdchr == 0x11) {
-
-            //sprintf_f(rs->logs, "len:%d addr:0x%.8x direct:%d\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
-            //print_f(rs->plogs, sp, rs->logs);
+            #if DBG_USB_HS
+            sprintf_f(rs->logs, "0x11 len:%d addr:0x%.8x direct:%d\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
+            print_f(rs->plogs, sp, rs->logs);
+            #endif
             pllst = 0;
 
             msync(cubsBuff, SPI_TRUNK_SZ, MS_SYNC);
@@ -61671,7 +61673,29 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                     
                 }
-                    
+
+                while (1) {
+                    chq = 0;
+                    pipRet = read(pipeRx[0], &chq, 1);
+                    if (pipRet <= 0) {
+                        break;
+                    }
+
+                    sprintf_f(rs->logs, "[DV] p clean get: 0x%.2x \n", chq);
+                    print_f(rs->plogs, "P11", rs->logs);
+                }
+
+                while (1) {
+                    chd = 0;
+                    pipRet = read(pipeRxd[0], &chd, 1);
+                    if (pipRet <= 0) {
+                        break;
+                    }
+
+                    sprintf_f(rs->logs, "[DV] s clean get: 0x%.2x \n", chd);
+                    print_f(rs->plogs, "P11", rs->logs);
+                }
+
                 cmd = 0;
             }
             else if (cmd == 0x14) { /* usbentsTx == 1*/
