@@ -32,9 +32,10 @@
 // version example: MSP Version v0.0.01,Wed Mar 16 15:02:13 2019 d6b4d5ad70,2019.12.17 14:48:18
 
 static char mver[] = "MSP Version v0.0.01"; // 19 
-static char gitcommit[] = "Wed Mar 16 15:02:13 2019 d6b4d5ad70"; // 35
+static char gitcommit[] = "Mon Mar 11 16:13:54 2019 16cb2e6e49"; // 35
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
+
 
 #define MSP_VERSION mver
 #define MSP_GIT gitcommit
