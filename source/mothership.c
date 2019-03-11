@@ -34,10 +34,12 @@
 static char mver[] = "MSP Version v0.0.01"; // 19 
 static char gitcommit[] = "Wed Mar 16 15:02:13 2019 d6b4d5ad70"; // 35
 static char buildtime[] = __TIMESTAMP__; // 24 
+static char genssid[128];
 
 #define MSP_VERSION mver
 #define MSP_GIT gitcommit
 #define MSP_TIME buildtime
+#define MSP_SSID genssid
 
 #define DISABLE_SPI  (1)
 #define DISABLE_USB  (0)
@@ -52866,6 +52868,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             if (ptret > 0) {
                 //sleep(2);
+                polcnt = 0;
                 read(pPtx[0], &chr, 1);
                 if (dlog) {
                     sprintf_f(rs->logs, "pipe%d get chr: %c(0x%.2x) \n", pPtx[0], chr, chr);
@@ -52877,7 +52880,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             #if USB_ALIVE_POLLING 
             else {
                 polcnt ++;
-                if (polcnt % 6) {
+                if (polcnt % 12) {
                     continue;
                 }
                 
@@ -63211,6 +63214,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 strncpy(&ptrecv[lenflh], MSP_TIME, lens);
                 lenflh += lens;
 
+                lens = strlen(MSP_SSID);
+                if (lens > 28) {
+                    lens = 28;
+                }
+                strncpy(&ptrecv[lenflh], MSP_SSID, lens);
+                lenflh += lens;
+
                 ptrecv[lenflh] = ']';
                 lenflh += 1;
 
@@ -63218,6 +63228,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "error!!! wrong version total size: \n", lenflh); 
                     print_f(rs->plogs, "P11", rs->logs);
                 }
+
+
+                sprintf_f(rs->logs, "version: %s\n", ptrecv); 
+                print_f(rs->plogs, "P11", rs->logs);
+              
 
                 wrtsz = 0;
                 retry = 0;
@@ -63853,6 +63868,7 @@ int main(int argc, char *argv[])
 //static char spi1[] = "/dev/spidev32766.0"; 
 //static char spi0[] = "/dev/spidev32765.0"; 
     char dir[256] = "/mnt/mmc2";
+    char wfssid[128] = "/root/scaner/ssid.gen";
     struct mainRes_s *pmrs;
     struct procRes_s rs[15];
     int ix, ret, len;
@@ -63875,9 +63891,39 @@ int main(int argc, char *argv[])
     int *spipeTx, *spipeRx, *spipeTxd, *spipeRxd;
     int *sgateUpTx, *sgateUpRx, *sgateDnTx, *sgateDnRx;
     struct usbFileidAccess_s *pusbf=0;
+    FILE *fpssid=0;
 
-    printf("\n        ======= <%s, git version: %s, build time: %s> =======\n\n", MSP_VERSION, MSP_GIT, MSP_TIME);    
+    memset(MSP_SSID, 0, 128);
+    len = 0;
+    ret = 0;
+    fpssid = fopen(wfssid, "r");
+    if (fpssid) {
+        ret |= fseek(fpssid, 0, SEEK_END);
 
+        len |= ftell(fpssid);
+
+        ret |= fseek(fpssid, 0, SEEK_SET);
+
+        if ((!ret) && (len)) {
+            ret = fread(MSP_SSID, 1, len, fpssid);
+            if (ret == len) {
+                if ((MSP_SSID[len - 1] == '\n') || (MSP_SSID[len - 1] == '\r')) {
+                    MSP_SSID[len - 1] = '\0';
+                }
+
+                printf("SSID: [%s] \n", MSP_SSID);
+
+            }
+        }
+
+        fclose(fpssid);
+    } else {
+        printf(" get ssid failed!! \n ");
+    }
+
+    printf("\n        ======== <%s, git version: %s> ========\n", MSP_VERSION, MSP_GIT);    
+    printf("\n        ======== <build time: %s ssid: %s> ========\n\n", MSP_TIME, MSP_SSID);    
+    
     aspMemAsign = (struct aspMemAsign_s *)mmap(NULL, sizeof(struct aspMemAsign_s) * MSP_P_NUM, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     memset(aspMemAsign, 0, sizeof(struct aspMemAsign_s) * MSP_P_NUM);
     asptotMalloc = (int *)mmap(NULL, sizeof(int) * MSP_P_NUM, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
