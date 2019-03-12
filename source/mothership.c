@@ -63205,6 +63205,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 strncpy(&ptrecv[lenflh], MSP_GIT, lens);
                 lenflh += lens;
+                
                 ptrecv[lenflh] = ',';
                 lenflh += 1;
 
@@ -63214,6 +63215,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 strncpy(&ptrecv[lenflh], MSP_TIME, lens);
                 lenflh += lens;
+
+                ptrecv[lenflh] = ',';
+                lenflh += 1;
 
                 lens = strlen(MSP_SSID);
                 if (lens > 28) {
