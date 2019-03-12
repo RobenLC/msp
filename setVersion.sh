@@ -5,12 +5,13 @@ v_cmit=0
 v_date=0
 v_time=0
 
-RES_VION="res/values/version.xml"
+RES_VION="./include/version.h"
 
 OUT_FILE="tmp01.txt"
 RLT_FILE="tmp02.txt"
 LOG_FILE="tmp00.txt"
 SOURCE_FILE="./source/mothership.c"
+TMP_FILE="mothership.tmp"
 git log --pretty="%h %ci" > $LOG_FILE
 
 awk -F" " '
@@ -67,7 +68,7 @@ END {
 } 
 ' $RLT_FILE
 
-awk -F"-" '
+awk -F"+" '
 BEGIN {
 	count=0	
 	OUTPUT="tmp01.txt"
@@ -86,16 +87,17 @@ BEGIN {
 	count++
 }
 END {
-	print "<?xml version=\"1.0\" encoding=\"utf-8\"?>" > RES_VERSION
-	print "<resources>" > RES_VERSION
-	print "" > RES_VERSION
-	print "<string name=\"versionText\">Version "V1"."V2" "V3"</string>" > RES_VERSION
-	print "" > RES_VERSION
-	print "</resources>" > RES_VERSION
-	print "" > RES_VERSION
+	
+	print ""V1" "V2" "V3"" > RES_VERSION
+
 	#close RES_VERSION
 }
-' $OUT_FILE
+' $RLT_FILE
 
 cat $RES_VION
 
+GIT_VERSION=$(<$RES_VION)
+
+echo $GIT_VERSION
+
+sed s/char\ gitcommit.*$/char\ gitcommit[]\ =\ \""$GIT_VERSION"\"\;/ $SOURCE_FILE > $TMP_FILE
