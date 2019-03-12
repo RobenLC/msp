@@ -5,7 +5,7 @@ v_cmit=0
 v_date=0
 v_time=0
 
-RES_VION="./include/version.h"
+RES_VION="./include/git_version.h"
 
 OUT_FILE="tmp01.txt"
 RLT_FILE="tmp02.txt"
@@ -72,7 +72,7 @@ awk -F"+" '
 BEGIN {
 	count=0	
 	OUTPUT="tmp01.txt"
-	RES_VERSION="./include/version.h"
+	RES_VERSION="./include/git_version.h"
 }
 {
 	if (count == 0) {
@@ -101,3 +101,5 @@ GIT_VERSION=$(<$RES_VION)
 echo $GIT_VERSION
 
 sed s/char\ gitcommit.*$/char\ gitcommit[]\ =\ \""$GIT_VERSION"\"\;/ $SOURCE_FILE > $TMP_FILE
+
+mv $TMP_FILE $SOURCE_FILE
