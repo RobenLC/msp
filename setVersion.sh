@@ -72,7 +72,7 @@ awk -F"+" '
 BEGIN {
 	count=0	
 	OUTPUT="tmp01.txt"
-	RES_VERSION="res/values/version.xml"
+	RES_VERSION="./include/version.h"
 }
 {
 	if (count == 0) {
