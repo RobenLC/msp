@@ -59941,6 +59941,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     pipRet = read(piprx[0], &chq, 1);
                                 }
 
+                                #if LOG_P11_EN
+                                sprintf_f(rs->logs, "[DV] pre: 0x%.2x nxt: 0x%.2x pipe%d\n", cindexfo[0], chq, piprx[0]);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                #endif
+
                                 if ((chq & 0xc0) == 0x40) {
                                     cindexfo[1] = chq;
                                 } else {
@@ -63201,8 +63206,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 lenflh += 1;
                 
                 lens = strlen(MSP_VERSION);
-                if (lens > 19) {
-                    lens = 19;
+                if (lens > 24) {
+                    lens = 24;
                 }
                 strncpy(&ptrecv[lenflh], MSP_VERSION, lens);
                 lenflh += lens;
