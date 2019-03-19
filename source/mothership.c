@@ -38695,7 +38695,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define DBG_USB_GATE (0)
+#define DBG_USB_GATE (1)
 #define MAX_145_EVENT (9)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -38735,7 +38735,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     int wfileid=0, acusz=0, maxsz=0, fileidcnt=0;
     int totsz[MAX_145_EVENT];
     int cycCnt[MAX_145_EVENT];
-    int idxInit[MAX_145_EVENT];
+    int idxInit=0;
     int memsz=0, pageidx=0, trunkidx=0, memallocsz=0;
     int mindex=0, scnt=0, smax=0;
     uint32_t wfiaddr=0;
@@ -38743,7 +38743,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct usbBuffLink_s *pubffh=0, *pubffcd[4], *pubfft=0, *pubffm=0, *pubffo=0;
     struct usbBuff_s *curbf=0, *headbf=0, *tmpbf=0, *outbf=0;
 
-    int clrstate=0;
+    int prisec=0;
     struct sdFAT_s *pfat=0;
 
     pfat = &mrs->aspFat;
@@ -38751,10 +38751,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     ppup = mrs->usbhost[0];
     ppdn = mrs->usbhost[1];
 
-    idxInit[0] = 1;
-    idxInit[1] = 1;
-    idxInit[2] = 2;
-    idxInit[3] = 2;
+    idxInit = 1;
 
     cycCnt[0] = 0;
     cycCnt[1] = 0;
@@ -38899,10 +38896,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
             matcmd[2] = 0;
             matcmd[3] = 0;
 
-            idxInit[0] = 1;
-            idxInit[1] = 1;
-            idxInit[2] = 2;
-            idxInit[3] = 2;
+            idxInit = 1;
 
             //cswinf = 0;
 
@@ -39410,7 +39404,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 }
 
                                 mindex = ((chindex[0] & 0x3f) << 5) | (chindex[1] & 0x1f);
-
+                                mindex = mindex & 0x3ff;
+                                
                                 sprintf_f(mrs->log, "[GW] pll%d get midx: %d(0x%.2x:0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, mindex, chindex[0], chindex[1], pubffo, pubffh);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 
@@ -39421,7 +39416,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     while (pubffo) {
                                         sprintf_f(mrs->log, "    [GW] %d:%d \n", pubffo->ubindex, mindex);
                                         print_f(&mrs->plog, "fs145", mrs->log);
-                                        if (pubffo->ubindex == mindex) {
+                                        if ((pubffo->ubindex & 0x3ff) == mindex) {
                                             break;
                                         }
                                         pubffo = pubffo->ubnxt;
@@ -39467,11 +39462,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     write(infd[ins], &pllcmd[ins], 1);
                                     sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) no outbf\n", ins, infd[ins], pllcmd[ins], pllcmd[ins]);
                                     print_f(&mrs->plog, "fs145", mrs->log);
-                                } else if (mindex == pubffo->ubindex) { 
+                                } else if (mindex == (pubffo->ubindex & 0x3ff)) { 
                                 
                                     midxfo[0] = ((pubffo->ubindex >> 5) & 0x3f) | 0x80;
                                     midxfo[1] = (pubffo->ubindex & 0x1f) | 0x40;
-
+                                    prisec = pubffo->ubindex & 0x400;
+                                    
                                     if ((pubffo->ubmetasize) && (pubffo->ublastsize)) {
                                         smax = pubffo->ubcylcnt - cycCnt[ins] + 2;
                                         if (smax > 0xff) {
@@ -39627,7 +39623,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         minfo[1] = (scnt & 0x7f) | 0x80; // 0  // 0
                                         minfo[2] = ((scnt >> 7) & 0x7f) | 0x80;  // 1
                                         
-                                        minfo[3] = latcmd[ins]; // 1  // 2
+                                        minfo[3] = (prisec == 0) ? 1:2; //latcmd[ins]; // 1  // 2
                                         
                                         minfo[4] = (char)(lastlen & 0xff); // 2  // 3
                                         minfo[5] = (char)((lastlen >> 8) & 0xff); // 3  // 4
@@ -39636,7 +39632,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         minfo[8] = cswinf; // 6  // 7
                                         
-                                        #if 0 /* memory used debug */
+                                        #if 1 /* memory used debug */
                                         pageidx = 0;
                                         if (pubffh) {
                                             pubffm = pubffh;
@@ -39799,11 +39795,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             pubffcd[2] = 0;
                             pubffcd[3] = 0;
                             
-                            idxInit[0] = 1;
-                            idxInit[1] = 1;
-                            idxInit[2] = 2;
-                            idxInit[3] = 2;
-
+                            idxInit = 1;
+                            
                             //cswinf = 0;
 
                             cmdex = 0;
@@ -39987,7 +39980,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                             lens = lens & 0x1ffff;
 
-                            #if DBG_USB_GATE
+                            #if 0//DBG_USB_GATE
                             sprintf_f(mrs->log, "[GW] cons u len: %d \n", lens);
                             print_f(&mrs->plog, "fs145", mrs->log);
                             #endif
@@ -40001,19 +39994,14 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     memset(pubffh, 0, sizeof(struct usbBuffLink_s));
                                     
-                                    pubffh->ubindex = idxInit[ins];
-
-                                    if ((latcmd[ins] == 'q') || (latcmd[ins] == 'Q')) {
-                                        idxInit[ins] += 2;
-                                    } else {
-                                        idxInit[ins] += 1;
-                                    }
+                                    pubffh->ubindex = idxInit;
+                                    idxInit += 1;
 
                                     if (!cmdex) {
                                         cmdex = latcmd[ins];
                                     }
 
-                                    sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 1\n", ins, pubffh->ubindex, idxInit[ins], latcmd[ins]);
+                                    sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 1\n", ins, pubffh->ubindex, idxInit, latcmd[ins]);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 } else {
                                     sprintf_f(mrs->log, "[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
@@ -40043,14 +40031,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if (pubffcd[ins]) {
                                     memset(pubffcd[ins], 0, sizeof(struct usbBuffLink_s));
                                     
-                                    pubffcd[ins]->ubindex = idxInit[ins];
-                                    if ((latcmd[ins] == 'q') || (latcmd[ins] == 'Q')) { 
-                                        idxInit[ins] += 2;
-                                    } else {
-                                        idxInit[ins] += 1;
-                                    }
-
-                                    sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 2\n", ins, pubffcd[ins]->ubindex, idxInit[ins], latcmd[ins]);
+                                    pubffcd[ins]->ubindex = idxInit;
+                                    idxInit += 1;
+                                    
+                                    sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 2\n", ins, pubffcd[ins]->ubindex, idxInit, latcmd[ins]);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                     
                                     pubffm = pubffh;
@@ -40158,6 +40142,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
+                                if (ins == 3) {
+                                    pubffcd[ins]->ubindex |= 0x400;
+                                }
+                                
                                 indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
                                 indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
 
@@ -40171,7 +40159,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 curbf->bsz |= lasflag;
 
                                 write(outfd[ins], indexfo, 2);
-                                sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: %d- end of transmission \n", 
+                                sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x- end of transmission \n", 
                                                               ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 cycCnt[ins] = 0;
@@ -40185,6 +40173,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if ((cycCnt[ins] > CYCLE_LEN) && (pubffcd[ins]->ubcylcnt > CYCLE_LEN)) {
                                     /* send back index */
                                     //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
+                                    if (ins == 3) {
+                                        pubffcd[ins]->ubindex |= 0x400;
+                                    }
+                                    
                                     indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
                                     indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
 
@@ -55910,7 +55902,7 @@ static int p10(struct procRes_s *rs)
 }
 
 #define LOG_FLASH  (0)
-#define LOG_P11_EN (0)
+#define LOG_P11_EN (1)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
@@ -55927,7 +55919,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
     struct epoll_event evtrs, evtrsd, evtrcmd, evtpipr, evtpiprd;
     struct pollfd ptfd[1];
-    struct pollfd ptfdc[1];
+    struct pollfd ptfdc[2];
     
     int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0;
     #if 1 /* save meta */
@@ -55951,13 +55943,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int usbfd=0;
     char *addrd=0, *palloc=0;
     int uimCylcnt=0, datCylcnt=0, distCylcnt=0, maxCylcnt=0;
-    struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0;
+    struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0, *puimCud=0;
     char *endf=0, *endm=0;
     char endstr[] = "usb_conti_stop";
     int seqtx=0, lens=0, maxsz=0, pipRet=0, idlet=0, ix=0, waitCylen=0, chr=0, cindex=0, lastCylen=0;
     char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12], chn=0, chm=0, chw=0, chy=0;;
-    char cmdtyp=0, cswerr=0, pagerst=2, che=0, cswstatus[2];
-    int *piptx=0, *piprx=0;
+    char cmdprisec=0, cswerr=0, pagerst=2, che=0, cswstatus[2];
+    int *piptx=0, *piprx=0, *pipm=0, *pipn=0;
     int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0, lastflag=0, filesz=0;
     int *pipeRx, *pipeRxd, *pipeTx, *pipeTxd;
     int *gateUpTx, *gateUpRx, *gateDnTx, *gateDnRx;
@@ -56069,6 +56061,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     gateDnTx = pushostd->pgattx;
     gateDnRx = pushostd->pgatrx;
 
+    ptfdc[0].fd = pipeRx[0];
+    ptfdc[0].events = POLLIN;
+
+    ptfdc[1].fd = pipeRxd[0];
+    ptfdc[1].events = POLLIN;
+                            
     epollfd = epoll_create1(O_CLOEXEC);
     if (epollfd < 0) {
         perror("epoll_create1");
@@ -58961,7 +58959,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                 
                                 if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
-                                    if ((puimGet->uimIdex % 2) == 1) {
+                                    if ((puimGet->uimIdex & 0x400) == 0) {
                                                 puscur = pushost;
                                                 pinfcur = pinfushost;
                                                 usbCur = puscur->pushring;
@@ -59767,48 +59765,80 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     break;
                                 }
                             }
-
-                            ptfdc[0].fd = piprx[0];
-                            ptfdc[0].events = POLLIN;
                             
                             chq = 0;
+                            chd = 0;
 
-                            pipRet = poll(ptfdc, 1, 100);
-                            if (pipRet <= 0) {
+                            //ptfdc[0].fd = piprx[0];
+                            //ptfdc[0].events = POLLIN;
+                            
+                            pipRet = poll(ptfdc, 2, 500);
+                            if (pipRet <= 0) {                                
                                 if (puimGet) {
-                                    if ((puimGet->uimCount == 0) && ((opc == 0x0a) || (opc == 0x05))) {
+                                    if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05))) {
                                         clock_gettime(CLOCK_REALTIME, &tidleE);
-                                        idlet = time_diff(&tidleS, &tidleE, 5000000);
+                                        idlet = time_diff(&tidleS, &tidleE, 1000000);
 
                                         sprintf_f(rs->logs, "[DV] wait id %d for %d ms \n", puimGet->uimIdex, idlet);
                                         print_f(rs->plogs, "P11", rs->logs);
 
-                                        if (idlet > 60000) {
+                                        //if (idlet > 60000) {
+                                        if (idlet > 6000) {
                                             clock_gettime(CLOCK_REALTIME, &tidleS);
 
                                             if (puimCnTH == puimGet) {
                                                 puimCnTH = puimGet->uimNxt;
-
+                                                
+                                                puimNxt = 0;
                                                 ix=0;
+                                                cindex = 0;
                                                 puimTmp = puimCnTH;
                                                 while (puimTmp) {
                                                     puimUse = puimTmp;
 
-                                                    if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                    #if 1
+                                                    if (cindex == 0) {
+                                                        cindex = puimUse->uimIdex & 0x3ff;
+                                                        puimNxt = puimUse;
+                                                    } else {
+                                                        if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                            cindex = puimUse->uimIdex & 0x3ff;
+                                                            puimNxt = puimUse;
+                                                        }
+                                                    }
+                                                    #else
+                                                    if (puimUse->uimIdex == ((puimGet->uimIdex & 0x3ff) + 1)) {
                                                         puimNxt = puimUse;
                                                     }
+                                                    #endif
+                                                    
                                                     puimTmp = puimUse->uimNxt;
                                                     ix++;
                                                 }
-                                            } else {
+                                            }
+                                            else {
 
                                                 ix=0;
                                                 puimTmp = puimCnTH;
                                                 while (puimTmp) {
                                                     puimUse = puimTmp;
-                                                    if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                                    
+                                                    #if 1
+                                                    if (cindex == 0) {
+                                                        cindex = puimUse->uimIdex & 0x3ff;
+                                                        puimNxt = puimUse;
+                                                    } else {
+                                                        if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                            cindex = puimUse->uimIdex & 0x3ff;
+                                                            puimNxt = puimUse;
+                                                        }
+                                                    }
+                                                    #else
+                                                    if (puimUse->uimIdex == ((puimGet->uimIdex & 0x3ff) + 1)) {
                                                         puimNxt = puimUse;
                                                     }
+                                                    #endif
+                                                    
                                                     puimTmp = puimUse->uimNxt;
                                                     if (puimTmp == puimGet) {
                                                         puimUse->uimNxt = puimGet->uimNxt;
@@ -59819,26 +59849,18 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 }
                                             }
 
+                                            free(puimGet);
+                                            puimGet = 0;
+                                            
                                             if (puimNxt) {
-                                                free(puimGet);
                                                 puimGet = puimNxt;
-                                            } else {
-                                                ix = puimGet->uimIdex + 1;
-                                                memset(puimGet, 0, sizeof(struct usbIndex_s));
-                                                puimGet->uimIdex = ix;
-                                                if (puimUse) {
-                                                    puimUse->uimNxt = puimGet;
-                                                } else {
-                                                    puimCnTH = puimGet;
-                                                }                                                                                       
-                                                clock_gettime(CLOCK_REALTIME, &tidleS);
                                             }
-
+                                            
                                             ix = 0;
                                             puimTmp = puimCnTH;
                                             while(puimTmp) {
                                                 #if 1
-                                                sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d timeout\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                                sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d timeout srh\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
                                                 print_f(rs->plogs, "P11", rs->logs);
                                                 #endif
 
@@ -59855,7 +59877,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             chr = 0;
 
                                             if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
-                                                if ((puimGet->uimIdex % 2) == 1) {
+                                                if ((puimGet->uimIdex & 0x400) == 0) {
                                                     puscur = pushost;
                                                     pinfcur = pinfushost;
                                                     usbCur = puscur->pushring;
@@ -59869,22 +59891,174 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                     piprx = puscur->pushrx; 
                                                 }
                                             } else {
-                                                sprintf_f(rs->logs, "[DV] puimGet is null timeout\n");
+                                                sprintf_f(rs->logs, "[DV] puimGet is null timeout break\n");
                                                 print_f(rs->plogs, "P11", rs->logs);
+
+                                                che = 'E';
+                                                uimCylcnt = 0;
+                                                lens = 0;
+                                                
+                                                break;
                                             }
                                         }
                                     }
                                 }
                             }
-
-
                             else {
-                                ret = read(piprx[0], &chq, 1);
 
-                                #if LOG_P11_EN
-                                sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x pipe%d ret=%d \n", chq, chr, piprx[0], ret);
-                                print_f(rs->plogs, "P11", rs->logs);
-                                #endif
+                                for (ix=0; ix < 2; ix++) {
+                                    if ((ptfdc[ix].revents & POLLIN) == POLLIN) {                                        
+                                        if (ptfdc[ix].fd == piprx[0]) {
+                                            ret = read(ptfdc[ix].fd, &chq, 1);
+
+                                            #if LOG_P11_EN
+                                            sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x %d.pipe%d ret=%d \n", chq, chr, ix, ptfdc[ix].fd, ret);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+
+                                        } else {
+                                            ret = read(ptfdc[ix].fd, &chd, 1);
+                                            
+                                            #if LOG_P11_EN
+                                            sprintf_f(rs->logs, "[DV] extra chd: 0x%.2x chr: 0x%.2x %d.pipe%d ret=%d \n", chd, chr, ix, ptfdc[ix].fd, ret);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+                                        }
+
+                                        if ((chd & 0xc0) == 0xc0) {
+                                            cindexfo[0] = chd;
+                                            pipRet = read(ptfdc[ix].fd, &chd, 1);
+                                            while (pipRet < 0) {
+                                                pipRet = read(ptfdc[ix].fd, &chd, 1);
+                                            }
+
+                                            #if LOG_P11_EN
+                                            sprintf_f(rs->logs, "[DV] extra pre: 0x%.2x nxt: 0x%.2x pipe%d\n", cindexfo[0], chd, ptfdc[ix].fd);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+
+                                            if ((chd & 0xc0) == 0x40) {
+                                                cindexfo[1] = chd;
+                                            } else {
+                                                sprintf_f(rs->logs, "[DV]  WARNNING get unknown chd: 0x%.2x \n", chd);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                break;
+                                            }
+
+                                            cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
+
+                                            if (!puimCnTH) {
+                                                puimCnTH = malloc(sizeof(struct usbIndex_s));
+                                                if (!puimCnTH) {
+                                                    sprintf_f(rs->logs, "Error!!! can't get memory for usbIndex_s\n\n\n");
+                                                    print_f(rs->plogs, "P11", rs->logs);
+                                                    break;
+                                                }
+
+                                                memset(puimCnTH, 0, sizeof(struct usbIndex_s));
+
+                                                puimCnTH->uimIdex = cindex;
+                                            }
+
+                                            #if DBG_27_DV
+                                            else {
+                                                act = 0;
+                                                puimTmp = puimCnTH;
+                                                while(puimTmp) {
+
+                                                    sprintf_f(rs->logs, "[DV] extra %d - 0x%.2x %d:%d \n", act, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                                    puimTmp = puimTmp->uimNxt;
+
+                                                    act++;
+                                                }                             
+                                            }
+                                            #endif
+
+                                            if (puimCud) {
+                                                if ((puimCud->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                                    puimCud->uimCount += 1;
+                                                }
+                                                else {
+
+                                                    sprintf_f(rs->logs, "[DV] extra current puim index not mach %d:%d \n\n", puimCud->uimIdex, cindex);
+                                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                                    puimTmp= puimCnTH;
+                                                    while(puimTmp) {
+                                                        puimUse = puimTmp;
+                                                        if ((puimUse->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                                            puimTmp = puimUse;
+                                                            break;
+                                                        }
+                                                        puimTmp = puimUse->uimNxt;
+                                                    }
+
+                                                    if (puimTmp) {
+                                                        puimTmp->uimCount += 1;
+                                                        puimCud = puimTmp;
+                                                    } else {
+
+                                                        puimTmp = malloc(sizeof(struct usbIndex_s));
+                                                        if (!puimTmp) {
+                                                            sprintf_f(rs->logs, "Error!!! can't get memory for puimTmp -2 !!!\n\n\n");
+                                                            print_f(rs->plogs, "P11", rs->logs);
+                                                            break;
+                                                        }
+
+                                                        memset(puimTmp, 0, sizeof(struct usbIndex_s));
+
+                                                        puimTmp->uimIdex = cindex;
+                                                        puimTmp->uimCount += 1;
+                                                        puimUse->uimNxt = puimTmp;
+
+                                                        puimCud = puimTmp;
+                                                    }
+                                                }
+                                            }
+                                            else {
+                                                if ((puimCnTH->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                                    puimCnTH->uimCount += 1;
+                                                    puimCud = puimCnTH;
+                                                } else {
+
+                                                    puimTmp= puimCnTH;
+                                                    while(puimTmp) {
+                                                        puimUse = puimTmp;
+                                                        if ((puimUse->uimIdex & 0x3ff) == (cindex  & 0x3ff)) {
+                                                            puimTmp = puimUse;
+                                                            break;
+                                                        }
+                                                        puimTmp = puimUse->uimNxt;
+                                                    }
+
+                                                    if (puimTmp) {
+                                                        puimTmp->uimCount += 1;                            
+                                                        puimCud = puimTmp;
+                                                    } else {
+                                                        puimTmp = malloc(sizeof(struct usbIndex_s));
+                                                        if (!puimTmp) {
+                                                            sprintf_f(rs->logs, "Error!!! can't get memory for puimTmp!!! \n\n\n");
+                                                            print_f(rs->plogs, "P11", rs->logs);
+                                                            break;
+                                                        }
+
+                                                        memset(puimTmp, 0, sizeof(struct usbIndex_s));
+
+                                                        puimTmp->uimIdex = cindex;
+                                                        puimTmp->uimCount += 1;
+                                                        puimUse->uimNxt = puimTmp;
+
+                                                        puimCud = puimTmp;
+                                                    }
+                                                }
+                                            }  
+
+                                            chd = 0;
+                                        }
+                                    }
+                                }
                             }
                             
                             if (chq == 0xff) {
@@ -59956,6 +60130,26 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
 
+                                if ((cindex & 0x400) == 0) {
+                                    sprintf_f(rs->logs, "[DV]  primary 0x%.8x \n", cindex);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    puscur = pushost;
+                                    pinfcur = pinfushost;
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                } else {
+                                    sprintf_f(rs->logs, "[DV]  secondary 0x%.8x \n", cindex);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    puscur = pushostd;
+                                    pinfcur = pinfushostd;
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                }
+                                
                                 if (!puimCnTH) {
                                     puimCnTH = malloc(sizeof(struct usbIndex_s));
                                     if (!puimCnTH) {
@@ -59969,7 +60163,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puimGet = puimCnTH;
                                         
                                     if (!chr) {
-                                        chr = puimGet->uimIdex;
+                                        chr = puimGet->uimIdex & 0x3ff;
+
+                                        if (chr == (cindex & 0x3ff)) {
                                         mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
                                         mindexfo[1] = (chr & 0x1f) | 0x40;
 
@@ -59979,10 +60175,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             print_f(rs->plogs, "P11", rs->logs);
                                             continue;
                                         }
+                                        }
                                     } else {
                                         sprintf_f(rs->logs, "[DV] warring!!! puimCnTH == 0, and chr == %d \n", chr);
                                         print_f(rs->plogs, "P11", rs->logs);
-                                        chr = puimGet->uimIdex;
+                                        if (chr == (cindex & 0x3ff)) {
                                         mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
                                         mindexfo[1] = (chr & 0x1f) | 0x40;
 
@@ -59991,6 +60188,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
                                             print_f(rs->plogs, "P11", rs->logs);
                                             continue;
+                                        }
                                         }
                                     }
                                 }
@@ -60014,7 +60212,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 if (puimGet) {
                                     if (!chr) {
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
-                                            chr = puimGet->uimIdex;
+                                            chr = puimGet->uimIdex & 0x3ff;
                                             mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
                                             mindexfo[1] = (chr & 0x1f) | 0x40;
 
@@ -60038,7 +60236,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puimTmp = puimCnTH;
                                     puimUse = puimCnTH;
                                     while (puimTmp) {
-                                        if (puimTmp->uimIdex < puimUse->uimIdex) {
+                                        if ((puimTmp->uimIdex & 0x3ff) < (puimUse->uimIdex & 0x3ff)) {
                                             if (puimTmp->uimCount > 0) {
                                                 puimUse = puimTmp;
                                             }
@@ -60057,13 +60255,36 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     }
 
+
                                     if (puimGet) {
                                         sprintf_f(rs->logs, "[DV] get puim index: 0x%.2x %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
 
+                                        if ((puimGet->uimIdex & 0x400) == 0) {
+
+                                            sprintf_f(rs->logs, "[DV]  new puimGet primary 0x%.8x \n", puimGet->uimIdex);
+                                            print_f(rs->plogs, "P11", rs->logs);
+
+                                            puscur = pushost;
+                                            pinfcur = pinfushost;
+                                            usbCur = puscur->pushring;
+                                            piptx = puscur->pushtx;
+                                            piprx = puscur->pushrx; 
+                                        } else {
+
+                                            sprintf_f(rs->logs, "[DV]  new puimGet secondary 0x%.8x \n", puimGet->uimIdex);
+                                            print_f(rs->plogs, "P11", rs->logs);
+
+                                            puscur = pushostd;
+                                            pinfcur = pinfushostd;
+                                            usbCur = puscur->pushring;
+                                            piptx = puscur->pushtx;
+                                            piprx = puscur->pushrx; 
+                                        }
+                                        
                                         if (!chr) {
                                             if (puimGet->uimGetCnt < puimGet->uimCount) {
-                                                chr = puimGet->uimIdex;
+                                                chr = puimGet->uimIdex & 0x3ff;
 
                                                 mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
                                                 mindexfo[1] = (chr & 0x1f) | 0x40;
@@ -60074,6 +60295,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                     print_f(rs->plogs, "P11", rs->logs);
                                                     continue;
                                                 }
+
+                                                sprintf_f(rs->logs, "[DV]  new puimGet send req 0x%.8x \n", puimGet->uimIdex);
+                                                print_f(rs->plogs, "P11", rs->logs);
                                             } else {
                                                 sprintf_f(rs->logs, "\n[DV] %d:%d wait for new data at begin \n", puimGet->uimGetCnt, puimGet->uimCount);
                                                 print_f(rs->plogs, "P11", rs->logs);
@@ -60090,7 +60314,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
                                 
                                 if (puimCur) {
-                                    if (puimCur->uimIdex == cindex) {
+                                    if ((puimCur->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
                                         puimCur->uimCount += 1;
                                     }
                                     else {
@@ -60100,7 +60324,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         puimTmp= puimCnTH;
                                         while(puimTmp) {
                                             puimUse = puimTmp;
-                                            if (puimUse->uimIdex == cindex) {
+                                            if ((puimUse->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
                                                 puimTmp = puimUse;
                                                 break;
                                             }
@@ -60128,14 +60352,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                 }
                                 else {
-                                    if (puimCnTH->uimIdex == cindex) {
+                                    if ((puimCnTH->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
                                         puimCnTH->uimCount += 1;
                                         puimCur = puimCnTH;
                                     } else {
                                         puimTmp= puimCnTH;
                                         while(puimTmp) {
                                             puimUse = puimTmp;
-                                            if (puimUse->uimIdex == cindex) {
+                                            if ((puimUse->uimIdex & 0x3ff) == (cindex  & 0x3ff)) {
                                                 puimTmp = puimUse;
                                                 break;
                                             }
@@ -60190,11 +60414,31 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                     cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
                                     
-                                    if (puimGet->uimIdex == cindex) {
+                                    if ((cindex & 0x400) == 0) {
+                                        sprintf_f(rs->logs, "[DV]  primary 0x80 0x%.8x \n", cindex);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        puscur = pushost;
+                                        pinfcur = pinfushost;
+                                        usbCur = puscur->pushring;
+                                        piptx = puscur->pushtx;
+                                        piprx = puscur->pushrx; 
+                                    } else {
+                                        sprintf_f(rs->logs, "[DV]  secondary 0x80 0x%.8x \n", cindex);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        puscur = pushostd;
+                                        pinfcur = pinfushostd;
+                                        usbCur = puscur->pushring;
+                                        piptx = puscur->pushtx;
+                                        piprx = puscur->pushrx; 
+                                    }
+                                    
+                                    if ((puimGet->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
                                         puimGet->uimGetCnt += 1;
                                         
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
-                                            chr = puimGet->uimIdex;
+                                            chr = puimGet->uimIdex & 0x3ff;
 
                                             mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
                                             mindexfo[1] = (chr & 0x1f) | 0x40;
@@ -60242,7 +60486,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     uimCylcnt = (cinfo[0] & 0x7f) | ((cinfo[1] & 0x7f) << 7);
                                     
-                                    cmdtyp = cinfo[2];
+                                    cmdprisec = cinfo[2];
 
                                     cswerr = cinfo[7] & 0x7f;
                                     if (cswerr == 0x7f) {
@@ -60260,6 +60504,33 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
                                     print_f(rs->plogs, "P11", rs->logs);
 
+                                    switch (cmdprisec) {
+                                    case 1:
+                                        sprintf_f(rs->logs, "[DV]  primary 0x7f 0x%.8x \n", cindex);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        puscur = pushost;
+                                        pinfcur = pinfushost;
+                                        usbCur = puscur->pushring;
+                                        piptx = puscur->pushtx;
+                                        piprx = puscur->pushrx; 
+                                        break;
+                                    case 2:
+                                        sprintf_f(rs->logs, "[DV]  secondary 0x7f 0x%.8x \n", cindex);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        puscur = pushostd;
+                                        pinfcur = pinfushostd;
+                                        usbCur = puscur->pushring;
+                                        piptx = puscur->pushtx;
+                                        piprx = puscur->pushrx; 
+                                        break;
+                                    default:
+                                        sprintf_f(rs->logs, "[DV]  error!!! unknown cmdprisec: %d, at 0x7f index: 0x%.8x \n", cmdprisec, cindex);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        break;
+                                    }
+                                    
                                     if (puimCur == puimGet) {
                                         puimCur = 0;
                                     }
@@ -60273,9 +60544,23 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         puimTmp = puimCnTH;
                                         while (puimTmp) {
                                             puimUse = puimTmp;
-                                            if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                            
+                                            #if 1
+                                            if (cindex == 0) {
+                                                cindex = puimUse->uimIdex & 0x3ff;
+                                                puimNxt = puimUse;
+                                            } else {
+                                                if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                    cindex = puimUse->uimIdex & 0x3ff;
+                                                    puimNxt = puimUse;
+                                                }
+                                            }
+                                            #else
+                                            if ((puimUse->uimIdex & 0x3ff) == ((puimGet->uimIdex + 1) & 0x3ff)) {
                                                 puimNxt = puimUse;
                                             }
+                                            #endif
+                                            
                                             puimTmp = puimUse->uimNxt;
                                             ix++;
                                         }
@@ -60284,9 +60569,23 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         puimTmp = puimCnTH;
                                         while (puimTmp) {
                                             puimUse = puimTmp;
-                                            if (puimUse->uimIdex == (puimGet->uimIdex + 1)) {
+                                            
+                                            #if 1
+                                            if (cindex == 0) {
+                                                cindex = puimUse->uimIdex & 0x3ff;
+                                                puimNxt = puimUse;
+                                            } else {
+                                                if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                    cindex = puimUse->uimIdex & 0x3ff;
+                                                    puimNxt = puimUse;
+                                                }
+                                            }
+                                            #else
+                                            if ((puimUse->uimIdex & 0x3ff) == ((puimGet->uimIdex + 1) & 0x3ff)) {
                                                 puimNxt = puimUse;
                                             }
+                                            #endif
+                                            
                                             puimTmp = puimUse->uimNxt;
                                             if (puimTmp == puimGet) {
                                                 puimUse->uimNxt = puimGet->uimNxt;
@@ -60296,16 +60595,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     }
 
+                                    
                                     if (puimNxt) {
                                         free(puimGet);
+                                        puimGet = 0;
+
                                         puimGet = puimNxt;
+                                        
+                                        #if LOG_P11_EN
+                                        sprintf_f(rs->logs, "[DV] puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+                                    } else {
+                                        #if LOG_P11_EN
+                                        sprintf_f(rs->logs, "[DV] puimGet is null \n");
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
                                     }
 
-                                    #if LOG_P11_EN
-                                    sprintf_f(rs->logs, "[DV] puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    #endif
-                                    
                                     ix = 0;
                                     puimTmp = puimCnTH;
                                     while(puimTmp) {
@@ -60329,10 +60636,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rs->plogs, "P11", rs->logs);
                                     #endif
 
+                                    #if 1
                                     if ((waitCylen > 0) || (pagerst > 1)) {
                                         if (!puimNxt) {
 
-                                            ix = puimGet->uimIdex + 1;
+                                            ix = (puimGet->uimIdex & 0x3ff) + 1;
                                             memset(puimGet, 0, sizeof(struct usbIndex_s));
                                             puimGet->uimIdex = ix;
                                             if (puimUse) {
@@ -60352,6 +60660,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             }
                                         }
                                     }
+                                    #endif
 
                                     chr = 0;
                                     
@@ -60360,7 +60669,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 else {
                                     if ((!chq) && (!chr) && (puimGet)) {
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
-                                            chr = puimGet->uimIdex;
+                                            chr = puimGet->uimIdex & 0x3ff;
                                             mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
                                             mindexfo[1] = (chr & 0x1f) | 0x40;
 
@@ -60864,9 +61173,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 print_f(rs->plogs, "P11", rs->logs);    
                             }
                             #endif
-
-                            sprintf_f(rs->logs, "zebra usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x) lens: %d\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr, lens); 
-                            print_f(rs->plogs, "P11", rs->logs);    
                         }
 
                         #if USB_RECVLEN_ZERO_HANDLE
@@ -60920,7 +61226,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             lens = 0;
                             
                             #if 1
-                            if (che == 'E') break;
+                            if (che == 'E') {
+                                puscur->pushrmcnt += 1;
+
+                                sprintf_f(rs->logs, "zebra usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x) lens: %d\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr, lens); 
+                                print_f(rs->plogs, "P11", rs->logs);    
+
+                                break;
+                            }
                             #else
                             if (puscur->pushcnt == 0) break;
                             #endif
@@ -61487,9 +61800,20 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if (cmd == 0x12) { /* usbentsTx == 1*/
 
+                sprintf_f(rs->logs, "[DV] waitCylen, pagerst and cswerr: 0x%.2x, %d : %d !!!\n", cswerr, waitCylen, pagerst); 
+                print_f(rs->plogs, "P11", rs->logs);
+
                 if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
-                    csw[11] = 0;
-                    csw[12] = cswerr;
+                    if ((waitCylen) || (pagerst)) {
+                        sprintf_f(rs->logs, "[DV] Warnning!!!waitCylen || pagerst != 0 and cswerr: 0x%.2x, %d : %d !!!\n", cswerr, waitCylen, pagerst); 
+                        print_f(rs->plogs, "P11", rs->logs);
+
+                        csw[11] = 0;
+                        csw[12] = 0;
+                    } else {
+                        csw[11] = 0;
+                        csw[12] = cswerr;
+                    }
                 } else {
                     csw[11] = 0;
                     csw[12] = 0;
