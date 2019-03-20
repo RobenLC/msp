@@ -39470,9 +39470,15 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     
                                     if ((pubffo->ubmetasize) && (pubffo->ublastsize)) {
                                         smax = pubffo->ubcylcnt - cycCnt[ins] + 2;
+                                        #if 0
                                         if (smax > 0xff) {
                                             smax = CYCLE_LEN;
                                         }
+                                        #else
+                                        if (smax > 0xfff) {
+                                            smax = 0xfff;
+                                        }
+                                        #endif
                                     } else {
                                         smax = CYCLE_LEN;
                                     }
@@ -60536,11 +60542,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
 
                                     puimUse = 0;
-
+                                    
                                     if (puimCnTH == puimGet) {
                                         puimCnTH = puimGet->uimNxt;
                                         
                                         ix=0;
+                                        cindex = 0;
                                         puimTmp = puimCnTH;
                                         while (puimTmp) {
                                             puimUse = puimTmp;
@@ -60566,6 +60573,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     } else {
                                         ix=0;
+                                        cindex = 0;
                                         puimTmp = puimCnTH;
                                         while (puimTmp) {
                                             puimUse = puimTmp;
@@ -60603,7 +60611,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         puimGet = puimNxt;
                                         
                                         #if LOG_P11_EN
-                                        sprintf_f(rs->logs, "[DV] puimGet: %d %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                        sprintf_f(rs->logs, "[DV] puimGet: 0x%.3x %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
                                     } else {
