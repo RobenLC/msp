@@ -38738,14 +38738,21 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     int idxInit=0;
     int memsz=0, pageidx=0, trunkidx=0, memallocsz=0;
     int mindex=0, scnt=0, smax=0;
-    uint32_t wfiaddr=0;
+    uint32_t wfiaddr=0, gval=0;
 
     struct usbBuffLink_s *pubffh=0, *pubffcd[4], *pubfft=0, *pubffm=0, *pubffo=0;
     struct usbBuff_s *curbf=0, *headbf=0, *tmpbf=0, *outbf=0;
 
     int prisec=0;
     struct sdFAT_s *pfat=0;
+    struct aspConfig_s *pct=0;
+    struct aspMetaDataviaUSB_s *ptscaninfo=0, *ptscaninfoduo=0;
+    
+    pct = mrs->configTable;
 
+    ptscaninfo = &mrs->metaUsb;
+    ptscaninfoduo =&mrs->metaUsbDuo;
+    
     pfat = &mrs->aspFat;
 
     ppup = mrs->usbhost[0];
@@ -39643,7 +39650,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         if (pubffh) {
                                             pubffm = pubffh;
                                             while (pubffm) {
-                                                pageidx += 1;
+                                                if ((pubffm->ubindex & 0x800) == 0) {
+                                                    pageidx += 1;
+                                                }
                                                 pubffm = pubffm->ubnxt;
                                             }
                                         }
@@ -40144,32 +40153,150 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                             
                             if (lens < 0) {
-                            } else if ((lens < USB_BUF_SIZE) && (lasflag)) {
-                                sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
+                                len = pubffcd[ins]->ublastsize;
+                                sprintf_f(mrs->log, "[GW] the last trunk size: %d \n", len);
                                 print_f(&mrs->plog, "fs145", mrs->log);
-                                //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
-                                if (ins == 3) {
-                                    pubffcd[ins]->ubindex |= 0x400;
-                                }
+                                dlen = &ptscaninfo->EPOINT_RESERVE1[0] - &ptscaninfo->ASP_MAGIC_ASPC[0];
                                 
-                                indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
-                                indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
-
-                                if ((pubffcd[ins]->ubindex >> 12) > 0) {
-                                    sprintf_f(mrs->log, "\n[GW] WARNNING!!! pubffcd[ins]->ubindex: %d \n", pubffcd[ins]->ubindex);                                
+                                mlen = len % 512;
+                                if (dlen < mlen) {
+                                    sprintf_f(mrs->log, "Error!!! usb scaninfo size less than expected len: %d expect: %d \n", mlen, dlen);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 }
 
-                                totsz[ins] = 0;
-                                
-                                curbf->bsz |= lasflag;
-
-                                write(outfd[ins], indexfo, 2);
-                                sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x- end of transmission \n", 
-                                                              ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
+                                sprintf_f(mrs->log, "dump scaninfo size: %d tot: %d \n", mlen, len);
                                 print_f(&mrs->plog, "fs145", mrs->log);
-                                cycCnt[ins] = 0;
 
+                                addrd = addrs + (len - mlen);
+
+                                if (ins == 1) {
+                                    memset(ptscaninfo, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memcpy(ptscaninfo, addrd, mlen);    
+                                } else {
+                                    memset(ptscaninfoduo, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memcpy(ptscaninfoduo, addrd, mlen);    
+                                }
+
+                            }
+                            else if ((lens < USB_BUF_SIZE) && (lasflag)) {
+                                sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 2\n", ins, lens, totsz[ins]);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+
+                                maxsz = 0;
+                                ret = cfgTableGet(pct, ASPOP_RESOLUTION, &gval);
+                                if (!ret) {
+                                    switch (gval) {
+                                    case RESOLUTION_1200:
+                                        maxsz = 1200;
+                                        break;
+                                    case RESOLUTION_600:
+                                        maxsz = 600;
+                                        break;
+                                    case RESOLUTION_300:
+                                        maxsz = 300;
+                                        break;
+                                    case RESOLUTION_200:
+                                        maxsz = 200;
+                                        break;
+                                    case RESOLUTION_150:
+                                        maxsz = 150;
+                                        break;
+                                    default:
+                                        break;
+                                    }
+                                }
+                                else {
+                                    sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+
+                                    maxsz = 300;
+                                }
+            
+                                if (ins == 1) {
+                                    sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+
+                                    mlen = pubffcd[ins]->ubmetasize;
+                                    ret = aspMetaReleaseviaUsb(mrs, 0, addrs, mlen);
+                                    if (!ret) {
+                                        /* mechanism to stop scan */
+                                        //gval = pubffcd[ins]->ubcswerr;
+                                        //cfgTableUpd(pct, ASPOP_SCAN_STATUS, gval);
+                                        dlen = 0;
+                                        gerr = cfgTableGet(pct, ASPOP_IMG_LEN, &gval);
+                                        if (!gerr) {
+                                            sprintf_f(mrs->log, "usb scaninfo imglen: %d, ret: %d, cswerr: 0x%.2x\n", gval, gerr, pubffcd[ins]->ubcswerr); 
+                                            print_f(&mrs->plog, "fs145", mrs->log);
+                                            dlen = gval;
+                                        }
+                                    
+                                        cfgTableGet(pct, ASPOP_XCROP_LINREC, &gval);
+                                        sprintf_f(mrs->log, "Yline_recorder: %d!!\n", gval); 
+                                        print_f(&mrs->plog, "fs145", mrs->log);
+                                    }
+                                    else {
+                                        sprintf_f(mrs->log, "get scaninfo failed!!! ret: %d!!\n", ret); 
+                                        print_f(&mrs->plog, "fs145", mrs->log);                   
+
+                                        shmem_dump(addrs, mlen);
+                                    }
+                                }
+                                else {          
+                                    sprintf_f(mrs->log, "duo get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                    
+                                    mlen = pubffcd[ins]->ubmetasize;
+                                    ret = aspMetaReleaseviaUsbDuo(mrs, 0, addrs, mlen);
+                                    if (!ret) {                                    
+                                        dlen = 0;
+                                        gerr = cfgTableGet(pct, ASPOP_IMG_LEN_DUO, &gval);
+                                        if (!gerr) {
+                                            sprintf_f(mrs->log, "duo usb scaninfo imglen: %d, ret: %d, cswerr: 0x%.2x\n", gval, gerr, pubffcd[ins]->ubcswerr); 
+                                            print_f(&mrs->plog, "fs145", mrs->log);                                    
+                                            dlen = gval;
+                                        }
+                                    
+                                        cfgTableGet(pct, ASPOP_XCROP_LINREC_DUO, &gval);
+                                        sprintf_f(mrs->log, "duo Yline_recorder: %d!!\n", gval); 
+                                        print_f(&mrs->plog, "fs145", mrs->log);                                    
+                                    }
+                                    else {
+                                        sprintf_f(mrs->log, "duo get scaninfo failed!!! ret: %d!!\n", ret); 
+                                        print_f(&mrs->plog, "fs145", mrs->log);      
+                                        shmem_dump(addrs, mlen);
+                                    }
+                                }
+
+                                if ((dlen > 0) && (dlen > maxsz) || (dlen == 0)) {
+                                    //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
+                                    if (ins == 3) {
+                                        pubffcd[ins]->ubindex |= 0x400;
+                                    }
+                                
+                                    indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
+                                    indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
+
+                                    if ((pubffcd[ins]->ubindex >> 12) > 0) {
+                                        sprintf_f(mrs->log, "\n[GW] WARNNING!!! pubffcd[ins]->ubindex: %d \n", pubffcd[ins]->ubindex);                                
+                                        print_f(&mrs->plog, "fs145", mrs->log);
+                                    }
+
+                                    totsz[ins] = 0;
+                                
+                                    curbf->bsz |= lasflag;
+
+                                    write(outfd[ins], indexfo, 2);
+                                    sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x- end of transmission \n", 
+                                                                  ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
+                                    print_f(&mrs->plog, "fs145", mrs->log);                            
+                                }
+                                else {
+                                    pubffcd[ins]->ubindex |= 0x800;
+                                    sprintf_f(mrs->log, "[GW] WARNNING!!! image too short skip this page!!! scanlen: %d min: %d\n", dlen, maxsz);                                
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+                                }
+                                
+                                cycCnt[ins] = 0;
                                 pubffcd[ins] = 0;
                             }
                             else {
@@ -40186,10 +40313,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
                                     indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
 
-                                    write(outfd[ins], indexfo, 2);
+                                    //write(outfd[ins], indexfo, 2);
 
                                     #if DBG_USB_GATE
-                                    sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x - middle of transmission count: %d \n", ins, outfd[ins], indexfo[0], indexfo[1], pubffcd[ins]->ubcylcnt);
+                                    sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x - middle of transmission count: %d:%d \n", ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                     #endif
                                     
@@ -55939,6 +56066,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                              0x4d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff};
     char csw[16] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff};
     char cswDefault[16] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff};
+    char emptyLine[4] = {0x59, 0x4c, 0x03, 0x10};
+    char emptyLast[4] = {0x41, 0x53, 0x50, 0x43};
     char msgcmd[16];
     char msgret[64];
     char endTran[64] = {};
@@ -59900,6 +60029,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 sprintf_f(rs->logs, "[DV] puimGet is null timeout break\n");
                                                 print_f(rs->plogs, "P11", rs->logs);
 
+                                                memset(ptrecv, 0, 160);
+
+                                                memcpy(ptrecv, emptyLast, 4);
+
+                                                sendsz = write(usbfd, ptrecv, 160);
+                                                while (sendsz <= 0) {
+                                                    sendsz = write(usbfd, ptrecv, 160);
+                                                }
+
+                                                memcpy(ptrecv, emptyLine, 4);
+                                                
+                                                sendsz = write(usbfd, ptrecv, 4);
+                                                while (sendsz <= 0) {
+                                                    sendsz = write(usbfd, ptrecv, 4);
+                                                }
+
                                                 che = 'E';
                                                 uimCylcnt = 0;
                                                 lens = 0;
@@ -60842,6 +60987,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
 
                         sendsz = 0;
+                        
+                        if (che == 'E') break;
                     }
 
                     if (cntTx == 1) {
