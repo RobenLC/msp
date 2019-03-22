@@ -38696,7 +38696,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 
 #define DBG_USB_GATE (0)
-#define MAX_145_EVENT (9)
+#define MAX_145_EVENT (11)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     sprintf_f(mrs->log, "usb gate !!!\n");
@@ -38879,6 +38879,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     pllfd[8].fd = mrs->pipeup[8].rt[0];
     pllfd[8].events = POLLIN;
+
+    pllfd[9].fd = mrs->pipeup[1].rt[0];
+    pllfd[9].events = POLLIN;
+
+    pllfd[10].fd = mrs->pipeup[2].rt[0];
+    pllfd[10].events = POLLIN;
     
     while (1) {
         ret = read(pllfd[1].fd, &chv, 1);
@@ -38952,6 +38958,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if (pllcmd[ins]) {
                     evcnt++;
                     switch(ins) {
+                    case 9:
+                        break;
+                    case 10:
+                        break;
                     case 7:
                         modersp->c ++;
                         if (pllcmd[ins] == 'N') {
@@ -39964,7 +39974,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 sprintf_f(mrs->log, "[GW] fileacc id%d get read fileid failed!! ret: %d filename:[%s]\n", ins, filefd, idfile);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                             }
-                                    
                         }
                         else if (pllcmd[ins] == 'u') {
                             write(outfd[ins], &pllcmd[ins], 1);
@@ -59917,19 +59926,31 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             //ptfdc[0].fd = piprx[0];
                             //ptfdc[0].events = POLLIN;
-                            
-                            pipRet = poll(ptfdc, 2, 500);
-                            if (pipRet <= 0) {                                
+                            clock_gettime(CLOCK_REALTIME, &tidleE);
+                            idlet = time_diff(&tidleS, &tidleE, 1000000);
+
+                            #if LOG_P11_EN
+                            sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, puimGet, puimCnTH);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            #endif
+
+                            pipRet = poll(ptfdc, 2, 200);
+                            if (pipRet <= 0) {
+                                clock_gettime(CLOCK_REALTIME, &tidleE);
+                                idlet = time_diff(&tidleS, &tidleE, 1000000);
+                                #if LOG_P11_EN
+                                sprintf_f(rs->logs, "[DV] wait for %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, puimGet, puimCnTH);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                #endif
+
                                 if (puimGet) {
                                     if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05))) {
-                                        clock_gettime(CLOCK_REALTIME, &tidleE);
-                                        idlet = time_diff(&tidleS, &tidleE, 1000000);
 
-                                        sprintf_f(rs->logs, "[DV] wait id %d for %d ms \n", puimGet->uimIdex, idlet);
+                                        sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex, puimGet->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
 
                                         //if (idlet > 60000) {
-                                        if (idlet > 6000) {
+                                        if (idlet > 60000) {
                                             clock_gettime(CLOCK_REALTIME, &tidleS);
 
                                             if (puimCnTH == puimGet) {
@@ -60109,7 +60130,15 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                             cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
 
+                                            #if LOG_P11_EN
+                                            sprintf_f(rs->logs, "[DV] get page index extra: 0x%.3x currx: %d \n", cindex, piprx[0]);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+
                                             if (!puimCnTH) {
+                                                sprintf_f(rs->logs, "extra puimCnTH is null!!! \n");
+                                                print_f(rs->plogs, "P11", rs->logs);
+
                                                 puimCnTH = malloc(sizeof(struct usbIndex_s));
                                                 if (!puimCnTH) {
                                                     sprintf_f(rs->logs, "Error!!! can't get memory for usbIndex_s\n\n\n");
@@ -60121,14 +60150,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                                 puimCnTH->uimIdex = cindex;
                                             }
-
-                                            #if DBG_27_DV
+                                            #if 1//DBG_27_DV
                                             else {
                                                 act = 0;
                                                 puimTmp = puimCnTH;
                                                 while(puimTmp) {
 
-                                                    sprintf_f(rs->logs, "[DV] extra %d - 0x%.2x %d:%d \n", act, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                                    sprintf_f(rs->logs, "[DV] extra page.%d - 0x%.3x %d/%d (addr: 0x%.8x) \n", act, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, puimTmp);
                                                     print_f(rs->plogs, "P11", rs->logs);
 
                                                     puimTmp = puimTmp->uimNxt;
@@ -60292,6 +60320,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
 
+                                #if LOG_P11_EN
+                                sprintf_f(rs->logs, "[DV] get page index: 0x%.3x currx: %d \n", cindex, piprx[0]);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                #endif
+
                                 if ((cindex & 0x400) == 0) {
                                     #if LOG_P11_EN
                                     sprintf_f(rs->logs, "[DV]  primary 0x%.8x \n", cindex);
@@ -60402,7 +60435,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puimTmp = puimCnTH;
                                     puimUse = puimCnTH;
                                     while (puimTmp) {
-                                        if ((puimTmp->uimIdex & 0x3ff) < (puimUse->uimIdex & 0x3ff)) {
+                                        if ((puimTmp->uimIdex & 0x3ff) > (puimUse->uimIdex & 0x3ff)) {
                                             if (puimTmp->uimCount > 0) {
                                                 puimUse = puimTmp;
                                             }
@@ -60411,17 +60444,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         puimTmp = puimTmp->uimNxt;
                                     }
 
-                                    if (ix > 1) {
+                                    if (ix > 0) {
                                         puimGet = puimUse;
                                     } 
                                         
-                                    if (ix == 1) {
-                                        if (puimUse->uimCount > 1) {
-                                            puimGet = puimUse;
-                                        }
-                                    }
-
-
                                     if (puimGet) {
                                         sprintf_f(rs->logs, "[DV] get puim index: 0x%.2x %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
@@ -60469,11 +60495,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 print_f(rs->plogs, "P11", rs->logs);
                                                 chr = 0;
                                             }
-                                        } else {
+                                        }
+                                        else {
                                             sprintf_f(rs->logs, "[DV] should not be here chr: (%d) \n", chr);
                                             print_f(rs->plogs, "P11", rs->logs);
                                         }
-                                    } else {
+                                    }
+                                    else {
                                         sprintf_f(rs->logs, "[DV] wait for more data \n");
                                         print_f(rs->plogs, "P11", rs->logs);
                                     }
@@ -60677,7 +60705,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     switch (cmdprisec) {
                                     case 1:
                                         #if LOG_P11_EN
-                                        sprintf_f(rs->logs, "[DV]  primary 0x7f 0x%.8x \n", cindex);
+                                        sprintf_f(rs->logs, "[DV]  primary 0x7f 0x%.3x \n", puimGet->uimIdex);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
 
@@ -60689,7 +60717,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         break;
                                     case 2:
                                         #if LOG_P11_EN
-                                        sprintf_f(rs->logs, "[DV]  secondary 0x7f 0x%.8x \n", cindex);
+                                        sprintf_f(rs->logs, "[DV]  secondary 0x7f 0x%.3x \n", puimGet->uimIdex);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
 
@@ -60771,11 +60799,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     }
 
+                                    free(puimGet);
+                                    puimGet = 0;
                                     
                                     if (puimNxt) {
-                                        free(puimGet);
-                                        puimGet = 0;
-
+                                    
                                         puimGet = puimNxt;
                                         
                                         #if LOG_P11_EN
@@ -60794,7 +60822,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     while(puimTmp) {
                                     
                                         #if LOG_P11_EN
-                                        sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                        sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, puimTmp);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
 
@@ -60812,7 +60840,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rs->plogs, "P11", rs->logs);
                                     #endif
 
-                                    #if 1
+                                    #if 0
                                     if ((waitCylen > 0) || (pagerst > 1)) {
                                         if (!puimNxt) {
 
@@ -60843,6 +60871,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     break;
                                 } 
                                 else {
+
+                                    sprintf_f(rs->logs, "[DV] idle warning!!! chq: 0x%.2x chr: 0x%.2x puimGet: 0x%.8x puimCnTH: 0x%.8x\n", chq, chr, puimGet, puimCnTH);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
                                     if ((!chq) && (!chr) && (puimGet)) {
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
                                             chr = puimGet->uimIdex & 0x3ff;
@@ -60854,6 +60886,73 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
                                                 print_f(rs->plogs, "P11", rs->logs);
                                                 continue;
+                                            }
+                                        }
+                                    } else {
+                                        if (puimCnTH) {
+                                            ix=0;
+                                            cindex = 0;
+                                            puimNxt = 0;
+                                            puimTmp = puimCnTH;
+                                            while (puimTmp) {
+                                                puimUse = puimTmp;
+                                            
+                                                if (cindex == 0) {
+                                                    cindex = puimUse->uimIdex & 0x3ff;
+                                                    puimNxt = puimUse;
+                                                } else {
+                                                    if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                        cindex = puimUse->uimIdex & 0x3ff;
+                                                        puimNxt = puimUse;
+                                                    }
+                                                }
+
+                                                #if LOG_P11_EN
+                                                sprintf_f(rs->logs, "[DV] idle page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, puimTmp);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+
+                                                puimTmp = puimUse->uimNxt;
+                                                ix++;
+                                            }
+
+                                            if (puimNxt) {
+
+                                                puimGet = puimNxt;
+
+                                                #if LOG_P11_EN
+                                                sprintf_f(rs->logs, "[DV] idle get puimGet: 0x%.3x %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+
+                                                if ((puimGet->uimIdex & 0x400) == 0) {
+                                                    #if LOG_P11_EN
+                                                    sprintf_f(rs->logs, "[DV] idle primary 0x80 0x%.8x \n", puimGet->uimIdex);
+                                                    print_f(rs->plogs, "P11", rs->logs);
+                                                    #endif
+
+                                                    puscur = pushost;
+                                                    pinfcur = pinfushost;
+                                                    usbCur = puscur->pushring;
+                                                    piptx = puscur->pushtx;
+                                                    piprx = puscur->pushrx; 
+                                                } else {
+                                                    #if LOG_P11_EN
+                                                    sprintf_f(rs->logs, "[DV] idle secondary 0x80 0x%.8x \n", puimGet->uimIdex);
+                                                    print_f(rs->plogs, "P11", rs->logs);
+                                                    #endif
+
+                                                    puscur = pushostd;
+                                                    pinfcur = pinfushostd;
+                                                    usbCur = puscur->pushring;
+                                                    piptx = puscur->pushtx;
+                                                    piprx = puscur->pushrx; 
+                                                }
+                                            } else {
+                                                #if LOG_P11_EN
+                                                sprintf_f(rs->logs, "[DV] idle get puimGet is null \n");
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
                                             }
                                         }
                                     }
