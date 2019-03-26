@@ -56053,7 +56053,7 @@ static int p10(struct procRes_s *rs)
 }
 
 #define LOG_FLASH  (0)
-#define LOG_P11_EN (0)
+#define LOG_P11_EN (1)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
@@ -57322,6 +57322,34 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &tidleE);                            
                         
                         #if 1
+                        if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                            sprintf_f(rs->logs, "[DV] q app duo puimGet index: 0x%.3x \n", puimGet->uimIdex);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            if ((puimGet->uimIdex & 0x400) == 0) {
+                                puscur = pushost;
+                                pinfcur = pinfushost;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            } else {
+                                puscur = pushostd;
+                                pinfcur = pinfushostd;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            }
+                        } else {
+                            puscur = pushostd;
+                            pinfcur = pinfushostd;
+                            usbCur = puscur->pushring;
+                            piptx = puscur->pushtx;
+                            piprx = puscur->pushrx; 
+                            
+                            sprintf_f(rs->logs, "[DV] q app duo puimGet is null get next \n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        #else   
                         puscur = pushost;                    
                         pinfcur = pinfushost;
                         
@@ -57329,10 +57357,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         piptx = puscur->pushtx;
                         piprx = puscur->pushrx; 
+                        #endif
                         
                         ring_buf_init(rs->pcmdRx);
                         rs_ipc_put(rsd, "s", 1);
-                        #endif
 
                         #if 1
                         sprintf(msgcmd, "usbscan");
@@ -57769,17 +57797,46 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &tidleE);                            
                         
                         #if 1
+                        if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                            sprintf_f(rs->logs, "[DV] app puimGet index: 0x%.3x \n", puimGet->uimIdex);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            if ((puimGet->uimIdex & 0x400) == 0) {
+                                puscur = pushost;
+                                pinfcur = pinfushost;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            } else {
+                                puscur = pushostd;
+                                pinfcur = pinfushostd;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            }
+                        } else {
+                            puscur = pushost;                    
+                            pinfcur = pinfushost;
+                        
+                            usbCur = puscur->pushring;
+
+                            piptx = puscur->pushtx;
+                            piprx = puscur->pushrx;  
+                        
+                            sprintf_f(rs->logs, "[DV] app puimGet is null get next \n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        #else
                         puscur = pushost;                    
                         pinfcur = pinfushost;
                         
                         usbCur = puscur->pushring;
 
                         piptx = puscur->pushtx;
-                        piprx = puscur->pushrx; 
-                        
+                        piprx = puscur->pushrx;                         
+                        #endif
                         ring_buf_init(rs->pcmdRx);
                         rs_ipc_put(rsd, "s", 1);
-                        #endif
 
                         break;
                     default:
@@ -57884,8 +57941,37 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         //pagerst = 2;
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
-                        clock_gettime(CLOCK_REALTIME, &tidleE);                            
+                        clock_gettime(CLOCK_REALTIME, &tidleE);     
                         
+                        #if 1
+                        if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                            sprintf_f(rs->logs, "[DV] n app duo puimGet index: 0x%.3x \n", puimGet->uimIdex);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            if ((puimGet->uimIdex & 0x400) == 0) {
+                                puscur = pushost;
+                                pinfcur = pinfushost;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            } else {
+                                puscur = pushostd;
+                                pinfcur = pinfushostd;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            }
+                        } else {
+                            puscur = pushostd;
+                            pinfcur = pinfushostd;
+                            usbCur = puscur->pushring;
+                            piptx = puscur->pushtx;
+                            piprx = puscur->pushrx; 
+                            
+                            sprintf_f(rs->logs, "[DV] n app duo puimGet is null get next \n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        #else   
                         puscur = pushostd;
                         pinfcur = pinfushostd;
                         
@@ -57893,6 +57979,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         piptx = puscur->pushtx;
                         piprx = puscur->pushrx; 
+                        #endif
 
                         ring_buf_init(rs->pcmdTx);
                         //rs_ipc_put(rsd, "s", 1);
@@ -57940,7 +58027,35 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
                         clock_gettime(CLOCK_REALTIME, &tidleE);                            
-                        
+                        #if 1
+                        if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                            sprintf_f(rs->logs, "[DV] q app duo puimGet index: 0x%.3x \n", puimGet->uimIdex);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            if ((puimGet->uimIdex & 0x400) == 0) {
+                                puscur = pushost;
+                                pinfcur = pinfushost;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            } else {
+                                puscur = pushostd;
+                                pinfcur = pinfushostd;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            }
+                        } else {
+                            puscur = pushostd;
+                            pinfcur = pinfushostd;
+                            usbCur = puscur->pushring;
+                            piptx = puscur->pushtx;
+                            piprx = puscur->pushrx; 
+                            
+                            sprintf_f(rs->logs, "[DV] q app duo puimGet is null get next \n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        #else                        
                         puscur = pushostd;
                         pinfcur = pinfushostd;
                         
@@ -57948,6 +58063,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         piptx = puscur->pushtx;
                         piprx = puscur->pushrx; 
+                        #endif
 
                         ring_buf_init(rs->pcmdTx);
                         //rs_ipc_put(rsd, "s", 1);
@@ -57985,7 +58101,36 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         
                         clock_gettime(CLOCK_REALTIME, &tidleS);
                         clock_gettime(CLOCK_REALTIME, &tidleE);                            
-                        
+
+                        #if 1
+                        if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                            sprintf_f(rs->logs, "[DV] o app duo puimGet index: 0x%.3x \n", puimGet->uimIdex);
+                            print_f(rs->plogs, "P11", rs->logs);
+
+                            if ((puimGet->uimIdex & 0x400) == 0) {
+                                puscur = pushost;
+                                pinfcur = pinfushost;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            } else {
+                                puscur = pushostd;
+                                pinfcur = pinfushostd;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            }
+                        } else {
+                            puscur = pushostd;
+                            pinfcur = pinfushostd;
+                            usbCur = puscur->pushring;
+                            piptx = puscur->pushtx;
+                            piprx = puscur->pushrx; 
+                                
+                            sprintf_f(rs->logs, "[DV] o app duo puimGet is null get next \n");
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                        #else
                         puscur = pushostd;
                         pinfcur = pinfushostd;
                         
@@ -57993,6 +58138,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         piptx = puscur->pushtx;
                         piprx = puscur->pushrx; 
+                        #endif
                         
                         ring_buf_init(rs->pcmdTx);
                         //rs_ipc_put(rsd, "s", 1);
@@ -60090,7 +60236,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             else {
 
                                 for (ix=0; ix < 2; ix++) {
-                                    if ((ptfdc[ix].revents & POLLIN) == POLLIN) {                                        
+                                    if ((ptfdc[ix].revents & POLLIN) == POLLIN) {
                                         if (ptfdc[ix].fd == piprx[0]) {
                                             ret = read(ptfdc[ix].fd, &chq, 1);
 
@@ -62290,6 +62436,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                 }
 
+                #if 0
                 while (1) {
                     chq = 0;
                     pipRet = read(pipeRx[0], &chq, 1);
@@ -62311,6 +62458,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] s clean get: 0x%.2x \n", chd);
                     print_f(rs->plogs, "P11", rs->logs);
                 }
+                #endif
 
                 cmd = 0;
             }
