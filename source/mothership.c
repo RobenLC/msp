@@ -56053,7 +56053,7 @@ static int p10(struct procRes_s *rs)
 }
 
 #define LOG_FLASH  (0)
-#define LOG_P11_EN (1)
+#define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
@@ -61699,7 +61699,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if ((cmd == 0x11) && ((opc == 0x4d) || (opc == 0x4f))) { /* usbentsTx == 1*/
 
-                if (ucbwpram->ASIC_sel) {
+                //if (ucbwpram->ASIC_sel) {
                 
                     #if BYPASS_TWO
                     //if (usbid02) {
@@ -61731,7 +61731,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     //}
                     #endif
                     
-                } else {
+                //} else {
                     //if (usbid01) {
                         while (1) {
                             chq = 0;
@@ -61759,19 +61759,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                         }
                     //}
-                }
+                //}
                 
                 #if 1
                 memcpy(csw, cswDefault, 16);
-                if (ucbwpram->ASIC_sel) {
-                    csw[10] = 0;
-                    csw[11] = 0;
-                    csw[12] = chn;
-                } else {
-                    csw[10] = 0;
-                    csw[11] = 0;
-                    csw[12] = chm;
-                }
+                csw[10] = 0;
+                csw[11] = 0;
+                csw[12] = chm | chn;
                 #else
                 memcpy(csw, vcswBuff, 13);
                 #endif
