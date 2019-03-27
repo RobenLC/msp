@@ -1191,9 +1191,9 @@ struct aspMetaDataviaUSB_s{
   unsigned char IMG_HIGH[2];                   // byte[6]
   unsigned char  WIDTH_RESERVE[5];    // byte[11]
   unsigned char IMG_WIDTH[2];                // byte[13] 
-  unsigned char MINGS_USE;                 // byte[14]
-  unsigned char PRI_O_SEC;                 // byte[15]
-  unsigned char  MCROP_RESERVE[49];   // byte[64]
+  unsigned char MINGS_USE[2];                 // byte[15]
+  unsigned char PRI_O_SEC;                 // byte[16]
+  unsigned char  MCROP_RESERVE[48];   // byte[64]
   
   struct intMbs_s CROP_POS_1;        //byte[68]
   struct intMbs_s CROP_POS_2;        //byte[72]
@@ -2490,7 +2490,13 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
                    pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8)); 
     print_f(mlogPool, "METAU", mlog);
 
-    for (ix=0; ix < 51; ix++) {
+    sprintf_f(mlog, "(0x%.8x) MINGS_USE: 0x%.2x 0x%.2x   \n",&(pmetausb->MINGS_USE), pmetausb->MINGS_USE[0], pmetausb->MINGS_USE[1]); 
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(0x%.8x) PRI_O_SEC: 0x%.2x    \n",&(pmetausb->PRI_O_SEC), pmetausb->PRI_O_SEC); 
+    print_f(mlogPool, "METAU", mlog);
+
+    for (ix=0; ix < 48; ix++) {
     sprintf_f(mlog, "(0x%.8x) MCROP_RESERVE[%d]: 0x%.2x    \n",&(pmetausb->MCROP_RESERVE[ix]), ix, pmetausb->MCROP_RESERVE[ix]); 
     print_f(mlogPool, "METAU", mlog);
     }
@@ -45996,6 +46002,27 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
+            
+            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'P';
+
+            sprintf(rs->logs, "%d,\n\r", val & 0xff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
             csws = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
             
@@ -46049,6 +46076,27 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE_DUO, &val, ASPOP_STA_UPD);
+            
+            sprintf_f(rs->logs, "get duo usb page side: 0x%.2x ret: %d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'p';
+
+            sprintf(rs->logs, "%d,\n\r", val & 0xff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             cswd = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS_DUO, &cswd, ASPOP_STA_UPD);
             
@@ -46704,6 +46752,28 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
+            
+            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'P';
+
+            sprintf(rs->logs, "%d,\n\r", val & 0xff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
 
             csws = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
@@ -47034,6 +47104,27 @@ static int p6(struct procRes_s *rs)
             sendbuf[3] = 'H';
 
             sprintf(rs->logs, "%d,\n\r", pdt->opValue & 0xffff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
+            
+            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'P';
+
+            sprintf(rs->logs, "%d,\n\r", val & 0xff);
             n = strlen(rs->logs);
             if (n > 256) n = 256;
 
@@ -47684,6 +47775,27 @@ static int p6(struct procRes_s *rs)
 #endif
             }
 
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
+            
+            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'P';
+
+            sprintf(rs->logs, "%d,\n\r", val & 0xff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             csws = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
             
@@ -47842,6 +47954,27 @@ static int p6(struct procRes_s *rs)
 #endif
             }
 
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE_DUO, &val, ASPOP_STA_UPD);
+            
+            sprintf_f(rs->logs, "get duo usb page side: 0x%.2x ret: %d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'p';
+
+            sprintf(rs->logs, "%d,\n\r", val & 0xff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             cswd = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS_DUO, &cswd, ASPOP_STA_UPD);
             
@@ -49551,6 +49684,27 @@ static int p6(struct procRes_s *rs)
 #endif
             }
 
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
+            
+            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            sendbuf[3] = 'P';
+
+            sprintf(rs->logs, "%d,\n\r", val & 0xff);
+            n = strlen(rs->logs);
+            if (n > 256) n = 256;
+
+            memcpy(&sendbuf[5], rs->logs, n);
+
+            sendbuf[5+n] = 0xfb;
+            sendbuf[5+n+1] = '\n';
+            sendbuf[5+n+2] = '\0';
+            ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            
             csws = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
 
@@ -55072,7 +55226,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             insert_cbw(CBW, 0x11, opc, dat);
             memcpy(&pkcbw[128], CBW, 32);            
-
 #else
             insert_cbw(CBW, 0x14, opc, dat);
             memcpy(&pkcbw[96], CBW, 32);            
@@ -65427,6 +65580,14 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_8;
                 ctb->opBitlen = 8;
                 break;
+            case ASPOP_SKIP_LENGTH:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SKIP_LENGTH;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
             case ASPOP_CROP_01: 
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_CROP_01;
@@ -66437,6 +66598,14 @@ int main(int argc, char *argv[])
             case ASPOP_FUNCTEST_22:
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_FUNCTEST_22;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xff;
+                ctb->opMask = ASPOP_MASK_8;
+                ctb->opBitlen = 8;
+                break;
+            case ASPOP_SKIP_LENGTH:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_SKIP_LENGTH;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xff;
                 ctb->opMask = ASPOP_MASK_8;
