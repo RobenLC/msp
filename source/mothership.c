@@ -31,8 +31,8 @@
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
-static char mver[] = "MSP Version v0.0.6.rc";
-static char gitcommit[] = "2019-03-22 17:23:09 5802581";
+static char mver[] = "MSP Version v0.0.7.rc";
+static char gitcommit[] = "2019-03-26 17:00:21 183bab1";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
@@ -290,6 +290,7 @@ static int *totSalloc=0;
 #define OP_FUNCTEST_20              0x88 
 #define OP_FUNCTEST_21              0x89 
 #define OP_FUNCTEST_22              0x8a
+#define OP_SKIP_LENGTH              0x8b
 /* debug */
 
 #define OP_SAVE              0x80
@@ -541,6 +542,7 @@ typedef enum {
     ASPOP_FUNCTEST_20,
     ASPOP_FUNCTEST_21,
     ASPOP_FUNCTEST_22,
+    ASPOP_SKIP_LENGTH,
     ASPOP_CROP_01,
     ASPOP_CROP_02, /* 70 */
     ASPOP_CROP_03,
@@ -598,6 +600,8 @@ typedef enum {
     ASPOP_SCAN_STATUS_DUO,
     ASPOP_SCAN_WIDTH,
     ASPOP_SCAN_WIDTH_DUO,
+    ASPOP_SCAN_SIDE,
+    ASPOP_SCAN_SIDE_DUO,
     ASPOP_CODE_MAX, /* 121 */
 } aspOpCode_e;
 
@@ -1132,7 +1136,8 @@ struct aspMetaData_s{
   unsigned char  OP_FUNC_20;               //0x88  
   unsigned char  OP_FUNC_21;               //0x89  
   unsigned char  OP_FUNC_22;               //0x8a
-  unsigned char  OP_RESERVE[18];          // byte[64]
+  unsigned char  SKIP_LENGTH;              //0x8b
+  unsigned char  OP_RESERVE[17];          // byte[64]
   
   /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
   struct intMbs_s CROP_POS_1;        //byte[68]
@@ -1183,10 +1188,12 @@ struct aspMetaData_s{
 
 struct aspMetaDataviaUSB_s{
   unsigned char  ASP_MAGIC_ASPC[4];  //byte[4] "ASPC"
-  unsigned char IMG_HIGH[2];                   // byte[6] 
+  unsigned char IMG_HIGH[2];                   // byte[6]
   unsigned char  WIDTH_RESERVE[5];    // byte[11]
-  unsigned char IMG_WIDTH[2];                // byte[13]
-  unsigned char  MCROP_RESERVE[51];   // byte[64]
+  unsigned char IMG_WIDTH[2];                // byte[13] 
+  unsigned char MINGS_USE;                 // byte[14]
+  unsigned char PRI_O_SEC;                 // byte[15]
+  unsigned char  MCROP_RESERVE[49];   // byte[64]
   
   struct intMbs_s CROP_POS_1;        //byte[68]
   struct intMbs_s CROP_POS_2;        //byte[72]
@@ -2891,13 +2898,13 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         }
 
         opSt = OP_BLEEDTHROU_ADJUST;
-        opEd = OP_FUNCTEST_22;
+        opEd = OP_SKIP_LENGTH;
 
         istr = ASPOP_BLEEDTHROU_ADJUST;
-        iend = ASPOP_FUNCTEST_22;
+        iend = ASPOP_SKIP_LENGTH;
         
         pvdst = &pmeta->BLEEDTHROU_ADJUST;
-        pvend = &pmeta->OP_FUNC_22;
+        pvend = &pmeta->SKIP_LENGTH;
 
         for (idx = istr; idx <= iend; idx++) {
             if ((pct[idx].opStatus & ASPOP_STA_CON) && (pct[idx].opCode == opSt)) {
@@ -3114,13 +3121,13 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         }
 
         opSt = OP_BLEEDTHROU_ADJUST;
-        opEd = OP_FUNCTEST_22;
+        opEd = OP_SKIP_LENGTH;
 
         istr = ASPOP_BLEEDTHROU_ADJUST;
-        iend = ASPOP_FUNCTEST_22;
+        iend = ASPOP_SKIP_LENGTH;
         
         pvdst = &pmeta->BLEEDTHROU_ADJUST;
-        pvend = &pmeta->OP_FUNC_22;
+        pvend = &pmeta->SKIP_LENGTH;
 
         for (idx = istr; idx <= iend; idx++) {
             if (pct[idx].opCode == opSt) {
@@ -3384,6 +3391,9 @@ static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, cha
     pct[ASPOP_SCAN_WIDTH].opValue = pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8);
     pct[ASPOP_SCAN_WIDTH].opStatus = ASPOP_STA_UPD;        
 
+    pct[ASPOP_SCAN_SIDE].opValue = pmetausb->PRI_O_SEC;
+    pct[ASPOP_SCAN_SIDE].opStatus = ASPOP_STA_UPD;        
+
     linGap = pmetausb->YLine_Gap;
     linStart = pmetausb->Start_YLine_No;
 
@@ -3501,6 +3511,9 @@ static int aspMetaReleaseviaUsbDuo(struct mainRes_s *mrs, struct procRes_s *rs, 
     
     pct[ASPOP_SCAN_WIDTH_DUO].opValue = pmetausbduo->IMG_WIDTH[0] | (pmetausbduo->IMG_WIDTH[1] << 8);
     pct[ASPOP_SCAN_WIDTH_DUO].opStatus = ASPOP_STA_UPD;        
+
+    pct[ASPOP_SCAN_SIDE_DUO].opValue = pmetausbduo->PRI_O_SEC;
+    pct[ASPOP_SCAN_SIDE_DUO].opStatus = ASPOP_STA_UPD;        
 
     linGap = pmetausbduo->YLine_Gap;
     linStart = pmetausbduo->Start_YLine_No;
@@ -65776,6 +65789,22 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
+            case ASPOP_SCAN_SIDE:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_SIDE_DUO:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
             default: break;
             }
         }
@@ -66866,6 +66895,22 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_NONE;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0xffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_SIDE:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_SCAN_SIDE_DUO:
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0;
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
