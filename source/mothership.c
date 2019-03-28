@@ -32,7 +32,7 @@
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
 static char mver[] = "MSP Version v0.0.9.rc";
-static char gitcommit[] = "2019-03-28 10:37:26 c12dde1";
+static char gitcommit[] = "2019-03-28 10:41:32 36f2033";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
@@ -38714,7 +38714,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define DBG_USB_GATE (0)
+#define DBG_USB_GATE (1)
 #define MAX_145_EVENT (11)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -56119,10 +56119,17 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             pieRet = write(pPrx[1], &cplls, 2);
             #else
 
+
             memset(ptrecv, 0x0, 13);
             memcpy(ptrecv, cubsBuff, 8);
             ptrecv[12] = pllst;
+
+            //sprintf_f(rs->logs,  "0x4f check alive dump csw: \n"); 
+            //print_f(rs->plogs, sp, rs->logs);
+
+            //shmem_dump(ptrecv, 13);
             
+
             cplls[0] = 'J';
             cplls[1] = pllst;
             pieRet = write(pPrx[1], &cplls, 2);
@@ -59017,7 +59024,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                     }                                    
                                     
-                                    if (ucbwpram->ASIC_sel) {
+                                    //if (ucbwpram->ASIC_sel) {
                                     
                                         #if BYPASS_TWO
                                         //if (usbid02) {
@@ -59031,7 +59038,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         //}
                                         #endif
                                         
-                                    } else {
+                                    //} else {
                                         //if (usbid01) {
                                             chq = 'z';
                                             pipRet = write(pipeTx[1], &chq, 1);
@@ -59041,7 +59048,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 continue;
                                             }
                                         //}
-                                    }
+                                    //}
 
                                     usbCur = puscur->pushring;
 
