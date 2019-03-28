@@ -40220,6 +40220,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 #endif
 
                                 maxsz = 0;
+
+                                #if 0 /* disable the skip short image mechanism */
                                 ret = cfgTableGet(pct, ASPOP_RESOLUTION, &gval);
                                 if (!ret) {
                                     switch (gval) {
@@ -40248,6 +40250,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     maxsz = 300;
                                 }
+                                #endif
             
                                 if (ins == 1) {
                                     sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
