@@ -38714,7 +38714,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define DBG_USB_GATE (1)
+#define DBG_USB_GATE (0)
 #define MAX_145_EVENT (11)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
