@@ -32,7 +32,7 @@
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
 static char mver[] = "MSP Version v0.0.10.rc";
-static char gitcommit[] = "2019-03-28 11:34:31 ab32e74";
+static char gitcommit[] = "2019-04-02 10:57:01 d8662dc";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
@@ -1503,12 +1503,14 @@ struct mainRes_s{
     struct aspWaitRlt_s wtg;
     struct apWifiConfig_s wifconf;
     struct aspMetaDataviaUSB_s  metaUsb;
+    struct aspMetaDataviaUSB_s  metaUsbfs145;
     struct aspMetaData_s metaout;
     struct aspMetaData_s metain;
     struct aspMetaMass_s metaMass;
     struct aspCrop36_s      crop32;
     struct aspCropExtra_s  cropex;
     struct aspMetaDataviaUSB_s  metaUsbDuo;
+    struct aspMetaDataviaUSB_s  metaUsbDuofs145;
     struct aspMetaData_s  metainDuo;
     struct aspMetaMass_s metaMassDuo;
     struct aspCrop36_s       crop32Duo;
@@ -3335,6 +3337,48 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
     msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
 
     return act;
+}
+
+static int aspMetafs145GetlenviaUsbDuo(struct mainRes_s *mrs) 
+{
+    struct aspMetaDataviaUSB_s *pmetausb=0;
+    int val=0;
+
+    if (!mrs) return -1;
+    
+    pmetausb = &mrs->metaUsbDuofs145;
+    
+    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+    
+    if ((pmetausb->ASP_MAGIC_ASPC[0] != 'A') || (pmetausb->ASP_MAGIC_ASPC[1] != 'S') || 
+        (pmetausb->ASP_MAGIC_ASPC[2] != 'P') || (pmetausb->ASP_MAGIC_ASPC[3] != 'C')) {
+        return -3;
+    }
+
+    val = pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8);
+
+    return val;
+}
+
+static int aspMetafs145GetlenviaUsb(struct mainRes_s *mrs)
+{
+    struct aspMetaDataviaUSB_s *pmetausb=0;
+    int val=0;
+
+    if (!mrs) return -1;
+    
+    pmetausb = &mrs->metaUsbfs145;
+    
+    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+    
+    if ((pmetausb->ASP_MAGIC_ASPC[0] != 'A') || (pmetausb->ASP_MAGIC_ASPC[1] != 'S') || 
+        (pmetausb->ASP_MAGIC_ASPC[2] != 'P') || (pmetausb->ASP_MAGIC_ASPC[3] != 'C')) {
+        return -3;
+    }
+
+    val = pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8);
+
+    return val;
 }
 
 static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, char *pdata, int dmax) 
@@ -38769,8 +38813,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     
     pct = mrs->configTable;
 
-    ptscaninfo = &mrs->metaUsb;
-    ptscaninfoduo =&mrs->metaUsbDuo;
+    ptscaninfo = &mrs->metaUsbfs145;
+    ptscaninfoduo =&mrs->metaUsbDuofs145;
     
     pfat = &mrs->aspFat;
 
@@ -39450,7 +39494,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     //print_f(&mrs->plog, "fs145", mrs->log);
                                     pubffo = pubffh;
                                     while (pubffo) {
-                                        sprintf_f(mrs->log, "    [GW] %d:%d \n", pubffo->ubindex, mindex);
+                                        sprintf_f(mrs->log, "    [GW] 0x%.3x:0x%.3x \n", pubffo->ubindex, mindex);
                                         print_f(&mrs->plog, "fs145", mrs->log);
                                         if ((pubffo->ubindex & 0x3ff) == mindex) {
                                             break;
@@ -40067,7 +40111,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if (((cmdex) && (latcmd[ins] != cmdex))) {
 
                                     #if DBG_USB_GATE
-                                    sprintf_f(mrs->log, "[GW] warnning !! latcmd[ins] != cmdex  0x%.2x : 0x%.2x \n", latcmd[ins], cmdex); 
+                                    sprintf_f(mrs->log, "[GW] warnning !! latcmd[%d] != cmdex  %c(0x%.2x) : %c(0x%.2x) \n", ins, latcmd[ins], latcmd[ins], cmdex, cmdex); 
                                     print_f(&mrs->plog, "fs145", mrs->log);  
                                     #endif
                                     
@@ -40256,54 +40300,30 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
                                     print_f(&mrs->plog, "fs145", mrs->log);
 
-                                    mlen = pubffcd[ins]->ubmetasize;
-                                    ret = aspMetaReleaseviaUsb(mrs, 0, addrs, mlen);
-                                    if (!ret) {
-                                        /* mechanism to stop scan */
-                                        //gval = pubffcd[ins]->ubcswerr;
-                                        //cfgTableUpd(pct, ASPOP_SCAN_STATUS, gval);
-                                        dlen = 0;
-                                        gerr = cfgTableGet(pct, ASPOP_IMG_LEN, &gval);
-                                        if (!gerr) {
-                                            sprintf_f(mrs->log, "usb scaninfo imglen: %d, ret: %d, cswerr: 0x%.2x\n", gval, gerr, pubffcd[ins]->ubcswerr); 
-                                            print_f(&mrs->plog, "fs145", mrs->log);
-                                            dlen = gval;
-                                        }
-                                    
-                                        cfgTableGet(pct, ASPOP_XCROP_LINREC, &gval);
-                                        sprintf_f(mrs->log, "Yline_recorder: %d!!\n", gval); 
+                                    ret = aspMetafs145GetlenviaUsb(mrs);
+                                    if (ret > 0) {
+                                        dlen = ret;
+                                        sprintf_f(mrs->log, "get scanlength: %d!!\n", dlen); 
                                         print_f(&mrs->plog, "fs145", mrs->log);
                                     }
                                     else {
                                         sprintf_f(mrs->log, "get scaninfo failed!!! ret: %d!!\n", ret); 
                                         print_f(&mrs->plog, "fs145", mrs->log);                   
-
-                                        shmem_dump(addrs, mlen);
                                     }
                                 }
                                 else {          
                                     sprintf_f(mrs->log, "duo get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                     
-                                    mlen = pubffcd[ins]->ubmetasize;
-                                    ret = aspMetaReleaseviaUsbDuo(mrs, 0, addrs, mlen);
-                                    if (!ret) {                                    
-                                        dlen = 0;
-                                        gerr = cfgTableGet(pct, ASPOP_IMG_LEN_DUO, &gval);
-                                        if (!gerr) {
-                                            sprintf_f(mrs->log, "duo usb scaninfo imglen: %d, ret: %d, cswerr: 0x%.2x\n", gval, gerr, pubffcd[ins]->ubcswerr); 
-                                            print_f(&mrs->plog, "fs145", mrs->log);                                    
-                                            dlen = gval;
-                                        }
-                                    
-                                        cfgTableGet(pct, ASPOP_XCROP_LINREC_DUO, &gval);
-                                        sprintf_f(mrs->log, "duo Yline_recorder: %d!!\n", gval); 
+                                    ret = aspMetafs145GetlenviaUsbDuo(mrs);
+                                    if (ret > 0) {                                    
+                                        dlen = ret;
+                                        sprintf_f(mrs->log, "duo get scanlength: %d!!\n", dlen); 
                                         print_f(&mrs->plog, "fs145", mrs->log);                                    
                                     }
                                     else {
                                         sprintf_f(mrs->log, "duo get scaninfo failed!!! ret: %d!!\n", ret); 
-                                        print_f(&mrs->plog, "fs145", mrs->log);      
-                                        shmem_dump(addrs, mlen);
+                                        print_f(&mrs->plog, "fs145", mrs->log);
                                     }
                                 }
                                 
@@ -52747,7 +52767,7 @@ static int p8(struct procRes_s *rs)
 
 }
 #define DUMP_FLASH (0)
-#define DBG_USB_HS (0)
+#define DBG_USB_HS (1)
 #define DBG_USB_FLW (0)
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
@@ -60573,10 +60593,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             }  
 
                                             chd = 0;
-                                        }
-                                        else {
-                                            sprintf_f(rs->logs, "[DV]  Error!!! get chd: 0x%.2x  not support extra\n", chd);
-                                            print_f(rs->plogs, "P11", rs->logs);
                                         }
                                     }
                                 }
