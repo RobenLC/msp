@@ -38714,7 +38714,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define DBG_USB_GATE (0)
+#define DBG_USB_GATE (1)
 #define MAX_145_EVENT (11)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -39757,7 +39757,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 }
                             }
                             else {
-                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:%c(0x%.2x) pll:%c(0x%.2x) - q \n", ins, latcmd[ins], latcmd[ins], pllcmd[ins], pllcmd[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                             }
                         }
@@ -39781,7 +39781,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 write(outfd[ins], &pllcmd[ins], 1);
                             }
                             else {
-                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:%c(0x%.2x) pll:%c(0x%.2x) - c\n", ins, latcmd[ins], latcmd[ins], pllcmd[ins], pllcmd[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                             }
                         }
@@ -39809,7 +39809,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 }
                             }
                             else {
-                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:%c(0x%.2x) pll:%c(0x%.2x) - qrak \n", ins, latcmd[ins], latcmd[ins], pllcmd[ins], pllcmd[ins]);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                             }
                         }
@@ -40306,7 +40306,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         shmem_dump(addrs, mlen);
                                     }
                                 }
-
+                                
+                                #if 1//DBG_USB_GATE
+                                sprintf_f(mrs->log, "[GW] get image length: %d max: %d \n", dlen, maxsz);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                                #endif
+                                
                                 if ((dlen > 0) && (dlen > maxsz) || (dlen == 0)) {
                                     //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
                                     if (ins == 3) {
@@ -56229,7 +56234,7 @@ static int p10(struct procRes_s *rs)
 }
 
 #define LOG_FLASH  (0)
-#define LOG_P11_EN (0)
+#define LOG_P11_EN (1)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
@@ -60252,7 +60257,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             idlet = time_diff(&tidleS, &tidleE, 1000000);
 
                             #if LOG_P11_EN
-                            sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, puimGet, puimCnTH);
+                            sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x rx: %d, 0: %d, 1: %d\n", idlet, puimGet, puimCnTH, piprx[0], ptfdc[0].fd, ptfdc[1].fd);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
 
@@ -60568,6 +60573,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             }  
 
                                             chd = 0;
+                                        }
+                                        else {
+                                            sprintf_f(rs->logs, "[DV]  Error!!! get chd: 0x%.2x  not support extra\n", chd);
+                                            print_f(rs->plogs, "P11", rs->logs);
                                         }
                                     }
                                 }
@@ -61211,7 +61220,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             }
                                         }
                                     } else {
-                                        if (puimCnTH) {
+                                        if ((puimCnTH) && (!puimGet)) {
                                             ix=0;
                                             cindex = 0;
                                             puimNxt = 0;
@@ -61379,7 +61388,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 pshfmeta = addrd + (lens - shfmeta);
 
-                                //shmem_dump(pshfmeta, shfmeta);
+                                shmem_dump(pshfmeta, shfmeta);
 
                                 if (rxfd == rs->ppipedn->rt[0]) {
                                     sprintf_f(rs->logs, "usb meta cp to primary size: %d dist size: %d\n", shfmeta, lenbs);
@@ -61400,6 +61409,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 } else {
                                     sprintf_f(rs->logs, "usb meta forward to pc \n");
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    //dbgMetaUsb(ptmetausbduo);
                                 }
                             }
 
