@@ -32,7 +32,7 @@
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
 static char mver[] = "MSP Version v0.0.10.rc";
-static char gitcommit[] = "2019-04-02 10:57:01 d8662dc";
+static char gitcommit[] = "2019-04-02 15:59:19 6369179";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
@@ -38758,7 +38758,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0; 
 }
 
-#define DBG_USB_GATE (1)
+#define DBG_USB_GATE (0)
 #define MAX_145_EVENT (11)
 static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -40447,6 +40447,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         else if (pllcmd[ins] == 'F') {
                             matcmd[ins] = pllcmd[ins];
                             if (ins == 3) {
+                                #if 1
+                                latcmd[2] = 'q';
+                                write(outfd[2], &latcmd[2], 1);
+                                #else
                                 if (latcmd[0] == 'Q') {
                                     latcmd[0] = 'q';
                                     latcmd[2] = 'q';
@@ -40462,9 +40466,14 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     latcmd[2] = 'Q';
                                 } else {
                                     latcmd[2] = 'Q';
-                                }                                
+                                }
+                                #endif
                             }
                             else {
+                                #if 1
+                                latcmd[0] = 'q';
+                                write(outfd[0], &latcmd[0], 1);
+                                #else
                                 if (latcmd[2] == 'Q') {
                                     latcmd[0] = 'q';
                                     latcmd[2] = 'q';
@@ -40481,7 +40490,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 }
                                 else {
                                     latcmd[0] = 'Q';
-                                }                                
+                                }
+                                #endif
                             }
                         }
                         else if (pllcmd[ins] == 'R') {
@@ -45568,7 +45578,7 @@ static int atFindIdx(char *str, char ch)
 
 #define P6_SEND_BUFF_SIZE (4096)
 
-#define LOG_P6_RX_EN    (1)
+#define LOG_P6_RX_EN    (0)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
 #define LOG_P6_CROP_EN    (0)
@@ -46706,7 +46716,13 @@ static int p6(struct procRes_s *rs)
             print_f(rs->plogs, "P6", rs->logs);
             h = val;
 
-            sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue);
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "duo user defined image length: %d, ret:%d\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            hduo = val;
+
+            sprintf_f(rs->logs, "param: %c, image len: %d (%d) duo: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue, hduo, pct[ASPOP_IMG_LEN_DUO].opValue);
             print_f(rs->plogs, "P6", rs->logs); 
             
             if ((param == 'E') || (h == 0) || (csws != 0) || (cswd != 0)) {
@@ -47509,6 +47525,12 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
+            val = 0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "user defined image length: %d, ret:%d duo\n", val, ret);
+            print_f(rs->plogs, "P6", rs->logs);
+            hduo = val;
+
             if (tmp == FILE_FORMAT_RAW) { /* second page */
                 ph = &rs->pbheaderDuo->aspbmpMagic[2];
                 len = sizeof(struct bitmapHeader_s) - 2;
@@ -47534,12 +47556,6 @@ static int p6(struct procRes_s *rs)
                         clr = 24;
                         break;
                 }
-
-                val = 0;
-                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &val, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "user defined image length: %d, ret:%d duo\n", val, ret);
-                print_f(rs->plogs, "P6", rs->logs);
-                hduo = val;
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
@@ -49319,10 +49335,10 @@ static int p6(struct procRes_s *rs)
                 pmassduo->massUsed = 0;
             }
 
-            sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue);
+            sprintf_f(rs->logs, "param: %c, image len: %d (%d) duo: %d (%d)\n", param, h, pct[ASPOP_IMG_LEN].opValue, hduo, pct[ASPOP_IMG_LEN_DUO].opValue);
             print_f(rs->plogs, "P6", rs->logs); 
             
-            if ((param == 'E') || (h == 0) || (csws != 0) || (cswd != 0)) {
+            if ((param == 'E') || (csws != 0) || (cswd != 0)) {
                 rs_ipc_put(rs, "Q", 1);
                 sprintf_f(rs->logs, "return \"Q\" \n");
                 print_f(rs->plogs, "P6", rs->logs);    
@@ -50424,7 +50440,7 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "param: %c, image len: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue);
             print_f(rs->plogs, "P6", rs->logs);    
 
-            if ((param == 'E') || (h == 0) || (csws != 0)) {
+            if ((param == 'E') || (csws != 0)) {
                 rs_ipc_put(rs, "E", 1);
                 sprintf_f(rs->logs, "return \"E\" \n");
                 print_f(rs->plogs, "P6", rs->logs);    
@@ -52767,7 +52783,7 @@ static int p8(struct procRes_s *rs)
 
 }
 #define DUMP_FLASH (0)
-#define DBG_USB_HS (1)
+#define DBG_USB_HS (0)
 #define DBG_USB_FLW (0)
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
@@ -56254,7 +56270,7 @@ static int p10(struct procRes_s *rs)
 }
 
 #define LOG_FLASH  (0)
-#define LOG_P11_EN (1)
+#define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
@@ -61218,9 +61234,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     break;
                                 } 
                                 else {
-
+                                    #if LOG_P11_EN
                                     sprintf_f(rs->logs, "[DV] idle warning!!! chq: 0x%.2x chr: 0x%.2x puimGet: 0x%.8x puimCnTH: 0x%.8x\n", chq, chr, puimGet, puimCnTH);
                                     print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
 
                                     if ((!chq) && (!chr) && (puimGet)) {
                                         if (puimGet->uimGetCnt < puimGet->uimCount) {
@@ -61404,7 +61421,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 pshfmeta = addrd + (lens - shfmeta);
 
+                                #if LOG_P11_EN
                                 shmem_dump(pshfmeta, shfmeta);
+                                #endif
 
                                 if (rxfd == rs->ppipedn->rt[0]) {
                                     sprintf_f(rs->logs, "usb meta cp to primary size: %d dist size: %d\n", shfmeta, lenbs);
