@@ -39023,8 +39023,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                     evcnt++;
                     switch(ins) {
                     case 9:
+                        sprintf_f(mrs->log, "[GW] get ch from p2: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
+                        print_f(&mrs->plog, "fs145", mrs->log);
                         break;
                     case 10:
+                        sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
+                        print_f(&mrs->plog, "fs145", mrs->log);
                         break;
                     case 7:
                         modersp->c ++;
@@ -40381,7 +40385,16 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 
                                     curbf->bsz |= lasflag;
 
+                                    #if 1
                                     write(outfd[ins], indexfo, 2);
+                                    #else
+                                    if (ins == 3) {
+                                        mrs_ipc_put(mrs, "o", 1, 2);
+                                    } else {
+                                        mrs_ipc_put(mrs, "o", 1, 1);
+                                    }
+                                    #endif
+                                    
                                     sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x- end of transmission \n", 
                                                                   ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
                                     print_f(&mrs->plog, "fs145", mrs->log);                            
@@ -41621,6 +41634,9 @@ static int p2(struct procRes_s *rs)
                     break;
                 case 'h':
                     cmode = 18;
+                    break;
+                case 'o':
+                    cmode = 19;
                     break;
                 default:
                     break;
@@ -43089,6 +43105,12 @@ static int p2(struct procRes_s *rs)
                 print_f(rs->plogs, "P2", rs->logs);
 #endif
             }
+            else if (cmode == 19) {
+                sprintf_f(rs->logs, "cmode: %d\n", cmode);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                rs_ipc_put(rs, "O", 1);
+            }
             else {
                 sprintf_f(rs->logs, "cmode: %d \n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
@@ -43190,6 +43212,9 @@ static int p3(struct procRes_s *rs)
                     break;
                 case 'y':
                     cmode = 7;
+                    break;
+                case 'o':
+                    cmode = 8;
                     break;
                 default:
                     break;
@@ -43573,7 +43598,12 @@ static int p3(struct procRes_s *rs)
                 } else {
                     rs->pmetaMassduo->massUsed = totsz;
                 }
-                
+            }
+            else if (cmode == 8) {
+                sprintf_f(rs->logs, "cmode: %d\n", cmode);
+                print_f(rs->plogs, "P3", rs->logs);
+
+                rs_ipc_put(rs, "O", 1);
             }
             else {
                 sprintf_f(rs->logs, "cmode: %d - 7\n", cmode);
@@ -52822,7 +52852,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
     struct pollfd ptfd[1];
     char ptrecv[32];
-    int ptret=0, recvsz=0, acusz=0, wrtsz=0, usbrun=0, usbdist=0, usbthrhld=0, upa=0, ufr=0, ure=0, ufo=0;
+    int ptret=0, recvsz=0, acusz=0, wrtsz=0, usbrun=0;
+    int usbdist=0, usbthrhld=0, usbuffed=0, usbavg=0, usbufmax=0;
+    int upa=0, ufr=0, ure=0, ufo=0;
     uint32_t usbfolw=0;
     int cntRecv=0, usCost=0, bufsize=0;
     int bufmax=0, idx=0, printlog=0, idlecnt=0;
@@ -54996,6 +55028,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             acusz = 0;
             tcnt = 0;
             cswst = 0;
+            usbufmax = puhsinfo->ushostbmax;
             
             len = ring_buf_get(pTx, &addr);    
             while (len <= 0) {
@@ -55011,44 +55044,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 #if 0 /* test drop line */
                 usleep(5);
                 #endif
-
-                #if USB_AUTO_RESUME
-                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
-                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-                
-                ure = puhsinfo->ushostresume;
-                ufo = puhsinfrd->ushostresume;
-
-                if (ure == 2) {
-                    ix = puhsinfo->ushostresume;
-                    pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
-                    
-                    puhsinfo->ushostresume += 1;
-
-                    #if DBG_PAUSE_RESUME
-                    sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - m0.1\n", usbdist, ure, ufo, pieRet);
-                    print_f(rs->plogs, sp, rs->logs);
-                    #endif
-                    
-                    //usleep(500000);
-                    //sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.2\n", usbdist, ure, ufo, pieRet);
-                    //print_f(rs->plogs, sp, rs->logs);
-                    
-                    if (ufo) {
-                        puhsinfrd->ushostresume += 1;
-                    }
-                    else {
-                        puhsinfrd->ushostresume = 3;
-                    }
-                }
-
-                if ((ure > 2) && (ufo > 2)) {
-                    puhsinfo->ushostresume = 0;
-                    puhsinfrd->ushostresume = 0;
-                    //sprintf_f(rs->logs, "RESUME reset remain: %d m\n", usbdist);
-                    //print_f(rs->plogs, sp, rs->logs);
-                }
-                #endif // #if USB_AUTO_RESUME
                 
                 #if USB_CALLBACK_LOOP 
                 recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
@@ -55151,6 +55146,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         usbrun = recvsz  & 0xffff;
                         recvsz = len;
 
+
                         #if DBG_USB_HS
                         sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m2\n", recvsz, usbrun);
                         print_f(rs->plogs, sp, rs->logs);
@@ -55175,19 +55171,18 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     puhsinfo->ushostbtrkbuffed = puhsinfo->ushostbtrktot - usbfolw;
                     usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
 
+                    #if 0//USB_AUTO_PAUSE
                     msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
                     msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
                     
                     upa = puhsinfo->ushostpause;
                     ufr = puhsinfrd->ushostpause;
-
+                    
                     ure = puhsinfo->ushostresume;
                     ufo = puhsinfrd->ushostresume;
                     
                     //sprintf_f(rs->logs, "pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d m\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
                     //print_f(rs->plogs, sp, rs->logs);
-
-                    #if USB_AUTO_PAUSE
                     
                     if (!upa) {
                         ix = upa;
@@ -55196,7 +55191,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
                                 
                             puhsinfo->ushostpause = 1;
-
+                    
                             #if DBG_PAUSE_RESUME
                             sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- m0\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
                             print_f(rs->plogs, sp, rs->logs);
@@ -55207,17 +55202,19 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
                                 
                                 puhsinfo->ushostpause = 1;
-
+                    
                                 #if DBG_PAUSE_RESUME
                                 sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - m1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
                                 print_f(rs->plogs, sp, rs->logs);
                                 #endif
                             }
                         } else {
-                            usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
-                            usbthrhld = puhsinfo->ushostbtrkpageavg * 2 + 50;
-                            if (usbthrhld) {
-                                if (puhsinfo->ushostbtrkpageavg > puhsinfo->ushostbthrshold) {
+                            usbuffed = puhsinfo->ushostbtrkbuffed;
+                            usbavg = puhsinfo->ushostbtrkpageavg;
+                            usbdist = usbufmax - usbuffed;
+                            usbthrhld = usbavg * 2 + 50;
+                            if (usbavg) {
+                                if (usbavg > puhsinfo->ushostbthrshold) {
                                     USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
                                     
                                     puhsinfo->ushostpause = 1;
@@ -55225,7 +55222,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                     sprintf_f(rs->logs, "PAUSE remain: %d system thrshold: %d, avgpage: %d - m2.1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbtrkpageavg);
                                     print_f(rs->plogs, sp, rs->logs);
                                     #endif
-                                }
+                                }             
                                 else if (usbdist < usbthrhld) {
                                     USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
                                     
@@ -55236,8 +55233,19 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                     print_f(rs->plogs, sp, rs->logs);
                                     #endif
                                 }                
-                            } else {
-                                if (usbdist < (puhsinfo->ushostbthrshold / 2)) {
+                            }
+                            else {
+                                if (puhsinfo->ushostbtrktot > puhsinfo->ushostbthrshold) {
+                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                                
+                                    puhsinfo->ushostpause = 1;
+                    
+                                    #if DBG_PAUSE_RESUME
+                                    sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - m1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
+                                    print_f(rs->plogs, sp, rs->logs);
+                                    #endif
+                                }
+                                else if (usbdist < (puhsinfo->ushostbthrshold * 2)) {
                                     USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
                                     
                                     puhsinfo->ushostpause = 1;
@@ -55254,7 +55262,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
                                 
                         puhsinfo->ushostpause += 1;
-
+                    
                         #if DBG_PAUSE_RESUME
                         sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- m3\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
                         print_f(rs->plogs, sp, rs->logs);
@@ -55270,6 +55278,61 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     }
                     #endif
                 }
+
+                #if 0//USB_AUTO_RESUME
+                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
+                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
+
+                upa = puhsinfo->ushostpause;
+                ufr = puhsinfrd->ushostpause;
+
+                ure = puhsinfo->ushostresume;
+                ufo = puhsinfrd->ushostresume;
+
+                if (((upa) || (ufr)) && ((ure) || (ufo))) {
+                
+                    #if 0
+                    if ((upa == 0) || (ufr == 0)) {
+                        sprintf_f(rs->logs, "update pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d - m0\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
+                    #endif
+                    puhsinfo->ushostpause = 0;
+                    puhsinfrd->ushostpause = 0;
+
+                }
+                else if (ure == 2) {
+                    ix = puhsinfo->ushostresume;
+                    pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
+                    
+                    puhsinfo->ushostresume += 1;
+                
+                    #if DBG_PAUSE_RESUME
+                    sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - m0.1\n", usbdist, ure, ufo, pieRet);
+                    print_f(rs->plogs, sp, rs->logs);
+                    #endif
+                    
+                    //usleep(500000);
+                    //sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.2\n", usbdist, ure, ufo, pieRet);
+                    //print_f(rs->plogs, sp, rs->logs);
+                    
+                    if (ufo) {
+                        puhsinfrd->ushostresume += 1;
+                    }
+                    else {
+                        puhsinfrd->ushostresume = 3;
+                    }
+                }
+                
+                if ((ure > 2) && (ufo > 2)) {
+                    puhsinfo->ushostresume = 0;
+                    puhsinfrd->ushostresume = 0;
+                    puhsinfo->ushostpause = 0;
+                    puhsinfrd->ushostpause = 0;
+                    //sprintf_f(rs->logs, "RESUME reset remain: %d m\n", usbdist);
+                    //print_f(rs->plogs, sp, rs->logs);
+                }
+                #endif // #if USB_AUTO_RESUME
                 
                 if (recvsz < 0) {
                     sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
@@ -55278,9 +55341,18 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //break;
                 }
                 else if (recvsz == 0) {
+                    msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
+                    msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
+                    
+                    upa = puhsinfo->ushostpause;
+                    ufr = puhsinfrd->ushostpause;
+                    
+                    ure = puhsinfo->ushostresume;
+                    ufo = puhsinfrd->ushostresume;
+                    
                     idlecnt ++;
                     if ((idlecnt % 0x10000) == 0) {
-                        sprintf_f(rs->logs, "warnning!!! meta usbfolw: %d, usbrun: %d recvsz: %d tcnt: 0x%x meta\n", usbfolw, usbrun, recvsz, idlecnt);
+                        sprintf_f(rs->logs, "idle meta warnning!!! meta usbfolw: %d, usbrun: %d recvsz: %d tcnt: 0x%x meta (%d, %d, %d, %d) \n", usbfolw, usbrun, recvsz, idlecnt, upa, ufr, ure, ufo);
                         print_f(rs->plogs, sp, rs->logs);
                     }
                     
@@ -55537,6 +55609,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             acusz = 0;
             tcnt = 0;
             idlecnt = 0;
+            usbufmax = puhsinfo->ushostbmax;
             
             len = ring_buf_get(pTx, &addr);    
             while (len <= 0) {
@@ -55553,44 +55626,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 #if 0 /* test drop line */
                 usleep(10000);
                 #endif
-
-                #if USB_AUTO_RESUME
-                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
-                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-                
-                ure = puhsinfo->ushostresume;
-                ufo = puhsinfrd->ushostresume;
-
-                if (ure == 2) {
-                    ix = puhsinfo->ushostresume;
-                    pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
-                    
-                    puhsinfo->ushostresume += 1;
-
-                    #if DBG_PAUSE_RESUME
-                    sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.1\n", usbdist, ure, ufo, pieRet);
-                    print_f(rs->plogs, sp, rs->logs);
-                    #endif
-                    
-                    //usleep(500000);
-                    //sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.2\n", usbdist, ure, ufo, pieRet);
-                    //print_f(rs->plogs, sp, rs->logs);
-                    
-                    if (ufo) {
-                        puhsinfrd->ushostresume += 1;
-                    }
-                    else {
-                        puhsinfrd->ushostresume = 3;
-                    }
-                }
-
-                if ((ure > 2) && (ufo > 2)) {
-                    puhsinfo->ushostresume = 0;
-                    puhsinfrd->ushostresume = 0;
-                    //sprintf_f(rs->logs, "RESUME reset remain: %d \n", usbdist);
-                    //print_f(rs->plogs, sp, rs->logs);
-                }
-                #endif // #if USB_AUTO_RESUME
                 
                 #if USB_CALLBACK_LOOP 
                 recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
@@ -55680,94 +55715,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     puhsinfo->ushostbtrkcms = usbfolw;
                     puhsinfo->ushostbtrkbuffed = puhsinfo->ushostbtrktot - usbfolw;
                     usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
-
-                    msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
-                    msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-                    
-                    upa = puhsinfo->ushostpause;
-                    ufr = puhsinfrd->ushostpause;
-
-                    ure = puhsinfo->ushostresume;
-                    ufo = puhsinfrd->ushostresume;
-                    
-                    //sprintf_f(rs->logs, "pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
-                    //print_f(rs->plogs, sp, rs->logs);
-
-                    #if USB_AUTO_PAUSE
-                    
-                    if (!upa) {
-                        ix = upa;
-                        
-                        if (ufr == 1) {
-                            USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                            puhsinfo->ushostpause = 1;
-
-                            #if DBG_PAUSE_RESUME
-                            sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- 0\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
-                            print_f(rs->plogs, sp, rs->logs);
-                            #endif
-                        }
-                        else if (puhsinfo->ushostbpagecnt == 0) {
-                            if (puhsinfo->ushostbtrktot > puhsinfo->ushostbthrshold) {
-                                USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                                puhsinfo->ushostpause = 1;
-
-                                #if DBG_PAUSE_RESUME
-                                sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - 1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
-                                print_f(rs->plogs, sp, rs->logs);
-                                #endif
-                            }
-                        } else {
-                            usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
-                            usbthrhld = puhsinfo->ushostbtrkpageavg * 2 + 50;
-                            if (usbthrhld) {
-                                if (puhsinfo->ushostbtrkpageavg > puhsinfo->ushostbthrshold) {
-                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                    
-                                    puhsinfo->ushostpause = 1;
-                                    
-                                    #if DBG_PAUSE_RESUME
-                                    sprintf_f(rs->logs, "PAUSE remain: %d system thrshold: %d, avgpage: %d - 2.1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbtrkpageavg);
-                                    print_f(rs->plogs, sp, rs->logs);
-                                    #endif
-                                }
-                                else if (usbdist < usbthrhld) {
-                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                    
-                                    puhsinfo->ushostpause = 1;
-                                    
-                                    #if DBG_PAUSE_RESUME
-                                    sprintf_f(rs->logs, "PAUSE remain: %d avg thrshold: %d, avgpage: %d - 2.2\n", usbdist, usbthrhld, puhsinfo->ushostbtrkpageavg);
-                                    print_f(rs->plogs, sp, rs->logs);
-                                    #endif
-                                }                
-                            } else {
-                                if (usbdist < (puhsinfo->ushostbthrshold / 2)) {
-                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                    
-                                    puhsinfo->ushostpause = 1;
-
-                                    #if DBG_PAUSE_RESUME
-                                    sprintf_f(rs->logs, "PAUSE remain: %d thrshold/2: %d - 3\n", usbdist, (puhsinfo->ushostbthrshold / 2));
-                                    print_f(rs->plogs, sp, rs->logs);
-                                    #endif
-                                }
-                            }
-                        }
-                    }
-                    else if (upa == 2) {
-                        USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                        puhsinfo->ushostpause += 1;
-                        
-                        #if DBG_PAUSE_RESUME                                        
-                        sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- 3\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
-                    }
-                    #endif // #if USB_AUTO_PAUSE
                     
                     #if DBG_USB_FLW
                     usbdist = usbrun - usbfolw;
@@ -55775,7 +55722,191 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                 }
+
+                #if USB_AUTO_PAUSE
                 
+                //puhsinfo->ushostbtrkbuffed = puhsinfo->ushostbtrktot - puhsinfo->ushostbtrkcms;
+                usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
+                    
+                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
+                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
+                
+                upa = puhsinfo->ushostpause;
+                ufr = puhsinfrd->ushostpause;
+                
+                ure = puhsinfo->ushostresume;
+                ufo = puhsinfrd->ushostresume;
+                
+                
+                if (!upa) {
+                    ix = upa;
+                    
+                    #if DBG_PAUSE_RESUME
+                    sprintf_f(rs->logs, "pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
+                    print_f(rs->plogs, sp, rs->logs);
+                    #endif
+                    
+                    if (ufr == 1) {
+                        USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                            
+                        puhsinfo->ushostpause = 1;
+                
+                        #if DBG_PAUSE_RESUME
+                        sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- 0\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                    }
+                    else if (puhsinfo->ushostbpagecnt == 0) {
+                        if (puhsinfo->ushostbtrktot > puhsinfo->ushostbthrshold) {
+                            USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                            
+                            puhsinfo->ushostpause = 1;
+                
+                            #if DBG_PAUSE_RESUME
+                            sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - 1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
+                            print_f(rs->plogs, sp, rs->logs);
+                            #endif
+                        }
+                    } else {
+                        usbuffed = puhsinfo->ushostbtrkbuffed;
+                        usbavg = puhsinfo->ushostbtrkpageavg;
+                        usbdist = usbufmax - usbuffed;
+                        usbthrhld = usbavg * 2 + 50;
+                        if (usbavg) {
+                            if (usbavg > puhsinfo->ushostbthrshold) {
+                                if (usbdist < usbavg) {
+                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                                
+                                    puhsinfo->ushostpause = 1;
+                                    #if DBG_PAUSE_RESUME
+                                    sprintf_f(rs->logs, "PAUSE remain: %d system thrshold: %d, avgpage: %d - 2.1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbtrkpageavg);
+                                    print_f(rs->plogs, sp, rs->logs);
+                                    #endif
+                                }
+                            }             
+                            else if (usbdist < usbthrhld) {
+                                USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                                
+                                puhsinfo->ushostpause = 1;
+                                
+                                #if DBG_PAUSE_RESUME
+                                sprintf_f(rs->logs, "PAUSE remain: %d avg thrshold: %d, avgpage: %d - 2.2\n", usbdist, usbthrhld, puhsinfo->ushostbtrkpageavg);
+                                print_f(rs->plogs, sp, rs->logs);
+                                #endif
+                            }                
+                        }
+                        else {
+                            if (puhsinfo->ushostbtrktot > puhsinfo->ushostbthrshold) {
+                                USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                            
+                                puhsinfo->ushostpause = 1;
+                
+                                #if DBG_PAUSE_RESUME
+                                sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - 3.1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
+                                print_f(rs->plogs, sp, rs->logs);
+                                #endif
+                            }
+                            else if (usbdist < (puhsinfo->ushostbthrshold * 2)) {
+                                USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                                
+                                puhsinfo->ushostpause = 1;
+                                
+                                #if DBG_PAUSE_RESUME
+                                sprintf_f(rs->logs, "PAUSE remain: %d thrshold/2: %d - 3.2\n", usbdist, (puhsinfo->ushostbthrshold / 2));
+                                print_f(rs->plogs, sp, rs->logs);
+                                #endif
+                            }
+                        }
+                    }
+                }
+                else if (upa == 2) {
+                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
+                            
+                    puhsinfo->ushostpause += 1;
+                    
+                    #if DBG_PAUSE_RESUME                                        
+                    sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- 3\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
+                    print_f(rs->plogs, sp, rs->logs);
+                    #endif
+                }
+                #endif // #if USB_AUTO_PAUSE
+                
+                #if USB_AUTO_RESUME
+                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
+                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
+
+                upa = puhsinfo->ushostpause;
+                ufr = puhsinfrd->ushostpause;
+                
+                ure = puhsinfo->ushostresume;
+                ufo = puhsinfrd->ushostresume;
+                
+                if (((upa) || (ufr)) && ((ure) || (ufo))) {
+
+                    #if 0
+                    if ((upa == 0) || (ufr == 0)) {
+                        sprintf_f(rs->logs, "update pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d - 0\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
+                    #endif
+                    
+                    if (ure) puhsinfo->ushostresume = 0;
+                    
+                    if (ufo) puhsinfrd->ushostresume = 0;
+
+                }
+                else if (ure == 2) {
+                    ix = puhsinfo->ushostresume;
+                    pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
+                    
+                    puhsinfo->ushostresume += 1;
+                
+                    #if DBG_PAUSE_RESUME
+                    sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.1\n", usbdist, ure, ufo, pieRet);
+                    print_f(rs->plogs, sp, rs->logs);
+                    #endif
+                    
+                    msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
+                    ufo = puhsinfrd->ushostresume;
+                    
+                    //usleep(500000);
+                    //sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.2\n", usbdist, ure, ufo, pieRet);
+                    //print_f(rs->plogs, sp, rs->logs);
+                    
+                    if (ufo) {
+                        puhsinfrd->ushostresume += 1;
+                    }
+                    else {
+                        puhsinfrd->ushostresume = 3;
+                    }
+                }
+                else if ((ure > 2) && (!ufo)) {
+                    puhsinfo->ushostresume = 0;
+                }
+                else {
+                    if ((ure > 2) && (ufo > 2)) {
+                        puhsinfo->ushostresume = 0;
+                        puhsinfrd->ushostresume = 0;
+                        puhsinfo->ushostpause = 0;
+                        puhsinfrd->ushostpause = 0;
+                        //sprintf_f(rs->logs, "RESUME reset remain: %d \n", usbdist);
+                        //print_f(rs->plogs, sp, rs->logs);
+                    }
+                }
+
+                #if 0
+                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
+                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
+
+                upa = puhsinfo->ushostpause;
+                ufr = puhsinfrd->ushostpause;
+                
+                ure = puhsinfo->ushostresume;
+                ufo = puhsinfrd->ushostresume;
+                #endif
+                
+
+                #endif // #if USB_AUTO_RESUME
                 if (recvsz < 0) {
                     sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
                     print_f(rs->plogs, sp, rs->logs);
@@ -55783,9 +55914,18 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //break;
                 }
                 else if (recvsz == 0) {
+                    msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
+                    msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
+                
+                    upa = puhsinfo->ushostpause;
+                    ufr = puhsinfrd->ushostpause;
+                    
+                    ure = puhsinfo->ushostresume;
+                    ufo = puhsinfrd->ushostresume;
+                    
                     idlecnt ++;
                     if ((idlecnt % 0x10000) == 0) {
-                        sprintf_f(rs->logs, "idle warnning!!! usbfolw: %d, usbrun: %d recvsz: %d tcnt: 0x%x\n", usbfolw, usbrun, recvsz, idlecnt);
+                        sprintf_f(rs->logs, "idle warnning!!! usbfolw: %d, usbrun: %d recvsz: %d tcnt: 0x%x (%d, %d, %d, %d) \n", usbfolw, usbrun, recvsz, idlecnt, upa, ufr, ure, ufo);
                         print_f(rs->plogs, sp, rs->logs);
                     }
 
@@ -56553,8 +56693,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char wfcmd[8][2] = {{'p', 0x01}, {'m', 0x02}, {'s', 0x03}, {'r', 0x04}, {'t', 0x05}, {'n', 0x06}, {'q', 0x07}, {'o', 0x08}};
     uint32_t fformat=0;
     int opsz=0, lrst=0;
-    struct usbHostmem_s *pinfushost=0, *pinfushostd=0, *pinfcur=0;
-    int udist=0, uthrhld=0, upas=0, ursm=0;
+    struct usbHostmem_s *pinfushost=0, *pinfushostd=0, *pinfcur=0, *pinfcurd=0;
+    int udist=0, uthrhld=0, upas=0, ursm=0, upasd=0, ursmd=0, udistd=0;
     struct usbFileidAccess_s *pubf=0;
     struct usbFileidContent_s *pubfidc=0, *pubfidnxt=0;
     
@@ -61549,14 +61689,23 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             distCylcnt = ring_buf_cons_tag(usbCur);
                             cntTx++;
 
+                            msync(pinfcur, sizeof(struct usbHostmem_s), MS_SYNC);
+                
                             upas = pinfcur->ushostpause;
                             ursm = pinfcur->ushostresume;
                             
                             #if USB_AUTO_RESUME
                             udist = pinfcur->ushostbmax - distCylcnt;
+                            pinfcur->ushostbtrkbuffed = distCylcnt;
+                            //pinfcur->ushostbtrkcms = pinfcur->ushostbtrktot - distCylcnt;
+                            
+                            #if DBG_PAUSE_RESUME
+                            sprintf_f(rs->logs, "resume info distCylcnt: %d, udist: %d, buffered: %d avg: %d thrhld:%d\n", distCylcnt, udist, pinfcur->ushostbtrkbuffed, pinfcur->ushostbtrkpageavg, pinfcur->ushostbthrshold);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            #endif
 
                             #if DBG_PAUSE_RESUME
-                            sprintf_f(rs->logs, "resume info distCylcnt: %d, udist: %d, buffered: %d cntTx: %d lens:%d\n", distCylcnt, udist, pinfcur->ushostbtrkbuffed, cntTx, lens);
+                            sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udist: %d L1\n", upas, ursm, udist);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
 
@@ -61575,22 +61724,46 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                         #endif
 
-                                        pinfushost->ushostresume = 1;
-                                        pinfushostd->ushostresume = 2;
+                                        if (pinfcur == pinfushost) {
+                                            pinfcurd= pinfushostd;
+                                        } else {
+                                            pinfcurd= pinfushost;
+                                        }
                                         
-                                        pinfushost->ushostpause = 0;
-                                        pinfushostd->ushostpause = 0;    
+                                        msync(pinfcurd, sizeof(struct usbHostmem_s), MS_SYNC);
                                         
+                                        upasd = pinfcurd->ushostpause;
+                                        ursmd = pinfcurd->ushostresume;
+                                        udistd = pinfcurd->ushostbmax - pinfcurd->ushostbtrkbuffed;
+
                                         #if DBG_PAUSE_RESUME
-                                        sprintf_f(rs->logs, "RESUME distCylcnt: %d, remain: %d, avg: %d - 1\n", distCylcnt, udist, pinfcur->ushostbtrkpageavg);
+                                        sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udistd: %d buffered: %d L2\n", upasd, ursmd, udistd, pinfcurd->ushostbtrkbuffed);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
+
+                                        if ((upasd) && (!ursmd)) {
+                                            if (pinfcurd->ushostbtrkpageavg > pinfcurd->ushostbthrshold) {
+                                                if (udistd > pinfcurd->ushostbtrkpageavg) {
+                                                
+                                                    pinfushost->ushostpause = 0;
+                                                    pinfushostd->ushostpause = 0;  
+                                                    
+                                                    pinfushost->ushostresume = 1;
+                                                    pinfushostd->ushostresume = 2;
+
+                                                    #if DBG_PAUSE_RESUME
+                                                    sprintf_f(rs->logs, "RESUME distCylcnt: %d, udist: %d, avg: %d - 1\n", distCylcnt, udist, pinfcur->ushostbtrkpageavg);
+                                                    print_f(rs->plogs, "P11", rs->logs);
+                                                    #endif
+                                                }
+                                            } 
+                                        }
                                     }
                                 }
                                 else {
                                     uthrhld = pinfcur->ushostbtrkpageavg * 6;
-                                    if (uthrhld > (pinfcur->ushostbmax - 120)) {
-                                        uthrhld = pinfcur->ushostbmax - 120;
+                                    if (uthrhld > (pinfcur->ushostbmax - pinfcur->ushostbthrshold)) {
+                                        uthrhld = pinfcur->ushostbmax - pinfcur->ushostbthrshold;
                                     }
                                     
                                     if ((uthrhld) && (udist > uthrhld)) {
@@ -61603,17 +61776,49 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             continue;
                                         }
                                         #endif
-
-                                        pinfushost->ushostresume = 1;
-                                        pinfushostd->ushostresume = 2;
-
-                                        pinfushost->ushostpause = 0;
-                                        pinfushostd->ushostpause = 0;                                        
+                                        
+                                        if (pinfcur == pinfushost) {
+                                            pinfcurd= pinfushostd;
+                                        } else {
+                                            pinfcurd= pinfushost;
+                                        }
+                                        
+                                        msync(pinfcurd, sizeof(struct usbHostmem_s), MS_SYNC);
+                                        
+                                        upasd = pinfcurd->ushostpause;
+                                        ursmd = pinfcurd->ushostresume;
+                                        udistd = pinfcurd->ushostbmax - pinfcurd->ushostbtrkbuffed;
 
                                         #if DBG_PAUSE_RESUME
-                                        sprintf_f(rs->logs, "RESUME distCylcnt: %d, remain: %d, usbthrhld: %d - 2\n", distCylcnt, udist, uthrhld);
+                                        sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udistd: %d L3\n", upasd, ursmd, udistd);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
+
+                                        if ((upasd) && (!ursmd)) {
+                                            if (pinfcurd->ushostbtrkpageavg < pinfcurd->ushostbthrshold) {
+                                                uthrhld = pinfcurd->ushostbtrkpageavg * 6;
+
+                                                if (uthrhld > (pinfcurd->ushostbmax - pinfcurd->ushostbthrshold)) {
+                                                    uthrhld = pinfcurd->ushostbmax - pinfcurd->ushostbthrshold;
+                                                }
+
+                                                if ((uthrhld) && (udistd > uthrhld)) {
+                                                
+                                                    pinfushost->ushostpause = 0;
+                                                    pinfushostd->ushostpause = 0;                                        
+                                                
+                                                    pinfushost->ushostresume = 1;
+                                                    pinfushostd->ushostresume = 2;
+
+                                                    #if DBG_PAUSE_RESUME
+                                                    sprintf_f(rs->logs, "RESUME distCylcnt: %d, remain: %d, usbthrhld: %d - 2\n", pinfcurd->ushostbtrkbuffed, udistd, uthrhld);
+                                                    print_f(rs->plogs, "P11", rs->logs);
+                                                    #endif
+                                                }
+                                            }
+                                        }
+
+
                                     }
                                 }
                             }
@@ -68068,7 +68273,7 @@ int main(int argc, char *argv[])
         usbh[0]->ushostblvir = aspSalloc(RING_BUFF_NUM_USB*4);
         usbh[0]->ushostblphy = aspSalloc(RING_BUFF_NUM_USB*4);
         usbh[0]->ushostbmax = RING_BUFF_NUM_USB;
-        usbh[0]->ushostbthrshold = usbh[0]->ushostbmax / 3;
+        usbh[0]->ushostbthrshold = usbh[0]->ushostbmax / 6;
         
         if ((!usbh[0]->ushostblphy) || (!usbh[0]->ushostblvir)) {
             sprintf_f(pmrs->log, "allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM_USB*4, usbhostpath1); 
@@ -68191,7 +68396,7 @@ int main(int argc, char *argv[])
         usbh[1]->ushostblvir = aspSalloc(RING_BUFF_NUM_USB*4);
         usbh[1]->ushostblphy = aspSalloc(RING_BUFF_NUM_USB*4);
         usbh[1]->ushostbmax = RING_BUFF_NUM_USB;
-        usbh[1]->ushostbthrshold = usbh[1]->ushostbmax / 3;
+        usbh[1]->ushostbthrshold = usbh[1]->ushostbmax / 6;
         
         if ((!usbh[1]->ushostblphy) || (!usbh[1]->ushostblvir)) {
             sprintf_f(pmrs->log, "allocate memory failed, size: %d [%s]\n", RING_BUFF_NUM_USB*4, usbhostpath2); 
