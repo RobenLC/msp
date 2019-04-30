@@ -55841,7 +55841,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 ure = puhsinfo->ushostresume;
                 ufo = puhsinfrd->ushostresume;
                 
-                if (((upa) || (ufr)) && ((ure) || (ufo))) {
+                if (((upa) || (ufr)) && ((ure > 0) || (ufo > 0))) {
 
                     #if 0
                     if ((upa == 0) || (ufr == 0)) {
@@ -55850,28 +55850,31 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     }
                     #endif
                     
-                    if (ure) puhsinfo->ushostresume = 0;
-                    
-                    if (ufo) puhsinfrd->ushostresume = 0;
+                    //puhsinfo->ushostresume = 0;
+                    //puhsinfrd->ushostresume = 0;
 
                 }
                 else if (ure == 2) {
                     ix = puhsinfo->ushostresume;
-                    pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
                     
+                    pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
+                    while (pieRet == 0) {
+                        #if 1//DBG_PAUSE_RESUME
+                        sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d resume faied!! - 0.1 \n", usbdist, ure, ufo, pieRet);
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                        pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
+                    }
+
                     puhsinfo->ushostresume += 1;
                 
-                    #if DBG_PAUSE_RESUME
-                    sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.1\n", usbdist, ure, ufo, pieRet);
+                    #if 1//DBG_PAUSE_RESUME
+                    sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d succeed!! - 0.1\n", usbdist, ure, ufo, pieRet);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                     
                     msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
                     ufo = puhsinfrd->ushostresume;
-                    
-                    //usleep(500000);
-                    //sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.2\n", usbdist, ure, ufo, pieRet);
-                    //print_f(rs->plogs, sp, rs->logs);
                     
                     if (ufo) {
                         puhsinfrd->ushostresume += 1;
@@ -55879,6 +55882,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     else {
                         puhsinfrd->ushostresume = 3;
                     }
+
                 }
                 else if ((ure > 2) && (!ufo)) {
                     puhsinfo->ushostresume = 0;
@@ -55929,6 +55933,19 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         print_f(rs->plogs, sp, rs->logs);
                     }
 
+                    
+                    #if 0 /* recover if the pause didn't be resume */
+                    if (idlecnt == 0x120000) {
+                        ix = puhsinfo->ushostresume;
+                        pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
+
+                        #if 1//DBG_PAUSE_RESUME
+                        sprintf_f(rs->logs, " timeout RESUME remain: %d ure:%d ufo:%d ret: %d - 0.2\n", usbdist, ure, ufo, pieRet);
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
+                    }
+                    #endif
+
                     //sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
                     #if USB_RECVLEN_ZERO_HANDLE
                     
@@ -55953,6 +55970,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 else {
                     /*do nothing*/
+                    idlecnt = 0;
                 }
                 
                 #if DBG_USB_HS
@@ -59922,7 +59940,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             case 0x09:
                             case 0x04:
                                 pinfushost->ushostresume = 2;
-                                pinfushostd->ushostresume = 0;
+                                pinfushostd->ushostresume = 1;
 
                                 pinfushost->ushostpause = 0;
                                 pinfushostd->ushostpause = 0;                                        
@@ -61709,7 +61727,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
 
-                            if ((upas) && (!ursm)) {
+                            if ((upas) && (ursm >= 0)) {
                                 //udist = pinfcur->ushostbmax - pinfcur->ushostbtrkbuffed;
                                 
                                 if (pinfcur->ushostbtrkpageavg > pinfcur->ushostbthrshold) {
@@ -61737,22 +61755,28 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         udistd = pinfcurd->ushostbmax - pinfcurd->ushostbtrkbuffed;
 
                                         #if DBG_PAUSE_RESUME
-                                        sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udistd: %d buffered: %d L2\n", upasd, ursmd, udistd, pinfcurd->ushostbtrkbuffed);
+                                        sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udistd: %d buffered: %d L2.\n", upasd, ursmd, udistd, pinfcurd->ushostbtrkbuffed);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
 
-                                        if ((upasd) && (!ursmd)) {
+                                        if ((upasd) && (ursmd >= 0)) {
                                             if (pinfcurd->ushostbtrkpageavg > pinfcurd->ushostbthrshold) {
                                                 if (udistd > pinfcurd->ushostbtrkpageavg) {
                                                 
+                                                    msync(pinfushost, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                    msync(pinfushostd, sizeof(struct usbHostmem_s), MS_SYNC);
+
                                                     pinfushost->ushostpause = 0;
                                                     pinfushostd->ushostpause = 0;  
                                                     
                                                     pinfushost->ushostresume = 1;
                                                     pinfushostd->ushostresume = 2;
+                                                    
+                                                    msync(pinfushost, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                    msync(pinfushostd, sizeof(struct usbHostmem_s), MS_SYNC);
 
-                                                    #if DBG_PAUSE_RESUME
-                                                    sprintf_f(rs->logs, "RESUME distCylcnt: %d, udist: %d, avg: %d - 1\n", distCylcnt, udist, pinfcur->ushostbtrkpageavg);
+                                                    #if 1//DBG_PAUSE_RESUME
+                                                    sprintf_f(rs->logs, "RESUME distCylcnt: %d, udist: %d, avg: %d, udistd: %d, avg: %d - 1. \n", distCylcnt, udist, pinfcur->ushostbtrkpageavg, udistd, pinfcurd->ushostbtrkpageavg);
                                                     print_f(rs->plogs, "P11", rs->logs);
                                                     #endif
                                                 }
@@ -61794,7 +61818,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
 
-                                        if ((upasd) && (!ursmd)) {
+                                        if ((upasd) && (ursmd >= 0)) {
                                             if (pinfcurd->ushostbtrkpageavg < pinfcurd->ushostbthrshold) {
                                                 uthrhld = pinfcurd->ushostbtrkpageavg * 6;
 
@@ -61803,15 +61827,21 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 }
 
                                                 if ((uthrhld) && (udistd > uthrhld)) {
-                                                
+
+                                                    msync(pinfushost, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                    msync(pinfushostd, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                    
                                                     pinfushost->ushostpause = 0;
                                                     pinfushostd->ushostpause = 0;                                        
                                                 
                                                     pinfushost->ushostresume = 1;
                                                     pinfushostd->ushostresume = 2;
 
-                                                    #if DBG_PAUSE_RESUME
-                                                    sprintf_f(rs->logs, "RESUME distCylcnt: %d, remain: %d, usbthrhld: %d - 2\n", pinfcurd->ushostbtrkbuffed, udistd, uthrhld);
+                                                    msync(pinfushost, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                    msync(pinfushostd, sizeof(struct usbHostmem_s), MS_SYNC);
+
+                                                    #if 1//DBG_PAUSE_RESUME
+                                                    sprintf_f(rs->logs, "RESUME buff1: %d, buff2: %d, udist: %d, udistd: %d, avg1: %d, avg2: %d - 2.\n", distCylcnt, pinfcurd->ushostbtrkbuffed, udist, udistd, pinfcur->ushostbtrkpageavg, pinfcurd->ushostbtrkpageavg);
                                                     print_f(rs->plogs, "P11", rs->logs);
                                                     #endif
                                                 }
