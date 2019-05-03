@@ -1221,7 +1221,10 @@ struct aspMetaDataviaUSB_s{
   unsigned char  YLine_Gap;               //byte[141]
   unsigned char  Start_YLine_No;       //byte[142]
   unsigned short YLines_Recorded;     //byte[144] 16bits
-  unsigned char EPOINT_RESERVE0[16];         //byte[160]
+  struct intMbs_s CROP_POS_F1;        //byte[148]
+  struct intMbs_s CROP_POS_F2;        //byte[152]
+  struct intMbs_s CROP_POS_F3;        //byte[156]
+  struct intMbs_s CROP_POS_F4;        //byte[160]
   unsigned char EPOINT_RESERVE1[64];         //byte[224]
   unsigned char ASP_MAGIC_YL[2];    //byte[226]
   unsigned short MPIONT_LEN;           //byte[228] 16bits  
@@ -38793,7 +38796,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     int uidx=12, sidx=13, lenrt=0;
 
     struct shmem_s *ringbf[4];
-    char *addrd, *addrs;
+    char *addrd, *addrs, *addrc;
     uint32_t *add32d, *add32s;
     int lens=-1, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0, csws=0, mlen=0, cswd=0, dlen=0, len=0;
     int wfileid=0, acusz=0, maxsz=0, fileidcnt=0;
@@ -38811,6 +38814,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct sdFAT_s *pfat=0;
     struct aspConfig_s *pct=0;
     struct aspMetaDataviaUSB_s *ptscaninfo=0, *ptscaninfoduo=0;
+    int ix=0, iv=0;
+    char *exptbuff=0;
+
+    exptbuff = aspMemalloc(32768, 10);
     
     pct = mrs->configTable;
 
@@ -38838,10 +38845,6 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     ringbf[1] = ppup->pgatring;
     ringbf[2] = ppdn->pushring;
     ringbf[3] = ppdn->pgatring;
-
-
-    int ix=0, iv=0;
-    char *taddr=0;
 
     ins += 1;
     uphstx = ppup->pushtx;
@@ -39025,10 +39028,27 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                     case 9:
                         sprintf_f(mrs->log, "[GW] get ch from p2: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
                         print_f(&mrs->plog, "fs145", mrs->log);
+
+                        
+                        mrs_ipc_get(mrs, minfo, 2, 1);
+                        
+                        sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
+                        print_f(&mrs->plog, "fs145", mrs->log);
+
+                        write(outfd[1], minfo, 2);
+                        
                         break;
                     case 10:
                         sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
                         print_f(&mrs->plog, "fs145", mrs->log);
+                        
+                        mrs_ipc_get(mrs, minfo, 2, 2);
+                        
+                        sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
+                        print_f(&mrs->plog, "fs145", mrs->log);
+
+                        write(outfd[3], minfo, 2);
+
                         break;
                     case 7:
                         modersp->c ++;
@@ -39964,6 +39984,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             totsz[ins+1] = 0;
                             ring_buf_init(ringbf[ins]);
                             ring_buf_init(ringbf[ins+1]);
+                            ring_buf_init(&mrs->cmdTx);
                         }
                         else if (pllcmd[ins] == 'b') {
                             write(outfd[ins], &pllcmd[ins], 1);
@@ -40385,13 +40406,74 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 
                                     curbf->bsz |= lasflag;
 
-                                    #if 1
+                                    #if 0
                                     write(outfd[ins], indexfo, 2);
                                     #else
+
+                                    memcpy(exptbuff, addrs, lens);    
                                     if (ins == 3) {
+                                        
+                                        ptscaninfoduo->ASP_MAGIC_ASPC[0] = indexfo[0];
+                                        ptscaninfoduo->ASP_MAGIC_ASPC[1] = indexfo[1];
+                                        ptscaninfoduo->MPIONT_LEN = lens;
+
+                                        len = ring_buf_get(&mrs->cmdTx, &addrc);
+                                        while (len <= 0) {
+                                            usleep(100000);
+                                            len = ring_buf_get(&mrs->cmdTx, &addrc);
+                                        }
+
+                                        memset(addrc, 0, len);
+
+                                        val = ptscaninfoduo->ASP_MAGIC_ASPC - ptscaninfoduo->EXTRA_POINT;
+                                        memcpy(addrc, ptscaninfoduo, val);
+                                        addrc += val;
+
+                                        memcpy(addrc, addrs, lens);
+
+                                        if ((val + lens) > len) {
+                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 1\n", val, lens, len);                                
+                                            print_f(&mrs->plog, "fs145", mrs->log);
+                                        }
+
+                                        ring_buf_prod(&mrs->cmdTx);
+                                        
+                                        sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d (%d) - 1\n", val, lens, len);
+                                        print_f(&mrs->plog, "fs145", mrs->log);
+                                        
                                         mrs_ipc_put(mrs, "o", 1, 2);
+                                        mrs_ipc_put(mrs, indexfo, 2, 2);
                                     } else {
+                                        ptscaninfo->ASP_MAGIC_ASPC[0] = indexfo[0];
+                                        ptscaninfo->ASP_MAGIC_ASPC[1] = indexfo[1];
+                                        ptscaninfo->MPIONT_LEN = lens;
+
+                                        len = ring_buf_get(&mrs->cmdTx, &addrc);
+                                        while (len <= 0) {
+                                            usleep(100000);
+                                            len = ring_buf_get(&mrs->cmdTx, &addrc);
+                                        }
+
+                                        memset(addrc, 0, len);
+
+                                        val = ptscaninfoduo->ASP_MAGIC_ASPC - ptscaninfoduo->EXTRA_POINT;
+                                        memcpy(addrc, ptscaninfoduo, val);
+                                        addrc += val;
+
+                                        memcpy(addrc, addrs, lens);
+
+                                        if ((val + lens) > len) {
+                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 2\n", val, lens, len);                                
+                                            print_f(&mrs->plog, "fs145", mrs->log);
+                                        }
+
+                                        ring_buf_prod(&mrs->cmdTx);
+                                        
+                                        sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d (%d) - 2\n", val, lens, len);
+                                        print_f(&mrs->plog, "fs145", mrs->log);
+                                        
                                         mrs_ipc_put(mrs, "o", 1, 1);
+                                        mrs_ipc_put(mrs, indexfo, 2, 1);
                                     }
                                     #endif
                                     
@@ -40583,8 +40665,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         }
                         else if (pllcmd[ins] == 'G') {
-                            pllcmd[ins] = 0xbf;;
-                            write(outfd[ins], &pllcmd[ins], 1);
+                            //pllcmd[ins] = 0xbf;;
+                            //write(outfd[ins], &pllcmd[ins], 1);
                             //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) - stall of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                             //print_f(&mrs->plog, "fs145", mrs->log);
                         }
@@ -41536,7 +41618,7 @@ static int p2(struct procRes_s *rs)
     
     pmeta = rs->pmetain;
 
-    char ch, str[128], rx8[4], tx8[4];
+    char ch, str[128], rx8[4], tx8[4], finfo[2];
     char *addr, *laddr, *rx_buff;
     sprintf_f(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
@@ -43109,7 +43191,16 @@ static int p2(struct procRes_s *rs)
                 sprintf_f(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P2", rs->logs);
 
+                rs_ipc_get(rs, finfo, 2);
+
+                sprintf_f(rs->logs, "get info: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
+                print_f(rs->plogs, "P2", rs->logs);
+
+                //usleep(500000);
+                sleep(10);
+                
                 rs_ipc_put(rs, "O", 1);
+                rs_ipc_put(rs, finfo, 2);
             }
             else {
                 sprintf_f(rs->logs, "cmode: %d \n", cmode);
@@ -43143,7 +43234,7 @@ static int p3(struct procRes_s *rs)
     
     int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait, totsz=0;
     uint16_t send16, recv16;
-    char ch, str[128], rx8[4], tx8[4];
+    char ch, str[128], rx8[4], tx8[4], finfo[2];
     char *addr, *laddr;
     uint32_t fformat=0;
     struct aspMetaData_s *pmetaduo;
@@ -43158,6 +43249,7 @@ static int p3(struct procRes_s *rs)
     sprintf_f(rs->logs, "p3, spidev:%d \n", rs->spifd);
     print_f(rs->plogs, "P3", rs->logs);
 
+    #if 0
     while (!rs->spifd) {
         ch = 0;
         ret = rs_ipc_get(rs, &ch, 1);
@@ -43167,6 +43259,7 @@ static int p3(struct procRes_s *rs)
             rs_ipc_put(rs, "x", 1);
         }
     }
+    #endif
 
     p3_init(rs);
     // wait for ch from p0
@@ -43603,7 +43696,15 @@ static int p3(struct procRes_s *rs)
                 sprintf_f(rs->logs, "cmode: %d\n", cmode);
                 print_f(rs->plogs, "P3", rs->logs);
 
+                ret = rs_ipc_get(rs, finfo, 2);
+                
+                sprintf_f(rs->logs, "get finfo: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
+                print_f(rs->plogs, "P3", rs->logs);
+
+                sleep(10);
+                
                 rs_ipc_put(rs, "O", 1);
+                rs_ipc_put(rs, finfo, 2);
             }
             else {
                 sprintf_f(rs->logs, "cmode: %d - 7\n", cmode);
