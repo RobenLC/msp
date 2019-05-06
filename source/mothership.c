@@ -2551,9 +2551,15 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
     sprintf_f(mlog, "(0x%.8x) YLines_Recorded: %d      \n", &pmetausb->YLines_Recorded, (pch[0] << 8) | pch[1]); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) EPOINT_RESERVE0      \n", pmetausb->EPOINT_RESERVE0); 
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F01: %d, %d\n", (&pmetausb->CROP_POS_F1), msb2lsb(&pmetausb->CROP_POS_F1) >> 16, msb2lsb(&pmetausb->CROP_POS_F1) & 0xffff);                      //byte[148]
     print_f(mlogPool, "METAU", mlog);
-
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F02: %d, %d\n", &pmetausb->CROP_POS_F2, msb2lsb(&pmetausb->CROP_POS_F2) >> 16, msb2lsb(&pmetausb->CROP_POS_F2) & 0xffff);                      //byte[152]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F03: %d, %d\n", &pmetausb->CROP_POS_F3, msb2lsb(&pmetausb->CROP_POS_F3) >> 16, msb2lsb(&pmetausb->CROP_POS_F3) & 0xffff);                      //byte[156]
+    print_f(mlogPool, "METAU", mlog);
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F04: %d, %d\n", &pmetausb->CROP_POS_F4, msb2lsb(&pmetausb->CROP_POS_F4) >> 16, msb2lsb(&pmetausb->CROP_POS_F4) & 0xffff);                      //byte[160]
+    print_f(mlogPool, "METAU", mlog);
+    
     sprintf_f(mlog, "(0x%.8x) EPOINT_RESERVE1      \n", pmetausb->EPOINT_RESERVE1); 
     print_f(mlogPool, "METAU", mlog);
 
@@ -2563,7 +2569,7 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
     sprintf_f(mlog, "(0x%.8x) MPIONT_LEN: %d      \n", &pmetausb->MPIONT_LEN, pmetausb->MPIONT_LEN); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) EXTRA_POINT      \n", pmetausb->EXTRA_POINT);
+    sprintf_f(mlog, "(0x%.8x) EXTRA_POINT[4]: 0x%.2x, 0x%.2x, 0x%.2x, 0x%.2x  \n", pmetausb->EXTRA_POINT, pmetausb->EXTRA_POINT[0], pmetausb->EXTRA_POINT[1], pmetausb->EXTRA_POINT[2], pmetausb->EXTRA_POINT[3]);
     print_f(mlogPool, "METAU", mlog);
 
 
@@ -40388,7 +40394,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 #endif
                                 
-                                if ((dlen > 0) && (dlen > maxsz) || (dlen == 0)) {
+                                if (((dlen > 0) && (dlen > maxsz)) || (dlen == 0)) {
                                     //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
                                     if (ins == 3) {
                                         pubffcd[ins]->ubindex |= 0x400;
@@ -40410,7 +40416,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     write(outfd[ins], indexfo, 2);
                                     #else
 
-                                    memcpy(exptbuff, addrs, lens);    
+                                    //memcpy(exptbuff, addrs, lens);    
                                     if (ins == 3) {
                                         
                                         ptscaninfoduo->ASP_MAGIC_ASPC[0] = indexfo[0];
@@ -40425,11 +40431,17 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         memset(addrc, 0, len);
 
-                                        val = ptscaninfoduo->ASP_MAGIC_ASPC - ptscaninfoduo->EXTRA_POINT;
+                                        val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
+                                        
+                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
+                                        print_f(&mrs->plog, "fs145", mrs->log);
+                                        
                                         memcpy(addrc, ptscaninfoduo, val);
+                                        //shmem_dump(addrc, val);
                                         addrc += val;
 
                                         memcpy(addrc, addrs, lens);
+                                        //shmem_dump(addrs, lens);
 
                                         if ((val + lens) > len) {
                                             sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 1\n", val, lens, len);                                
@@ -40456,11 +40468,17 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         memset(addrc, 0, len);
 
-                                        val = ptscaninfoduo->ASP_MAGIC_ASPC - ptscaninfoduo->EXTRA_POINT;
-                                        memcpy(addrc, ptscaninfoduo, val);
+                                        val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
+
+                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
+                                        print_f(&mrs->plog, "fs145", mrs->log);
+
+                                        memcpy(addrc, ptscaninfo, val);
+                                        //shmem_dump(addrc, val);
                                         addrc += val;
 
                                         memcpy(addrc, addrs, lens);
+                                        //shmem_dump(addrs, lens);
 
                                         if ((val + lens) > len) {
                                             sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 2\n", val, lens, len);                                
@@ -41615,6 +41633,7 @@ static int p2(struct procRes_s *rs)
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaData_s *pmeta;
     CFLOAT thrput, fltime;
+    struct aspMetaDataviaUSB_s *pusbmeta=0;
     
     pmeta = rs->pmetain;
 
@@ -43197,7 +43216,39 @@ static int p2(struct procRes_s *rs)
                 print_f(rs->plogs, "P2", rs->logs);
 
                 //usleep(500000);
-                sleep(10);
+                //sleep(10);
+                len = ring_buf_cons(rs->pcmdTx, &addr);
+                if (len >= 0) {
+                    sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    shmem_dump(addr, sizeof(struct aspMetaDataviaUSB_s));
+                
+                    pusbmeta = aspMemalloc(len, 2);
+
+                    if (pusbmeta) {
+                        memset(pusbmeta, 0, len);
+                        memcpy(pusbmeta, addr, len);  
+                        
+                        if ((pusbmeta->ASP_MAGIC_ASPC[0] == finfo[0]) && 
+                             (pusbmeta->ASP_MAGIC_ASPC[1] == finfo[1])) {
+
+                             totsz = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
+                             totsz += sizeof(struct aspMetaDataviaUSB_s);
+
+                             shmem_dump(addr, totsz);
+                             
+                        } else {
+                            sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
+                            print_f(rs->plogs, "P2", rs->logs);
+                        }
+                        //dbgMetaUsb(pusbmeta);
+                    } else {
+                        sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
+                        print_f(rs->plogs, "P2", rs->logs);
+                    }
+                
+                }
                 
                 rs_ipc_put(rs, "O", 1);
                 rs_ipc_put(rs, finfo, 2);
@@ -43239,6 +43290,7 @@ static int p3(struct procRes_s *rs)
     uint32_t fformat=0;
     struct aspMetaData_s *pmetaduo;
     CFLOAT thrput, fltime;
+    struct aspMetaDataviaUSB_s *pusbmeta=0;
 
     prctl(PR_SET_NAME, "msp-p3");
     //sprintf(argv[0], "msp-p3-spi");
@@ -43698,11 +43750,41 @@ static int p3(struct procRes_s *rs)
 
                 ret = rs_ipc_get(rs, finfo, 2);
                 
-                sprintf_f(rs->logs, "get finfo: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
+                sprintf_f(rs->logs, "get info: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
                 print_f(rs->plogs, "P3", rs->logs);
 
-                sleep(10);
+                //sleep(10);
+                len = ring_buf_cons(rs->pcmdTx, &addr);
+                if (len >= 0) {
+                    sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
+                    print_f(rs->plogs, "P3", rs->logs);
                 
+                    pusbmeta = aspMemalloc(len, 3);
+
+                    if (pusbmeta) {
+                        memset(pusbmeta, 0, len);
+                        memcpy(pusbmeta, addr, len);  
+
+                        if ((pusbmeta->ASP_MAGIC_ASPC[0] == finfo[0]) && 
+                             (pusbmeta->ASP_MAGIC_ASPC[1] == finfo[1])) {
+
+                             totsz = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
+                             totsz += sizeof(struct aspMetaDataviaUSB_s);
+
+                             shmem_dump(addr, totsz);
+                             
+                        } else {
+                            sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
+                            print_f(rs->plogs, "P3", rs->logs);
+                        }
+                        //dbgMetaUsb(pusbmeta);
+                    } else {
+                        sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
+                        print_f(rs->plogs, "P3", rs->logs);
+                    }
+                
+                }
+
                 rs_ipc_put(rs, "O", 1);
                 rs_ipc_put(rs, finfo, 2);
             }
@@ -43712,6 +43794,8 @@ static int p3(struct procRes_s *rs)
             }
 
             //dbgShowTimeStamp("P3_END", 6);
+
+            aspMemClear(aspMemAsign, asptotMalloc, 3);
 
         }
     }
@@ -63082,8 +63166,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     csw[11] = waitCylen & 0xff;
                     csw[12] = 0;
                 } else {
-                    if (pagerst > 1) {
-                        csw[11] = pagerst - 1;
+                    if (pagerst > 0) {
+                        csw[11] = pagerst;
                         csw[12] = 0;
                     } else {
                         if (distCylcnt > maxCylcnt) {
@@ -63236,8 +63320,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     csw[11] = waitCylen & 0xff;
                     csw[12] = 0;
                 } else {
-                    if (pagerst > 1) {
-                        csw[11] = pagerst - 1;
+                    if (pagerst > 0) {
+                        csw[11] = pagerst;
                         csw[12] = 0;
                     } else {
                         if (distCylcnt > maxCylcnt) {
