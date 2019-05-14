@@ -31,8 +31,8 @@
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
-static char mver[] = "MSP Version v0.1.2.rc";
-static char gitcommit[] = "2019-04-30 14:25:52 9e0332c";
+static char mver[] = "MSP Version v0.1.2";
+static char gitcommit[] = "2019-05-06 16:53:22 f9f616d";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
@@ -43219,10 +43219,10 @@ static int p2(struct procRes_s *rs)
                 //sleep(10);
                 len = ring_buf_cons(rs->pcmdTx, &addr);
                 if (len >= 0) {
-                    sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
-                    print_f(rs->plogs, "P2", rs->logs);
+                    //sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
+                    //print_f(rs->plogs, "P2", rs->logs);
 
-                    shmem_dump(addr, sizeof(struct aspMetaDataviaUSB_s));
+                    //shmem_dump(addr, sizeof(struct aspMetaDataviaUSB_s));
                 
                     pusbmeta = aspMemalloc(len, 2);
 
@@ -43236,7 +43236,7 @@ static int p2(struct procRes_s *rs)
                              totsz = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
                              totsz += sizeof(struct aspMetaDataviaUSB_s);
 
-                             shmem_dump(addr, totsz);
+                             //shmem_dump(addr, totsz);
                              
                         } else {
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
@@ -43756,10 +43756,10 @@ static int p3(struct procRes_s *rs)
                 //sleep(10);
                 len = ring_buf_cons(rs->pcmdTx, &addr);
                 if (len >= 0) {
-                    sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
-                    print_f(rs->plogs, "P3", rs->logs);
+                    //sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
+                    //print_f(rs->plogs, "P3", rs->logs);
                 
-                    pusbmeta = aspMemalloc(len, 3);
+                    //pusbmeta = aspMemalloc(len, 3);
 
                     if (pusbmeta) {
                         memset(pusbmeta, 0, len);
@@ -43771,7 +43771,7 @@ static int p3(struct procRes_s *rs)
                              totsz = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
                              totsz += sizeof(struct aspMetaDataviaUSB_s);
 
-                             shmem_dump(addr, totsz);
+                             //shmem_dump(addr, totsz);
                              
                         } else {
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
@@ -53770,6 +53770,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         case 'r':
             opc = OP_Multi_DUPLEX;
             dat = OPSUB_USB_Scan;
+            
+            sprintf_f(rs->logs, "(OP_Multi_DUPLEX) target opc: 0x%.2x 0x%.2x get cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", opc, dat, dcbwopc->opcType, dcbwopc->opcOpcode, dcbwopc->opcSubOPCode);
+            print_f(rs->plogs, sp, rs->logs);
+            
             cmdchr = cmdMtx[6][1];
             break;
         /* stop loop procedure */
@@ -53796,6 +53800,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         case 'k':
             opc = OP_Multi_Single;
             dat = OPSUB_USB_Scan;
+            
+            sprintf_f(rs->logs, "(OP_Multi_Single) target opc: 0x%.2x 0x%.2x get cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", opc, dat, dcbwopc->opcType, dcbwopc->opcOpcode, dcbwopc->opcSubOPCode);
+            print_f(rs->plogs, sp, rs->logs);
+
             cmdchr = cmdMtx[13][1];
             break;
         case 'o':
@@ -59461,7 +59469,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     continue;
                                 }
                                 else if ((opc == 0x04) && (dat == 0x85)) {
-                                
+
+                                    iubs->opinfo = opc << 8 | dat;
+                                    memcpy(iubsBuff, ptrecv, 31);
+                                    
                                     puscur = 0;
                                     pinfcur = 0;
 
@@ -59483,7 +59494,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     break;
                                 }
                                 else if ((opc == 0x05) && (dat == 0x85)) {
-                                
+
+                                    iubs->opinfo = opc << 8 | dat;
+                                    memcpy(iubsBuff, ptrecv, 31);
+                                    
                                     puscur = 0;
                                     pinfcur = 0;
                                     
@@ -59503,6 +59517,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     break;
                                 }
                                 else if ((opc == 0x09) && (dat == 0x85)) {
+
+                                    iubs->opinfo = opc << 8 | dat;
+                                    memcpy(iubsBuff, ptrecv, 31);
+                                    
                                     puscur = 0;
                                     pinfcur = 0;
 
@@ -59522,6 +59540,33 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     break;
                                 }
                                 else if ((opc == 0x0a) && (dat == 0x85)) {
+
+                                    iubs->opinfo = opc << 8 | dat;
+                                    memcpy(iubsBuff, ptrecv, 31);
+                                    
+                                    puscur = 0;
+                                    pinfcur = 0;
+                                    
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
+                                    }
+
+                                    chq = 'n';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    break;
+                                }
+                                else if ((opc == 0x0e) && (dat == 0x85)) {
+
+                                    iubs->opinfo = opc << 8 | dat;
+                                    memcpy(iubsBuff, ptrecv, 31);
+                                    
                                     puscur = 0;
                                     pinfcur = 0;
                                     
@@ -59893,7 +59938,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 acusz = 0;
                                 break;
                             }
-                            else if ((opc == 0x0a) && (dat == 0x85)) {
+                            else if (((opc == 0x0a) || (opc == 0x0e)) && (dat == 0x85)) {
                                 if (!puscur) {
                                     puscur = pushost;    
                                     pinfcur = pinfushost;
@@ -60020,7 +60065,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     /* should't be here */
                                 }
                 
-                                if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                                if ((puimGet) && ((opc == 0x05) || (opc == 0x0a) || (opc == 0x0e))) {
                                     if ((puimGet->uimIdex & 0x400) == 0) {
                                                 puscur = pushost;
                                                 pinfcur = pinfushost;
@@ -60775,7 +60820,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         }
         
         if (usbentsTx == 1) { 
-            if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09))) { /* usbentsTx == 1*/
+            if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e))) { /* usbentsTx == 1*/
                 #if USB_HS_SAVE_RESULT_DV
                 fsave = find_save(ptfilepath, ptfileSave);
                 if (!fsave) {
@@ -60851,7 +60896,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 #endif
 
                                 if (puimGet) {
-                                    if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05))) {
+                                    if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e))) {
 
                                         sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex, puimGet->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
