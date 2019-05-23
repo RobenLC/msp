@@ -2479,7 +2479,7 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
     sprintf_f(mlog, "********************************************\n");
     print_f(mlogPool, "METAU", mlog);
     
-    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_ASPC: %c %c %c %c\n", pmetausb->ASP_MAGIC_ASPC, pmetausb->ASP_MAGIC_ASPC[0], pmetausb->ASP_MAGIC_ASPC[1], 
+    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_ASPC: 0x%.2x 0x%.2x 0x%.2x 0x%.2x\n", pmetausb->ASP_MAGIC_ASPC, pmetausb->ASP_MAGIC_ASPC[0], pmetausb->ASP_MAGIC_ASPC[1], 
                   pmetausb->ASP_MAGIC_ASPC[2], pmetausb->ASP_MAGIC_ASPC[3]);
     print_f(mlogPool, "METAU", mlog);
 
@@ -39991,6 +39991,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             ring_buf_init(ringbf[ins]);
                             ring_buf_init(ringbf[ins+1]);
                             ring_buf_init(&mrs->cmdTx);
+                            ring_buf_init(&mrs->dataRx);
                         }
                         else if (pllcmd[ins] == 'b') {
                             write(outfd[ins], &pllcmd[ins], 1);
@@ -40433,24 +40434,26 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
                                         
-                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
+                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d duo\n", val);                                
                                         print_f(&mrs->plog, "fs145", mrs->log);
                                         
                                         memcpy(addrc, ptscaninfoduo, val);
                                         //shmem_dump(addrc, val);
-                                        addrc += val;
+                                        //addrc += val;
 
-                                        memcpy(addrc, addrs, lens);
+                                        memcpy(addrc + val, addrs, lens);
                                         //shmem_dump(addrs, lens);
 
+                                        //shmem_dump(addrc, val+lens);
+                                        
                                         if ((val + lens) > len) {
-                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 1\n", val, lens, len);                                
+                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 2\n", val, lens, len);                                
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                         }
 
                                         ring_buf_prod(&mrs->cmdTx);
                                         
-                                        sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d (%d) - 1\n", val, lens, len);
+                                        sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x - 2\n", val, lens, len, indexfo[0], indexfo[1]);
                                         print_f(&mrs->plog, "fs145", mrs->log);
                                         
                                         mrs_ipc_put(mrs, "o", 1, 2);
@@ -40460,10 +40463,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         ptscaninfo->ASP_MAGIC_ASPC[1] = indexfo[1];
                                         ptscaninfo->MPIONT_LEN = lens;
 
-                                        len = ring_buf_get(&mrs->cmdTx, &addrc);
+                                        len = ring_buf_get(&mrs->dataRx, &addrc);
                                         while (len <= 0) {
                                             usleep(100000);
-                                            len = ring_buf_get(&mrs->cmdTx, &addrc);
+                                            len = ring_buf_get(&mrs->dataRx, &addrc);
                                         }
 
                                         memset(addrc, 0, len);
@@ -40475,19 +40478,21 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         memcpy(addrc, ptscaninfo, val);
                                         //shmem_dump(addrc, val);
-                                        addrc += val;
+                                        //addrc += val;
 
-                                        memcpy(addrc, addrs, lens);
+                                        memcpy(addrc+val, addrs, lens);
                                         //shmem_dump(addrs, lens);
+                                        
+                                        //shmem_dump(addrc, val+lens);
 
                                         if ((val + lens) > len) {
-                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 2\n", val, lens, len);                                
+                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 1\n", val, lens, len);                                
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                         }
 
-                                        ring_buf_prod(&mrs->cmdTx);
+                                        ring_buf_prod(&mrs->dataRx);
                                         
-                                        sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d (%d) - 2\n", val, lens, len);
+                                        sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x - 1\n", val, lens, len, indexfo[0], indexfo[1]);
                                         print_f(&mrs->plog, "fs145", mrs->log);
                                         
                                         mrs_ipc_put(mrs, "o", 1, 1);
@@ -43217,7 +43222,7 @@ static int p2(struct procRes_s *rs)
 
                 //usleep(500000);
                 //sleep(10);
-                len = ring_buf_cons(rs->pcmdTx, &addr);
+                len = ring_buf_cons(rs->pdataRx, &addr);
                 if (len >= 0) {
                     //sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
                     //print_f(rs->plogs, "P2", rs->logs);
@@ -43242,7 +43247,8 @@ static int p2(struct procRes_s *rs)
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
                             print_f(rs->plogs, "P2", rs->logs);
                         }
-                        //dbgMetaUsb(pusbmeta);
+                        
+                        dbgMetaUsb(pusbmeta);
                     } else {
                         sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
                         print_f(rs->plogs, "P2", rs->logs);
@@ -43759,7 +43765,7 @@ static int p3(struct procRes_s *rs)
                     //sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
                     //print_f(rs->plogs, "P3", rs->logs);
                 
-                    //pusbmeta = aspMemalloc(len, 3);
+                    pusbmeta = aspMemalloc(len, 3);
 
                     if (pusbmeta) {
                         memset(pusbmeta, 0, len);
@@ -43777,7 +43783,7 @@ static int p3(struct procRes_s *rs)
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
                             print_f(rs->plogs, "P3", rs->logs);
                         }
-                        //dbgMetaUsb(pusbmeta);
+                        dbgMetaUsb(pusbmeta);
                     } else {
                         sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
                         print_f(rs->plogs, "P3", rs->logs);
@@ -48852,7 +48858,7 @@ static int p6(struct procRes_s *rs)
                             ix ++;
                         }
                     }
-#endif
+#endif  // #if 1//CROP_MIGRATE_TO_APP
                 }
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
@@ -48950,7 +48956,7 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-#endif
+#endif // #if !CROP_MIGRATE_TO_APP
 
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
@@ -49000,7 +49006,7 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-#endif
+#endif // #if !CROP_MIGRATE_TO_APP
 
             msync(pmassduo, sizeof(struct aspMetaMass_s), MS_SYNC);
 
@@ -49534,7 +49540,7 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
             }          
-#endif
+#endif // #if !CROP_MIGRATE_TO_APP
 
             #if !MOVE_MUTX_TO_FRONT_P6
             ch = 0; 
@@ -50081,7 +50087,7 @@ static int p6(struct procRes_s *rs)
                     getRectPoint(pcp36);
                 }
             }
-#endif
+#endif // #if !CROP_MIGRATE_TO_APP
 
 #if 0 /* move behind the cropping stage 2 complete */
             for (i = 0; i < 4; i++) { /* send the cropping result to APP */
@@ -50607,7 +50613,7 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-#endif
+#endif  // #if !CROP_MIGRATE_TO_APP
 
 #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
@@ -50655,7 +50661,7 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-#endif
+#endif  //#if !CROP_MIGRATE_TO_APP
 
             #if !MOVE_MUTX_TO_FRONT_P6
             ch = 0;
