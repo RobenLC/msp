@@ -1313,6 +1313,12 @@ struct aspCropExtra_s{
     CFLOAT crpCropRt[2];
 };
 
+struct aspDoCropCalcu{
+    int acrpDPI;
+    struct aspCrop36_s       *acrp36;
+    struct aspCropExtra_s   *acrpex;
+};
+
 struct bitmapHeader_s {
     char aspbmpMagic[4];
     int    aspbhSize;
@@ -2470,6 +2476,7 @@ static dbgBitmapHeader(struct bitmapHeader_s *ph, int len)
 
 static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb) 
 {
+#define VERB_INFO_USB (0)
     char mlog[256];
     char *pch=0;
     int ix=0;
@@ -2487,10 +2494,12 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
                    pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8)); 
     print_f(mlogPool, "METAU", mlog);
 
+    #if VERB_INFO_USB
     for (ix=0; ix < 5; ix++) {
     sprintf_f(mlog, "(0x%.8x) WIDTH_RESERVE[%d]: 0x%.2x    \n",&(pmetausb->WIDTH_RESERVE[ix]), ix, pmetausb->WIDTH_RESERVE[ix]); 
     print_f(mlogPool, "METAU", mlog);
     }
+    #endif
 
     sprintf_f(mlog, "(0x%.8x) IMG_WIDTH: 0x%.2x 0x%.2x (%d)   \n",&(pmetausb->IMG_WIDTH), pmetausb->IMG_WIDTH[0], pmetausb->IMG_WIDTH[1], 
                    pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8)); 
@@ -2502,10 +2511,12 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
     sprintf_f(mlog, "(0x%.8x) PRI_O_SEC: 0x%.2x    \n",&(pmetausb->PRI_O_SEC), pmetausb->PRI_O_SEC); 
     print_f(mlogPool, "METAU", mlog);
 
+    #if VERB_INFO_USB
     for (ix=0; ix < 48; ix++) {
     sprintf_f(mlog, "(0x%.8x) MCROP_RESERVE[%d]: 0x%.2x    \n",&(pmetausb->MCROP_RESERVE[ix]), ix, pmetausb->MCROP_RESERVE[ix]); 
     print_f(mlogPool, "METAU", mlog);
     }
+    #endif
 
     sprintf_f(mlog, "(0x%.8x) CROP_POSX_01: %d, %d\n", (&pmetausb->CROP_POS_1), msb2lsb(&pmetausb->CROP_POS_1) >> 16, msb2lsb(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
     print_f(mlogPool, "METAU", mlog);
@@ -7712,6 +7723,409 @@ static int topPositive(struct aspCropExtra_s *pcpex)
     memcpy(pcpex->crpCropLf, lfsf, sizeof(CFLOAT)*2);
     memcpy(pcpex->crpCropDn, dnsf, sizeof(CFLOAT)*2);
     memcpy(pcpex->crpCropRt, rtsf, sizeof(CFLOAT)*2);
+
+    return 0;
+}
+
+static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, struct procRes_s *rs) 
+{
+    int aidxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
+    int aidxR[] = {5, 8, 10, 12, 14, 16, 18, 3};    
+
+    uint32_t cord=0;
+    int len=0, val=0, hval=0, ret=0, cnt=0;
+    int ix=0, xpn=0, ipx=0, ipn=0, cls=0, cof=0, idx=0;
+    int lngap=0, lnstart=0, lnrec=0, lnlength=0;
+    int masUsed=0, masRecd=0, masStart=0, cy=0, gap=0, cxm=0, cxn=0, linecnt=0;
+    int adpi=0;
+    char infotag[2]={0};
+    struct aspMetaDataviaUSB_s *pscanInfo=0;
+    struct intMbs_s *pt=0;
+    struct aspCropExtra_s *pextra=0;
+    struct aspCrop36_s *ppt36 = 0;
+    char *ptext=0, *pch=0;
+    CFLOAT mostlft[2], mostrgt[2], lftgrp[10][2], rgtgrp[10][2], fhi=0.0, fwh=0.0, fwe=0.0;
+    CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
+    unsigned short *shtbuf=0;
+
+    pextra = crpdo->acrpex;
+    ppt36 = crpdo->acrp36;
+    pscanInfo = (struct aspMetaDataviaUSB_s *)indat;
+    len = sizeof(struct aspMetaDataviaUSB_s);
+    ptext = indat + len;
+    val = (int)pscanInfo->MPIONT_LEN;
+    val += len;
+    if (val > maxs) {
+        return -1;
+    }
+
+    adpi = crpdo->acrpDPI;
+    
+    pt = &(pscanInfo->CROP_POS_1);
+    for (ix = 1; ix < (CROP_MAX_NUM_META+1); ix++) {
+    
+        cord = msb2lsb(pt);
+        val = cord >> 16;
+        if (adpi < 300) {
+            val = (val * adpi) / 300;
+        }
+        
+        hval = cord & 0xffff;
+
+        ppt36->crp36Pots[ix*2+0] = val;
+        ppt36->crp36Pots[ix*2+1] = hval;
+                            
+        pt++;
+    }
+
+    xpn = 0;
+    ppt36->crp36Pots[xpn*2+0] = 100;
+    ppt36->crp36Pots[xpn*2+1] = 0;
+
+    xpn = CROP_MAX_NUM_META+1;
+    ppt36->crp36Pots[xpn*2+0] = 1100;
+    ppt36->crp36Pots[xpn*2+1] = 0;
+
+    /* first stage of cropping algorithm */            
+    ret = aspCrp36GetBoundry(ppt36, aidxL, aidxR, CROP_MAX_NUM_META+2);
+    #if CROP_CALCU_PROCESS
+    sprintf_f(rs->logs, "crop36 get boundry, ret = %d\n", ret);
+    print_f(rs->plogs, "DoC", rs->logs);
+    #endif
+
+    ret = 0;
+    ret |= calcuCrossUpAph(ppt36);
+    #if CROP_CALCU_PROCESS
+    sprintf_f(rs->logs, "crop36 cross up ret = %d\n", ret);
+    print_f(rs->plogs, "DoC", rs->logs);
+    #endif
+
+    ret |= calcuCrossDnAph(ppt36);
+    #if CROP_CALCU_PROCESS
+    sprintf_f(rs->logs, "crop36 cross down ret = %d\n", ret);
+    print_f(rs->plogs, "DoC", rs->logs);
+    #endif
+
+    if (ret) {
+        getRectPoint(ppt36);
+    } else {
+        ret = calcuMostRtLf(ppt36);
+        if (ret == 0) {
+            ret = calcuCrossUpLine(ppt36);
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, "crop36 cross up line ret = %d\n", ret);
+            print_f(rs->plogs, "DoC", rs->logs);
+            #endif
+
+            ret = calcuCrossDnLine(ppt36);
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, "crop36 cross down line ret = %d\n", ret);
+            print_f(rs->plogs, "DoC", rs->logs);
+            #endif
+
+            ret = getCrop36RotatePoints(ppt36);
+            #if CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, "crop36 get rotate points, ret = %d\n", ret);
+            print_f(rs->plogs, "DoC", rs->logs);
+            #endif
+        } else {
+            getRectPoint(ppt36);
+        }
+    }
+
+    ipx = 0;
+    ipn = 6;
+    pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipn = 5;
+    pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+
+    ipx = 1;
+    ipn = 7;
+    pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipn = 8;
+    pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+
+    ipx = 2;
+    ipn = 9;
+    pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipn = 10;
+    pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+
+    cof = ipx + 1;
+
+    ret = 0;
+
+    lngap = pscanInfo->YLine_Gap;
+    lnstart = pscanInfo->Start_YLine_No;
+
+    pch = (char *)&(pscanInfo->YLines_Recorded);
+    val = pch[0] << 8 | pch[1];
+    lnrec = val;
+    
+    len = (int)pscanInfo->MPIONT_LEN;
+    pch = &pscanInfo->EXTRA_POINT[2];
+    val = pch[0] << 8 | pch[1];
+    lnlength = val;
+    if (val != (len - 4)) {
+        sprintf_f(rs->logs, "Error!!! mass len: %d not match expect len: %d - 4\n", val, len); 
+        print_f(rs->plogs, "DoC", rs->logs);
+        return -2;
+    }
+    
+    masUsed = lnlength;
+    masStart = lnstart;
+    masRecd = lnrec;
+    
+    sprintf_f(rs->logs, "wait meta mass (used:%d, start:%d lineRec:%d) %d\n", masUsed, masStart, masRecd, cnt); 
+    print_f(rs->plogs, "DoC", rs->logs);
+
+    msync(ptext, masUsed, MS_SYNC);
+    shtbuf = (unsigned short *)ptext;
+
+    cy = masStart;
+    gap = lngap;
+    
+    linecnt=0;
+    
+    for (ix = 0; ix < masRecd; ix++) {
+        cy += gap;
+
+        cxm = *shtbuf;
+        shtbuf++;
+        cxn = *shtbuf;
+        shtbuf++;              
+
+        if (adpi < 300) {
+            cxm = (cxm * adpi) / 300;
+            cxn = (cxn * adpi) / 300;
+        }
+
+        ipx = linecnt + cof;
+        
+        pextra->crpexLfPots[ipx*2+0] = cxm;
+        pextra->crpexLfPots[ipx*2+1] = cy;
+
+        pextra->crpexRtPots[ipx*2+0] = cxn;
+        pextra->crpexRtPots[ipx*2+1] = cy;
+
+        linecnt ++;
+    }
+
+    ipx = linecnt + cof;
+    cls =  masRecd + cof - 1;
+
+    ipn = 11;
+    pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipn = 12;
+    pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipx += 1;
+
+    ipn = 13;
+    pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipn = 14;
+    pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipx += 1;
+
+    ipn = 15;
+    pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipn = 16;
+    pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipx += 1;
+
+    ipn = 17;
+    pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipn = 18;
+    pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipx += 1;
+
+    ipn = 2;
+    pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipn = 3;
+    pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
+    pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
+    ipx += 1;
+
+    pextra->crpexSize = ipx*2;
+
+    msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
+
+    sprintf_f(rs->logs, "total extra points size: %d \n", ipx);
+    print_f(rs->plogs, "DoC", rs->logs);
+    
+    #if 0//LOG_P6_CROP_EN
+    for (ix = 0; ix < ipx; ix++) {
+        sprintf_f(rs->logs, "unsort pt %d. L%.1lf, %.1lf R%.1lf, %.1lf \n", ix
+                              , pextra->crpexLfPots[ix*2+0], pextra->crpexLfPots[ix*2+1], pextra->crpexRtPots[ix*2+0], pextra->crpexRtPots[ix*2+1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
+    #endif
+
+    aspSortD(pextra->crpexLfPots, ipx); /* max sort = 1024 */
+    aspSortD(pextra->crpexRtPots, ipx); /* max sort = 1024 */
+
+
+    ret = getRotateP1(ppt36, mostlft);
+    if (!ret) {
+        #if LOG_P6_CROP_EN
+        sprintf_f(rs->logs, "get most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+        #endif
+    }
+
+    fwh = mostlft[1] - (gap * 2);
+    if (fwh < 0.0) {
+        fwh = 0.0;
+    }
+
+    ret = getRotateP3(ppt36, mostrgt);
+    if (!ret) {
+        #if LOG_P6_CROP_EN
+        sprintf_f(rs->logs, "get most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+        #endif
+    }
+
+    fwe = mostrgt[1] - (gap * 2);
+    if (fwe < 0.0) {
+        fwe = 0.0;
+    }
+
+    cnt = 0; 
+    idx = 0;
+    for (ix = 0; ix < ipx; ix++) {
+
+        #if LOG_P6_CROP_EN
+        sprintf_f(rs->logs, "pt %d. L%.1lf, %.1lf R%.1lf, %.1lf \n", ix
+                              , pextra->crpexLfPots[ix*2+0], pextra->crpexLfPots[ix*2+1], pextra->crpexRtPots[ix*2+0], pextra->crpexRtPots[ix*2+1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+        #endif
+
+        hval = (int)pextra->crpexLfPots[ix*2+1];
+        cxm = (int)pextra->crpexLfPots[ix*2+0];
+        cxn = (int)pextra->crpexRtPots[ix*2+0];
+
+        fhi = (CFLOAT)hval;
+
+        if (cnt < 4) {
+            if (fhi > fwh) {
+                lftgrp[cnt][0] = cxm;
+                lftgrp[cnt][1] = fhi;
+                cnt ++;
+            }
+        }
+
+        if (idx < 4) {
+            if (fhi > fwe) {
+                rgtgrp[idx][0] = cxn;
+                rgtgrp[idx][1] = fhi;
+                idx ++;
+            }
+        }
+    }
+
+    /* fix most left and most right shift */  
+    fhi = 0.0; fwh = 0.0; fwe = 0.0;
+    for (ix=0; ix < 4; ix++) {
+
+        #if LOG_P6_CROP_EN
+        sprintf_f(rs->logs, "left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+        #endif
+
+        fhi += lftgrp[ix][0] - mostlft[0];
+        fwh += lftgrp[ix][0];
+    }
+
+    fwe = fhi / 4.0;
+    if (fwe > 15.0) {
+        mostlft[0] = fwh / 4.0;
+        setRotateP1(ppt36, mostlft);
+
+        #if 1//LOG_P6_CROP_EN
+        sprintf_f(rs->logs, "correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+        #endif
+    }
+
+    fhi = 0.0; fwh = 0.0; fwe = 0.0;
+    for (ix=0; ix < 4; ix++) {
+
+        #if LOG_P6_CROP_EN
+        sprintf_f(rs->logs, "right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+        #endif
+
+        fhi += mostrgt[0] - rgtgrp[ix][0];
+        fwh += rgtgrp[ix][0];
+    }
+
+    fwe = fhi / 4.0;
+    if (fwe > 15.0) {
+        mostrgt[0] = fwh / 4.0;
+        setRotateP3(ppt36, mostrgt);
+
+        #if 1//LOG_P6_CROP_EN
+        sprintf_f(rs->logs, "correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+        #endif
+    }
+
+    /* second stage of cropping algorithm */
+    msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
+    findLine(ppt36, pextra);
+
+    msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
+    ret = findUniPoints(ppt36, pextra);
+    if (!ret) {
+        msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
+        calcuLine(pextra);
+
+        msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
+        findBestLine(ppt36, pextra);
+    } else {
+        getRectPoint(ppt36);
+    }
+
+
+    msync(ppt36, sizeof(struct aspCrop36_s), MS_SYNC);
+    ret = getRotateP1(ppt36, rotlf);
+    if (!ret) {
+        sprintf_f(rs->logs, "get rotateP1 (%lf, %lf) \n", rotlf[0], rotlf[1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
+
+    ret = getRotateP2(ppt36, rotup);
+    if (!ret) {
+        sprintf_f(rs->logs, "get rotateP2 (%lf, %lf) \n", rotup[0], rotup[1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
+
+    ret = getRotateP3(ppt36, rotrt);
+    if (!ret) {
+        sprintf_f(rs->logs, "get rotateP3 (%lf, %lf) \n", rotrt[0], rotrt[1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
+
+    ret = getRotateP4(ppt36, rotdn);
+    if (!ret) {
+        sprintf_f(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
 
     return 0;
 }
@@ -41630,7 +42044,7 @@ static int p2(struct procRes_s *rs)
     int bitset, totsz=0;
     uint16_t send16, recv16;
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0, maxLen=0;
-    uint32_t fformat=0;
+    uint32_t fformat=0, tmp=0;
     struct info16Bit_s *p=0, *c=0;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
@@ -41639,7 +42053,9 @@ static int p2(struct procRes_s *rs)
     struct aspMetaData_s *pmeta;
     CFLOAT thrput, fltime;
     struct aspMetaDataviaUSB_s *pusbmeta=0;
-    
+    struct aspCrop36_s *pcrp36=0;
+    struct aspCropExtra_s *pcrpex=0;
+    struct aspDoCropCalcu *pcrpdo=0;
     pmeta = rs->pmetain;
 
     char ch, str[128], rx8[4], tx8[4], finfo[2];
@@ -43242,13 +43658,61 @@ static int p2(struct procRes_s *rs)
                              totsz += sizeof(struct aspMetaDataviaUSB_s);
 
                              //shmem_dump(addr, totsz);
-                             
-                        } else {
+
+                             pcrpdo = aspMemalloc(sizeof(struct aspDoCropCalcu), 2);
+                             pcrpex = aspMemalloc(sizeof(struct aspCropExtra_s), 2); 
+                             pcrp36 = aspMemalloc(sizeof(struct aspCrop36_s), 2); 
+                             if ((pcrpdo) && (pcrpex) && (pcrp36)) {
+                                 memset(pcrpdo, 0, sizeof(struct aspDoCropCalcu));
+                                 memset(pcrpex, 0, sizeof(struct aspCropExtra_s));
+                                 memset(pcrp36, 0, sizeof(struct aspCrop36_s));
+                                 
+                                 pcrpdo->acrpex = pcrpex;
+                                 pcrpdo->acrp36 = pcrp36;
+                                 
+                                 sprintf_f(rs->logs, "crop memory allocate succeed size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
+                                 print_f(rs->plogs, "P2", rs->logs);
+                                 
+                                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                                 print_f(rs->plogs, "P2", rs->logs);
+                                 switch (tmp) {
+                                 case RESOLUTION_1200:
+                                     pcrpdo->acrpDPI = 1200;
+                                     break;
+                                 case RESOLUTION_600:
+                                     pcrpdo->acrpDPI = 600;
+                                     break;
+                                 case RESOLUTION_300:
+                                     pcrpdo->acrpDPI = 300;
+                                     break;
+                                 case RESOLUTION_200:
+                                     pcrpdo->acrpDPI = 200;
+                                     break;
+                                 case RESOLUTION_150:
+                                     pcrpdo->acrpDPI = 150;
+                                     break;
+                                 default:
+                                     pcrpdo->acrpDPI = 300;
+                                     break;
+                                 }
+
+                                 ret = doCropCalcu(pcrpdo, addr, len, rs);
+                                 
+                                 sprintf_f(rs->logs, "do crop ret: %d \n", ret);
+                                 print_f(rs->plogs, "P2", rs->logs);
+
+                             } else {
+                                 sprintf_f(rs->logs, "crop memory allocate failed!!! size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
+                                 print_f(rs->plogs, "P2", rs->logs);
+                             }
+                        }
+                        else {
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
                             print_f(rs->plogs, "P2", rs->logs);
                         }
                         
-                        dbgMetaUsb(pusbmeta);
+                        //dbgMetaUsb(pusbmeta);
                     } else {
                         sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
                         print_f(rs->plogs, "P2", rs->logs);
@@ -43293,10 +43757,13 @@ static int p3(struct procRes_s *rs)
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4], finfo[2];
     char *addr, *laddr;
-    uint32_t fformat=0;
+    uint32_t fformat=0, tmp=0;
     struct aspMetaData_s *pmetaduo;
     CFLOAT thrput, fltime;
     struct aspMetaDataviaUSB_s *pusbmeta=0;
+    struct aspCrop36_s *pcrp36=0;
+    struct aspCropExtra_s *pcrpex=0;
+    struct aspDoCropCalcu *pcrpdo=0;
 
     prctl(PR_SET_NAME, "msp-p3");
     //sprintf(argv[0], "msp-p3-spi");
@@ -43778,12 +44245,59 @@ static int p3(struct procRes_s *rs)
                              totsz += sizeof(struct aspMetaDataviaUSB_s);
 
                              //shmem_dump(addr, totsz);
-                             
+
+                             pcrpdo = aspMemalloc(sizeof(struct aspDoCropCalcu), 3);
+                             pcrpex = aspMemalloc(sizeof(struct aspCropExtra_s), 3); 
+                             pcrp36 = aspMemalloc(sizeof(struct aspCrop36_s), 3); 
+                             if ((pcrpdo) && (pcrpex) && (pcrp36)) {
+                                 memset(pcrpdo, 0, sizeof(struct aspDoCropCalcu));
+                                 memset(pcrpex, 0, sizeof(struct aspCropExtra_s));
+                                 memset(pcrp36, 0, sizeof(struct aspCrop36_s));
+                                 
+                                 pcrpdo->acrpex = pcrpex;
+                                 pcrpdo->acrp36 = pcrp36;
+                                 
+                                 sprintf_f(rs->logs, "crop memory allocate succeed size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
+                                 print_f(rs->plogs, "P3", rs->logs);
+                                 
+                                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                                 print_f(rs->plogs, "P3", rs->logs);
+                                 switch (tmp) {
+                                 case RESOLUTION_1200:
+                                     pcrpdo->acrpDPI = 1200;
+                                     break;
+                                 case RESOLUTION_600:
+                                     pcrpdo->acrpDPI = 600;
+                                     break;
+                                 case RESOLUTION_300:
+                                     pcrpdo->acrpDPI = 300;
+                                     break;
+                                 case RESOLUTION_200:
+                                     pcrpdo->acrpDPI = 200;
+                                     break;
+                                 case RESOLUTION_150:
+                                     pcrpdo->acrpDPI = 150;
+                                     break;
+                                 default:
+                                     pcrpdo->acrpDPI = 300;
+                                     break;
+                                 }
+
+                                 ret = doCropCalcu(pcrpdo, addr, len, rs);
+                                 
+                                 sprintf_f(rs->logs, "do crop ret: %d \n", ret);
+                                 print_f(rs->plogs, "P3", rs->logs);
+                             } else {
+                                 sprintf_f(rs->logs, "crop memory allocate failed!!! size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
+                                 print_f(rs->plogs, "P3", rs->logs);
+                             }
                         } else {
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
                             print_f(rs->plogs, "P3", rs->logs);
                         }
-                        dbgMetaUsb(pusbmeta);
+                        
+                        //dbgMetaUsb(pusbmeta);
                     } else {
                         sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
                         print_f(rs->plogs, "P3", rs->logs);
@@ -45878,6 +46392,8 @@ static int p6(struct procRes_s *rs)
     int cpn=0, cpx=0, cof=0, cls=0;
     struct aspCrop36_s *pcp36, *pcp36duo;
     struct aspCropExtra_s *pcpex, *pcpexduo;
+    struct aspDoCropCalcu *pcpdo=0, *pcpdoduo=0;
+
     CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
     CFLOAT mostlft[2], mostrgt[2], lftgrp[10][2], rgtgrp[10][2], fhi=0.0, fwh=0.0, fwe=0.0;
     CFLOAT selecPic = 0.0, selecBase = 100.0, selecRatio = 0.0, selecCur = 0, selecMax = 0;
@@ -53774,8 +54290,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             cmdchr = cmdMtx[5][1];
             break;
         case 'r':
-            opc = OP_Multi_DUPLEX;
-            dat = OPSUB_USB_Scan;
+            //opc = OP_Multi_DUPLEX;
+            //dat = OPSUB_USB_Scan;
+            
+            opc = dcbwopc->opcOpcode;
+            dat = dcbwopc->opcSubOPCode;
             
             sprintf_f(rs->logs, "(OP_Multi_DUPLEX) target opc: 0x%.2x 0x%.2x get cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", opc, dat, dcbwopc->opcType, dcbwopc->opcOpcode, dcbwopc->opcSubOPCode);
             print_f(rs->plogs, sp, rs->logs);
@@ -53804,8 +54323,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             cmdchr = cmdMtx[12][1];
             break;
         case 'k':
-            opc = OP_Multi_Single;
-            dat = OPSUB_USB_Scan;
+            //opc = OP_Multi_Single;
+            //dat = OPSUB_USB_Scan;
+
+            opc = dcbwopc->opcOpcode;
+            dat = dcbwopc->opcSubOPCode;
             
             sprintf_f(rs->logs, "(OP_Multi_Single) target opc: 0x%.2x 0x%.2x get cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", opc, dat, dcbwopc->opcType, dcbwopc->opcOpcode, dcbwopc->opcSubOPCode);
             print_f(rs->plogs, sp, rs->logs);
