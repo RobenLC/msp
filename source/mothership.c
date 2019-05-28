@@ -1461,6 +1461,7 @@ struct usbBuffLink_s{
     int ubmetasize;
     int ubcylcnt;
     int ubcswerr;
+    char *ubinfoaddr;
 };
 
 struct usbfileid_s{
@@ -8152,7 +8153,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
         getRectPoint(ppt36);
     }
 
-
+    #if LOG_P6_CROP_EN
     msync(ppt36, sizeof(struct aspCrop36_s), MS_SYNC);
     ret = getRotateP1(ppt36, rotlf);
     if (!ret) {
@@ -8177,6 +8178,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
         sprintf_f(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
         print_f(rs->plogs, "DoC", rs->logs);
     }
+    #endif
 
     return 0;
 }
@@ -39257,6 +39259,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     char latcmd[MAX_145_EVENT];
     char matcmd[MAX_145_EVENT];
     char minfo[12];
+    char cordbuf[16];
     char indexfo[2];
     char midxfo[2];
     char chindex[2];
@@ -39278,17 +39281,18 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
     int mindex=0, scnt=0, smax=0;
     uint32_t wfiaddr=0, gval=0, resltion=0;
 
-    struct usbBuffLink_s *pubffh=0, *pubffcd[4], *pubfft=0, *pubffm=0, *pubffo=0;
+    struct usbBuffLink_s *pubffh=0, *pubffcd[4], *pubfft=0, *pubffm=0, *pubffo=0, *pubffedt=0;
     struct usbBuff_s *curbf=0, *headbf=0, *tmpbf=0, *outbf=0;
 
     int prisec=0;
     struct sdFAT_s *pfat=0;
     struct aspConfig_s *pct=0;
     struct aspMetaDataviaUSB_s *ptscaninfo=0, *ptscaninfoduo=0;
+    struct aspMetaDataviaUSB_s *ptinfomod=0;
     int ix=0, iv=0;
     char *exptbuff=0;
 
-    exptbuff = aspMemalloc(32768, 10);
+    //exptbuff = aspMemalloc(32768, 10);
     
     pct = mrs->configTable;
 
@@ -39500,11 +39504,55 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         sprintf_f(mrs->log, "[GW] get ch from p2: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
                         print_f(&mrs->plog, "fs145", mrs->log);
 
-                        
                         mrs_ipc_get(mrs, minfo, 2, 1);
-                        
+
                         sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
                         print_f(&mrs->plog, "fs145", mrs->log);
+
+                        mindex = ((minfo[0] & 0x3f) << 5) | (minfo[1] & 0x1f);
+                        mindex = mindex & 0x3ff;
+
+                        pubffedt = pubffh;
+                        while (pubffedt) {
+                            sprintf_f(mrs->log, "    [CROP]  check 0x%.3x  get index: 0x%.3x \n", pubffedt->ubindex & 0x3ff, mindex);
+                            print_f(&mrs->plog, "fs145", mrs->log);
+                            if ((pubffedt->ubindex & 0x3ff) == mindex) {
+                                break;
+                            }
+                            pubffedt = pubffedt->ubnxt;
+                        }
+                        
+                        if (pubffedt) {
+                            ptinfomod = (struct aspMetaDataviaUSB_s *)pubffedt->ubinfoaddr;
+                        }
+
+                        if (ptinfomod) {
+                            addrc = (char *)&ptinfomod->CROP_POS_F1;
+
+                            ret = mrs_ipc_get(mrs, addrc, 16, 1);
+                            if (ret != 16) {
+                                sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                            }
+                            
+                            sprintf_f(mrs->log, "9 dump crop ch result: \n");
+                            print_f(&mrs->plog, "fs145", mrs->log);
+
+                            //shmem_dump(addrc, 16);
+
+                            //dbgMetaUsb(ptinfomod);
+                        } else {
+                            ret = mrs_ipc_get(mrs, cordbuf, 16, 1);
+                            if (ret != 16) {
+                                sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "[GW] Error!!! can't find scan info address, get cord: \n");
+                            print_f(&mrs->plog, "fs145", mrs->log);
+
+                            shmem_dump(cordbuf, 16);
+                        }
 
                         write(outfd[1], minfo, 2);
                         
@@ -39517,6 +39565,51 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         
                         sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
                         print_f(&mrs->plog, "fs145", mrs->log);
+
+                        mindex = ((minfo[0] & 0x3f) << 5) | (minfo[1] & 0x1f);
+                        mindex = mindex & 0x3ff;
+
+                        pubffedt = pubffh;
+                        while (pubffedt) {
+                            sprintf_f(mrs->log, "    [CROP]  check 0x%.3x  get index: 0x%.3x \n", pubffedt->ubindex & 0x3ff, mindex);
+                            print_f(&mrs->plog, "fs145", mrs->log);
+                            if ((pubffedt->ubindex & 0x3ff) == mindex) {
+                                break;
+                            }
+                            pubffedt = pubffedt->ubnxt;
+                        }
+                        
+                        if (pubffedt) {
+                            ptinfomod = (struct aspMetaDataviaUSB_s *)pubffedt->ubinfoaddr;
+                        }
+
+                        if (ptinfomod) {
+                            addrc = (char *)&ptinfomod->CROP_POS_F1;
+                            
+                            ret = mrs_ipc_get(mrs, addrc, 16, 2);
+                            if (ret != 16) {
+                                sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "10 dump crop ch result ret: %d \n", ret);
+                            print_f(&mrs->plog, "fs145", mrs->log);
+
+                            //shmem_dump(addrc, 16);
+
+                            //dbgMetaUsb(ptinfomod);
+                        } else {
+                            ret = mrs_ipc_get(mrs, cordbuf, 16, 2);
+                            if (ret != 16) {
+                                sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
+                                print_f(&mrs->plog, "fs145", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "[GW] Error!!! can't find scan info address, get cord ret: %d\n", ret);
+                            print_f(&mrs->plog, "fs145", mrs->log);
+
+                            shmem_dump(cordbuf, 16);
+                        }
 
                         write(outfd[3], minfo, 2);
 
@@ -40776,6 +40869,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                 addrd = addrs + (len - mlen);
 
+                                pubffcd[ins]->ubinfoaddr = addrd;
+                                
                                 if (ins == 1) {
                                     memset(ptscaninfo, 0, sizeof(struct aspMetaDataviaUSB_s));
                                     memcpy(ptscaninfo, addrd, mlen);    
@@ -42095,7 +42190,7 @@ static int p2(struct procRes_s *rs)
     int bitset, totsz=0;
     uint16_t send16, recv16;
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0, maxLen=0;
-    uint32_t fformat=0, tmp=0;
+    uint32_t fformat=0, tmp=0, cord=0;
     struct info16Bit_s *p=0, *c=0;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
@@ -42107,9 +42202,10 @@ static int p2(struct procRes_s *rs)
     struct aspCrop36_s *pcrp36=0;
     struct aspCropExtra_s *pcrpex=0;
     struct aspDoCropCalcu *pcrpdo=0;
+    CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
     pmeta = rs->pmetain;
 
-    char ch, str[128], rx8[4], tx8[4], finfo[2];
+    char ch, str[128], rx8[4], tx8[4], finfo[2], uinfo[32];
     char *addr, *laddr, *rx_buff;
     sprintf_f(rs->logs, "p2\n");
     print_f(rs->plogs, "P2", rs->logs);
@@ -43756,7 +43852,8 @@ static int p2(struct procRes_s *rs)
                                  sprintf_f(rs->logs, "do crop extra ret: %d \n", ret);
                                  print_f(rs->plogs, "P2", rs->logs);
 
-                             } else {
+                             }
+                             else {
                                  sprintf_f(rs->logs, "crop memory allocate failed!!! size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
                                  print_f(rs->plogs, "P2", rs->logs);
                              }
@@ -43773,9 +43870,68 @@ static int p2(struct procRes_s *rs)
                     }
                 
                 }
+
+                ret = getRotateP1(pcrp36, rotlf);
+                if (!ret) {
+                    sprintf_f(rs->logs, "get rotateP1 (%.2lf, %.2lf) \n", rotlf[0], rotlf[1]);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                ret = getRotateP2(pcrp36, rotup);
+                if (!ret) {
+                    sprintf_f(rs->logs, "get rotateP2 (%.2lf, %.2lf) \n", rotup[0], rotup[1]);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                ret = getRotateP3(pcrp36, rotrt);
+                if (!ret) {
+                    sprintf_f(rs->logs, "get rotateP3 (%.2lf, %.2lf) \n", rotrt[0], rotrt[1]);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                ret = getRotateP4(pcrp36, rotdn);
+                if (!ret) {
+                    sprintf_f(rs->logs, "get rotateP4 (%.2lf, %.2lf) \n", rotdn[0], rotdn[1]);
+                    print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                tmp = (uint32_t)round(rotlf[0]);
+                cord = (uint32_t)round(rotlf[1]);
+                cord = cord | (tmp <<16);
+                lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
+
+                tmp = (uint32_t)round(rotup[0]);
+                cord = (uint32_t)round(rotup[1]);
+                cord = cord | (tmp <<16);
+                lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
                 
-                rs_ipc_put(rs, "O", 1);
-                rs_ipc_put(rs, finfo, 2);
+                tmp = (uint32_t)round(rotrt[0]);
+                cord = (uint32_t)round(rotrt[1]);
+                cord = cord | (tmp <<16);
+                lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
+
+                tmp = (uint32_t)round(rotdn[0]);
+                cord = (uint32_t)round(rotdn[1]);
+                cord = cord | (tmp <<16);
+                lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
+                
+                addr = (char *) &pusbmeta->CROP_POS_F1;
+                
+                //sprintf_f(rs->logs, "print usb info: \n");
+                //print_f(rs->plogs, "P2", rs->logs);
+
+                //shmem_dump(addr, 16);
+
+                //dbgMetaUsb(pusbmeta);
+
+                memset(uinfo, 0, 32);
+                uinfo[0] = 'O';
+                uinfo[1] = finfo[0];
+                uinfo[2] = finfo[1];
+                memcpy(&uinfo[3], addr, 16);
+
+                rs_ipc_put(rs, uinfo, 19);
+                
             }
             else {
                 sprintf_f(rs->logs, "cmode: %d \n", cmode);
@@ -43809,16 +43965,17 @@ static int p3(struct procRes_s *rs)
     
     int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait, totsz=0;
     uint16_t send16, recv16;
-    char ch, str[128], rx8[4], tx8[4], finfo[2];
+    char ch, str[128], rx8[4], tx8[4], finfo[2], uinfo[32];
     char *addr, *laddr;
-    uint32_t fformat=0, tmp=0;
+    uint32_t fformat=0, tmp=0, cord=0;
     struct aspMetaData_s *pmetaduo;
     CFLOAT thrput, fltime;
     struct aspMetaDataviaUSB_s *pusbmeta=0;
     struct aspCrop36_s *pcrp36=0;
     struct aspCropExtra_s *pcrpex=0;
     struct aspDoCropCalcu *pcrpdo=0;
-
+    CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
+    
     prctl(PR_SET_NAME, "msp-p3");
     //sprintf(argv[0], "msp-p3-spi");
     
@@ -44364,8 +44521,67 @@ static int p3(struct procRes_s *rs)
                 
                 }
 
-                rs_ipc_put(rs, "O", 1);
-                rs_ipc_put(rs, finfo, 2);
+                ret = getRotateP1(pcrp36, rotlf);
+                if (!ret) {
+                    sprintf_f(rs->logs, "get rotateP1 (%.2lf, %.2lf) \n", rotlf[0], rotlf[1]);
+                    print_f(rs->plogs, "P3", rs->logs);
+                }
+
+                ret = getRotateP2(pcrp36, rotup);
+                if (!ret) {
+                    sprintf_f(rs->logs, "get rotateP2 (%.2lf, %.2lf) \n", rotup[0], rotup[1]);
+                    print_f(rs->plogs, "P3", rs->logs);
+                }
+
+                ret = getRotateP3(pcrp36, rotrt);
+                if (!ret) {
+                    sprintf_f(rs->logs, "get rotateP3 (%.2lf, %.2lf) \n", rotrt[0], rotrt[1]);
+                    print_f(rs->plogs, "P3", rs->logs);
+                }
+
+                ret = getRotateP4(pcrp36, rotdn);
+                if (!ret) {
+                    sprintf_f(rs->logs, "get rotateP4 (%.2lf, %.2lf) \n", rotdn[0], rotdn[1]);
+                    print_f(rs->plogs, "P3", rs->logs);
+                }
+
+                tmp = (uint32_t)round(rotlf[0]);
+                cord = (uint32_t)round(rotlf[1]);
+                cord = cord | (tmp <<16);
+                lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
+
+                tmp = (uint32_t)round(rotup[0]);
+                cord = (uint32_t)round(rotup[1]);
+                cord = cord | (tmp <<16);
+                lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
+                
+                tmp = (uint32_t)round(rotrt[0]);
+                cord = (uint32_t)round(rotrt[1]);
+                cord = cord | (tmp <<16);
+                lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
+
+                tmp = (uint32_t)round(rotdn[0]);
+                cord = (uint32_t)round(rotdn[1]);
+                cord = cord | (tmp <<16);
+                lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
+                
+                addr = (char *) &pusbmeta->CROP_POS_F1;
+                
+                //sprintf_f(rs->logs, "print usb info: \n");
+                //print_f(rs->plogs, "P3", rs->logs);
+
+                //shmem_dump(addr, 16);
+
+                //dbgMetaUsb(pusbmeta);
+
+                memset(uinfo, 0, 32);
+                uinfo[0] = 'O';
+                uinfo[1] = finfo[0];
+                uinfo[2] = finfo[1];
+                memcpy(&uinfo[3], addr, 16);
+
+                rs_ipc_put(rs, uinfo, 19);
+                
             }
             else {
                 sprintf_f(rs->logs, "cmode: %d - 7\n", cmode);
