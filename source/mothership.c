@@ -1275,11 +1275,15 @@ struct aspCropExtra_s{
     int crpexSize;
     CFLOAT crpexLfPots[2048];
     CFLOAT crpexRtPots[2048];
-    int crpexLfAbs[2048];
+    int crpexLfAbs[1024];
+    double crpexLfAbsVec[512][3];
+    double crpexLfAbsVecDist[512];
     int crpexLfAbsUsed;
     int crpexLfAbsCut;
     int crpexLfAbsMax;
-    int crpexRtAbs[2048];
+    int crpexRtAbs[1024];
+    double crpexRtAbsVec[512][3];
+    double crpexRtAbsVecDist[512];
     int crpexRtAbsUsed;
     int crpexRtAbsCut;
     int crpexRtAbsMax;
@@ -4524,6 +4528,137 @@ static CFLOAT calcuLineGroupDist(CFLOAT *pGrp, CFLOAT *vecTr, int gpLen)
     return avgDist;
 }
 
+static double calcuLineGroupDistAlign(double *pGrp, double *vecTr, int gpLen, double limit, int *limcnt) {
+    double dist = 0, sumDist = 0, cnt = 0, avgDist = 0;
+    int i = 0, len = 0, lmcnt=0;
+
+    if (vecTr == 0) return -1;
+    if (pGrp == 0) return -2;
+
+    len = gpLen;
+    if (len == 0) return -3;
+
+    for (i = 0; i < len; i++) {
+        dist = calcuVectorDistancePoint(vecTr, pGrp + i * 2);
+
+        if (dist < limit) {
+            lmcnt += 1;
+        }
+
+        sumDist += dist;
+
+        #if CROP_CALCU_DETAIL
+        printf("[Gline] align %d - dist = %.2lf \n", i, dist);
+        #endif
+		
+        cnt += 1;
+    }
+
+    *limcnt = lmcnt;
+
+    avgDist = sumDist / cnt;
+
+    return avgDist;
+}
+
+static int calcuGroupLineAlign(double *pGrp, double *vecTr, double *div, int gpLen, double limit) {
+    double dist = 0, sumDist = 0, avgDist = 0;
+    int head = 0, tail = 0, cur = 0;
+    int len = 0, ret = 0, idx = 0;
+    int i = 0, cnt = 0, cntDist = 0;
+    int gbegin = 0, gend = 0;
+    double *p1, *p2, minDist;
+    int limtcnt=0, maxcnt=0;
+
+    len = gpLen;
+    if (vecTr == 0) return -1;
+
+    if (len == 0) return -2;
+
+    head = 0;
+    tail = len - 1;
+#if CROP_CALCU_DETAIL
+    printf("[Gline] gplen = %d ,head = %d, tail = %d\n", len, head, tail);
+#endif
+    double *avd = (double *) malloc(sizeof(double) * (tail - head));
+    int *avcnt = (int *) malloc(sizeof(int) * (tail - head));
+    int *avList = (int *) malloc(sizeof(int) * (tail - head) * 2);
+	memset(avd, 0, sizeof(double) * (tail - head));
+	memset(avList, 0, sizeof(int) * (tail - head) * 2);
+
+    cntDist = 0;
+    while ((tail - head) > 1) {
+        p1 = &pGrp[head * 2];
+        p2 = &pGrp[tail * 2];
+
+        ret = getVectorFromP(vecTr, p1, p2);
+        if (ret < 0) {
+            return -3;
+        }
+
+        //avgDist = calcuLineGroupDist(pGrp, vecTr, len);
+        avgDist = calcuLineGroupDistAlign(pGrp, vecTr, len, limit, &limtcnt);
+
+        avcnt[cntDist] = limtcnt;
+        avd[cntDist] = avgDist;
+        avList[cntDist * 2 + 0] = head;
+        avList[cntDist * 2 + 1] = tail;
+        cntDist++;
+
+        if (cur == head) {
+            tail -= 1;
+            cur = tail;
+        } else {
+            head += 1;
+            cur = head;
+        }
+
+        //Log.e(TAG, "group head = "+head+", tail = "+tail);
+
+    }
+
+    idx = -1;
+    minDist = 0;
+    maxcnt = 0;
+    for (i = 0; i < cntDist; i++) {
+        if (idx < 0) {
+            idx = i;
+            maxcnt = avcnt[i];
+        } else {
+            if (maxcnt < avcnt[i]) {
+                maxcnt = avcnt[i];
+                idx = i;
+            }
+        }
+#if CROP_CALCU_DETAIL
+        printf("[Gline] group limit count= %d, head = %d, tail = %d \n", avcnt[i], avList[i * 2 + 0], avList[i * 2 + 1]);
+#endif
+    }
+
+#if CROP_CALCU_DETAIL
+    printf("[Gline] max cnt idx = %d, max cnt = %d, head = %d, tail = %d dist: %.2lf\n",
+                        idx, maxcnt, avList[idx * 2 + 0], avList[idx * 2 + 1], avd[idx]);
+#endif
+
+    div[0] = avd[idx];
+
+    head = avList[idx * 2 + 0];
+    tail = avList[idx * 2 + 1];
+
+    p1 = &pGrp[head * 2];
+    p2 = &pGrp[tail * 2];
+    free(avd);
+    free(avcnt);
+    free(avList);
+
+    ret = getVectorFromP(vecTr, p1, p2);
+    if (ret < 0) {
+        return -4;
+    }
+
+    return maxcnt;
+}
+
 static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen) 
 {
     CFLOAT dist=0, sumDist=0, avgDist=0;
@@ -5630,14 +5765,29 @@ static int cpyPGrp(int start, int len, CFLOAT *grp, CFLOAT **cpgp, int max)
 
 static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
 {
-#define CROP_LINE_DIST  (90.0)
-    int i=0, tot=0, ret=0, head=0, glen=0, id=0;
+#define CROP_POINT_DIST  (16.0)	
+#define CROP_LINE_DIST  (30.0)
+#define MUL_DIST_TOLT   (4.0)
+#define CROP_LINE_MIN (600.0)
+#define CROP_LINE_NUM (3)
+#define GROUP_LINE_LIMIT (1.0)
+    int i = 0, tot = 0, ret = 0, head = 0, glen = 0, id = 0, aln=0, rid=0, sid=0;
     int cntLf=0, cntRt=0, contL=0, contR=0;
+    int allpos[16] = {0};
+    int allnum[16] = {0};
+    double alldist[16] = {0};
+    double allverTr[16][3] = {0};
+    double *allgrp[16] = {0};
     CFLOAT *p1, *p2;
     CFLOAT *ptLf, *ptRt;
     CFLOAT vecTr[3];
     CFLOAT dist=0;
     CFLOAT *cgrp;
+    double pc0[2], pc1[2], pc2[2];
+    double distP2P = 0, distP2Bef = 0;
+    int absLsize = cntLf / 2;
+    int absRsize = cntRt / 2;
+    int thrd=0, sms=0, minpt=0;
 
     if (!pcp36) return -1;
     if (!pcpex) return -2;
@@ -5649,6 +5799,8 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 #endif
     tot = pcpex->crpexSize / 2;
     
+    thrd = tot / 12;
+    
     cntLf = 0;
     pcpex->crpexLfAbsUsed = 0;
     
@@ -5659,9 +5811,42 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     pcpex->crpexLfAbs[cntLf] = 0;
     cntLf ++;
 
+    pc0[0] = -1;
+    pc0[1] = -1;
+    distP2Bef = -1;
+    sms = 0;
+    
     for (i=1; i < tot; i++) {
         p1 = &ptLf[head*2];
         p2 = &ptLf[i*2];
+
+
+        if (sms > thrd) {
+            pc0[0] = -1;
+            pc0[1] = -1;
+            sms = 0;
+        } else if (pc0[0] > 0) {
+            distP2Bef = calcuDistance(p1, pc0);
+            if (distP2Bef < CROP_POINT_DIST) {
+#if LOG_CROP_FINDBASELINE
+    printf("[find] [skip] [%d] (%.2lf, %.2lf) <-> (%.2lf, %.2lf) dist: %.2lf (%.2lf)\n", head, pc0[0], pc0[1], p1[0], p1[1], distP2Bef, CROP_POINT_DIST);
+#endif
+                head = i;
+                pcpex->crpexLfAbs[cntLf-1] = i;
+
+                pc0[0] = p1[0];
+                pc0[1] = p1[1];
+
+                sms ++;
+
+                continue;
+            } else {
+                pc0[0] = -1;
+                pc0[1] = -1;
+                sms = 0;
+            }
+        }
+
         getVectorFromP(vecTr,  p1,  p2);
 
         ret = cpyPGrp(head, i-head, ptLf, &cgrp, 2048/2);
@@ -5687,6 +5872,13 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             pcpex->crpexLfAbs[cntLf] = i;
             
             cntLf ++;
+            
+            pc0[0] = p1[0];
+            pc0[1] = p1[1];
+        }
+        else {
+            pc0[0] = -1;
+            pc0[1] = -1;
         }
 
         cgrp = 0;
@@ -5712,9 +5904,40 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     pcpex->crpexRtAbs[cntRt] = 0;
     cntRt ++;
 
+    pc0[0] = -1;
+    pc0[1] = -1;
+    distP2Bef = -1;
+    sms = 0;	
+    
     for (i=1; i < tot; i++) {
         p1 = &ptRt[head*2];
         p2 = &ptRt[i*2];
+
+        if (sms > thrd) {
+            pc0[0] = -1;
+            pc0[1] = -1;
+            sms = 0;
+        } else if (pc0[0] > 0) {
+            distP2Bef = calcuDistance(p1, pc0);
+            if (distP2Bef < CROP_POINT_DIST) {
+#if LOG_CROP_FINDBASELINE
+    printf("[find] [skip] [%d] (%.2lf, %.2lf) <-> (%.2lf, %.2lf) dist: %.2lf (%.2lf)\n", head, pc0[0], pc0[1], p1[0], p1[1], distP2Bef, CROP_POINT_DIST);
+#endif
+                head = i;
+                pcpex->crpexRtAbs[cntRt-1] = i;
+
+                pc0[0] = p1[0];
+                pc0[1] = p1[1];
+
+                sms ++;
+
+                continue;
+            } else {
+                pc0[0] = -1;
+                pc0[1] = -1;
+                sms = 0;
+            }
+        }
         getVectorFromP(vecTr,  p1,  p2);
 
         ret = cpyPGrp(head, i-head, ptRt, &cgrp, 2048/2);
@@ -5740,6 +5963,13 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             pcpex->crpexRtAbs[cntRt] = i;
             
             cntRt++;
+            
+            pc0[0] = p1[0];
+            pc0[1] = p1[1];
+        }
+        else {
+            pc0[0] = -1;
+            pc0[1] = -1;
         }
 
         cgrp = 0;
@@ -5768,59 +5998,85 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
         printf("%d. right abs = [%d]  =  (%lf, %lf) \n", i, id, ptRt[id*2+0], ptRt[id*2+1]);    
 #endif
     }
-
-    CFLOAT distP2P=0;
-    CFLOAT distP2Bef=0;
-    CFLOAT pc0[2];
-    CFLOAT pc1[2];
-    CFLOAT pc2[2];
-    int absLsize = cntLf / 2;
-    int absRsize = cntRt / 2;
     
     contL = 0;
     contR = 0;
-
+    
+    absLsize = cntLf / 2;
+    absRsize = cntRt / 2;
+    
     pc0[0] = -1;
     pc0[1] = -1;
 #if LOG_CROP_FINDBASELINE
     printf("absLsize : %d, absRsize: %d \n", absLsize, absRsize);
 #endif
-    for (i=0; i < absLsize; i++) {
-        id = pcpex->crpexLfAbs[i*2+0];
-        pc1[0] = ptLf[id*2+0];
-        pc1[1] = ptLf[id*2+1];
-        
-        id = pcpex->crpexLfAbs[i*2+1];
-        pc2[0] = ptLf[id*2+0];
-        pc2[1] = ptLf[id*2+1];
+
+    for (i = 0; i < absLsize; i++) {
+        id = pcpex->crpexLfAbs[i * 2 + 0];
+        pc1[0] = ptLf[id * 2 + 0];
+        pc1[1] = ptLf[id * 2 + 1];
+
+        id = pcpex->crpexLfAbs[i * 2 + 1];
+        pc2[0] = ptLf[id * 2 + 0];
+        pc2[1] = ptLf[id * 2 + 1];
 
         distP2P = calcuDistance(pc1, pc2);
 
-        if (pc0[0] > 0) {
-            distP2Bef = calcuDistance(pc1, pc0);
-        } else {
-            distP2Bef = -1;
-        }
-        
 #if LOG_CROP_FINDBASELINE
-        printf("%d.  =  (%lf, %lf) \n", i, distP2Bef, distP2P);    
+        printf("[find] %d. distp2p = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d\n", i, distP2P, pc1[0], pc1[1], pc2[0], pc2[1], (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]));
+#endif
+        if ((i == 0) || ( i == (absLsize - 1))) {
+            minpt = CROP_LINE_NUM;
+        } else {
+            minpt = CROP_LINE_NUM * 6;
+        }
+
+        if ((distP2P > CROP_LINE_MIN) &&
+            ((pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]) > minpt)) {
+
+#if LOG_CROP_FINDBASELINE
+	    printf("[find] dist: %.2lf num: %d - pass\n", distP2P, (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]));
 #endif
 
-        //if ((distP2Bef > 500) || (distP2P > 500.0)) {
-        if ((distP2P > 1000.0) && ((pcpex->crpexLfAbs[i*2+1] - pcpex->crpexLfAbs[i*2+0]) > 5)) {
             contL++;
 
-            pc0[0] = pc2[0];
-            pc0[1] = pc2[1];
-#if LOG_CROP_FINDBASELINE
-            printf("keep %d.  =  (%d -> 1%d) \n", i, pcpex->crpexLfAbs[i*2+0], pcpex->crpexLfAbs[i*2+1]);    
+            ret = cpyPGrp(pcpex->crpexLfAbs[i * 2 + 0], pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0], ptLf, &cgrp, 2048 / 2);
+            if (ret > 0) {
+                glen = ret;
+            } else {
+                glen = 0;
+            }
+
+            //ret = calcuGroupLine(cgrp, pcpex->crpexLfAbsVec[i], &dist, glen);
+            ret = calcuGroupLineAlign(cgrp, pcpex->crpexLfAbsVec[i], &dist, glen, GROUP_LINE_LIMIT);
+            if (ret > 0) {
+#if LOG_CROP_CALCULINE
+                printf("[find] (Lf) %d. get group line suceed!! (%.2lf, %.2lf)<->(%.2lf, %.2lf) div: %.2lf ret: %d\n", i, pc1[0], pc1[1], pc2[0], pc2[1], dist, ret);
+#endif		
+            } else {
+                dist = -1;
+                pcpex->crpexLfAbsVecDist[i] = -1;
+#if LOG_CROP_CALCULINE
+                printf("[find] (Lf) %d. get group line failed!! (%.2lf, %.2lf)<->(%.2lf, %.2lf)\n", i, pc1[0], pc1[1], pc2[0], pc2[1]);
 #endif
+            }
+
+            if ((dist < 0) || (dist > (CROP_LINE_DIST / 2))) {
+                pcpex->crpexLfAbs[i * 2 + 0] = -1;
+                pcpex->crpexLfAbs[i * 2 + 1] = -1;
+            }
+            else {
+                pcpex->crpexLfAbsVecDist[i] = dist;
+                contL++;
+            }
+
         } else {
-        #if LOG_CROP_FINDBASELINE
-            printf("drop %d.  =  (%d -> 1%d) \n", i, pcpex->crpexLfAbs[i*2+0], pcpex->crpexLfAbs[i*2+1]);    
+        
+#if LOG_CROP_FINDBASELINE
+	    printf("[find] dist: %.2lf num: %d - deny\n", distP2P, (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]));
 #endif
-            pcpex->crpexLfAbs[i*2+0] = -1;
-            pcpex->crpexLfAbs[i*2+1] = -1;        
+            pcpex->crpexLfAbs[i * 2 + 0] = -1;
+            pcpex->crpexLfAbs[i * 2 + 1] = -1;
         }
 
     }
@@ -5829,61 +6085,302 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
 
     pc0[0] = -1;
     pc0[1] = -1;
-    for (i=0; i < absRsize; i++) {
-        id = pcpex->crpexRtAbs[i*2+0];
-        pc1[0] = ptRt[id*2+0];
-        pc1[1] = ptRt[id*2+1];
-        
-        id = pcpex->crpexRtAbs[i*2+1];
-        pc2[0] = ptRt[id*2+0];
-        pc2[1] = ptRt[id*2+1];
+    for (i = 0; i < absRsize; i++) {
+        id = pcpex->crpexRtAbs[i * 2 + 0];
+        pc1[0] = ptRt[id * 2 + 0];
+        pc1[1] = ptRt[id * 2 + 1];
+
+        id = pcpex->crpexRtAbs[i * 2 + 1];
+        pc2[0] = ptRt[id * 2 + 0];
+        pc2[1] = ptRt[id * 2 + 1];
 
         distP2P = calcuDistance(pc1, pc2);
 
-        if (pc0[0] > 0) {
-            distP2Bef = calcuDistance(pc1, pc0);
+#if LOG_CROP_FINDBASELINE
+        printf("[find] %d. distp2p = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d\n", i, distP2P, pc1[0], pc1[1], pc2[0], pc2[1], (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]));
+#endif
+
+        if ((i == 0) || ( i == (absRsize - 1))) {
+            minpt = CROP_LINE_NUM;
         } else {
-            distP2Bef = -1;
+            minpt = CROP_LINE_NUM * 6;
         }
 
-#if LOG_CROP_FINDBASELINE
-        printf("%d.  =  (%lf, %lf) \n", i, distP2Bef, distP2P);    
-#endif
-        if ((distP2P > 1000.0) && ((pcpex->crpexRtAbs[i*2+1] - pcpex->crpexRtAbs[i*2+0]) > 5)) {
-        //if ((distP2Bef > 500) || (distP2P > 500.0)) {
-            contR++;
+        if ((distP2P > CROP_LINE_MIN) &&
+            ((pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]) > minpt)) {
 
-            pc0[0] = pc2[0];
-            pc0[1] = pc2[1];
 #if LOG_CROP_FINDBASELINE
-            printf("keep %d.  =  (%d -> 1%d) \n", i, pcpex->crpexRtAbs[i*2+0], pcpex->crpexRtAbs[i*2+1]);    
+	    printf("[find] dist: %.2lf num: %d - pass\n", distP2P, (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]));
 #endif
+
+            ret = cpyPGrp(pcpex->crpexRtAbs[i * 2 + 0], pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0], ptRt, &cgrp, 2048 / 2);
+            if (ret > 0) {
+                glen = ret;
+            } else {
+                glen = 0;
+            }
+
+            //ret = calcuGroupLine(cgrp, pcpex->crpexRtAbsVec[i], &dist, glen);
+            ret = calcuGroupLineAlign(cgrp, pcpex->crpexRtAbsVec[i], &dist, glen, GROUP_LINE_LIMIT);
+            if (ret > 0) {
+                pcpex->crpexRtAbsVecDist[i] = dist;
+#if LOG_CROP_CALCULINE
+                printf("[find] (Rt) %d. get group line suceed!! (%.2lf, %.2lf)<->(%.2lf, %.2lf) div: %.2lf\n", i, pc1[0], pc1[1], pc2[0], pc2[1], dist);
+#endif		
+            } else {
+                pcpex->crpexRtAbsVecDist[i] = -1;
+#if LOG_CROP_CALCULINE
+                printf("[find] (Rt) %d. get group line failed!! (%.2lf, %.2lf)<->(%.2lf, %.2lf)\n", i, pc1[0], pc1[1], pc2[0], pc2[1]);
+#endif
+            }
+
+            if ((dist < 0) || (dist > (CROP_LINE_DIST / 2))) {
+                pcpex->crpexRtAbs[i * 2 + 0] = -1;
+                pcpex->crpexRtAbs[i * 2 + 1] = -1;
+            }
+            else {
+                pcpex->crpexRtAbsVecDist[i] = dist;
+                contR++;
+            }
 
         } else {
 #if LOG_CROP_FINDBASELINE
-            printf("drop %d.  =  (%d -> 1%d) \n", i, pcpex->crpexRtAbs[i*2+0], pcpex->crpexRtAbs[i*2+1]);    
+	    printf("[find] dist: %.2lf num: %d - deny\n", distP2P, (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]));
 #endif
-
-            pcpex->crpexRtAbs[i*2+0] = -1;
-            pcpex->crpexRtAbs[i*2+1] = -1;      
+            pcpex->crpexRtAbs[i * 2 + 0] = -1;
+            pcpex->crpexRtAbs[i * 2 + 1] = -1;
         }
-        
+
     }
-    
-    pcpex->crpexRtAbsCut = contR;
+   pcpex->crpexRtAbsCut = contR;
+
 #if LOG_CROP_FINDBASELINE
-    printf("absLf cut : %d, absRt cut: %d \n", contL, contR);
+    printf("[find] absLf cut : %d, absRt cut: %d \n", contL,
+                        contR);
+
+    for (i = 0; i < cntLf; i++) {
+        id = pcpex->crpexLfAbs[i];
+
+	if (id < 0) {
+        printf("[find] %d. left abs = [%d] \n", i, id);
+	} else {
+        printf("[find] %d. left abs = [%d]  =  (%.2lf, %.2lf) \n", i, id, ptLf[id * 2 + 0], ptLf[id * 2 + 1]);
+	}
+
+    }
+
+    for (i = 0; i < cntRt; i++) {
+        id = pcpex->crpexRtAbs[i];
+
+	if (id < 0) {
+        printf("[find] %d. right abs = [%d] \n", i, id);
+	} else {
+        printf("[find] %d. right abs = [%d]  =  (%.2lf, %.2lf) \n", i, id, ptRt[id * 2 + 0], ptRt[id * 2 + 1]);
+	}
+
+    }
 #endif
+
+    if (contL > 1) {
+        aln = 0;
+        for (i = 0; i < absLsize; i++) {
+            id = pcpex->crpexLfAbs[i * 2 + 0];
+            if (id < 0) {
+                continue;
+            }
+
+            pc1[0] = ptLf[id * 2 + 0];
+            pc1[1] = ptLf[id * 2 + 1];
+
+            id = pcpex->crpexLfAbs[i * 2 + 1];
+            pc2[0] = ptLf[id * 2 + 0];
+            pc2[1] = ptLf[id * 2 + 1];
+
+            allpos[aln] = i;
+            alldist[aln] = calcuDistance(pc1, pc2);
+
+            //getVectorFromP(&allverTr[aln][0], pc1, pc2);
+            memcpy(&allverTr[aln][0], &pcpex->crpexLfAbsVec[i][0], sizeof(double) * 3);
+
+            allnum[aln] = pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0];
+            ret = cpyPGrp(pcpex->crpexLfAbs[i * 2 + 0], allnum[aln], ptLf, &allgrp[aln], 2048 / 2);
+            if (ret == allnum[aln]) {
+                dist = calcuLineGroupDist(allgrp[aln], &allverTr[aln][0], allnum[aln]);
+
+                #if LOG_CROP_FINDBASELINE
+                 printf("[find] %d. alldist = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d (%d) dist: %.2lf (%.2lf) (o)\n", i, alldist[aln], pc1[0], pc1[1], pc2[0], pc2[1], allnum[aln], ret, dist, pcpex->crpexLfAbsVecDist[i]);
+                #endif
+            } else {
+                #if LOG_CROP_FINDBASELINE
+                 printf("[find] %d. alldist = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d (%d) dist: %.2lf (x) \n", i, alldist[aln], pc1[0], pc1[1], pc2[0], pc2[1], allnum[aln], ret, dist);
+                #endif
+            }
+
+            aln += 1;
+        }	
+
+        for (id = 0; id < aln; id++) {
+            if (allpos[id] < 0) continue;
+            for (i = 0; i < aln; i++) {
+                if (i == id) continue;
+                rid = allpos[i];
+                sid = allpos[id];
+
+                dist = calcuLineGroupDist(allgrp[i], &allverTr[id][0], allnum[i]);
+				
+                #if LOG_CROP_FINDBASELINE
+                 printf("[find] Lf %d.%d. grpdist = [%.2lf] num: %d : %d, (%d, %d) (%d, %d) \n", id, i, dist, allnum[id], allnum[i],
+                            pcpex->crpexLfAbs[sid*2 +0], pcpex->crpexLfAbs[sid*2 +1], pcpex->crpexLfAbs[rid*2 +0], pcpex->crpexLfAbs[rid*2 +1]);
+                #endif
+				
+                if ((dist < CROP_LINE_DIST*MUL_DIST_TOLT) && (allnum[id] > allnum[i])) {
+
+                    if (pcpex->crpexLfAbs[sid*2 +0] > pcpex->crpexLfAbs[rid*2 +0]) {
+                        pcpex->crpexLfAbs[sid*2 +0] = pcpex->crpexLfAbs[rid*2 +0];
+                    }
+
+                    if (pcpex->crpexLfAbs[sid*2 +1] < pcpex->crpexLfAbs[rid*2 +1]) {
+                        pcpex->crpexLfAbs[sid*2 +1] = pcpex->crpexLfAbs[rid*2 +1];
+                    }
+		
+                    pcpex->crpexLfAbs[rid*2 +0] = -1;
+                    pcpex->crpexLfAbs[rid*2 +1] = -1;
+
+                    allpos[i] = -1;
+                }
+            }
+        }
+
+        contL = 0;
+        for (i = 0; i < absLsize; i++) {
+            id = pcpex->crpexLfAbs[i * 2 + 0];
+            if (id < 0) {
+                continue;
+            }
+
+            pc1[0] = ptLf[id * 2 + 0];
+            pc1[1] = ptLf[id * 2 + 1];
+
+            id = pcpex->crpexLfAbs[i * 2 + 1];
+            pc2[0] = ptLf[id * 2 + 0];
+            pc2[1] = ptLf[id * 2 + 1];
+
+            distP2P = calcuDistance(pc1, pc2);
+
+            #if LOG_CROP_FINDBASELINE
+            printf("[find] lf %d. distp2p = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d\n", i, distP2P, pc1[0], pc1[1], pc2[0], pc2[1], (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]));
+            #endif
+
+            contL += 1;
+        }	
+        pcpex->crpexLfAbsCut = contL;
+    }
+
+    if (contR > 1) {
+        aln = 0;
+        for (i = 0; i < absRsize; i++) {
+            id = pcpex->crpexRtAbs[i * 2 + 0];
+            if (id < 0) {
+                continue;
+            }
+
+            pc1[0] = ptRt[id * 2 + 0];
+            pc1[1] = ptRt[id * 2 + 1];
+
+            id = pcpex->crpexRtAbs[i * 2 + 1];
+            pc2[0] = ptRt[id * 2 + 0];
+            pc2[1] = ptRt[id * 2 + 1];
+
+            allpos[aln] = i;
+            alldist[aln] = calcuDistance(pc1, pc2);
+			
+            //getVectorFromP(&allverTr[aln][0], pc1, pc2);
+            memcpy(&allverTr[aln][0], &pcpex->crpexRtAbsVec[i][0], sizeof(double) * 3);
+
+            allnum[aln] = pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0];
+            ret = cpyPGrp(pcpex->crpexRtAbs[i * 2 + 0], allnum[aln], ptRt, &allgrp[aln], 2048 / 2);
+            if (ret == allnum[aln]) {
+                dist = calcuLineGroupDist(allgrp[aln], &allverTr[aln][0], allnum[aln]);
+
+                #if LOG_CROP_FINDBASELINE
+                 printf("[find] %d. alldist = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d (%d) dist: %.2lf (%.2lf) (o)\n", i, alldist[aln], pc1[0], pc1[1], pc2[0], pc2[1], allnum[aln], ret, dist, pcpex->crpexRtAbsVecDist[i]);
+                #endif
+            } else {
+                #if LOG_CROP_FINDBASELINE
+                 printf("[find] %d. alldist = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d (%d) dist: %.2lf (x) \n", i, alldist[aln], pc1[0], pc1[1], pc2[0], pc2[1], allnum[aln], ret, dist);
+                #endif
+            }
+
+            aln += 1;
+        }	
+
+        for (id = 0; id < aln; id++) {
+            if (allpos[id] < 0) continue;
+            for (i = 0; i < aln; i++) {
+                if (i == id) continue;
+                rid = allpos[i];
+                sid = allpos[id];
+                dist = calcuLineGroupDist(allgrp[i], &allverTr[id][0], allnum[i]);
+				
+                #if LOG_CROP_FINDBASELINE
+                 printf("[find] Rt %d.%d. grpdist = [%.2lf] num: %d : %d, (%d, %d) (%d, %d) \n", id, i, dist, allnum[id], allnum[i],
+                            pcpex->crpexRtAbs[sid*2 +0], pcpex->crpexRtAbs[sid*2 +1], pcpex->crpexRtAbs[rid*2 +0], pcpex->crpexRtAbs[rid*2 +1]);
+                #endif
+
+                if ((dist < CROP_LINE_DIST*MUL_DIST_TOLT) && (allnum[id] > allnum[i])) {
+
+                    if (pcpex->crpexRtAbs[sid*2 +0] > pcpex->crpexRtAbs[rid*2 +0]) {
+                        pcpex->crpexRtAbs[sid*2 +0] = pcpex->crpexRtAbs[rid*2 +0];
+                    }
+
+                    if (pcpex->crpexRtAbs[sid*2 +1] < pcpex->crpexRtAbs[rid*2 +1]) {
+                        pcpex->crpexRtAbs[sid*2 +1] = pcpex->crpexRtAbs[rid*2 +1];
+                    }
+
+                    pcpex->crpexRtAbs[rid*2 +0] = -1;
+                    pcpex->crpexRtAbs[rid*2 +1] = -1;
+                    allpos[i] = -1;
+                }
+            }
+        }
+
+        contR = 0;
+        for (i = 0; i < absRsize; i++) {
+            id = pcpex->crpexRtAbs[i * 2 + 0];
+            if (id < 0) {
+                continue;
+            }
+
+            pc1[0] = ptRt[id * 2 + 0];
+            pc1[1] = ptRt[id * 2 + 1];
+
+            id = pcpex->crpexRtAbs[i * 2 + 1];
+            pc2[0] = ptRt[id * 2 + 0];
+            pc2[1] = ptRt[id * 2 + 1];
+
+            distP2P = calcuDistance(pc1, pc2);
+
+            #if LOG_CROP_FINDBASELINE
+            printf("[find] rt %d. distp2p = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d\n", i, distP2P, pc1[0], pc1[1], pc2[0], pc2[1], (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]));
+            #endif
+
+            contR += 1;
+        }	
+        pcpex->crpexRtAbsCut = contR;
+    }
+	
     return 0;
 }
 
 static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
 {
+#define BOUNDRY_BIAS (6)
     int ret=0;
     CFLOAT Lfarr[12], Rtarr[12];
+    double LfarrVec[3][3], RtarrVec[3][3];
     int rtLinSize=0, lfLinSize=0, lfused=0, rtused=0;
-    CFLOAT v1[3], v2[3], v3[3];
-    CFLOAT p1[2], p2[2], p3[2], p4[2], p5[2], p6[2], cs[2], ct[2];
+    double v1[3], v2[3], v3[3], v4[3];
+    double p1[2], p2[2], p3[2], p4[2], p5[2], p6[2], cs[2], ct[2], cu[2], cv[2];
     CFLOAT sup[2];
     CFLOAT sdn[2];
     CFLOAT slf[2];
@@ -5892,8 +6389,21 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     CFLOAT lval=0, rval=0;
     CFLOAT upal=0, dnal=0;
     CFLOAT csUp[2], msLf[2], msRt[2], csDn[2];
+    double ttline[3], bbline[3], llline[3], rrline[3];
+    double bnup=0.0, bndn=0.0, bnlf=0.0, bnrt=0.0;
+    double distv=0.0;
     uint32_t cropflag = 0;
 
+    bnup = (double)((pcp36->crp36Up - BOUNDRY_BIAS) > 0 ? (pcp36->crp36Up - BOUNDRY_BIAS) : 0);
+    bndn = (double)(pcp36->crp36Dn + BOUNDRY_BIAS);
+    bnlf = (double)((pcp36->crp36Lf- BOUNDRY_BIAS) > 0 ? (pcp36->crp36Lf - BOUNDRY_BIAS) : 0);
+    bnrt = (double)(pcp36->crp36Rt + BOUNDRY_BIAS);
+
+    memcpy(ttline, pcp36->crp36LineTop, sizeof(double) * 3);
+    memcpy(bbline, pcp36->crp36LineBotn, sizeof(double) * 3);
+    memcpy(llline, pcp36->crp36LineLeft, sizeof(double) * 3);
+    memcpy(rrline, pcp36->crp36LineRight, sizeof(double) * 3);
+    
     memcpy(msLf, pcp36->crp36P1, sizeof(CFLOAT)*2);    
     memcpy(csUp, pcp36->crp36P2, sizeof(CFLOAT)*2);    
     memcpy(msRt, pcp36->crp36P3, sizeof(CFLOAT)*2);    
@@ -5911,6 +6421,12 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 #endif
     memset(Lfarr, 0, sizeof(CFLOAT)*12);
     memset(Rtarr, 0, sizeof(CFLOAT)*12);
+    memset(LfarrVec, 0, sizeof(double) * 9);
+    memset(RtarrVec, 0, sizeof(double) * 9);
+    memset(sup, 0, sizeof(double) * 2);
+    memset(sdn, 0, sizeof(double) * 2);
+    memset(slf, 0, sizeof(double) * 2);
+    memset(srt, 0, sizeof(double) * 2);
 
     for (i=0; i < 3; i++) {
         for (iL = 0; iL < lfused; iL++) {
@@ -5927,6 +6443,8 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
             Lfarr[i*4+2] = pcpex->crpexLfPots[idst*2+0];
             Lfarr[i*4+3] = pcpex->crpexLfPots[idst*2+1];
+
+            memcpy(&LfarrVec[i][0], &pcpex->crpexLfAbsVec[iL][0], sizeof(double) * 3);
 
             pcpex->crpexLfAbs[iL*2+0] = -1;
             pcpex->crpexLfAbs[iL*2+1] = -1;
@@ -5950,6 +6468,8 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
             Rtarr[i*4+2] = pcpex->crpexRtPots[idst*2+0];
             Rtarr[i*4+3] = pcpex->crpexRtPots[idst*2+1];
 
+            memcpy(&RtarrVec[i][0], &pcpex->crpexRtAbsVec[iR][0], sizeof(double) * 3);
+            
             pcpex->crpexRtAbs[iR*2+0] = -1;
             pcpex->crpexRtAbs[iR*2+1] = -1;
             break;
@@ -5984,100 +6504,421 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         }
      }
 
+    cs[0] = -1;
+    cs[0] = -1;
+    ct[0] = -1; 
+    ct[1] = -1;
+    cu[0] = -1; 
+    cu[1] = -1;
+    cv[0] = -1;
+    cv[1] = -1;
+    upal = -1;
+    dnal = -1;
+    rval = -1;
+    lval = -1;
+    
     if (lfLinSize == 1) {
         if (rtLinSize == 1) {
-            id = 0;
-    
-            lval = Lfarr[id*2+1];
-            rval = Rtarr[id*2+1];
-            
-            if (lval > rval) {
-                id = 0;
-                sup[0] = Rtarr[id*2+0];
-                sup[1] = Rtarr[id*2+1];
-    
-                slf[0] = Lfarr[id*2+0];
-                slf[1] = Lfarr[id*2+1];
-    
-                id = 1;
-                srt[0] = Rtarr[id*2+0];
-                srt[1] = Rtarr[id*2+1];
-    
-                sdn[0] = Lfarr[id*2+0];
-                sdn[1] = Lfarr[id*2+1];
+            memcpy(v1, LfarrVec[0], sizeof(double) * 3);
+            memcpy(v2, RtarrVec[0], sizeof(double) * 3);
+
+            ret = getCross(v1, ttline, cs);
+            ret = getCross(ttline, v2, ct);			
+            ret = getCross(bbline, v2, cu);
+            ret = getCross(v1, bbline, cv);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 0. cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+            if (cs[0] < cv[0]) {
+                slf[0] = cs[0];
+                slf[1] = cs[1];
+
+                sup[0] = ct[0];
+                sup[1] = ct[1];
+
+                srt[0] = cu[0];
+                srt[1] = cu[1];
+
+                sdn[0] = cv[0];
+                sdn[1] = cv[1];
+
             } else {
-                id = 0;
-                sup[0] = Lfarr[id*2+0];
-                sup[1] = Lfarr[id*2+1];
-    
-                srt[0] = Rtarr[id*2+0];
-                srt[1] = Rtarr[id*2+1];
-    
-                id = 1; 
-                slf[0] = Lfarr[id*2+0];
-                slf[1] = Lfarr[id*2+1];
-    
-                sdn[0] = Rtarr[id*2+0];
-                sdn[1] = Rtarr[id*2+1];
+                slf[0] = cv[0];
+                slf[1] = cv[1];
+
+                sup[0] = cs[0];
+                sup[1] = cs[1];
+
+                srt[0] = ct[0];
+                srt[1] = ct[1];
+
+                sdn[0] = cu[0];
+                sdn[1] = cu[1];
             }
         }
          else if (rtLinSize == 2) {    
-             id = 0;
-             p1[0] = Rtarr[id*2+0];
-             p1[1] = Rtarr[id*2+1];
-    
-             id = 1;
-             p2[0] = Rtarr[id*2+0];
-             p2[1] = Rtarr[id*2+1];
-    
-             id = 2;
-             p3[0] = Rtarr[id*2+0];
-             p3[1] = Rtarr[id*2+1];
-    
-             id = 3;
-             p4[0] = Rtarr[id*2+0];
-             p4[1] = Rtarr[id*2+1];
-    
-             ret = getVectorFromP(v1, p1, p2);
-             ret = getVectorFromP(v2, p3, p4);
-             ret = getCross(v1, v2, cs);
-             
-             id = 0;
-             upal = Rtarr[id*2+0];
-    
-             id = 3;
-             dnal = Rtarr[id*2+0];
-    
-             if (upal > dnal) {
-                 id = 0;
-                 sup[0] = Rtarr[id*2+0];
-                 sup[1] = Rtarr[id*2+1];
-    
-                 slf[0] = Lfarr[id*2+0];
-                 slf[1] = Lfarr[id*2+1];
-    
-                 srt[0] = cs[0];
-                 srt[1] = cs[1];
-    
-                 id = 1;
-                 sdn[0] = Lfarr[id*2+0];
-                 sdn[1] = Lfarr[id*2+1];
-             } else {
-                 id = 0;
-                 sup[0] = Lfarr[id*2+0];
-                 sup[1] = Lfarr[id*2+1];
-    
-                 id = 1;
-                 slf[0] = Lfarr[id*2+0];
-                 slf[1] = Lfarr[id*2+1];
-                  
-                 srt[0] = cs[0];
-                 srt[1] = cs[1];
-                 
-                 id = 3;
-                 sdn[0] = Rtarr[id*2+0];
-                 sdn[1] = Rtarr[id*2+1];
-             }
+
+            memcpy(v1, LfarrVec[0], sizeof(double) * 3);
+            memcpy(v2, RtarrVec[0], sizeof(double) * 3);
+            //memcpy(v3, LfarrVec[1], sizeof(double) * 3);
+            memcpy(v4, RtarrVec[1], sizeof(double) * 3);
+			
+            ret = getCross(v2, v4, ct);
+            lval = calcuVectorDistancePoint(ttline, ct);
+            rval = calcuVectorDistancePoint(bbline, ct);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 1. cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+            ret = getCross(v1, llline, cs);
+            ret = getCross(v1, ttline, p1);
+            ret = getCross(v1, bbline, p2);
+            if (((cs[1] < bnup) || (cs[1] > bndn)) || ((p1[0] > bnlf) && (p1[0] < bnrt))
+			|| ((p2[0] > bnlf) && (p2[0] < bnrt))  || ((cs[0] < bnlf) || (cs[0] > (bnlf+BOUNDRY_BIAS*2)))) {
+				
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 1.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                cs[0] = -1;
+                cs[1] = -1;
+				
+                if (lval > rval) {
+                    ret = getCross(v1, bbline, cv);
+                    if ((cv[0] < bnlf) || (cv[0] > bnrt)) {
+						
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 1.2 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                        cv[0] = -1;
+                        cv[1] = -1;
+                        ret = getCross(v1, ttline, cu);
+                        if ((cu[0] < bnlf) || (cu[0] > bnrt)) {
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 1.2.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                            cu[0] = -1;
+                            cu[1] = -1;
+                        }
+                    }
+                } else {
+                    ret = getCross(v1, ttline, cu);
+                    if ((cu[0] < bnlf) || (cu[0] > bnrt)) {
+						
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 1.3 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                        cu[0] = -1;
+                        cu[1] = -1;
+                        ret = getCross(v1, bbline, cv);
+                        if ((cu[0] < bnlf) || (cu[0] > bnrt)) {
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 1.3.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                            cu[0] = -1;
+                            cu[1] = -1;
+                        }
+                    }
+
+                }
+            }
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2. cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+            if ((cs[0] > 0) && (cs[1] > 0)) {
+
+                upal = calcuVectorDistancePoint(ttline, cs);
+                dnal = calcuVectorDistancePoint(bbline, cs);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                if ((upal >= dnal) && (rval >= lval)) {
+                    ret = getCross(v2, ttline, cu);
+                    ret = getCross(v4, bbline, cv);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                }
+                else if ((upal <= dnal) && (rval <= lval)) {
+                    ret = getCross(v4, bbline, cv);
+                    ret = getCross(v2, ttline, cu);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.2 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+                }
+                else {
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                    if (upal >= dnal) {
+                        if (lval >= rval) {
+                            if ((upal - dnal) > (lval - rval)) {
+                                ret = getCross(v2, ttline, cu);
+                                ret = getCross(v4, bbline, cv);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                            } else {
+                                ret = getCross(v2, ttline, cu);
+                                ret = getCross(v4, bbline, cv);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3.2 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                            }			
+                        } else {
+                            if ((upal - dnal) > (rval - lval)) {
+                                ret = getCross(v2, ttline, cu);
+                                ret = getCross(v4, bbline, cv);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3.3 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+                            } else {
+                                ret = getCross(v2, ttline, cu);
+                                ret = getCross(v4, bbline, cv);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3.4 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+                            }			
+                        }
+                    }
+                    else {
+                        if (lval >= rval) {
+                            if ((dnal - upal) > (lval - rval)) {
+                                ret = getCross(v4, bbline, cv);
+                                ret = getCross(v2, ttline, cu);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+                            } else {
+                                ret = getCross(v2, ttline, cu);
+                                ret = getCross(v4, bbline, cv);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                            }			
+                        } else {
+                            if ((dnal - upal) > (rval - lval)) {
+                                ret = getCross(v4, bbline, cv);
+                                ret = getCross(v2, ttline, cu);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                            } else {
+                                ret = getCross(v2, ttline, cu);
+                                ret = getCross(v4, bbline, cv);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.1.3.1 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                            }			
+                        }
+                    }
+                }
+            }
+            else if ((cv[0] > 0) && (cv[1] > 0)) {
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.2 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                if (lval > rval) {
+                    ret = getCross(v2, ttline, cu);
+                    ret = getCross(v1, ttline, cs);
+                    if ((cs[0] < bnlf) || (cs[0] > bnrt)) {
+                        cs[1] = rval;
+                        cs[0] = bnlf + BOUNDRY_BIAS;		
+                    }
+                } else {
+                    if ((ct[0] > bnrt) || (ct[0] < (bnrt-(BOUNDRY_BIAS*2)))) {
+                        ret = getCross(v4, bbline, p1);
+                        distv = calcuDistance(cv, p1);
+                        if (distv < 100.0) {
+                            ret = getCross(v4, rrline, ct);
+				ret = getCross(v1, bbline, cu);		
+
+                            lval = calcuVectorDistancePoint(ttline, ct);
+                            rval = calcuVectorDistancePoint(bbline, ct);
+
+                            cs[1] = rval;
+                            cs[0] = bnlf + BOUNDRY_BIAS;
+                        } else {
+                            ret = getCross(v2, rrline, ct);
+				ret = getCross(v1, bbline, cv);
+
+                            lval = calcuVectorDistancePoint(ttline, ct);
+                            rval = calcuVectorDistancePoint(bbline, ct);
+
+                            cs[1] = rval;
+                            cs[0] = bnlf + BOUNDRY_BIAS;
+                        }
+                    }
+                    else {
+                        ret = getCross(v2, ttline, cu);
+                        ret = getCross(v4, bbline, cv);
+                        cs[1] = rval;
+                        cs[0] = bnlf + BOUNDRY_BIAS;	
+                    }
+                }
+            }
+            else if ((cu[0] > 0) && (cu[1] > 0)) {
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.3 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                if (lval > rval) {
+                    if ((ct[0] > bnrt) || (ct[0] < (bnrt-(BOUNDRY_BIAS*2)))) {
+                        ret = getCross(v2, ttline, p1);
+                        distv = calcuDistance(cu, p1);
+                        if (distv < 100.0) {
+                            ret = getCross(v2, rrline, ct);
+				ret = getCross(v1, bbline, cv);		
+
+                            lval = calcuVectorDistancePoint(ttline, ct);
+                            rval = calcuVectorDistancePoint(bbline, ct);
+
+                            cs[1] = rval;
+                            cs[0] = bnlf + BOUNDRY_BIAS;
+                        } else {
+                            ret = getCross(v4, rrline, ct);
+				ret = getCross(v1, bbline, cv);
+
+                            lval = calcuVectorDistancePoint(ttline, ct);
+                            rval = calcuVectorDistancePoint(bbline, ct);
+
+                            cs[1] = rval;
+                            cs[0] = bnlf + BOUNDRY_BIAS;
+                        }
+                    }
+                    else {
+                        ret = getCross(v4, bbline, cv);
+                        cs[1] = rval;
+                        cs[0] = bnlf + BOUNDRY_BIAS;	
+                    }
+                }
+                else {
+                    ret = getCross(v4, bbline, cv);
+                    ret = getCross(v1, bbline, cs);
+                    if ((cs[0] < bnlf) || (cs[0] > bnrt)) {
+                        cs[1] = rval;
+                        cs[0] = bnlf + BOUNDRY_BIAS;	
+                    }
+                }
+            }
+            else {
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] 2.4 cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+
+                ret = getCross(v2, ttline, cu);
+                ret = getCross(v4, bbline, cv);
+                cs[1] = rval;
+                cs[0] = bnlf + BOUNDRY_BIAS;	
+				
+            }
+
+
+            sup[0] = cu[0];
+            sup[1] = cu[1];
+
+            slf[0] = cs[0];
+            slf[1] = cs[1];
+
+            srt[0] = ct[0];
+            srt[1] = ct[1];
+
+            sdn[0] = cv[0];
+            sdn[1] = cv[1];
+
+#if 0
+            id = 0;
+            p1[0] = Rtarr[id * 2 + 0];
+            p1[1] = Rtarr[id * 2 + 1];
+
+            id = 1;
+            p2[0] = Rtarr[id * 2 + 0];
+            p2[1] = Rtarr[id * 2 + 1];
+
+            id = 2;
+            p3[0] = Rtarr[id * 2 + 0];
+            p3[1] = Rtarr[id * 2 + 1];
+
+            id = 3;
+            p4[0] = Rtarr[id * 2 + 0];
+            p4[1] = Rtarr[id * 2 + 1];
+
+            ret = getVectorFromP(v1, p1, p2);
+            ret = getVectorFromP(v2, p3, p4);
+            ret = getCross(v1, v2, cs);
+
+            id = 0;
+            upal = Rtarr[id * 2 + 0];
+
+            id = 3;
+            dnal = Rtarr[id * 2 + 0];
+
+            if (upal > dnal) {
+                id = 0;
+                sup[0] = Rtarr[id * 2 + 0];
+                sup[1] = Rtarr[id * 2 + 1];
+
+                slf[0] = Lfarr[id * 2 + 0];
+                slf[1] = Lfarr[id * 2 + 1];
+
+                srt[0] = cs[0];
+                srt[1] = cs[1];
+
+                id = 1;
+                sdn[0] = Lfarr[id * 2 + 0];
+                sdn[1] = Lfarr[id * 2 + 1];
+            } else {
+                id = 0;
+                sup[0] = Lfarr[id * 2 + 0];
+                sup[1] = Lfarr[id * 2 + 1];
+
+                id = 1;
+                slf[0] = Lfarr[id * 2 + 0];
+                slf[1] = Lfarr[id * 2 + 1];
+
+                srt[0] = cs[0];
+                srt[1] = cs[1];
+
+                id = 3;
+                sdn[0] = Rtarr[id * 2 + 0];
+                sdn[1] = Rtarr[id * 2 + 1];
+            }
+#endif
         }
          else if ((rtLinSize == 3) && ((cropflag & (0x4 << 4)) || (cropflag & (0x3 << 8)))) {
              id = 0;
@@ -6170,134 +7011,415 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     }
     else if (lfLinSize == 2) {
         if (rtLinSize == 1) {
-             id = 0;
-             p1[0] = Lfarr[id*2+0];
-             p1[1] = Lfarr[id*2+1];
-    
-             id = 1;
-             p2[0] = Lfarr[id*2+0];
-             p2[1] = Lfarr[id*2+1];
-    
-             id = 2;
-             p3[0] = Lfarr[id*2+0];
-             p3[1] = Lfarr[id*2+1];
-    
-             id = 3;
-             p4[0] = Lfarr[id*2+0];
-             p4[1] = Lfarr[id*2+1];
-    
-             ret = getVectorFromP(v1, p1, p2);
-             ret = getVectorFromP(v2, p3, p4);
-             ret = getCross(v1, v2, cs);
-             
-             id = 0;
-             upal = Lfarr[id*2+0];
-    
-             id = 3;
-             dnal = Lfarr[id*2+0];
-    
-             if (upal > dnal) {
-                 id = 0;
-                 sup[0] = Rtarr[id*2+0];
-                 sup[1] = Rtarr[id*2+1];
-    
-                 id = 1;
-                 srt[0] = Rtarr[id*2+0];
-                 srt[1] = Rtarr[id*2+1];
-    
-                 slf[0] = cs[0];
-                 slf[1] = cs[1];
-                 
-                 id = 3;
-                 sdn[0] = Lfarr[id*2+0];
-                 sdn[1] = Lfarr[id*2+1];
-             } else {
-                 id = 0;
-                 sup[0] = Lfarr[id*2+0];
-                 sup[1] = Lfarr[id*2+1];
-                 
-                 srt[0] = Rtarr[id*2+0];
-                 srt[1] = Rtarr[id*2+1];
-                 
-                 slf[0] = cs[0];
-                 slf[1] = cs[1];
-    
-                 id = 1;
-                 sdn[0] = Rtarr[id*2+0];
-                 sdn[1] = Rtarr[id*2+1];
-             }
+
+            memcpy(v1, LfarrVec[0], sizeof(double) * 3);
+            memcpy(v2, RtarrVec[0], sizeof(double) * 3);
+            memcpy(v3, LfarrVec[1], sizeof(double) * 3);
+            //memcpy(v4, RtarrVec[1], sizeof(double) * 3);
+			
+            ret = getCross(v1, v3, cs);
+            upal = calcuVectorDistancePoint(ttline, cs);
+            dnal = calcuVectorDistancePoint(bbline, cs);
+
+            //lval = calcuVectorDistancePoint(ttline, ct);
+            //rval = calcuVectorDistancePoint(bbline, ct);
+
+#if LOG_CROP_FINDPOINTS
+            printf("[find] L1. cs(%.2lf, %.2lf) ct(%.2lf, %.2lf) cu(%.2lf, %.2lf) cv(%.2lf, %.2lf) d1(%.2lf, %.2lf) d2(%.2lf, %.2lf)\n", cs[0], cs[1], ct[0], ct[1], cu[0], cu[1], cv[0], cv[1], upal, dnal, lval, rval);
+#endif
+            ret = getCross(v2, rrline, ct);
+            ret = getCross(v2, ttline, p1);
+            ret = getCross(v2, bbline, p2);
+            if (((ct[1] < bnup) || (ct[1] > bndn)) || ((p1[0] > bnlf) && (p1[0] < bnrt))
+			|| ((p2[0] > bnlf) && (p2[0] < bnrt)) || ((ct[0] > bnrt) || (ct[0] > (bnrt-BOUNDRY_BIAS*2)))) {
+
+                ct[0] = -1;
+                ct[1] = -1;
+                if (upal > dnal) {
+                    ret = getCross(v2, bbline, cv);
+                    if ((cv[0] < bnlf) || (cv[0] > bnrt)) {
+                        cv[0] = -1;
+                        cv[1] = -1;
+                        ret = getCross(v2, ttline, cu);
+                        if ((cu[0] < bnlf) || (cu[0] > bnrt)) {
+                            cu[0] = -1;
+                            cu[1] = -1;
+                        }
+                    }
+                } else {
+                    ret = getCross(v2, ttline, cu);
+                    if ((cu[0] < bnlf) || (cu[0] > bnrt)) {
+                        cu[0] = -1;
+                        cu[1] = -1;
+                        ret = getCross(v2, bbline, cv);
+                        if ((cv[0] < bnlf) || (cv[0] > bnrt)) {
+                            cv[0] = -1;
+                            cv[1] = -1;
+                        }
+                    }
+                }
+            }
+
+            if ((ct[0] > 0) && (ct[1] > 0)) {
+                lval = calcuVectorDistancePoint(ttline, ct);
+                rval = calcuVectorDistancePoint(bbline, ct);
+
+                if ((upal >= dnal) && (rval >= lval)) {
+                    ret = getCross(v1, ttline, cu);
+                    ret = getCross(v3, bbline, cv);
+                }
+                else if ((upal <= dnal) && (rval <= lval)) {
+                    ret = getCross(v3, bbline, cv);
+                    ret = getCross(v1, ttline, cu);
+                }
+                else {
+                    if (upal >= dnal) {
+                        if (lval >= rval) {
+                            if ((upal - dnal) > (lval - rval)) {
+                                ret = getCross(v1, ttline, cu);
+                                ret = getCross(v3, bbline, cv);
+                            } else {
+                                ret = getCross(v1, ttline, cu);
+                                ret = getCross(v3, bbline, cv);
+                            }			
+                        } else {
+                            if ((upal - dnal) > (rval - lval)) {
+                                ret = getCross(v1, ttline, cu);
+                                ret = getCross(v3, bbline, cv);
+                            } else {
+                                ret = getCross(v1, ttline, cu);
+                                ret = getCross(v3, bbline, cv);
+                            }			
+                        }
+                    } else {
+                        if (lval >= rval) {
+                            if ((dnal - upal) > (lval - rval)) {
+                                ret = getCross(v3, bbline, cv);
+                                ret = getCross(v1, ttline, cu);
+                            } else {
+                                ret = getCross(v1, ttline, cu);
+                                ret = getCross(v3, bbline, cv);
+                            }			
+                        } else {
+                            if ((dnal - upal) > (rval - lval)) {
+                                ret = getCross(v3, bbline, cv);
+                                ret = getCross(v1, ttline, cu);
+                            } else {
+                                ret = getCross(v1, ttline, cu);
+                                ret = getCross(v3, bbline, cv);
+                            }			
+                        }
+                    }
+                }
+            }
+            else if ((cv[0] > 0) && (cv[1] > 0)) {
+                if (upal > dnal) {
+                    ret = getCross(v1, ttline, cu);
+                    ret = getCross(v2, ttline, ct);
+                    if ((ct[0] < bnlf) || (ct[0] > bnrt)) {
+                        ct[1] = dnal;
+                        ct[0] = bnrt + BOUNDRY_BIAS;		
+                    }
+                } else {
+                    if ((cs[0] < bnlf) || (cs[0] > (bnlf+(BOUNDRY_BIAS*2)))) {
+                        ret = getCross(v3, bbline, p1);
+                        distv = calcuDistance(cv, p1);
+                        if (distv < 100.0) {
+                            ret = getCross(v3, llline, cs);
+				ret = getCross(v2, bbline, cu);		
+
+                            upal = calcuVectorDistancePoint(ttline, cs);
+                            dnal = calcuVectorDistancePoint(bbline, cs);
+
+                            ct[1] = dnal;
+                            ct[0] = bnrt + BOUNDRY_BIAS;
+                        } else {
+                            ret = getCross(v1, llline, cs);
+				ret = getCross(v2, bbline, cv);
+
+                            upal = calcuVectorDistancePoint(ttline, cs);
+                            dnal = calcuVectorDistancePoint(bbline, cs);
+
+                            ct[1] = dnal;
+                            ct[0] = bnrt + BOUNDRY_BIAS;                        }
+                    }
+                    else {
+                        ret = getCross(v1, ttline, cu);
+                        ret = getCross(v3, bbline, cv);
+
+                        ct[1] = dnal;
+                        ct[0] = bnrt + BOUNDRY_BIAS;	
+                    }
+                }
+            }
+            else if ((cu[0] > 0) && (cu[1] > 0)) {
+                if (upal > dnal) {
+                    if ((cs[0] < bnlf) || (cs[0] > (bnlf+(BOUNDRY_BIAS*2)))) {
+                        ret = getCross(v1, ttline, p1);
+                        distv = calcuDistance(cu, p1);
+                        if (distv < 100.0) {
+                            ret = getCross(v1, llline, cs);
+				ret = getCross(v2, bbline, cv);		
+
+                            upal = calcuVectorDistancePoint(ttline, cs);
+                            dnal = calcuVectorDistancePoint(bbline, cs);
+
+                            ct[1] = dnal;
+                            ct[0] = bnrt + BOUNDRY_BIAS;
+                        } else {
+                            ret = getCross(v3, llline, cs);
+				ret = getCross(v2, bbline, cv);
+
+                            upal = calcuVectorDistancePoint(ttline, cs);
+                            dnal = calcuVectorDistancePoint(bbline, cs);
+
+                            ct[1] = dnal;
+                            ct[0] = bnrt + BOUNDRY_BIAS;
+                        }
+                    }
+                    else {
+                        ret = getCross(v1, ttline, cu);
+                        ret = getCross(v3, bbline, cv);
+
+                        ct[1] = dnal;
+                        ct[0] = bnrt + BOUNDRY_BIAS;
+                    }
+                }
+                else {
+                    ret = getCross(v3, bbline, cv);
+                    ret = getCross(v2, bbline, ct);
+                    if ((ct[0] < bnlf) || (ct[0] > bnrt)) {
+                        ct[1] = dnal;
+                        ct[0] = bnrt + BOUNDRY_BIAS;
+                    }
+                }
+            }
+            else {
+                ret = getCross(v1, ttline, cu);
+                ret = getCross(v3, bbline, cv);
+
+                ct[1] = dnal;
+                ct[0] = bnrt + BOUNDRY_BIAS;
+            }
+
+
+            sup[0] = cu[0];
+            sup[1] = cu[1];
+
+            slf[0] = cs[0];
+            slf[1] = cs[1];
+
+            srt[0] = ct[0];
+            srt[1] = ct[1];
+
+            sdn[0] = cv[0];
+            sdn[1] = cv[1];
+
+#if 0
+            id = 0;
+            p1[0] = Lfarr[id * 2 + 0];
+            p1[1] = Lfarr[id * 2 + 1];
+
+            id = 1;
+            p2[0] = Lfarr[id * 2 + 0];
+            p2[1] = Lfarr[id * 2 + 1];
+
+            id = 2;
+            p3[0] = Lfarr[id * 2 + 0];
+            p3[1] = Lfarr[id * 2 + 1];
+
+            id = 3;
+            p4[0] = Lfarr[id * 2 + 0];
+            p4[1] = Lfarr[id * 2 + 1];
+
+            ret = getVectorFromP(v1, p1, p2);
+            ret = getVectorFromP(v2, p3, p4);
+            ret = getCross(v1, v2, cs);
+
+            id = 0;
+            upal = Lfarr[id * 2 + 0];
+
+            id = 3;
+            dnal = Lfarr[id * 2 + 0];
+
+            if (upal > dnal) {
+                id = 0;
+                sup[0] = Rtarr[id * 2 + 0];
+                sup[1] = Rtarr[id * 2 + 1];
+
+                id = 1;
+                srt[0] = Rtarr[id * 2 + 0];
+                srt[1] = Rtarr[id * 2 + 1];
+
+                slf[0] = cs[0];
+                slf[1] = cs[1];
+
+                id = 3;
+                sdn[0] = Lfarr[id * 2 + 0];
+                sdn[1] = Lfarr[id * 2 + 1];
+            } else {
+                id = 0;
+                sup[0] = Lfarr[id * 2 + 0];
+                sup[1] = Lfarr[id * 2 + 1];
+
+                srt[0] = Rtarr[id * 2 + 0];
+                srt[1] = Rtarr[id * 2 + 1];
+
+                slf[0] = cs[0];
+                slf[1] = cs[1];
+
+                id = 1;
+                sdn[0] = Rtarr[id * 2 + 0];
+                sdn[1] = Rtarr[id * 2 + 1];
+            }
+#endif
     
         }
          else if (rtLinSize == 2) {
-             id = 0;
-             upal = Lfarr[id*2+1];
-             dnal = Rtarr[id*2+1];
-    
-             if (upal > dnal) {
-                 id = 0;
-                 sup[0] = Rtarr[id*2+0];
-                 sup[1] = Rtarr[id*2+1];
-             } else {
-                 id = 0;
-                 sup[0] = Lfarr[id*2+0];
-                 sup[1] = Lfarr[id*2+1];
-             }
-    
-             id = 0;
-             p1[0] = Lfarr[id*2+0];
-             p1[1] = Lfarr[id*2+1];
-    
-             id = 1;
-             p2[0] = Lfarr[id*2+0];
-             p2[1] = Lfarr[id*2+1];
-    
-             id = 2;
-             p3[0] = Lfarr[id*2+0];
-             p3[1] = Lfarr[id*2+1];
-    
-             id = 3;
-             p4[0] = Lfarr[id*2+0];
-             p4[1] = Lfarr[id*2+1];
-    
-             ret = getVectorFromP(v1, p1, p2);
-             ret = getVectorFromP(v2, p3, p4);
-             ret = getCross(v1, v2, cs);
-             
-             slf[0] = cs[0];
-             slf[1] = cs[1];
-             
-             id = 0;
-             p1[0] = Rtarr[id*2+0];
-             p1[1] = Rtarr[id*2+1];
-    
-             id = 1;
-             p2[0] = Rtarr[id*2+0];
-             p2[1] = Rtarr[id*2+1];
-    
-             id = 2;
-             p3[0] = Rtarr[id*2+0];
-             p3[1] = Rtarr[id*2+1];
-    
-             id = 3;
-             p4[0] = Rtarr[id*2+0];
-             p4[1] = Rtarr[id*2+1];
-    
-             ret = getVectorFromP(v1, p1, p2);
-             ret = getVectorFromP(v2, p3, p4);
-             ret = getCross(v1, v2, cs);
-             
-             srt[0] = cs[0];
-             srt[1] = cs[1];
-             
-             if (upal > dnal) {                 
-                 id = 3;
-                 sdn[0] = Lfarr[id*2+0];
-                 sdn[1] = Lfarr[id*2+1];
-             } else {
-                 id = 3;
-                 sdn[0] = Rtarr[id*2+0];
-                 sdn[1] = Rtarr[id*2+1];
-             }
+            memcpy(v1, LfarrVec[0], sizeof(double) * 3);
+            memcpy(v2, RtarrVec[0], sizeof(double) * 3);
+            memcpy(v3, LfarrVec[1], sizeof(double) * 3);
+            memcpy(v4, RtarrVec[1], sizeof(double) * 3);
+
+            ret = getCross(v1, v3, cs);
+            ret = getCross(v2, v4, ct);
+
+            upal = calcuVectorDistancePoint(ttline, cs);
+            dnal = calcuVectorDistancePoint(bbline, cs);
+
+            lval = calcuVectorDistancePoint(ttline, ct);
+            rval = calcuVectorDistancePoint(bbline, ct);
+
+            if ((upal >= dnal) && (rval >= lval)) {
+                ret = getCross(v1, ttline, cu);
+                ret = getCross(v4, bbline, cv);
+            }
+            else if ((upal <= dnal) && (rval <= lval)) {
+                ret = getCross(v3, bbline, cv);
+                ret = getCross(v2, ttline, cu);
+            }
+            else {
+                if (upal >= dnal) {
+                    if (lval >= rval) {
+                        if ((upal - dnal) > (lval - rval)) {
+                            ret = getCross(v1, ttline, cu);
+                            ret = getCross(v4, bbline, cv);
+                        } else {
+                            ret = getCross(v2, ttline, cu);
+                            ret = getCross(v3, bbline, cv);
+                        }			
+                    } else {
+                        if ((upal - dnal) > (rval - lval)) {
+                            ret = getCross(v1, ttline, cu);
+                            ret = getCross(v4, bbline, cv);
+                        } else {
+                            ret = getCross(v2, ttline, cu);
+                            ret = getCross(v3, bbline, cv);
+                        }			
+                    }
+                } else {
+                    if (lval >= rval) {
+                        if ((dnal - upal) > (lval - rval)) {
+                            ret = getCross(v3, bbline, cv);
+                            ret = getCross(v2, ttline, cu);
+                        } else {
+                            ret = getCross(v1, ttline, cu);
+                            ret = getCross(v4, bbline, cv);
+                        }			
+                    } else {
+                        if ((dnal - upal) > (rval - lval)) {
+                            ret = getCross(v3, bbline, cv);
+                            ret = getCross(v2, ttline, cu);
+                        } else {
+                            ret = getCross(v1, ttline, cu);
+                            ret = getCross(v4, bbline, cv);
+                        }			
+                    }
+                }
+            }
+
+            sup[0] = cu[0];
+            sup[1] = cu[1];
+
+            slf[0] = cs[0];
+            slf[1] = cs[1];
+
+            srt[0] = ct[0];
+            srt[1] = ct[1];
+
+            sdn[0] = cv[0];
+            sdn[1] = cv[1];
+#if 0
+            id = 0;
+            upal = Lfarr[id * 2 + 1];
+            dnal = Rtarr[id * 2 + 1];
+
+            if (upal > dnal) {
+                id = 0;
+                sup[0] = Rtarr[id * 2 + 0];
+                sup[1] = Rtarr[id * 2 + 1];
+            } else {
+                id = 0;
+                sup[0] = Lfarr[id * 2 + 0];
+                sup[1] = Lfarr[id * 2 + 1];
+            }
+
+            id = 0;
+            p1[0] = Lfarr[id * 2 + 0];
+            p1[1] = Lfarr[id * 2 + 1];
+
+            id = 1;
+            p2[0] = Lfarr[id * 2 + 0];
+            p2[1] = Lfarr[id * 2 + 1];
+
+            id = 2;
+            p3[0] = Lfarr[id * 2 + 0];
+            p3[1] = Lfarr[id * 2 + 1];
+
+            id = 3;
+            p4[0] = Lfarr[id * 2 + 0];
+            p4[1] = Lfarr[id * 2 + 1];
+
+            ret = getVectorFromP(v1, p1, p2);
+            ret = getVectorFromP(v2, p3, p4);
+            ret = getCross(v1, v2, cs);
+
+            slf[0] = cs[0];
+            slf[1] = cs[1];
+
+            id = 0;
+            p1[0] = Rtarr[id * 2 + 0];
+            p1[1] = Rtarr[id * 2 + 1];
+
+            id = 1;
+            p2[0] = Rtarr[id * 2 + 0];
+            p2[1] = Rtarr[id * 2 + 1];
+
+            id = 2;
+            p3[0] = Rtarr[id * 2 + 0];
+            p3[1] = Rtarr[id * 2 + 1];
+
+            id = 3;
+            p4[0] = Rtarr[id * 2 + 0];
+            p4[1] = Rtarr[id * 2 + 1];
+
+            ret = getVectorFromP(v1, p1, p2);
+            ret = getVectorFromP(v2, p3, p4);
+            ret = getCross(v1, v2, cs);
+
+            srt[0] = cs[0];
+            srt[1] = cs[1];
+
+            if (upal > dnal) {
+                id = 3;
+                sdn[0] = Lfarr[id * 2 + 0];
+                sdn[1] = Lfarr[id * 2 + 1];
+            } else {
+                id = 3;
+                sdn[0] = Rtarr[id * 2 + 0];
+                sdn[1] = Rtarr[id * 2 + 1];
+            }
+#endif
         }
         else {
 #if LOG_CROP_FINDPOINTS
@@ -7934,7 +9056,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
         masStart = lnstart;
         masRecd = lnrec;
         
-        sprintf_f(rs->logs, "wait meta mass (used:%d, start:%d lineRec:%d) %d\n", masUsed, masStart, masRecd, cnt); 
+        sprintf_f(rs->logs, "wait meta mass (used:%d, start:%d lineRec:%d gap:%d) %d\n", masUsed, masStart, masRecd, lngap, cnt); 
         print_f(rs->plogs, "DoC", rs->logs);
         
         msync(ptext, masUsed, MS_SYNC);
@@ -7946,7 +9068,6 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
         linecnt=0;
         
         for (ix = 0; ix < masRecd; ix++) {
-            cy += gap;
         
             cxm = *shtbuf;
             shtbuf++;
@@ -7967,6 +9088,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
             pextra->crpexRtPots[ipx*2+1] = cy;
         
             linecnt ++;
+            cy += gap;
         }
         
         ipx = linecnt + cof;
@@ -8019,7 +9141,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
         sprintf_f(rs->logs, "total extra points size: %d \n", ipx);
         print_f(rs->plogs, "DoC", rs->logs);
         
-        #if 0//LOG_P6_CROP_EN
+        #if LOG_P6_CROP_EN
         for (ix = 0; ix < ipx; ix++) {
             sprintf_f(rs->logs, "unsort pt %d. L%.1lf, %.1lf R%.1lf, %.1lf \n", ix
                                   , pextra->crpexLfPots[ix*2+0], pextra->crpexLfPots[ix*2+1], pextra->crpexRtPots[ix*2+0], pextra->crpexRtPots[ix*2+1]);
