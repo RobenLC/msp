@@ -31,8 +31,8 @@
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
-static char mver[] = "MSP Version v0.1.4.rc";
-static char gitcommit[] = "2019-05-28 11:40:16 ae855e6";
+static char mver[] = "MSP Version v0.1.5.rc";
+static char gitcommit[] = "2019-05-31 11:45:35 48cb4a8";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
