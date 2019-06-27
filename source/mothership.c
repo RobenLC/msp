@@ -1,10 +1,16 @@
 #include <stdint.h> 
-#include <unistd.h> 
 #include <stdio.h> 
 #include <stdlib.h> 
 #include <string.h>
 //#include <getopt.h> 
+#include <unistd.h> 
+
+int pipe(int pipefd[2]);
+
+#define _GNU_SOURCE
 #include <fcntl.h> 
+int pipe2(int pipefd[2], int flags);
+
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -18,7 +24,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <linux/poll.h>
+//#include <linux/poll.h>
+#include <poll.h>
+#include <signal.h>
 
 #include <dirent.h>
 #include <sys/stat.h>  
@@ -1777,7 +1785,7 @@ static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *ro
 static int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, uint8_t *fat, uint32_t max);
 
 static int mspFS_allocDir(struct sdFatDir_s  *pfatDir, struct directnFile_s **dir, int pidx);
-inline uint32_t mspSD_getNextFreeFAT(uint32_t idx, uint8_t *fat, uint32_t max) ;
+static uint32_t mspSD_getNextFreeFAT(uint32_t idx, uint8_t *fat, uint32_t max) ;
 static int aspFS_createFATRoot(struct sdFAT_s *pfat);
 static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *root, char *dir, int max);
 static int aspFS_insertFATChild(struct directnFile_s *parent, struct directnFile_s *r);
@@ -2419,7 +2427,7 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     return 0;
 }
 
-static dbgBitmapHeader(struct bitmapHeader_s *ph, int len) 
+static int dbgBitmapHeader(struct bitmapHeader_s *ph, int len) 
 {
     char mlog[256];
 
@@ -3912,7 +3920,7 @@ inline int tiffGetDot(char *img, int *dot, char *pta, int *scale)
     return val;
 }
 
-inline int tiffDrawDot(char *img, int *dot, char *pta, int *scale)
+static int tiffDrawDot(char *img, int *dot, char *pta, int *scale)
 {
     uint8_t *dst, val=0;
     int rowsz, height, max, bpp;
@@ -10078,7 +10086,7 @@ struct directnFile_s{
 #endif
 }
 
-inline int aspCalcSupLen(struct supdataBack_s *sup)
+static int aspCalcSupLen(struct supdataBack_s *sup)
 {
     int len=0, cnt=0;
     struct supdataBack_s *scr;
@@ -11451,8 +11459,8 @@ static int aspFSspaceCount(char *str, int len)
     int space=0;
     int sc=0;
     char *end=0;
-    if (!str) return;
-    if (!len) return;
+    if (!str) return -1;
+    if (!len) return -2;
     end = str + len - 1;
     while (end >= str) {
         if (*end == 0x20) {
@@ -11472,8 +11480,8 @@ static int aspFSrmspace(char *str, int len)
     int space=0;
     int sc=0;
     char *end=0;
-    if (!str) return;
-    if (!len) return;
+    if (!str) return -1;
+    if (!len) return -2;
     end = str + len - 1;
     while (end >= str) {
         if (*end == 0x20) {
@@ -12349,7 +12357,7 @@ inline int mspSD_parseFAT2LinkList(struct adFATLinkList_s **head, uint32_t idx, 
     return 0;
 }
 
-inline uint32_t mspSD_getNextFreeFAT(uint32_t idx, uint8_t *fat, uint32_t max) 
+static uint32_t mspSD_getNextFreeFAT(uint32_t idx, uint8_t *fat, uint32_t max) 
 {
     uint8_t *uch;
     uint32_t offset=0, i=0;
@@ -13393,7 +13401,7 @@ static int error_handle(char *log, int line)
     return 0;
 
 }
-inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
+static uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
 {
     char str[128];
 
@@ -13408,7 +13416,7 @@ inline uint16_t abs_info(struct info16Bit_s *p, uint16_t info)
     return info;
 }
 
-inline uint16_t pkg_info(struct info16Bit_s *p)
+static uint16_t pkg_info(struct info16Bit_s *p)
 {
     char str[128];
     uint16_t info = 0;
@@ -13423,69 +13431,69 @@ inline uint16_t pkg_info(struct info16Bit_s *p)
     return info;
 }
 
-inline uint32_t chk_bk(uint32_t bkf) 
+static uint32_t chk_bk(uint32_t bkf) 
 {
     return (bkf & 0xffff0000);
 }
 
-inline uint32_t clr_bk(uint32_t bkf) 
+static uint32_t clr_bk(uint32_t bkf) 
 {
     bkf &= ~0xffff0000;
     return bkf;
 }
 
-inline uint32_t emb_bk(uint32_t bkf, uint8_t evt, uint8_t ste) 
+static uint32_t emb_bk(uint32_t bkf, uint8_t evt, uint8_t ste) 
 {
     bkf &= ~0xffff0000;
     bkf |= ((evt << 8) | ste) << 16;
     return bkf;
 }
 
-inline uint32_t chk_fw(uint32_t bkf) 
+static uint32_t chk_fw(uint32_t bkf) 
 {
     return (bkf & 0x0000ffff);
 }
 
-inline uint32_t clr_fw(uint32_t bkf) 
+static uint32_t clr_fw(uint32_t bkf) 
 {
     bkf &= ~0x0000ffff;
     return bkf;
 }
 
-inline uint32_t emb_fw(uint32_t bkf, uint8_t evt, uint8_t ste) 
+static uint32_t emb_fw(uint32_t bkf, uint8_t evt, uint8_t ste) 
 {
     bkf &= ~0x0000ffff;
     bkf |= (evt << 8) | ste;
     return bkf;
 }
 
-inline uint32_t abs_result(uint32_t result)
+static uint32_t abs_result(uint32_t result)
 {
     result = result >> 16;
     return (result & 0xff);
 }
-inline uint32_t emb_result(uint32_t result, uint32_t flag) 
+static uint32_t emb_result(uint32_t result, uint32_t flag) 
 {
     result &= ~0xff0000;
     result |= (flag << 16) & 0xff0000;
     return result;
 }
 
-inline uint32_t emb_stanPro(uint32_t result, uint32_t rlt, uint32_t sta, uint32_t pro) 
+static uint32_t emb_stanPro(uint32_t result, uint32_t rlt, uint32_t sta, uint32_t pro) 
 {
     result &= ~0xffffff;
     result |= ((rlt & 0xff) << 16) | ((sta & 0xff) << 8) | (pro & 0xff);
     return result;
 }
 
-inline uint32_t emb_event(uint32_t result, uint32_t flag) 
+static uint32_t emb_event(uint32_t result, uint32_t flag) 
 {
     result &= ~0xff000000;
     result |= (flag & 0xff) << 24;
     return result;
 }
 
-inline uint32_t emb_state(uint32_t result, uint32_t flag) 
+static uint32_t emb_state(uint32_t result, uint32_t flag) 
 {
     char str[32];
     static int pre=0;
@@ -13501,7 +13509,7 @@ inline uint32_t emb_state(uint32_t result, uint32_t flag)
     return result;
 }
 
-inline uint32_t emb_process(uint32_t result, uint32_t flag) 
+static uint32_t emb_process(uint32_t result, uint32_t flag) 
 {
     result &= ~0xff;
     result |= flag & 0xff;
@@ -26387,11 +26395,11 @@ static int p0_end(struct mainRes_s *mrs)
     close(mrs->pipedn[3].rt[1]);
     close(mrs->pipedn[4].rt[1]);
 
-    kill(mrs->sid[0]);
-    kill(mrs->sid[1]);
-    kill(mrs->sid[2]);
-    kill(mrs->sid[3]);
-    kill(mrs->sid[4]);
+    kill(mrs->sid[0], SIGKILL);
+    kill(mrs->sid[1], SIGKILL);
+    kill(mrs->sid[2], SIGKILL);
+    kill(mrs->sid[3], SIGKILL);
+    kill(mrs->sid[4], SIGKILL);
 
     fclose(mrs->fs);
     munmap(mrs->dataRx.pp[0], 1024*SPI_TRUNK_SZ);
