@@ -59757,7 +59757,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             
                             if (chm) {
-                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                                 print_f(rs->plogs, "P11", rs->logs);
                             }
                         }
@@ -59946,7 +59946,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             
                             if (chm) {
-                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                                 print_f(rs->plogs, "P11", rs->logs);
                             }
                         }
@@ -60193,7 +60193,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             
                             if (chm) {
-                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                                 print_f(rs->plogs, "P11", rs->logs);
                             }
                         }
@@ -60406,7 +60406,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             
                             if (chm) {
-                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                                sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                                 print_f(rs->plogs, "P11", rs->logs);
                             }
                         }
@@ -61995,7 +61995,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                 }
                                 else {
-                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown puscur 0x%.8x \n", puscur);
+                                    sprintf_f(rs->logs, "\n[DVF] Error!!! unknown puscur 0x%.8x \n", (uint32_t)puscur);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     /* should't be here */
                                 }
@@ -62592,7 +62592,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                 
                                 } else {
-                                    sprintf_f(rs->logs, "[DVB] Error!!! fileid point is null  \n", lenflh);
+                                    sprintf_f(rs->logs, "[DVB] Error!!! fileid point is null  \n");
                                     print_f(rs->plogs, "P11", rs->logs);
                                     cmd = 0;
                                     opc = 0xff;
@@ -64559,7 +64559,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                     
                         if (chm) {
-                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                             print_f(rs->plogs, "P11", rs->logs);
                         }
                     //}
@@ -64769,7 +64769,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
     
                     if (chm) {
-                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
@@ -64931,7 +64931,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
     
                     if (chm) {
-                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
@@ -66391,7 +66391,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
                     
-                    sprintf_f(rs->logs, "[DV] rom pri send command ret:  \n", pipRet);
+                    sprintf_f(rs->logs, "[DV] rom pri send command ret:  %d\n", pipRet);
                     print_f(rs->plogs, "P11", rs->logs);
 
                     pipRet = write(pipeTxd[1], endTran, 1);
@@ -66401,7 +66401,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
 
-                    sprintf_f(rs->logs, "[DV] rom sec send command ret:  \n", pipRet);
+                    sprintf_f(rs->logs, "[DV] rom sec send command ret:  %d\n", pipRet);
                     print_f(rs->plogs, "P11", rs->logs);
 
                     while (1) {
@@ -66632,7 +66632,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         continue;
                     }
-                    sprintf_f(rs->logs, "[DV] rom pri send command ret:  \n", pipRet);
+                    sprintf_f(rs->logs, "[DV] rom pri send command ret:  %d \n", pipRet);
                     print_f(rs->plogs, "P11", rs->logs);
 
                     endTran[0] = '0';
@@ -66643,7 +66643,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         continue;
                     }
-                    sprintf_f(rs->logs, "[DV] rom sec send command ret:  \n", pipRet);
+                    sprintf_f(rs->logs, "[DV] rom sec send command ret:  %d \n", pipRet);
                     print_f(rs->plogs, "P11", rs->logs);
 
                     while (1) {
@@ -66822,7 +66822,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 lenflh += 1;
 
                 if (lenflh > 128) {
-                    sprintf_f(rs->logs, "error!!! wrong version total size: \n", lenflh); 
+                    sprintf_f(rs->logs, "error!!! wrong version total size: %d\n", lenflh); 
                     print_f(rs->plogs, "P11", rs->logs);
                 }
 
@@ -66905,7 +66905,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         if (chm) {
                         
                             #if LOG_FLASH 
-                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
                             
@@ -67140,7 +67140,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                         
                         if (chm) {
-                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                            sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                             print_f(rs->plogs, "P11", rs->logs);
                         }
                     //}
@@ -67360,7 +67360,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
     
                     if (chm) {
-                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm, chm);
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
@@ -67540,9 +67540,9 @@ int main(int argc, char *argv[])
     dbgShowTimeStamp("s1", pmrs, NULL, 4, NULL);
 
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
     
     pmrs->plog.max = OUT_BUFF_LEN - 4096;
     pmrs->plog.pool = aspSalloc(pmrs->plog.max);
@@ -67612,9 +67612,9 @@ int main(int argc, char *argv[])
     dbgShowTimeStamp("s2", pmrs, NULL, 2, NULL);
 
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
     pmrs->spioc1 = aspSalloc(sizeof(struct spi_ioc_transfer));
     pmrs->spioc2 = aspSalloc(sizeof(struct spi_ioc_transfer));
@@ -67683,9 +67683,9 @@ int main(int argc, char *argv[])
     dbgShowTimeStamp("s3", pmrs, NULL, 2, NULL);
     
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
 // initial share parameter
     len = sizeof(struct aspMetaData_s);
@@ -67783,16 +67783,16 @@ int main(int argc, char *argv[])
         sprintf_f(pmrs->log, "wtg result buff:0x%.8x - DONE\n", (uint32_t)pmrs->wtg.wtRlt);
         print_f(&pmrs->plog, "WTG", pmrs->log);
     } else {
-        sprintf_f(pmrs->log, "wtg result buff alloc failed!!- ERROR\n", pmrs->wtg.wtRlt);
+        sprintf_f(pmrs->log, "wtg result buff alloc failed!!- ERROR\n");
         print_f(&pmrs->plog, "WTG", pmrs->log);
     }
     pmrs->wtg.wtMrs = pmrs;
 
     dbgShowTimeStamp("s4", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
     
     ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
@@ -69773,9 +69773,9 @@ int main(int argc, char *argv[])
 
     dbgShowTimeStamp("s5", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
     
     #if 0 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
@@ -69893,9 +69893,9 @@ int main(int argc, char *argv[])
 
     dbgShowTimeStamp("s6", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
     #if AP_AUTO
     /* AP mode launch or not */
@@ -70077,9 +70077,9 @@ int main(int argc, char *argv[])
 
     dbgShowTimeStamp("s7", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
     #endif
     
     #endif
@@ -70163,9 +70163,9 @@ int main(int argc, char *argv[])
 
     dbgShowTimeStamp("s8", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
     
     /* FAT */
@@ -70255,9 +70255,9 @@ int main(int argc, char *argv[])
 
     dbgShowTimeStamp("s9", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
     sprintf_f(pmrs->log, "before open device[%s]\n", spidev_0); 
     print_f(&pmrs->plog, "SPI", pmrs->log);
@@ -70402,9 +70402,9 @@ int main(int argc, char *argv[])
 
     dbgShowTimeStamp("s10", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 
 #endif  //#if DISABLE_SPI
 
@@ -70928,9 +70928,9 @@ int main(int argc, char *argv[])
 
     dbgShowTimeStamp("s11", pmrs, NULL, 2, NULL);
     sysinfo(&minfo);
-    printf("[M] sysinfo free: %d total: %d unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
-    printf("[M] sysinfo freeswp: %d totalswp: %d buff: %d \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
-    printf("[M] sysinfo freehi: %d totalhi: %d shd: %d \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
+    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", minfo.freeram, minfo.totalram, minfo.mem_unit);
+    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", minfo.freeswap, minfo.totalswap, minfo.bufferram);
+    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", minfo.freehigh, minfo.totalhigh, minfo.sharedram);
 #endif //#if DISABLE_USB
 
 // IPC
