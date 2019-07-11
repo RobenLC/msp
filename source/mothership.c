@@ -36,6 +36,7 @@ int pipe2(int pipefd[2], int flags);
 #include <math.h>
 #include <errno.h> 
 //#include <mysql.h>
+#include <jpeglib.h>
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
@@ -73,7 +74,7 @@ static char genssid[128];
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (1000) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -1634,7 +1635,7 @@ static int sprintf_f(char *a, char *b, ...)
 #endif
 
 //memory alloc. put in/put out
-static char **memory_init(int *sz, int tsize, int csize);
+static char **memory_init(int *sz, uint32_t tsize, int csize);
 //debug printf
 static int print_f(struct logPool_s *plog, char *head, char *str);
 static int printf_flush(struct logPool_s *plog, FILE *f);
@@ -1806,7 +1807,7 @@ static void* aspMemalloc(uint32_t asz, int pidx);
 static int aspMemFree(void *dval, int pidx);
 static void* aspMalloc(int mlen, int pidx);
 static void aspFree(void *p, int pidx);
-static void* aspSalloc(int slen);
+static void* aspSalloc(uint32_t slen);
 static int getParallelVectorFromV(CFLOAT *vec, CFLOAT *p, CFLOAT *vecIn);
 static int getRectVectorFromV(CFLOAT *vec, CFLOAT *p, CFLOAT *vecIn);
 static int getVectorFromP(CFLOAT *vec, CFLOAT *p1, CFLOAT *p2);
@@ -9950,9 +9951,9 @@ static void* aspMalloc(int mlen, int pidx)
     return p;
 }
 
-static void* aspSalloc(int slen)
+static void* aspSalloc(uint32_t slen)
 {
-    int tot=0;
+    uint32_t tot=0;
     char *p=0;
     
     tot = *totSalloc;
@@ -60908,13 +60909,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     recvsz = read(usbfd, ptrecv, USB_META_SIZE);
                 
                     #if DBG_27_DV
-                    sprintf_f(rs->logs, "[DV] usb RX size: %d / %d \n====================\n", recvsz, USB_META_SIZE);
+                    sprintf_f(rs->logs, "[DV] usb RX meta data size: %d / %d \n====================\n", recvsz, USB_META_SIZE);
                     print_f(rs->plogs, "P11", rs->logs);
                     #endif              
                     
                     if (recvsz < 0) {
                         //usbentsRx = 0;
-                        break;
+                        //break;
+                        continue;
                     }
                 
                     dat = 0;
@@ -71257,7 +71259,7 @@ static char **memory_init_vtable(char **pbuf, int tsize, int csize, uint32_t *tb
     return pma;
 }
 
-static char **memory_init(int *sz, int tsize, int csize)
+static char **memory_init(int *sz, uint32_t tsize, int csize)
 {
     char *mbuf, *tmpB;
     char **pma;
