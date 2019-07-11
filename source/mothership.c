@@ -2500,101 +2500,101 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
     sprintf_f(mlog, "********************************************\n");
     print_f(mlogPool, "METAU", mlog);
     
-    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_ASPC: 0x%.2x 0x%.2x 0x%.2x 0x%.2x\n", pmetausb->ASP_MAGIC_ASPC, pmetausb->ASP_MAGIC_ASPC[0], pmetausb->ASP_MAGIC_ASPC[1], 
+    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_ASPC: 0x%.2x 0x%.2x 0x%.2x 0x%.2x\n", (uint32_t)pmetausb->ASP_MAGIC_ASPC, pmetausb->ASP_MAGIC_ASPC[0], pmetausb->ASP_MAGIC_ASPC[1], 
                   pmetausb->ASP_MAGIC_ASPC[2], pmetausb->ASP_MAGIC_ASPC[3]);
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) IMG_HIGH: 0x%.2x 0x%.2x (%d)   \n",&(pmetausb->IMG_HIGH), pmetausb->IMG_HIGH[0], pmetausb->IMG_HIGH[1], 
+    sprintf_f(mlog, "(0x%.8x) IMG_HIGH: 0x%.2x 0x%.2x (%d)   \n",(uint32_t)&(pmetausb->IMG_HIGH), pmetausb->IMG_HIGH[0], pmetausb->IMG_HIGH[1], 
                    pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8)); 
     print_f(mlogPool, "METAU", mlog);
 
     #if VERB_INFO_USB
     for (ix=0; ix < 5; ix++) {
-    sprintf_f(mlog, "(0x%.8x) WIDTH_RESERVE[%d]: 0x%.2x    \n",&(pmetausb->WIDTH_RESERVE[ix]), ix, pmetausb->WIDTH_RESERVE[ix]); 
+    sprintf_f(mlog, "(0x%.8x) WIDTH_RESERVE[%d]: 0x%.2x    \n",(uint32_t)&(pmetausb->WIDTH_RESERVE[ix]), ix, pmetausb->WIDTH_RESERVE[ix]); 
     print_f(mlogPool, "METAU", mlog);
     }
     #endif
 
-    sprintf_f(mlog, "(0x%.8x) IMG_WIDTH: 0x%.2x 0x%.2x (%d)   \n",&(pmetausb->IMG_WIDTH), pmetausb->IMG_WIDTH[0], pmetausb->IMG_WIDTH[1], 
+    sprintf_f(mlog, "(0x%.8x) IMG_WIDTH: 0x%.2x 0x%.2x (%d)   \n",(uint32_t)&(pmetausb->IMG_WIDTH), pmetausb->IMG_WIDTH[0], pmetausb->IMG_WIDTH[1], 
                    pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8)); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) MINGS_USE: 0x%.2x 0x%.2x   \n",&(pmetausb->MINGS_USE), pmetausb->MINGS_USE[0], pmetausb->MINGS_USE[1]); 
+    sprintf_f(mlog, "(0x%.8x) MINGS_USE: 0x%.2x 0x%.2x   \n",(uint32_t)&(pmetausb->MINGS_USE), pmetausb->MINGS_USE[0], pmetausb->MINGS_USE[1]); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) PRI_O_SEC: 0x%.2x    \n",&(pmetausb->PRI_O_SEC), pmetausb->PRI_O_SEC); 
+    sprintf_f(mlog, "(0x%.8x) PRI_O_SEC: 0x%.2x    \n",(uint32_t)&(pmetausb->PRI_O_SEC), pmetausb->PRI_O_SEC); 
     print_f(mlogPool, "METAU", mlog);
 
     #if VERB_INFO_USB
     for (ix=0; ix < 48; ix++) {
-    sprintf_f(mlog, "(0x%.8x) MCROP_RESERVE[%d]: 0x%.2x    \n",&(pmetausb->MCROP_RESERVE[ix]), ix, pmetausb->MCROP_RESERVE[ix]); 
+    sprintf_f(mlog, "(0x%.8x) MCROP_RESERVE[%d]: 0x%.2x    \n",(uint32_t)&(pmetausb->MCROP_RESERVE[ix]), ix, pmetausb->MCROP_RESERVE[ix]); 
     print_f(mlogPool, "METAU", mlog);
     }
     #endif
 
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_01: %d, %d\n", (&pmetausb->CROP_POS_1), msb2lsb(&pmetausb->CROP_POS_1) >> 16, msb2lsb(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_1), msb2lsb(&pmetausb->CROP_POS_1) >> 16, msb2lsb(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_02: %d, %d\n", &pmetausb->CROP_POS_2, msb2lsb(&pmetausb->CROP_POS_2) >> 16, msb2lsb(&pmetausb->CROP_POS_2) & 0xffff);                      //byte[72]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_2, msb2lsb(&pmetausb->CROP_POS_2) >> 16, msb2lsb(&pmetausb->CROP_POS_2) & 0xffff);                      //byte[72]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_03: %d, %d\n", &pmetausb->CROP_POS_3, msb2lsb(&pmetausb->CROP_POS_3) >> 16, msb2lsb(&pmetausb->CROP_POS_3) & 0xffff);                      //byte[76]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_3, msb2lsb(&pmetausb->CROP_POS_3) >> 16, msb2lsb(&pmetausb->CROP_POS_3) & 0xffff);                      //byte[76]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_04: %d, %d\n", &pmetausb->CROP_POS_4, msb2lsb(&pmetausb->CROP_POS_4) >> 16, msb2lsb(&pmetausb->CROP_POS_4) & 0xffff);                      //byte[80]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_4, msb2lsb(&pmetausb->CROP_POS_4) >> 16, msb2lsb(&pmetausb->CROP_POS_4) & 0xffff);                      //byte[80]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_05: %d, %d\n", &pmetausb->CROP_POS_5, msb2lsb(&pmetausb->CROP_POS_5) >> 16, msb2lsb(&pmetausb->CROP_POS_5) & 0xffff);                      //byte[84]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_05: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_5, msb2lsb(&pmetausb->CROP_POS_5) >> 16, msb2lsb(&pmetausb->CROP_POS_5) & 0xffff);                      //byte[84]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_06: %d, %d\n", &pmetausb->CROP_POS_6, msb2lsb(&pmetausb->CROP_POS_6) >> 16, msb2lsb(&pmetausb->CROP_POS_6) & 0xffff);                      //byte[88]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_06: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_6, msb2lsb(&pmetausb->CROP_POS_6) >> 16, msb2lsb(&pmetausb->CROP_POS_6) & 0xffff);                      //byte[88]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_07: %d, %d\n", &pmetausb->CROP_POS_7, msb2lsb(&pmetausb->CROP_POS_7) >> 16, msb2lsb(&pmetausb->CROP_POS_7) & 0xffff);                      //byte[92]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_07: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_7, msb2lsb(&pmetausb->CROP_POS_7) >> 16, msb2lsb(&pmetausb->CROP_POS_7) & 0xffff);                      //byte[92]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_08: %d, %d\n", &pmetausb->CROP_POS_8, msb2lsb(&pmetausb->CROP_POS_8) >> 16, msb2lsb(&pmetausb->CROP_POS_8) & 0xffff);                      //byte[96]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_08: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_8, msb2lsb(&pmetausb->CROP_POS_8) >> 16, msb2lsb(&pmetausb->CROP_POS_8) & 0xffff);                      //byte[96]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_09: %d, %d\n", &pmetausb->CROP_POS_9, msb2lsb(&pmetausb->CROP_POS_9) >> 16, msb2lsb(&pmetausb->CROP_POS_9) & 0xffff);                      //byte[100]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_09: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_9, msb2lsb(&pmetausb->CROP_POS_9) >> 16, msb2lsb(&pmetausb->CROP_POS_9) & 0xffff);                      //byte[100]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_10: %d, %d\n", &pmetausb->CROP_POS_10, msb2lsb(&pmetausb->CROP_POS_10) >> 16, msb2lsb(&pmetausb->CROP_POS_10) & 0xffff);                      //byte[104]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_10: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_10, msb2lsb(&pmetausb->CROP_POS_10) >> 16, msb2lsb(&pmetausb->CROP_POS_10) & 0xffff);                      //byte[104]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_11: %d, %d\n", &pmetausb->CROP_POS_11, msb2lsb(&pmetausb->CROP_POS_11) >> 16, msb2lsb(&pmetausb->CROP_POS_11) & 0xffff);                      //byte[108]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_11: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_11, msb2lsb(&pmetausb->CROP_POS_11) >> 16, msb2lsb(&pmetausb->CROP_POS_11) & 0xffff);                      //byte[108]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_12: %d, %d\n", &pmetausb->CROP_POS_12, msb2lsb(&pmetausb->CROP_POS_12) >> 16, msb2lsb(&pmetausb->CROP_POS_12) & 0xffff);                      //byte[112]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_12: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_12, msb2lsb(&pmetausb->CROP_POS_12) >> 16, msb2lsb(&pmetausb->CROP_POS_12) & 0xffff);                      //byte[112]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_13: %d, %d\n", &pmetausb->CROP_POS_13, msb2lsb(&pmetausb->CROP_POS_13) >> 16, msb2lsb(&pmetausb->CROP_POS_13) & 0xffff);                      //byte[116]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_13: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_13, msb2lsb(&pmetausb->CROP_POS_13) >> 16, msb2lsb(&pmetausb->CROP_POS_13) & 0xffff);                      //byte[116]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_14: %d, %d\n", &pmetausb->CROP_POS_14, msb2lsb(&pmetausb->CROP_POS_14) >> 16, msb2lsb(&pmetausb->CROP_POS_14) & 0xffff);                      //byte[120]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_14: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_14, msb2lsb(&pmetausb->CROP_POS_14) >> 16, msb2lsb(&pmetausb->CROP_POS_14) & 0xffff);                      //byte[120]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_15: %d, %d\n", &pmetausb->CROP_POS_15, msb2lsb(&pmetausb->CROP_POS_15) >> 16, msb2lsb(&pmetausb->CROP_POS_15) & 0xffff);                      //byte[124]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_15: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_15, msb2lsb(&pmetausb->CROP_POS_15) >> 16, msb2lsb(&pmetausb->CROP_POS_15) & 0xffff);                      //byte[124]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_16: %d, %d\n", &pmetausb->CROP_POS_16, msb2lsb(&pmetausb->CROP_POS_16) >> 16, msb2lsb(&pmetausb->CROP_POS_16) & 0xffff);                      //byte[128]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_16: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_16, msb2lsb(&pmetausb->CROP_POS_16) >> 16, msb2lsb(&pmetausb->CROP_POS_16) & 0xffff);                      //byte[128]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_17: %d, %d\n", &pmetausb->CROP_POS_17, msb2lsb(&pmetausb->CROP_POS_17) >> 16, msb2lsb(&pmetausb->CROP_POS_17) & 0xffff);                      //byte[132]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_17: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_17, msb2lsb(&pmetausb->CROP_POS_17) >> 16, msb2lsb(&pmetausb->CROP_POS_17) & 0xffff);                      //byte[132]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_18: %d, %d\n", &pmetausb->CROP_POS_18, msb2lsb(&pmetausb->CROP_POS_18) >> 16, msb2lsb(&pmetausb->CROP_POS_18) & 0xffff);                      //byte[136]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_18: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_18, msb2lsb(&pmetausb->CROP_POS_18) >> 16, msb2lsb(&pmetausb->CROP_POS_18) & 0xffff);                      //byte[136]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) YLine_Gap: %.d      \n", &pmetausb->YLine_Gap, pmetausb->YLine_Gap); 
+    sprintf_f(mlog, "(0x%.8x) YLine_Gap: %.d      \n", (uint32_t)&pmetausb->YLine_Gap, pmetausb->YLine_Gap); 
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) Start_YLine_No: %d      \n", &pmetausb->Start_YLine_No, pmetausb->Start_YLine_No); 
+    sprintf_f(mlog, "(0x%.8x) Start_YLine_No: %d      \n", (uint32_t)&pmetausb->Start_YLine_No, pmetausb->Start_YLine_No); 
     print_f(mlogPool, "METAU", mlog);
     pch = (char *)&pmetausb->YLines_Recorded;
-    sprintf_f(mlog, "(0x%.8x) YLines_Recorded: %d      \n", &pmetausb->YLines_Recorded, (pch[0] << 8) | pch[1]); 
+    sprintf_f(mlog, "(0x%.8x) YLines_Recorded: %d      \n", (uint32_t)&pmetausb->YLines_Recorded, (pch[0] << 8) | pch[1]); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F01: %d, %d\n", (&pmetausb->CROP_POS_F1), msb2lsb(&pmetausb->CROP_POS_F1) >> 16, msb2lsb(&pmetausb->CROP_POS_F1) & 0xffff);                      //byte[148]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_F1), msb2lsb(&pmetausb->CROP_POS_F1) >> 16, msb2lsb(&pmetausb->CROP_POS_F1) & 0xffff);                      //byte[148]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F02: %d, %d\n", &pmetausb->CROP_POS_F2, msb2lsb(&pmetausb->CROP_POS_F2) >> 16, msb2lsb(&pmetausb->CROP_POS_F2) & 0xffff);                      //byte[152]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F2, msb2lsb(&pmetausb->CROP_POS_F2) >> 16, msb2lsb(&pmetausb->CROP_POS_F2) & 0xffff);                      //byte[152]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F03: %d, %d\n", &pmetausb->CROP_POS_F3, msb2lsb(&pmetausb->CROP_POS_F3) >> 16, msb2lsb(&pmetausb->CROP_POS_F3) & 0xffff);                      //byte[156]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F3, msb2lsb(&pmetausb->CROP_POS_F3) >> 16, msb2lsb(&pmetausb->CROP_POS_F3) & 0xffff);                      //byte[156]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F04: %d, %d\n", &pmetausb->CROP_POS_F4, msb2lsb(&pmetausb->CROP_POS_F4) >> 16, msb2lsb(&pmetausb->CROP_POS_F4) & 0xffff);                      //byte[160]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F4, msb2lsb(&pmetausb->CROP_POS_F4) >> 16, msb2lsb(&pmetausb->CROP_POS_F4) & 0xffff);                      //byte[160]
     print_f(mlogPool, "METAU", mlog);
     
-    sprintf_f(mlog, "(0x%.8x) EPOINT_RESERVE1      \n", pmetausb->EPOINT_RESERVE1); 
+    sprintf_f(mlog, "(0x%.8x) EPOINT_RESERVE1      \n", (uint32_t)pmetausb->EPOINT_RESERVE1); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_YL: 0x%.2x 0x%.2x\n", pmetausb->ASP_MAGIC_YL, pmetausb->ASP_MAGIC_YL[0], pmetausb->ASP_MAGIC_YL[1]);
+    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_YL: 0x%.2x 0x%.2x\n", (uint32_t)pmetausb->ASP_MAGIC_YL, pmetausb->ASP_MAGIC_YL[0], pmetausb->ASP_MAGIC_YL[1]);
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) MPIONT_LEN: %d      \n", &pmetausb->MPIONT_LEN, pmetausb->MPIONT_LEN); 
+    sprintf_f(mlog, "(0x%.8x) MPIONT_LEN: %d      \n", (uint32_t)&pmetausb->MPIONT_LEN, pmetausb->MPIONT_LEN); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) EXTRA_POINT[4]: 0x%.2x, 0x%.2x, 0x%.2x, 0x%.2x  \n", pmetausb->EXTRA_POINT, pmetausb->EXTRA_POINT[0], pmetausb->EXTRA_POINT[1], pmetausb->EXTRA_POINT[2], pmetausb->EXTRA_POINT[3]);
+    sprintf_f(mlog, "(0x%.8x) EXTRA_POINT[4]: 0x%.2x, 0x%.2x, 0x%.2x, 0x%.2x  \n", (uint32_t)pmetausb->EXTRA_POINT, pmetausb->EXTRA_POINT[0], pmetausb->EXTRA_POINT[1], pmetausb->EXTRA_POINT[2], pmetausb->EXTRA_POINT[3]);
     print_f(mlogPool, "METAU", mlog);
 
 
@@ -9533,7 +9533,7 @@ static int pdfHead(char *ppdf, int max, int inSize, int *inData)
     d2 = wh;
     wscale = d1 / d2;
     
-    sprintf(tch, "%PDF-1.4\n");
+    sprintf(tch, "%cPDF-1.4\n", '%');
     n = pdfAppend(dst, tch, tot, max);
     if (n < 0) return -3;
     tot += n;
@@ -9917,13 +9917,13 @@ static int pdfTail(char *ppdf, int max, int inSize, int *inData)
 
 static void aspFree(void *p, int pidx)
 {
-    printf("<<<<<<<<  free 0x%.8x \n", p);
+    printf("<<<<<<<<  free 0x%.8x \n", (uint32_t)p);
     //free(p);
 }
 
 static void aspFreeSup(void *p, int pidx)
 {
-    printf("XXXXXXXXX  free Sup 0x%.8x \n", p);
+    printf("XXXXXXXXX  free Sup 0x%.8x \n", (uint32_t)p);
     //free(p);
 }
 
@@ -10079,10 +10079,10 @@ struct directnFile_s{
     printf("  [%.2d:%.2d:%.2d] Y:M:D recorded date \n", ((pf->dfrecodate >> 16) & 0xff) + 1980, (pf->dfrecodate >> 8) & 0xff, (pf->dfrecodate >> 0) & 0xff);
     printf("  [%d] cluster number \n", pf->dfclstnum);
     printf("  [%d] file length \n", pf->dflength);
-    printf("  [0x%.8x][0x%x] self id \n",pf , pf->dfindex);
-    printf("  [0x%.8x][0x%x] parent id \n", pf->pa, pf->dfpaid);
-    printf("  [0x%.8x][0x%x] bother id \n", pf->br, pf->dfbrid);
-    printf("  [0x%.8x][0x%x] child id \n", pf->ch, pf->dfchid);
+    printf("  [0x%.8x][0x%x] self id \n",(uint32_t)pf , pf->dfindex);
+    printf("  [0x%.8x][0x%x] parent id \n", (uint32_t)pf->pa, pf->dfpaid);
+    printf("  [0x%.8x][0x%x] bother id \n", (uint32_t)pf->br, pf->dfbrid);
+    printf("  [0x%.8x][0x%x] child id \n", (uint32_t)pf->ch, pf->dfchid);
     printf("==========================================\n");
 #endif
 }
@@ -10690,7 +10690,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
     //msdir = aspMalloc(sizeof(struct sdDirPool_s*)*used, 6);
     msdir = aspMemalloc(sizeof(struct sdDirPool_s*)*used, 6);
     if (!msdir) {
-        sprintf_f(rs->logs, "ERROR!!!failed to allocate memory for msdir !!!\n", ch);
+        sprintf_f(rs->logs, "ERROR!!!failed to allocate memory for msdir !!!\n");
         print_f(rs->plogs, "CPFAT", rs->logs);    
         return -6;
     }
@@ -10699,7 +10699,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
         //msdir[idt] = (struct sdDirPool_s *)aspMalloc(sizeof(struct sdDirPool_s), 6);
         msdir[idt] = (struct sdDirPool_s *)aspMemalloc(sizeof(struct sdDirPool_s), 6);
         if (!msdir[idt]) {
-            sprintf_f(rs->logs, "ERROR!!!failed to allocate memory for msdir !!!\n", ch);
+            sprintf_f(rs->logs, "ERROR!!!failed to allocate memory for msdir !!!\n");
             print_f(rs->plogs, "CPFAT", rs->logs);    
             return -7;
         }
@@ -10759,7 +10759,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
                 print_f(rs->plogs, "CPFAT", rs->logs);                
             }
         } else {
-            sprintf_f(rs->logs, "failed to get ch ret: \n", ret);
+            sprintf_f(rs->logs, "failed to get ch ret: %d\n", ret);
             print_f(rs->plogs, "CPFAT", rs->logs);    
         }
     }
@@ -11035,7 +11035,7 @@ static int aspFScpFatDir(struct sdFatDir_s *dsttr, struct sdFatDir_s *srctr, str
 
     if (dsttr->dirRoot) {
         if (dsttr->dirRoot->dfindex != iroot) {
-            sprintf_f(rs->logs, "ERROR!!! didn't get root dir, iroot: %d\n", iroot, dsttr->dirRoot->dfindex);
+            sprintf_f(rs->logs, "ERROR!!! didn't get root dir, iroot: %d index: %d\n", iroot, dsttr->dirRoot->dfindex);
             print_f(rs->plogs, "CPFAT", rs->logs);    
         }
     } else {
@@ -11925,7 +11925,7 @@ static int aspFS_insertFATChilds(struct sdFAT_s *pfat, struct directnFile_s *roo
     char *dkbuf=0;
 
     if (!root) {
-        printf("[R]root error 0x%x\n", root);
+        printf("[R]root error 0x%x\n", (uint32_t)root);
         ret = -1;
         goto insertEnd;
     }
@@ -12641,7 +12641,7 @@ static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, 
     if (!r) {
         return (-2);
     }else {
-            sprintf_f(mlog, "alloc root fs done [0x%x]\n", r);
+            sprintf_f(mlog, "alloc root fs done [0x%x]\n", (uint32_t)r);
             print_f(mlogPool, "FS", mlog);
     }
 
@@ -12650,7 +12650,7 @@ static int mspFS_createRoot(struct directnFile_s **root, struct sdFAT_s *psFat, 
     if (!c) {
         return (-3);
     }else {
-        sprintf_f(mlog, "alloc root fs first child done [0x%x]\n", c);
+        sprintf_f(mlog, "alloc root fs first child done [0x%x]\n", (uint32_t)c);
         print_f(mlogPool, "FS", mlog);
     }
 
@@ -12693,7 +12693,7 @@ static int mspFS_insertChilds(struct sdFAT_s *psFat, struct directnFile_s *root)
     struct stat statbuf;
 
     if (!root) {
-        sprintf_f(mlog, "root error 0x%x\n", root);
+        sprintf_f(mlog, "root error 0x%x\n", (uint32_t)root);
         print_f(mlogPool, "FS", mlog);
         ret = -1;
         goto insertEnd;
@@ -13178,7 +13178,7 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
         }
     }
 
-    sprintf_f(mlog, "path len: %d, match num: %d, brt:0x%x \n", a, b, brt);
+    sprintf_f(mlog, "path len: %d, match num: %d, brt:0x%x \n", a, b, (uint32_t)brt);
     print_f(mlogPool, "FSRH", mlog);
 /*
     while((brt) && (b>=0)) {
@@ -25280,7 +25280,7 @@ static int shmem_pop_send(struct mainRes_s *mrs, char **addr, int seq, int p)
     sz = ring_buf_get_dual(&mrs->dataRx, addr, seq);
     //sprintf_f(mlog, "shmem pop:0x%.8x, seq:%d sz:%d\n", *addr, seq, sz);
     if (sz < 0) return (-1);
-    sprintf_f(str, "d%.8xl%.8d\n", *addr, sz);
+    sprintf_f(str, "d%.8xl%.8d\n", (uint32_t)*addr, sz);
     print_f(&mrs->plog, "pop", str);
     //sprintf_f(mlog, "[%s]\n", str);
     mrs_ipc_put(mrs, str, 18, p);
@@ -25307,7 +25307,7 @@ static int shmem_dump(char *src, int size)
     if (!src) return -1;
 
     inc = 0;
-    sprintf_f(str, "memdump[0x%.8x] sz%d: \n", src, size);
+    sprintf_f(str, "memdump[0x%.8x] sz%d: \n", (uint32_t)src, size);
     print_f(mlogPool, "dump", str);
     while (inc < size) {
         sprintf_f(str, "%.2x ", *src);
@@ -32498,7 +32498,7 @@ static int fs53(struct mainRes_s *mrs, struct modersp_s *modersp)
     pParBuf = &pfat->parBuf;
 
     if (pftb->ftbFat1) {
-        sprintf_f(mrs->log, "get FAT table, addr:0x%.8x, len:%d\n", pftb->ftbFat1, pftb->ftbLen);
+        sprintf_f(mrs->log, "get FAT table, addr:0x%.8x, len:%d\n", (uint32_t)pftb->ftbFat1, pftb->ftbLen);
         print_f(&mrs->plog, "fs53", mrs->log);
 
         shmem_dump(pftb->ftbFat1, 512);
@@ -32857,7 +32857,7 @@ static int fs59(struct mainRes_s *mrs, struct modersp_s *modersp)
         pfat->fatSupcur = s;
     }
 
-    sprintf_f(mrs->log, "fatSupdata = 0x%.8x, fatSupcur = 0x%.8x!!!  \n", pfat->fatSupdata, pfat->fatSupcur);
+    sprintf_f(mrs->log, "fatSupdata = 0x%.8x, fatSupcur = 0x%.8x!!!  \n", (uint32_t)pfat->fatSupdata, (uint32_t)pfat->fatSupcur);
     print_f(&mrs->plog, "fs59", mrs->log);
 
     if (modersp->d) {
@@ -33451,7 +33451,7 @@ static int fs71(struct mainRes_s *mrs, struct modersp_s *modersp)
         return 1;
     }
 
-    sprintf_f(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, (curDir->dflen==0)?curDir->dfSFN:curDir->dfLFN, curDir->dflength);
+    sprintf_f(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", (uint32_t)pftb->c, (curDir->dflen==0)?curDir->dfSFN:curDir->dfLFN, curDir->dflength);
     print_f(&mrs->plog, "fs71", mrs->log);
 
     if (pftb->c) {
@@ -33773,7 +33773,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                         pfre = pfre->n;
 
-                        sprintf_f(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
+                        sprintf_f(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", (uint32_t)pclst, pclst->ftStart, pclst->ftLen);
                         print_f(&mrs->plog, "fs75", mrs->log);
 
                         aspMemFree(pclst, 0);
@@ -33790,7 +33790,7 @@ static int fs75(struct mainRes_s *mrs, struct modersp_s *modersp)
                 }
 
                 totalsize = freeClst * psec->secPrClst * psec->secSize;
-                sprintf_f(mrs->log, "re-calculate total free cluster: %d free sector: %d (size: %ld) \n", 
+                sprintf_f(mrs->log, "re-calculate total free cluster: %d free sector: %d (size: %d) \n", 
                     freeClst, freeClst * psec->secPrClst, totalsize);
                 print_f(&mrs->plog, "fs75", mrs->log);     
                 usedClst = totClst - freeClst;
@@ -33920,7 +33920,7 @@ static int fs76(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
 
-    sprintf_f(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
+    sprintf_f(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", (uint32_t)pftb->c, curDir->dfSFN, curDir->dflength);
     print_f(&mrs->plog, "fs76", mrs->log);
 
     if (pftb->c) {
@@ -34377,7 +34377,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 
             pclst = pflsh;
             while (1) {
-                sprintf_f(mrs->log, "    str:%d len:%d for \n", pclst->ftStart, pclst->ftLen, pa->dfSFN);
+                sprintf_f(mrs->log, "    str:%d len:%d for %s\n", pclst->ftStart, pclst->ftLen, pa->dfSFN);
                 print_f(&mrs->plog, "fs81", mrs->log);
                 if (!pclst->n) break;
                 pnxf = pclst;
@@ -34426,7 +34426,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                 pfre = pfre->n;
 
-                                sprintf_f(mrs->log, "free used FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
+                                sprintf_f(mrs->log, "free used FAT linklist, 0x%.8x start: %d, length: %d \n", (uint32_t)pclst, pclst->ftStart, pclst->ftLen);
                                 print_f(&mrs->plog, "fs81", mrs->log);
 
                                 aspMemFree(pclst, 0);
@@ -34470,7 +34470,7 @@ static int fs81(struct mainRes_s *mrs, struct modersp_s *modersp)
                     pclst->n = padd; 
                 }else {
                     aspMemFree(pclst, 0);
-                    sprintf_f(mrs->log, "ERROR!!! pftb->h != 0, 0x%x\n", pftb->h);
+                    sprintf_f(mrs->log, "ERROR!!! pftb->h != 0, 0x%x\n", (uint32_t)pftb->h);
                     print_f(&mrs->plog, "fs81", mrs->log);
                     modersp->r = 0xed;
                     return 1;
@@ -34900,7 +34900,7 @@ static int fs88(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         pr = aspMemalloc(len, 10);
         if (!pr) {
-            sprintf_f(mrs->log, " malloc failed ret: %d \n", pr);
+            sprintf_f(mrs->log, " malloc failed ret: 0x%.8x \n", (uint32_t)pr);
             print_f(&mrs->plog, "fs88", mrs->log);
             modersp->r = 0xed;
             return 1;
@@ -35588,7 +35588,7 @@ static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
     
-    sprintf_f(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
+    sprintf_f(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", (uint32_t)pftb->c, curDir->dfSFN, curDir->dflength);
     print_f(&mrs->plog, "fs94", mrs->log);
 
     if (pftb->c) {
@@ -36611,7 +36611,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                     pfre = pfre->n;
 
-                    sprintf_f(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
+                    sprintf_f(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", (uint32_t)pclst, pclst->ftStart, pclst->ftLen);
                     print_f(&mrs->plog, "fs98", mrs->log);
 
                     aspMemFree(pclst, 0);
@@ -38867,7 +38867,7 @@ static int fs122(struct mainRes_s *mrs, struct modersp_s *modersp)
         pfat->fatSupcurDuo = s;
     }
 
-    sprintf_f(mrs->log, "fatSupdataDuo = 0x%.8x, fatSupcurDuo = 0x%.8x!!!  \n", pfat->fatSupdataDuo, pfat->fatSupcurDuo);
+    sprintf_f(mrs->log, "fatSupdataDuo = 0x%.8x, fatSupcurDuo = 0x%.8x!!!  \n", (uint32_t)pfat->fatSupdataDuo, (uint32_t)pfat->fatSupcurDuo);
     print_f(&mrs->plog, "fs122", mrs->log);
 
     modersp->d = 59;
@@ -38926,7 +38926,7 @@ static int fs123(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf_f(mrs->log, "release resource for CFLOAT side SD write back\n");
         print_f(&mrs->plog, "fs123", mrs->log);
     } else {
-        sprintf_f(mrs->log, "ERROR!!! backup buffer is not correct sh: 0x%x, shduo: 0x%x\n", sh, shduo);
+        sprintf_f(mrs->log, "ERROR!!! backup buffer is not correct sh: 0x%x, shduo: 0x%x\n", (uint32_t)sh, (uint32_t)shduo);
         print_f(&mrs->plog, "fs123", mrs->log);
         modersp->r = 0xed;
         return 1;
@@ -39758,12 +39758,12 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
     if (!pParBuf->dirParseBuff) {
         pParBuf->dirParseBuff = aspMemalloc(32768, 10);    
         pParBuf->dirBuffMax = 32768;
-        sprintf_f(mrs->log, "WARNNING!! buffer is null!! allocate %d bytes, addr: 0x%.8x \n", 32768, pParBuf->dirParseBuff);
+        sprintf_f(mrs->log, "WARNNING!! buffer is null!! allocate %d bytes, addr: 0x%.8x \n", 32768, (uint32_t)pParBuf->dirParseBuff);
         print_f(&mrs->plog, "fs139", mrs->log);
     }
     else {
         sprintf_f(mrs->log, "WARNNING!! buffer is NOT null!! addr: 0x%.8x, used: %d, max: %d \n", 
-                       pParBuf->dirParseBuff, pParBuf->dirBuffUsed, pParBuf->dirBuffMax);
+                       (uint32_t)pParBuf->dirParseBuff, pParBuf->dirBuffUsed, pParBuf->dirBuffMax);
         print_f(&mrs->plog, "fs139", mrs->log);
     }
     
@@ -39957,7 +39957,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
     
                     pfre = pfre->n;
     
-                    sprintf_f(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", pclst, pclst->ftStart, pclst->ftLen);
+                    sprintf_f(mrs->log, "free used FREE FAT linklist, 0x%.8x start: %d, length: %d \n", (uint32_t)pclst, pclst->ftStart, pclst->ftLen);
                     print_f(&mrs->plog, "fs139", mrs->log);
     
                     aspMemFree(pclst, 0);
@@ -39974,7 +39974,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
             }
     
             totalsize = freeClst * psec->secPrClst * psec->secSize;
-            sprintf_f(mrs->log, "re-calculate total free cluster: %d free sector: %d (size: %lu) \n", 
+            sprintf_f(mrs->log, "re-calculate total free cluster: %d free sector: %d (size: %llu) \n", 
                 freeClst, freeClst * psec->secPrClst, totalsize);
             print_f(&mrs->plog, "fs139", mrs->log);     
             usedClst = totClst - freeClst;
@@ -40011,7 +40011,7 @@ static int fs139(struct mainRes_s *mrs, struct modersp_s *modersp)
         
         pParBuf->dirBuffUsed = 0;
         pr = pParBuf->dirParseBuff;
-        sprintf_f(mrs->log, "dump parsing buffer addr: 0x%.8x\n", pr);
+        sprintf_f(mrs->log, "dump parsing buffer addr: 0x%.8x\n", (uint32_t)pr);
         print_f(&mrs->plog, "fs139", mrs->log);
         shmem_dump(pr, 64);
         
@@ -40141,7 +40141,7 @@ static int fs140(struct mainRes_s *mrs, struct modersp_s *modersp)
     }
 
 
-    sprintf_f(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", pftb->c, curDir->dfSFN, curDir->dflength);
+    sprintf_f(mrs->log, "get SD cur:0x%.8x filename:[%s]length[%d]\n", (uint32_t)pftb->c, curDir->dfSFN, curDir->dflength);
     print_f(&mrs->plog, "fs140", mrs->log);
 
     if (pftb->c) {
@@ -40961,7 +40961,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     sprintf(idfile, filenames, wfileid);
                                     filefd = find_write(idfile);
                                     
-                                    sprintf_f(mrs->log, "[GW] wget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, filefd);
+                                    sprintf_f(mrs->log, "[GW] wget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, (uint32_t)filefd);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 } else {
                                     sprintf_f(mrs->log, "[GW] wget file id failed ret: %d !!! \n", ret);
@@ -40992,7 +40992,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         print_f(&mrs->plog, "fs145", mrs->log);
                                     }
                                 } else {
-                                    sprintf_f(mrs->log, "[GW] error!! wget filefd: %d len: %d \n",filefd, len);
+                                    sprintf_f(mrs->log, "[GW] error!! wget filefd: %d len: %d \n", (uint32_t)filefd, len);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 }
                                 
@@ -41050,7 +41050,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     sprintf(idfile, filenames, wfileid);
                                     filefd = find_read(idfile);
                                     
-                                    sprintf_f(mrs->log, "[GW] rget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, filefd);
+                                    sprintf_f(mrs->log, "[GW] rget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, (uint32_t)filefd);
                                     print_f(&mrs->plog, "fs145", mrs->log);
                                 }
                                 else {
@@ -41206,7 +41206,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 mindex = ((chindex[0] & 0x3f) << 5) | (chindex[1] & 0x1f);
                                 mindex = mindex & 0x3ff;
                                 
-                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d(0x%.2x:0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, mindex, chindex[0], chindex[1], pubffo, pubffh);
+                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d(0x%.2x:0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, mindex, chindex[0], chindex[1], (uint32_t)pubffo, (uint32_t)pubffh);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                                 
                                 if (!pubffo) {
@@ -41338,7 +41338,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             #endif
                                             
                                         } else {
-                                            sprintf_f(mrs->log, "[GW] compare addr failed !! addrs: 0x%.8x addrd: 0x%.8x\n", addrs, addrd);
+                                            sprintf_f(mrs->log, "[GW] compare addr failed !! addrs: 0x%.8x addrd: 0x%.8x\n", (uint32_t)addrs, (uint32_t)addrd);
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                         }
                                         
@@ -41385,7 +41385,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             
                                             pubffo = 0;
                                             
-                                            sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", pubffh);
+                                            sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", (uint32_t)pubffh);
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                             
                                             scnt = scnt + 1;
@@ -41786,7 +41786,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 
                             }
                             else {
-                                sprintf_f(mrs->log, "[GW] fileacc id%d get read fileid failed!! ret: %d filename:[%s]\n", ins, filefd, idfile);
+                                sprintf_f(mrs->log, "[GW] fileacc id%d get read fileid failed!! ret: %d filename:[%s]\n", ins, (uint32_t)filefd, idfile);
                                 print_f(&mrs->plog, "fs145", mrs->log);
                             }
                         }
@@ -43205,7 +43205,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
             //print_f(rs->plogs, "P1", rs->logs);
 
             if ((pi >= SMAX) && (px >= PSMAX)) {
-                sprintf_f(rs->logs, "cmdt:%c do nothing\n", cmdt, ch);
+                sprintf_f(rs->logs, "cmdt:%c ch: %c do nothing\n", cmdt, ch);
                 print_f(rs->plogs, "P1", rs->logs);
             }
             else if ((pi >= SMAX) || (px >= PSMAX)) {
@@ -43790,7 +43790,7 @@ static int p2(struct procRes_s *rs)
                         pi += 1;
                     }
                     else {
-                        sprintf_f(rs->logs, "failed to get buffer en:%d!\n", len, opsz, ret);
+                        sprintf_f(rs->logs, "failed to get buffer len:%d!\n", len);
                         print_f(rs->plogs, "P2", rs->logs);    
                         usleep(100000);
                     }
@@ -44244,7 +44244,7 @@ static int p2(struct procRes_s *rs)
                 laddr = addr;
                 addr = addr + (secStr - psec->secWhfat) * 512;
 
-                sprintf_f(rs->logs, "laddr:0x%.8x, addr:0x%.8x\n", laddr, addr);
+                sprintf_f(rs->logs, "laddr:0x%.8x, addr:0x%.8x\n", (uint32_t)laddr, (uint32_t)addr);
                 print_f(rs->plogs, "P2", rs->logs);
 
 
@@ -45797,7 +45797,7 @@ static int p4(struct procRes_s *rs)
         print_f(rs->plogs, "P4", rs->logs);
         return (-1);
     } else {
-        sprintf_f(rs->logs, "p4 recvbuf alloc success! 0x%x\n", recvbuf);
+        sprintf_f(rs->logs, "p4 recvbuf alloc success! 0x%x\n", (uint32_t)recvbuf);
         print_f(rs->plogs, "P4", rs->logs);
     }
 
@@ -45944,7 +45944,7 @@ static int p4(struct procRes_s *rs)
 #endif
                 totsz = 0;
                 clock_gettime(CLOCK_REALTIME, &rs->tdf[0]);
-                sprintf_f(rs->logs, "start at %ds\n", rs->tdf[0].tv_sec);
+                sprintf_f(rs->logs, "start at %ld s\n", rs->tdf[0].tv_sec);
                 print_f(rs->plogs, "P4", rs->logs);                         
 
 #if SOCKET_EPOLL_EN
@@ -46069,7 +46069,7 @@ static int p4(struct procRes_s *rs)
                 }
                 
                 clock_gettime(CLOCK_REALTIME, &rs->tdf[1]);
-                sprintf_f(rs->logs, "end at %ds\n", rs->tdf[1].tv_sec);
+                sprintf_f(rs->logs, "end at %ld s\n", rs->tdf[1].tv_sec);
                 print_f(rs->plogs, "P4", rs->logs);                         
                 
                 while (ch != 'D') {
@@ -47387,7 +47387,7 @@ static int p5(struct procRes_s *rs, struct procRes_s *rcmd)
         print_f(rs->plogs, "P5", rs->logs);
         return (-1);
     } else {
-        sprintf_f(rs->logs, "p5 recvbuf alloc success! 0x%x\n", recvbuf);
+        sprintf_f(rs->logs, "p5 recvbuf alloc success! 0x%x\n", (uint32_t)recvbuf);
         print_f(rs->plogs, "P5", rs->logs);
     }
 
@@ -47863,7 +47863,7 @@ static int p6(struct procRes_s *rs)
         print_f(rs->plogs, "P6", rs->logs);
         return (-1);
     } else {
-        sprintf_f(rs->logs, "recvbuf alloc success! 0x%x\n", recvbuf);
+        sprintf_f(rs->logs, "recvbuf alloc success! 0x%x\n", (uint32_t)recvbuf);
         print_f(rs->plogs, "P6", rs->logs);
     }
 
@@ -47873,7 +47873,7 @@ static int p6(struct procRes_s *rs)
         print_f(rs->plogs, "P6", rs->logs);
         return (-1);
     } else {
-        sprintf_f(rs->logs, "sendbuf alloc success! 0x%x\n", sendbuf);
+        sprintf_f(rs->logs, "sendbuf alloc success! 0x%x\n", (uint32_t)sendbuf);
         print_f(rs->plogs, "P6", rs->logs);
     }
 
@@ -48004,7 +48004,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for c ret: %d \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -48173,7 +48173,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for d1 ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for d1 ret: %d \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -48189,7 +48189,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for d2 ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for d2 ret: %d \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -48942,7 +48942,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for c ret: %d \n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -49388,7 +49388,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for d1 ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for d1 ret: %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -49404,7 +49404,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for d2 ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for d2 ret: %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -51555,7 +51555,7 @@ static int p6(struct procRes_s *rs)
                         print_f(rs->plogs, "P6", rs->logs);    
                     }
                 } else {
-                    sprintf_f(rs->logs, "wait for c ret: \n", ret);
+                    sprintf_f(rs->logs, "wait for c ret: %d\n", ret);
                     print_f(rs->plogs, "P6", rs->logs);    
                 }
             }
@@ -54321,7 +54321,7 @@ static int p7(struct procRes_s *rs)
                 rs_ipc_get(rs, &ch, 1);
 
                 memset(chbuf, 0, 32);
-                sprintf_f(chbuf, "%d\0", datLen);
+                sprintf_f(chbuf, "%d%c", datLen, '\0');
 #if SOCKET_NON_BLOCK_TX 
 #if SOCKET_EPOLL_EN
                 len = strlen(chbuf);
@@ -54395,7 +54395,7 @@ static int p7(struct procRes_s *rs)
                 
                 if (!pftb->c) {
                     memset(chbuf, 0, 32);
-                    sprintf(chbuf, "%c\0", ch);
+                    sprintf(chbuf, "%c%c", ch, '\0');
 #if SOCKET_NON_BLOCK_TX 
 #if SOCKET_EPOLL_EN
                 len = strlen(chbuf);
@@ -55244,7 +55244,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 #endif
                 if (puhsinfo->ushostid)
                 if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
-                    sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                    sprintf_f(rs->logs,  "no vir table and phy table \n"); 
                     print_f(rs->plogs, sp, rs->logs);
                     close(usbid);
                     usbid = 0;
@@ -55597,7 +55597,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                         if (puhsinfo->ushostid)
                         if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
-                            sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                            sprintf_f(rs->logs,  "no vir table and phy table \n"); 
                             print_f(rs->plogs, sp, rs->logs);
                             close(usbid);
                             usbid = -1;
@@ -55974,7 +55974,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     #endif
                 
                     if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
-                        sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                        sprintf_f(rs->logs,  "no vir table and phy table \n"); 
                         print_f(rs->plogs, sp, rs->logs);
                         close(usbid);
                         usbid = -1;
@@ -56357,7 +56357,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
             
                 if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
-                    sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                    sprintf_f(rs->logs,  "no vir table and phy table \n"); 
                     print_f(rs->plogs, sp, rs->logs);
                     close(usbid);
                     usbid = 0;
@@ -56488,7 +56488,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 
                 if ((actlen) || (pllst)) {
-                    sprintf_f(rs->logs, "error!!! 0x16 write failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    sprintf_f(rs->logs, "error!!! 0x16 write failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, (uint32_t)actaddr); 
                     print_f(rs->plogs, sp, rs->logs);
                     
                     cplls[0] = 'U';
@@ -56609,7 +56609,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
 
                 if ((len) || (pllst)) {
-                    sprintf_f(rs->logs, "error!!! 0x16 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    sprintf_f(rs->logs, "error!!! 0x16 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, (uint32_t)actaddr); 
                     print_f(rs->plogs, sp, rs->logs);
                     
                     cplls[0] = 'U';
@@ -56712,7 +56712,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 
                 if ((actlen) || (pllst)) {
-                    sprintf_f(rs->logs, "error!!! 0x16 write failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    sprintf_f(rs->logs, "error!!! 0x16 write failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, (uint32_t)actaddr); 
                     print_f(rs->plogs, sp, rs->logs);
                     
                     cplls[0] = 'U';
@@ -56739,7 +56739,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             tgendaddr = tagtaddr + eraslen;            
             
             #if DUMP_FLASH
-            sprintf_f(rs->logs, "tagtaddr: 0x%.8x eraslen: %d endaddr: 0x%.8x \n", tagtaddr, eraslen, tgendaddr);
+            sprintf_f(rs->logs, "tagtaddr: 0x%.8x eraslen: %d endaddr: 0x%.8x \n", tagtaddr, eraslen, (uint32_t)tgendaddr);
             print_f(rs->plogs, sp, rs->logs);
             #endif
             
@@ -56873,7 +56873,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 
                 if ((actlen) || (pllst)) {
-                    sprintf_f(rs->logs, "error!!! 0x15 READ B4 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    sprintf_f(rs->logs, "error!!! 0x15 READ B4 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, (uint32_t)actaddr); 
                     print_f(rs->plogs, sp, rs->logs);
                     
                     cplls[0] = 'X';
@@ -56975,7 +56975,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 
                 if ((actlen) || (pllst)) {
-                    sprintf_f(rs->logs, "error!!! 0x15 READ B4 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    sprintf_f(rs->logs, "error!!! 0x15 READ B4 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, (uint32_t)actaddr); 
                     print_f(rs->plogs, sp, rs->logs);
                     
                     cplls[0] = 'X';
@@ -57059,7 +57059,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
 
                 if ((actlen) || (pllst)) {
-                    sprintf_f(rs->logs, "error!!! 0x15 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, actaddr); 
+                    sprintf_f(rs->logs, "error!!! 0x15 erase failed size, pllst: %d eraslen: %d erasaddr: 0x%.8x\n", pllst, actlen, (uint32_t)actaddr); 
                     print_f(rs->plogs, sp, rs->logs);
                 }
 
@@ -57590,7 +57590,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 chq = 'R';
                 pieRet = write(pPrx[1], &chq, 1);
             } else {
-                sprintf_f(rs->logs, "[%s] Error!!! unknown chr: %c \n", chr);
+                sprintf_f(rs->logs, "Error!!! unknown chr: %c \n", chr);
                 print_f(rs->plogs, sp, rs->logs);
             }
     
@@ -58179,7 +58179,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 pieRet = write(pPrx[1], &chq, 1);
                 break;
             default:
-                printf("[%s] Error!!! data unknown chr: %c \n", chr);
+                sprintf_f(rs->logs, "Error!!! data unknown chr: %c \n", chr);
+                print_f(rs->plogs, sp, rs->logs);
                 break;
             }
 #else
@@ -58497,7 +58498,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     if (!pllst) {
                         if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
-                            sprintf_f(rs->logs,  "no vir table and phy table \n", puhsinfo->ushostblvir, puhsinfo->ushostblphy); 
+                            sprintf_f(rs->logs,  "no vir table and phy table \n"); 
                             print_f(rs->plogs, sp, rs->logs);
                             close(usbid);
                             usbid = 0;
@@ -59558,7 +59559,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                         
                         if (chn) {
-                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                             print_f(rs->plogs, "P11", rs->logs);
                         }
                         }
@@ -59715,7 +59716,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                         
                         if (chn) {
-                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                             print_f(rs->plogs, "P11", rs->logs);
                         }
                         }
@@ -59904,7 +59905,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             
                             if (chn) {
-                                sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                                sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                                 print_f(rs->plogs, "P11", rs->logs);
                             }
                         }
@@ -60151,7 +60152,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             
                             if (chn) {
-                                sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                                sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                                 print_f(rs->plogs, "P11", rs->logs);
                             }
                         }
@@ -61174,7 +61175,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     #if LOG_FLASH /* debug flash read/write */
                     sprintf_f(rs->logs, "[DV] data flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
                                                 msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
-                                                ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
+                                                ucbwpram->pramType, (uint32_t)msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
                     print_f(rs->plogs, "P11", rs->logs);
                     #endif
 
@@ -62323,7 +62324,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             //memset(iubsBuff, 0, SPI_TRUNK_SZ);
 
                             sprintf_f(rs->logs, "[DV] file access dlen: %d, fileid: %d, wrtrd: %d, addr: 0x%.8x, fsize: %d, direct: %d select: %d\n"
-                                                        , msb2lsb(&ucbwfile->pramDataLength), act, ucbwfile->pramWrtorRd[0], msb2lsb(&ucbwfile->pramAddress)
+                                                        , msb2lsb(&ucbwfile->pramDataLength), act, ucbwfile->pramWrtorRd[0], (uint32_t)msb2lsb(&ucbwfile->pramAddress)
                                                         , msb2lsb(&ucbwfile->pramFilesize) , ucbwfile->pramDirect, ucbwfile->ASIC_sel);
                             print_f(rs->plogs, "P11", rs->logs);
 
@@ -62371,7 +62372,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         getents = pubfidc->usfdid[0] | (pubfidc->usfdid[1] << 8);
                                     
                                         #if 1
-                                        sprintf_f(rs->logs, "    srhwrfstt - [%d] %d %c %d, addr: 0x%x size: %d select: %d\n", ix, getents, pubfidc->usfdid[2], 
+                                        sprintf_f(rs->logs, "    srhwrfstt - [%d] %d %c %d, addr: 0x%x size: %d select: %d\n", ix, (uint32_t)getents, pubfidc->usfdid[2], 
                                                        pubfidc->usfdid[3], pubfidc->usfdAddr, pubfidc->usfdsize, act);
                                         print_f(rs->plogs, "P11", rs->logs);                                
                                         #endif
@@ -62635,7 +62636,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             #if LOG_FLASH
                             sprintf_f(rs->logs, "[DV] enty flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d ASIC: %d \n", 
                                                           msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
-                                                          ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect, ucbwpram->ASIC_sel);
+                                                          ucbwpram->pramType, (uint32_t)msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect, ucbwpram->ASIC_sel);
                             print_f(rs->plogs, "P11", rs->logs);
                             #else
                             switch (ucbwpram->pramDirect) {
@@ -62816,7 +62817,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             idlet = time_diff(&tidleS, &tidleE, 1000000);
 
                             #if LOG_P11_EN
-                            sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x rx: %d, 0: %d, 1: %d\n", idlet, puimGet, puimCnTH, piprx[0], ptfdc[0].fd, ptfdc[1].fd);
+                            sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x rx: %d, 0: %d, 1: %d\n", idlet, (uint32_t)puimGet, (uint32_t)puimCnTH, piprx[0], ptfdc[0].fd, ptfdc[1].fd);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
 
@@ -62825,7 +62826,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 clock_gettime(CLOCK_REALTIME, &tidleE);
                                 idlet = time_diff(&tidleS, &tidleE, 1000000);
                                 #if LOG_P11_EN
-                                sprintf_f(rs->logs, "[DV] wait for %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, puimGet, puimCnTH);
+                                sprintf_f(rs->logs, "[DV] wait for %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, (uint32_t)puimGet, (uint32_t)puimCnTH);
                                 print_f(rs->plogs, "P11", rs->logs);
                                 #endif
 
@@ -63042,7 +63043,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 puimTmp = puimCnTH;
                                                 while(puimTmp) {
 
-                                                    sprintf_f(rs->logs, "[DV] extra page.%d - 0x%.3x %d/%d (addr: 0x%.8x) \n", act, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, puimTmp);
+                                                    sprintf_f(rs->logs, "[DV] extra page.%d - 0x%.3x %d/%d (addr: 0x%.8x) \n", act, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
                                                     print_f(rs->plogs, "P11", rs->logs);
 
                                                     puimTmp = puimTmp->uimNxt;
@@ -63708,7 +63709,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     while(puimTmp) {
                                     
                                         #if LOG_P11_EN
-                                        sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, puimTmp);
+                                        sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
 
@@ -63758,7 +63759,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 } 
                                 else {
                                     #if LOG_P11_EN
-                                    sprintf_f(rs->logs, "[DV] idle warning!!! chq: 0x%.2x chr: 0x%.2x puimGet: 0x%.8x puimCnTH: 0x%.8x\n", chq, chr, puimGet, puimCnTH);
+                                    sprintf_f(rs->logs, "[DV] idle warning!!! chq: 0x%.2x chr: 0x%.2x puimGet: 0x%.8x puimCnTH: 0x%.8x\n", chq, chr, (uint32_t)puimGet, (uint32_t)puimCnTH);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     #endif
 
@@ -63795,7 +63796,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 }
 
                                                 #if LOG_P11_EN
-                                                sprintf_f(rs->logs, "[DV] idle page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, puimTmp);
+                                                sprintf_f(rs->logs, "[DV] idle page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
                                                 print_f(rs->plogs, "P11", rs->logs);
                                                 #endif
 
@@ -64061,7 +64062,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
 
                             #if LOG_P11_EN
-                            sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d dist: %d lastflag: 0x%.5x count: %d\n", addrd, lens, uimCylcnt, lastCylen, distCylcnt, lastflag, cntTx);
+                            sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d dist: %d lastflag: 0x%.5x count: %d\n", (uint32_t)addrd, lens, uimCylcnt, lastCylen, distCylcnt, lastflag, cntTx);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
                             
@@ -64447,7 +64448,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     if (sendsz < 0) {
                     
                         #if DBG_27_DV
-                        sprintf_f(rs->logs, "[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
+                        sprintf_f(rs->logs, "[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, (uint32_t)addrd);
                         print_f(rs->plogs, "P11", rs->logs);
                         #endif
 
@@ -64588,7 +64589,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                         
                         if (chn) {
-                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                             print_f(rs->plogs, "P11", rs->logs);
                         }
                     //}
@@ -64728,7 +64729,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                     
                     if (chn) {
-                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
@@ -64901,7 +64902,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                     
                     if (chn) {
-                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
@@ -66959,7 +66960,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         if (chn) {
                         
                             #if LOG_FLASH 
-                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
                         }
@@ -66975,7 +66976,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 #if LOG_FLASH /* debug flash read/write */
                 sprintf_f(rs->logs, "[DV] read flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
                                               msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
-                                              ucbwpram->pramType, msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
+                                              ucbwpram->pramType, (uint32_t)msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
                 print_f(rs->plogs, "P11", rs->logs);
                 #endif
                 lenflh = msb2lsb(&ucbwpram->pramDataLength);
@@ -67192,7 +67193,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         if (chn) {
 
                             #if LOG_FLASH
-                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                            sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
                             
@@ -67330,7 +67331,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
     
                     if (chn) {
-                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn, chn);
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
@@ -67697,7 +67698,7 @@ int main(int argc, char *argv[])
     pmrs->metaMass.massUsed = 0;
 
     if (pmrs->metaMass.masspt) {
-        sprintf_f(pmrs->log, "inbuff addr(0x%.8x), outbuff addr(0x%.8x), massbuff addr(0x%.8x) \n", &pmrs->metain, &pmrs->metaout, pmrs->metaMass.masspt);
+        sprintf_f(pmrs->log, "inbuff addr(0x%.8x), outbuff addr(0x%.8x), massbuff addr(0x%.8x) \n", (uint32_t)&pmrs->metain, (uint32_t)&pmrs->metaout, (uint32_t)pmrs->metaMass.masspt);
         print_f(&pmrs->plog, "meta", pmrs->log);
     } else {
         sprintf_f(pmrs->log, "Error!! allocate meta memory failed!!!! \n");
@@ -67713,7 +67714,7 @@ int main(int argc, char *argv[])
     pmrs->metaMassDuo.massUsed = 0;
 
     if (pmrs->metaMassDuo.masspt) {
-        sprintf_f(pmrs->log, " duo inbuff addr(0x%.8x), massbuff addr(0x%.8x) \n", &pmrs->metainDuo, pmrs->metaMassDuo.masspt);
+        sprintf_f(pmrs->log, " duo inbuff addr(0x%.8x), massbuff addr(0x%.8x) \n", (uint32_t)&pmrs->metainDuo, (uint32_t)pmrs->metaMassDuo.masspt);
         print_f(&pmrs->plog, "metaduo", pmrs->log);
     } else {
         sprintf_f(pmrs->log, "Error!! duo allocate meta memory failed!!!! \n");
@@ -67779,7 +67780,7 @@ int main(int argc, char *argv[])
 
     pmrs->wtg.wtRlt =  aspSalloc(16);
     if (pmrs->wtg.wtRlt) {
-        sprintf_f(pmrs->log, "wtg result buff:0x%.8x - DONE\n", pmrs->wtg.wtRlt);
+        sprintf_f(pmrs->log, "wtg result buff:0x%.8x - DONE\n", (uint32_t)pmrs->wtg.wtRlt);
         print_f(&pmrs->plog, "WTG", pmrs->log);
     } else {
         sprintf_f(pmrs->log, "wtg result buff alloc failed!!- ERROR\n", pmrs->wtg.wtRlt);
@@ -70142,7 +70143,7 @@ int main(int argc, char *argv[])
     } else {
         pmrs->bmpRotate.aspRotCASize = 8192*4*3;
         
-        sprintf_f(pmrs->log, "alloc share memory for BITMAP ROTATE DONE [0x%.8x]!!! size = %d\n", pmrs->bmpRotate.aspRotCrossAry, pmrs->bmpRotate.aspRotCASize); 
+        sprintf_f(pmrs->log, "alloc share memory for BITMAP ROTATE DONE [0x%.8x]!!! size = %d\n", (uint32_t)pmrs->bmpRotate.aspRotCrossAry, pmrs->bmpRotate.aspRotCASize); 
         print_f(&pmrs->plog, "BITMAP", pmrs->log);
     }
 
@@ -70272,7 +70273,7 @@ int main(int argc, char *argv[])
 /*
     ret = mspFS_createRoot(&pmrs->aspFat.fatRootdir, &pmrs->aspFat, dir);
     if (!ret) {
-        sprintf_f(pmrs->log, "FS root [%s] create done, root:0x%x\n", dir, pmrs->aspFat.fatRootdir);
+        sprintf_f(pmrs->log, "FS root [%s] create done, root:0x%x\n", dir, (uint32_t)pmrs->aspFat.fatRootdir);
         print_f(&pmrs->plog, "FAT", pmrs->log);
         ret = mspFS_insertChilds(&pmrs->aspFat, pmrs->aspFat.fatRootdir);
         if (!ret) {
