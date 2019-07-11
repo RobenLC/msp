@@ -1542,8 +1542,8 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheader;
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
-    char netIntfs[16];
-    char netIntwpa[16];
+    char netIntfs[32];
+    char netIntwpa[32];
     char *dbglog;
 };
 
@@ -12852,7 +12852,7 @@ static int mspFS_insertChildFile(struct sdFAT_s *psFat, struct directnFile_s *pa
 
 static int mspFS_listDetail(struct directnFile_s *root, int depth)
 {
-    char mlog[256];
+    char mlog[512];
     struct directnFile_s *fs = 0;
     if (!root) return (-1);
 
@@ -12879,7 +12879,7 @@ static int mspFS_listDetail(struct directnFile_s *root, int depth)
 
 static int mspFS_list(struct directnFile_s *root, int depth)
 {
-    char mlog[256];
+    char mlog[512];
     struct directnFile_s *fs = 0;
     if (!root) return (-1);
 
@@ -12904,7 +12904,7 @@ static int mspFS_list(struct directnFile_s *root, int depth)
 
 static int mspFS_folderList(struct directnFile_s *root, int depth)
 {
-    char mlog[256];
+    char mlog[512];
     struct directnFile_s *fs = 0;
     if (!root) return (-1);
 
@@ -13049,7 +13049,7 @@ static int mspFS_Search(struct directnFile_s **dir, struct directnFile_s *root, 
 
 static int mspFS_SearchInFolder(struct directnFile_s **dir, struct directnFile_s *folder, char *fname)
 {
-    char mlog[256];
+    char mlog[512];
     int ret = 0;
     struct directnFile_s *brt=0;
 
@@ -13309,7 +13309,7 @@ static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *
 }
 static int mspFS_showFolder(struct directnFile_s *root)
 {
-    char mlog[256];
+    char mlog[512];
     struct directnFile_s *brt = 0;
     if (!root) return (-1);
     if (root->dftype == ASPFS_TYPE_FILE) return (-2);
@@ -13376,7 +13376,7 @@ static int mspFS_folderJump(struct directnFile_s **dir, struct directnFile_s *ro
 
 static int error_handle(char *log, int line)
 {
-#define MAX_LEN 256
+#define MAX_LEN 5000
 #define TOT_LEN (MAX_LEN + 64)
 
     char str[TOT_LEN];
@@ -21338,7 +21338,7 @@ static int stcrop_75(struct psdata_s *data)
 static int stcrop_76(struct psdata_s *data)
 { 
     uint8_t uch=0;
-    int xyAr[6];
+    int xyAr[7];
     int id=0, err=0;
     uint32_t coord[2];
     char ch = 0; 
@@ -32425,7 +32425,7 @@ static int fs52(struct mainRes_s *mrs, struct modersp_s *modersp)
             *pr = '/';
             pr += 1;
             
-            ret = strlen(strPath[i]);
+            ret = strnlen(strPath[i], sizeof(strPath[i]));
             strncpy(pr, strPath[i], ret);
             pr += ret;
             
@@ -47765,7 +47765,7 @@ static int p6(struct procRes_s *rs)
     char strPath[32][128];
     //char **strPath; 
     char *recvbuf, *sendbuf, *pr, *cltaddr;
-    int ret, n, num, hd, be, ed, ln, cnt=0, i, len=0, cltport=0;
+    int ret, n, num, hd, be, ed, ln, cnt=0, i, len=0, cltport=0, slen=0;
     char opc=0;
     char opcode=0, param=0, flag = 0;
     uint32_t clstSize=0;
@@ -52682,8 +52682,10 @@ static int p6(struct procRes_s *rs)
 #endif
                                     
                                     sprintf(rs->logs, "%d,", scanParam[i*3]);
-                                    strncpy(&recvbuf[n], rs->logs, strlen(rs->logs));
-                                    n += strlen(rs->logs);
+
+                                    slen = strnlen(rs->logs, sizeof(rs->logs));
+                                    strncpy(&recvbuf[n], rs->logs, slen);
+                                    n += slen;
                                 }
                                 else {
                                     sprintf_f(rs->logs, "Error!!! get 0x%.2x = 0x%.2x (%d) mask: 0x%x out of range ret: %d\n", op, cd, fg, pdt->opMask, ret);
@@ -52760,7 +52762,7 @@ static int p6(struct procRes_s *rs)
                 sprintf(rs->logs, "PSK_NG");
             }
 
-            n = strlen(rs->logs);
+            n = strnlen(rs->logs, sizeof(rs->logs));
             strncpy(&sendbuf[5], rs->logs, n);
             
             sendbuf[5+n] = 0xfb;
@@ -52798,7 +52800,7 @@ static int p6(struct procRes_s *rs)
                 sprintf(rs->logs, "SSID_NG");
             }
 
-            n = strlen(rs->logs);
+            n = strnlen(rs->logs, sizeof(rs->logs));
             strncpy(&sendbuf[5], rs->logs, n);
             
             sendbuf[5+n] = 0xfb;
@@ -53096,7 +53098,7 @@ static int p6(struct procRes_s *rs)
                 *pr = '/';
                 pr += 1;
             
-                ret = strlen(strPath[i]);
+                ret = strnlen(strPath[i], sizeof(strPath[i]));
                 strncpy(pr, strPath[i], ret);
                 pr += ret;        
             }
@@ -66779,7 +66781,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 ptrecv[lenflh] = '[';
                 lenflh += 1;
                 
-                lens = strlen(MSP_VERSION);
+                lens = strnlen(MSP_VERSION, sizeof(MSP_VERSION));
                 if (lens > 24) {
                     lens = 24;
                 }
@@ -66788,7 +66790,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 ptrecv[lenflh] = ',';
                 lenflh += 1;
                 
-                lens = strlen(MSP_GIT);
+                lens = strnlen(MSP_GIT, sizeof(MSP_GIT));
                 if (lens > 28) {
                     lens = 28;
                 }
@@ -66798,7 +66800,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 ptrecv[lenflh] = ',';
                 lenflh += 1;
 
-                lens = strlen(MSP_TIME);
+                lens = strnlen(MSP_TIME, sizeof(MSP_TIME));
                 if (lens > 24) {
                     lens = 24;
                 }
@@ -66808,7 +66810,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 ptrecv[lenflh] = ',';
                 lenflh += 1;
 
-                lens = strlen(MSP_SSID);
+                lens = strnlen(MSP_SSID, sizeof(MSP_SSID));
                 if (lens > 28) {
                     lens = 28;
                 }
@@ -71170,7 +71172,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 {
     uint32_t logdisplayflag=0;
     int len;
-    char ch[1152];
+    char ch[5100];
 
     logdisplayflag = plog->dislog;
     
