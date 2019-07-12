@@ -841,7 +841,7 @@ struct directnFile_s{
     uint32_t   dftype;
     uint32_t   dfstats;
     char        dfLFN[256];
-    char        dfSFN[12];
+    char        dfSFN[16];
     uint16_t   dflen;
     uint16_t   dfattrib;
     uint32_t   dfcretime;
@@ -2120,7 +2120,7 @@ static int aspFatFormat(struct sdFatFormat_s *pffmt)
     pbootsec->secWhfat = pbootsec->secResv;
     pbootsec->secWhroot = pbootsec->secWhfat + pbootsec->secPrfat * 2;
 
-    pbootsec->secBoffset;
+    pbootsec->secBoffset = 0;
 
     pbootsec->secSt = 0;
 
@@ -2198,7 +2198,7 @@ static int scanWidthConvert(int tag, int widt)
     
     switch (tag) {
     case DEFAULTWIDTH_NONE:
-        val -1;
+        val = -1;
         break;
     case DEFAULTWIDTH_1:
         val = DEFAULTWIDTH_VAL1;
@@ -3776,7 +3776,7 @@ static void* aspMemalloc(uint32_t asz, int pidx)
     struct aspMemAsign_s *ms=0;
     int mi=0, tot=0, rst, mlen, num;
     if (pidx >= MSP_P_NUM) return 0;
-    if (asz == 0 | asz < 0) return 0;
+    if (asz == 0 || asz < 0) return 0;
 
     mlen = asz;
     rst = mlen % MIN_MEM_ALLOC_SIZE;
@@ -7003,7 +7003,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 #if LOG_CROP_FINDPOINTS
             printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
 #endif
-            if ((csUp) && (msLf) && (msRt) && (csDn)) {
+            if ((csUp[0]) && (msLf[0]) && (msRt[0]) && (csDn[0])) {
                 sup[0] = csUp[0];
                 sup[1] = csUp[1];
     
@@ -7434,7 +7434,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 #if LOG_CROP_FINDPOINTS
             printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
 #endif
-            if ((csUp) && (msLf) && (msRt) && (csDn)){
+            if ((csUp[0]) && (msLf[0]) && (msRt[0]) && (csDn[0])){
                 sup[0] = csUp[0];
                 sup[1] = csUp[1];
     
@@ -7523,7 +7523,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 #if LOG_CROP_FINDPOINTS
             printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
 #endif
-            if ((csUp) && (msLf) && (msRt) && (csDn)){
+            if ((csUp[0]) && (msLf[0]) && (msRt[0]) && (csDn[0])){
                 sup[0] = csUp[0];
                 sup[1] = csUp[1];
     
@@ -7542,7 +7542,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 #if LOG_CROP_FINDPOINTS
         printf("Warnning!!! findline result not match!!!LfSize:%d, RtSize:%d \n", lfLinSize, rtLinSize);
 #endif
-        if ((csUp) && (msLf) && (msRt) && (csDn)) {
+        if ((csUp[0]) && (msLf[0]) && (msRt[0]) && (csDn[0])) {
             sup[0] = csUp[0];
             sup[1] = csUp[1];
     
@@ -7557,7 +7557,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         }
     }
 
-    if ((sup) && (sdn) && (slf) && (srt)) {
+    if ((sup[0]) && (sdn[0]) && (slf[0]) && (srt[0])) {
 #if LOG_CROP_FINDPOINTS
         printf("sup = (%lf, %lf), sdn = (%lf, %lf) \n", sup[0], sup[1], sdn[0], sdn[1]);
         printf("slf = (%lf, %lf), srt = (%lf, %lf) \n", slf[0], slf[1], srt[0], srt[1]);    
@@ -9506,7 +9506,7 @@ static int pdfHead(char *ppdf, int max, int inSize, int *inData)
     CFLOAT d1=0, d2=0;
     char tch[128], *dst = 0;
     int tlen = 0, tot = 0, n=0;
-    int hi, wh, mh, mw, cm;
+    int hi=0, wh=0, mh=0, mw=0, cm=0;
     
 
     if (ppdf == 0) return -1;
@@ -11639,7 +11639,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
 #if LOG_FS_EN
             printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
 #endif
-            if (sum != (fs->dfstats >> 16) & 0xff) {
+            if (sum != ((fs->dfstats >> 16) & 0xff)) {
                 ret = -11;
                 //memset(fs, 0x00, sizeof(struct directnFile_s));
 #if LOG_FS_EN
@@ -29242,6 +29242,8 @@ static int cmdfunc_opcode(int argc, char *argv[])
     char ch=0, opcode[5], param=0;
     uint32_t tg=0, cd=0;
     struct mainRes_s *mrs=0;
+    struct aspConfig_s* ctb = 0;
+    
     mrs = (struct mainRes_s *)argv[0];
     if (!mrs) {ret = -1; goto end;}
     sprintf_f(mrs->log, "cmdfunc_opcode argc:%d\n", argc); 
@@ -29271,7 +29273,7 @@ static int cmdfunc_opcode(int argc, char *argv[])
     if (opcode[2] != '/') {ret = -5; goto end;}
 
     tg = opcode[1];
-    struct aspConfig_s* ctb = 0;
+
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
         ctb = &mrs->configTable[ix];
         if (tg == ctb->opCode) {
@@ -31565,7 +31567,7 @@ static int fs45(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs46(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct sdParseBuff_s *pabuf=0;
-    int ret, bitset, loop=0, len, bufn, dstsz=0, totsz;
+    int ret, bitset, loop=0, len=0, bufn, dstsz=0, totsz;
     char ch;
     char *src, *dst, *pt;
 
@@ -31818,7 +31820,7 @@ static int fs50(struct mainRes_s *mrs, struct modersp_s *modersp)
         for (i = 0; i < 8; i++) {
             psec->secSysid[i] = pr[3+i];
         }
-        psec->secSysid[8] = '\0';
+        psec->secSysid[7] = '\0';
         /* 11 sector size */ 
         psec->secSize = aspRawCompose(&pr[11], 2);
         /* 13 sector per cluster */
@@ -33161,7 +33163,7 @@ static int fs67(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 static int fs68(struct mainRes_s *mrs, struct modersp_s *modersp) 
 { 
-    int ret, bitset, len;
+    int ret, bitset, len=0;
     char ch, *addr=0, *dst=0;
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *s=0, *sc=0;
@@ -34112,7 +34114,7 @@ static int fs80(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     int val=0, i=0, ret=0;
     char *pr=0;
-    uint32_t secStr=0, secLen=0, fstsec=0, lstsec;
+    uint32_t secStr=0, secLen=0, fstsec=0, lstsec=0;
     struct aspConfig_s *pct=0;
     struct sdbootsec_s   *psec=0;
     struct sdFAT_s *pfat=0;
@@ -35294,8 +35296,8 @@ static int fs92(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     char fnameSave[16] = "asp%.5d.jpg";
-    char srhName[16];
-    int ret=0, cnt=0;
+    char srhName[12];
+    int ret=0, cnt=0, slen=0;
     uint32_t secStr=0, secLen=0, clstLen=0, clstStr=0;;
     uint32_t freeClst=0, usedClst=0, totClst=0, val=0, b32=0;
     struct aspConfig_s *pct=0;
@@ -35473,8 +35475,9 @@ static int fs93(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (ret) break;
     }
 
-    strncpy(upld->dfSFN, srhName, 12);
-    upld->dfSFN[13] = '\0';
+    slen = strnlen(srhName, sizeof(srhName));
+    strncpy(upld->dfSFN, srhName, slen);
+    upld->dfSFN[12] = '\0';
 
     upld->dflen = 0;
     upld->dfLFN[0] = '\0';
@@ -35665,7 +35668,7 @@ static int fs94(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs95(struct mainRes_s *mrs, struct modersp_s *modersp) 
 {
-    int bitset, ret;
+    int bitset, ret=0;
 
     sprintf_f(mrs->log, "trigger spi_0_\n");
     print_f(&mrs->plog, "fs95", mrs->log);
@@ -35804,7 +35807,7 @@ static int fs96(struct mainRes_s *mrs, struct modersp_s *modersp)
 { 
     char *addr=0;
     uint32_t val=0;
-    int ret, totsz=0, len=0, secLen, max=0, mdo=0;
+    int ret=-1, totsz=0, len=0, secLen, max=0, mdo=0;
     int hi = 0, wh = 0, n = 0;
     struct sdFAT_s *pfat=0;
     struct supdataBack_s *rs = 0, *s=0, *sc=0, *sh=0, *se=0;
@@ -35995,7 +35998,7 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
     char fnameSave_bmp[16] = "asp%.5d.bmp";
     char fnameSave_tif[16] = "asp%.5d.tif";
     char srhName[16];
-    int ret=0, cnt=0, hi=0, wh=0, mh=0, mw=0;
+    int ret=0, cnt=0, hi=0, wh=0, mh=0, mw=0, slen=0;
     uint32_t secStr=0, secLen=0, clstByte, clstLen=0, clstStr=0;
     uint32_t freeClst=0, usedClst=0, totClst=0, val=0, tmp=0;
     int datLen=0, imgLen=0;
@@ -36160,8 +36163,9 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         if (ret) break;
     }
 
-    strncpy(upld->dfSFN, srhName, 12);
-    upld->dfSFN[13] = '\0';
+    slen = strnlen(srhName, sizeof(srhName));
+    strncpy(upld->dfSFN, srhName, slen);
+    upld->dfSFN[12] = '\0';
 
     upld->dflen = 0;
     upld->dfLFN[0] = '\0';
@@ -37529,7 +37533,7 @@ static int fs114(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs115(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     struct sdParseBuff_s *pabuf=0;
-    int ret, bitset, loop=0, len, bufn, dstsz=0, totsz;
+    int ret, bitset, loop=0, len=0, bufn, dstsz=0, totsz;
     char ch;
     char *src, *dst, *pt;
 
@@ -43317,7 +43321,7 @@ static int p2(struct procRes_s *rs)
     struct spi_ioc_transfer *tr = rs->rspioc1;
     struct timespec tnow;
     struct sdParseBuff_s *pabuf=0;
-    int px, pi=0, ret, len=0, opsz, cmode=0, tdiff, tlast, twait, tlen=0, maxsz=0;
+    int px, pi=0, ret, len=0, opsz=0, cmode=0, tdiff, tlast, twait, tlen=0, maxsz=0;
     int bitset, totsz=0;
     uint16_t send16, recv16;
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0, maxLen=0;
@@ -45094,7 +45098,7 @@ static int p3(struct procRes_s *rs)
     struct aspConfig_s *pct=0, *pdt=0;
 
     
-    int pi, ret, len, opsz, cmode, bitset, tdiff, tlast, twait, totsz=0;
+    int pi, ret, len, opsz, cmode=0, bitset, tdiff, tlast, twait, totsz=0;
     uint16_t send16, recv16;
     char ch, str[128], rx8[4], tx8[4], finfo[2], uinfo[32];
     char *addr, *laddr;
@@ -45758,7 +45762,7 @@ static int p4(struct procRes_s *rs)
 {
     CFLOAT flsize, fltime;
     int px, pi, ret=0, len=0, opsz, totsz, tdiff, tlast;
-    int cmode, acuhk, errtor=0, cltport=0;
+    int cmode=0, acuhk, errtor=0, cltport=0;
     char ch, str[128];
     char *addr, *pre, *cltaddr;
     struct info16Bit_s *p=0, *c=0;
@@ -53853,7 +53857,7 @@ static int p7(struct procRes_s *rs)
     char chbuf[32];
     char ch=0, *addr=0, *cltaddr;
     int ret=0, len=0, num=0, tx=0, cltport=0, totsz=0;
-    int cmode, tdiff, tlast;
+    int cmode=0, tdiff, tlast;
     struct sdFAT_s *pfat=0;
     struct sdFATable_s   *pftb=0;
     uint32_t secStr=0, secLen=0, datLen=0, minLen=0;
@@ -54976,7 +54980,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     int len=0, pieRet=0, ret=0, err=0;
     char *ptm=0, *pcur=0, *addr=0;
     char chr=0, opc=0, dat=0, chq=0, ch=0;
-    char cplls[4];
+    char cplls[8];
     char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     char *pkcbw=0;
@@ -66801,20 +66805,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 ptrecv[lenflh] = ',';
                 lenflh += 1;
 
-                lens = strnlen(MSP_TIME, sizeof(MSP_TIME));
-                if (lens > 24) {
-                    lens = 24;
-                }
+                lens = strnlen(MSP_TIME, 24);
                 strncpy(&ptrecv[lenflh], MSP_TIME, lens);
                 lenflh += lens;
 
                 ptrecv[lenflh] = ',';
                 lenflh += 1;
 
-                lens = strnlen(MSP_SSID, sizeof(MSP_SSID));
-                if (lens > 28) {
-                    lens = 28;
-                }
+                lens = strnlen(MSP_SSID, 28);
                 strncpy(&ptrecv[lenflh], MSP_SSID, lens);
                 lenflh += lens;
 
@@ -67563,7 +67561,7 @@ int main(int argc, char *argv[])
     print_f(&pmrs->plog, "main", pmrs->log);
 
 // show arguments
-    memset(arg, 0, 8);
+    memset(arg, 0, sizeof(arg));
     ix = 0;
     len = argc;
     while(len) {
