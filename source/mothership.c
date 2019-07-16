@@ -328,7 +328,7 @@ static int *totSalloc=0;
 /* wifi debug */
 #define DBG_WIFI_REAL (1)
 
-#define MSP_P_NUM (11) /* P0 ~ P8 */
+#define MSP_P_NUM (12) /* P0 ~ P8 */
 #define ASP_MEM_SLOT_NUM (4096)
 
 #define DIR_POOL_SIZE (1024)
@@ -58846,6 +58846,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int udist=0, uthrhld=0, upas=0, ursm=0, upasd=0, ursmd=0, udistd=0;
     struct usbFileidAccess_s *pubf=0;
     struct usbFileidContent_s *pubfidc=0, *pubfidnxt=0;
+    int bmplen=0, cpylen=0, rawlen=0, bret=0, blen=0;
+    char *bmpbuff=0, *bmpbufc=0, *bmpcpy=0;
     
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
@@ -59000,7 +59002,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     cntTx = 0;
     ifx = 0;
     while (1) {
-
+        
         rxfd = 0;
         uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 500);
         if (uret < 0) {
@@ -63593,6 +63595,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
                                     print_f(rs->plogs, "P11", rs->logs);
 
+                                    bmplen = uimCylcnt * USB_BUF_SIZE;
+                                    bmplen += lastCylen;
+
+                                    bmpbufc = 0;
+                                    cpylen = 0;
+                                    
+                                    bmpbuff = aspMemalloc(bmplen, 11);
+
+                                    if (bmpbuff) {
+                                        sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d succeed!!!\n", bmplen);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        bmpbufc = bmpbuff;
+                                    } else {
+                                        sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d failed!!!\n", bmplen);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+
                                     switch (cmdprisec) {
                                     case 1:
                                         #if LOG_P11_EN
@@ -63727,7 +63747,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     waitCylen = ix;
 
                                     #if LOG_P11_EN
-                                    sprintf_f(rs->logs, "[DV] wait page size: %d, pagerst: %d\n", waitCylen, pagerst);
+                                    sprintf_f(rs->logs, "[DV] wait page number: %d, wait page rest: %d\n", waitCylen, pagerst);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     #endif
 
@@ -63877,7 +63897,18 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             cntTx++;
 
                             msync(pinfcur, sizeof(struct usbHostmem_s), MS_SYNC);
-                
+
+                            if (bmpbufc) {
+                            
+                                bmpcpy = memcpy(bmpbufc, addrd, lens);
+                                
+                                //sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d (0x%.8x:0x%.8x)\n", lens, cpylen, (uint32_t)bmpcpy, (uint32_t)bmpbufc);
+                                //print_f(rs->plogs, "P11", rs->logs);
+
+                                cpylen += lens;
+                                bmpbufc = bmpcpy + lens;
+                            }
+                            
                             upas = pinfcur->ushostpause;
                             ursm = pinfcur->ushostresume;
                             
@@ -64016,8 +64047,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 }
                                             }
                                         }
-
-
                                     }
                                 }
                             }
@@ -64436,15 +64465,75 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             #endif
                         }
 
-                        #if USB_RECVLEN_ZERO_HANDLE
-                        if (lens == 0) {
-                            sendsz = lens;
-                        } else {
-                            sendsz = write(usbfd, addrd, lens);
+                        if (bmpbufc) {
+                            if (che == 'E') {
+                                rawlen = cpylen - lastCylen - lens;
+                                
+                                sprintf_f(rs->logs, "[BMP] cpylen: %d, rawlen: %d, lastlen: %d, metaex len: %d \n", cpylen, rawlen, lastCylen, lens);
+                                print_f(rs->plogs, "P11", rs->logs); 
+
+                                bmpbufc = bmpbuff;
+
+                                if (rawlen > USB_BUF_SIZE) {
+                                    blen = USB_BUF_SIZE;
+                                } else {
+                                    blen = rawlen;
+                                }
+
+                                while (rawlen) {                                    
+                                    bret = write(usbfd, bmpbufc, blen);
+
+                                    if (bret > 0) {
+                                        //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
+                                        //print_f(rs->plogs, "P11", rs->logs); 
+
+                                        rawlen -= bret;
+                                        bmpbufc += bret;
+
+                                        if (rawlen > USB_BUF_SIZE) {
+                                            blen = USB_BUF_SIZE;
+                                        } else {
+                                            blen = rawlen;
+                                        }
+                                    }
+                                }
+
+                                blen = lastCylen;
+                                while (blen) {
+                                    bret = write(usbfd, bmpbufc, blen); 
+
+                                    if (bret > 0) {
+                                        blen -= bret;
+                                        bmpbufc += bret;
+                                    }
+                                }
+
+                                blen = lens;
+                                while (blen) {
+                                    bret = write(usbfd, bmpbufc, blen); 
+
+                                    if (bret > 0) {
+                                        blen -= bret;
+                                        bmpbufc += bret;
+                                    }
+                                }
+                            }
+                            
+                            sendsz = lens;                            
                         }
-                        #else
-                        sendsz = write(usbfd, addrd, lens);
-                        #endif
+                        else {
+
+                            #if USB_RECVLEN_ZERO_HANDLE
+                            if (lens == 0) {
+                                sendsz = lens;
+                            } else {
+                                sendsz = write(usbfd, addrd, lens);
+                            }
+                            #else
+                            sendsz = write(usbfd, addrd, lens);
+                            #endif
+
+                        }
                         
                     }
                     #endif
@@ -67435,6 +67524,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
 
         }
+
+        aspMemClear(aspMemAsign, asptotMalloc, 11);
         
     }
 
