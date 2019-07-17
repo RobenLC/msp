@@ -612,6 +612,10 @@ typedef enum {
     ASPOP_SCAN_WIDTH_DUO,
     ASPOP_SCAN_SIDE,
     ASPOP_SCAN_SIDE_DUO,
+    ASPOP_USBCROP_FP01,
+    ASPOP_USBCROP_FP02,
+    ASPOP_USBCROP_FP03,
+    ASPOP_USBCROP_FP04,
     ASPOP_CODE_MAX, /* 121 */
 } aspOpCode_e;
 
@@ -3414,6 +3418,164 @@ static int aspMetafs145GetlenviaUsb(struct mainRes_s *mrs)
     val = pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8);
 
     return val;
+}
+
+static int aspMetaReleaseviaUsbdlBmpUpd(struct mainRes_s *mrs, struct procRes_s *rs, int updw, int updh) 
+{
+    struct intMbs_s *pt=0;
+    struct aspMetaDataviaUSB_s *pmetausb=0;
+    struct aspMetaMass_s *pmass=0;
+    unsigned int val=0;
+
+    if ((!mrs) && (!rs)) return -1;
+    
+    if (mrs) {
+        pmetausb = &mrs->metaUsb;
+        pmass = &mrs->metaMass;
+    } else {
+        pmetausb = rs->pmetausb;
+        pmass = rs->pmetaMass;
+    }
+    
+    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+
+    pmetausb->IMG_HIGH[0] = updh & 0xff;
+    pmetausb->IMG_HIGH[1] = (updh >> 8) & 0xff;
+    
+    pmetausb->IMG_WIDTH[0] = updw & 0xff;
+    pmetausb->IMG_WIDTH[1] = (updw >> 8) & 0xff;
+    
+    return 0;
+}
+
+static int aspMetaReleaseviaUsbdlBmp(struct mainRes_s *mrs, struct procRes_s *rs, char *pdata, int dmax) 
+{
+    int i=0, act=0;
+    int opSt=0, opEd=0;
+    int istr=0, iend=0, idx=0, ret=0;
+    char *pvdst=0, *pvend=0;
+    struct intMbs_s *pt=0;
+    struct aspMetaDataviaUSB_s *pmetausb=0, *pmetainput=0;
+    struct aspMetaMass_s *pmass=0;
+    struct aspConfig_s *pct=0, *pdt=0;
+    unsigned char linGap=0, linStart=0;
+    unsigned short linRec=0, linLength=0;
+    unsigned int val=0;
+    char *pch=0;
+
+    if ((!mrs) && (!rs)) return -1;
+    if ((!pdata) || (!dmax)) return -2;
+    
+    if (mrs) {
+        pmetausb = &mrs->metaUsb;
+        pct = mrs->configTable;
+        pmass = &mrs->metaMass;
+    } else {
+        pmetausb = rs->pmetausb;
+        pct = rs->pcfgTable;
+        pmass = rs->pmetaMass;
+    }
+    
+    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+    
+    if ((pmetausb->ASP_MAGIC_ASPC[0] != 'A') || (pmetausb->ASP_MAGIC_ASPC[1] != 'S') || 
+        (pmetausb->ASP_MAGIC_ASPC[2] != 'P') || (pmetausb->ASP_MAGIC_ASPC[3] != 'C')) {
+        return -31;
+    }
+
+    pt = &(pmetausb->CROP_POS_1);
+    for (i = ASPOP_CROP_01; i <= ASPOP_CROP_06; i++) {
+        pct[i].opValue = msb2lsb(pt);
+        pct[i].opStatus = ASPOP_STA_UPD;
+
+        //printf("%d. 0x%.8x \n", i, pct[i].opValue);
+        
+        pt++;
+    }
+
+    for (i = ASPOP_CROP_07; i <= ASPOP_CROP_18; i++) {
+        pct[i].opValue = msb2lsb(pt);
+        pct[i].opStatus = ASPOP_STA_UPD;
+
+        //printf("%d. 0x%.8x \n", i, pct[i].opValue);
+        
+        pt++;
+    }
+
+    pct[ASPOP_IMG_LEN].opValue = pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8);
+    pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_UPD;    
+
+    pct[ASPOP_SCAN_WIDTH].opValue = pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8);
+    pct[ASPOP_SCAN_WIDTH].opStatus = ASPOP_STA_UPD;        
+
+    pct[ASPOP_SCAN_SIDE].opValue = pmetausb->PRI_O_SEC;
+    pct[ASPOP_SCAN_SIDE].opStatus = ASPOP_STA_UPD;        
+
+    linGap = pmetausb->YLine_Gap;
+    linStart = pmetausb->Start_YLine_No;
+
+    pch = (char *)&(pmetausb->YLines_Recorded);
+    val = pch[0] << 8 | pch[1];
+    linRec = val;
+    
+    // shmem_dump((char *)&pmetausb->CROP_POS_1, 128);
+    //printf(" gap: %d, startLin: %d yline: %d \n", linGap, linStart, linRec);
+
+    if ((pdata[0] == 'Y') && (pdata[1] == 'L')) {
+        pch = &pdata[2];
+        val = pch[0] << 8 | pch[1];
+        linLength = val;
+    }
+    
+    if (linRec) {
+        pmass->massGap = linGap;
+        pmass->massStart = linStart;
+        pmass->massRecd = linRec;
+        pmass->massUsed = linLength;
+
+        cfgTableSet(pct, ASPOP_XCROP_GAT, linGap);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR, linStart);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC, linRec);
+            
+    }
+    else if (linLength) {
+        linRec = linLength / 4;
+        pmass->massGap = linGap;
+        pmass->massStart = linStart;
+        pmass->massRecd = linRec;
+        pmass->massUsed = linLength;
+
+        cfgTableSet(pct, ASPOP_XCROP_GAT, linGap);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR, linStart);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC, linRec);
+            
+    }
+    else {
+        pmass->massGap = 0;
+        pmass->massStart = 0;
+        pmass->massRecd = 0;
+        pmass->massUsed = 0;
+        
+        cfgTableSet(pct, ASPOP_XCROP_GAT, 0);
+        cfgTableSet(pct, ASPOP_XCROP_LINSTR, 0);
+        cfgTableSet(pct, ASPOP_XCROP_LINREC, 0);
+    }
+
+    if (linLength) {
+        pt = &(pmetausb->CROP_POS_F1);
+        for (i = ASPOP_USBCROP_FP01; i <= ASPOP_USBCROP_FP04; i++) {
+            pct[i].opValue = msb2lsb(pt);
+            pct[i].opStatus = ASPOP_STA_UPD;
+
+            printf("F%d. = (%d, %d) \n", i - ASPOP_USBCROP_FP01 + 1, (pct[i].opValue >> 16) & 0xffff, (pct[i].opValue >> 0) & 0xffff);
+        
+            pt++;
+        }
+    }
+    
+    msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
+
+    return 0;
 }
 
 static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, char *pdata, int dmax) 
@@ -9312,6 +9474,1039 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
     #endif
 
     return 0;
+}
+
+static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
+{
+    struct sdParseBuff_s *pabuf=0;
+    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
+    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0;
+    int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
+    char ch;
+    struct bitmapHeader_s *bheader;
+    CFLOAT LU[2], RU[2], LD[2], RD[2];
+    CFLOAT LUn[2], RUn[2], LDn[2], RDn[2];
+    int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4], bmpScale[4], oldScale[4];
+    int sdot[2], ddot[2];
+    CFLOAT rangle[2], thacos=0, thasin=0, theta, piAngle = 180.0;
+    CFLOAT minH=0, minV=0, offsetH=0, offsetV=0;
+    int maxhint=0, maxvint=0, minhint=0, minvint=0, rowsize=0, rawszNew=0;
+    int bpp=0, ix=0, iy=0, dx=0, dy=0, outi[2], id=0, ixd=0, iyn=0, ixn=0, offsetCal=0;
+    CFLOAT ind[4], outd[2], fx=0, fy=0, tx=0, ty=0;
+    CFLOAT *tars, *tarc;
+    char gdat[3];
+    char *dst=0;
+
+    int *crsAry, crsASize, expCAsize;
+    CFLOAT linLU[3], linRU[3], linLD[3], linRD[3], linPal[3], linCrs[3];
+    CFLOAT pLU[2], pRU[2], pLD[2], pRD[2], pal[2], par[2], pt[2];
+    CFLOAT plm[2], prm[2], plc[2], prc[2], pn[2];
+    CFLOAT maxhf=0, maxvf=0, minhf=0, minvf=0;
+    int ublen=0, ubret=0, ubrst=0;
+
+    
+    sprintf_f(rs->logs, "deg: %d\n", deg);
+    print_f(rs->plogs, "ROT", rs->logs);
+        
+    pabuf = &rs->psFat->parBuf;
+    //totsz = pabuf->dirBuffUsed;
+    //srcbuf = pabuf->dirParseBuff;
+    srcbuf = bmpsrc;
+
+    /* check header */
+    //shmem_dump(srcbuf, 128);
+
+    /* rotate */
+    ph = &rs->pbheader->aspbmpMagic[2];
+    len = sizeof(struct bitmapHeader_s) - 2;
+    memcpy(ph, srcbuf, len);
+
+    //shmem_dump(srcbuf, 128);
+
+    bheader = rs->pbheader;
+
+    //dbgBitmapHeader(bheader, len);
+
+    rawsz = bheader->aspbiRawSize;
+    rawSrc = srcbuf + bheader->aspbhRawoffset;
+    oldWidth = bheader->aspbiWidth;
+    oldHeight = bheader->aspbiHeight;
+    bpp = bheader->aspbiCPP >> 16;
+    oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
+
+    //rawCpy = aspMemalloc(rawsz, 11);
+    
+    //memcpy(rawCpy, rawSrc, rawsz);
+    rawCpy = rawSrc;
+        
+    //shmem_dump(rawCpy, 128);
+    //shmem_dump(rawSrc, 128);
+
+    LU[0] = 0;
+    LU[1] = bheader->aspbiHeight;
+
+    RU[0] = bheader->aspbiWidth;
+    RU[1] = bheader->aspbiHeight;        
+
+    LD[0] = 0;
+    LD[1] = 0;
+
+    RD[0] = bheader->aspbiWidth;
+    RD[1] = 0;
+
+    theta = (CFLOAT)deg;
+    theta = theta / 5.0;
+    
+    sprintf_f(rs->logs, "rotate angle = %f \n", theta);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+    
+    calcuRotateCoordinates(LUt, LUn, LU, rangle);
+    calcuRotateCoordinates(RUt, RUn, RU, rangle);
+    calcuRotateCoordinates(LDt, LDn, LD, rangle);
+    calcuRotateCoordinates(RDt, RDn, RD, rangle);
+    
+    #if 1
+    sprintf_f(rs->logs, "LUn: %lf, %lf / %3d, %3d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "RUn: %lf, %lf / %3d, %3d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "LDn: %lf, %lf / %3d, %3d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "RDn: %lf, %lf / %3d, %3d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    #endif
+    
+    minH = aspMin(LUn[0], RUn[0]);
+    minH = aspMin(minH, LDn[0]);
+    minH = aspMin(minH, RDn[0]);
+
+    minV = aspMin(LUn[1], RUn[1]);
+    minV = aspMin(minV, LDn[1]);
+    minV = aspMin(minV, RDn[1]);
+
+    sprintf_f(rs->logs, "minH: %lf, minV: %lf \n", minH, minV);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    offsetH = 0 - minH;
+    offsetV = 0 - minV;
+
+    LUn[0] += offsetH;
+    LUn[1] += offsetV;
+
+    RUn[0] += offsetH;
+    RUn[1] += offsetV;
+
+    LDn[0] += offsetH;
+    LDn[1] += offsetV;
+
+    RDn[0] += offsetH;
+    RDn[1] += offsetV;
+
+    LUt[0] = (int)round(LUn[0]);
+    LUt[1] = (int)round(LUn[1]);
+
+    RUt[0] = (int)round(RUn[0]);
+    RUt[1] = (int)round(RUn[1]);
+
+    LDt[0] = (int)round(LDn[0]);
+    LDt[1] = (int)round(LDn[1]);
+
+    RDt[0] = (int)round(RDn[0]);
+    RDt[1] = (int)round(RDn[1]);
+    
+    #if 1
+    sprintf_f(rs->logs, "LUn: %lf, %lf / %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "RUn: %lf, %lf / %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "LDn: %lf, %lf / %d, %d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "RDn: %lf, %lf / %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    #endif
+    
+    maxhint= aspMaxInt(LUt[0], RUt[0]);
+    maxhint = aspMaxInt(maxhint, LDt[0]);
+    maxhint = aspMaxInt(maxhint, RDt[0]);
+
+    maxvint = aspMaxInt(LUt[1], RUt[1]);
+    maxvint = aspMaxInt(maxvint, LDt[1]);
+    maxvint = aspMaxInt(maxvint, RDt[1]);
+
+    minhint= aspMinInt(LUt[0], RUt[0]);
+    minhint = aspMinInt(minhint, LDt[0]);
+    minhint = aspMinInt(minhint, RDt[0]);
+
+    minvint = aspMinInt(LUt[1], RUt[1]);
+    minvint = aspMinInt(minvint, LDt[1]);
+    minvint = aspMinInt(minvint, RDt[1]);
+    
+    rowsize = ((bpp * maxhint + 31) / 32) * 4;
+    rawszNew = rowsize * maxvint;
+
+    bheader->aspbhSize = bheader->aspbhRawoffset + rawszNew;
+    bheader->aspbiWidth = maxhint;
+    bheader->aspbiHeight = maxvint;
+    bheader->aspbiRawSize = rawszNew;
+
+    ubrst = 512 - (bheader->aspbhSize % 512);
+
+    sprintf_f(rs->logs, "allocate raw dest size: %d!!!\n", rawszNew);
+    print_f(rs->plogs, "ROT", rs->logs);
+    
+    //rawdest = aspMemalloc(bheader->aspbhSize + 512 + ubrst, 11);
+    rawdest = malloc(bheader->aspbhSize + 512 + ubrst);
+    if (rawdest) {
+        sprintf_f(rs->logs, "allocate raw dest size: %d succeed!!!\n", rawszNew);
+        print_f(rs->plogs, "ROT", rs->logs);
+    } else {
+        sprintf_f(rs->logs, "allocate raw dest size: %d failed!!!\n", rawszNew);
+        print_f(rs->plogs, "ROT", rs->logs);
+        return -1;
+    }
+    memcpy(rawdest, ph, 54);
+    rawSrc = rawdest + bheader->aspbhRawoffset;
+
+    pabuf->dirBuffUsed = bheader->aspbhSize + ubrst;
+    pabuf->dirParseBuff = rawdest;
+    
+    sprintf_f(rs->logs, "maxh: %d, minh: %d, maxv: %d, minv: %d \n", maxhint, minhint, maxvint, minvint);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    pLU[0] = -1;
+    pLU[1] = -1;
+    pRU[0] = -1;
+    pRU[1] = -1;
+    pLD[0] = -1;
+    pLD[1] = -1;
+    pRD[0] = -1;
+    pRD[1] = -1;
+
+    if (minhint == LUt[0]) {
+        sprintf_f(rs->logs, "LU =  %d, %d match minhint: %d !!!left - 0\n", LUt[0], LUt[1], minhint);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        if (minvint == LUt[1]) {
+            sprintf_f(rs->logs, "LU =  %d, %d match minvint: %d !!!left - 0\n", LUt[0], LUt[1], minvint);
+            print_f(rs->plogs, "ROT", rs->logs);
+        
+            pLD[0] = LUn[0];
+            pLD[1] = LUn[1];
+            
+            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+        } else {
+            if (maxvint == LUt[1]) {
+                sprintf_f(rs->logs, "LU =  %d, %d match maxvint: %d !!!left - 0\n", LUt[0], LUt[1], maxvint);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+                pLU[0] = LUn[0];
+                pLU[1] = LUn[1];
+
+                sprintf_f(rs->logs, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+            } else {
+                if (maxvint == RUt[1]) {
+                    if (minvint == LDt[1]) {
+                        if (RUt[0] > LDt[0]) {
+                            pLU[0] = LUn[0];
+                            pLU[1] = LUn[1];
+
+                            pLD[0] = LDn[0];
+                            pLD[1] = LDn[1];
+                        } else if (RUt[0] < LDt[0]) {
+                            pLU[0] = RUn[0];
+                            pLU[1] = RUn[1];
+
+                            pLD[0] = LUn[0];
+                            pLD[1] = LUn[1];
+                        } else {
+                            sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!left - 1\n", LUt[0], LUt[1]);
+                            print_f(rs->plogs, "ROT", rs->logs);
+                        }
+                    } else {
+                        sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!! left - 2\n", LUt[0], LUt[1]);
+                        print_f(rs->plogs, "ROT", rs->logs);
+                    }
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!left - 3\n", LUt[0], LUt[1]);
+                    print_f(rs->plogs, "ROT", rs->logs);
+                }
+            }
+        }
+    }
+    
+    if (minhint == RUt[0]) {
+        sprintf_f(rs->logs, "RU =  %d, %d match minhint: %d !!!left - 0\n", RUt[0], RUt[1], minhint);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        if (minvint == RUt[1]) {
+            sprintf_f(rs->logs, "RU =  %d, %d match minvint: %d !!!left - 0\n", RUt[0], RUt[1], minvint);
+            print_f(rs->plogs, "ROT", rs->logs);
+            
+            pLD[0] = RUn[0];
+            pLD[1] = RUn[1];
+
+            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            print_f(rs->plogs, "ROT", rs->logs);
+        } else {
+            if (maxvint == RUt[1]) {
+                sprintf_f(rs->logs, "RU =  %d, %d match maxvint: %d !!!left - 0\n", RUt[0], RUt[1], maxvint);
+                print_f(rs->plogs, "ROT", rs->logs);
+                
+                pLU[0] = RUn[0];
+                pLU[1] = RUn[1];
+
+                sprintf_f(rs->logs, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                print_f(rs->plogs, "ROT", rs->logs);
+            } else {
+                if (maxvint == RDt[1]) {
+                    if (minvint == LUt[1]) {
+                        if (RDt[0] > LUt[0]) {
+                            pLU[0] = RUn[0];
+                            pLU[1] = RUn[1];
+                
+                            pLD[0] = LUn[0];
+                            pLD[1] = LUn[1];
+                        } else if (RDt[0] < LUt[0]) {
+                            pLU[0] = RDn[0];
+                            pLU[1] = RDn[1];
+                
+                            pLD[0] = RUn[0];
+                            pLD[1] = RUn[1];
+                        } else {
+                            sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!left - 1\n", RUt[0], RUt[1]);
+                            print_f(rs->plogs, "ROT", rs->logs);
+                        }
+                    } else {
+                        sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!left - 2\n", RUt[0], RUt[1]);
+                        print_f(rs->plogs, "ROT", rs->logs);
+                    }
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!left - 3\n", RUt[0], RUt[1]);
+                    print_f(rs->plogs, "ROT", rs->logs);
+                }                    
+            }
+        }
+    }
+        
+    if (minhint == LDt[0]) {
+        sprintf_f(rs->logs, "LD =  %d, %d match minhint: %d !!!left - 0\n", LDt[0], LDt[1], minhint);
+        print_f(rs->plogs, "ROT", rs->logs);
+        
+        if (minvint == LDt[1]) {
+            sprintf_f(rs->logs, "LD =  %d, %d match minvint: %d !!!left - 0\n", LDt[0], LDt[1], minvint);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+            pLD[0] = LDn[0];
+            pLD[1] = LDn[1];
+
+            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            print_f(rs->plogs, "ROT", rs->logs);
+        } else {
+            if (maxvint == LDt[1]) {
+                sprintf_f(rs->logs, "LD =  %d, %d match maxvint: %d !!!left - 0\n", LDt[0], LDt[1], maxvint);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+                pLU[0] = LDn[0];
+                pLU[1] = LDn[1];
+
+                sprintf_f(rs->logs, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+            } else {
+                if (maxvint == LUt[1]) {
+                    if (minvint == RDt[1]) {
+                        if (LUt[0] > RDt[0]) {
+                            pLU[0] = LDn[0];
+                            pLU[1] = LDn[1];
+                
+                            pLD[0] = RDn[0];
+                            pLD[1] = RDn[1];
+                        } else if (LUt[0] < RDt[0]) {
+                            pLU[0] = LUn[0];
+                            pLU[1] = LUn[1];
+                
+                            pLD[0] = LDn[0];
+                            pLD[1] = LDn[1];
+                        } else {
+                            sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!left - 1\n", LDt[0], LDt[1]);
+                            print_f(rs->plogs, "ROT", rs->logs);
+                        }
+                    } else {
+                        sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!left - 2\n", LDt[0], LDt[1]);
+                        print_f(rs->plogs, "ROT", rs->logs);
+                    }
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!left - 3\n", LDt[0], LDt[1]);
+                    print_f(rs->plogs, "ROT", rs->logs);
+                }                                   
+            }
+        }
+    }
+        
+    if (minhint == RDt[0]) {
+        sprintf_f(rs->logs, "RD =  %d, %d match minhint: %d !!!left - 0\n", RDt[0], RDt[1], minhint);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        if (minvint == RDt[1]) {
+            sprintf_f(rs->logs, "RD =  %d, %d match minvint: %d !!!left - 0\n", RDt[0], RDt[1], minvint);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+            pLD[0] = RDn[0];
+            pLD[1] = RDn[1];                    
+
+            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            print_f(rs->plogs, "ROT", rs->logs);
+        } else {
+            if (maxvint == RDt[1]) {
+                sprintf_f(rs->logs, "RD =  %d, %d match maxvint: %d !!!left - 0\n", RDt[0], RDt[1], maxvint);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+                pLU[0] = RDn[0];
+                pLU[1] = RDn[1];
+
+                sprintf_f(rs->logs, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                print_f(rs->plogs, "ROT", rs->logs);
+            } else {
+                if (maxvint == LDt[1]) {
+                    if (minvint == RUt[1]) {
+                        if (LDt[0] > RUt[0]) {
+                            pLU[0] = RDn[0];
+                            pLU[1] = RDn[1];
+                
+                            pLD[0] = RUn[0];
+                            pLD[1] = RUn[1];
+                        } else if (LDt[0] < RUt[0]) {
+                            pLU[0] = LDn[0];
+                            pLU[1] = LDn[1];
+                
+                            pLD[0] = RDn[0];
+                            pLD[1] = RDn[1];
+                        } else {
+                            sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!left - 1\n", RDt[0], RDt[1]);
+                            print_f(rs->plogs, "ROT", rs->logs);
+                        }
+                    } else {
+                        sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!left - 2\n", RDt[0], RDt[1]);
+                        print_f(rs->plogs, "ROT", rs->logs);
+                    }
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!left - 3\n", RDt[0], RDt[1]);
+                    print_f(rs->plogs, "ROT", rs->logs);
+                }                                
+            }
+        }
+    }
+
+    if (maxhint == LUt[0]) {
+        sprintf_f(rs->logs, "LU =  %d, %d match maxhint: %d !!!right - 0\n", LUt[0], LUt[1], maxhint);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        if (minvint == LUt[1]) {
+            sprintf_f(rs->logs, "LU =  %d, %d match minvint: %d !!!right - 0\n", LUt[0], LUt[1], minvint);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+            pRD[0] = LUn[0];
+            pRD[1] = LUn[1];
+
+            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+        } else {
+            if (maxvint == LUt[1]) {
+                sprintf_f(rs->logs, "LU =  %d, %d match maxvint: %d !!!right - 0\n", LUt[0], LUt[1], maxvint);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+                pRU[0] = LUn[0];
+                pRU[1] = LUn[1];
+
+                sprintf_f(rs->logs, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+            } else {
+                if (maxvint == LDt[1]) {
+                    if (minvint == RUt[1]) {
+                        if (RUt[0] < LDt[0]) {
+                            pRU[0] = LDn[0];
+                            pRU[1] = LDn[1];
+
+                            pRD[0] = LUn[0];
+                            pRD[1] = LUn[1];
+                        } else if (RUt[0] > LDt[0]) {
+                            pRU[0] = LUn[0];
+                            pRU[1] = LUn[1];
+
+                            pRD[0] = RUn[0];
+                            pRD[1] = RUn[1];
+                        } else {
+                            sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!right - 1\n", LUt[0], LUt[1]);
+                            print_f(rs->plogs, "ROT", rs->logs);
+                        }
+                    } else {
+                        sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!right - 2\n", LUt[0], LUt[1]);
+                        print_f(rs->plogs, "ROT", rs->logs);
+                    }
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!right - 3\n", LUt[0], LUt[1]);
+                    print_f(rs->plogs, "ROT", rs->logs);
+                }
+            }
+        }
+    }
+    
+    if (maxhint == RUt[0]) {
+        sprintf_f(rs->logs, "RU =  %d, %d match maxhint: %d !!!right - 0\n", RUt[0], RUt[1], maxhint);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        if (minvint == RUt[1]) {
+            sprintf_f(rs->logs, "RU =  %d, %d match minvint: %d !!!right - 0\n", RUt[0], RUt[1], minvint);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+            pRD[0] = RUn[0];
+            pRD[1] = RUn[1];
+
+            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+        } else {
+            if (maxvint == RUt[1]) {
+                sprintf_f(rs->logs, "RU =  %d, %d match maxvint: %d !!!right - 0\n", RUt[0], RUt[1], maxvint);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+                pRU[0] = RUn[0];
+                pRU[1] = RUn[1];
+
+                sprintf_f(rs->logs, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+            } else {
+                if (maxvint == LUt[1]) {
+                    if (minvint == RDt[1]) {
+                        if (RDt[0] < LUt[0]) {
+                            pRU[0] = LUn[0];
+                            pRU[1] = LUn[1];
+                
+                            pRD[0] = RUn[0];
+                            pRD[1] = RUn[1];
+                        } else if (RDt[0] > LUt[0]) {
+                            pRU[0] = RUn[0];
+                            pRU[1] = RUn[1];
+                
+                            pRD[0] = RDn[0];
+                            pRD[1] = RDn[1];
+                        } else {
+                            sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!right - 1\n", RUt[0], RUt[1]);
+                            print_f(rs->plogs, "ROT", rs->logs);
+                        }
+                    } else {
+                        sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!right - 2\n", RUt[0], RUt[1]);
+                        print_f(rs->plogs, "ROT", rs->logs);
+                    }
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!right - 3\n", RUt[0], RUt[1]);
+                    print_f(rs->plogs, "ROT", rs->logs);
+                }                    
+            }
+        }
+    }
+        
+    if (maxhint == LDt[0]) {
+        sprintf_f(rs->logs, "LD =  %d, %d match maxhint: %d !!!right - 0\n", LDt[0], LDt[1], maxhint);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        if (minvint == LDt[1]) {
+            sprintf_f(rs->logs, "LD =  %d, %d match minvint: %d !!!right - 0\n", LDt[0], LDt[1], minvint);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+            pRD[0] = LDn[0];
+            pRD[1] = LDn[1];                  
+
+            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+        } else {
+            if (maxvint == LDt[1]) {
+                sprintf_f(rs->logs, "LD =  %d, %d match maxvint: %d !!!right - 0\n", LDt[0], LDt[1], maxvint);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+                pRU[0] = LDn[0];
+                pRU[1] = LDn[1];
+
+                sprintf_f(rs->logs, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+            } else {
+                if (maxvint == RDt[1]) {
+                    if (minvint == LUt[1]) {
+                        if (LUt[0] < RDt[0]) {
+                            pRU[0] = RDn[0];
+                            pRU[1] = RDn[1];
+                
+                            pRD[0] = LDn[0];
+                            pRD[1] = LDn[1];
+                        } else if (LUt[0] > RDt[0]) {
+                            pRU[0] = LDn[0];
+                            pRU[1] = LDn[1];
+                
+                            pRD[0] = LUn[0];
+                            pRD[1] = LUn[1];
+                        } else {
+                            sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!right - 1\n", LDt[0], LDt[1]);
+                            print_f(rs->plogs, "ROT", rs->logs);
+                        }
+                    } else {
+                        sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!right - 2\n", LDt[0], LDt[1]);
+                        print_f(rs->plogs, "ROT", rs->logs);
+                    }
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!right - 3\n", LDt[0], LDt[1]);
+                    print_f(rs->plogs, "ROT", rs->logs);
+                }                                   
+            }
+        }
+    }
+            
+    if (maxhint == RDt[0]) {
+        sprintf_f(rs->logs, "RD =  %d, %d match maxhint: %d !!!right - 0\n", RDt[0], RDt[1], maxhint);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        if (minvint == RDt[1]) {
+            sprintf_f(rs->logs, "RD =  %d, %d match minvint: %d !!!right - 0\n", RDt[0], RDt[1], minvint);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+            pRD[0] = RDn[0];
+            pRD[1] = RDn[1];                    
+
+            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            print_f(rs->plogs, "ROT", rs->logs);
+
+        } else {
+            if (maxvint == RDt[1]) {
+                sprintf_f(rs->logs, "RD =  %d, %d match maxvint: %d !!!right - 0\n", RDt[0], RDt[1], maxvint);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+                pRU[0] = RDn[0];
+                pRU[1] = RDn[1];
+
+                sprintf_f(rs->logs, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                print_f(rs->plogs, "ROT", rs->logs);
+
+            } else {
+                if (maxvint == RUt[1]) {
+                    if (minvint == LDt[1]) {
+                        if (LDt[0] < RUt[0]) {
+                            pRU[0] = RUn[0];
+                            pRU[1] = RUn[1];
+                
+                            pRD[0] = RDn[0];
+                            pRD[1] = RDn[1];
+                        } else if (LDt[0] > RUt[0]) {
+                            pRU[0] = RDn[0];
+                            pRU[1] = RDn[1];
+                
+                            pRD[0] = LDn[0];
+                            pRD[1] = LDn[1];
+                        } else {
+                            sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 1\n", RDt[0], RDt[1]);
+                            print_f(rs->plogs, "ROT", rs->logs);
+                        }
+                    } else {
+                        sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 2\n", RDt[0], RDt[1]);
+                        print_f(rs->plogs, "ROT", rs->logs);
+                    }
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 3\n", RDt[0], RDt[1]);
+                    print_f(rs->plogs, "ROT", rs->logs);
+                }                                
+            }
+        }
+    }
+
+    #if 0
+    sprintf_f(rs->logs, "PLU: %lf, %lf \n", pLU[0], pLU[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "PRU: %lf, %lf \n", pRU[0], pRU[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "PLD: %lf, %lf \n", pLD[0], pLD[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "PRD: %lf, %lf \n", pRD[0], pRD[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    #endif
+
+    if (pLU[1] > pRU[1]) {
+        getVectorFromP(linLU, pLU, pLD);
+        getVectorFromP(linLD, pLD, pRD);
+        getVectorFromP(linRD, pRD, pRU);
+        getVectorFromP(linRU, pRU, pLU);
+
+        plm[0] = pLD[0];
+        plm[1] = pLD[1];
+        
+        prm[0] = pRU[0];
+        prm[1] = pRU[1];
+    } else {
+        getVectorFromP(linLU, pRU, pLU);
+        getVectorFromP(linLD, pLU, pLD);
+        getVectorFromP(linRD, pLD, pRD);
+        getVectorFromP(linRU, pRD, pRU);
+
+        plm[0] = pLU[0];
+        plm[1] = pLU[1];
+        
+        prm[0] = pRD[0];
+        prm[1] = pRD[1];
+    }
+    
+    #if 0
+    ret = getCross(linLD, linLU, plc);
+    sprintf_f(rs->logs, "test cross left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
+    print_f(rs->plogs, "ROT", rs->logs);
+            
+    ret = getCross(linRD, linRU, prc);
+    sprintf_f(rs->logs, "test cross right %lf, %lf ret: %d \n", prc[0], prc[1], ret);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    ret = getCross(linRU, linLU, pt);
+    sprintf_f(rs->logs, "test cross top %lf, %lf ret: %d \n", pt[0], pt[1], ret);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    ret= getCross(linRD, linLD, pn);
+    sprintf_f(rs->logs, "test cross down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
+    print_f(rs->plogs, "ROT", rs->logs);
+    #endif
+
+    pal[0] = 100;
+    pal[1] = 100;
+
+    par[0] = 100;
+    par[1] = 1000;
+    getVectorFromP(linPal, par, pal);        
+
+    expCAsize = maxvint-minvint+1;
+    len = 3*sizeof(int);
+    //crsAry = aspMemalloc(expCAsize*len);
+    crsAry = (int *)rs->pbrotate->aspRotCrossAry;
+    crsASize = rs->pbrotate->aspRotCASize /len;
+
+    if (expCAsize > crsASize) {
+        expCAsize = crsASize;
+    }
+
+    pt[0] = 200.0;
+    for (iy=minvint, ix=0; ix < expCAsize; iy++, ix++) {
+        pt[1] = (CFLOAT)iy;
+        getRectVectorFromV(linCrs, pt, linPal);
+
+        //getCross(linCrs, linPal, pn);
+        //sprintf_f(rs->logs, "pn: %.4lf, %.4lf \n", pn[0], pn[1]);
+        //print_f(rs->plogs, "ROT", rs->logs);
+
+        if (pt[1] > plm[1]) {
+            getCross(linCrs, linLU, plc);
+        } else {
+            getCross(linCrs, linLD, plc);
+        }
+
+        //sprintf_f(rs->logs, "%.4lf %.4lf, left cross (%.4lf, %.4lf) \n", pt[1], plm[1], plc[0], plc[1]);
+        //print_f(rs->plogs, "ROT", rs->logs);
+
+        if (pt[1] > prm[1]) {
+            getCross(linCrs, linRU, prc);
+        } else {
+            getCross(linCrs, linRD, prc);
+        }
+
+        //sprintf_f(rs->logs, "%.4lf %.4lf, right cross (%.4lf, %.4lf) \n", pt[1], prm[1], prc[0], prc[1]);
+        //print_f(rs->plogs, "ROT", rs->logs);
+        
+        crsAry[ix*3+0] = iy;
+        crsAry[ix*3+1] = (int)round(plc[0]);
+        crsAry[ix*3+2] = (int)round(prc[0]);
+    }
+
+    /*
+    for (ix=0; ix < (maxvint-minvint+1); ix++) {
+        sprintf_f(rs->logs, "%d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+    }
+    */
+    
+    sprintf_f(rs->logs, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d, sizeof crsArry: %d\n", maxhint, maxvint, rowsize, rawszNew, totsz, expCAsize);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    //memset(rawSrc, 0, rawszNew);
+    
+    /* retate raw data */
+    //memset(rawSrc, 0xff, rawszNew);
+    oldScale[0] = oldRowsz;
+    oldScale[1] = oldHeight;
+    oldScale[2] = rawsz;
+    oldScale[3] = bpp;        
+
+    bmpScale[0] = rowsize;
+    bmpScale[1] = maxvint;        
+    bmpScale[2] = rawszNew;
+    bmpScale[3] = bpp;
+
+    rawTmp = rawSrc;
+    memset(rawTmp, 0xff, rawszNew);
+    
+    /* reverse to fill the rotate image */
+    
+    theta = (CFLOAT) (360*5 - deg);
+    theta = theta / 5;
+    
+    sprintf_f(rs->logs, "reverse rotate angle = %lf \n", theta);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+
+    ix = (int)round(0 - offsetH);
+    iy = (int)round(0 - offsetV);
+    
+    if (maxhint > maxvint) {
+        oldTot = (int)round(maxhint - offsetH + 1);
+    } else {
+        oldTot = (int)round(maxvint - offsetV + 1);
+    }
+
+    if (ix < iy) {
+        id = ix - 1;
+    } else {
+        id = iy - 1;
+    }
+
+    offsetCal = 0 - id;
+    len = oldTot - id;
+
+    #if 0 
+    tars = aspMemalloc(sizeof(CFLOAT) * len);
+    tarc = aspMemalloc(sizeof(CFLOAT) * len);
+
+    sprintf_f(rs->logs, "pre-calculating buffer size: %d, max: %d, min: %d, offset: %d, tars: 0x%.8x, tarc: 0x%.8x\n", len, oldTot, id, offsetCal, tars, tarc);
+    print_f(rs->plogs, "ROT", rs->logs);
+    
+    
+    for (ix = id, iy = 0; iy < len; ix++, iy++) {
+
+        fx = (CFLOAT)ix;
+        tars[iy] = fx * thasin;
+        tarc[iy] = fx * thacos;
+
+        sprintf_f(rs->logs, "pre-calculate fx: %lf, sin: %lf, cos: %lf \n", fx, tars[iy], tarc[iy]);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+    }
+    #endif
+
+    #if 0
+    fx = LUn[0] - offsetH;
+    fy = LUn[1] - offsetV;
+    dx = (int) round(fx*thacos - fy*thasin);
+    dy = (int) round(fx*thasin + fy*thacos);
+    sprintf_f(rs->logs, "LU back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", LUt[0], fx, LUt[1], fy,  dx, dy, offsetH, offsetV);
+    print_f(rs->plogs, "ROT", rs->logs);
+    
+    fx = RUn[0] - offsetH;
+    fy = RUn[1] - offsetV;
+    dx = (int) round(fx*thacos - fy*thasin);
+    dy = (int) round(fx*thasin + fy*thacos);
+    sprintf_f(rs->logs, "RU back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", RUt[0], fx, RUt[1], fy,  dx, dy, offsetH, offsetV);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    fx = RDn[0] - offsetH;
+    fy = RDn[1] - offsetV;
+    dx = (int) round(fx*thacos - fy*thasin);
+    dy = (int) round(fx*thasin + fy*thacos);
+    sprintf_f(rs->logs, "RD back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", RDt[0], fx, RDt[1], fy,  dx, dy, offsetH, offsetV);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    fx = LDn[0] - offsetH;
+    fy = LDn[1] - offsetV;
+    dx = (int) round(fx*thacos - fy*thasin);
+    dy = (int) round(fx*thasin + fy*thacos);
+    sprintf_f(rs->logs, "LD back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", LDt[0], fx, LDt[1], fy,  dx, dy, offsetH, offsetV);
+    print_f(rs->plogs, "ROT", rs->logs);
+    #endif
+
+    lstsz = 0;
+    totsz = bheader->aspbhSize;
+    //ring_buf_init(&mrs->cmdRx);
+
+    msync(crsAry, expCAsize*3*4, MS_SYNC);
+    
+    cnt = 0;
+    for (id=0; id < expCAsize; id++) {
+        iy = crsAry[id*3+0];
+        ix = crsAry[id*3+1];
+        ixd = crsAry[id*3+2]; 
+
+        //fx = (CFLOAT)ix;
+        fy = (CFLOAT)iy;
+        
+        //fx -= offsetH;
+        fy -= offsetV;
+
+        //dx = (int) round(fx*thacos - fy*thasin);
+        dy = (int) round(fx*thasin + fy*thacos);
+
+        //sprintf_f(rs->logs, "back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", ix, fx, iy, fy,  dx, dy, offsetH, offsetV);
+        //print_f(rs->plogs, "ROT", rs->logs);
+
+        iyn = (int)round(fy);
+        iyn += offsetCal;
+        
+        for (;ix <= ixd; ix++) {       
+
+            fx = (CFLOAT)ix;
+
+            fx -= offsetH;
+
+            ixn = (int)round(fx);
+            ixn += offsetCal;
+
+            //dx = (int) round(tarc[ixn] - tars[iyn]);
+            //dy = (int) round(tars[ixn] + tarc[iyn]);
+
+            dx = (int) round(fx*thacos - fy*thasin);
+            dy = (int) round(fx*thasin + fy*thacos);
+
+            cnt++;
+
+            if ((dx < 0) || (dy < 0) || (dx >= oldWidth) || (dy >= oldHeight)) {
+                //sprintf(rs->logs, "%d. %d, %d => %d, %d (%d, %d)\n",id, ix, iy,  dx, dy, oldWidth, oldHeight);
+                //print_f(rs->plogs, "ROT", rs->logs);
+                continue;
+            }
+
+            bitset = bpp / 8;
+            dst = rawCpy + (dx*bitset + dy*oldRowsz);
+
+            cnt = 0;
+            while (bitset > 0) {
+                gdat[cnt] = *dst;
+
+                bitset --;
+                cnt++;
+                dst++;
+
+                if (cnt > 2) break;
+            }
+
+            bitset = bpp / 8;
+            dst = rawTmp + (ix*bitset + iy*rowsize);
+
+            cnt = 0;
+            while (bitset > 0) {
+                *dst = gdat[cnt];
+
+                bitset --;
+                cnt++;
+                dst++;
+                
+                if (cnt > 2) break;
+            }
+
+            lstsz = bheader->aspbhRawoffset + iy*rowsize;  
+
+            while ((lstsz - acusz) > SPI_TRUNK_SZ) {
+                len = SPI_TRUNK_SZ;
+
+                msync(rawdest, len, MS_SYNC);
+
+                ublen = len;
+                while (ublen) {
+                
+                    #if 0
+                    ubret = write(usbfid, rawdest, ublen); 
+                    #else
+                    ubret = ublen;
+                    #endif
+                    
+                    if (ubret > 0) {
+                        ublen -= ubret;
+                        rawdest += ubret;
+                    }
+                }
+
+                acusz= acusz + len;
+            }                    
+        }
+    }
+
+    lstsz = totsz - acusz;
+
+    sprintf_f(rs->logs, "last size: %d\n", lstsz);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    while (lstsz > 0) {
+        
+        len = SPI_TRUNK_SZ;
+        if (len > 0) {
+            if (len < lstsz) { 
+                msync(rawdest, len, MS_SYNC);
+
+                ublen = len;
+                while (ublen) {
+
+                    #if 0
+                    ubret = write(usbfid, rawdest, ublen); 
+                    #else
+                    ubret = ublen;
+                    #endif
+
+                    if (ubret > 0) {
+                        ublen -= ubret;
+                        rawdest += ubret;
+                    }
+                }
+
+                lstsz = lstsz - len;
+            } else {
+                msync(rawdest, lstsz, MS_SYNC);
+
+                ublen = lstsz;
+                while (ublen) {
+
+                    #if 0
+                    ubret = write(usbfid, rawdest, ublen); 
+                    #else
+                    ubret = ublen;
+                    #endif
+
+                    if (ubret > 0) {
+                        ublen -= ubret;
+                        rawdest += ubret;
+                    }
+                }
+            
+                lstsz = 0;
+            }
+        } else {
+            usleep(800000);
+        }
+    }                
+
+    sprintf_f(rs->logs, "ring buff count: %d\n", cnt);
+    print_f(rs->plogs, "ROT", rs->logs);
+
+    dbgBitmapHeader(bheader, len);
+
+    return 0; 
 }
 
 static int doSystemCmd(char *sCommand)
@@ -58832,7 +60027,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct aspMetaData_s *ptmetaout=0, *ptmetain=0;
     struct aspMetaData_s *ptmetainduo=0;
     char *addrs=0;
-    int lenrs=0, act=0, val=0, lenflh=0, err=0, fsrcv=0, idlcnt=0, pollcnt=0, loopcnt=0;
+    int lenrs=0, act=0, val=0, lenflh=0, err=0, fsrcv=0, idlcnt=0, pollcnt=0, loopcnt=0, tmp=0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct aspMetaMass_s *pmass=0, *pmassduo=0;
     int usbid01=0, usbid02=0;
@@ -58846,8 +60041,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int udist=0, uthrhld=0, upas=0, ursm=0, upasd=0, ursmd=0, udistd=0;
     struct usbFileidAccess_s *pubf=0;
     struct usbFileidContent_s *pubfidc=0, *pubfidnxt=0;
-    int bmplen=0, cpylen=0, rawlen=0, bret=0, blen=0;
-    char *bmpbuff=0, *bmpbufc=0, *bmpcpy=0;
+    int bmplen=0, cpylen=0, rawlen=0, rotlen=0, rotlast=0, bdeg=0, bret=0, blen=0, colr=0, bmpw=0, bmph=0, bdpi=0, bdpp=0, bhlen=0;
+    char *bmpbuff=0, *bmpbufc=0, *bmpcpy=0, *bmpcolrtb=0, *ph=0;
+    struct sdParseBuff_s *pabuff=0;
+    struct bitmapHeader_s *bheader = 0;
     
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
@@ -58874,6 +60071,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         print_f(rs->plogs, "P11", rs->logs);
     }
 
+    pabuff = &rs->psFat->parBuf;
+    bheader = rs->pbheader;
     
     pct = rs->pcfgTable;
     pmass = rs->pmetaMass;
@@ -63901,7 +65100,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (bmpbufc) {
                             
                                 bmpcpy = memcpy(bmpbufc, addrd, lens);
-                                
+
+                                msync(bmpcpy, lens, MS_SYNC);    
+
+                                //shmem_dump(bmpcpy, 128);
                                 //sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d (0x%.8x:0x%.8x)\n", lens, cpylen, (uint32_t)bmpcpy, (uint32_t)bmpbufc);
                                 //print_f(rs->plogs, "P11", rs->logs);
 
@@ -64090,6 +65292,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 } else {
                                     sprintf_f(rs->logs, "usb meta forward to pc \n");
                                     print_f(rs->plogs, "P11", rs->logs);
+
+                                    /* deal with bmp retate */
+                                    memset(ptmetausb, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memcpy(ptmetausb, pshfmeta, shfmeta);
                                     //dbgMetaUsb(ptmetausbduo);
                                 }
                             }
@@ -64474,6 +65680,254 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 bmpbufc = bmpbuff;
 
+                                act = aspMetaReleaseviaUsbdlBmp(0, rs, addrd, lens);
+
+                                val=0;
+                                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+                                sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                bmph = val;
+
+                                bhlen = 0;
+                                
+                                if (act || (bmph == 0)) {
+                                    sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d \n", act);
+                                    print_f(rs->plogs, "P11", rs->logs); 
+                                } else {
+                                    sprintf_f(rs->logs, "[BMP] pop usb meta succeed!! \n");
+                                    print_f(rs->plogs, "P11", rs->logs); 
+
+                                    ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
+                                    switch (val) {
+                                    case COLOR_MODE_COLOR:
+                                        colr = 24;
+                                        break;
+                                    case COLOR_MODE_GRAY:
+                                    case COLOR_MODE_GRAY_DETAIL:
+                                    case COLOR_MODE_BLACKWHITE:
+                                        colr = 8;
+                                        break;
+                                    default:
+                                        colr = 24;
+                                        break;
+                                    }
+                                    sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                                    print_f(rs->plogs, "P11", rs->logs);
+            
+                                    ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                                    sprintf_f(rs->logs, "[BMP] width high: %d, ret:%d\n", val, ret);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                                    tmp = val << 8 | tmp;
+
+                                    val = 0;
+                                    ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+                                    bmpw = scanWidthConvert(tmp, val);
+                                    sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                                    switch (tmp) {
+                                    case RESOLUTION_1200:
+                                        bdpi = 1200;
+                                        break;
+                                    case RESOLUTION_600:
+                                        bdpi = 600;
+                                        break;
+                                    case RESOLUTION_300:
+                                        bdpi = 300;
+                                        break;
+                                    case RESOLUTION_200:
+                                        bdpi = 200;
+                                        break;
+                                    case RESOLUTION_150:
+                                        bdpi = 150;
+                                        break;
+                                    default:
+                                        bdpi = 300;
+                                        break;
+                                    }
+                                    sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    bmpcolrtb = aspMemalloc(1078, 11);
+                                    if (!bmpcolrtb) {
+                                        sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
+                                        print_f(rs->plogs, "P11", rs->logs);                                
+                                    }
+
+                                    if (colr == 8) {
+                                        blen = 1078;
+                                        bdpp = 1;
+                                    } else if (colr == 24) {
+                                        blen = 54;            
+                                        bdpp = 3;
+                                    } else {
+                                        sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
+                                        print_f(rs->plogs, "P11", rs->logs);   
+                                    }
+
+                                    bhlen = blen;
+                                    val = bmpw * bmph * bdpp;
+
+                                    sprintf_f(rs->logs, "[BMP] calcu raw size: %d, recv rawlen: %d \n", val, cpylen - lens);
+                                    print_f(rs->plogs, "P11", rs->logs);   
+
+                                    sprintf_f(rs->logs, "[BMP] bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
+
+                                    ph = &rs->pbheader->aspbmpMagic[2];
+                                    val = sizeof(struct bitmapHeader_s) - 2;
+                                    memcpy(bmpcolrtb, ph, val);
+
+                                    blen -= val;
+                                    if (blen > 0) {
+                                        bitmapColorTableSetup(bmpcolrtb+val);
+                                        blen -= 1024;
+                                    }
+
+                                    if (blen) {
+                                        sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    } 
+
+                                    //dbgBitmapHeader(bheader, val);
+                                }
+
+                                memcpy(bmpbuff, bmpcolrtb, bhlen);
+                                
+                                //shmem_dump(bmpbuff, bhlen);
+                                
+                                bdeg = 20;
+                                rotateBMP(rs, bdeg, usbfd, bmpbuff);
+                                
+                                #if 1
+
+                                if (bhlen) {
+                                    bmpbufc = pabuff->dirParseBuff;
+                                    rotlen = pabuff->dirBuffUsed;
+                                    
+                                    lrst= lastCylen % 512;
+                                    
+                                    bmpcpy = bmpbuff + rawlen + lastCylen - lrst;
+                                    bmpbufc = bmpbufc + rotlen;
+
+                                    aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight);
+                                    sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    //shmem_dump(bmpcpy, lrst);
+
+                                    memcpy(bmpbufc, ptmetausb, lrst);
+                                    
+                                    lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                                    
+                                    sprintf_f(rs->logs, "[BMP] usb meta size check, lstlen: %d : sizeof: %d  \n", lrst, lenbs);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    //memcpy(bmpbufc, bmpcpy, lrst);
+                                    //shmem_dump(bmpbufc, lrst);
+                                    
+                                    bmpbufc = pabuff->dirParseBuff;
+                                    rotlen = rotlen + lrst;
+                                    
+                                    rotlast = rotlen % USB_BUF_SIZE;
+                                    rawlen = rotlen - rotlast;
+                                    
+                                    if (rawlen > USB_BUF_SIZE) {
+                                        blen = USB_BUF_SIZE;
+                                    } else {
+                                        blen = rawlen;
+                                    }
+                                    
+                                    while (rawlen) {                                    
+                                        bret = write(usbfd, bmpbufc, blen);
+                                    
+                                        if (bret > 0) {
+                                            //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
+                                            //print_f(rs->plogs, "P11", rs->logs); 
+                                    
+                                            rawlen -= bret;
+                                            bmpbufc += bret;
+                                    
+                                            if (rawlen > USB_BUF_SIZE) {
+                                                blen = USB_BUF_SIZE;
+                                            } else {
+                                                blen = rawlen;
+                                            }
+                                        }
+                                    }
+                                    
+                                    blen = rotlast;
+                                    while (blen) {
+                                        bret = write(usbfd, bmpbufc, blen); 
+                                    
+                                        if (bret > 0) {
+                                            blen -= bret;
+                                            bmpbufc += bret;
+                                        }
+                                    }
+                                    
+                                    blen = lens;
+                                    while (blen) {
+                                        bret = write(usbfd, addrd, blen); 
+                                    
+                                        if (bret > 0) {
+                                            blen -= bret;
+                                            bmpbufc += bret;
+                                        }
+                                    }
+                                } else {
+                                    if (rawlen > USB_BUF_SIZE) {
+                                        blen = USB_BUF_SIZE;
+                                    } else {
+                                        blen = rawlen;
+                                    }
+                                    
+                                    while (rawlen) {                                    
+                                        bret = write(usbfd, bmpbufc, blen);
+                                    
+                                        if (bret > 0) {
+                                            //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
+                                            //print_f(rs->plogs, "P11", rs->logs); 
+                                    
+                                            rawlen -= bret;
+                                            bmpbufc += bret;
+                                    
+                                            if (rawlen > USB_BUF_SIZE) {
+                                                blen = USB_BUF_SIZE;
+                                            } else {
+                                                blen = rawlen;
+                                            }
+                                        }
+                                    }
+                                    
+                                    blen = lastCylen;
+                                    while (blen) {
+                                        bret = write(usbfd, bmpbufc, blen); 
+                                    
+                                        if (bret > 0) {
+                                            blen -= bret;
+                                            bmpbufc += bret;
+                                        }
+                                    }
+                                    
+                                    blen = lens;
+                                    while (blen) {
+                                        bret = write(usbfd, addrd, blen); 
+                                    
+                                        if (bret > 0) {
+                                            blen -= bret;
+                                            bmpbufc += bret;
+                                        }
+                                    }
+                                }
+                                
+
+                                #else
                                 if (rawlen > USB_BUF_SIZE) {
                                     blen = USB_BUF_SIZE;
                                 } else {
@@ -64510,13 +65964,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 blen = lens;
                                 while (blen) {
-                                    bret = write(usbfd, bmpbufc, blen); 
+                                    bret = write(usbfd, addrd, blen); 
 
                                     if (bret > 0) {
                                         blen -= bret;
                                         bmpbufc += bret;
                                     }
                                 }
+                                #endif
                             }
                             
                             sendsz = lens;                            
@@ -68723,6 +70178,38 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
+            case ASPOP_USBCROP_FP01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
             default: break;
             }
         }
@@ -69837,6 +71324,38 @@ int main(int argc, char *argv[])
                 ctb->opCode = OP_NONE;
                 ctb->opType = ASPOP_TYPE_VALUE;
                 ctb->opValue = 0;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP01: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP02: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP03: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
