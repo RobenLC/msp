@@ -9541,7 +9541,19 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
         
     //shmem_dump(rawCpy, 128);
     //shmem_dump(rawSrc, 128);
+    #if 0
+    LU[0] = (bheader->aspbiWidth * 1) /4;
+    LU[1] = (bheader->aspbiHeight * 3) /4;
 
+    RU[0] = (bheader->aspbiWidth * 3) /4;
+    RU[1] = (bheader->aspbiHeight * 3) /4;
+
+    LD[0] = (bheader->aspbiWidth * 1) /4;
+    LD[1] = (bheader->aspbiHeight * 1) /4;
+
+    RD[0] = (bheader->aspbiWidth * 3) /4;
+    RD[1] = (bheader->aspbiHeight * 1) /4;
+    #else
     LU[0] = 0;
     LU[1] = bheader->aspbiHeight;
 
@@ -9553,6 +9565,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 
     RD[0] = bheader->aspbiWidth;
     RD[1] = 0;
+    #endif
 
     theta = (CFLOAT)deg;
     theta = theta / 5.0;
@@ -14286,7 +14299,7 @@ static int mspFS_SearchInFolder(struct directnFile_s **dir, struct directnFile_s
 
 static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *root, char *path)
 {
-    char mlog[256];
+    char mlog[512];
     int ret = 0;
     char split = '/';
     char *ch;
@@ -14388,7 +14401,7 @@ static int mspFS_FileSearch(struct directnFile_s **dir, struct directnFile_s *ro
 
 static int mspFS_FolderSearch(struct directnFile_s **dir, struct directnFile_s *root, char *path)
 {
-    char mlog[256];
+    char mlog[512];
     int ret = 0;
     char split = '/';
     char *ch;
@@ -65797,16 +65810,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //dbgBitmapHeader(bheader, val);
                                 }
 
-                                memcpy(bmpbuff, bmpcolrtb, bhlen);
-                                
-                                //shmem_dump(bmpbuff, bhlen);
-                                
-                                bdeg = 20;
-                                rotateBMP(rs, bdeg, usbfd, bmpbuff);
-                                
-                                #if 1
-
+                                #if 0
                                 if (bhlen) {
+
+                                    memcpy(bmpbuff, bmpcolrtb, bhlen);
+                                
+                                    //shmem_dump(bmpbuff, bhlen);
+                                
+                                    bdeg = 20;
+                                    rotateBMP(rs, bdeg, usbfd, bmpbuff);
+                                
                                     bmpbufc = pabuff->dirParseBuff;
                                     rotlen = pabuff->dirBuffUsed;
                                     
