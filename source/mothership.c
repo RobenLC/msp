@@ -37,6 +37,7 @@ int pipe2(int pipefd[2], int flags);
 #include <errno.h> 
 //#include <mysql.h>
 #include <jpeglib.h>
+#include <jerror.h>
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
@@ -1826,6 +1827,177 @@ static int mspFS_folderList(struct directnFile_s *root, int depth);
 static char **memory_init_vtable(char **pbuf, int tsize, int csize, uint32_t *tbl);
 static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf);
 
+unsigned char *raw_image = NULL;
+
+int width = 2400;
+int height = 3200;
+int bytes_per_pixel = 3;   /* or 1 for GRACYSCALE images */
+int color_space = JCS_RGB; /* or JCS_GRAYSCALE for grayscale images */
+
+int read_jpeg_file( char *filename )
+{
+	struct jpeg_decompress_struct cinfo;
+	struct jpeg_error_mgr jerr;
+
+	JSAMPROW row_pointer[1];
+	
+	FILE *infile = fopen( filename, "rb" );
+	unsigned long location = 0;
+	int i = 0;
+	
+	if ( !infile )
+	{
+		printf("Error opening jpeg file %s\n!", filename );
+		return -1;
+	}
+
+	cinfo.err = jpeg_std_error( &jerr );
+
+	jpeg_create_decompress( &cinfo );
+
+	jpeg_stdio_src( &cinfo, infile );
+
+	jpeg_read_header( &cinfo, TRUE );
+
+
+	jpeg_start_decompress( &cinfo );
+	printf("components = %d\n", cinfo.num_components);
+
+	raw_image = (unsigned char*)malloc( cinfo.output_width*cinfo.output_height*cinfo.num_components );
+
+	row_pointer[0] = (unsigned char *)malloc( cinfo.output_width*cinfo.num_components );
+
+	while( cinfo.output_scanline < cinfo.image_height )
+	{
+		jpeg_read_scanlines( &cinfo, row_pointer, 1 );
+		for( i=0; i<cinfo.image_width*cinfo.num_components;i++) 
+			raw_image[location++] = row_pointer[0][i];
+	}
+
+	jpeg_finish_decompress( &cinfo );
+	jpeg_destroy_decompress( &cinfo );
+	free( row_pointer[0] );
+	fclose( infile );
+
+	return 1;
+}
+
+int write_jpeg_file( char *filename )
+{
+	struct jpeg_compress_struct cinfo;
+	struct jpeg_error_mgr jerr;
+	
+	JSAMPROW row_pointer[1];
+	FILE *outfile = fopen( filename, "wb" );
+	
+	if ( !outfile )
+	{
+		printf("Error opening output jpeg file %s\n!", filename );
+		return -1;
+	}
+	cinfo.err = jpeg_std_error( &jerr );
+	jpeg_create_compress(&cinfo);
+	jpeg_stdio_dest(&cinfo, outfile);
+
+
+	cinfo.image_width = width;	
+	cinfo.image_height = height;
+	cinfo.input_components = bytes_per_pixel;
+	cinfo.in_color_space = color_space;
+
+	jpeg_set_defaults( &cinfo );
+
+	jpeg_start_compress( &cinfo, TRUE );
+
+	while( cinfo.next_scanline < cinfo.image_height )
+	{
+		row_pointer[0] = &raw_image[ cinfo.next_scanline * cinfo.image_width *  cinfo.input_components];
+		jpeg_write_scanlines( &cinfo, row_pointer, 1 );
+	}
+
+	jpeg_finish_compress( &cinfo );
+	jpeg_destroy_compress( &cinfo );
+	fclose( outfile );
+
+	return 1;
+}
+
+
+static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int clrsp)
+{
+    struct jpeg_decompress_struct cinfo;
+    struct jpeg_error_mgr err;
+ 
+    JSAMPARRAY samplebuffer;
+    int row_stride = 0;
+    char* tmpbuff = NULL;
+    int rgb_size;
+
+    //printf("[JPG] jpeg2rgb enter \n"); 
+    
+    if (!pjpg) {
+        printf("[JPG] jpg buffer is null \n");
+        return -1;
+    }
+    
+    if (!prgb)
+    {
+        printf("[JPG] output buff is null \n");
+        return -2;
+    }
+    
+    cinfo.err = jpeg_std_error(&err);
+  
+    jpeg_create_decompress(&cinfo);
+    //printf("[JPG] jpeg_create_decompress. \n"); 
+    
+    jpeg_mem_src(&cinfo, pjpg, jpgsz);
+    //printf("[JPG] jpeg_mem_src size: %d \n", jpgsz); 
+
+    //shmem_dump(pjpg, 512);
+     
+    jpeg_read_header(&cinfo, TRUE);
+    //printf("[JPG] jpeg_read_header. \n"); 
+
+    cinfo.out_color_space = clrsp;//JCS_GRAYSCALE;//JCS_RGB;//JCS_GRAYSCALE; //JCS_YCbCr;
+ 
+    jpeg_start_decompress(&cinfo);
+    //printf("[JPG] jpeg_start_decompress. \n"); 
+     
+    row_stride = cinfo.output_width * cinfo.output_components;
+    *getW = cinfo.output_width;
+    *getH = cinfo.output_height;
+ 
+    rgb_size = row_stride * cinfo.output_height;
+    if (rgbsz < rgb_size) {
+        printf("[JPG] output buff size %d is wrong should be %d \n", rgbsz, rgb_size);
+        return -3;
+    }
+    
+    samplebuffer = (*cinfo.mem->alloc_sarray)((j_common_ptr) &cinfo, JPOOL_IMAGE, row_stride, 1);
+
+    #if 0
+    printf("[JPG] debug: rgb_size: %d, raw size: %d w: %d h: %d row_stride: %d \n", rgb_size,
+                cinfo.image_width*cinfo.image_height*3,
+                cinfo.image_width, 
+                cinfo.image_height,
+                row_stride);
+    #endif
+                
+    tmpbuff = prgb;
+    while (cinfo.output_scanline < cinfo.output_height)
+    {
+        jpeg_read_scanlines(&cinfo, samplebuffer, 1);
+        memcpy(tmpbuff, samplebuffer[0], row_stride);
+        tmpbuff += row_stride;
+    }
+ 
+    jpeg_finish_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
+    
+    return 0;
+}
+
 static unsigned long long int time_get_ms(struct timespec *s)
 {
     unsigned long long int cur, tnow, lnow, gunit;
@@ -2384,6 +2556,8 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     if (clr == 8) {
         numclrp = 256;
         rawoffset = 1078;
+        //numclrp = 0;
+        //rawoffset = 54;
         calcuraw = w * h;
     }
     else if (clr == 24) {
@@ -2421,6 +2595,7 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     ph->aspbiWidth = w; // W
     ph->aspbiHeight = h; // H
     ph->aspbiCPP = 1;
+    //ph->aspbiCPP = 0;
     ph->aspbiCPP |= clr << 16;  // 8 or 24
     ph->aspbiCompMethd = 0;
     ph->aspbiRawSize = rawsize; // size of raw
@@ -9515,7 +9690,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     srcbuf = bmpsrc;
 
     /* check header */
-    //shmem_dump(srcbuf, 128);
+    shmem_dump(srcbuf, 512);
 
     /* rotate */
     ph = &rs->pbheader->aspbmpMagic[2];
@@ -9526,7 +9701,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 
     bheader = rs->pbheader;
 
-    //dbgBitmapHeader(bheader, len);
+    dbgBitmapHeader(bheader, len);
 
     rawsz = bheader->aspbiRawSize;
     rawSrc = srcbuf + bheader->aspbhRawoffset;
@@ -9555,7 +9730,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 //1719, 1809
 //915, 1809
 
-    #if 1 /* manually setup the ROI */
+    #if 0 /* manually setup the ROI */
     LU[0] = 100;
     LU[1] = 668;
 
@@ -9567,7 +9742,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 
     RD[0] = 1237;
     RD[1] = 668;
-    #elif 0
+    #elif 1
     LU[0] = 915;
     LU[1] = 1809;
 
@@ -9712,8 +9887,8 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     sprintf_f(rs->logs, "allocate raw dest size: %d!!!\n", rawszNew);
     print_f(rs->plogs, "ROT", rs->logs);
     
-    //rawdest = aspMemalloc(bheader->aspbhSize + 512 + ubrst, 11);
-    rawdest = malloc(bheader->aspbhSize + 512 + ubrst);
+    rawdest = aspMemalloc(bheader->aspbhSize + 512 + ubrst, 11);
+    //rawdest = malloc(bheader->aspbhSize + 512 + ubrst);
     if (rawdest) {
         sprintf_f(rs->logs, "allocate raw dest size: %d succeed!!!\n", rawszNew);
         print_f(rs->plogs, "ROT", rs->logs);
@@ -9722,6 +9897,8 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
         print_f(rs->plogs, "ROT", rs->logs);
         return -1;
     }
+    
+    memcpy(rawdest, srcbuf, bheader->aspbhRawoffset);
     memcpy(rawdest, ph, 54);
     rawSrc = rawdest + bheader->aspbhRawoffset;
 
@@ -60093,8 +60270,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct usbFileidContent_s *pubfidc=0, *pubfidnxt=0;
     int bmplen=0, cpylen=0, rawlen=0, rotlen=0, rotlast=0, bdeg=0, bret=0, blen=0, colr=0, bmpw=0, bmph=0, bdpi=0, bdpp=0, bhlen=0;
     char *bmpbuff=0, *bmpbufc=0, *bmpcpy=0, *bmpcolrtb=0, *ph=0;
+    char *jpgout=0;
+    int jpgetW=0, jpgetH=0;
     struct sdParseBuff_s *pabuff=0;
     struct bitmapHeader_s *bheader = 0;
+    struct timespec jpgS, jpgE;
     
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
@@ -64849,17 +65029,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                     bmpbufc = 0;
                                     cpylen = 0;
-                                    
-                                    bmpbuff = aspMemalloc(bmplen, 11);
 
-                                    if (bmpbuff) {
-                                        sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d succeed!!!\n", bmplen);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                    ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                                    if (ret) {
+                                        fformat = 0;
+                                    }
 
-                                        bmpbufc = bmpbuff;
-                                    } else {
-                                        sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d failed!!!\n", bmplen);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                    if ((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) {
+                                        bmpbuff = aspMemalloc(bmplen, 11);
+
+                                        if (bmpbuff) {
+                                            sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d succeed!!!\n", bmplen);
+                                            print_f(rs->plogs, "P11", rs->logs);
+
+                                            bmpbufc = bmpbuff;
+                                        } else {
+                                            sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d failed!!!\n", bmplen);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        }
                                     }
 
                                     switch (cmdprisec) {
@@ -65693,6 +65880,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     }
                     else {
+                        
                         if ((lens < USB_BUF_SIZE) && (che != 'E') && (sendsz == 0)) {
                             #if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
                             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
@@ -65721,8 +65909,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             #endif
                         }
 
+
                         if (bmpbufc) {
                             if (che == 'E') {
+                            
                                 rawlen = cpylen - lastCylen - lens;
                                 
                                 sprintf_f(rs->logs, "[BMP] cpylen: %d, rawlen: %d, lastlen: %d, metaex len: %d \n", cpylen, rawlen, lastCylen, lens);
@@ -65801,6 +65991,37 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                                     print_f(rs->plogs, "P11", rs->logs);
 
+                                    jpgout = 0;
+
+                                    if (fformat == FILE_FORMAT_JPG) {
+                                        tmp = colr / 8;
+                                        tmp = tmp * bmpw * bmph;
+                                        jpgout = aspMemalloc(tmp, 11);
+
+                                        if (jpgout) {
+                                            sprintf_f(rs->logs, "[BMP] allocate memory for jpeg decode out, size: %d succeed!!!\n", tmp);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        } else {
+                                            sprintf_f(rs->logs, "[BMP] allocate memory for jpeg decode out, size: %d failed!!!\n", tmp);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        }
+
+                                        changeJpgLen(bmpbuff, bmph, bmplen);
+
+                                        clock_gettime(CLOCK_REALTIME, &jpgS);
+                                        err = jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr==8 ? JCS_GRAYSCALE:JCS_RGB);
+                                        clock_gettime(CLOCK_REALTIME, &jpgE);
+
+                                        usCost = time_diff(&jpgS, &jpgE, 1000);
+                                                                    
+                                        sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d us\n", err, jpgetW, jpgetH, usCost);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        //bmpbuff = jpgout;
+                                        bmpw = jpgetW;
+                                        bmph = jpgetH;
+                                    }
+
                                     bmpcolrtb = aspMemalloc(1078, 11);
                                     if (!bmpcolrtb) {
                                         sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
@@ -65809,6 +66030,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                     if (colr == 8) {
                                         blen = 1078;
+                                        //blen = 54;
                                         bdpp = 1;
                                     } else if (colr == 24) {
                                         blen = 54;            
@@ -65850,6 +66072,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 #if 1 /* manually rotate the BMP */
                                 if (bhlen) {
 
+                                    if (jpgout) {
+                                        bmpbuff = jpgout;
+                                    }
+
+                                    msync(bmpcolrtb, 1078, MS_SYNC);
                                     memcpy(bmpbuff, bmpcolrtb, bhlen);
                                 
                                     //shmem_dump(bmpbuff, bhlen);
@@ -65857,7 +66084,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //bdeg = 1350;
                                     //bdeg = 900;
                                     //bdeg = 450;
-                                    bdeg = 220;
+                                    bdeg = 50;
                                     rotateBMP(rs, bdeg, usbfd, bmpbuff);
                                 
                                     bmpbufc = pabuff->dirParseBuff;
