@@ -1599,7 +1599,7 @@ struct procRes_s{
     // time measurement
     struct timespec *tm[2];
     struct timespec tdf[2];
-    char logs[4096];
+    char logs[4000];
     struct socket_s *psocket_r;
     struct socket_s *psocket_t;
     struct socket_s *psocket_at;
@@ -4291,7 +4291,7 @@ static int calcuRotateCoordinates(int *outi, CFLOAT *out, CFLOAT *in, CFLOAT *an
     if (!outi) return -3;
     if (!angle) return -4;
 
-    //printf("calcu rotate input :%lf, %lf, angle:%lf \n", in[0], in[1], angle);
+    printf("calcu rotate input :%lf, %lf, cos:%lf sin:%lf\n", in[0], in[1], angle[0], angle[1]);
 
     x1 = in[0];
     y1 = in[1];
@@ -9502,6 +9502,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     CFLOAT pLU[2], pRU[2], pLD[2], pRD[2], pal[2], par[2], pt[2];
     CFLOAT plm[2], prm[2], plc[2], prc[2], pn[2];
     CFLOAT maxhf=0, maxvf=0, minhf=0, minvf=0;
+    CFLOAT imgw=0.0, imgh=0.0;
     int ublen=0, ubret=0, ubrst=0;
 
     
@@ -9541,18 +9542,43 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
         
     //shmem_dump(rawCpy, 128);
     //shmem_dump(rawSrc, 128);
-    #if 0
-    LU[0] = (bheader->aspbiWidth * 1) /4;
-    LU[1] = (bheader->aspbiHeight * 3) /4;
+    imgw = (CFLOAT)bheader->aspbiWidth;
+    imgh = (CFLOAT)bheader->aspbiHeight;
+    
+//668, 100
+//1237, 668
+//668, 1237
+//100, 668
 
-    RU[0] = (bheader->aspbiWidth * 3) /4;
-    RU[1] = (bheader->aspbiHeight * 3) /4;
+//915, 1005
+//1719, 1005
+//1719, 1809
+//915, 1809
 
-    LD[0] = (bheader->aspbiWidth * 1) /4;
-    LD[1] = (bheader->aspbiHeight * 1) /4;
+    #if 1 /* manually setup the ROI */
+    LU[0] = 100;
+    LU[1] = 668;
 
-    RD[0] = (bheader->aspbiWidth * 3) /4;
-    RD[1] = (bheader->aspbiHeight * 1) /4;
+    RU[0] = 668;
+    RU[1] = 1237;
+
+    LD[0] = 668;
+    LD[1] = 100;
+
+    RD[0] = 1237;
+    RD[1] = 668;
+    #elif 0
+    LU[0] = 915;
+    LU[1] = 1809;
+
+    RU[0] = 1719;
+    RU[1] = 1809;
+
+    LD[0] = 915;
+    LD[1] = 1005;
+
+    RD[0] = 1719;
+    RD[1] = 1005;
     #else
     LU[0] = 0;
     LU[1] = bheader->aspbiHeight;
@@ -9566,7 +9592,18 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     RD[0] = bheader->aspbiWidth;
     RD[1] = 0;
     #endif
-
+    
+    #if 1
+    sprintf_f(rs->logs, "enter: LUn: %lf, %lf\n", LU[0], LU[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "enter: RUn: %lf, %lf \n", RU[0], RU[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "enter: LDn: %lf, %lf \n", LD[0], LD[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "enter: RDn: %lf, %lf \n", RD[0], RD[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    #endif
+    
     theta = (CFLOAT)deg;
     theta = theta / 5.0;
     
@@ -9586,14 +9623,14 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     calcuRotateCoordinates(LDt, LDn, LD, rangle);
     calcuRotateCoordinates(RDt, RDn, RD, rangle);
     
-    #if 1
-    sprintf_f(rs->logs, "LUn: %lf, %lf / %3d, %3d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+    #if 0
+    sprintf_f(rs->logs, "rotate: LUn: %lf, %lf -> %3d, %3d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "RUn: %lf, %lf / %3d, %3d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+    sprintf_f(rs->logs, "rotate: RUn: %lf, %lf -> %3d, %3d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "LDn: %lf, %lf / %3d, %3d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+    sprintf_f(rs->logs, "rotate: LDn: %lf, %lf -> %3d, %3d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "RDn: %lf, %lf / %3d, %3d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+    sprintf_f(rs->logs, "rotate: RDn: %lf, %lf -> %3d, %3d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
     
@@ -9635,14 +9672,14 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     RDt[0] = (int)round(RDn[0]);
     RDt[1] = (int)round(RDn[1]);
     
-    #if 1
-    sprintf_f(rs->logs, "LUn: %lf, %lf / %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+    #if 0
+    sprintf_f(rs->logs, "bound: LUn: %lf, %lf -> %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "RUn: %lf, %lf / %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+    sprintf_f(rs->logs, "bound: RUn: %lf, %lf -> %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "LDn: %lf, %lf / %d, %d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+    sprintf_f(rs->logs, "bound: LDn: %lf, %lf -> %d, %d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "RDn: %lf, %lf / %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+    sprintf_f(rs->logs, "bound: RDn: %lf, %lf -> %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
     
@@ -9714,7 +9751,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             pLD[0] = LUn[0];
             pLD[1] = LUn[1];
             
-            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
 
         } else {
@@ -9725,13 +9762,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
                 pLU[0] = LUn[0];
                 pLU[1] = LUn[1];
 
-                sprintf_f(rs->logs, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
 
             } else {
                 if (maxvint == RUt[1]) {
                     if (minvint == LDt[1]) {
-                        if (RUt[0] > LDt[0]) {
+                        if (RUt[0] >= LDt[0]) {
                             pLU[0] = LUn[0];
                             pLU[1] = LUn[1];
 
@@ -9770,7 +9807,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             pLD[0] = RUn[0];
             pLD[1] = RUn[1];
 
-            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
         } else {
             if (maxvint == RUt[1]) {
@@ -9780,12 +9817,12 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
                 pLU[0] = RUn[0];
                 pLU[1] = RUn[1];
 
-                sprintf_f(rs->logs, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
             } else {
                 if (maxvint == RDt[1]) {
                     if (minvint == LUt[1]) {
-                        if (RDt[0] > LUt[0]) {
+                        if (RDt[0] >= LUt[0]) {
                             pLU[0] = RUn[0];
                             pLU[1] = RUn[1];
                 
@@ -9824,7 +9861,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             pLD[0] = LDn[0];
             pLD[1] = LDn[1];
 
-            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
         } else {
             if (maxvint == LDt[1]) {
@@ -9834,13 +9871,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
                 pLU[0] = LDn[0];
                 pLU[1] = LDn[1];
 
-                sprintf_f(rs->logs, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
 
             } else {
                 if (maxvint == LUt[1]) {
                     if (minvint == RDt[1]) {
-                        if (LUt[0] > RDt[0]) {
+                        if (LUt[0] >= RDt[0]) {
                             pLU[0] = LDn[0];
                             pLU[1] = LDn[1];
                 
@@ -9879,7 +9916,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             pLD[0] = RDn[0];
             pLD[1] = RDn[1];                    
 
-            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
         } else {
             if (maxvint == RDt[1]) {
@@ -9889,12 +9926,12 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
                 pLU[0] = RDn[0];
                 pLU[1] = RDn[1];
 
-                sprintf_f(rs->logs, "PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
             } else {
                 if (maxvint == LDt[1]) {
                     if (minvint == RUt[1]) {
-                        if (LDt[0] > RUt[0]) {
+                        if (LDt[0] >= RUt[0]) {
                             pLU[0] = RDn[0];
                             pLU[1] = RDn[1];
                 
@@ -9933,7 +9970,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             pRD[0] = LUn[0];
             pRD[1] = LUn[1];
 
-            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pRD[0], pRD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
 
         } else {
@@ -9944,13 +9981,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
                 pRU[0] = LUn[0];
                 pRU[1] = LUn[1];
 
-                sprintf_f(rs->logs, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
 
             } else {
                 if (maxvint == LDt[1]) {
                     if (minvint == RUt[1]) {
-                        if (RUt[0] < LDt[0]) {
+                        if (RUt[0] <= LDt[0]) {
                             pRU[0] = LDn[0];
                             pRU[1] = LDn[1];
 
@@ -9989,7 +10026,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             pRD[0] = RUn[0];
             pRD[1] = RUn[1];
 
-            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pRD[0], pRD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
 
         } else {
@@ -10000,13 +10037,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
                 pRU[0] = RUn[0];
                 pRU[1] = RUn[1];
 
-                sprintf_f(rs->logs, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
 
             } else {
                 if (maxvint == LUt[1]) {
                     if (minvint == RDt[1]) {
-                        if (RDt[0] < LUt[0]) {
+                        if (RDt[0] <= LUt[0]) {
                             pRU[0] = LUn[0];
                             pRU[1] = LUn[1];
                 
@@ -10045,7 +10082,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             pRD[0] = LDn[0];
             pRD[1] = LDn[1];                  
 
-            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pRD[0], pRD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
 
         } else {
@@ -10056,13 +10093,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
                 pRU[0] = LDn[0];
                 pRU[1] = LDn[1];
 
-                sprintf_f(rs->logs, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
 
             } else {
                 if (maxvint == RDt[1]) {
                     if (minvint == LUt[1]) {
-                        if (LUt[0] < RDt[0]) {
+                        if (LUt[0] <= RDt[0]) {
                             pRU[0] = RDn[0];
                             pRU[1] = RDn[1];
                 
@@ -10101,7 +10138,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             pRD[0] = RDn[0];
             pRD[1] = RDn[1];                    
 
-            sprintf_f(rs->logs, "PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pRD[0], pRD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
 
         } else {
@@ -10112,13 +10149,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
                 pRU[0] = RDn[0];
                 pRU[1] = RDn[1];
 
-                sprintf_f(rs->logs, "PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
 
             } else {
                 if (maxvint == RUt[1]) {
                     if (minvint == LDt[1]) {
-                        if (LDt[0] < RUt[0]) {
+                        if (LDt[0] <= RUt[0]) {
                             pRU[0] = RUn[0];
                             pRU[1] = RUn[1];
                 
@@ -10147,13 +10184,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
 
     #if 0
-    sprintf_f(rs->logs, "PLU: %lf, %lf \n", pLU[0], pLU[1]);
+    sprintf_f(rs->logs, "align: PLU: %lf, %lf \n", pLU[0], pLU[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "PRU: %lf, %lf \n", pRU[0], pRU[1]);
+    sprintf_f(rs->logs, "align: PRU: %lf, %lf \n", pRU[0], pRU[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "PLD: %lf, %lf \n", pLD[0], pLD[1]);
+    sprintf_f(rs->logs, "align: PLD: %lf, %lf \n", pLD[0], pLD[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "PRD: %lf, %lf \n", pRD[0], pRD[1]);
+    sprintf_f(rs->logs, "align: PRD: %lf, %lf \n", pRD[0], pRD[1]);
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
 
@@ -39026,7 +39063,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
                 } else {
                     if (maxvint == RUt[1]) {
                         if (minvint == LDt[1]) {
-                            if (RUt[0] > LDt[0]) {
+                            if (RUt[0] >= LDt[0]) {
                                 pLU[0] = LUn[0];
                                 pLU[1] = LUn[1];
 
@@ -39245,7 +39282,7 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
                 } else {
                     if (maxvint == LDt[1]) {
                         if (minvint == RUt[1]) {
-                            if (RUt[0] < LDt[0]) {
+                            if (RUt[0] <= LDt[0]) {
                                 pRU[0] = LDn[0];
                                 pRU[1] = LDn[1];
 
@@ -65810,14 +65847,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //dbgBitmapHeader(bheader, val);
                                 }
 
-                                #if 0
+                                #if 1 /* manually rotate the BMP */
                                 if (bhlen) {
 
                                     memcpy(bmpbuff, bmpcolrtb, bhlen);
                                 
                                     //shmem_dump(bmpbuff, bhlen);
                                 
-                                    bdeg = 20;
+                                    //bdeg = 1350;
+                                    //bdeg = 900;
+                                    //bdeg = 450;
+                                    bdeg = 220;
                                     rotateBMP(rs, bdeg, usbfd, bmpbuff);
                                 
                                     bmpbufc = pabuff->dirParseBuff;
@@ -72794,7 +72834,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 {
     uint32_t logdisplayflag=0;
     int len;
-    char ch[5100];
+    char ch[4096];
 
     logdisplayflag = plog->dislog;
     
