@@ -38,6 +38,7 @@ int pipe2(int pipefd[2], int flags);
 //#include <mysql.h>
 #include <jpeglib.h>
 #include <jerror.h>
+#include <turbojpeg.h>
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
@@ -75,7 +76,7 @@ static char genssid[128];
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (1000) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -1600,7 +1601,7 @@ struct procRes_s{
     // time measurement
     struct timespec *tm[2];
     struct timespec tdf[2];
-    char logs[4000];
+    char logs[2048];
     struct socket_s *psocket_r;
     struct socket_s *psocket_t;
     struct socket_s *psocket_at;
@@ -1827,101 +1828,25 @@ static int mspFS_folderList(struct directnFile_s *root, int depth);
 static char **memory_init_vtable(char **pbuf, int tsize, int csize, uint32_t *tbl);
 static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf);
 
-unsigned char *raw_image = NULL;
 
-int width = 2400;
-int height = 3200;
-int bytes_per_pixel = 3;   /* or 1 for GRACYSCALE images */
-int color_space = JCS_RGB; /* or JCS_GRAYSCALE for grayscale images */
-
-int read_jpeg_file( char *filename )
+static int tj_jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int *getH, int clrsp)
 {
-	struct jpeg_decompress_struct cinfo;
-	struct jpeg_error_mgr jerr;
+    long unsigned int _jpegSize=0;
+    int jpegSubsamp=0, width=0, height=0;
 
-	JSAMPROW row_pointer[1];
-	
-	FILE *infile = fopen( filename, "rb" );
-	unsigned long location = 0;
-	int i = 0;
-	
-	if ( !infile )
-	{
-		printf("Error opening jpeg file %s\n!", filename );
-		return -1;
-	}
+    tjhandle _jpegDecompressor = tjInitDecompress();
 
-	cinfo.err = jpeg_std_error( &jerr );
+    tjDecompressHeader2(_jpegDecompressor, pjpg, jpgsz, &width, &height, &jpegSubsamp);
 
-	jpeg_create_decompress( &cinfo );
+    tjDecompress2(_jpegDecompressor, pjpg, jpgsz, prgb, width, 0, height, clrsp, TJFLAG_FASTDCT);
 
-	jpeg_stdio_src( &cinfo, infile );
+    *getW = width;
+    *getH = height;
 
-	jpeg_read_header( &cinfo, TRUE );
+    tjDestroy(_jpegDecompressor);
 
-
-	jpeg_start_decompress( &cinfo );
-	printf("components = %d\n", cinfo.num_components);
-
-	raw_image = (unsigned char*)malloc( cinfo.output_width*cinfo.output_height*cinfo.num_components );
-
-	row_pointer[0] = (unsigned char *)malloc( cinfo.output_width*cinfo.num_components );
-
-	while( cinfo.output_scanline < cinfo.image_height )
-	{
-		jpeg_read_scanlines( &cinfo, row_pointer, 1 );
-		for( i=0; i<cinfo.image_width*cinfo.num_components;i++) 
-			raw_image[location++] = row_pointer[0][i];
-	}
-
-	jpeg_finish_decompress( &cinfo );
-	jpeg_destroy_decompress( &cinfo );
-	free( row_pointer[0] );
-	fclose( infile );
-
-	return 1;
+    return 0;
 }
-
-int write_jpeg_file( char *filename )
-{
-	struct jpeg_compress_struct cinfo;
-	struct jpeg_error_mgr jerr;
-	
-	JSAMPROW row_pointer[1];
-	FILE *outfile = fopen( filename, "wb" );
-	
-	if ( !outfile )
-	{
-		printf("Error opening output jpeg file %s\n!", filename );
-		return -1;
-	}
-	cinfo.err = jpeg_std_error( &jerr );
-	jpeg_create_compress(&cinfo);
-	jpeg_stdio_dest(&cinfo, outfile);
-
-
-	cinfo.image_width = width;	
-	cinfo.image_height = height;
-	cinfo.input_components = bytes_per_pixel;
-	cinfo.in_color_space = color_space;
-
-	jpeg_set_defaults( &cinfo );
-
-	jpeg_start_compress( &cinfo, TRUE );
-
-	while( cinfo.next_scanline < cinfo.image_height )
-	{
-		row_pointer[0] = &raw_image[ cinfo.next_scanline * cinfo.image_width *  cinfo.input_components];
-		jpeg_write_scanlines( &cinfo, row_pointer, 1 );
-	}
-
-	jpeg_finish_compress( &cinfo );
-	jpeg_destroy_compress( &cinfo );
-	fclose( outfile );
-
-	return 1;
-}
-
 
 static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int clrsp)
 {
@@ -58889,6 +58814,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 if (recvsz < 0) {
                     sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
                     print_f(rs->plogs, sp, rs->logs);
+
+                    sleep(1);
                     continue;
                     //break;
                 }
@@ -59466,6 +59393,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 if (recvsz < 0) {
                     sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
                     print_f(rs->plogs, sp, rs->logs);
+
+                    sleep(1);
                     continue;
                     //break;
                 }
@@ -66010,6 +65939,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                         clock_gettime(CLOCK_REALTIME, &jpgS);
                                         err = jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr==8 ? JCS_GRAYSCALE:JCS_RGB);
+                                        //err = tj_jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr==8 ? TJPF_GRAY:TJPF_RGB);
                                         clock_gettime(CLOCK_REALTIME, &jpgE);
 
                                         usCost = time_diff(&jpgS, &jpgE, 1000);
@@ -66084,7 +66014,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //bdeg = 1350;
                                     //bdeg = 900;
                                     //bdeg = 450;
-                                    bdeg = 50;
+                                    bdeg = 25;
                                     rotateBMP(rs, bdeg, usbfd, bmpbuff);
                                 
                                     bmpbufc = pabuff->dirParseBuff;
@@ -73061,7 +72991,7 @@ static int print_f(struct logPool_s *plog, char *head, char *str)
 {
     uint32_t logdisplayflag=0;
     int len;
-    char ch[4096];
+    char ch[8192];
 
     logdisplayflag = plog->dislog;
     
