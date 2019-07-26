@@ -1848,6 +1848,69 @@ static int tj_jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, in
     return 0;
 }
 
+static int rgb2jpg(unsigned char *prgb, unsigned char **ppjpg, int *jlen, int setW, int setH, int bpp)
+{
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+    JSAMPROW row_pointer[1];
+    unsigned int row_stride;
+    unsigned long lLen=0;
+    int clrsp=0;
+    unsigned char *pbuff=0, *pret=0;
+    
+    //printf("[JPG] rgb2jpg enter \n"); 
+    
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+
+    jpeg_mem_dest(&cinfo, &pbuff, &lLen);
+
+    cinfo.image_width = setW;      /* image width and height, in pixels */
+    cinfo.image_height = setH;
+    cinfo.input_components = bpp / 8;         /* # of color components per pixel */
+    
+    clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
+    cinfo.in_color_space = clrsp;//JCS_RGB;
+    
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, 80, TRUE);
+
+    jpeg_start_compress(&cinfo, TRUE);
+
+    //oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
+    row_stride = ((cinfo.image_width * bpp + 31) / 32) * 4;;
+    printf("[JPG] bpp: %d row: %d \n", bpp, row_stride);
+
+    while (cinfo.next_scanline < cinfo.image_height) 
+    {
+        //row_pointer[0] = & bits[(cinfo.image_height - cinfo.next_scanline - 1) * row_stride];
+        //printf("l: %d \n", cinfo.next_scanline);
+        row_pointer[0] = &prgb[cinfo.next_scanline * row_stride];
+        (void) jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+
+    jpeg_destroy_compress(&cinfo);
+    
+    pret = aspMemalloc(lLen+1024, 11);
+    if (!pret) {
+        printf("[JPG] allocate return memory failed size: %ld \n", lLen+1024);
+        
+        *ppjpg = pbuff;
+        *jlen = (int)lLen;
+    } else {
+        memset(pret + lLen, 0xff, 1024);
+        memcpy(pret, pbuff, lLen);
+        free(pbuff);
+        
+        *ppjpg = pret;
+        *jlen = (int)lLen;
+    }
+    
+    return 0;
+}
+
 static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int clrsp)
 {
     struct jpeg_decompress_struct cinfo;
@@ -3952,7 +4015,7 @@ static int aspMemClear(struct aspMemAsign_s *msa, int *memtot, int pidx)
 
             pfree = (char *)ad32;
             
-            memset(pfree, 0, asz);
+            //memset(pfree, 0, asz);
             free(pfree);
             //memset(pfree, 0xff, asz);
             
@@ -4391,7 +4454,7 @@ static int calcuRotateCoordinates(int *outi, CFLOAT *out, CFLOAT *in, CFLOAT *an
     if (!outi) return -3;
     if (!angle) return -4;
 
-    printf("calcu rotate input :%lf, %lf, cos:%lf sin:%lf\n", in[0], in[1], angle[0], angle[1]);
+    //printf("calcu rotate input :%lf, %lf, cos:%lf sin:%lf\n", in[0], in[1], angle[0], angle[1]);
 
     x1 = in[0];
     y1 = in[1];
@@ -6648,10 +6711,10 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 #define BOUNDRY_BIAS (6)
     int ret=0;
     CFLOAT Lfarr[12], Rtarr[12];
-    double LfarrVec[3][3], RtarrVec[3][3];
+    CFLOAT LfarrVec[3][3], RtarrVec[3][3];
     int rtLinSize=0, lfLinSize=0, lfused=0, rtused=0;
-    double v1[3], v2[3], v3[3], v4[3];
-    double p1[2], p2[2], p3[2], p4[2], p5[2], p6[2], cs[2], ct[2], cu[2], cv[2];
+    CFLOAT v1[3], v2[3], v3[3], v4[3];
+    CFLOAT p1[2], p2[2], p3[2], p4[2], p5[2], p6[2], cs[2], ct[2], cu[2], cv[2];
     CFLOAT sup[2];
     CFLOAT sdn[2];
     CFLOAT slf[2];
@@ -6660,9 +6723,9 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     CFLOAT lval=0, rval=0;
     CFLOAT upal=0, dnal=0;
     CFLOAT csUp[2], msLf[2], msRt[2], csDn[2];
-    double ttline[3], bbline[3], llline[3], rrline[3];
-    double bnup=0.0, bndn=0.0, bnlf=0.0, bnrt=0.0;
-    double distv=0.0;
+    CFLOAT ttline[3], bbline[3], llline[3], rrline[3];
+    CFLOAT bnup=0.0, bndn=0.0, bnlf=0.0, bnrt=0.0;
+    CFLOAT distv=0.0;
     uint32_t cropflag = 0;
 
     bnup = (double)((pcp36->crp36Up - BOUNDRY_BIAS) > 0 ? (pcp36->crp36Up - BOUNDRY_BIAS) : 0);
@@ -9576,6 +9639,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
     return 0;
 }
 
+#define LOG_ROT_DBG  (0)
 static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 {
     struct sdParseBuff_s *pabuf=0;
@@ -9595,7 +9659,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     CFLOAT ind[4], outd[2], fx=0, fy=0, tx=0, ty=0;
     CFLOAT *tars, *tarc;
     char gdat[3];
-    char *dst=0;
+    char *dst=0, *src=0;
 
     int *crsAry, crsASize, expCAsize;
     CFLOAT linLU[3], linRU[3], linLD[3], linRD[3], linPal[3], linCrs[3];
@@ -9605,17 +9669,18 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     CFLOAT imgw=0.0, imgh=0.0;
     int ublen=0, ubret=0, ubrst=0;
 
-    
+    #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "deg: %d\n", deg);
     print_f(rs->plogs, "ROT", rs->logs);
-        
+    #endif
+
     pabuf = &rs->psFat->parBuf;
     //totsz = pabuf->dirBuffUsed;
     //srcbuf = pabuf->dirParseBuff;
     srcbuf = bmpsrc;
 
     /* check header */
-    shmem_dump(srcbuf, 512);
+    //shmem_dump(srcbuf, 512);
 
     /* rotate */
     ph = &rs->pbheader->aspbmpMagic[2];
@@ -9625,9 +9690,10 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     //shmem_dump(srcbuf, 128);
 
     bheader = rs->pbheader;
-
+    
+    #if LOG_ROT_DBG    
     dbgBitmapHeader(bheader, len);
-
+    #endif
     rawsz = bheader->aspbiRawSize;
     rawSrc = srcbuf + bheader->aspbhRawoffset;
     oldWidth = bheader->aspbiWidth;
@@ -9667,7 +9733,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 
     RD[0] = 1237;
     RD[1] = 668;
-    #elif 1
+    #elif 0
     LU[0] = 915;
     LU[1] = 1809;
 
@@ -9681,19 +9747,19 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     RD[1] = 1005;
     #else
     LU[0] = 0;
-    LU[1] = bheader->aspbiHeight;
+    LU[1] = bheader->aspbiHeight-1;
 
-    RU[0] = bheader->aspbiWidth;
-    RU[1] = bheader->aspbiHeight;        
+    RU[0] = bheader->aspbiWidth-1;
+    RU[1] = bheader->aspbiHeight-1;        
 
     LD[0] = 0;
     LD[1] = 0;
 
-    RD[0] = bheader->aspbiWidth;
+    RD[0] = bheader->aspbiWidth-1;
     RD[1] = 0;
     #endif
     
-    #if 1
+    #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "enter: LUn: %lf, %lf\n", LU[0], LU[1]);
     print_f(rs->plogs, "ROT", rs->logs);
     sprintf_f(rs->logs, "enter: RUn: %lf, %lf \n", RU[0], RU[1]);
@@ -9707,8 +9773,8 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     theta = (CFLOAT)deg;
     theta = theta / 5.0;
     
-    sprintf_f(rs->logs, "rotate angle = %f \n", theta);
-    print_f(rs->plogs, "ROT", rs->logs);
+    //sprintf_f(rs->logs, "rotate angle = %f \n", theta);
+    //print_f(rs->plogs, "ROT", rs->logs);
 
     theta = theta * M_PI / piAngle;
 
@@ -9742,8 +9808,8 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     minV = aspMin(minV, LDn[1]);
     minV = aspMin(minV, RDn[1]);
 
-    sprintf_f(rs->logs, "minH: %lf, minV: %lf \n", minH, minV);
-    print_f(rs->plogs, "ROT", rs->logs);
+    //sprintf_f(rs->logs, "minH: %lf, minV: %lf \n", minH, minV);
+    //print_f(rs->plogs, "ROT", rs->logs);
 
     offsetH = 0 - minH;
     offsetV = 0 - minV;
@@ -9799,24 +9865,29 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     minvint = aspMinInt(minvint, LDt[1]);
     minvint = aspMinInt(minvint, RDt[1]);
     
-    rowsize = ((bpp * maxhint + 31) / 32) * 4;
-    rawszNew = rowsize * maxvint;
+    rowsize = ((bpp * (maxhint + 1) + 31) / 32) * 4;
+    rawszNew = rowsize * (maxvint + 1);
 
     bheader->aspbhSize = bheader->aspbhRawoffset + rawszNew;
-    bheader->aspbiWidth = maxhint;
-    bheader->aspbiHeight = maxvint;
+    bheader->aspbiWidth = maxhint + 1;
+    bheader->aspbiHeight = maxvint + 1;
     bheader->aspbiRawSize = rawszNew;
 
     ubrst = 512 - (bheader->aspbhSize % 512);
-
+    
+    #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "allocate raw dest size: %d!!!\n", rawszNew);
     print_f(rs->plogs, "ROT", rs->logs);
+    #endif
     
     rawdest = aspMemalloc(bheader->aspbhSize + 512 + ubrst, 11);
-    //rawdest = malloc(bheader->aspbhSize + 512 + ubrst);
     if (rawdest) {
+    
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "allocate raw dest size: %d succeed!!!\n", rawszNew);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
+
     } else {
         sprintf_f(rs->logs, "allocate raw dest size: %d failed!!!\n", rawszNew);
         print_f(rs->plogs, "ROT", rs->logs);
@@ -9829,9 +9900,11 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 
     pabuf->dirBuffUsed = bheader->aspbhSize + ubrst;
     pabuf->dirParseBuff = rawdest;
-    
+
+    #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "maxh: %d, minh: %d, maxv: %d, minv: %d \n", maxhint, minhint, maxvint, minvint);
     print_f(rs->plogs, "ROT", rs->logs);
+    #endif
 
     pLU[0] = -1;
     pLU[1] = -1;
@@ -9843,29 +9916,42 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     pRD[1] = -1;
 
     if (minhint == LUt[0]) {
+    
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "LU =  %d, %d match minhint: %d !!!left - 0\n", LUt[0], LUt[1], minhint);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         if (minvint == LUt[1]) {
+
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "LU =  %d, %d match minvint: %d !!!left - 0\n", LUt[0], LUt[1], minvint);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
         
             pLD[0] = LUn[0];
             pLD[1] = LUn[1];
-            
+
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
         } else {
             if (maxvint == LUt[1]) {
+
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "LU =  %d, %d match maxvint: %d !!!left - 0\n", LUt[0], LUt[1], maxvint);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
                 pLU[0] = LUn[0];
                 pLU[1] = LUn[1];
 
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
             } else {
                 if (maxvint == RUt[1]) {
@@ -9899,28 +9985,41 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
     
     if (minhint == RUt[0]) {
+
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "RU =  %d, %d match minhint: %d !!!left - 0\n", RUt[0], RUt[1], minhint);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         if (minvint == RUt[1]) {
+
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "RU =  %d, %d match minvint: %d !!!left - 0\n", RUt[0], RUt[1], minvint);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
             
             pLD[0] = RUn[0];
             pLD[1] = RUn[1];
 
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
         } else {
             if (maxvint == RUt[1]) {
+
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "RU =  %d, %d match maxvint: %d !!!left - 0\n", RUt[0], RUt[1], maxvint);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
                 
                 pLU[0] = RUn[0];
                 pLU[1] = RUn[1];
 
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
             } else {
                 if (maxvint == RDt[1]) {
                     if (minvint == LUt[1]) {
@@ -9953,28 +10052,40 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
         
     if (minhint == LDt[0]) {
+
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "LD =  %d, %d match minhint: %d !!!left - 0\n", LDt[0], LDt[1], minhint);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
         
         if (minvint == LDt[1]) {
+
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "LD =  %d, %d match minvint: %d !!!left - 0\n", LDt[0], LDt[1], minvint);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
             pLD[0] = LDn[0];
             pLD[1] = LDn[1];
 
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
         } else {
             if (maxvint == LDt[1]) {
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "LD =  %d, %d match maxvint: %d !!!left - 0\n", LDt[0], LDt[1], maxvint);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
                 pLU[0] = LDn[0];
                 pLU[1] = LDn[1];
 
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
             } else {
                 if (maxvint == LUt[1]) {
@@ -10008,28 +10119,41 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
         
     if (minhint == RDt[0]) {
+
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "RD =  %d, %d match minhint: %d !!!left - 0\n", RDt[0], RDt[1], minhint);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         if (minvint == RDt[1]) {
+
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "RD =  %d, %d match minvint: %d !!!left - 0\n", RDt[0], RDt[1], minvint);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
             pLD[0] = RDn[0];
             pLD[1] = RDn[1];                    
 
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
         } else {
             if (maxvint == RDt[1]) {
+
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "RD =  %d, %d match maxvint: %d !!!left - 0\n", RDt[0], RDt[1], maxvint);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
                 pLU[0] = RDn[0];
                 pLU[1] = RDn[1];
 
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
             } else {
                 if (maxvint == LDt[1]) {
                     if (minvint == RUt[1]) {
@@ -10062,29 +10186,42 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
 
     if (maxhint == LUt[0]) {
+
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "LU =  %d, %d match maxhint: %d !!!right - 0\n", LUt[0], LUt[1], maxhint);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         if (minvint == LUt[1]) {
+        
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "LU =  %d, %d match minvint: %d !!!right - 0\n", LUt[0], LUt[1], minvint);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
             pRD[0] = LUn[0];
             pRD[1] = LUn[1];
 
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pRD[0], pRD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
         } else {
             if (maxvint == LUt[1]) {
+
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "LU =  %d, %d match maxvint: %d !!!right - 0\n", LUt[0], LUt[1], maxvint);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
                 pRU[0] = LUn[0];
                 pRU[1] = LUn[1];
 
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
             } else {
                 if (maxvint == LDt[1]) {
@@ -10118,29 +10255,42 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
     
     if (maxhint == RUt[0]) {
+    
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "RU =  %d, %d match maxhint: %d !!!right - 0\n", RUt[0], RUt[1], maxhint);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         if (minvint == RUt[1]) {
+
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "RU =  %d, %d match minvint: %d !!!right - 0\n", RUt[0], RUt[1], minvint);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
             pRD[0] = RUn[0];
             pRD[1] = RUn[1];
 
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pRD[0], pRD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
         } else {
             if (maxvint == RUt[1]) {
+
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "RU =  %d, %d match maxvint: %d !!!right - 0\n", RUt[0], RUt[1], maxvint);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
                 pRU[0] = RUn[0];
                 pRU[1] = RUn[1];
 
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
             } else {
                 if (maxvint == LUt[1]) {
@@ -10174,29 +10324,42 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
         
     if (maxhint == LDt[0]) {
+
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "LD =  %d, %d match maxhint: %d !!!right - 0\n", LDt[0], LDt[1], maxhint);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         if (minvint == LDt[1]) {
+
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "LD =  %d, %d match minvint: %d !!!right - 0\n", LDt[0], LDt[1], minvint);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
             pRD[0] = LDn[0];
             pRD[1] = LDn[1];                  
 
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pRD[0], pRD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
         } else {
             if (maxvint == LDt[1]) {
+
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "LD =  %d, %d match maxvint: %d !!!right - 0\n", LDt[0], LDt[1], maxvint);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
                 pRU[0] = LDn[0];
                 pRU[1] = LDn[1];
 
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
             } else {
                 if (maxvint == RDt[1]) {
@@ -10230,29 +10393,42 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
             
     if (maxhint == RDt[0]) {
+
+        #if LOG_ROT_DBG    
         sprintf_f(rs->logs, "RD =  %d, %d match maxhint: %d !!!right - 0\n", RDt[0], RDt[1], maxhint);
         print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         if (minvint == RDt[1]) {
+
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "RD =  %d, %d match minvint: %d !!!right - 0\n", RDt[0], RDt[1], minvint);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
             pRD[0] = RDn[0];
             pRD[1] = RDn[1];                    
 
+            #if LOG_ROT_DBG    
             sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pRD[0], pRD[1]);
             print_f(rs->plogs, "ROT", rs->logs);
+            #endif
 
         } else {
             if (maxvint == RDt[1]) {
+
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "RD =  %d, %d match maxvint: %d !!!right - 0\n", RDt[0], RDt[1], maxvint);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
                 pRU[0] = RDn[0];
                 pRU[1] = RDn[1];
 
+                #if LOG_ROT_DBG    
                 sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
+                #endif
 
             } else {
                 if (maxvint == RUt[1]) {
@@ -10394,8 +10570,10 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     }
     */
     
+    #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d, sizeof crsArry: %d\n", maxhint, maxvint, rowsize, rawszNew, totsz, expCAsize);
     print_f(rs->plogs, "ROT", rs->logs);
+    #endif
 
     //memset(rawSrc, 0, rawszNew);
     
@@ -10419,8 +10597,10 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     theta = (CFLOAT) (360*5 - deg);
     theta = theta / 5;
     
+    #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "reverse rotate angle = %lf \n", theta);
     print_f(rs->plogs, "ROT", rs->logs);
+    #endif
 
     theta = theta * M_PI / piAngle;
 
@@ -10514,13 +10694,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
         fy -= offsetV;
 
         //dx = (int) round(fx*thacos - fy*thasin);
-        dy = (int) round(fx*thasin + fy*thacos);
+        //dy = (int) round(fx*thasin + fy*thacos);
 
         //sprintf_f(rs->logs, "back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", ix, fx, iy, fy,  dx, dy, offsetH, offsetV);
         //print_f(rs->plogs, "ROT", rs->logs);
 
-        iyn = (int)round(fy);
-        iyn += offsetCal;
+        //iyn = (int)round(fy);
+        //iyn += offsetCal;
         
         for (;ix <= ixd; ix++) {       
 
@@ -10528,8 +10708,8 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 
             fx -= offsetH;
 
-            ixn = (int)round(fx);
-            ixn += offsetCal;
+            //ixn = (int)round(fx);
+            //ixn += offsetCal;
 
             //dx = (int) round(tarc[ixn] - tars[iyn]);
             //dy = (int) round(tars[ixn] + tarc[iyn]);
@@ -10546,60 +10726,27 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
             }
 
             bitset = bpp / 8;
-            dst = rawCpy + (dx*bitset + dy*oldRowsz);
-
-            cnt = 0;
-            while (bitset > 0) {
-                gdat[cnt] = *dst;
-
-                bitset --;
-                cnt++;
-                dst++;
-
-                if (cnt > 2) break;
-            }
-
-            bitset = bpp / 8;
+            src = rawCpy + (dx*bitset + dy*oldRowsz);
             dst = rawTmp + (ix*bitset + iy*rowsize);
-
+            
             cnt = 0;
             while (bitset > 0) {
-                *dst = gdat[cnt];
+                *dst = *src;
+                //gdat[cnt] = *src;
 
                 bitset --;
                 cnt++;
+                src++;
                 dst++;
-                
+
                 if (cnt > 2) break;
             }
-
-            lstsz = bheader->aspbhRawoffset + iy*rowsize;  
-
-            while ((lstsz - acusz) > SPI_TRUNK_SZ) {
-                len = SPI_TRUNK_SZ;
-
-                msync(rawdest, len, MS_SYNC);
-
-                ublen = len;
-                while (ublen) {
-                
-                    #if 0
-                    ubret = write(usbfid, rawdest, ublen); 
-                    #else
-                    ubret = ublen;
-                    #endif
-                    
-                    if (ubret > 0) {
-                        ublen -= ubret;
-                        rawdest += ubret;
-                    }
-                }
-
-                acusz= acusz + len;
-            }                    
         }
     }
 
+    msync(rawdest, totsz, MS_SYNC);
+
+    #if 0
     lstsz = totsz - acusz;
 
     sprintf_f(rs->logs, "last size: %d\n", lstsz);
@@ -10655,8 +10802,8 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 
     sprintf_f(rs->logs, "ring buff count: %d\n", cnt);
     print_f(rs->plogs, "ROT", rs->logs);
-
-    dbgBitmapHeader(bheader, len);
+    #endif
+    //dbgBitmapHeader(bheader, len);
 
     return 0; 
 }
@@ -37134,7 +37281,7 @@ static int changeJpgLen(uint8_t *data, uint32_t tlen, int max)
                                 
                 len = (imgLen[1] << 8) + imgLen[0];   
 
-                //printf("[changeImgLen] Length = %d -> %d\n", len, tlen);
+                printf("[changeImgLen] Length = %d -> %d\n", len, tlen);
                 
                 data[ix + 4] = tlen >> 8;
                 data[ix + 5] = tlen & 0xff;;
@@ -60117,6 +60264,7 @@ static int p10(struct procRes_s *rs)
 #define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
 #define OP_WRITE_FILE (0x0b)
+#define DUMP_JPG_ROT (0)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -60135,6 +60283,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char ptfilepath[128];
     static char ptfileSaveMeta[] = "/mnt/mmc2/usb/meta_%.3d.bin";
     static char ptfileSaveWifiMeta[] = "/mnt/mmc2/usb/wmeta_%.3d.bin";
+    static char ptfileSavejpg[] = "/home/root/rot_%.3d.jpg";
     FILE *fsmeta=0;
     #endif
     char elfhead[4] = {0x7f, 0x45, 0x4c, 0x46};
@@ -60200,7 +60349,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int bmplen=0, cpylen=0, rawlen=0, rotlen=0, rotlast=0, bdeg=0, bret=0, blen=0, colr=0, bmpw=0, bmph=0, bdpi=0, bdpp=0, bhlen=0;
     char *bmpbuff=0, *bmpbufc=0, *bmpcpy=0, *bmpcolrtb=0, *ph=0;
     char *jpgout=0;
-    int jpgetW=0, jpgetH=0;
+    unsigned char *jpgrlt=0;
+    int jpgetW=0, jpgetH=0, jpgLen=0, cntsent=0;
     struct sdParseBuff_s *pabuff=0;
     struct bitmapHeader_s *bheader = 0;
     struct timespec jpgS, jpgE;
@@ -62362,6 +62512,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] clean start \n");
                     print_f(rs->plogs, "P11", rs->logs);
 
+                    aspMemClear(aspMemAsign, asptotMalloc, 11);
+        
                     #if 1  /* clean msg queue */
                     while (1) {
                         chq = 0;
@@ -64963,8 +65115,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     if (ret) {
                                         fformat = 0;
                                     }
-
+                                    
+                                    #if 1
                                     if ((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) {
+                                    //if (fformat == FILE_FORMAT_RAW) {
                                         bmpbuff = aspMemalloc(bmplen, 11);
 
                                         if (bmpbuff) {
@@ -64977,6 +65131,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             print_f(rs->plogs, "P11", rs->logs);
                                         }
                                     }
+                                    #endif
 
                                     switch (cmdprisec) {
                                     case 1:
@@ -65970,8 +66125,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         print_f(rs->plogs, "P11", rs->logs);   
                                     }
 
+                                    //oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
+                                    
                                     bhlen = blen;
-                                    val = bmpw * bmph * bdpp;
+                                    val = ((bmpw * colr + 31) / 32) * 4;
+                                    val = val * bmph;
 
                                     sprintf_f(rs->logs, "[BMP] calcu raw size: %d, recv rawlen: %d \n", val, cpylen - lens);
                                     print_f(rs->plogs, "P11", rs->logs);   
@@ -66015,52 +66173,109 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //bdeg = 900;
                                     //bdeg = 450;
                                     bdeg = 25;
+                                    
+                                    clock_gettime(CLOCK_REALTIME, &jpgS);
                                     rotateBMP(rs, bdeg, usbfd, bmpbuff);
-                                
-                                    bmpbufc = pabuff->dirParseBuff;
+                                    clock_gettime(CLOCK_REALTIME, &jpgE);
+                                    
+                                    usCost = time_diff(&jpgS, &jpgE, 1000000);
+                                    sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", usCost);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    bmpbufc = pabuff->dirParseBuff;   
                                     rotlen = pabuff->dirBuffUsed;
-                                    
-                                    lrst= lastCylen % 512;
-                                    
-                                    bmpcpy = bmpbuff + rawlen + lastCylen - lrst;
-                                    bmpbufc = bmpbufc + rotlen;
 
+                                    if (fformat == FILE_FORMAT_JPG) {
+                                        clock_gettime(CLOCK_REALTIME, &jpgS);
+                                        err = rgb2jpg(pabuff->dirParseBuff + bheader->aspbhRawoffset, &jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
+                                        clock_gettime(CLOCK_REALTIME, &jpgE);
+                                        if (err) {
+                                            sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        }
+                                    
+                                        usCost = time_diff(&jpgS, &jpgE, 1000);
+                                        sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d us\n", jpgLen, (uint32_t)jpgrlt, usCost);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        
+                                        //changeJpgLen(jpgrlt, bheader->aspbiHeight, jpgLen);
+                                        
+                                        //shmem_dump(jpgrlt, 512);
+                                        
+                                        rotlen = 512 - (jpgLen % 512);
+                                        rotlen = rotlen + jpgLen;
+                                        bmpbufc = jpgrlt;
+                                    }
+                                    
                                     aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight);
                                     sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
                                     print_f(rs->plogs, "P11", rs->logs);
 
-                                    //shmem_dump(bmpcpy, lrst);
-
-                                    memcpy(bmpbufc, ptmetausb, lrst);
-                                    
                                     lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                                    lrst= lastCylen % 512;
+                                    
+                                    bmpcpy = bmpbufc + rotlen;
+                                    memcpy(bmpcpy, ptmetausb, lrst);
+
+                                    //shmem_dump(bmpbufc+rotlen-512, 1024);
                                     
                                     sprintf_f(rs->logs, "[BMP] usb meta size check, lstlen: %d : sizeof: %d  \n", lrst, lenbs);
                                     print_f(rs->plogs, "P11", rs->logs);
-
-                                    //memcpy(bmpbufc, bmpcpy, lrst);
-                                    //shmem_dump(bmpbufc, lrst);
                                     
-                                    bmpbufc = pabuff->dirParseBuff;
+                                    //bmpbufc = bmpbuff;
                                     rotlen = rotlen + lrst;
+
+                                    #if DUMP_JPG_ROT
+                                    fsmeta = find_save(ptfilepath, ptfileSavejpg);
+                                    if (fsmeta) {
+                                        sprintf_f(rs->logs, "[DV] find save jpg [%s] succeed!!! \n", ptfilepath);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+                                    #endif
                                     
                                     rotlast = rotlen % USB_BUF_SIZE;
                                     rawlen = rotlen - rotlast;
+
+                                    msync(bmpbufc, rotlen, MS_SYNC);
+
+                                    //rawlen = rotlen;
                                     
                                     if (rawlen > USB_BUF_SIZE) {
                                         blen = USB_BUF_SIZE;
                                     } else {
                                         blen = rawlen;
                                     }
-                                    
+                                    cntsent = 0;
                                     while (rawlen) {                                    
+                                        /*
+                                        if (cntsent == 0) {
+                                            memset(bmpbufc, 0xff, 512);
+                                            msync(bmpbufc, 512, MS_SYNC);
+                                        }
+                                        */
+                                        
                                         bret = write(usbfd, bmpbufc, blen);
+
+                                        //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 1\n", blen, bret);
+                                        //print_f(rs->plogs, "P11", rs->logs); 
+
+                                        /*
+                                        if (cntsent == 0) {
+                                            shmem_dump(bmpbufc, 512);
+                                        }
+                                        */
                                     
                                         if (bret > 0) {
-                                            //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
-                                            //print_f(rs->plogs, "P11", rs->logs); 
-                                    
+                                            cntsent ++;                                    
+                                            
                                             rawlen -= bret;
+
+                                            #if DUMP_JPG_ROT
+                                            wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
+                                            sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+
                                             bmpbufc += bret;
                                     
                                             if (rawlen > USB_BUF_SIZE) {
@@ -66070,13 +66285,24 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             }
                                         }
                                     }
+
                                     
                                     blen = rotlast;
                                     while (blen) {
                                         bret = write(usbfd, bmpbufc, blen); 
-                                    
+                                        
+                                        //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 2\n", blen, bret);
+                                        //print_f(rs->plogs, "P11", rs->logs); 
+
                                         if (bret > 0) {
                                             blen -= bret;
+
+                                            #if DUMP_JPG_ROT
+                                            wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
+                                            sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+
                                             bmpbufc += bret;
                                         }
                                     }
@@ -66084,13 +66310,29 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     blen = lens;
                                     while (blen) {
                                         bret = write(usbfd, addrd, blen); 
-                                    
+                                        
+                                        //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d -3 \n", blen, bret);
+                                        //print_f(rs->plogs, "P11", rs->logs); 
+
                                         if (bret > 0) {
                                             blen -= bret;
-                                            bmpbufc += bret;
+
+                                            #if DUMP_JPG_ROT
+                                            wrtsz = fwrite((char*)addrd, 1, bret, fsmeta);
+                                            sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+
+                                            addrd += bret;
                                         }
                                     }
-                                } else {
+
+                                    #if DUMP_JPG_ROT
+                                    fclose(fsmeta);
+                                    sync();
+                                    #endif
+                                }
+                                else {
                                     if (rawlen > USB_BUF_SIZE) {
                                         blen = USB_BUF_SIZE;
                                     } else {
@@ -66105,6 +66347,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             //print_f(rs->plogs, "P11", rs->logs); 
                                     
                                             rawlen -= bret;
+
                                             bmpbufc += bret;
                                     
                                             if (rawlen > USB_BUF_SIZE) {
@@ -66131,11 +66374,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                         if (bret > 0) {
                                             blen -= bret;
-                                            bmpbufc += bret;
+                                            addrd += bret;
                                         }
                                     }
                                 }
-                                
 
                                 #else
                                 if (rawlen > USB_BUF_SIZE) {
@@ -69189,8 +69431,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
 
         }
-
-        aspMemClear(aspMemAsign, asptotMalloc, 11);
         
     }
 
