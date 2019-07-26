@@ -387,6 +387,7 @@ static int *totSalloc=0;
 #define CROP_SELEC_HEAD (10)
 #define CROP_SELEC_TAIL (10)
 #define CROP_MIGRATE_TO_APP (0)
+
 #define CFLOAT double
 
 #define FAT_DIRPOOL_IDX_MAX   (65535)
@@ -1291,14 +1292,14 @@ struct aspCropExtra_s{
     CFLOAT crpexLfPots[2048];
     CFLOAT crpexRtPots[2048];
     int crpexLfAbs[1024];
-    double crpexLfAbsVec[512][3];
-    double crpexLfAbsVecDist[512];
+    CFLOAT crpexLfAbsVec[512][3];
+    CFLOAT crpexLfAbsVecDist[512];
     int crpexLfAbsUsed;
     int crpexLfAbsCut;
     int crpexLfAbsMax;
     int crpexRtAbs[1024];
-    double crpexRtAbsVec[512][3];
-    double crpexRtAbsVecDist[512];
+    CFLOAT crpexRtAbsVec[512][3];
+    CFLOAT crpexRtAbsVecDist[512];
     int crpexRtAbsUsed;
     int crpexRtAbsCut;
     int crpexRtAbsMax;
@@ -4862,8 +4863,8 @@ static CFLOAT calcuLineGroupDist(CFLOAT *pGrp, CFLOAT *vecTr, int gpLen)
     return avgDist;
 }
 
-static double calcuLineGroupDistAlign(double *pGrp, double *vecTr, int gpLen, double limit, int *limcnt) {
-    double dist = 0, sumDist = 0, cnt = 0, avgDist = 0;
+static CFLOAT calcuLineGroupDistAlign(CFLOAT *pGrp, CFLOAT *vecTr, int gpLen, CFLOAT limit, int *limcnt) {
+    CFLOAT dist = 0, sumDist = 0, cnt = 0, avgDist = 0;
     int i = 0, len = 0, lmcnt=0;
 
     if (vecTr == 0) return -1;
@@ -4895,13 +4896,13 @@ static double calcuLineGroupDistAlign(double *pGrp, double *vecTr, int gpLen, do
     return avgDist;
 }
 
-static int calcuGroupLineAlign(double *pGrp, double *vecTr, double *div, int gpLen, double limit) {
-    double dist = 0, sumDist = 0, avgDist = 0;
+static int calcuGroupLineAlign(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen, CFLOAT limit) {
+    CFLOAT dist = 0, sumDist = 0, avgDist = 0;
     int head = 0, tail = 0, cur = 0;
     int len = 0, ret = 0, idx = 0;
     int i = 0, cnt = 0, cntDist = 0;
     int gbegin = 0, gend = 0;
-    double *p1, *p2, minDist;
+    CFLOAT *p1, *p2, minDist;
     int limtcnt=0, maxcnt=0;
 
     len = gpLen;
@@ -4914,10 +4915,10 @@ static int calcuGroupLineAlign(double *pGrp, double *vecTr, double *div, int gpL
 #if CROP_CALCU_DETAIL
     printf("[Gline] gplen = %d ,head = %d, tail = %d\n", len, head, tail);
 #endif
-    double *avd = (double *) malloc(sizeof(double) * (tail - head));
+    CFLOAT *avd = (CFLOAT *) malloc(sizeof(CFLOAT) * (tail - head));
     int *avcnt = (int *) malloc(sizeof(int) * (tail - head));
     int *avList = (int *) malloc(sizeof(int) * (tail - head) * 2);
-	memset(avd, 0, sizeof(double) * (tail - head));
+	memset(avd, 0, sizeof(CFLOAT) * (tail - head));
 	memset(avList, 0, sizeof(int) * (tail - head) * 2);
 
     cntDist = 0;
@@ -6109,16 +6110,16 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     int cntLf=0, cntRt=0, contL=0, contR=0;
     int allpos[16] = {0};
     int allnum[16] = {0};
-    double alldist[16] = {0};
-    double allverTr[16][3] = {0};
-    double *allgrp[16] = {0};
+    CFLOAT alldist[16] = {0};
+    CFLOAT allverTr[16][3] = {0};
+    CFLOAT *allgrp[16] = {0};
     CFLOAT *p1, *p2;
     CFLOAT *ptLf, *ptRt;
     CFLOAT vecTr[3];
     CFLOAT dist=0;
     CFLOAT *cgrp;
-    double pc0[2], pc1[2], pc2[2];
-    double distP2P = 0, distP2Bef = 0;
+    CFLOAT pc0[2], pc1[2], pc2[2];
+    CFLOAT distP2P = 0, distP2Bef = 0;
     int absLsize = cntLf / 2;
     int absRsize = cntRt / 2;
     int thrd=0, sms=0, minpt=0;
@@ -6534,7 +6535,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             alldist[aln] = calcuDistance(pc1, pc2);
 
             //getVectorFromP(&allverTr[aln][0], pc1, pc2);
-            memcpy(&allverTr[aln][0], &pcpex->crpexLfAbsVec[i][0], sizeof(double) * 3);
+            memcpy(&allverTr[aln][0], &pcpex->crpexLfAbsVec[i][0], sizeof(CFLOAT) * 3);
 
             allnum[aln] = pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0];
             ret = cpyPGrp(pcpex->crpexLfAbs[i * 2 + 0], allnum[aln], ptLf, &allgrp[aln], 2048 / 2);
@@ -6629,7 +6630,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             alldist[aln] = calcuDistance(pc1, pc2);
 			
             //getVectorFromP(&allverTr[aln][0], pc1, pc2);
-            memcpy(&allverTr[aln][0], &pcpex->crpexRtAbsVec[i][0], sizeof(double) * 3);
+            memcpy(&allverTr[aln][0], &pcpex->crpexRtAbsVec[i][0], sizeof(CFLOAT) * 3);
 
             allnum[aln] = pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0];
             ret = cpyPGrp(pcpex->crpexRtAbs[i * 2 + 0], allnum[aln], ptRt, &allgrp[aln], 2048 / 2);
@@ -6728,15 +6729,15 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     CFLOAT distv=0.0;
     uint32_t cropflag = 0;
 
-    bnup = (double)((pcp36->crp36Up - BOUNDRY_BIAS) > 0 ? (pcp36->crp36Up - BOUNDRY_BIAS) : 0);
-    bndn = (double)(pcp36->crp36Dn + BOUNDRY_BIAS);
-    bnlf = (double)((pcp36->crp36Lf- BOUNDRY_BIAS) > 0 ? (pcp36->crp36Lf - BOUNDRY_BIAS) : 0);
-    bnrt = (double)(pcp36->crp36Rt + BOUNDRY_BIAS);
+    bnup = (CFLOAT)((pcp36->crp36Up - BOUNDRY_BIAS) > 0 ? (pcp36->crp36Up - BOUNDRY_BIAS) : 0);
+    bndn = (CFLOAT)(pcp36->crp36Dn + BOUNDRY_BIAS);
+    bnlf = (CFLOAT)((pcp36->crp36Lf- BOUNDRY_BIAS) > 0 ? (pcp36->crp36Lf - BOUNDRY_BIAS) : 0);
+    bnrt = (CFLOAT)(pcp36->crp36Rt + BOUNDRY_BIAS);
 
-    memcpy(ttline, pcp36->crp36LineTop, sizeof(double) * 3);
-    memcpy(bbline, pcp36->crp36LineBotn, sizeof(double) * 3);
-    memcpy(llline, pcp36->crp36LineLeft, sizeof(double) * 3);
-    memcpy(rrline, pcp36->crp36LineRight, sizeof(double) * 3);
+    memcpy(ttline, pcp36->crp36LineTop, sizeof(CFLOAT) * 3);
+    memcpy(bbline, pcp36->crp36LineBotn, sizeof(CFLOAT) * 3);
+    memcpy(llline, pcp36->crp36LineLeft, sizeof(CFLOAT) * 3);
+    memcpy(rrline, pcp36->crp36LineRight, sizeof(CFLOAT) * 3);
     
     memcpy(msLf, pcp36->crp36P1, sizeof(CFLOAT)*2);    
     memcpy(csUp, pcp36->crp36P2, sizeof(CFLOAT)*2);    
@@ -6755,12 +6756,12 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 #endif
     memset(Lfarr, 0, sizeof(CFLOAT)*12);
     memset(Rtarr, 0, sizeof(CFLOAT)*12);
-    memset(LfarrVec, 0, sizeof(double) * 9);
-    memset(RtarrVec, 0, sizeof(double) * 9);
-    memset(sup, 0, sizeof(double) * 2);
-    memset(sdn, 0, sizeof(double) * 2);
-    memset(slf, 0, sizeof(double) * 2);
-    memset(srt, 0, sizeof(double) * 2);
+    memset(LfarrVec, 0, sizeof(CFLOAT) * 9);
+    memset(RtarrVec, 0, sizeof(CFLOAT) * 9);
+    memset(sup, 0, sizeof(CFLOAT) * 2);
+    memset(sdn, 0, sizeof(CFLOAT) * 2);
+    memset(slf, 0, sizeof(CFLOAT) * 2);
+    memset(srt, 0, sizeof(CFLOAT) * 2);
 
     for (i=0; i < 3; i++) {
         for (iL = 0; iL < lfused; iL++) {
@@ -6778,7 +6779,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
             Lfarr[i*4+2] = pcpex->crpexLfPots[idst*2+0];
             Lfarr[i*4+3] = pcpex->crpexLfPots[idst*2+1];
 
-            memcpy(&LfarrVec[i][0], &pcpex->crpexLfAbsVec[iL][0], sizeof(double) * 3);
+            memcpy(&LfarrVec[i][0], &pcpex->crpexLfAbsVec[iL][0], sizeof(CFLOAT) * 3);
 
             pcpex->crpexLfAbs[iL*2+0] = -1;
             pcpex->crpexLfAbs[iL*2+1] = -1;
@@ -6802,7 +6803,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
             Rtarr[i*4+2] = pcpex->crpexRtPots[idst*2+0];
             Rtarr[i*4+3] = pcpex->crpexRtPots[idst*2+1];
 
-            memcpy(&RtarrVec[i][0], &pcpex->crpexRtAbsVec[iR][0], sizeof(double) * 3);
+            memcpy(&RtarrVec[i][0], &pcpex->crpexRtAbsVec[iR][0], sizeof(CFLOAT) * 3);
             
             pcpex->crpexRtAbs[iR*2+0] = -1;
             pcpex->crpexRtAbs[iR*2+1] = -1;
@@ -6853,8 +6854,8 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     
     if (lfLinSize == 1) {
         if (rtLinSize == 1) {
-            memcpy(v1, LfarrVec[0], sizeof(double) * 3);
-            memcpy(v2, RtarrVec[0], sizeof(double) * 3);
+            memcpy(v1, LfarrVec[0], sizeof(CFLOAT) * 3);
+            memcpy(v2, RtarrVec[0], sizeof(CFLOAT) * 3);
 
             ret = getCross(v1, ttline, cs);
             ret = getCross(ttline, v2, ct);			
@@ -6894,10 +6895,10 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         }
          else if (rtLinSize == 2) {    
 
-            memcpy(v1, LfarrVec[0], sizeof(double) * 3);
-            memcpy(v2, RtarrVec[0], sizeof(double) * 3);
-            //memcpy(v3, LfarrVec[1], sizeof(double) * 3);
-            memcpy(v4, RtarrVec[1], sizeof(double) * 3);
+            memcpy(v1, LfarrVec[0], sizeof(CFLOAT) * 3);
+            memcpy(v2, RtarrVec[0], sizeof(CFLOAT) * 3);
+            //memcpy(v3, LfarrVec[1], sizeof(CFLOAT) * 3);
+            memcpy(v4, RtarrVec[1], sizeof(CFLOAT) * 3);
 			
             ret = getCross(v2, v4, ct);
             lval = calcuVectorDistancePoint(ttline, ct);
@@ -7346,10 +7347,10 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     else if (lfLinSize == 2) {
         if (rtLinSize == 1) {
 
-            memcpy(v1, LfarrVec[0], sizeof(double) * 3);
-            memcpy(v2, RtarrVec[0], sizeof(double) * 3);
-            memcpy(v3, LfarrVec[1], sizeof(double) * 3);
-            //memcpy(v4, RtarrVec[1], sizeof(double) * 3);
+            memcpy(v1, LfarrVec[0], sizeof(CFLOAT) * 3);
+            memcpy(v2, RtarrVec[0], sizeof(CFLOAT) * 3);
+            memcpy(v3, LfarrVec[1], sizeof(CFLOAT) * 3);
+            //memcpy(v4, RtarrVec[1], sizeof(CFLOAT) * 3);
 			
             ret = getCross(v1, v3, cs);
             upal = calcuVectorDistancePoint(ttline, cs);
@@ -7610,10 +7611,10 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     
         }
          else if (rtLinSize == 2) {
-            memcpy(v1, LfarrVec[0], sizeof(double) * 3);
-            memcpy(v2, RtarrVec[0], sizeof(double) * 3);
-            memcpy(v3, LfarrVec[1], sizeof(double) * 3);
-            memcpy(v4, RtarrVec[1], sizeof(double) * 3);
+            memcpy(v1, LfarrVec[0], sizeof(CFLOAT) * 3);
+            memcpy(v2, RtarrVec[0], sizeof(CFLOAT) * 3);
+            memcpy(v3, LfarrVec[1], sizeof(CFLOAT) * 3);
+            memcpy(v4, RtarrVec[1], sizeof(CFLOAT) * 3);
 
             ret = getCross(v1, v3, cs);
             ret = getCross(v2, v4, ct);
@@ -44098,7 +44099,7 @@ static int fs148(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 static int fs149(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf_f(mrs->log, "wifi usb double side scan  !!!\n");
+    sprintf_f(mrs->log, "wifi usb CFLOAT side scan  !!!\n");
     print_f(&mrs->plog, "fs149", mrs->log);
 
     mrs_ipc_put(mrs, "n", 1, 12);
@@ -56468,7 +56469,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     uint32_t usbfolw=0;
     int cntRecv=0, usCost=0, bufsize=0;
     int bufmax=0, idx=0, printlog=0, idlecnt=0;
-    double throughput=0.0;
+    CFLOAT throughput=0.0;
     struct timespec tstart, tend;
     struct aspMetaData_s meta, *pmeta=0;
     int len=0, pieRet=0, ret=0, err=0;
@@ -60323,7 +60324,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int fintvalS[2], fintvalE[2];
 #endif
     struct aspMetaData_s *metaRx = 0;
-    double throughput=0.0;
+    CFLOAT throughput=0.0;
     struct info16Bit_s *iubs=0;
     struct usbCBWopc_s *ucbwopc=0;
     struct usbCBWpram_s *ucbwpram=0;
