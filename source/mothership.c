@@ -39,6 +39,14 @@ int pipe2(int pipefd[2], int flags);
 #include <jpeglib.h>
 #include <jerror.h>
 #include <turbojpeg.h>
+//#include <GL/gl.h>
+//#include <GL/glext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+//#include <GLES2/gl2platform.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+//#include <GL/glx.h>
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
@@ -1828,7 +1836,7 @@ static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
 static char **memory_init_vtable(char **pbuf, int tsize, int csize, uint32_t *tbl);
 static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf);
-
+static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen);
 
 static int tj_jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int *getH, int clrsp)
 {
@@ -1849,6 +1857,262 @@ static int tj_jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, in
     return 0;
 }
 
+#define WIN_WIDTH (400)
+#define WIN_HEIGHT (400)
+
+GLuint textureID=0;
+GLuint renderBufferID=0;
+GLuint frameBufferID=0;
+static void SetupRC(void)
+{
+    #if 0
+    glRenderMode(GL_RENDER);
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIN_WIDTH, WIN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    //glBindTexture(GL_TEXTURE_2D, 0);
+
+    glGenRenderbuffers(1, &renderBufferID);
+    glBindRenderbuffer(GL_RENDERBUFFER, renderBufferID);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, WIN_WIDTH, WIN_HEIGHT);
+    //glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    glGenFramebuffers(1, &frameBufferID);
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureID, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, renderBufferID);
+    //glBindFramebuffer(GL_FRAMEBUFFER, 0);   
+
+    printf("[GL] setup GL %d %d %d \n", textureID, renderBufferID, frameBufferID);
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+    {
+        fprintf(stderr, "GLEW Error, FRAME BUFFER STATUS Error!%d", status);
+        //return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_TEXTURE_2D);
+    #endif
+}
+
+static int glsetup(void)
+{
+
+    return 0;
+}
+
+void drawCube()
+{
+    #if 0
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glColor4f(1, 1, 1, 1);
+
+    glBegin(GL_QUADS);
+    //Front
+    glNormal3d(0, 0, 1);
+    glVertex3d(-1,-1, 1);   glTexCoord2d(0,0);
+    glVertex3d(1, -1, 1);   glTexCoord2d(1,0);
+    glVertex3d(1, 1, 1);    glTexCoord2d(1,1);
+    glVertex3d(-1, 1, 1);   glTexCoord2d(0,1);
+
+    //Back
+    glNormal3d(0, 0, -1);
+    glVertex3d(1, -1 , -1); glTexCoord2d(0, 0);
+    glVertex3d(-1, -1, -1); glTexCoord2d(1, 0);
+    glVertex3d(-1, 1, -1);  glTexCoord2d(1, 1);
+    glVertex3d(1, 1, -1);   glTexCoord2d(0, 1);
+
+    //Left
+    glNormal3d(-1, 0, 0);
+    glVertex3d(-1, -1, -1); glTexCoord2d(0, 0);
+    glVertex3d(-1, -1, 1);  glTexCoord2d(1, 0);
+    glVertex3d(-1, 1, 1);   glTexCoord2d(1, 1);
+    glVertex3d(-1, 1, -1);  glTexCoord2d(0, 1);
+
+    //Right
+    glNormal3d(1, 0, 0);
+    glVertex3d(1, -1, 1);   glTexCoord2d(0, 0);
+    glVertex3d(1, -1, -1);  glTexCoord2d(1, 0);
+    glVertex3d(1, 1, -1);   glTexCoord2d(1, 1);
+    glVertex3d(1, 1, 1);    glTexCoord2d(0, 1);
+
+    //Top
+    glNormal3d(0, 1, 0);
+    glVertex3d(-1, 1, 1);   glTexCoord2d(0, 0);
+    glVertex3d(1, 1, 1);    glTexCoord2d(1, 0);
+    glVertex3d(1, 1, -1);   glTexCoord2d(1, 1);
+    glVertex3d(-1, 1, -1);  glTexCoord2d(0, 1);
+
+    //Bottom
+    glNormal3d(0, -1, 0);
+    glVertex3d(1, -1, 1);   glTexCoord2d(0, 0);
+    glVertex3d(-1, -1, 1);  glTexCoord2d(1, 0);
+    glVertex3d(-1, -1, -1); glTexCoord2d(1, 1);
+    glVertex3d(1, -1, -1);  glTexCoord2d(0, 1);
+
+    glEnd();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    #endif
+}
+
+static int draw(void)
+{
+    GLuint fb0=0;
+
+    int ret=0;
+    GLenum fbstatus=0;
+    
+    #if 1
+    SetupRC();
+    #else
+    glGenFramebuffers(1, &fb0);
+    if (fb0) {
+        printf("[GL] gen framebuffer fb0: %d!!! \n", fb0);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb0);
+    } else {
+        printf("[GL] gen framebuffer error!!! \n");
+
+        glGenBuffers(1, &fb0);
+        if (fb0) {
+            printf("[GL] gen buffer fb0: %d!!! \n", fb0);
+            glBindBuffer(GL_FRAMEBUFFER, fb0);
+        } else {
+            printf("[GL] gen buffer error!!! \n");
+            //glBindBuffer(GL_FRAMEBUFFER, 0);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+    }
+    
+     fbstatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fbstatus != GL_FRAMEBUFFER_COMPLETE)
+    {
+        printf("GLEW Error FRAME BUFFER STATUS Error: %d \n", fbstatus);
+    }
+
+    glGenTextures(1, &textureID);
+    if (textureID) {
+        printf("[GL] gen texture id: %d!!! \n", textureID);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIN_WIDTH, WIN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    } else {
+        printf("[GL] gen texture error!!! \n");
+    }
+    #endif
+
+    #if 0
+    //glBindBuffer(GLenum target, GLuint buffer)
+    //glBufferStorage(GLenum target, GLsizeiptr size, const void * data, GLbitfield flags)
+    //glClear(GL_COLOR_BUFFER_BIT);
+    //glVertexAttribLPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const void * pointer)
+    glBegin(GL_TRIANGLES);
+
+    //glLoadIdentity();
+    
+    //glRasterPos2i(0, 0);
+    
+    glColor3f(1.0f, 0.0f, 0.0f); glVertex2f(0.0f, 0.0f);
+
+    glColor3f(0.0f, 1.0f, 0.0f); glVertex2f(1.0f, 0.0f);
+
+    glColor3f(0.0f, 0.0f, 1.0f); glVertex2f(0.5f, 1.0f);
+
+    glEnd();
+
+    //glPixelZoom(-0.5f,-0.5f);
+    //glRasterPos2i(1, 1);
+
+    //glCopyPixels(WIN_WIDTH/2, WIN_HEIGHT/2, WIN_WIDTH/2, WIN_HEIGHT/2, GL_COLOR);
+
+    //glFlush();
+    #endif
+    
+    drawCube();
+    
+    
+    return 0;
+}
+
+static int grapjpg(unsigned char *ptr, int len)
+{
+    char ptfilepath[256];
+    static char ptfiledump[] = "/home/root/Jpg_%.3d.jpg";
+    FILE *dumpFile=0;
+    int ret=0;
+    
+    printf("[GL] grap JPG \n");
+        
+    dumpFile = find_save(ptfilepath, ptfiledump);
+    if (!dumpFile) {
+        return -3;
+    }
+    
+    ret = fwrite(ptr, 1, len, dumpFile);    
+    printf("[GL] write JPG file %s size: %d ret: %d \n", ptfilepath, len, ret);
+    
+    sync();
+    fclose(dumpFile);
+
+    return 0;
+}
+
+static int grapbmp(unsigned char *ptr, struct bitmapHeader_s * bmphead, char *pthr, int hlen)
+{
+    char ptfilepath[256];
+    static char ptfiledump[] = "/home/root/dump_%.3d.bmp";
+    FILE *dumpFile=0;
+    GLubyte *pPixelData=0, *ph=0;
+    GLint rowSize=0, bmplen=0, bmptotal=0;
+    struct bitmapHeader_s *bheader = 0;
+    int ret=0, setwidth=0, setheight=0, bpp=0;
+
+    setwidth = bmphead->aspbiWidth;
+    setheight = bmphead->aspbiHeight;
+    bpp = bmphead->aspbiCPP >> 16;
+    
+    printf("[GL] grap bmp \n");
+
+    rowSize = ((setwidth * bpp + 31) / 32) * 4;
+    bmptotal = rowSize * setheight;
+
+    pPixelData = ptr;
+    bheader = bmphead;
+        
+    dumpFile = find_save(ptfilepath, ptfiledump);
+    if (!dumpFile) {
+        return -3;
+    }
+
+    if (pthr) {
+        ph = pthr;
+        bmplen = hlen;
+    } else {
+        ph = &bheader->aspbmpMagic[2];
+        bmplen = sizeof(struct bitmapHeader_s) - 2;
+    }
+
+    ret = fwrite(ph, 1, bmplen, dumpFile);
+    printf("[GL] write file %s size: %d ret: %d \n", ptfilepath, bmplen, ret);
+        
+    ret = fwrite(pPixelData, 1, bmptotal, dumpFile);    
+    printf("[GL] write file %s size: %d ret: %d \n", ptfilepath, bmptotal, ret);
+    
+    sync();
+    fclose(dumpFile);
+
+    return 0;
+}
+
 static int rgb2jpg(unsigned char *prgb, unsigned char **ppjpg, int *jlen, int setW, int setH, int bpp)
 {
     struct jpeg_compress_struct cinfo;
@@ -1858,7 +2122,7 @@ static int rgb2jpg(unsigned char *prgb, unsigned char **ppjpg, int *jlen, int se
     unsigned long lLen=0;
     int clrsp=0;
     unsigned char *pbuff=0, *pret=0;
-    
+
     //printf("[JPG] rgb2jpg enter \n"); 
     
     cinfo.err = jpeg_std_error(&jerr);
@@ -1884,9 +2148,9 @@ static int rgb2jpg(unsigned char *prgb, unsigned char **ppjpg, int *jlen, int se
 
     while (cinfo.next_scanline < cinfo.image_height) 
     {
-        //row_pointer[0] = & bits[(cinfo.image_height - cinfo.next_scanline - 1) * row_stride];
+        row_pointer[0] = &prgb[(cinfo.image_height - cinfo.next_scanline - 1) * row_stride];
         //printf("l: %d \n", cinfo.next_scanline);
-        row_pointer[0] = &prgb[cinfo.next_scanline * row_stride];
+        //row_pointer[0] = &prgb[cinfo.next_scanline * row_stride];
         (void) jpeg_write_scanlines(&cinfo, row_pointer, 1);
     }
 
@@ -1912,7 +2176,7 @@ static int rgb2jpg(unsigned char *prgb, unsigned char **ppjpg, int *jlen, int se
     return 0;
 }
 
-static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int clrsp)
+static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp)
 {
     struct jpeg_decompress_struct cinfo;
     struct jpeg_error_mgr err;
@@ -1920,7 +2184,7 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     JSAMPARRAY samplebuffer;
     int row_stride = 0;
     char* tmpbuff = NULL;
-    int rgb_size;
+    int rgb_size, clrsp=0;
 
     //printf("[JPG] jpeg2rgb enter \n"); 
     
@@ -1942,32 +2206,41 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     
     jpeg_mem_src(&cinfo, pjpg, jpgsz);
     //printf("[JPG] jpeg_mem_src size: %d \n", jpgsz); 
-
+    
     //shmem_dump(pjpg, 512);
      
     jpeg_read_header(&cinfo, TRUE);
-    //printf("[JPG] jpeg_read_header. \n"); 
-
+    printf("[JPG] jpeg_read_header. bpp: %d output_components: %d \n", bpp, cinfo.output_components); 
+    cinfo.output_components = bpp / 8;
+    
+    clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
+    
     cinfo.out_color_space = clrsp;//JCS_GRAYSCALE;//JCS_RGB;//JCS_GRAYSCALE; //JCS_YCbCr;
  
     jpeg_start_decompress(&cinfo);
     //printf("[JPG] jpeg_start_decompress. \n"); 
      
-    row_stride = cinfo.output_width * cinfo.output_components;
+    //row_stride = cinfo.output_width * cinfo.output_components;
+    row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;;
+    
     *getW = cinfo.output_width;
     *getH = cinfo.output_height;
- 
+    
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d\n", cinfo.output_width, cinfo.output_height, row_stride); 
+     
     rgb_size = row_stride * cinfo.output_height;
     if (rgbsz < rgb_size) {
         printf("[JPG] output buff size %d is wrong should be %d \n", rgbsz, rgb_size);
         return -3;
     }
     
+    printf("[JPG] output buff size: %d, bmp size: %d \n", rgbsz, rgb_size);
+    
     samplebuffer = (*cinfo.mem->alloc_sarray)((j_common_ptr) &cinfo, JPOOL_IMAGE, row_stride, 1);
 
-    #if 0
+    #if 1
     printf("[JPG] debug: rgb_size: %d, raw size: %d w: %d h: %d row_stride: %d \n", rgb_size,
-                cinfo.image_width*cinfo.image_height*3,
+                cinfo.image_width*cinfo.image_height*cinfo.output_components,
                 cinfo.image_width, 
                 cinfo.image_height,
                 row_stride);
@@ -9641,7 +9914,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
 }
 
 #define LOG_ROT_DBG  (0)
-static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
+static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, char *bmphd, int hdlen)
 {
     struct sdParseBuff_s *pabuf=0;
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
@@ -9676,39 +9949,26 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     #endif
 
     pabuf = &rs->psFat->parBuf;
-    //totsz = pabuf->dirBuffUsed;
-    //srcbuf = pabuf->dirParseBuff;
     srcbuf = bmpsrc;
 
     /* check header */
     //shmem_dump(srcbuf, 512);
 
     /* rotate */
-    ph = &rs->pbheader->aspbmpMagic[2];
-    len = sizeof(struct bitmapHeader_s) - 2;
-    memcpy(ph, srcbuf, len);
-
-    //shmem_dump(srcbuf, 128);
-
     bheader = rs->pbheader;
+    ph = &bheader->aspbmpMagic[2];
     
     #if LOG_ROT_DBG    
     dbgBitmapHeader(bheader, len);
     #endif
     rawsz = bheader->aspbiRawSize;
-    rawSrc = srcbuf + bheader->aspbhRawoffset;
     oldWidth = bheader->aspbiWidth;
     oldHeight = bheader->aspbiHeight;
     bpp = bheader->aspbiCPP >> 16;
     oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
 
-    //rawCpy = aspMemalloc(rawsz, 11);
-    
-    //memcpy(rawCpy, rawSrc, rawsz);
-    rawCpy = rawSrc;
+    rawCpy = srcbuf;
         
-    //shmem_dump(rawCpy, 128);
-    //shmem_dump(rawSrc, 128);
     imgw = (CFLOAT)bheader->aspbiWidth;
     imgh = (CFLOAT)bheader->aspbiHeight;
     
@@ -9734,7 +9994,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
 
     RD[0] = 1237;
     RD[1] = 668;
-    #elif 0
+    #elif 1
     LU[0] = 915;
     LU[1] = 1809;
 
@@ -9895,9 +10155,14 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
         return -1;
     }
     
-    memcpy(rawdest, srcbuf, bheader->aspbhRawoffset);
+    memcpy(rawdest, bmphd, hdlen);
     memcpy(rawdest, ph, 54);
     rawSrc = rawdest + bheader->aspbhRawoffset;
+
+    if (hdlen != bheader->aspbhRawoffset) {
+        sprintf_f(rs->logs, "Error!!! Rawoffset: %d not match head len: %d !!!\n", bheader->aspbhRawoffset, hdlen);
+        print_f(rs->plogs, "ROT", rs->logs);
+    }
 
     pabuf->dirBuffUsed = bheader->aspbhSize + ubrst;
     pabuf->dirParseBuff = rawdest;
@@ -10804,8 +11069,10 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc)
     sprintf_f(rs->logs, "ring buff count: %d\n", cnt);
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
-    //dbgBitmapHeader(bheader, len);
-
+    
+    #if LOG_ROT_DBG
+    dbgBitmapHeader(bheader, len);
+    #endif
     return 0; 
 }
 
@@ -60265,7 +60532,7 @@ static int p10(struct procRes_s *rs)
 #define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
 #define OP_WRITE_FILE (0x0b)
-#define DUMP_JPG_ROT (0)
+#define DUMP_JPG_ROT (1)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -60311,7 +60578,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12], chn=0, chm=0, chw=0, chy=0;;
     char cmdprisec=0, cswerr=0, pagerst=2, che=0, cswstatus[2];
     int *piptx=0, *piprx=0, *pipm=0, *pipn=0;
-    int sendsz=0, errcnt=0, acusz=0, usCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0, lastflag=0, filesz=0;
+    int sendsz=0, errcnt=0, acusz=0, tmCost=0, wrtsz=0, retry=0, rwaitCylen=0, recvsz=0, lastflag=0, filesz=0;
     int *pipeRx, *pipeRxd, *pipeTx, *pipeTxd;
     int *gateUpTx, *gateUpRx, *gateDnTx, *gateDnRx;
     struct timespec tidleS, tidleE;
@@ -62791,17 +63058,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         if (fintvalS[1]) {
 
-                            usCost = time_diff(pintval, &intvalS[0], 1000);
+                            tmCost = time_diff(pintval, &intvalS[0], 1000);
                             
                             #if LOG_FLASH
-                            sprintf_f(rs->logs, "[DV] TX-RX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalS[0]), time_get_ms(pintval), usCost);
+                            sprintf_f(rs->logs, "[DV] TX-RX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalS[0]), time_get_ms(pintval), tmCost);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
                             
-                            usCost = time_diff(&intvalS[1], &intvalS[0], 1000);
+                            tmCost = time_diff(&intvalS[1], &intvalS[0], 1000);
                             
                             #if LOG_FLASH
-                            sprintf_f(rs->logs, "[DV] RX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalS[0]), time_get_ms(&intvalS[1]), usCost);
+                            sprintf_f(rs->logs, "[DV] RX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalS[0]), time_get_ms(&intvalS[1]), tmCost);
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
 
@@ -62818,12 +63085,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             clock_gettime(CLOCK_REALTIME, &intvalS[1]);
                             fintvalS[1] = 1;
 
-                            usCost = time_diff(pintval, &intvalS[1], 1000);
-                            sprintf_f(rs->logs, "[DV] TX-RX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalS[1]), time_get_ms(pintval), usCost);
+                            tmCost = time_diff(pintval, &intvalS[1], 1000);
+                            sprintf_f(rs->logs, "[DV] TX-RX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalS[1]), time_get_ms(pintval), tmCost);
                             print_f(rs->plogs, "P11", rs->logs);
                             
-                            usCost = time_diff(&intvalS[0], &intvalS[1], 1000);
-                            sprintf_f(rs->logs, "[DV] RX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalS[1]), time_get_ms(&intvalS[0]), usCost);
+                            tmCost = time_diff(&intvalS[0], &intvalS[1], 1000);
+                            sprintf_f(rs->logs, "[DV] RX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalS[1]), time_get_ms(&intvalS[0]), tmCost);
                             print_f(rs->plogs, "P11", rs->logs);
 
                             fintvalS[0] = 0;
@@ -66079,8 +66346,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     jpgout = 0;
 
                                     if (fformat == FILE_FORMAT_JPG) {
-                                        tmp = colr / 8;
-                                        tmp = tmp * bmpw * bmph;
+                                        tmp = ((bmpw * colr + 31) / 32) * 4;
+                                        tmp = tmp * bmph;
                                         jpgout = aspMemalloc(tmp, 11);
 
                                         if (jpgout) {
@@ -66092,15 +66359,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
 
                                         changeJpgLen(bmpbuff, bmph, bmplen);
-
+                                        
+                                        //grapjpg(bmpbuff, bmplen);
+                                        
                                         clock_gettime(CLOCK_REALTIME, &jpgS);
-                                        err = jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr==8 ? JCS_GRAYSCALE:JCS_RGB);
+                                        err = jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr);
                                         //err = tj_jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr==8 ? TJPF_GRAY:TJPF_RGB);
                                         clock_gettime(CLOCK_REALTIME, &jpgE);
 
-                                        usCost = time_diff(&jpgS, &jpgE, 1000);
+                                        tmCost = time_diff(&jpgS, &jpgE, 1000000);
                                                                     
-                                        sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d us\n", err, jpgetW, jpgetH, usCost);
+                                        sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d ms\n", err, jpgetW, jpgetH, tmCost);
                                         print_f(rs->plogs, "P11", rs->logs);
 
                                         //bmpbuff = jpgout;
@@ -66176,11 +66445,18 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     bdeg = 25;
                                     
                                     clock_gettime(CLOCK_REALTIME, &jpgS);
-                                    rotateBMP(rs, bdeg, usbfd, bmpbuff);
+                                    //grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
+                                    rotateBMP(rs, bdeg, usbfd, bmpbuff, bmpcolrtb, bhlen);
+                                    //grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
+                                    //draw();
+                                    //grapbmp();
                                     clock_gettime(CLOCK_REALTIME, &jpgE);
+
+                                    sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d \n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset);
+                                    print_f(rs->plogs, "P11", rs->logs);
                                     
-                                    usCost = time_diff(&jpgS, &jpgE, 1000000);
-                                    sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", usCost);
+                                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                                    sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", tmCost);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     
                                     bmpbufc = pabuff->dirParseBuff;   
@@ -66195,8 +66471,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             print_f(rs->plogs, "P11", rs->logs);
                                         }
                                     
-                                        usCost = time_diff(&jpgS, &jpgE, 1000);
-                                        sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d us\n", jpgLen, (uint32_t)jpgrlt, usCost);
+                                        tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                                        sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
                                         //changeJpgLen(jpgrlt, bheader->aspbiHeight, jpgLen);
@@ -66508,11 +66784,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     clock_gettime(CLOCK_REALTIME, &tend);
 
-                    usCost = time_diff(&tstart, &tend, 1000);
-                    sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), usCost);
+                    tmCost = time_diff(&tstart, &tend, 1000);
+                    sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), tmCost);
                     print_f(rs->plogs, "P11", rs->logs);
-                    throughput = acusz*8.0 / usCost*1.0;
-                    sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, usCost > 1000 ? usCost / 1000 : 1, throughput);
+                    throughput = acusz*8.0 / tmCost*1.0;
+                    sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, tmCost > 1000 ? tmCost / 1000 : 1, throughput);
                     print_f(rs->plogs, "P11", rs->logs);
 
                     #if USB_HS_SAVE_RESULT_DV
@@ -66675,8 +66951,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -66691,8 +66967,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -66819,8 +67095,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -66835,8 +67111,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -67010,8 +67286,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -67026,8 +67302,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -67097,8 +67373,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -67113,8 +67389,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -67196,8 +67472,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -67212,8 +67488,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -67350,8 +67626,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -67366,8 +67642,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -67423,8 +67699,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -67439,8 +67715,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -67569,8 +67845,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                         if (fintvalE[1]) {
                 
-                            usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                            sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                            tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                            sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                             print_f(rs->plogs, "P11", rs->logs);
                 
                             fintvalE[1] = 0;
@@ -67585,8 +67861,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                             fintvalE[1] = 1;
                 
-                            usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                            sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                            tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                            sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                             print_f(rs->plogs, "P11", rs->logs);
                 
                             fintvalE[0] = 0;
@@ -67884,8 +68160,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -67900,8 +68176,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -69049,8 +69325,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -69065,8 +69341,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
@@ -69242,8 +69518,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                     if (fintvalE[1]) {
                 
-                        usCost = time_diff(&intvalE[1], &intvalE[0], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), usCost);
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[1] = 0;
@@ -69258,8 +69534,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         clock_gettime(CLOCK_REALTIME, &intvalE[1]);
                         fintvalE[1] = 1;
                 
-                        usCost = time_diff(&intvalE[0], &intvalE[1], 1000);
-                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), usCost);
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         fintvalE[0] = 0;
