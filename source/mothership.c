@@ -2088,7 +2088,7 @@ static int grapbmp(unsigned char *ptr, struct bitmapHeader_s * bmphead, char *pt
     setheight = bmphead->aspbiHeight;
     bpp = bmphead->aspbiCPP >> 16;
     
-    printf("[GL] grap bmp \n");
+    printf("[GL] grap bmp w: %d h: %d bpp: %d \n", setwidth, setheight, bpp);
 
     rowSize = ((setwidth * bpp + 31) / 32) * 4;
     bmptotal = rowSize * setheight;
@@ -2116,6 +2116,7 @@ static int grapbmp(unsigned char *ptr, struct bitmapHeader_s * bmphead, char *pt
     printf("[GL] write file %s size: %d ret: %d \n", ptfilepath, bmptotal, ret);
     
     sync();
+    fflush(dumpFile);
     fclose(dumpFile);
 
     return 0;
@@ -67089,25 +67090,33 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         print_f(rs->plogs, "P11", rs->logs);
                                     }
 
-                                    msync(bmpcolrtb, 1078, MS_SYNC);
-                                    memcpy(bmpbuff, bmpcolrtb, bhlen);
-                                
+                                    //msync(bmpcolrtb, 1078, MS_SYNC);
+                                    //memcpy(bmpbuff, bmpcolrtb, bhlen);
                                     //shmem_dump(bmpbuff, bhlen);
                                 
                                     //bdeg = 1350;
                                     //bdeg = 900;
                                     //bdeg = 450;
+
+                                    #if DUMP_JPG_ROT
+                                    for (bdeg = 180000; bdeg < 360000; bdeg+=1000) {
+                                    #else
+                                    bdeg = 1000;
+                                    #endif
                                     
-                                    for (bdeg = 0; bdeg < 360000; bdeg+=5000) {
                                     //bdeg = -915;
 
+                                    memcpy(ph, bmpcolrtb, 54);
+                                    
                                     sprintf_f(rs->logs, "[BMP] rotate degree: %d \n", bdeg/1000);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     
                                     clock_gettime(CLOCK_REALTIME, &jpgS);
+
                                     //grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
                                     rotateBMP(rs, bdeg, usbfd, bmpbuff, bmpcolrtb, bhlen, bmprot);
                                     //grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
+                                    
                                     //draw();
                                     //grapbmp();
                                     clock_gettime(CLOCK_REALTIME, &jpgE);
@@ -67191,7 +67200,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         }
                                         */
 
-                                        #if 1
+                                        #if DUMP_JPG_ROT
                                         bret = blen;
                                         #else
                                         bret = write(usbfd, bmpbufc, blen);
@@ -67232,7 +67241,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     blen = rotlast;
                                     while (blen) {
 
-                                        #if 1
+                                        #if DUMP_JPG_ROT
                                         bret = blen;
                                         #else
                                         bret = write(usbfd, bmpbufc, blen); 
@@ -67256,7 +67265,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     blen = lens;
                                     while (blen) {
-                                        #if 1
+                                        #if DUMP_JPG_ROT
                                         bret = blen;
                                         #else
                                         bret = write(usbfd, addrd, blen); 
@@ -67283,7 +67292,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     fclose(fsmeta);
                                     sync();
                                     #endif
+
+                                    #if DUMP_JPG_ROT
                                     }
+                                    #endif
                                 }
                                 else {
                                     if (rawlen > USB_BUF_SIZE) {
