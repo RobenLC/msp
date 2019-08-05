@@ -4961,7 +4961,6 @@ static int getRectVectorFromV(CFLOAT *vec, CFLOAT *p, CFLOAT *vecIn)
         a = 1;
         b = -x;
     } else {
-
         b = y - (a * x);
     }
     vec[0] = a;
@@ -4989,6 +4988,7 @@ static int getVectorFromP(CFLOAT *vec, CFLOAT *p1, CFLOAT *p2)
 
     x2 = p2[0];
     y2 = p2[1];
+
 
     vec[2] = 0;
 #if CROP_CALCU_DETAIL
@@ -5553,6 +5553,13 @@ static int getRectPoint(struct aspCrop36_s *pcp36)
     memcpy(llline, pcp36->crp36LineLeft, sizeof(CFLOAT)*3);
     memcpy(rrline, pcp36->crp36LineRight, sizeof(CFLOAT)*3);
 
+#if LOG_CROP_RECT
+    printf("[rect] get rect top line = (%lf, %lf, %lf) \n", ttline[0], ttline[1], ttline[2]);
+    printf("[rect] get rect bot line = (%lf, %lf, %lf) \n", bbline[0], bbline[1], bbline[2]);
+    printf("[rect] get rect left line = (%lf, %lf, %lf) \n", llline[0], llline[1], llline[2]);
+    printf("[rect] get rect right line = (%lf, %lf, %lf) \n", rrline[0], rrline[1], rrline[2]);
+#endif
+
     ret = getCross(ttline, llline, pLU);
     if (ret != 0) {
         printf("[rect] Error!!! get rect cross LU failed!!!!\n");
@@ -5576,6 +5583,7 @@ static int getRectPoint(struct aspCrop36_s *pcp36)
         printf("[rect] Error!!! get rect cross RD failed!!!!\n");
         err++;
     }
+    
 #if LOG_CROP_RECT
     printf("[rect] get rect LU = (%lf, %lf) \n", pLU[0], pLU[1]);
     printf("[rect] get rect RU = (%lf, %lf) \n", pRU[0], pRU[1]);
@@ -9977,6 +9985,10 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
         getRectPoint(ppt36);
     }
 
+    #if 0 /* test code */
+    getRectPoint(ppt36);
+    #endif
+
     #if LOG_P6_CROP_EN
     msync(ppt36, sizeof(struct aspCrop36_s), MS_SYNC);
     ret = getRotateP1(ppt36, rotlf);
@@ -10577,7 +10589,7 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
     return 0;
 }
 
-#define LOG_ROT_DBG  (1)
+#define LOG_ROT_DBG  (0)
 static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff)
 {
 #define UNIT_DEG (1000.0)
@@ -10742,6 +10754,9 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     //sprintf_f(rs->logs, "minH: %lf, minV: %lf \n", minH, minV);
     //print_f(rs->plogs, "ROT", rs->logs);
 
+    //minH = (minH > 0) ? (minH + 1):(minH-1);
+    //minV = (minV > 0) ? (minV + 1):(minV-1);
+    
     offsetH = 0 - minH;
     offsetV = 0 - minV;
 
@@ -11533,6 +11548,36 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
         }
     }
 
+    LUt[0] = (int)round(pLU[0]*100000);
+    LUt[1] = (int)round(pLU[1]*100000);
+
+    RUt[0] = (int)round(pRU[0]*100000);
+    RUt[1] = (int)round(pRU[1]*100000);
+
+    LDt[0] = (int)round(pLD[0]*100000);
+    LDt[1] = (int)round(pLD[1]*100000);
+
+    RDt[0] = (int)round(pRD[0]*100000);
+    RDt[1] = (int)round(pRD[1]*100000);
+
+    pLU[0] = (double)LUt[0];
+    pLU[1] = (double)LUt[1];
+    pRU[0] = (double)RUt[0];
+    pRU[1] = (double)RUt[1];
+    pLD[0] = (double)LDt[0];
+    pLD[1] = (double)LDt[1];
+    pRD[0] = (double)RDt[0];
+    pRD[1] = (double)RDt[1];
+
+    pLU[0] = pLU[0]/100000.0;
+    pLU[1] = pLU[1]/100000.0;
+    pRU[0] = pRU[0]/100000.0;
+    pRU[1] = pRU[1]/100000.0;
+    pLD[0] = pLD[0]/100000.0;
+    pLD[1] = pLD[1]/100000.0;
+    pRD[0] = pRD[0]/100000.0;
+    pRD[1] = pRD[1]/100000.0; 
+    
     #if LOG_ROT_DBG
     sprintf_f(rs->logs, "align: PLU: %lf, %lf \n", pLU[0], pLU[1]);
     print_f(rs->plogs, "ROT", rs->logs);
@@ -11545,22 +11590,61 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     #endif
 
     if (pLU[1] > pRU[1]) {
-        getVectorFromP(linLU, pLU, pLD);
+        #if LOG_ROT_DBG
+        sprintf_f(rs->logs, "PLU[1]: %lf  > PLU[1]: %lf \n", pLU[1], pRU[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        #endif
+
+        getVectorFromP(linLU, pLD, pLU);
         getVectorFromP(linLD, pLD, pRD);
         getVectorFromP(linRD, pRD, pRU);
         getVectorFromP(linRU, pRU, pLU);
+
+        #if LOG_ROT_DBG
+        sprintf_f(rs->logs, "lineLU:(%lf, %lf, %lf) = pLU:(%lf, %lf) <-> pLD:(%lf, %lf)  \n", linLU[0], linLU[1], linLU[2], pLU[0], pLU[1], pLD[0], pLD[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        
+        sprintf_f(rs->logs, "linLD:(%lf, %lf, %lf) = pLD:(%lf, %lf) <-> pRD:(%lf, %lf)  \n", linLD[0], linLD[1], linLD[2], pLD[0], pLD[1], pRD[0], pRD[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        sprintf_f(rs->logs, "linRD:(%lf, %lf, %lf) = pRD:(%lf, %lf) <-> pRU:(%lf, %lf)  \n", linRD[0], linRD[1], linRD[2], pRD[0], pRD[1], pRU[0], pRU[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        
+        sprintf_f(rs->logs, "linRU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linRU[0], linRU[1], linRU[2], pRU[0], pRU[1], pLU[0], pLU[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         plm[0] = pLD[0];
         plm[1] = pLD[1];
         
         prm[0] = pRU[0];
         prm[1] = pRU[1];
-    } else {
+    }
+    else {
+        #if LOG_ROT_DBG
+        sprintf_f(rs->logs, "PLU[1]: %lf  <= PLU[1]: %lf \n", pLU[1], pRU[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        #endif
+
         getVectorFromP(linLU, pRU, pLU);
         getVectorFromP(linLD, pLU, pLD);
         getVectorFromP(linRD, pLD, pRD);
         getVectorFromP(linRU, pRD, pRU);
 
+        #if LOG_ROT_DBG
+        sprintf_f(rs->logs, "lineLU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linLU[0], linLU[1], linLU[2], pRU[0], pRU[1], pLU[0], pLU[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        
+        sprintf_f(rs->logs, "linLD:(%lf, %lf, %lf) = pLU:(%lf, %lf) <-> pLD:(%lf, %lf)  \n", linLD[0], linLD[1], linLD[2], pLU[0], pLU[1], pLD[0], pLD[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+
+        sprintf_f(rs->logs, "linRD:(%lf, %lf, %lf) = pLD:(%lf, %lf) <-> pRD:(%lf, %lf)  \n", linRD[0], linRD[1], linRD[2], pLD[0], pLD[1], pRD[0], pRD[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        
+        sprintf_f(rs->logs, "linRU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linRU[0], linRU[1], linRU[2], pRD[0], pRD[1], pRU[0], pRU[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        #endif
+        
         plm[0] = pLU[0];
         plm[1] = pLU[1];
         
@@ -11568,21 +11652,21 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
         prm[1] = pRD[1];
     }
     
-    #if 1
+    #if LOG_ROT_DBG
     ret = getCross(linLD, linLU, plc);
-    sprintf_f(rs->logs, "test cross left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
+    sprintf_f(rs->logs, "test linLD cross linLU.  left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
     print_f(rs->plogs, "ROT", rs->logs);
             
     ret = getCross(linRD, linRU, prc);
-    sprintf_f(rs->logs, "test cross right %lf, %lf ret: %d \n", prc[0], prc[1], ret);
+    sprintf_f(rs->logs, "test linRD cross linRU.  right %lf, %lf ret: %d \n", prc[0], prc[1], ret);
     print_f(rs->plogs, "ROT", rs->logs);
 
     ret = getCross(linRU, linLU, pt);
-    sprintf_f(rs->logs, "test cross top %lf, %lf ret: %d \n", pt[0], pt[1], ret);
+    sprintf_f(rs->logs, "test linRU cross linLU.  top %lf, %lf ret: %d \n", pt[0], pt[1], ret);
     print_f(rs->plogs, "ROT", rs->logs);
 
     ret= getCross(linRD, linLD, pn);
-    sprintf_f(rs->logs, "test cross down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
+    sprintf_f(rs->logs, "test linRD cross linLD.  down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
 
@@ -11592,6 +11676,11 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     par[0] = 100;
     par[1] = 1000;
     getVectorFromP(linPal, par, pal);        
+
+    #if LOG_ROT_DBG
+    sprintf_f(rs->logs, "linPal:(%lf, %lf, %lf) = par:(%lf, %lf) <-> pal:(%lf, %lf)  \n", linPal[0], linPal[1], linPal[2], par[0], par[1], pal[0], pal[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    #endif
 
     expCAsize = maxvint-minvint+1;
     len = 3*sizeof(int);
@@ -11607,6 +11696,11 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     for (iy=minvint, ix=0; ix < expCAsize; iy++, ix++) {
         pt[1] = (CFLOAT)iy;
         getRectVectorFromV(linCrs, pt, linPal);
+
+        #if 0//LOG_ROT_DBG
+        sprintf_f(rs->logs, "linCrs:(%lf, %lf, %lf) = pt:(%lf, %lf)  \n", linCrs[0], linCrs[1], linCrs[2], pt[0], pt[1]);
+        print_f(rs->plogs, "ROT", rs->logs);
+        #endif
 
         //getCross(linCrs, linPal, pn);
         //sprintf_f(rs->logs, "pn: %.4lf, %.4lf \n", pn[0], pn[1]);
@@ -11635,12 +11729,12 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
         crsAry[ix*3+2] = (int)round(prc[0]);
     }
 
-    
+    /*
     for (ix=0; ix < (maxvint-minvint+1); ix++) {
         sprintf_f(rs->logs, "%d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
         print_f(rs->plogs, "ROT", rs->logs);
     }
-    
+    */
     
     #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d, sizeof crsArry: %d\n", maxhint, maxvint, rowsize, rawszNew, totsz, expCAsize);
@@ -61345,7 +61439,7 @@ static int p10(struct procRes_s *rs)
 #define DBG_USB_TIME_MEASURE (0)
 #define BYPASS_TWO  (1)
 #define OP_WRITE_FILE (0x0b)
-#define DUMP_JPG_ROT (1)
+#define DUMP_JPG_ROT (0)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -67269,10 +67363,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //bdeg = 450;
 
                                     #if DUMP_JPG_ROT
-                                    //for (bdeg = 178000; bdeg < 360000; bdeg+=500) {
-                                    bdeg = 180000;
+                                    for (bdeg = 0; bdeg <= 360000; bdeg += 100) {
+                                    //bdeg = 180000;
                                     #else
-                                    bdeg = 180000;
+                                    bdeg = 15000;
                                     #endif
                                     
                                     //bdeg = -915;
@@ -67284,9 +67378,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     clock_gettime(CLOCK_REALTIME, &jpgS);
 
-                                    grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
+                                    //grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
                                     rotateBMP(rs, bdeg, usbfd, bmpbuff, bmpcolrtb, bhlen, bmprot);
-                                    grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
+                                    //grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
                                     
                                     //draw();
                                     //grapbmp();
@@ -67465,7 +67559,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     #endif
 
                                     #if DUMP_JPG_ROT
-                                    //}
+                                    }
                                     #endif
                                 }
                                 else {
