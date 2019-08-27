@@ -47737,7 +47737,7 @@ static int p2(struct procRes_s *rs)
                 //shmem_dump(addr, 16);
 
                 //dbgMetaUsb(pusbmeta);
-                getRotRectPoint(pcrp36, 0, 0, 2);
+                //getRotRectPoint(pcrp36, 0, 0, 2);
                 
                 memset(uinfo, 0, 32);
                 uinfo[0] = 'O';
@@ -48389,7 +48389,7 @@ static int p3(struct procRes_s *rs)
 
                 //dbgMetaUsb(pusbmeta);
 
-                getRotRectPoint(pcrp36, 0, 0, 3);
+                //getRotRectPoint(pcrp36, 0, 0, 3);
                 
                 memset(uinfo, 0, 32);
                 uinfo[0] = 'O';
@@ -53607,8 +53607,10 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                #if 0//LOG_P6_CROP_EN
                 sprintf_f(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
             }
             #endif // #if !CROP_MIGRATE_TO_APP
 
@@ -54156,8 +54158,10 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                #if 0//LOG_P6_CROP_EN
                 sprintf_f(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
             }          
             #endif // #if !CROP_MIGRATE_TO_APP
 
@@ -55263,8 +55267,10 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
+                #if 0//LOG_P6_CROP_EN
                 sprintf_f(rs->logs, "socket send CROP  F %d [ %s ], len:%d \n", i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
             }
             #endif  //#if !CROP_MIGRATE_TO_APP
 
