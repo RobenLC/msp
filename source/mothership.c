@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-
+#define GHP_EN (0)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -36,6 +36,7 @@ int pipe2(int pipefd[2], int flags);
 #include <math.h>
 #include <errno.h> 
 //#include <mysql.h>
+#if GHP_EN
 #include <jpeglib.h>
 #include <jerror.h>
 #include <turbojpeg.h>
@@ -47,10 +48,12 @@ int pipe2(int pipefd[2], int flags);
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 //#include <GL/glx.h>
+#endif
+
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
-static char mver[] = "MSP Version v0.1.5.rc";
+static char mver[] = "MSP Version v0.1.5.rc-d1";
 static char gitcommit[] = "2019-05-31 11:45:35 48cb4a8";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
@@ -1837,7 +1840,7 @@ static int getCross(CFLOAT *v1, CFLOAT *v2, CFLOAT *pt);
 static CFLOAT calcuDistance(CFLOAT *p1, CFLOAT *p2);
 static CFLOAT calcuVectorDistancePoint(CFLOAT *vec, CFLOAT *p);
 static CFLOAT calcuLineGroupDist(CFLOAT *pGrp, CFLOAT *vecTr, int gpLen);
-static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen);
+static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen, int midx);
 static int topPositive(struct aspCropExtra_s *pcpex);
 static int cfgTableGet(struct aspConfig_s *table, int idx, uint32_t *rval);
 static int mspFS_folderList(struct directnFile_s *root, int depth);
@@ -1846,6 +1849,7 @@ static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf);
 static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen);
 static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin);
 
+#if GHP_EN
 static int tj_jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int *getH, int clrsp)
 {
     long unsigned int _jpegSize=0;
@@ -2268,7 +2272,7 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     
     return 0;
 }
-
+#endif
 static unsigned long long int time_get_ms(struct timespec *s)
 {
     unsigned long long int cur, tnow, lnow, gunit;
@@ -4297,20 +4301,23 @@ static int aspMemClear(struct aspMemAsign_s *msa, int *memtot, int pidx)
             ad32 = ms->aspMemAddr[mi];
 
             pfree = (char *)ad32;
-            
-            //memset(pfree, 0, asz);
-            free(pfree);
-            //memset(pfree, 0xff, asz);
-            
+
             tot -= asz;
             memtot[pidx] = tot;
 
-            ms->aspMemAddr[mi] = 0;
-            ms->aspMemSize[mi] = 0;
             #if LOG_DEBUG_MEMALLOC
             sprintf_f(mlog, "[%d] FREE [%d] ADDR: 0x%.8x, SIZE: %d, TOTAL: %d\n", pidx, mi, ad32, asz, tot);
             print_f(mlogPool, "MEM", mlog);
             #endif
+
+            ms->aspMemAddr[mi] = 0;
+            ms->aspMemSize[mi] = 0;
+
+            //memset(pfree, 0, asz);
+            #if 1
+            free(pfree);
+            #endif
+            //memset(pfree, 0xff, asz);
         }
     }
     
@@ -5178,7 +5185,7 @@ static CFLOAT calcuLineGroupDistAlign(CFLOAT *pGrp, CFLOAT *vecTr, int gpLen, CF
     return avgDist;
 }
 
-static int calcuGroupLineAlign(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen, CFLOAT limit) {
+static int calcuGroupLineAlign(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen, CFLOAT limit, int midx) {
     CFLOAT dist = 0, sumDist = 0, avgDist = 0;
     int head = 0, tail = 0, cur = 0;
     int len = 0, ret = 0, idx = 0;
@@ -5197,9 +5204,9 @@ static int calcuGroupLineAlign(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpL
 #if CROP_CALCU_DETAIL
     printf("[Gline] gplen = %d ,head = %d, tail = %d\n", len, head, tail);
 #endif
-    CFLOAT *avd = (CFLOAT *) malloc(sizeof(CFLOAT) * (tail - head));
-    int *avcnt = (int *) malloc(sizeof(int) * (tail - head));
-    int *avList = (int *) malloc(sizeof(int) * (tail - head) * 2);
+    CFLOAT *avd = (CFLOAT *) aspMemalloc(sizeof(CFLOAT) * (tail - head), midx);
+    int *avcnt = (int *) aspMemalloc(sizeof(int) * (tail - head), midx);
+    int *avList = (int *) aspMemalloc(sizeof(int) * (tail - head) * 2, midx);
 	memset(avd, 0, sizeof(CFLOAT) * (tail - head));
 	memset(avList, 0, sizeof(int) * (tail - head) * 2);
 
@@ -5264,9 +5271,9 @@ static int calcuGroupLineAlign(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpL
 
     p1 = &pGrp[head * 2];
     p2 = &pGrp[tail * 2];
-    free(avd);
-    free(avcnt);
-    free(avList);
+    aspMemFree(avd, midx);
+    aspMemFree(avcnt, midx);
+    aspMemFree(avList, midx);
 
     ret = getVectorFromP(vecTr, p1, p2);
     if (ret < 0) {
@@ -5276,7 +5283,7 @@ static int calcuGroupLineAlign(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpL
     return maxcnt;
 }
 
-static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen) 
+static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen, int midx) 
 {
     CFLOAT dist=0, sumDist=0, avgDist=0;
     int head=0, tail=0, cur=0;
@@ -5296,9 +5303,9 @@ static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen)
     printf("[Gline] gplen = %d ,head = %d, tail = %d\n", len, head, tail);    
 #endif
     CFLOAT *avd;
-    avd = (CFLOAT *)aspMemalloc(sizeof(CFLOAT) * (tail - head), 6);
+    avd = (CFLOAT *)aspMemalloc(sizeof(CFLOAT) * (tail - head), midx);
     int *avList;
-    avList = (int *)aspMemalloc(sizeof(int) * (tail - head) * 2, 6);
+    avList = (int *)aspMemalloc(sizeof(int) * (tail - head) * 2, midx);
     
     cntDist = 0;
     while ((tail - head) > 1) {
@@ -5362,8 +5369,8 @@ static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen)
     p1 = &pGrp[head*2];
     p2 = &pGrp[tail*2];
 
-    aspMemFree(avd, 6);
-    aspMemFree(avList, 6);
+    aspMemFree(avd, midx);
+    aspMemFree(avList, midx);
     
     ret = getVectorFromP(vecTr,  p1,  p2);
     if (ret < 0) {
@@ -5373,7 +5380,7 @@ static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen)
     return 0;
 }
 
-static int calcuCrossUpAph(struct aspCrop36_s *pcp36) 
+static int calcuCrossUpAph(struct aspCrop36_s *pcp36, int midx) 
 {
 #define UP_NUM 3
 #define PT_NUM 40
@@ -5410,7 +5417,7 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
     CFLOAT vru[3];
     CFLOAT divRU;
 
-    ret = calcuGroupLine(plu, vlu, &divLU, UP_NUM);
+    ret = calcuGroupLine(plu, vlu, &divLU, UP_NUM, midx);
     if (ret == 0) {
 #if LOG_CROP_CROSUP
         printf("[csUP] succeed to get group line vLU, divLU = %lf \n", divLU);    
@@ -5422,7 +5429,7 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36)
         return -2;
     }
 
-    ret = calcuGroupLine(pru, vru, &divRU, UP_NUM);
+    ret = calcuGroupLine(pru, vru, &divRU, UP_NUM, midx);
     if (ret == 0) {
 #if LOG_CROP_CROSUP
         printf("[csUP] succeed to get group line vRU, divRU = %lf\n", divRU);
@@ -5885,7 +5892,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
     return 0;
 }
 
-static int calcuCrossDnAph(struct aspCrop36_s *pcp36) 
+static int calcuCrossDnAph(struct aspCrop36_s *pcp36, int midx) 
 {
 #define DN_NUM 5
 #define PT_NUM 40
@@ -5921,7 +5928,7 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
     CFLOAT vrd[3];
     CFLOAT divRD;
 
-    ret = calcuGroupLine(pld, vld, &divLD, DN_NUM);
+    ret = calcuGroupLine(pld, vld, &divLD, DN_NUM, midx);
     if (ret == 0) {
 #if LOG_CROP_CROSSDNAPH
         printf("[csDN] succeed to get group line vLD, divLD = %lf \n", divLD);    
@@ -5933,7 +5940,7 @@ static int calcuCrossDnAph(struct aspCrop36_s *pcp36)
         return -2;
     }
 
-    ret = calcuGroupLine(prd, vrd, &divRD, DN_NUM);
+    ret = calcuGroupLine(prd, vrd, &divRD, DN_NUM, midx);
     if (ret == 0) {
 #if LOG_CROP_CROSSDNAPH
         printf("[csDN] succeed to get group line vRD, divRD = %lf \n", divRD);    
@@ -6473,7 +6480,7 @@ static int cpyPGrp(int start, int len, CFLOAT *grp, CFLOAT **cpgp, int max)
     return len;
 }
 
-static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex) 
+static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int midx) 
 {
 #define CROP_POINT_DIST  (16.0)	
 #define CROP_LINE_DIST  (30.0)
@@ -6758,7 +6765,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             }
 
             //ret = calcuGroupLine(cgrp, pcpex->crpexLfAbsVec[i], &dist, glen);
-            ret = calcuGroupLineAlign(cgrp, pcpex->crpexLfAbsVec[i], &dist, glen, GROUP_LINE_LIMIT);
+            ret = calcuGroupLineAlign(cgrp, pcpex->crpexLfAbsVec[i], &dist, glen, GROUP_LINE_LIMIT, midx);
             if (ret > 0) {
 #if LOG_CROP_CALCULINE
                 printf("[find] (Lf) %d. get group line suceed!! (%.2lf, %.2lf)<->(%.2lf, %.2lf) div: %.2lf ret: %d\n", i, pc1[0], pc1[1], pc2[0], pc2[1], dist, ret);
@@ -6831,7 +6838,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
             }
 
             //ret = calcuGroupLine(cgrp, pcpex->crpexRtAbsVec[i], &dist, glen);
-            ret = calcuGroupLineAlign(cgrp, pcpex->crpexRtAbsVec[i], &dist, glen, GROUP_LINE_LIMIT);
+            ret = calcuGroupLineAlign(cgrp, pcpex->crpexRtAbsVec[i], &dist, glen, GROUP_LINE_LIMIT, midx);
             if (ret > 0) {
                 pcpex->crpexRtAbsVecDist[i] = dist;
 #if LOG_CROP_CALCULINE
@@ -8275,7 +8282,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
     return 0;
 }
 
-static int calcuLine(struct aspCropExtra_s *pcpex) 
+static int calcuLine(struct aspCropExtra_s *pcpex, int midx) 
 {
 #define CROP_MIN_LINE  5
     int i=0, j=0, ret=0;
@@ -8398,7 +8405,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
         printf("(LU) copy , start idx = %d, end idx = %d, size = %d\n", lfStrUp, lfEndUp, szlu);
 #endif
         pGrp = &pcpex->crpexLfPots[lfStrUp*2];
-        ret = calcuGroupLine(pGrp, vecLU, &divLU, szlu);
+        ret = calcuGroupLine(pGrp, vecLU, &divLU, szlu, midx);
         if (ret == 0) {
             memcpy(pcpex->crpexLinLU, vecLU, sizeof(CFLOAT)*3);
             pcpex->crpexLinLUDiv = (int) round(divLU);
@@ -8418,7 +8425,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
         printf("(LD) copy , start idx = %d, end idx = %d, size = %d\n", lfStrDn, lfEndDn, szld);
 #endif
         pGrp = &pcpex->crpexLfPots[lfStrDn*2];
-        ret = calcuGroupLine(pGrp, vecLD, &divLD, szld);
+        ret = calcuGroupLine(pGrp, vecLD, &divLD, szld, midx);
         if (ret == 0) {
             memcpy(pcpex->crpexLinLD, vecLD, sizeof(CFLOAT)*3);
             pcpex->crpexLinLDDiv = (int) round(divLD);
@@ -8438,7 +8445,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
         printf("(RU) copy , start idx = %d, end idx = %d, size = %d\n", rtStrUp, rtEndUp, szru);    
 #endif
         pGrp = &pcpex->crpexRtPots[rtStrUp*2];
-        ret = calcuGroupLine(pGrp, vecRU, &divRU, szru);
+        ret = calcuGroupLine(pGrp, vecRU, &divRU, szru, midx);
         if (ret == 0) {
             memcpy(pcpex->crpexLinRU, vecRU, sizeof(CFLOAT)*3);
             pcpex->crpexLinRUDiv = (int) round(divRU);
@@ -8458,7 +8465,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex)
         printf("(RD) copy , start idx = %d, end idx = %d, size = %d\n", rtStrDn, rtEndDn, szrd);    
 #endif
         pGrp = &pcpex->crpexRtPots[rtStrDn*2];
-        ret = calcuGroupLine(pGrp, vecRD, &divRD, szrd);
+        ret = calcuGroupLine(pGrp, vecRD, &divRD, szrd, midx);
         if (ret == 0) {
             memcpy(pcpex->crpexLinRD, vecRD, sizeof(CFLOAT)*3);
             pcpex->crpexLinRDDiv = (int) round(divRD);
@@ -8722,7 +8729,7 @@ static int setRotateP4(struct aspCrop36_s *pcp36, CFLOAT *rotateP4)
     return 0;
 }
 
-static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
+static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int midx)
 {
 #define ACCEPT_OFFSET (1000.0)
 #define ACCEPT_FINAL_OFFSET_RADIO (1.0)
@@ -8843,7 +8850,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
 
     if (pGrpLU == 0) {
-        pGrpLU = aspMemalloc(sizeof(CFLOAT)*5*2, 6);
+        pGrpLU = aspMemalloc(sizeof(CFLOAT)*5*2, midx);
     
         pGrpLU[0*2+0] = sup[0];
         pGrpLU[0*2+1] = sup[1];
@@ -8864,7 +8871,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
     
     if (pGrpLD == 0) {
-        pGrpLD = aspMemalloc(sizeof(CFLOAT)*7*2, 6);
+        pGrpLD = aspMemalloc(sizeof(CFLOAT)*7*2, midx);
     
         pGrpLD[0*2+0] = sdn[0];
         pGrpLD[0*2+1] = sdn[1];
@@ -8891,7 +8898,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
     
     if (pGrpRU == 0) {
-        pGrpRU = aspMemalloc(sizeof(CFLOAT)*5*2, 6);
+        pGrpRU = aspMemalloc(sizeof(CFLOAT)*5*2, midx);
         
         pGrpRU[0*2+0] = sup[0];
         pGrpRU[0*2+1] = sup[1];
@@ -8912,7 +8919,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex)
     }
     
     if (pGrpRD == 0) {
-        pGrpRD = aspMemalloc(sizeof(CFLOAT)*7*2, 6);
+        pGrpRD = aspMemalloc(sizeof(CFLOAT)*7*2, midx);
         
         pGrpRD[0*2+0] = sdn[0];
         pGrpRD[0*2+1] = sdn[1];
@@ -9560,7 +9567,7 @@ static int topPositive(struct aspCropExtra_s *pcpex)
     return 0;
 }
 
-static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, struct procRes_s *rs) 
+static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, struct procRes_s *rs, int midx) 
 {
     int aidxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
     int aidxR[] = {5, 8, 10, 12, 14, 16, 18, 3};    
@@ -9631,13 +9638,13 @@ static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, st
     #endif
 
     ret = 0;
-    ret |= calcuCrossUpAph(ppt36);
+    ret |= calcuCrossUpAph(ppt36, midx);
     #if CROP_CALCU_PROCESS
     sprintf_f(rs->logs, "crop36 cross up ret = %d\n", ret);
     print_f(rs->plogs, "DoC", rs->logs);
     #endif
 
-    ret |= calcuCrossDnAph(ppt36);
+    ret |= calcuCrossDnAph(ppt36, midx);
     #if CROP_CALCU_PROCESS
     sprintf_f(rs->logs, "crop36 cross down ret = %d\n", ret);
     print_f(rs->plogs, "DoC", rs->logs);
@@ -9673,7 +9680,7 @@ static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, st
     return 0;
 }
 
-static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, struct procRes_s *rs) 
+static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, struct procRes_s *rs, int midx) 
 {
     int len=0, val=0, hval=0, ret=0, cnt=0;
     int ix=0, xpn=0, ipx=0, ipn=0, cls=0, cof=0, idx=0;
@@ -9760,6 +9767,12 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
             sprintf_f(rs->logs, "Error!!! mass len: %d not match expect len: %d - 4\n", val, len); 
             print_f(rs->plogs, "DoC", rs->logs);
             return -2;
+        }
+
+        if (len <= 4) {
+            sprintf_f(rs->logs, "skip extra point calculation len: %d \n", len); 
+            print_f(rs->plogs, "DoC", rs->logs);
+            //return -3;
         }
         
         masUsed = lnlength;
@@ -9971,16 +9984,16 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
 
     /* second stage of cropping algorithm */
     msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
-    findLine(ppt36, pextra);
+    findLine(ppt36, pextra, midx);
 
     msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
     ret = findUniPoints(ppt36, pextra);
     if (!ret) {
         msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
-        calcuLine(pextra);
+        calcuLine(pextra, midx);
 
         msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
-        findBestLine(ppt36, pextra);
+        findBestLine(ppt36, pextra, midx);
     } else {
         getRectPoint(ppt36);
     }
@@ -47645,11 +47658,11 @@ static int p2(struct procRes_s *rs)
                                      break;
                                  }
 
-                                 ret = doCropCalcu36(pcrpdo, addr, len, rs);
+                                 ret = doCropCalcu36(pcrpdo, addr, len, rs, 2);
                                  sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
                                  print_f(rs->plogs, "P2", rs->logs);
 
-                                 ret = doCropCalcu(pcrpdo, addr, len, rs);                                 
+                                 ret = doCropCalcu(pcrpdo, addr, len, rs, 2);                                 
                                  sprintf_f(rs->logs, "do crop extra ret: %d \n", ret);
                                  print_f(rs->plogs, "P2", rs->logs);
 
@@ -48297,11 +48310,11 @@ static int p3(struct procRes_s *rs)
                                      break;
                                  }
                                  
-                                 ret = doCropCalcu36(pcrpdo, addr, len, rs);
+                                 ret = doCropCalcu36(pcrpdo, addr, len, rs, 3);
                                  sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
                                  print_f(rs->plogs, "P3", rs->logs);
 
-                                 ret = doCropCalcu(pcrpdo, addr, len, rs);
+                                 ret = doCropCalcu(pcrpdo, addr, len, rs, 3);
                                  sprintf_f(rs->logs, "do crop extra ret: %d \n", ret);
                                  print_f(rs->plogs, "P3", rs->logs);
 
@@ -52923,7 +52936,7 @@ static int p6(struct procRes_s *rs)
             pcp36->crp36Pots[cpn*2+1] = 0;
 
             #if 1 /* refactor crop function */
-            ret = doCropCalcu36(pcpdo, 0, 0, rs); 
+            ret = doCropCalcu36(pcpdo, 0, 0, rs, 6); 
             #else
             #if !CROP_MIGRATE_TO_APP
             /* first stage of cropping algorithm */            
@@ -52992,7 +53005,7 @@ static int p6(struct procRes_s *rs)
             pcp36duo->crp36Pots[cpn*2+1] = 0;
 
             #if 1 /* refactor crop function */
-            ret = doCropCalcu36(pcpdoduo, 0, 0, rs); 
+            ret = doCropCalcu36(pcpdoduo, 0, 0, rs, 6); 
             #else
 
             #if !CROP_MIGRATE_TO_APP
@@ -53506,7 +53519,7 @@ static int p6(struct procRes_s *rs)
             }
 
             #if 1 /* refactor crop function */
-            ret = doCropCalcu(pcpdo, 0, 0, rs); 
+            ret = doCropCalcu(pcpdo, 0, 0, rs, 6); 
             #else
             /* second stage of cropping algorithm */
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
@@ -54054,7 +54067,7 @@ static int p6(struct procRes_s *rs)
             }
 
             #if 1 /* refactor crop function */
-            ret = doCropCalcu(pcpdoduo, 0, 0, rs); 
+            ret = doCropCalcu(pcpdoduo, 0, 0, rs, 6); 
             #else
             /* second stage of cropping algorithm */
             msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
@@ -54664,7 +54677,7 @@ static int p6(struct procRes_s *rs)
             pcp36->crp36Pots[cpn*2+1] = 0;
 
             #if 1
-            ret = doCropCalcu36(pcpdo, 0, 0, rs);
+            ret = doCropCalcu36(pcpdo, 0, 0, rs, 6);
             #else
             #if !CROP_MIGRATE_TO_APP
             /* first stage of cropping algorithm */            
@@ -55160,7 +55173,7 @@ static int p6(struct procRes_s *rs)
             }
 
             #if 1
-            ret = doCropCalcu(pcpdo, 0, 0, rs); 
+            ret = doCropCalcu(pcpdo, 0, 0, rs, 6); 
             #else
             /* second stage of cropping algorithm */
             msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
@@ -61998,6 +62011,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         iubs->opinfo = opc << 8 | dat;
                         memcpy(iubsBuff, cbw, 31);
+                        iubsBuff[15] = cmd;
+                        iubsBuff[16] = opc;
+                        iubsBuff[17] = dat;
 
                         puscur = pushost;                    
                         pinfcur = pinfushost;
@@ -62059,6 +62075,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         cmd = 0x11;
                         opc = 0x4c;
                         dat = 0x01;
+                        
+                        iubs->opinfo = opc << 8 | dat;
+                        memcpy(iubsBuff, cbw, 31);
+                        iubsBuff[15] = cmd;
+                        iubsBuff[16] = opc;
+                        iubsBuff[17] = dat;
                         
                         aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
                         //dbgMeta(msb2lsb(&ptmetaout->FUNC_BITS), ptmetaout);
@@ -62301,6 +62323,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         opc = 0x04;
                         dat = 0x85;
 
+                        iubs->opinfo = opc << 8 | dat;
+                        memcpy(iubsBuff, cbw, 31);
+                        iubsBuff[15] = cmd;
+                        iubsBuff[16] = opc;
+                        iubsBuff[17] = dat;
+                        
                         endf = 0;
                         endm = 0;
 
@@ -62476,6 +62504,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         cmd = 0x12;
                         opc = 0x09;
                         dat = 0x85;
+                        
+                        iubs->opinfo = opc << 8 | dat;
+                        memcpy(iubsBuff, cbw, 31);
+                        iubsBuff[15] = cmd;
+                        iubsBuff[16] = opc;
+                        iubsBuff[17] = dat;
                         
                         endf = 0;
                         endm = 0;
@@ -62665,6 +62699,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         opc = 0x09;
                         dat = 0x85;
                         
+                        iubs->opinfo = opc << 8 | dat;
+                        memcpy(iubsBuff, cbw, 31);
+                        iubsBuff[15] = cmd;
+                        iubsBuff[16] = opc;
+                        iubsBuff[17] = dat;
+                        
                         distCylcnt = 0;
                         uimCylcnt = 0;
                         datCylcnt = 0;
@@ -62692,6 +62732,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         cmd = 0x12;
                         opc = 0x05;
                         dat = 0x85;
+                        
+                        iubs->opinfo = opc << 8 | dat;
+                        memcpy(iubsBuff, cbw, 31);
+                        iubsBuff[15] = cmd;
+                        iubsBuff[16] = opc;
+                        iubsBuff[17] = dat;
                         
                         endf = 0;
                         endm = 0;
@@ -62934,6 +62980,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         opc = 0x0a;
                         dat = 0x85;
 
+                        iubs->opinfo = opc << 8 | dat;
+                        memcpy(iubsBuff, cbw, 31);
+                        iubsBuff[15] = cmd;
+                        iubsBuff[16] = opc;
+                        iubsBuff[17] = dat;
+                        
                         endf = 0;
                         endm = 0;
 
@@ -63177,6 +63229,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         cmd = 0x12;
                         opc = 0x0a;
                         dat = 0x85;
+                        
+                        iubs->opinfo = opc << 8 | dat;
+                        memcpy(iubsBuff, cbw, 31);
+                        iubsBuff[15] = cmd;
+                        iubsBuff[16] = opc;
+                        iubsBuff[17] = dat;
                         
                         distCylcnt = 0;
                         uimCylcnt = 0;
@@ -66291,7 +66349,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         fformat = 0;
                                     }
                                     
-                                    #if 1
+                                    #if GHP_EN
                                     if ((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) {
                                     //if (fformat == FILE_FORMAT_RAW) {
                                         bmpbuff = aspMemalloc(bmplen, 11);
@@ -66593,6 +66651,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             msync(pinfcur, sizeof(struct usbHostmem_s), MS_SYNC);
 
+                            #if GHP_EN
                             if (bmpbufc) {
                             
                                 bmpcpy = memcpy(bmpbufc, addrd, lens);
@@ -66606,6 +66665,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 cpylen += lens;
                                 bmpbufc = bmpcpy + lens;
                             }
+                            #endif
                             
                             upas = pinfcur->ushostpause;
                             ursm = pinfcur->ushostresume;
@@ -67168,7 +67228,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             #endif
                         }
 
-
+                        #if GHP_EN
                         if (bmpbufc) {
                             if (che == 'E') {
                             
@@ -67657,8 +67717,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             
                             sendsz = lens;                            
-                        }
-                        else {
+                        } else 
+                        #endif
+                        {
 
                             #if USB_RECVLEN_ZERO_HANDLE
                             if (lens == 0) {
