@@ -1330,14 +1330,18 @@ struct aspCropExtra_s{
     int crpexGrpLDLen;
     int crpexGrpRULen;
     int crpexGrpRDLen;
+    CFLOAT crpexGrpLUDist;
+    CFLOAT crpexGrpLDDist;
+    CFLOAT crpexGrpRUDist;
+    CFLOAT crpexGrpRDDist;
     CFLOAT crpexLinLU[3];
     CFLOAT crpexLinLD[3];
     CFLOAT crpexLinRU[3];
     CFLOAT crpexLinRD[3];
-    int crpexLinLUDiv;
-    int crpexLinLDDiv;
-    int crpexLinRUDiv;
-    int crpexLinRDDiv;
+    CFLOAT crpexLinLUDiv;
+    CFLOAT crpexLinLDDiv;
+    CFLOAT crpexLinRUDiv;
+    CFLOAT crpexLinRDDiv;
     CFLOAT crpCropUp[2];
     CFLOAT crpCropDn[2];
     CFLOAT crpCropLf[2];
@@ -1848,6 +1852,16 @@ static char **memory_init_vtable(char **pbuf, int tsize, int csize, uint32_t *tb
 static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf);
 static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen);
 static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin);
+
+static int qsort_comp(const void *a, const void *b) {
+    CFLOAT *pa = (CFLOAT *) a;
+    CFLOAT *pb = (CFLOAT *) b;
+    CFLOAT ia = *(pa + 1);
+    CFLOAT ib = *(pb + 1);
+    if (ia < ib) { return -1; }
+    else if (ia == ib) { return 0; }
+    else return 1;
+}
 
 #if GHP_EN
 static int tj_jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int *getH, int clrsp)
@@ -4709,6 +4723,36 @@ static int tiffDrawBox(char *img, int *cord, int *scale)
     return 0;
 }
 
+static CFLOAT getAngle(CFLOAT *pSrc, CFLOAT *p1, CFLOAT *p2)
+{
+    CFLOAT angle = 0.0f; // ����
+    
+    if ((p1[0] == p2[0]) && (p1[1] == p2[1])) return -1;
+    if ((p1[0] == pSrc[0]) && (p1[1] == pSrc[1])) return -1;
+    if ((p2[0] == pSrc[0]) && (p2[1] == pSrc[1])) return -1;
+    
+    CFLOAT va_x = p1[0] - pSrc[0];
+    CFLOAT va_y = p1[1] - pSrc[1];
+
+    CFLOAT vb_x = p2[0] - pSrc[0];
+    CFLOAT vb_y = p2[1] - pSrc[1];
+
+    CFLOAT productValue = (va_x * vb_x) + (va_y * vb_y);  
+    CFLOAT va_val = sqrt(va_x * va_x + va_y * va_y);  
+    CFLOAT vb_val = sqrt(vb_x * vb_x + vb_y * vb_y);  
+    CFLOAT cosValue = productValue / (va_val * vb_val);      
+
+    if(cosValue < -1 && cosValue > -2) {
+        cosValue = -1;
+    } else if (cosValue > 1 && cosValue < 2) {
+        cosValue = 1;
+    }
+
+    angle = acos(cosValue) * 180 / M_PI; 
+    
+    return angle;
+}
+
 inline int calcuRotateCoordFast(CFLOAT *out, CFLOAT *in) 
 {
     CFLOAT r=0;
@@ -4770,30 +4814,213 @@ static int calcuRotateCoordinates(int *outi, CFLOAT *out, CFLOAT *in, CFLOAT *an
     return 0;
 }
 
-static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt, int max) 
+static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf, CFLOAT *exrt, int ex_len) 
 {
-    CFLOAT ptn[40];
+    CFLOAT *ptn;
     CFLOAT lups[3];
     CFLOAT lrt[3];
     CFLOAT llf[3];
     CFLOAT ltop[3];
     CFLOAT lbtn[3];
-    int i, ret, p1, p2;;
-    int up=-1, dn=-1, rt=-1, lf=-1;
+    int i, ret, p1, p2, p3, skewflag;
+    CFLOAT up[2] = {-1,-1}, dn[2] = {-1,-1}, rt[2] = {-1,-1}, lf[2] = {-1,-1};
+    CFLOAT diff=0, angleLf, angleRt;
+    CFLOAT aRange = 1.0, rlRange = 25.0;
+    CFLOAT cs[4][2];
+    CFLOAT w, h, r, l, tmf1, tmf2;
     
     if (!pcrp36) return -1;
-    if (!idxLf) return -2;
-    if (!idxRt) return -3;
+    if (!exlf) return -2;
+    if (!exrt) return -3;
 
     if (max > 20) max = 20;
 
-    memcpy(ptn, pcrp36->crp36Pots, sizeof(CFLOAT) * 40);
+    //memcpy(ptn, pcrp36->crp36Pots, sizeof(CFLOAT) * 40);
+    ptn = pcrp36->crp36Pots;
     
 #if CROP_CALCU_PROCESS
     for (i=0; i < max; i++) {
         printf("[crp36] %d. %lf, %lf \n", i, ptn[i*2+0], ptn[i*2+1]);
     }
 #endif
+
+    p1 = 5;
+    up[0] = ptn[p1 * 2];
+    up[1] = ptn[p1 * 2 + 1];
+    
+    p1 = 2;
+    dn[0] = ptn[p1 * 2];
+    dn[1] = ptn[p1 * 2 + 1];
+
+    for (i = 1; i <= CROP_MAX_NUM_META; i++) {
+        if (up[1] > 0) {
+            if (up[1] > ptn[i * 2 + 1]) {
+                up[0] = ptn[i * 2];
+                up[1] = ptn[i * 2 + 1];
+            }
+        } else {
+            up[0] = ptn[i * 2];
+            up[1] = ptn[i * 2 + 1];
+        }
+
+        if (dn[1] > 0) {
+            if (dn[1] < ptn[i * 2 + 1]) {
+                dn[0] = ptn[i * 2];
+                dn[1] = ptn[i * 2 + 1];
+            }
+        } else {
+            dn[0] = ptn[i * 2];
+            dn[1] = ptn[i * 2 + 1];
+        }
+
+        if ((lf[0] > 0) && (i != 1) && (i != 6)) {
+            if (lf[0] > ptn[i * 2 + 0]) {
+                lf[0] = ptn[i * 2];
+                lf[1] = ptn[i * 2 + 1];
+            }
+        } else {
+            lf[0] = ptn[i * 2];
+            lf[1] = ptn[i * 2 + 1];
+        }
+
+        if ((rt[0] > 0) && (i != 4) && (i != 5)) {
+            if (rt[0] < ptn[i * 2 + 0]) {
+                rt[0] = ptn[i * 2];
+                rt[1] = ptn[i * 2 + 1];
+            }
+        } else {
+            rt[0] = ptn[i * 2];
+            rt[1] = ptn[i * 2 + 1];
+        }
+    }
+
+    for (int i = 0; i < ex_len; i++) {
+        if (lf[0] > exlf[i * 2]) {
+            lf[0] = exlf[i * 2];
+            lf[1] = exlf[i * 2 + 1];
+        }
+
+        if (rt[0] < exrt[i * 2]) {
+            rt[0] = exrt[i * 2];
+            rt[1] = exrt[i * 2 + 1];
+        }
+    }
+
+    w = rt[0] - lf[0];
+    h = dn[1] - up[1];
+    p1 = 5;
+    p2 = 6;
+    diff = ptn[p1*2] - ptn[p2*2];
+    if (diff < (w / 2)) {
+        tmf1 = rt[0] - ptn[p2*2];
+        tmf2 = ptn[p1*2] - lf[0];
+        if (tmf1 == tmf2) {
+            skewflag = 0;
+        } else if (tmf1 > tmf2) {
+            skewflag = 1;
+        } else {
+            skewflag = 2;
+        }
+    } else {
+        p1 = 2;
+        p2 = 3;
+        diff = ptn[p1*2] - ptn[p2*2];
+        tmf1 = rt[0] - ptn[p2*2];
+        tmf2 = ptn[p1*2] - lf[0];
+
+        if (diff < (w / 2)) {
+            if (tmf1 == tmf2) {
+                skewflag = 0;
+            } else if (tmf1 > tmf2) {
+                skewflag = 2;
+            } else {
+                skewflag = 1;
+            }
+        } else {
+            if (tmf1 == tmf2) {
+                skewflag = 1;
+            } else if (tmf1 < tmf2) {
+                skewflag = 1;
+            } else {
+                skewflag = 2;
+            }
+        }
+    }
+
+    if (skewflag) {
+        r = rt[0] - rlRange;
+        l = lf[0] + rlRange;
+        for (int i = 0; i < ex_len; i++) {
+            //__android_log_print(ANDROID_LOG_VERBOSE, "calculate", "sflag: %d, %d - rt: (%.2lf, %.2lf) lf: (%.2lf, %.2lf) r:%.2lf, l:%.2lf  (%.2lf, %.2lf) (%.2lf, %.2lf)\n"
+            //, skewflag, i, exrt[i * 2], exrt[i * 2+1], exlf[i * 2], exlf[i * 2+1], r, l, rt[0], rt[1], lf[0], lf[1]);
+            if (skewflag == 1) { //rt up, lf dn
+                if (r <= exrt[i * 2]) {
+                    rt[0] = exrt[i * 2];
+                    rt[1] = exrt[i * 2 + 1];
+
+                    r = rt[0] + 1.0;
+                }
+
+                if (l >= exlf[i * 2]) {
+                    lf[0] = exlf[i * 2];
+                    lf[1] = exlf[i * 2 + 1];
+                }
+
+            } else {  // rt dn lf up
+                if (r <= exrt[i * 2]) {
+                    rt[0] = exrt[i * 2];
+                    rt[1] = exrt[i * 2 + 1];
+                }
+
+                if (l >= exlf[i * 2]) {
+                    lf[0] = exlf[i * 2];
+                    lf[1] = exlf[i * 2 + 1];
+
+                    l = lf[0] - 1.0;
+                }
+            }
+        }
+    }
+
+    p1 = 1;
+    p2 = 2;
+    p3 = 6;
+    angleLf = getAngle(&ptn[p1 * 2], &ptn[p2 * 2], &ptn[p3 * 2]);
+
+    p1 = 4;
+    p2 = 3;
+    p3 = 5;
+    angleRt = getAngle(&ptn[p1 * 2], &ptn[p2 * 2], &ptn[p3 * 2]);
+
+    p1 = 1;
+    if ((angleLf < (90.0 + aRange)) && (angleLf > (90.0 - aRange))) {
+        if (ptn[p1 * 2] < lf[0]) {
+            diff = lf[0] - ptn[p1 * 2];
+
+            if (diff > 1.0) {
+                lf[0] = ptn[p1 * 2];
+                lf[1] = ptn[p1 * 2 + 1];
+            }
+        }
+    } else {
+        ptn[p1 * 2] = lf[0];
+        ptn[p1 * 2 + 1] = lf[1];
+    }
+
+    p1 = 4;
+    if ((angleRt < (90.0 + aRange)) && (angleRt > (90.0 - aRange))) {
+        if (ptn[p1 * 2] > rt[0]) {
+            diff = ptn[p1 * 2] - rt[0];
+
+            if (diff > 1.0) {
+                rt[0] = ptn[p1 * 2];
+                rt[1] = ptn[p1 * 2 + 1];
+            }
+        }
+    } else {
+        ptn[p1 * 2] = rt[0];
+        ptn[p1 * 2 + 1] = rt[1];
+    }
 
     p1 = 0; 
     p2 = CROP_MAX_NUM_META+1;
@@ -4803,34 +5030,28 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt
         return -4;
     }        
 
-    p1 = 5; 
-    p2 = 6;
-    ret = getVectorFromP(ltop, &ptn[p1*2], &ptn[p2*2]);
-    if (ret != 0) {
-        printf("[crp36] Error!!!!get top line failed!!!");
-        return -5;
-    }
-
-    p1 = 2;
-    p2 = 3;
-    ret = getVectorFromP(lbtn, &ptn[p1*2], &ptn[p2*2]);
-    if (ret != 0) {
-        printf("[crp36] Error!!!!get botton line failed!!!");
-        return -6;
-    }
-
-    p1 = 1;
-    ret = getRectVectorFromV(llf, &ptn[p1*2], lbtn);
+    ret = getRectVectorFromV(llf, lf, lups);
     if (ret != 0) {
         printf("[crp36] Error!!!!get left line failed!!!");
         return -7;
     }
 
-    p1 = 4;
-    ret = getRectVectorFromV(lrt, &ptn[p1*2], lbtn);
+    ret = getRectVectorFromV(lrt, rt, lups);
     if (ret != 0) {
         printf("[crp36] Error!!!!get right line failed!!!");
         return -8;
+    }
+
+    ret = getRectVectorFromV(ltop, up, lrt);
+    if (ret != 0) {
+        printf("[crp36] Error!!!!get top line failed!!!");
+        return -7;
+    }
+
+    ret = getRectVectorFromV(lbtn, dn, lrt);
+    if (ret != 0) {
+        printf("[crp36] Error!!!!get botton line failed!!!");
+        return -7;
     }
 
     memcpy(pcrp36->crp36LineUpbnd, lups, sizeof(CFLOAT) * 3);
@@ -4838,82 +5059,27 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int *idxLf, int *idxRt
     memcpy(pcrp36->crp36LineBotn, lbtn, sizeof(CFLOAT) * 3);
     memcpy(pcrp36->crp36LineLeft, llf, sizeof(CFLOAT) * 3);
     memcpy(pcrp36->crp36LineRight, lrt, sizeof(CFLOAT) * 3);
-
-    for (i = 1; i <= CROP_MAX_NUM_META; i++) {
-        if (up >= 0) {
-            if (up > ptn[i*2+1]) {
-                up = ptn[i*2+1];
-            }
-        } else {
-            up = ptn[i*2+1];
-        }
-
-        if (dn >= 0) {
-            if (dn < ptn[i*2+1]) {
-                dn = ptn[i*2+1];
-            }               
-        } else {
-            dn = ptn[i*2+1];;
-        }
-
-        if (lf >= 0) {
-            if (lf > ptn[i*2+0]) {
-                lf = ptn[i*2+0];
-            }
-        } else {
-            lf = ptn[i*2+0];
-        }
-
-        if (rt >= 0) {
-            if (rt < ptn[i*2+0]) {
-                rt = ptn[i*2+0];
-            }               
-        } else {
-            rt = ptn[i*2+0];
-        }
-    }
-
-    pcrp36->crp36Up = up;
-    pcrp36->crp36Dn = dn;
-    pcrp36->crp36Rt= rt;
-    pcrp36->crp36Lf = lf;
+    
+    pcrp36->crp36Up = (int)up[1];
+    pcrp36->crp36Dn = (int)dn[1];
+    pcrp36->crp36Rt = (int)rt[0];
+    pcrp36->crp36Lf = (int)lf[0];
+    
 #if CROP_CALCU_PROCESS
-    printf("[crp36] up = %d, dn = %d , lf = %d, rt = %d \n", up, dn, lf, rt);
+    printf("[crp36] up = %d, dn = %d , lf = %d, rt = %d \n", pcrp36->crp36Up, pcrp36->crp36Dn, pcrp36->crp36Lf, pcrp36->crp36Rt);
 #endif
+
+    getCross(lbtn, llf, cs[0]);
+    getCross(lbtn, lrt, cs[1]);
+    getCross(ltop, lrt, cs[2]);
+    getCross(ltop, llf, cs[3]);
+
+#if CROP_CALCU_PROCESS
+    printf("[crp36] cs0 = (%f, %f), cs1 = (%f, %f), cs2 = (%f, %f), cs3 = (%f, %f) \n", cs[0][0], cs[0][1], cs[1][0], cs[1][1], cs[2][0], cs[2][1], cs[3][0], cs[3][1]);
+#endif
+
     return 0;
 }
-
-static CFLOAT getAngle(CFLOAT *pSrc, CFLOAT *p1, CFLOAT *p2)
-{
-    CFLOAT angle = 0.0f; // ����
-    
-    if ((p1[0] == p2[0]) && (p1[1] == p2[1])) return -1;
-    if ((p1[0] == pSrc[0]) && (p1[1] == pSrc[1])) return -1;
-    if ((p2[0] == pSrc[0]) && (p2[1] == pSrc[1])) return -1;
-    
-    CFLOAT va_x = p1[0] - pSrc[0];
-    CFLOAT va_y = p1[1] - pSrc[1];
-
-    CFLOAT vb_x = p2[0] - pSrc[0];
-    CFLOAT vb_y = p2[1] - pSrc[1];
-
-    CFLOAT productValue = (va_x * vb_x) + (va_y * vb_y);  
-    CFLOAT va_val = sqrt(va_x * va_x + va_y * va_y);  
-    CFLOAT vb_val = sqrt(vb_x * vb_x + vb_y * vb_y);  
-    CFLOAT cosValue = productValue / (va_val * vb_val);      
-
-    if(cosValue < -1 && cosValue > -2) {
-        cosValue = -1;
-    } else if (cosValue > 1 && cosValue < 2) {
-        cosValue = 1;
-    }
-
-    angle = acos(cosValue) * 180 / M_PI; 
-    
-    return angle;
-}
-
-
 
 static int getParallelVectorFromV(CFLOAT *vec, CFLOAT *p, CFLOAT *vecIn)
 {
@@ -5358,10 +5524,12 @@ static int calcuGroupLine(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpLen, i
 #endif
 
     div[0] = minDist;
-    
+
+    #if 0
     if (minDist > (1.333  * (CFLOAT) len)) {
         return (0 - (int)round(minDist));
     }
+    #endif
 
     head = avList[minIdx*2+0];
     tail = avList[minIdx*2+1];
@@ -6482,12 +6650,12 @@ static int cpyPGrp(int start, int len, CFLOAT *grp, CFLOAT **cpgp, int max)
 
 static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int midx) 
 {
-#define CROP_POINT_DIST  (16.0)	
-#define CROP_LINE_DIST  (30.0)
+
 #define MUL_DIST_TOLT   (4.0)
-#define CROP_LINE_MIN (600.0)
-#define CROP_LINE_NUM (3)
-#define GROUP_LINE_LIMIT (1.0)
+#define CROP_LINE_MIN_F (60.0)//(600.0)
+#define CROP_LINE_MIN_W (200.0)//(600.0)
+#define CROP_LINE_NUM (2)
+#define GROUP_LINE_LIMIT (3.0)
     int i = 0, tot = 0, ret = 0, head = 0, glen = 0, id = 0, aln=0, rid=0, sid=0;
     int cntLf=0, cntRt=0, contL=0, contR=0;
     int allpos[16] = {0};
@@ -6502,13 +6670,23 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
     CFLOAT *cgrp;
     CFLOAT pc0[2], pc1[2], pc2[2];
     CFLOAT distP2P = 0, distP2Bef = 0;
+    CFLOAT lineMin=0, wmin=0;
     int absLsize = cntLf / 2;
     int absRsize = cntRt / 2;
     int thrd=0, sms=0, minpt=0;
 
     if (!pcp36) return -1;
     if (!pcpex) return -2;
-    
+
+    lineMin = (double)(pcp36->crp36Dn - pcp36->crp36Up);
+    lineMin = lineMin / CROP_LINE_MIN_F;
+
+    wmin = (double)(pcp36->crp36Rt - pcp36->crp36Lf);
+    wmin = wmin / CROP_LINE_MIN_F;
+
+#define CROP_LINE_DIST  (wmin)
+#define CROP_POINT_DIST  (wmin / 2.0)
+
     ptLf = pcpex->crpexLfPots;
     ptRt = pcpex->crpexRtPots;
 #if LOG_CROP_FINDBASELINE
@@ -6748,7 +6926,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
             minpt = CROP_LINE_NUM * 6;
         }
 
-        if ((distP2P > CROP_LINE_MIN) &&
+        if ((distP2P > lineMin) &&
             ((pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]) > minpt)) {
 
 #if LOG_CROP_FINDBASELINE
@@ -6778,7 +6956,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
 #endif
             }
 
-            if ((dist < 0) || (dist > (CROP_LINE_DIST / 2))) {
+            if ((dist < 0) || (dist > (CROP_LINE_DIST))) {
                 pcpex->crpexLfAbs[i * 2 + 0] = -1;
                 pcpex->crpexLfAbs[i * 2 + 1] = -1;
             }
@@ -6798,7 +6976,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
 
     }
 
-    pcpex->crpexLfAbsCut = contL;
+    //pcpex->crpexLfAbsCut = contL;
 
     pc0[0] = -1;
     pc0[1] = -1;
@@ -6823,7 +7001,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
             minpt = CROP_LINE_NUM * 6;
         }
 
-        if ((distP2P > CROP_LINE_MIN) &&
+        if ((distP2P > lineMin) &&
             ((pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]) > minpt)) {
 
 #if LOG_CROP_FINDBASELINE
@@ -6851,7 +7029,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
 #endif
             }
 
-            if ((dist < 0) || (dist > (CROP_LINE_DIST / 2))) {
+            if ((dist < 0) || (dist > (CROP_LINE_DIST))) {
                 pcpex->crpexRtAbs[i * 2 + 0] = -1;
                 pcpex->crpexRtAbs[i * 2 + 1] = -1;
             }
@@ -6869,7 +7047,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
         }
 
     }
-   pcpex->crpexRtAbsCut = contR;
+   //pcpex->crpexRtAbsCut = contR;
 
 #if LOG_CROP_FINDBASELINE
     printf("[find] absLf cut : %d, absRt cut: %d \n", contL,
@@ -6940,6 +7118,8 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
             if (allpos[id] < 0) continue;
             for (i = 0; i < aln; i++) {
                 if (i == id) continue;
+                if (allpos[i] < 0) continue;
+                
                 rid = allpos[i];
                 sid = allpos[id];
 
@@ -6963,11 +7143,62 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
                     pcpex->crpexLfAbs[rid*2 +0] = -1;
                     pcpex->crpexLfAbs[rid*2 +1] = -1;
 
+                    allnum[id] += allnum[i];
+
                     allpos[i] = -1;
                 }
             }
         }
 
+        for (id = 0; id < aln; id++) {
+            if (allpos[id] < 0) continue;
+            for (i = 0; i < aln; i++) {
+                if (i == id) continue;
+                if (allpos[id] < 0) continue;
+                if (allpos[i] < 0) continue;
+                
+                rid = allpos[i];
+                sid = allpos[id];
+				
+                #if LOG_CROP_FINDBASELINE
+                printf("cover Lf %d.%d. num: %d : %d, (%d, %d) (%d, %d) \n", id, i, allnum[id], allnum[i],
+                            pcpex->crpexLfAbs[sid*2 +0], pcpex->crpexLfAbs[sid*2 +1], pcpex->crpexLfAbs[rid*2 +0], pcpex->crpexLfAbs[rid*2 +1]);
+                #endif
+
+                if (pcpex->crpexLfAbs[sid*2 +0] < pcpex->crpexLfAbs[rid*2 +0]) {
+                    if (pcpex->crpexLfAbs[sid*2 +1] > pcpex->crpexLfAbs[rid*2 +1]) {
+                        pcpex->crpexLfAbs[rid*2 +0] = -1;
+                        pcpex->crpexLfAbs[rid*2 +1] = -1;
+                        allpos[i] = -1;
+                    }
+                }				
+                
+                if (pcpex->crpexLfAbs[sid*2 +0] < pcpex->crpexLfAbs[rid*2 +0]) {
+                    if (pcpex->crpexLfAbs[sid*2 +1] > pcpex->crpexLfAbs[rid*2 +0]) {
+                        if (allnum[id] > allnum[i]) {
+                            pcpex->crpexLfAbs[rid*2 +0] = -1;
+                            pcpex->crpexLfAbs[rid*2 +1] = -1;
+                            allpos[i] = -1;
+                        } else if (allnum[id] == allnum[i]) {
+                            if (alldist[id] > alldist[i]) {
+                                pcpex->crpexLfAbs[rid*2 +0] = -1;
+                                pcpex->crpexLfAbs[rid*2 +1] = -1;
+                                allpos[i] = -1;
+                            } else {
+                                pcpex->crpexLfAbs[sid*2 +0] = -1;
+                                pcpex->crpexLfAbs[sid*2 +1] = -1;
+                                allpos[id] = -1;
+                            }
+                        } else {
+                            pcpex->crpexLfAbs[sid*2 +0] = -1;
+                            pcpex->crpexLfAbs[sid*2 +1] = -1;
+                            allpos[id] = -1;
+                        }
+                    }
+                }		
+            }
+        }
+        
         contL = 0;
         for (i = 0; i < absLsize; i++) {
             id = pcpex->crpexLfAbs[i * 2 + 0];
@@ -6990,7 +7221,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
 
             contL += 1;
         }	
-        pcpex->crpexLfAbsCut = contL;
+        //pcpex->crpexLfAbsCut = contL;
     }
 
     if (contR > 1) {
@@ -7035,8 +7266,11 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
             if (allpos[id] < 0) continue;
             for (i = 0; i < aln; i++) {
                 if (i == id) continue;
+                if (allpos[i] < 0) continue;
+                
                 rid = allpos[i];
                 sid = allpos[id];
+                
                 dist = calcuLineGroupDist(allgrp[i], &allverTr[id][0], allnum[i]);
 				
                 #if LOG_CROP_FINDBASELINE
@@ -7056,11 +7290,65 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
 
                     pcpex->crpexRtAbs[rid*2 +0] = -1;
                     pcpex->crpexRtAbs[rid*2 +1] = -1;
+
+                    allnum[id] += allnum[i];
+                    
                     allpos[i] = -1;
                 }
             }
         }
 
+        for (id = 0; id < aln; id++) {
+            if (allpos[id] < 0) continue;
+            for (i = 0; i < aln; i++) {
+                if (i == id) continue;
+                if (allpos[id] < 0) continue;
+                if (allpos[i] < 0) continue;
+                
+                rid = allpos[i];
+                sid = allpos[id];
+				
+                #if LOG_CROP_FINDBASELINE
+                printf("cover Rt %d.%d. num: %d : %d, (%d, %d) (%d, %d) \n", id, i, allnum[id], allnum[i],
+                            pcpex->crpexRtAbs[sid*2 +0], pcpex->crpexRtAbs[sid*2 +1], pcpex->crpexRtAbs[rid*2 +0], pcpex->crpexRtAbs[rid*2 +1]);
+                #endif
+
+                if (pcpex->crpexRtAbs[sid*2 +0] < pcpex->crpexRtAbs[rid*2 +0]) {
+                    if (pcpex->crpexRtAbs[sid*2 +1] > pcpex->crpexRtAbs[rid*2 +1]) {
+                        pcpex->crpexRtAbs[rid*2 +0] = -1;
+                        pcpex->crpexRtAbs[rid*2 +1] = -1;
+                        allpos[i] = -1;
+                    }
+                }				
+
+                if (pcpex->crpexRtAbs[sid*2 +0] < pcpex->crpexRtAbs[rid*2 +0]) {
+                    if (pcpex->crpexRtAbs[sid*2 +1] > pcpex->crpexRtAbs[rid*2 +0]) {
+                        if (allnum[id] > allnum[i]) {
+                            pcpex->crpexRtAbs[rid*2 +0] = -1;
+                            pcpex->crpexRtAbs[rid*2 +1] = -1;
+                            allpos[i] = -1;
+                        } else if (allnum[id] == allnum[i]) {
+                            if (alldist[id] > alldist[i]) {
+                                pcpex->crpexRtAbs[rid*2 +0] = -1;
+                                pcpex->crpexRtAbs[rid*2 +1] = -1;
+                                allpos[i] = -1;
+                            } else {
+                                pcpex->crpexRtAbs[sid*2 +0] = -1;
+                                pcpex->crpexRtAbs[sid*2 +1] = -1;
+                                allpos[id] = -1;
+                            }
+                        } else {
+                            pcpex->crpexRtAbs[sid*2 +0] = -1;
+                            pcpex->crpexRtAbs[sid*2 +1] = -1;
+                            allpos[id] = -1;
+                        }
+                    }
+                }		
+
+                
+            }
+        }
+        
         contR = 0;
         for (i = 0; i < absRsize; i++) {
             id = pcpex->crpexRtAbs[i * 2 + 0];
@@ -7083,9 +7371,18 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
 
             contR += 1;
         }	
-        pcpex->crpexRtAbsCut = contR;
+        //pcpex->crpexRtAbsCut = contR;
+        
     }
-	
+    
+    #if LOG_CROP_FINDBASELINE
+    printf("calculate", "abscut Lf: %d rt: %d used: %d tmpcut lf: %d rt: %d\n"
+    , pcpex->crpexLfAbsCut, pcpex->crpexRtAbsCut, pcpex->crpexLfAbsUsed, contL, contR);
+    #endif
+
+    pcpex->crpexRtAbsCut = contR;
+    pcpex->crpexLfAbsCut = contL;
+    
     return 0;
 }
 
@@ -8380,10 +8677,10 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
     memset(pcpex->crpexLinRU, 0, sizeof(CFLOAT)*3);
     memset(pcpex->crpexLinRD, 0, sizeof(CFLOAT)*3);
 
-    pcpex->crpexLinLUDiv = 9999;
-    pcpex->crpexLinLDDiv = 9999;
-    pcpex->crpexLinRUDiv = 9999;
-    pcpex->crpexLinRDDiv = 9999;
+    pcpex->crpexLinLUDiv = 9999.0;
+    pcpex->crpexLinLDDiv = 9999.0;
+    pcpex->crpexLinRUDiv = 9999.0;
+    pcpex->crpexLinRDDiv = 9999.0;
 
     pcpex->crpexGrpLUpt = 0;
     pcpex->crpexGrpLDpt = 0;
@@ -8408,12 +8705,13 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
         ret = calcuGroupLine(pGrp, vecLU, &divLU, szlu, midx);
         if (ret == 0) {
             memcpy(pcpex->crpexLinLU, vecLU, sizeof(CFLOAT)*3);
-            pcpex->crpexLinLUDiv = (int) round(divLU);
+            pcpex->crpexLinLUDiv = divLU;
             pcpex->crpexGrpLUpt = pGrp;
             pcpex->crpexGrpLUStr = lfStrUp;
             pcpex->crpexGrpLULen = szlu;
+            pcpex->crpexGrpLUDist = calcuDistance(pGrp, pGrp+(szlu-1)*2);
         } else {
-            pcpex->crpexLinLUDiv = (int) abs(ret);
+            pcpex->crpexLinLUDiv = abs(ret);
 #if LOG_CROP_CALCULINE
             printf("(LU) ret (%d), divLU (%lf)\n", ret, divLU); 
 #endif
@@ -8428,12 +8726,13 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
         ret = calcuGroupLine(pGrp, vecLD, &divLD, szld, midx);
         if (ret == 0) {
             memcpy(pcpex->crpexLinLD, vecLD, sizeof(CFLOAT)*3);
-            pcpex->crpexLinLDDiv = (int) round(divLD);
+            pcpex->crpexLinLDDiv = divLD;
             pcpex->crpexGrpLDpt = pGrp;
             pcpex->crpexGrpLDStr = lfStrDn;
             pcpex->crpexGrpLDLen = szld;
+            pcpex->crpexGrpLDDist = calcuDistance(pGrp, pGrp+(szld-1)*2);
         } else {
-            pcpex->crpexLinLDDiv = (int) abs(ret);
+            pcpex->crpexLinLDDiv = abs(ret);
 #if LOG_CROP_CALCULINE
             printf("(LD) ret (%d), divLD (%lf)\n", ret, divLD);
 #endif
@@ -8448,12 +8747,13 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
         ret = calcuGroupLine(pGrp, vecRU, &divRU, szru, midx);
         if (ret == 0) {
             memcpy(pcpex->crpexLinRU, vecRU, sizeof(CFLOAT)*3);
-            pcpex->crpexLinRUDiv = (int) round(divRU);
+            pcpex->crpexLinRUDiv = divRU;
             pcpex->crpexGrpRUpt = pGrp;
             pcpex->crpexGrpRUStr = rtStrUp;
             pcpex->crpexGrpRULen = szru;
+            pcpex->crpexGrpRUDist = calcuDistance(pGrp, pGrp+(szru-1)*2);
         } else {
-            pcpex->crpexLinRUDiv = (int) abs(ret);
+            pcpex->crpexLinRUDiv = abs(ret);
 #if LOG_CROP_CALCULINE
             printf("(RU) ret (%d), divRU (%lf)\n", ret, divRU);
 #endif
@@ -8468,12 +8768,13 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
         ret = calcuGroupLine(pGrp, vecRD, &divRD, szrd, midx);
         if (ret == 0) {
             memcpy(pcpex->crpexLinRD, vecRD, sizeof(CFLOAT)*3);
-            pcpex->crpexLinRDDiv = (int) round(divRD);
+            pcpex->crpexLinRDDiv = divRD;
             pcpex->crpexGrpRDpt = pGrp;
             pcpex->crpexGrpRDStr = rtStrDn;
             pcpex->crpexGrpRDLen = szrd;
+            pcpex->crpexGrpRDDist = calcuDistance(pGrp, pGrp+(szrd-1)*2);
         } else {
-            pcpex->crpexLinRDDiv = (int) abs(ret);
+            pcpex->crpexLinRDDiv = abs(ret);
 #if LOG_CROP_CALCULINE
             printf("(RD) ret (%d), divRD (%lf)\n",  ret, divRD);
 #endif
@@ -8752,8 +9053,9 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
     int gpLUlen, gpLDlen, gpRUlen, gpRDlen;
     int gpLUstr, gpLDstr, gpRUstr, gpRDstr;
     int ret, i=0;
-    CFLOAT high=0.0, width=0.0, acptOff_h=0.0, acptOff_v=0.0, acpFn_h=0.0, acpFn_v=0.0;
+    CFLOAT high=0.0, width=0.0, acptOff_h=0.0, acptOff_v=0.0, acpFn_h=10.0, acpFn_v=10.0;
     CFLOAT ttline[3], bbline[3], llline[3], rrline[3];
+    CFLOAT dlu, dru, dld, drd;
     
     high = pcp36->crp36Dn - pcp36->crp36Up;
     width = pcp36->crp36Rt - pcp36->crp36Lf;
@@ -8789,6 +9091,11 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
     gpRUlen = (CFLOAT) pcpex->crpexGrpRULen;
     gpRDlen = (CFLOAT) pcpex->crpexGrpRDLen;
 
+    dlu = pcpex->crpexGrpLUDist;
+    dld = pcpex->crpexGrpLDDist;
+    dru = pcpex->crpexGrpRUDist;
+    drd = pcpex->crpexGrpRDDist;
+    
     gpLUstr = pcpex->crpexGrpLUStr;
     gpLDstr = pcpex->crpexGrpLDStr;
     gpRUstr = pcpex->crpexGrpRUStr;
@@ -8799,10 +9106,10 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
     vRUDiv = pcpex->crpexLinRUDiv;
     vRDDiv = pcpex->crpexLinRDDiv;
 #if LOG_CROP_FINDLINE
-    printf("line LU str:%d len:%d div:%lf \n", gpLUstr, gpLUlen, vLUDiv);
-    printf("line LD str:%d len:%d div:%lf \n", gpLDstr, gpLDlen, vLDDiv);
-    printf("line RU str:%d len:%d div:%lf \n", gpRUstr, gpRUlen, vRUDiv);
-    printf("line RD str:%d len:%d div:%lf \n", gpRDstr, gpRDlen, vRDDiv);
+    printf("line LU str:%d len:%d div:%lf d:%.2f\n", gpLUstr, gpLUlen, vLUDiv, dlu);
+    printf("line LD str:%d len:%d div:%lf d:%.2f\n", gpLDstr, gpLDlen, vLDDiv, dld);
+    printf("line RU str:%d len:%d div:%lf d:%.2f\n", gpRUstr, gpRUlen, vRUDiv, dru);
+    printf("line RD str:%d len:%d div:%lf d:%.2f\n", gpRDstr, gpRDlen, vRDDiv, drd);
 #endif
 /*
     if (gpLUlen > 0)
@@ -8946,17 +9253,24 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
     }
         
     CFLOAT maxDiv = 10 / 5.0 ;
+    #if 1
+    CFLOAT divGpLU = ((dlu  * 9.0) + (gpLUlen * 8 / vLUDiv) * 9.0) / 18.0;
+    CFLOAT divGpLD = ((dld  * 9.0) + (gpLDlen * 8 / vLDDiv) * 9.0) / 18.0;
+    CFLOAT divGpRU = ((dru * 9.0) + (gpRUlen * 8 / vRUDiv) * 9.0) / 18.0;
+    CFLOAT divGpRD = ((drd * 9.0) + (gpRDlen * 8 / vRDDiv) * 9.0) / 18.0;
+    #else
     CFLOAT divGpLU= gpLUlen / vLUDiv;
     CFLOAT divGpLD= gpLDlen / vLDDiv;
     CFLOAT divGpRU= gpRUlen / vRUDiv;
     CFLOAT divGpRD= gpRDlen / vRDDiv;
+    #endif
     
 #if LOG_CROP_FINDLINE
-    printf("compare div LU:%lf(%d/%lf), LD:%lf(%d/%lf), RU:%lf(%d/%lf), RD:%lf(%d/%lf) \n", 
-            divGpLU, gpLUlen, vLUDiv, 
-            divGpLD, gpLDlen, vLDDiv, 
-            divGpRU, gpRUlen, vRUDiv, 
-            divGpRD, gpRDlen, vRDDiv);
+    printf("compare div LU:%lf(%d/%lf) - %.2f, LD:%lf(%d/%lf) - %.2f, RU:%lf(%d/%lf) - %.2f, RD:%lf(%d/%lf) - %.2f \n", 
+            divGpLU, gpLUlen, vLUDiv, dlu,
+            divGpLD, gpLDlen, vLDDiv, dld, 
+            divGpRU, gpRUlen, vRUDiv, dru, 
+            divGpRD, gpRDlen, vRDDiv, drd);
 #endif
 
     maxDiv = aspMax(divGpLU, maxDiv);
@@ -9567,6 +9881,130 @@ static int topPositive(struct aspCropExtra_s *pcpex)
     return 0;
 }
 
+static int doCropCalcuPt(struct aspDoCropCalcu *crpdo, struct aspMetaDataviaUSB_s *pscanInfo, char *indat, int maxs, struct procRes_s *rs, int midx) 
+{
+    struct intMbs_s *pt=0;
+    struct aspCropExtra_s *pextra=0;
+    struct aspCrop36_s *ppt36 = 0;
+    char *ptext=0, *pch=0;
+    unsigned short *shtbuf=0;
+
+    int adpi=0, len=0, val=0;
+    int gap=0, cy=0, lnrec=0, lnlength=0, masUsed=0, masRecd=0;
+    int ix=0, cxm=0, cxn=0, ipx=0;
+
+    if ((!crpdo) || (!pscanInfo) || (!indat)) {
+        return -2;
+    }
+
+    pextra = crpdo->acrpex;
+    ppt36 = crpdo->acrp36;
+
+    if ((!ppt36) || (!pextra)) {
+        return -3;
+    }
+    
+    adpi = crpdo->acrpDPI;
+        
+    if ((indat) && (pscanInfo)) {
+        val = (int)pscanInfo->MPIONT_LEN;
+    
+        if (val > maxs) {
+            sprintf_f(rs->logs, "Error!!! MPIONT_LEN: %d not match max len: %d \n", val, maxs); 
+            print_f(rs->plogs, "DoC", rs->logs);
+            
+            return -4;
+        }
+
+        ptext = indat;
+    }
+    
+    if (pscanInfo) {       
+        
+        gap = pscanInfo->YLine_Gap;
+        cy = pscanInfo->Start_YLine_No;
+        len = (int)pscanInfo->MPIONT_LEN;
+        
+        pch = (char *)&(pscanInfo->YLines_Recorded);
+        val = pch[0] << 8 | pch[1];
+        lnrec = val;
+        
+        pch = &pscanInfo->EXTRA_POINT[2];
+        val = pch[0] << 8 | pch[1];
+        lnlength = val;
+
+        sprintf_f(rs->logs, "mass len: %d expect len: %d \n", val, len-4); 
+        print_f(rs->plogs, "DoC", rs->logs);
+
+        if (val != (len - 4)) {
+            sprintf_f(rs->logs, "Error!!! mass len: %d not match expect len: %d \n", val, len); 
+            print_f(rs->plogs, "DoC", rs->logs);
+            return -5;
+        }
+
+        if (len <= 4) {
+            sprintf_f(rs->logs, "skip extra point calculation len: %d \n", len); 
+            print_f(rs->plogs, "DoC", rs->logs);
+            return -6;
+        }
+        
+        masUsed = lnlength;
+        masRecd = lnrec;
+        
+        sprintf_f(rs->logs, "meta masspt info (used:%d, start:%d lineRec:%d gap:%d)\n", masUsed, cy, masRecd, gap); 
+        print_f(rs->plogs, "DoC", rs->logs);
+        
+        msync(ptext, masUsed, MS_SYNC);
+        shtbuf = (unsigned short *)ptext;
+
+    }
+
+    if (masRecd) {
+        ipx=0;
+        
+        for (ix = 0; ix < masRecd; ix++) {
+        
+            cxm = (int)*shtbuf;
+            shtbuf++;
+            cxn = (int)*shtbuf;
+            shtbuf++;              
+        
+            if (adpi < 300) {
+                cxm = (cxm * adpi) / 300;
+                cxn = (cxn * adpi) / 300;
+            }
+            
+            pextra->crpexLfPots[ipx*2+0] = (CFLOAT)cxm;
+            pextra->crpexLfPots[ipx*2+1] = (CFLOAT)cy;
+        
+            pextra->crpexRtPots[ipx*2+0] = (CFLOAT)cxn;
+            pextra->crpexRtPots[ipx*2+1] = (CFLOAT)cy;
+        
+            ipx ++;
+            cy += gap;
+        }
+        
+        pextra->crpexSize = ipx*2;
+        
+        msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
+        
+        sprintf_f(rs->logs, "total extra points size: %d \n", ipx);
+        print_f(rs->plogs, "DoC", rs->logs);
+        
+        #if LOG_P6_CROP_EN
+        for (ix = 0; ix < ipx; ix++) {
+            sprintf_f(rs->logs, "unsort pt %d. L (%.1f, %.1f) R (%.1f, %.1f) \n", ix
+                                  , pextra->crpexLfPots[ix*2+0], pextra->crpexLfPots[ix*2+1], pextra->crpexRtPots[ix*2+0], pextra->crpexRtPots[ix*2+1]);
+            print_f(rs->plogs, "DoC", rs->logs);
+        }
+        #endif
+
+        return 0;
+    }
+
+    return -1;
+}
+
 static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, struct procRes_s *rs, int midx) 
 {
     int aidxL[] = {6, 7, 9, 11, 13, 15, 17, 2};
@@ -9631,7 +10069,7 @@ static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, st
     }
 
     /* first stage of cropping algorithm */            
-    ret = aspCrp36GetBoundry(ppt36, aidxL, aidxR, CROP_MAX_NUM_META+2);
+    ret = aspCrp36GetBoundry(ppt36, CROP_MAX_NUM_META+2, pextra->crpexLfPots, pextra->crpexRtPots, pextra->crpexSize/2);
     #if CROP_CALCU_PROCESS
     sprintf_f(rs->logs, "crop36 get boundry, ret = %d\n", ret);
     print_f(rs->plogs, "DoC", rs->logs);
@@ -9692,10 +10130,12 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
     struct aspCropExtra_s *pextra=0;
     struct aspCrop36_s *ppt36 = 0;
     char *ptext=0, *pch=0;
-    CFLOAT mostlft[2], mostrgt[2], lftgrp[10][2], rgtgrp[10][2], fhi=0.0, fwh=0.0, fwe=0.0;
-    CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
+    CFLOAT mostlft[2]={0}, mostrgt[2]={0}, lftgrp[10][2]={0}, rgtgrp[10][2]={0}, fhi=0.0, fwh=0.0, fwe=0.0;
+    CFLOAT rotlf[2]={0}, rotup[2]={0}, rotrt[2]={0}, rotdn[2]={0};
     unsigned short *shtbuf=0;
-
+    CFLOAT *org;
+    int messpair_pos=0, new_mass_len=0, ext_cnt_lf=0, ext_cnt_rt=0, i=0;
+        
     pextra = crpdo->acrpex;
     ppt36 = crpdo->acrp36;
 
@@ -9708,6 +10148,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
     }
 
     adpi = crpdo->acrpDPI;
+    org = &ppt36->crp36Pots[2];
         
     if (indat) {
         pscanInfo = (struct aspMetaDataviaUSB_s *)indat;
@@ -9724,156 +10165,83 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
     }
 
     if (pscanInfo) {
-        ipx = 0;
-        ipn = 6;
-        pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipn = 5;
-        pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        
-        ipx = 1;
-        ipn = 7;
-        pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipn = 8;
-        pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        
-        ipx = 2;
-        ipn = 9;
-        pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipn = 10;
-        pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        
-        cof = ipx + 1;
-        
-        ret = 0;
-        
-        lngap = pscanInfo->YLine_Gap;
-        lnstart = pscanInfo->Start_YLine_No;
-        
-        pch = (char *)&(pscanInfo->YLines_Recorded);
-        val = pch[0] << 8 | pch[1];
-        lnrec = val;
-        
-        len = (int)pscanInfo->MPIONT_LEN;
-        pch = &pscanInfo->EXTRA_POINT[2];
-        val = pch[0] << 8 | pch[1];
-        lnlength = val;
-        if (val != (len - 4)) {
-            sprintf_f(rs->logs, "Error!!! mass len: %d not match expect len: %d - 4\n", val, len); 
-            print_f(rs->plogs, "DoC", rs->logs);
-            return -2;
-        }
-
-        if (len <= 4) {
-            sprintf_f(rs->logs, "skip extra point calculation len: %d \n", len); 
-            print_f(rs->plogs, "DoC", rs->logs);
-            //return -3;
-        }
-        
-        masUsed = lnlength;
-        masStart = lnstart;
-        masRecd = lnrec;
-        
-        sprintf_f(rs->logs, "wait meta mass (used:%d, start:%d lineRec:%d gap:%d) %d\n", masUsed, masStart, masRecd, lngap, cnt); 
-        print_f(rs->plogs, "DoC", rs->logs);
-        
-        msync(ptext, masUsed, MS_SYNC);
-        shtbuf = (unsigned short *)ptext;
-        
-        cy = masStart;
-        gap = lngap;
-        
-        linecnt=0;
-        
-        for (ix = 0; ix < masRecd; ix++) {
-        
-            cxm = *shtbuf;
-            shtbuf++;
-            cxn = *shtbuf;
-            shtbuf++;              
-        
-            if (adpi < 300) {
-                cxm = (cxm * adpi) / 300;
-                cxn = (cxn * adpi) / 300;
-            }
-        
-            ipx = linecnt + cof;
-            
-            pextra->crpexLfPots[ipx*2+0] = cxm;
-            pextra->crpexLfPots[ipx*2+1] = cy;
-        
-            pextra->crpexRtPots[ipx*2+0] = cxn;
-            pextra->crpexRtPots[ipx*2+1] = cy;
-        
-            linecnt ++;
-            cy += gap;
-        }
-        
-        ipx = linecnt + cof;
-        cls =  masRecd + cof - 1;
-        
-        ipn = 11;
-        pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipn = 12;
-        pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipx += 1;
-        
-        ipn = 13;
-        pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipn = 14;
-        pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipx += 1;
-        
-        ipn = 15;
-        pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipn = 16;
-        pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipx += 1;
-        
-        ipn = 17;
-        pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipn = 18;
-        pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipx += 1;
-        
-        ipn = 2;
-        pextra->crpexLfPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexLfPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipn = 3;
-        pextra->crpexRtPots[ipx*2+0] = ppt36->crp36Pots[ipn*2+0];
-        pextra->crpexRtPots[ipx*2+1] = ppt36->crp36Pots[ipn*2+1];
-        ipx += 1;
-        
-        pextra->crpexSize = ipx*2;
-        
-        msync(pextra, sizeof(struct aspCropExtra_s), MS_SYNC);
-        
-        sprintf_f(rs->logs, "total extra points size: %d \n", ipx);
-        print_f(rs->plogs, "DoC", rs->logs);
+        messpair_pos = pextra->crpexSize;
         
         #if LOG_P6_CROP_EN
-        for (ix = 0; ix < ipx; ix++) {
-            sprintf_f(rs->logs, "unsort pt %d. L%.1lf, %.1lf R%.1lf, %.1lf \n", ix
-                                  , pextra->crpexLfPots[ix*2+0], pextra->crpexLfPots[ix*2+1], pextra->crpexRtPots[ix*2+0], pextra->crpexRtPots[ix*2+1]);
-            print_f(rs->plogs, "DoC", rs->logs);
+        sprintf_f(rs->logs, "messpair_pos = %d\n", messpair_pos);
+        print_f(rs->plogs, "DoC", rs->logs);
+        #endif
+        {
+    
+            if ((org[2] > ppt36->crp36Lf) && (org[4] < ppt36->crp36Rt)) {
+                #if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "org pos %d (%.2f, %.2f) to extra lf-%d \n", 2, org[2], org[3], ext_cnt_lf);
+                print_f(rs->plogs, "DoC", rs->logs);
+                #endif
+                pextra->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[2];
+                pextra->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[3];
+
+                #if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "org pos %d (%.2f, %.2f) to extra rt-%d \n", 4, org[4], org[5], ext_cnt_rt);
+                print_f(rs->plogs, "DoC", rs->logs);
+                #endif
+                pextra->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[4];
+                pextra->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[5];
+            }
+            if ((org[10] > ppt36->crp36Lf) && (org[8] < ppt36->crp36Rt)) {		
+                #if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "org pos %d (%.2f, %.2f) to extra lf-%d \n", 10, org[10], org[11], ext_cnt_lf);
+                print_f(rs->plogs, "DoC", rs->logs);
+                #endif
+                pextra->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[10];
+                pextra->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[11];
+            
+                #if LOG_P6_CROP_EN
+                sprintf_f(rs->logs, "org pos %d (%.2f, %.2f) to extra rf-%d \n", 8, org[8], org[9], ext_cnt_rt);
+                print_f(rs->plogs, "DoC", rs->logs);
+                #endif
+                pextra->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[8];
+                pextra->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[9];
+            }
+    
+            for (i = 3; i < CROP_MAX_NUM_META / 2; i++) {
+                if ((org[i * 4] > ppt36->crp36Lf) && (org[i * 4 + 2] < ppt36->crp36Rt)) {	
+                    #if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "org pos %d (%.2f, %.2f) to extra lf-%d \n", i*4, org[i*4], org[i*4+1], ext_cnt_lf);
+                    print_f(rs->plogs, "DoC", rs->logs);
+                    #endif
+                    pextra->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[i * 4];
+                    pextra->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[i * 4 + 1];
+                
+                    #if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "org pos %d (%.2f, %.2f) to extra rt-%d \n", i*4+2, org[i*4+2], org[i*4+3], ext_cnt_rt);
+                    print_f(rs->plogs, "DoC", rs->logs);
+                    #endif
+                    pextra->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[i * 4 + 2];
+                    pextra->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[i * 4 + 3];
+                }
+            }
         }
+        
+        new_mass_len = (messpair_pos + ext_cnt_lf) * 2;
+
+        #if LOG_P6_CROP_EN
+        sprintf_f(rs->logs, "after add new_mass_len = %d", new_mass_len);
+        print_f(rs->plogs, "DoC", rs->logs);
         #endif
         
-        aspSortD(pextra->crpexLfPots, ipx); /* max sort = 1024 */
-        aspSortD(pextra->crpexRtPots, ipx); /* max sort = 1024 */
+        qsort((void *) pextra->crpexLfPots, (new_mass_len / 4), sizeof(CFLOAT) * 2, qsort_comp);
+        qsort((void *) pextra->crpexRtPots, (new_mass_len / 4), sizeof(CFLOAT) * 2, qsort_comp);
+        
+        pextra->crpexSize = messpair_pos + ext_cnt_lf;
+
+        #if LOG_P6_CROP_EN
+        for (i=0; i < (pextra->crpexSize/2); i++) {
+            sprintf_f(rs->logs, "%d. qsort lf(%.2f, %.2f) rt(%.2f, %.2f) p%d\n", i, pextra->crpexLfPots[i*2], pextra->crpexLfPots[i*2+1], 
+            pextra->crpexRtPots[i*2], pextra->crpexRtPots[i*2+1], midx);
+            print_f(rs->plogs, "DoC", rs->logs);    
+        }
+        #endif
         
         ret = getRotateP1(ppt36, mostlft);
         if (!ret) {
@@ -43328,8 +43696,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                         pubffedt = pubffh;
                         while (pubffedt) {
+                        
+                            #if DBG_USB_GATE
                             sprintf_f(mrs->log, "    [CROP]  check 0x%.3x  get index: 0x%.3x \n", pubffedt->ubindex & 0x3ff, mindex);
                             print_f(&mrs->plog, "fs145", mrs->log);
+                            #endif
+                            
                             if ((pubffedt->ubindex & 0x3ff) == mindex) {
                                 break;
                             }
@@ -43385,8 +43757,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                         pubffedt = pubffh;
                         while (pubffedt) {
+                            
+                            #if DBG_USB_GATE
                             sprintf_f(mrs->log, "    [CROP]  check 0x%.3x  get index: 0x%.3x \n", pubffedt->ubindex & 0x3ff, mindex);
                             print_f(&mrs->plog, "fs145", mrs->log);
+                            #endif
+                            
                             if ((pubffedt->ubindex & 0x3ff) == mindex) {
                                 break;
                             }
@@ -47658,6 +48034,10 @@ static int p2(struct procRes_s *rs)
                                      break;
                                  }
 
+                                 ret = doCropCalcuPt(pcrpdo, pusbmeta, &pusbmeta->EXTRA_POINT[4], len - sizeof(struct aspMetaDataviaUSB_s), rs, 2);
+                                 sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
+                                 print_f(rs->plogs, "P2", rs->logs);
+                                 
                                  ret = doCropCalcu36(pcrpdo, addr, len, rs, 2);
                                  sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
                                  print_f(rs->plogs, "P2", rs->logs);
@@ -48309,7 +48689,11 @@ static int p3(struct procRes_s *rs)
                                      pcrpdo->acrpDPI = 300;
                                      break;
                                  }
-                                 
+
+                                 ret = doCropCalcuPt(pcrpdo, pusbmeta, &pusbmeta->EXTRA_POINT[4], len - sizeof(struct aspMetaDataviaUSB_s), rs, 2);
+                                 sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
+                                 print_f(rs->plogs, "P3", rs->logs);
+
                                  ret = doCropCalcu36(pcrpdo, addr, len, rs, 3);
                                  sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
                                  print_f(rs->plogs, "P3", rs->logs);
@@ -50486,8 +50870,8 @@ static int p6(struct procRes_s *rs)
     struct aspCropExtra_s *pcpex, *pcpexduo;
     struct aspDoCropCalcu *pcpdo=0, *pcpdoduo=0;
 
-    CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
-    CFLOAT mostlft[2], mostrgt[2], lftgrp[10][2], rgtgrp[10][2], fhi=0.0, fwh=0.0, fwe=0.0;
+    CFLOAT rotlf[2]={0}, rotup[2]={0}, rotrt[2]={0}, rotdn[2]={0};
+    CFLOAT mostlft[2]={0}, mostrgt[2]={0}, lftgrp[10][2]={0}, rgtgrp[10][2]={0}, fhi=0.0, fwh=0.0, fwe=0.0;
     CFLOAT selecPic = 0.0, selecBase = 100.0, selecRatio = 0.0, selecCur = 0, selecMax = 0;
     int ipic=0, icur=0;
 
@@ -50500,7 +50884,8 @@ static int p6(struct procRes_s *rs)
     int clr=0, w=0, h=0, hduo=0, dpi=0, hlen=0, datlen=0, orglen=0, t=0, vhi=0, crpMx=0;
     uint32_t tmp=0, val=0, ffrmt=0, scanlen=0, csws=0, cswd=0;
     char *hbuff=0;
-
+    struct aspMetaDataviaUSB_s *ptmetausb=0, *ptmetausbduo=0;
+    
     prctl(PR_SET_NAME, "msp-p6");
     //sprintf(argv[0], "msp-p6-socket4000");
     
@@ -50514,6 +50899,9 @@ static int p6(struct procRes_s *rs)
     pmassduo= rs->pmetaMassduo;
     pcp36duo= rs->pcrop32duo;
     pcpexduo= rs->pcropexduo;
+
+    ptmetausb = rs->pmetausb;
+    ptmetausbduo = rs->pmetausbduo;
 
     char dir[64] = "/mnt/mmc2";
     //char dir[256] = "/root";
@@ -52935,66 +53323,15 @@ static int p6(struct procRes_s *rs)
             pcp36->crp36Pots[cpn*2+0] = 1100;
             pcp36->crp36Pots[cpn*2+1] = 0;
 
-            #if 1 /* refactor crop function */
+            msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
+            msync(pmass->masspt, pmass->massUsed, MS_SYNC);
+            ret = doCropCalcuPt(pcpdo, ptmetausb, pmass->masspt, pmass->massUsed, rs, 6);
+            sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
             ret = doCropCalcu36(pcpdo, 0, 0, rs, 6); 
-            #else
-            #if !CROP_MIGRATE_TO_APP
-            /* first stage of cropping algorithm */            
-            ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
-
-            #if CROP_CALCU_PROCESS
-            sprintf_f(rs->logs, " crop36 get boundry, ret = %d\n", ret);
+            sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-            #endif
-            
-            ret = 0;
-            ret |= calcuCrossUpAph(pcp36);
-
-            #if CROP_CALCU_PROCESS
-            sprintf_f(rs->logs, " crop36 calcu cross up, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            #endif
-            
-            ret |= calcuCrossDnAph(pcp36);
-            
-            #if CROP_CALCU_PROCESS
-            sprintf_f(rs->logs, " crop36 calcu cross down, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            #endif
-
-            if (ret) {
-                getRectPoint(pcp36);
-            } else {
-                ret = calcuMostRtLf(pcp36);
-                if (ret == 0) {
-                    ret = calcuCrossUpLine(pcp36);
-
-                    #if CROP_CALCU_PROCESS
-                    sprintf_f(rs->logs, " crop36 calcu cross line up, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-                    #endif
-                    
-                    ret = calcuCrossDnLine(pcp36);
-
-                    #if CROP_CALCU_PROCESS
-                    sprintf_f(rs->logs, " crop36 calcu cross line down, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-                    #endif
-                    
-                    ret = getCrop36RotatePoints(pcp36);
-
-                    #if CROP_CALCU_PROCESS
-                    sprintf_f(rs->logs, " crop36 get rotate points, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-                    #endif
-                    
-                } else {
-                    getRectPoint(pcp36);
-                }
-            }
-            
-            #endif // #if !CROP_MIGRATE_TO_APP
-            #endif // #if1
 
             cpn = 0;
             pcp36duo->crp36Pots[cpn*2+0] = 100;
@@ -53004,67 +53341,16 @@ static int p6(struct procRes_s *rs)
             pcp36duo->crp36Pots[cpn*2+0] = 1100;
             pcp36duo->crp36Pots[cpn*2+1] = 0;
 
-            #if 1 /* refactor crop function */
+            msync(pmassduo, sizeof(struct aspMetaMass_s), MS_SYNC);
+            msync(pmassduo->masspt, pmassduo->massUsed, MS_SYNC);
+            ret = doCropCalcuPt(pcpdoduo, ptmetausbduo, pmassduo->masspt, pmassduo->massUsed, rs, 6);
+            sprintf_f(rs->logs, "do set extra points duo first ret: %d \n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
             ret = doCropCalcu36(pcpdoduo, 0, 0, rs, 6); 
-            #else
-
-            #if !CROP_MIGRATE_TO_APP
-            /* first stage of cropping algorithm */            
-            ret = aspCrp36GetBoundry(pcp36duo, idxL, idxR, CROP_MAX_NUM_META+2);
-
-            #if CROP_CALCU_PROCESS
-            sprintf_f(rs->logs, " duo crop36 get boundry, ret = %d\n", ret);
+            sprintf_f(rs->logs, "do crop 36 duo ret: %d \n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-            #endif
-            
-            ret = 0;
-            ret |= calcuCrossUpAph(pcp36duo);
 
-            #if CROP_CALCU_PROCESS
-            sprintf_f(rs->logs, " duo crop36 calcu cross up, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            #endif
-            
-            ret |= calcuCrossDnAph(pcp36duo);
-
-            #if CROP_CALCU_PROCESS
-            sprintf_f(rs->logs, " duo crop36 calcu cross down, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            #endif
-
-            if (ret) {
-                getRectPoint(pcp36duo);
-            } else {
-                ret = calcuMostRtLf(pcp36duo);
-                if (ret == 0) {
-                    ret = calcuCrossUpLine(pcp36duo);
-
-                    #if CROP_CALCU_PROCESS
-                    sprintf_f(rs->logs, " duo crop36 calcu cross line up, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-                    #endif
-                    
-                    ret = calcuCrossDnLine(pcp36duo);
-
-                    #if CROP_CALCU_PROCESS
-                    sprintf_f(rs->logs, " duo crop36 calcu cross line down, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-                    #endif
-                    
-                    ret = getCrop36RotatePoints(pcp36duo);
-
-                    #if CROP_CALCU_PROCESS
-                    sprintf_f(rs->logs, " duo crop36 get rotate points, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-                    #endif
-                    
-                } else {
-                    getRectPoint(pcp36duo);
-                }
-            }
-            #endif // #if !CROP_MIGRATE_TO_APP
-            #endif // #if 1
-            
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
 
             masRecd = pmass->massRecd;
@@ -53466,75 +53752,58 @@ static int p6(struct procRes_s *rs)
                 //pmass->massRecd = 0; /* move to the end of transmitting */ 
                 //pmass->massUsed = 0;
 
+                #if !CROP_MIGRATE_TO_APP
+                /* fix most left and most right shift */  
+                fhi = 0.0; fwh = 0.0; fwe = 0.0;
+                for (ix=0; ix < 4; ix++) {
+                
+                    #if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "duo left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                    
+                    fhi += lftgrp[ix][0] - mostlft[0];
+                    fwh += lftgrp[ix][0];
+                }
+                
+                fwe = fhi / 4.0;
+                if (fwe > 15.0) {
+                    mostlft[0] = fwh / 4.0;
+                    setRotateP1(pcp36, mostlft);
+                
+                    #if 1//LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "duo correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                }
+                
+                fhi = 0.0; fwh = 0.0; fwe = 0.0;
+                for (ix=0; ix < 4; ix++) {
+                
+                    #if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "duo right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                    fhi += mostrgt[0] - rgtgrp[ix][0];
+                    fwh += rgtgrp[ix][0];
+                }
+                
+                fwe = fhi / 4.0;
+                if (fwe > 15.0) {
+                    mostrgt[0] = fwh / 4.0;
+                    setRotateP3(pcp36, mostrgt);
+                
+                    #if 1//LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "duo correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                }
             } 
 
-            #if !CROP_MIGRATE_TO_APP
-            /* fix most left and most right shift */  
-            fhi = 0.0; fwh = 0.0; fwe = 0.0;
-            for (ix=0; ix < 4; ix++) {
-
-                #if LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "duo left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-                
-                fhi += lftgrp[ix][0] - mostlft[0];
-                fwh += lftgrp[ix][0];
-            }
-
-            fwe = fhi / 4.0;
-            if (fwe > 15.0) {
-                mostlft[0] = fwh / 4.0;
-                setRotateP1(pcp36, mostlft);
-
-                #if 1//LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "duo correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-            }
-
-            fhi = 0.0; fwh = 0.0; fwe = 0.0;
-            for (ix=0; ix < 4; ix++) {
-
-                #if LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "duo right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-                fhi += mostrgt[0] - rgtgrp[ix][0];
-                fwh += rgtgrp[ix][0];
-            }
-            
-            fwe = fhi / 4.0;
-            if (fwe > 15.0) {
-                mostrgt[0] = fwh / 4.0;
-                setRotateP3(pcp36, mostrgt);
-
-                #if 1//LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "duo correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-            }
-
-            #if 1 /* refactor crop function */
             ret = doCropCalcu(pcpdo, 0, 0, rs, 6); 
-            #else
-            /* second stage of cropping algorithm */
-            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-            findLine(pcp36, pcpex);
-            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-            ret = findUniPoints(pcp36, pcpex);
-            if (!ret) {
-                msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-                calcuLine(pcpex);
-                msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-                findBestLine(pcp36, pcpex);
-            } else {
-                getRectPoint(pcp36);
-            }
-            #endif
             
             msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
             ret = getRotateP1(pcp36, rotlf);
@@ -54015,77 +54284,59 @@ static int p6(struct procRes_s *rs)
 
                 //pmassduo->massRecd = 0; /* move to the end of transmitting */
                 //pmassduo->massUsed = 0;
-
+                #if !CROP_MIGRATE_TO_APP
+                /* fix most left and most right shift */  
+                fhi = 0.0; fwh = 0.0; fwe = 0.0;
+                for (ix=0; ix < 4; ix++) {
+                
+                    #if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "left duo apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                    
+                    fhi += lftgrp[ix][0] - mostlft[0];
+                    fwh += lftgrp[ix][0];
+                }
+                
+                fwe = fhi / 4.0;
+                if (fwe > 15.0) {
+                    mostlft[0] = fwh / 4.0;
+                    setRotateP1(pcp36, mostlft);
+                
+                    #if 1//LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "correct duo most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                }
+                
+                fhi = 0.0; fwh = 0.0; fwe = 0.0;
+                for (ix=0; ix < 4; ix++) {
+                
+                    #if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "right duo apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                    fhi += mostrgt[0] - rgtgrp[ix][0];
+                    fwh += rgtgrp[ix][0];
+                }
+                
+                fwe = fhi / 4.0;
+                if (fwe > 15.0) {
+                    mostrgt[0] = fwh / 4.0;
+                    setRotateP3(pcp36, mostrgt);
+                
+                    #if 1//LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "correct duo most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                }
             } 
             
-            #if !CROP_MIGRATE_TO_APP
-            /* fix most left and most right shift */  
-            fhi = 0.0; fwh = 0.0; fwe = 0.0;
-            for (ix=0; ix < 4; ix++) {
 
-                #if LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "left duo apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-                
-                fhi += lftgrp[ix][0] - mostlft[0];
-                fwh += lftgrp[ix][0];
-            }
-
-            fwe = fhi / 4.0;
-            if (fwe > 15.0) {
-                mostlft[0] = fwh / 4.0;
-                setRotateP1(pcp36, mostlft);
-
-                #if 1//LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "correct duo most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-            }
-
-            fhi = 0.0; fwh = 0.0; fwe = 0.0;
-            for (ix=0; ix < 4; ix++) {
-
-                #if LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "right duo apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-                fhi += mostrgt[0] - rgtgrp[ix][0];
-                fwh += rgtgrp[ix][0];
-            }
-            
-            fwe = fhi / 4.0;
-            if (fwe > 15.0) {
-                mostrgt[0] = fwh / 4.0;
-                setRotateP3(pcp36, mostrgt);
-
-                #if 1//LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "correct duo most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-            }
-
-            #if 1 /* refactor crop function */
             ret = doCropCalcu(pcpdoduo, 0, 0, rs, 6); 
-            #else
-            /* second stage of cropping algorithm */
-            msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
-            findLine(pcp36duo, pcpexduo);
-            msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
-            ret = findUniPoints(pcp36duo, pcpexduo);
-            
-            if (!ret) {
-                msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
-                calcuLine(pcpexduo);
-                msync(pcpexduo, sizeof(struct aspCropExtra_s), MS_SYNC);
-                findBestLine(pcp36duo, pcpexduo);
-            } else {
-                getRectPoint(pcp36duo);
-            }
-            #endif
 
             msync(pcp36duo, sizeof(struct aspCrop36_s), MS_SYNC);
             ret = getRotateP1(pcp36duo, rotlf);
@@ -54680,48 +54931,15 @@ static int p6(struct procRes_s *rs)
             pcp36->crp36Pots[cpn*2+0] = 1100;
             pcp36->crp36Pots[cpn*2+1] = 0;
 
-            #if 1
-            ret = doCropCalcu36(pcpdo, 0, 0, rs, 6);
-            #else
-            #if !CROP_MIGRATE_TO_APP
-            /* first stage of cropping algorithm */            
-            ret = aspCrp36GetBoundry(pcp36, idxL, idxR, CROP_MAX_NUM_META+2);
-            sprintf_f(rs->logs, " crop36 get boundry, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-
-            ret = 0;
-            ret |= calcuCrossUpAph(pcp36);
-            sprintf_f(rs->logs, " crop36 calcu cross up, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-            
-            ret |= calcuCrossDnAph(pcp36);
-            sprintf_f(rs->logs, " crop36 calcu cross down, ret = %d\n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-
-            if (ret) {
-                getRectPoint(pcp36);
-            } else {
-                ret = calcuMostRtLf(pcp36);
-                if (ret == 0) {
-                    ret = calcuCrossUpLine(pcp36);
-                    sprintf_f(rs->logs, " crop36 calcu cross line up, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-
-                    ret = calcuCrossDnLine(pcp36);
-                    sprintf_f(rs->logs, " crop36 calcu cross line down, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-
-                    ret = getCrop36RotatePoints(pcp36);
-                    sprintf_f(rs->logs, " crop36 get rotate points, ret = %d\n", ret);
-                    print_f(rs->plogs, "P6", rs->logs);
-                } else {
-                    getRectPoint(pcp36);
-                }
-            }
-            #endif // #if !CROP_MIGRATE_TO_APP
-            #endif
-
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
+            msync(pmass->masspt, pmass->massUsed, MS_SYNC);
+            ret = doCropCalcuPt(pcpdo, ptmetausb, pmass->masspt, pmass->massUsed, rs, 6);
+            sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
+
+            ret = doCropCalcu36(pcpdo, 0, 0, rs, 6);
+            sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
+            print_f(rs->plogs, "P6", rs->logs);
 
             masRecd = pmass->massRecd;
 
@@ -55123,81 +55341,59 @@ static int p6(struct procRes_s *rs)
 
                 //pmass->massRecd = 0; /* move to the end of transmitting */
                 //pmass->massUsed = 0;
-
+                #if !CROP_MIGRATE_TO_APP
+                /* fix most left and most right shift */  
+                fhi = 0.0; fwh = 0.0; fwe = 0.0;
+                for (ix=0; ix < 4; ix++) {
+                
+                    #if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                    
+                    fhi += lftgrp[ix][0] - mostlft[0];
+                    fwh += lftgrp[ix][0];
+                }
+                
+                fwe = fhi / 4.0;
+                if (fwe > 15.0) {
+                    mostlft[0] = fwh / 4.0;
+                    setRotateP1(pcp36, mostlft);
+                
+                    #if 1//LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                }
+                
+                fhi = 0.0; fwh = 0.0; fwe = 0.0;
+                for (ix=0; ix < 4; ix++) {
+                
+                    #if LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                    fhi += mostrgt[0] - rgtgrp[ix][0];
+                    fwh += rgtgrp[ix][0];
+                }
+                
+                fwe = fhi / 4.0;
+                if (fwe > 15.0) {
+                    mostrgt[0] = fwh / 4.0;
+                    setRotateP3(pcp36, mostrgt);
+                
+                    #if 1//LOG_P6_CROP_EN
+                    sprintf_f(rs->logs, "correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
+                    print_f(rs->plogs, "P6", rs->logs);
+                    #endif
+                
+                }
             } 
 
-            #if !CROP_MIGRATE_TO_APP
-            /* fix most left and most right shift */  
-            fhi = 0.0; fwh = 0.0; fwe = 0.0;
-            for (ix=0; ix < 4; ix++) {
 
-                #if LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "left apporach group (%lf, %lf) \n", lftgrp[ix][0], lftgrp[ix][1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-                
-                fhi += lftgrp[ix][0] - mostlft[0];
-                fwh += lftgrp[ix][0];
-            }
-
-            fwe = fhi / 4.0;
-            if (fwe > 15.0) {
-                mostlft[0] = fwh / 4.0;
-                setRotateP1(pcp36, mostlft);
-
-                #if 1//LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "correct most left (%lf, %lf) \n", mostlft[0], mostlft[1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-            }
-
-            fhi = 0.0; fwh = 0.0; fwe = 0.0;
-            for (ix=0; ix < 4; ix++) {
-
-                #if LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "right apporach group (%lf, %lf) \n", rgtgrp[ix][0], rgtgrp[ix][1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-                fhi += mostrgt[0] - rgtgrp[ix][0];
-                fwh += rgtgrp[ix][0];
-            }
-            
-            fwe = fhi / 4.0;
-            if (fwe > 15.0) {
-                mostrgt[0] = fwh / 4.0;
-                setRotateP3(pcp36, mostrgt);
-
-                #if 1//LOG_P6_CROP_EN
-                sprintf_f(rs->logs, "correct most right (%lf, %lf) \n", mostrgt[0], mostrgt[1]);
-                print_f(rs->plogs, "P6", rs->logs);
-                #endif
-
-            }
-
-            #if 1
             ret = doCropCalcu(pcpdo, 0, 0, rs, 6); 
-            #else
-            /* second stage of cropping algorithm */
-            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-            findLine(pcp36, pcpex);
-            msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-            ret = findUniPoints(pcp36, pcpex);
-            
-            sprintf_f(rs->logs, "### findUniPoints ret: %d \n", ret);
-            print_f(rs->plogs, "P6", rs->logs);
-
-            if (!ret) {
-                msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-                calcuLine(pcpex);
-                msync(pcpex, sizeof(struct aspCropExtra_s), MS_SYNC);
-                findBestLine(pcp36, pcpex);
-            } else {
-                getRectPoint(pcp36);
-            }
-            #endif
-
             
             msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
             ret = getRotateP1(pcp36, rotlf);
@@ -65792,7 +65988,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                                 puimCnTH->uimIdex = cindex;
                                             }
-                                            #if 1//DBG_27_DV
+                                            #if DBG_27_DV
                                             else {
                                                 act = 0;
                                                 puimTmp = puimCnTH;
