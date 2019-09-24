@@ -4725,7 +4725,7 @@ static int tiffDrawBox(char *img, int *cord, int *scale)
 
 static CFLOAT getAngle(CFLOAT *pSrc, CFLOAT *p1, CFLOAT *p2)
 {
-    CFLOAT angle = 0.0f; // ����
+    CFLOAT angle = 0.0f;
     
     if ((p1[0] == p2[0]) && (p1[1] == p2[1])) return -1;
     if ((p1[0] == pSrc[0]) && (p1[1] == pSrc[1])) return -1;
@@ -4816,18 +4816,20 @@ static int calcuRotateCoordinates(int *outi, CFLOAT *out, CFLOAT *in, CFLOAT *an
 
 static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf, CFLOAT *exrt, int ex_len) 
 {
+#define SKIP_HEAD_TAIL_LEN (10)
     CFLOAT *ptn;
-    CFLOAT lups[3];
-    CFLOAT lrt[3];
-    CFLOAT llf[3];
-    CFLOAT ltop[3];
-    CFLOAT lbtn[3];
+    CFLOAT lups[3] = {0.0, 0.0, 0.0};
+    CFLOAT lrt[3] = {0.0, 0.0, 0.0};
+    CFLOAT llf[3] = {0.0, 0.0, 0.0};
+    CFLOAT ltop[3] = {0.0, 0.0, 0.0};
+    CFLOAT lbtn[3] = {0.0, 0.0, 0.0};
     int i, ret, p1, p2, p3, skewflag;
     CFLOAT up[2] = {-1,-1}, dn[2] = {-1,-1}, rt[2] = {-1,-1}, lf[2] = {-1,-1};
     CFLOAT diff=0, angleLf, angleRt;
-    CFLOAT aRange = 1.0, rlRange = 25.0;
+    CFLOAT aRange = 1.0, rlRange = 3.0, lfRange = 3.0;
     CFLOAT cs[4][2];
-    CFLOAT w, h, r, l, tmf1, tmf2;
+    CFLOAT w, h, r, l, tmf1, tmf2, d1=0, d2=0, cnt=0, acu1, acu2;
+    CFLOAT rtrun[2]={-1,-1} , lfrun[2]={-1,-1};
     
     if (!pcrp36) return -1;
     if (!exlf) return -2;
@@ -4908,9 +4910,74 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
 
     w = rt[0] - lf[0];
     h = dn[1] - up[1];
+
+    tmf1=0;
+    tmf2=0;
+    cnt=0;
+    acu1 = 0;
+    acu2 = 0;
+    
+    for (int i = SKIP_HEAD_TAIL_LEN; i < (ex_len-SKIP_HEAD_TAIL_LEN); i++) {
+        d1 = exlf[i * 2] - lf[0];
+        d2 = rt[0] - exrt[i * 2];
+
+        acu1 += d1;
+        acu2 += d2;
+
+        if (tmf1 == 0) {
+            tmf1 = d1;
+        } else {
+            if (tmf1 < d1) {
+                tmf1 = d1;
+            }
+        }
+
+        
+        if (tmf2 == 0) {
+            tmf2 = d2;
+        } else {
+            if (tmf2 < d2) {
+                tmf2 = d2;
+            }
+        }
+
+        cnt += 1;
+    }
+
+    d1 = acu1/cnt;
+    d2 = acu2/cnt;
+
+#if CROP_CALCU_PROCESS
+    printf("[crp36] acu1: %.2lf, acu2: %.2lf, d1:%.2lf d2:%.2lf tmf1: %.2lf tmf2: %.2lf w:%.2lf, h: %.2lf\n", acu1, acu2, d1, d2, tmf1, tmf2, w, h);
+#endif
+
+    diff = abs(tmf1 - d1);
+    if (diff < (w/3)) {
+        d1 = tmf1;
+    }
+
+    diff = abs(tmf2 - d2);
+    if (diff < (w/3)) {
+        d2 = tmf2;
+    }
+    
     p1 = 5;
     p2 = 6;
     diff = ptn[p1*2] - ptn[p2*2];
+
+    if (diff > w) {
+        p1 = 7;
+        p2 = 8;
+        diff = ptn[p1*2] - ptn[p2*2];
+    }
+
+    rlRange = w / 200.0;
+    lfRange = w / 200.0;
+
+#if CROP_CALCU_PROCESS
+    printf("[crp36] 1. diff: %.2lf, limit: %.2lf, d1:%.2lf d2:%.2lf\n", diff, (w / 2), d1, d2);
+#endif
+
     if (diff < (w / 2)) {
         tmf1 = rt[0] - ptn[p2*2];
         tmf2 = ptn[p1*2] - lf[0];
@@ -4922,13 +4989,17 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
             skewflag = 2;
         }
     } else {
-        p1 = 2;
-        p2 = 3;
+        p1 = 3;
+        p2 = 2;
         diff = ptn[p1*2] - ptn[p2*2];
         tmf1 = rt[0] - ptn[p2*2];
         tmf2 = ptn[p1*2] - lf[0];
 
-        if (diff < (w / 2)) {
+        #if CROP_CALCU_PROCESS
+        printf("[crp36] 2. diff: %.2lf, limit: %.2lf\n", diff, (w / 2));
+        #endif
+
+        if (diff < (w / 10)) {
             if (tmf1 == tmf2) {
                 skewflag = 0;
             } else if (tmf1 > tmf2) {
@@ -4937,6 +5008,10 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
                 skewflag = 1;
             }
         } else {
+            //rlRange = 100.0;
+            //rlRange = (w / 5.0) - 1;
+            rlRange = d2;
+            lfRange = d1;
             if (tmf1 == tmf2) {
                 skewflag = 1;
             } else if (tmf1 < tmf2) {
@@ -4947,36 +5022,56 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
         }
     }
 
+    #if CROP_CALCU_PROCESS
+    printf("[crp36] skewflag: %d, rlRange: %.2lf, lfRange: %.2lf\n", skewflag, rlRange, lfRange);
+    #endif
+
     if (skewflag) {
-        r = rt[0] - rlRange;
-        l = lf[0] + rlRange;
+        p1 = 0;
+        rtrun[0] = exrt[p1 * 2];
+        rtrun[1] = exrt[p1 * 2 + 1];
+        
+        lfrun[0] = exlf[p1 * 2];
+        lfrun[1] = exlf[p1 * 2 + 1];
+        
+        if (skewflag == 1) { //rt up, lf dn
+            r = rtrun[0] + rlRange;
+            l = lfrun[0] + lfRange;
+        } else {// rt dn lf up
+            r = rtrun[0] - rlRange;
+            l = lfrun[0] - lfRange;
+        }
         for (int i = 0; i < ex_len; i++) {
             //__android_log_print(ANDROID_LOG_VERBOSE, "calculate", "sflag: %d, %d - rt: (%.2lf, %.2lf) lf: (%.2lf, %.2lf) r:%.2lf, l:%.2lf  (%.2lf, %.2lf) (%.2lf, %.2lf)\n"
             //, skewflag, i, exrt[i * 2], exrt[i * 2+1], exlf[i * 2], exlf[i * 2+1], r, l, rt[0], rt[1], lf[0], lf[1]);
             if (skewflag == 1) { //rt up, lf dn
                 if (r <= exrt[i * 2]) {
-                    rt[0] = exrt[i * 2];
-                    rt[1] = exrt[i * 2 + 1];
+                    rtrun[0] = exrt[i * 2];
+                    rtrun[1] = exrt[i * 2 + 1];
 
-                    r = rt[0] + 1.0;
+                    r = rtrun[0] + rlRange;
                 }
 
                 if (l >= exlf[i * 2]) {
-                    lf[0] = exlf[i * 2];
-                    lf[1] = exlf[i * 2 + 1];
+                    lfrun[0] = exlf[i * 2];
+                    lfrun[1] = exlf[i * 2 + 1];
+
+                    l = lfrun[0] + lfRange;
                 }
 
             } else {  // rt dn lf up
                 if (r <= exrt[i * 2]) {
-                    rt[0] = exrt[i * 2];
-                    rt[1] = exrt[i * 2 + 1];
+                    rtrun[0] = exrt[i * 2];
+                    rtrun[1] = exrt[i * 2 + 1];
+
+                    r = rtrun[0] - rlRange;
                 }
 
                 if (l >= exlf[i * 2]) {
-                    lf[0] = exlf[i * 2];
-                    lf[1] = exlf[i * 2 + 1];
+                    lfrun[0] = exlf[i * 2];
+                    lfrun[1] = exlf[i * 2 + 1];
 
-                    l = lf[0] - 1.0;
+                    l = lfrun[0] - lfRange;
                 }
             }
         }
@@ -4992,6 +5087,10 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
     p3 = 5;
     angleRt = getAngle(&ptn[p1 * 2], &ptn[p2 * 2], &ptn[p3 * 2]);
 
+    #if CROP_CALCU_PROCESS
+    printf("[crp36] angleLf = %.2lf, angleRt = %.2lf \n", angleLf, angleRt);
+    #endif
+
     p1 = 1;
     if ((angleLf < (90.0 + aRange)) && (angleLf > (90.0 - aRange))) {
         if (ptn[p1 * 2] < lf[0]) {
@@ -5003,6 +5102,9 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
             }
         }
     } else {
+        lf[0] = lfrun[0];
+        lf[1] = lfrun[1];
+    
         ptn[p1 * 2] = lf[0];
         ptn[p1 * 2 + 1] = lf[1];
     }
@@ -5018,6 +5120,9 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
             }
         }
     } else {
+        rt[0] = rtrun[0];
+        rt[1] = rtrun[1];
+    
         ptn[p1 * 2] = rt[0];
         ptn[p1 * 2 + 1] = rt[1];
     }
@@ -5377,7 +5482,7 @@ static int calcuGroupLineAlign(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpL
 	memset(avList, 0, sizeof(int) * (tail - head) * 2);
 
     cntDist = 0;
-    while ((tail - head) > 1) {
+    while ((tail - head) > 3) {
         p1 = &pGrp[head * 2];
         p2 = &pGrp[tail * 2];
 
@@ -5430,6 +5535,10 @@ static int calcuGroupLineAlign(CFLOAT *pGrp, CFLOAT *vecTr, CFLOAT *div, int gpL
                         idx, maxcnt, avList[idx * 2 + 0], avList[idx * 2 + 1], avd[idx]);
 #endif
 
+    if (idx < 0) {
+        return -5;
+    }
+    
     div[0] = avd[idx];
 
     head = avList[idx * 2 + 0];
@@ -6651,9 +6760,10 @@ static int cpyPGrp(int start, int len, CFLOAT *grp, CFLOAT **cpgp, int max)
 static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int midx) 
 {
 
-#define MUL_DIST_TOLT   (4.0)
-#define CROP_LINE_MIN_F (60.0)//(600.0)
-#define CROP_LINE_MIN_W (200.0)//(600.0)
+#define MUL_DIST_TOLT   (24.0) //(4.0)
+#define CROP_LINE_MIN_L (120.0)
+#define CROP_LINE_MIN_F (10.0)//(600.0)
+#define CROP_LINE_MIN_W (180.0)//(600.0)
 #define CROP_LINE_NUM (2)
 #define GROUP_LINE_LIMIT (3.0)
     int i = 0, tot = 0, ret = 0, head = 0, glen = 0, id = 0, aln=0, rid=0, sid=0;
@@ -6665,12 +6775,12 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
     CFLOAT *allgrp[16] = {0};
     CFLOAT *p1, *p2;
     CFLOAT *ptLf, *ptRt;
-    CFLOAT vecTr[3];
-    CFLOAT dist=0;
+    CFLOAT vecTr[3] = {0.0, 0.0, 0.0};
+    CFLOAT dist = 0, dist2 = 0, diff = 0;
     CFLOAT *cgrp;
     CFLOAT pc0[2], pc1[2], pc2[2];
     CFLOAT distP2P = 0, distP2Bef = 0;
-    CFLOAT lineMin=0, wmin=0;
+    CFLOAT lineMin=0, wmin=0, linenum=0, w=0, h=0;
     int absLsize = cntLf / 2;
     int absRsize = cntRt / 2;
     int thrd=0, sms=0, minpt=0;
@@ -6678,11 +6788,12 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
     if (!pcp36) return -1;
     if (!pcpex) return -2;
 
-    lineMin = (double)(pcp36->crp36Dn - pcp36->crp36Up);
-    lineMin = lineMin / CROP_LINE_MIN_F;
-
-    wmin = (double)(pcp36->crp36Rt - pcp36->crp36Lf);
-    wmin = wmin / CROP_LINE_MIN_F;
+    h = (double)(pcp36->crp36Dn - pcp36->crp36Up);
+    linenum = h / CROP_LINE_MIN_L; 
+    lineMin = h / CROP_LINE_MIN_F;
+    
+    w = (double)(pcp36->crp36Rt - pcp36->crp36Lf);
+    wmin = w / CROP_LINE_MIN_W;
 
 #define CROP_LINE_DIST  (wmin)
 #define CROP_POINT_DIST  (wmin / 2.0)
@@ -6756,7 +6867,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
         
         if (dist > CROP_LINE_DIST) {
 #if LOG_CROP_FINDBASELINE
-            printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1], dist);
+            printf("line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf limit: %.2lf\n", head, i - 1, ptLf[head*2+0], ptLf[head*2+1], ptLf[(i-1)*2+0], ptLf[(i-1)*2+1], dist, CROP_LINE_DIST);
 #endif
             head = i;
 
@@ -6847,7 +6958,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
         
         if (dist > CROP_LINE_DIST) {
 #if LOG_CROP_FINDBASELINE
-            printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf\n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1], dist);    
+            printf( "line = [%d] -> [%d], (%lf, %lf) -> (%lf, %lf), dist: %lf limit: %.2lf\n", head, i - 1, ptRt[head*2+0], ptRt[head*2+1], ptRt[(i-1)*2+0], ptRt[(i-1)*2+1], dist, CROP_LINE_DIST);    
 #endif
             head = i;
 
@@ -6879,20 +6990,18 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
     cntRt++;
 
     pcpex->crpexRtAbsUsed = cntRt;
-    
+    #if LOG_CROP_FINDBASELINE
     for (i=0; i < cntLf; i++) {
         id = pcpex->crpexLfAbs[i];
-#if LOG_CROP_FINDBASELINE
-        printf("%d. left abs = [%d]  =  (%lf, %lf) \n", i, id, ptLf[id*2+0], ptLf[id*2+1]);    
-#endif
-    }
 
+        printf("%d. left abs = [%d]  =  (%lf, %lf) \n", i, id, ptLf[id*2+0], ptLf[id*2+1]);    
+    }
+    
     for (i=0; i < cntRt; i++) {
         id = pcpex->crpexRtAbs[i];
-#if LOG_CROP_FINDBASELINE
         printf("%d. right abs = [%d]  =  (%lf, %lf) \n", i, id, ptRt[id*2+0], ptRt[id*2+1]);    
-#endif
     }
+    #endif
     
     contL = 0;
     contR = 0;
@@ -6918,22 +7027,20 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
         distP2P = calcuDistance(pc1, pc2);
 
 #if LOG_CROP_FINDBASELINE
-        printf("[find] %d. distp2p = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d\n", i, distP2P, pc1[0], pc1[1], pc2[0], pc2[1], (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]));
+        printf("[find] left scan line (%d) ==== [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d ==== \n", i, distP2P, pc1[0], pc1[1], pc2[0], pc2[1], (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]));
 #endif
-        if ((i == 0) || ( i == (absLsize - 1))) {
-            minpt = CROP_LINE_NUM;
-        } else {
-            minpt = CROP_LINE_NUM * 6;
+        //if ((i == 0) || ( i == (absLsize - 1))) {
+        if (i == 0) {
+            minpt = CROP_LINE_NUM + 2;
+        } else if (i == (absLsize - 1)) {
+            minpt = CROP_LINE_NUM + 2;
+        }
+        else {
+            minpt = CROP_LINE_NUM * linenum;
         }
 
         if ((distP2P > lineMin) &&
             ((pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]) > minpt)) {
-
-#if LOG_CROP_FINDBASELINE
-	    printf("[find] dist: %.2lf num: %d - pass\n", distP2P, (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]));
-#endif
-
-            contL++;
 
             ret = cpyPGrp(pcpex->crpexLfAbs[i * 2 + 0], pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0], ptLf, &cgrp, 2048 / 2);
             if (ret > 0) {
@@ -6944,9 +7051,11 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
 
             //ret = calcuGroupLine(cgrp, pcpex->crpexLfAbsVec[i], &dist, glen);
             ret = calcuGroupLineAlign(cgrp, pcpex->crpexLfAbsVec[i], &dist, glen, GROUP_LINE_LIMIT, midx);
-            if (ret > 0) {
+            if (ret > (glen / 3)) {
+                pcpex->crpexLfAbsVecDist[i] = dist;
 #if LOG_CROP_CALCULINE
-                printf("[find] (Lf) %d. get group line suceed!! (%.2lf, %.2lf)<->(%.2lf, %.2lf) div: %.2lf ret: %d\n", i, pc1[0], pc1[1], pc2[0], pc2[1], dist, ret);
+                printf("[find] (Lf) %d. get group line alignment!! (%.2lf, %.2lf)<->(%.2lf, %.2lf) div: %.2lf ret: %d limit: %.2lf\n"
+                , i, pc1[0], pc1[1], pc2[0], pc2[1], dist, ret, CROP_LINE_DIST);
 #endif		
             } else {
                 dist = -1;
@@ -6959,16 +7068,23 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
             if ((dist < 0) || (dist > (CROP_LINE_DIST))) {
                 pcpex->crpexLfAbs[i * 2 + 0] = -1;
                 pcpex->crpexLfAbs[i * 2 + 1] = -1;
+#if LOG_CROP_CALCULINE
+                printf("[find] dist: %.2lf limit: %.2lf - deny\n", dist, CROP_LINE_DIST);
+#endif
             }
             else {
                 pcpex->crpexLfAbsVecDist[i] = dist;
                 contL++;
+#if LOG_CROP_CALCULINE
+                printf("[find] dist: %.2lf limit: %.2lf - pass %d \n", dist, CROP_LINE_DIST, contL);
+#endif
             }
 
-        } else {
+        }
+        else {
         
 #if LOG_CROP_FINDBASELINE
-	    printf("[find] dist: %.2lf num: %d - deny\n", distP2P, (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]));
+	    printf("[find] dist: %.2lf num: %d limit: %.2lf, %d - deny\n", distP2P, (pcpex->crpexLfAbs[i * 2 + 1] - pcpex->crpexLfAbs[i * 2 + 0]), lineMin, minpt);
 #endif
             pcpex->crpexLfAbs[i * 2 + 0] = -1;
             pcpex->crpexLfAbs[i * 2 + 1] = -1;
@@ -6992,21 +7108,21 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
         distP2P = calcuDistance(pc1, pc2);
 
 #if LOG_CROP_FINDBASELINE
-        printf("[find] %d. distp2p = [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d\n", i, distP2P, pc1[0], pc1[1], pc2[0], pc2[1], (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]));
+        printf("[find] right scan line (%d) ==== [%.2lf] (%.2lf, %.2lf) (%.2lf, %.2lf) num: %d ==== \n", i, distP2P, pc1[0], pc1[1], pc2[0], pc2[1], (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]));
 #endif
 
-        if ((i == 0) || ( i == (absRsize - 1))) {
-            minpt = CROP_LINE_NUM;
-        } else {
-            minpt = CROP_LINE_NUM * 6;
+        //if ((i == 0) || ( i == (absRsize - 1))) {
+        if (i == 0) {
+            minpt = CROP_LINE_NUM + 2;
+        } else if ( i == (absRsize - 1)) {
+            minpt = CROP_LINE_NUM + 2;
+        }
+        else {
+            minpt = CROP_LINE_NUM * linenum - 1;
         }
 
         if ((distP2P > lineMin) &&
             ((pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]) > minpt)) {
-
-#if LOG_CROP_FINDBASELINE
-	    printf("[find] dist: %.2lf num: %d - pass\n", distP2P, (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]));
-#endif
 
             ret = cpyPGrp(pcpex->crpexRtAbs[i * 2 + 0], pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0], ptRt, &cgrp, 2048 / 2);
             if (ret > 0) {
@@ -7017,12 +7133,13 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
 
             //ret = calcuGroupLine(cgrp, pcpex->crpexRtAbsVec[i], &dist, glen);
             ret = calcuGroupLineAlign(cgrp, pcpex->crpexRtAbsVec[i], &dist, glen, GROUP_LINE_LIMIT, midx);
-            if (ret > 0) {
+            if (ret > (glen / 3)) {
                 pcpex->crpexRtAbsVecDist[i] = dist;
 #if LOG_CROP_CALCULINE
-                printf("[find] (Rt) %d. get group line suceed!! (%.2lf, %.2lf)<->(%.2lf, %.2lf) div: %.2lf\n", i, pc1[0], pc1[1], pc2[0], pc2[1], dist);
+                printf("[find] (Rt) %d. get group line alignment!! (%.2lf, %.2lf)<->(%.2lf, %.2lf) div: %.2lf ret: %d limit: %.2lf \n"
 #endif		
             } else {
+                dist = -1;
                 pcpex->crpexRtAbsVecDist[i] = -1;
 #if LOG_CROP_CALCULINE
                 printf("[find] (Rt) %d. get group line failed!! (%.2lf, %.2lf)<->(%.2lf, %.2lf)\n", i, pc1[0], pc1[1], pc2[0], pc2[1]);
@@ -7032,15 +7149,23 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
             if ((dist < 0) || (dist > (CROP_LINE_DIST))) {
                 pcpex->crpexRtAbs[i * 2 + 0] = -1;
                 pcpex->crpexRtAbs[i * 2 + 1] = -1;
+                
+#if LOG_CROP_CALCULINE
+                printf("[find] dist: %.2lf limit: %.2lf - deny\n", dist, CROP_LINE_DIST);
+#endif
             }
             else {
                 pcpex->crpexRtAbsVecDist[i] = dist;
                 contR++;
+#if LOG_CROP_CALCULINE
+                printf("[find] dist: %.2lf limit: %.2lf - pass %d\n", dist, CROP_LINE_DIST, contR);
+#endif
             }
 
-        } else {
+        }
+        else {
 #if LOG_CROP_FINDBASELINE
-	    printf("[find] dist: %.2lf num: %d - deny\n", distP2P, (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]));
+	    printf("[find] dist: %.2lf num: %d limit: %.2lf, %d - deny\n", distP2P, (pcpex->crpexRtAbs[i * 2 + 1] - pcpex->crpexRtAbs[i * 2 + 0]), lineMin, minpt);
 #endif
             pcpex->crpexRtAbs[i * 2 + 0] = -1;
             pcpex->crpexRtAbs[i * 2 + 1] = -1;
@@ -7049,7 +7174,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
     }
    //pcpex->crpexRtAbsCut = contR;
 
-#if LOG_CROP_FINDBASELINE
+#if 0//LOG_CROP_FINDBASELINE
     printf("[find] absLf cut : %d, absRt cut: %d \n", contL,
                         contR);
 
@@ -7126,26 +7251,40 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
                 dist = calcuLineGroupDist(allgrp[i], &allverTr[id][0], allnum[i]);
 				
                 #if LOG_CROP_FINDBASELINE
-                 printf("[find] Lf %d.%d. grpdist = [%.2lf] num: %d : %d, (%d, %d) (%d, %d) \n", id, i, dist, allnum[id], allnum[i],
-                            pcpex->crpexLfAbs[sid*2 +0], pcpex->crpexLfAbs[sid*2 +1], pcpex->crpexLfAbs[rid*2 +0], pcpex->crpexLfAbs[rid*2 +1]);
+                 printf("[find] Lf %d.%d. grpdist = [%.2lf] num: %d : %d, (%d, %d) (%d, %d) limit: %.2lf\n", id, i, dist, allnum[id], allnum[i],
+                            pcpex->crpexLfAbs[sid*2 +0], pcpex->crpexLfAbs[sid*2 +1], pcpex->crpexLfAbs[rid*2 +0], pcpex->crpexLfAbs[rid*2 +1], CROP_LINE_DIST*MUL_DIST_TOLT);
                 #endif
 				
-                if ((dist < CROP_LINE_DIST*MUL_DIST_TOLT) && (allnum[id] > allnum[i])) {
-
-                    if (pcpex->crpexLfAbs[sid*2 +0] > pcpex->crpexLfAbs[rid*2 +0]) {
-                        pcpex->crpexLfAbs[sid*2 +0] = pcpex->crpexLfAbs[rid*2 +0];
+                if (((dist < CROP_LINE_DIST) || (dist < CROP_LINE_DIST*MUL_DIST_TOLT)) && (allnum[id] >= allnum[i])) {
+                
+                    if (dist < CROP_LINE_DIST) {
+                        dist2 = 0;
+                        diff = 0;
+                    } else {
+                        dist2 = calcuLineGroupDist(allgrp[id], &allverTr[i][0], allnum[id]);
+                        diff = abs(dist - dist2);
                     }
 
-                    if (pcpex->crpexLfAbs[sid*2 +1] < pcpex->crpexLfAbs[rid*2 +1]) {
-                        pcpex->crpexLfAbs[sid*2 +1] = pcpex->crpexLfAbs[rid*2 +1];
-                    }
+                    #if LOG_CROP_FINDBASELINE
+                     printf("[find] dist: %.2lf dist2: %.2lf diff: %.2lf \n", dist, dist2, diff);
+                    #endif
+
+                    if (diff < 50.0) {
+                        if (pcpex->crpexLfAbs[sid*2 +0] > pcpex->crpexLfAbs[rid*2 +0]) {
+                            pcpex->crpexLfAbs[sid*2 +0] = pcpex->crpexLfAbs[rid*2 +0];
+                        }
+
+                        if (pcpex->crpexLfAbs[sid*2 +1] < pcpex->crpexLfAbs[rid*2 +1]) {
+                            pcpex->crpexLfAbs[sid*2 +1] = pcpex->crpexLfAbs[rid*2 +1];
+                        }
 		
-                    pcpex->crpexLfAbs[rid*2 +0] = -1;
-                    pcpex->crpexLfAbs[rid*2 +1] = -1;
+                        pcpex->crpexLfAbs[rid*2 +0] = -1;
+                        pcpex->crpexLfAbs[rid*2 +1] = -1;
 
-                    allnum[id] += allnum[i];
+                        allnum[id] += allnum[i];
 
-                    allpos[i] = -1;
+                        allpos[i] = -1;
+                    }
                 }
             }
         }
@@ -7274,26 +7413,40 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
                 dist = calcuLineGroupDist(allgrp[i], &allverTr[id][0], allnum[i]);
 				
                 #if LOG_CROP_FINDBASELINE
-                 printf("[find] Rt %d.%d. grpdist = [%.2lf] num: %d : %d, (%d, %d) (%d, %d) \n", id, i, dist, allnum[id], allnum[i],
-                            pcpex->crpexRtAbs[sid*2 +0], pcpex->crpexRtAbs[sid*2 +1], pcpex->crpexRtAbs[rid*2 +0], pcpex->crpexRtAbs[rid*2 +1]);
+                printf("[find] Rt %d.%d. grpdist = [%.2lf] num: %d : %d, (%d, %d) (%d, %d) limit: %.2lf\n", id, i, dist, allnum[id], allnum[i],
+                            pcpex->crpexRtAbs[sid*2 +0], pcpex->crpexRtAbs[sid*2 +1], pcpex->crpexRtAbs[rid*2 +0], pcpex->crpexRtAbs[rid*2 +1], CROP_LINE_DIST*MUL_DIST_TOLT);
                 #endif
 
-                if ((dist < CROP_LINE_DIST*MUL_DIST_TOLT) && (allnum[id] > allnum[i])) {
+                if (((dist < CROP_LINE_DIST) || (dist < CROP_LINE_DIST*MUL_DIST_TOLT)) && (allnum[id] >= allnum[i])) {
 
-                    if (pcpex->crpexRtAbs[sid*2 +0] > pcpex->crpexRtAbs[rid*2 +0]) {
-                        pcpex->crpexRtAbs[sid*2 +0] = pcpex->crpexRtAbs[rid*2 +0];
+                    if (dist < CROP_LINE_DIST) {
+                        dist2 = 0;
+                        diff = 0;
+                    } else {
+                        dist2 = calcuLineGroupDist(allgrp[id], &allverTr[i][0], allnum[id]);
+                        diff = abs(dist - dist2);
                     }
-
-                    if (pcpex->crpexRtAbs[sid*2 +1] < pcpex->crpexRtAbs[rid*2 +1]) {
-                        pcpex->crpexRtAbs[sid*2 +1] = pcpex->crpexRtAbs[rid*2 +1];
-                    }
-
-                    pcpex->crpexRtAbs[rid*2 +0] = -1;
-                    pcpex->crpexRtAbs[rid*2 +1] = -1;
-
-                    allnum[id] += allnum[i];
                     
-                    allpos[i] = -1;
+                    #if LOG_CROP_FINDBASELINE
+                    printf("[find] dist: %.2lf dist2: %.2lf diff: %.2lf \n", dist, dist2, diff);
+                    #endif
+
+                    if (diff < 50.0) {
+                        if (pcpex->crpexRtAbs[sid*2 +0] > pcpex->crpexRtAbs[rid*2 +0]) {
+                            pcpex->crpexRtAbs[sid*2 +0] = pcpex->crpexRtAbs[rid*2 +0];
+                        }
+
+                        if (pcpex->crpexRtAbs[sid*2 +1] < pcpex->crpexRtAbs[rid*2 +1]) {
+                            pcpex->crpexRtAbs[sid*2 +1] = pcpex->crpexRtAbs[rid*2 +1];
+                        }
+
+                        pcpex->crpexRtAbs[rid*2 +0] = -1;
+                        pcpex->crpexRtAbs[rid*2 +1] = -1;
+
+                        allnum[id] += allnum[i];
+                    
+                        allpos[i] = -1;
+                    }
                 }
             }
         }
@@ -7430,7 +7583,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
     lfLinSize = pcpex->crpexLfAbsCut;
     rtLinSize = pcpex->crpexRtAbsCut;
-#if LOG_CROP_FINDPOINTS
+#if 0//LOG_CROP_FINDPOINTS
     printf("LfCut: %d, RtCut: %d, lfused: %d, rtused: %d, cropflag: 0x%x \n", lfLinSize, rtLinSize, lfused, rtused, cropflag);
 #endif
     memset(Lfarr, 0, sizeof(CFLOAT)*12);
@@ -8581,7 +8734,7 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
 
 static int calcuLine(struct aspCropExtra_s *pcpex, int midx) 
 {
-#define CROP_MIN_LINE  5
+#define CROP_MIN_LINE  3
     int i=0, j=0, ret=0;
     int lfStrUp=-1, lfEndUp=-1, rtStrUp=-1, rtEndUp=-1;
     int lfStrDn=-1, lfEndDn=-1, rtStrDn=-1, rtEndDn=-1;
@@ -8615,6 +8768,10 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
 #endif
     for (i = 0; i < tot; i++) {
         //printf("%d. Left (%lf, %lf) Right (%lf, %lf)\n", i, ptLf[i*2+0], ptLf[i*2+1], ptRt[i*2+0], ptRt[i*2+1]);
+        #if 0//LOG_CROP_CALCULINE
+        printf(" %d. Left (%.2lf, %.2lf) Right (%.2lf, %.2lf)\n", i, ptLf[i*2+0], ptLf[i*2+1], ptRt[i*2+0], ptRt[i*2+1]);
+        #endif
+        
         if ((ptLf[i*2+0] > (lf[0] - 200.0)) && (ptLf[i*2+0] < (up[0] + 200.0)) && (ptLf[i*2+1] <= lf[1]) && (ptLf[i*2+1] >= up[1])) {
             if (lfStrUp < 0) {
                 lfStrUp = i;
@@ -8710,6 +8867,10 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
             pcpex->crpexGrpLUStr = lfStrUp;
             pcpex->crpexGrpLULen = szlu;
             pcpex->crpexGrpLUDist = calcuDistance(pGrp, pGrp+(szlu-1)*2);
+#if LOG_CROP_CALCULINE
+            printf("(LU) distance from (%.2lf, %.2lf) to (%.2lf, %.2lf) = %.2lf\n", 
+            pGrp[0], pGrp[1], *(pGrp+(szlu-1)*2), *(pGrp+(szlu-1)*2+1), pcpex->crpexGrpLUDist);
+#endif
         } else {
             pcpex->crpexLinLUDiv = abs(ret);
 #if LOG_CROP_CALCULINE
@@ -8731,6 +8892,10 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
             pcpex->crpexGrpLDStr = lfStrDn;
             pcpex->crpexGrpLDLen = szld;
             pcpex->crpexGrpLDDist = calcuDistance(pGrp, pGrp+(szld-1)*2);
+#if LOG_CROP_CALCULINE
+            printf("(LD) distance from (%.2lf, %.2lf) to (%.2lf, %.2lf) = %.2lf\n", 
+            pGrp[0], pGrp[1], *(pGrp+(szld-1)*2), *(pGrp+(szld-1)*2+1), pcpex->crpexGrpLDDist);
+#endif
         } else {
             pcpex->crpexLinLDDiv = abs(ret);
 #if LOG_CROP_CALCULINE
@@ -8752,6 +8917,10 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
             pcpex->crpexGrpRUStr = rtStrUp;
             pcpex->crpexGrpRULen = szru;
             pcpex->crpexGrpRUDist = calcuDistance(pGrp, pGrp+(szru-1)*2);
+#if LOG_CROP_CALCULINE
+            printf("(RU) distance from (%.2lf, %.2lf) to (%.2lf, %.2lf) = %.2lf\n", 
+            pGrp[0], pGrp[1], *(pGrp+(szru-1)*2), *(pGrp+(szru-1)*2+1), pcpex->crpexGrpRUDist);
+#endif
         } else {
             pcpex->crpexLinRUDiv = abs(ret);
 #if LOG_CROP_CALCULINE
@@ -8773,6 +8942,10 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
             pcpex->crpexGrpRDStr = rtStrDn;
             pcpex->crpexGrpRDLen = szrd;
             pcpex->crpexGrpRDDist = calcuDistance(pGrp, pGrp+(szrd-1)*2);
+#if LOG_CROP_CALCULINE
+            printf("(RD) distance from (%.2lf, %.2lf) to (%.2lf, %.2lf) = %.2lf\n", 
+            pGrp[0], pGrp[1], *(pGrp+(szrd-1)*2), *(pGrp+(szrd-1)*2+1), pcpex->crpexGrpRDDist);
+#endif
         } else {
             pcpex->crpexLinRDDiv = abs(ret);
 #if LOG_CROP_CALCULINE
@@ -9050,12 +9223,14 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
     CFLOAT distV=-1, distN=-1;
     int loopcnt=0;
     CFLOAT *pGrpLU, *pGrpLD, *pGrpRU, *pGrpRD;
-    int gpLUlen, gpLDlen, gpRUlen, gpRDlen;
+    CFLOAT gpLUlen, gpLDlen, gpRUlen, gpRDlen;
     int gpLUstr, gpLDstr, gpRUstr, gpRDstr;
     int ret, i=0;
     CFLOAT high=0.0, width=0.0, acptOff_h=0.0, acptOff_v=0.0, acpFn_h=10.0, acpFn_v=10.0;
     CFLOAT ttline[3], bbline[3], llline[3], rrline[3];
     CFLOAT dlu, dru, dld, drd;
+    CFLOAT cslf[2], csrt[2], csup[2], csdn[2];
+    CFLOAT angleLf=0, angleRt=0, angleUp=0, angleDn=0;
     
     high = pcp36->crp36Dn - pcp36->crp36Up;
     width = pcp36->crp36Rt - pcp36->crp36Lf;
@@ -9105,11 +9280,29 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
     vLDDiv = pcpex->crpexLinLDDiv;
     vRUDiv = pcpex->crpexLinRUDiv;
     vRDDiv = pcpex->crpexLinRDDiv;
+
+    getCross(pcpex->crpexLinLU, pcpex->crpexLinLD, cslf);
+    getCross(pcpex->crpexLinRU, pcpex->crpexLinRD, csrt);
+    getCross(pcpex->crpexLinLU, pcpex->crpexLinRU, csup);
+    getCross(pcpex->crpexLinLD, pcpex->crpexLinRD, csdn);
+
+    angleLf = getAngle(cslf, csup, csdn);
+    angleRt = getAngle(csrt, csup, csdn);
+    angleUp= getAngle(csup, cslf, csrt);
+    angleDn = getAngle(csdn, cslf, csrt);
+
 #if LOG_CROP_FINDLINE
-    printf("line LU str:%d len:%d div:%lf d:%.2f\n", gpLUstr, gpLUlen, vLUDiv, dlu);
-    printf("line LD str:%d len:%d div:%lf d:%.2f\n", gpLDstr, gpLDlen, vLDDiv, dld);
-    printf("line RU str:%d len:%d div:%lf d:%.2f\n", gpRUstr, gpRUlen, vRUDiv, dru);
-    printf("line RD str:%d len:%d div:%lf d:%.2f\n", gpRDstr, gpRDlen, vRDDiv, drd);
+    printf("angle lf: %.2lf rt: %.2lf up: %.2lf dn: %.2lf \n",
+                        angleLf, angleRt, angleUp, angleDn);
+    printf("cross lf: (%.2lf, %.2lf) rt: (%.2lf, %.2lf) up: (%.2lf, %.2lf) dn: (%.2lf, %.2lf) \n",
+                        cslf[0], cslf[1], csrt[0], csrt[1], csup[0], csup[1], csdn[0], csdn[1]);
+#endif
+
+#if LOG_CROP_FINDLINE
+    printf("line LU str:%d len:%lf div:%lf d:%.2f\n", gpLUstr, gpLUlen, vLUDiv, dlu);
+    printf("line LD str:%d len:%lf div:%lf d:%.2f\n", gpLDstr, gpLDlen, vLDDiv, dld);
+    printf("line RU str:%d len:%lf div:%lf d:%.2f\n", gpRUstr, gpRUlen, vRUDiv, dru);
+    printf("line RD str:%d len:%lf div:%lf d:%.2f\n", gpRDstr, gpRDlen, vRDDiv, drd);
 #endif
 /*
     if (gpLUlen > 0)
@@ -9253,24 +9446,27 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
     }
         
     CFLOAT maxDiv = 10 / 5.0 ;
-    #if 1
-    CFLOAT divGpLU = ((dlu  * 9.0) + (gpLUlen * 8 / vLUDiv) * 9.0) / 18.0;
-    CFLOAT divGpLD = ((dld  * 9.0) + (gpLDlen * 8 / vLDDiv) * 9.0) / 18.0;
-    CFLOAT divGpRU = ((dru * 9.0) + (gpRUlen * 8 / vRUDiv) * 9.0) / 18.0;
-    CFLOAT divGpRD = ((drd * 9.0) + (gpRDlen * 8 / vRDDiv) * 9.0) / 18.0;
-    #else
-    CFLOAT divGpLU= gpLUlen / vLUDiv;
-    CFLOAT divGpLD= gpLDlen / vLDDiv;
-    CFLOAT divGpRU= gpRUlen / vRUDiv;
-    CFLOAT divGpRD= gpRDlen / vRDDiv;
-    #endif
+    double divGpLU=0, divGpLD=0, divGpRU=0, divGpRD=0;
+
+    if (width > (high * 1.2)) {
+        divGpLU = ((dlu  * 20.0) + (gpLUlen * 32.0 / vLUDiv) * 18.0) / 38.0;
+        divGpLD = ((dld  * 20.0) + (gpLDlen * 32.0 / vLDDiv) * 18.0) / 38.0;
+        divGpRU = ((dru * 20.0) + (gpRUlen * 32.0 / vRUDiv) * 18.0) / 38.0;
+        divGpRD = ((drd * 20.0) + (gpRDlen * 32.0 / vRDDiv) * 18.0) / 38.0;
+    } 
+    else {
+        divGpLU = (dlu  * gpLUlen) / (vLUDiv);
+        divGpLD = (dld  * gpLDlen) / (vLDDiv);
+        divGpRU = (dru * gpRUlen) / (vRUDiv);
+        divGpRD = (drd * gpRDlen) / (vRDDiv);
+    }
     
 #if LOG_CROP_FINDLINE
-    printf("compare div LU:%lf(%d/%lf) - %.2f, LD:%lf(%d/%lf) - %.2f, RU:%lf(%d/%lf) - %.2f, RD:%lf(%d/%lf) - %.2f \n", 
-            divGpLU, gpLUlen, vLUDiv, dlu,
-            divGpLD, gpLDlen, vLDDiv, dld, 
-            divGpRU, gpRUlen, vRUDiv, dru, 
-            divGpRD, gpRDlen, vRDDiv, drd);
+    printf("compare div LU:%.2lf(%.2lf/%.2lf) - %.2f, LD:%.2lf(%.2lf/%.2lf) - %.2f, RU:%.2lf(%.2lf/%.2lf) - %.2f, RD:%.2lf(%.2lf/%.2lf) - %.2f radio: (%.2lf:%.2lf) \n",
+                        divGpLU, gpLUlen, vLUDiv, dlu,
+                        divGpLD, gpLDlen, vLDDiv, dld,
+                        divGpRU, gpRUlen, vRUDiv, dru,
+                        divGpRD, gpRDlen, vRDDiv, drd, width, (high * 1.2));
 #endif
 
     maxDiv = aspMax(divGpLU, maxDiv);
@@ -9363,8 +9559,8 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
             }
         
             if ((vLD != 0)  || (vRU != 0)) {
-                distN = calcuLineGroupDist(pGrpLU, vLUn, gpLUlen);
-                distV = calcuLineGroupDist(pGrpLU, vLUv, gpLUlen);
+                distN = calcuLineGroupDist(pGrpLU, vLUn, (int)gpLUlen);
+                distV = calcuLineGroupDist(pGrpLU, vLUv, (int)gpLUlen);
 #if LOG_CROP_FINDLINE
                 printf("vLU compare uv distN=%lf, distV=%lf\n", distN, distV);
 #endif
@@ -9432,8 +9628,8 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
             }
             
             if ((vLU != 0) || (vRD != 0)) {
-                distN = calcuLineGroupDist(pGrpLD, vLDn, gpLDlen);
-                distV = calcuLineGroupDist(pGrpLD, vLDv, gpLDlen);
+                distN = calcuLineGroupDist(pGrpLD, vLDn, (int)gpLDlen);
+                distV = calcuLineGroupDist(pGrpLD, vLDv, (int)gpLDlen);
 #if LOG_CROP_FINDLINE
                 printf("vLD compare uv distN=%lf, distV=%lf\n", distN, distV);
 #endif
@@ -9500,8 +9696,8 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
                 ret =getRectVectorFromV(vRUv, srt, vLU);                
             }
             if ((vRD != 0) || (vLU != 0)) {        
-                distN = calcuLineGroupDist(pGrpRU, vRUn, gpRUlen);
-                distV = calcuLineGroupDist(pGrpRU, vRUv, gpRUlen);
+                distN = calcuLineGroupDist(pGrpRU, vRUn, (int)gpRUlen);
+                distV = calcuLineGroupDist(pGrpRU, vRUv, (int)gpRUlen);
 #if LOG_CROP_FINDLINE
                 printf("vRU compare uv distN=%lf, distV=%lf\n", distN, distV);
 #endif
@@ -9568,8 +9764,8 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
                 ret =getRectVectorFromV(vRDv, srt, vLD);                
             }
             if ((vRU != 0) || (vLD != 0)) {
-                distN = calcuLineGroupDist(pGrpRD, vRDn, gpRDlen);
-                distV = calcuLineGroupDist(pGrpRD, vRDv, gpRDlen);
+                distN = calcuLineGroupDist(pGrpRD, vRDn, (int)gpRDlen);
+                distV = calcuLineGroupDist(pGrpRD, vRDv, (int)gpRDlen);
 #if LOG_CROP_FINDLINE
                 printf("vRD compare uv distN=%lf, distV=%lf\n", distN, distV);
 #endif
