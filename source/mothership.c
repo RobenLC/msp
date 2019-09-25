@@ -4896,7 +4896,7 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
         }
     }
 
-    for (int i = 0; i < ex_len; i++) {
+    for (i = 0; i < ex_len; i++) {
         if (lf[0] > exlf[i * 2]) {
             lf[0] = exlf[i * 2];
             lf[1] = exlf[i * 2 + 1];
@@ -4917,7 +4917,7 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
     acu1 = 0;
     acu2 = 0;
     
-    for (int i = SKIP_HEAD_TAIL_LEN; i < (ex_len-SKIP_HEAD_TAIL_LEN); i++) {
+    for (i = SKIP_HEAD_TAIL_LEN; i < (ex_len-SKIP_HEAD_TAIL_LEN); i++) {
         d1 = exlf[i * 2] - lf[0];
         d2 = rt[0] - exrt[i * 2];
 
@@ -5041,7 +5041,7 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
             r = rtrun[0] - rlRange;
             l = lfrun[0] - lfRange;
         }
-        for (int i = 0; i < ex_len; i++) {
+        for (i = 0; i < ex_len; i++) {
             //__android_log_print(ANDROID_LOG_VERBOSE, "calculate", "sflag: %d, %d - rt: (%.2lf, %.2lf) lf: (%.2lf, %.2lf) r:%.2lf, l:%.2lf  (%.2lf, %.2lf) (%.2lf, %.2lf)\n"
             //, skewflag, i, exrt[i * 2], exrt[i * 2+1], exlf[i * 2], exlf[i * 2+1], r, l, rt[0], rt[1], lf[0], lf[1]);
             if (skewflag == 1) { //rt up, lf dn
