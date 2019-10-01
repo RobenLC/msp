@@ -10277,7 +10277,7 @@ static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, st
             ppt36->crp36Pots[ix*2+0] = val;
             ppt36->crp36Pots[ix*2+1] = hval;
 
-            #if 1//CROP_CALCU_PROCESS
+            #if CROP_CALCU_PROCESS
             sprintf_f(rs->logs, "%d. (%d, %d) \n", ix, val, hval);
             print_f(rs->plogs, "DoC", rs->logs);
             #endif
@@ -43909,67 +43909,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if (pllcmd[ins]) {
                     evcnt++;
                     switch(ins) {
+
                     case 9:
-                        sprintf_f(mrs->log, "[GW] get ch from p2: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
-                        print_f(&mrs->plog, "fs145", mrs->log);
-
-                        mrs_ipc_get(mrs, minfo, 2, 1);
-
-                        sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
-                        print_f(&mrs->plog, "fs145", mrs->log);
-
-                        mindex = ((minfo[0] & 0x3f) << 5) | (minfo[1] & 0x1f);
-                        mindex = mindex & 0x3ff;
-
-                        pubffedt = pubffh;
-                        while (pubffedt) {
-                        
-                            #if DBG_USB_GATE
-                            sprintf_f(mrs->log, "    [CROP]  check 0x%.3x  get index: 0x%.3x \n", pubffedt->ubindex & 0x3ff, mindex);
-                            print_f(&mrs->plog, "fs145", mrs->log);
-                            #endif
-                            
-                            if ((pubffedt->ubindex & 0x3ff) == mindex) {
-                                break;
-                            }
-                            pubffedt = pubffedt->ubnxt;
-                        }
-                        
-                        if (pubffedt) {
-                            ptinfomod = (struct aspMetaDataviaUSB_s *)pubffedt->ubinfoaddr;
-                        }
-
-                        if (ptinfomod) {
-                            addrc = (char *)&ptinfomod->CROP_POS_F1;
-
-                            ret = mrs_ipc_get(mrs, addrc, 16, 1);
-                            if (ret != 16) {
-                                sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
-                                print_f(&mrs->plog, "fs145", mrs->log);
-                            }
-                            
-                            sprintf_f(mrs->log, "9 dump crop ch result: \n");
-                            print_f(&mrs->plog, "fs145", mrs->log);
-
-                            //shmem_dump(addrc, 16);
-
-                            //dbgMetaUsb(ptinfomod);
-                        } else {
-                            ret = mrs_ipc_get(mrs, cordbuf, 16, 1);
-                            if (ret != 16) {
-                                sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
-                                print_f(&mrs->plog, "fs145", mrs->log);
-                            }
-
-                            sprintf_f(mrs->log, "[GW] Error!!! can't find scan info address, get cord: \n");
-                            print_f(&mrs->plog, "fs145", mrs->log);
-
-                            shmem_dump(cordbuf, 16);
-                        }
-
-                        write(outfd[1], minfo, 2);
-                        
-                        break;
                     case 10:
                         sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
                         print_f(&mrs->plog, "fs145", mrs->log);
@@ -44028,7 +43969,14 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             shmem_dump(cordbuf, 16);
                         }
 
-                        write(outfd[3], minfo, 2);
+                        sprintf_f(mrs->log, "[GW] pri or sec: %d\n", ptinfomod->PRI_O_SEC);
+                        print_f(&mrs->plog, "fs145", mrs->log);
+
+                        if (ptinfomod->PRI_O_SEC == 0) {
+                            write(outfd[1], minfo, 2);
+                        } else {
+                            write(outfd[3], minfo, 2);
+                        }
 
                         break;
                     case 7:
@@ -44965,7 +44913,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             totsz[ins+1] = 0;
                             ring_buf_init(ringbf[ins]);
                             ring_buf_init(ringbf[ins+1]);
-                            ring_buf_init(&mrs->cmdTx);
+                            //ring_buf_init(&mrs->cmdTx);
                             ring_buf_init(&mrs->dataRx);
                         }
                         else if (pllcmd[ins] == 'b') {
@@ -45395,19 +45343,18 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     #else
 
                                     //memcpy(exptbuff, addrs, lens);    
+
+                                    len = ring_buf_get(&mrs->dataRx, &addrc);
+                                    while (len <= 0) {
+                                        usleep(100000);
+                                        len = ring_buf_get(&mrs->dataRx, &addrc);
+                                    }
+                                    memset(addrc, 0, len);    
+                                    
                                     if (ins == 3) {
-                                        
                                         ptscaninfoduo->ASP_MAGIC_ASPC[0] = indexfo[0];
                                         ptscaninfoduo->ASP_MAGIC_ASPC[1] = indexfo[1];
                                         ptscaninfoduo->MPIONT_LEN = lens;
-
-                                        len = ring_buf_get(&mrs->cmdTx, &addrc);
-                                        while (len <= 0) {
-                                            usleep(100000);
-                                            len = ring_buf_get(&mrs->cmdTx, &addrc);
-                                        }
-
-                                        memset(addrc, 0, len);
 
                                         val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
                                         
@@ -45415,11 +45362,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         print_f(&mrs->plog, "fs145", mrs->log);
                                         
                                         memcpy(addrc, ptscaninfoduo, val);
-                                        shmem_dump(addrc, val);
+                                        //shmem_dump(addrc, val);
                                         //addrc += val;
 
                                         memcpy(addrc + val, addrs, lens);
-                                        shmem_dump(addrc + val, 32);
+                                        //shmem_dump(addrc + val, 32);
 
                                         //shmem_dump(addrc, val+lens);
                                         
@@ -45427,38 +45374,25 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 2\n", val, lens, len);                                
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                         }
-
-                                        ring_buf_prod(&mrs->cmdTx);
                                         
-                                        sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x - 2\n", val, lens, len, indexfo[0], indexfo[1]);
-                                        print_f(&mrs->plog, "fs145", mrs->log);
-                                        
-                                        mrs_ipc_put(mrs, "o", 1, 2);
-                                        mrs_ipc_put(mrs, indexfo, 2, 2);
-                                    } else {
+                                    }
+                                    else {
                                         ptscaninfo->ASP_MAGIC_ASPC[0] = indexfo[0];
                                         ptscaninfo->ASP_MAGIC_ASPC[1] = indexfo[1];
                                         ptscaninfo->MPIONT_LEN = lens;
 
-                                        len = ring_buf_get(&mrs->dataRx, &addrc);
-                                        while (len <= 0) {
-                                            usleep(100000);
-                                            len = ring_buf_get(&mrs->dataRx, &addrc);
-                                        }
 
-                                        memset(addrc, 0, len);
-
-                                        val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
+                                        val = ptscaninfo->EXTRA_POINT - ptscaninfo->ASP_MAGIC_ASPC;
 
                                         sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
                                         print_f(&mrs->plog, "fs145", mrs->log);
 
                                         memcpy(addrc, ptscaninfo, val);
-                                        shmem_dump(addrc, val);
+                                        //shmem_dump(addrc, val);
                                         //addrc += val;
 
                                         memcpy(addrc+val, addrs, lens);
-                                        shmem_dump(addrc+val, 32);
+                                        //shmem_dump(addrc+val, 32);
                                         
                                         //shmem_dump(addrc, val+lens);
 
@@ -45467,15 +45401,16 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             print_f(&mrs->plog, "fs145", mrs->log);
                                         }
 
-                                        ring_buf_prod(&mrs->dataRx);
-                                        
-                                        sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x - 1\n", val, lens, len, indexfo[0], indexfo[1]);
-                                        print_f(&mrs->plog, "fs145", mrs->log);
-                                        
-                                        mrs_ipc_put(mrs, "o", 1, 1);
-                                        mrs_ipc_put(mrs, indexfo, 2, 1);
                                     }
                                     #endif
+
+                                    ring_buf_prod(&mrs->dataRx);
+
+                                    sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
+                                    print_f(&mrs->plog, "fs145", mrs->log);
+
+                                    mrs_ipc_put(mrs, "o", 1, 2);
+                                    mrs_ipc_put(mrs, indexfo, 2, 2);
                                     
                                     sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x- end of transmission \n", 
                                                                   ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
@@ -48864,7 +48799,7 @@ static int p3(struct procRes_s *rs)
                 print_f(rs->plogs, "P3", rs->logs);
 
                 //sleep(10);
-                len = ring_buf_cons(rs->pcmdTx, &addr);
+                len = ring_buf_cons(rs->pdataRx, &addr);
                 if (len >= 0) {
                     sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
                     print_f(rs->plogs, "P3", rs->logs);
@@ -48874,8 +48809,8 @@ static int p3(struct procRes_s *rs)
                         memset(pusbmeta, 0, len);
                         memcpy(pusbmeta, addr, len);  
                         
-                        shmem_dump(addr, 228);
-                        shmem_dump(addr+228, 32);
+                        //shmem_dump(addr, 228);
+                        //shmem_dump(addr+228, 32);
                         
                         msync(pusbmeta, len, MS_SYNC);
 
@@ -51067,7 +51002,7 @@ static int atFindIdx(char *str, char ch)
 #define LOG_P6_RX_EN    (0)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
-#define LOG_P6_CROP_EN    (1)
+#define LOG_P6_CROP_EN    (0)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
@@ -51561,8 +51496,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             csws = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
@@ -51582,8 +51517,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             /* second page */
             pdt = &pct[ASPOP_IMG_LEN_DUO];
@@ -51635,8 +51570,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
             
             cswd = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS_DUO, &cswd, ASPOP_STA_UPD);
@@ -51656,8 +51591,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
             
             /* send back bmp header */
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
@@ -52318,8 +52253,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
             
 
             csws = 0;
@@ -52340,8 +52275,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             #if !MOVE_MUTX_TO_FRONT_P6
             ch = 0;
@@ -52681,8 +52616,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
             
             goto socketEnd;
         }
@@ -53350,8 +53285,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
             
             csws = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
@@ -53371,8 +53306,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
             
             #if 1
             pdt = &pct[ASPOP_CROP_02_DUO];
@@ -53535,8 +53470,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
             
             cswd = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS_DUO, &cswd, ASPOP_STA_UPD);
@@ -53556,8 +53491,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             #if 0
             cpn = 0;
@@ -54064,7 +53999,7 @@ static int p6(struct procRes_s *rs)
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
             sprintf_f(rs->logs, "crop meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P11", rs->logs);                     
+            print_f(rs->plogs, "P6", rs->logs);                     
             rotlf[0] = (CFLOAT)cxm;
             rotlf[1] = (CFLOAT)cxn;
 
@@ -54072,7 +54007,7 @@ static int p6(struct procRes_s *rs)
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
             sprintf_f(rs->logs, "crop meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P11", rs->logs);                     
+            print_f(rs->plogs, "P6", rs->logs);                     
             rotup[0] = (CFLOAT)cxm;
             rotup[1] = (CFLOAT)cxn;
 
@@ -54080,7 +54015,7 @@ static int p6(struct procRes_s *rs)
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
             sprintf_f(rs->logs, "crop meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P11", rs->logs);                     
+            print_f(rs->plogs, "P6", rs->logs);                     
             rotrt[0] = (CFLOAT)cxm;
             rotrt[1] = (CFLOAT)cxn;
 
@@ -54088,7 +54023,7 @@ static int p6(struct procRes_s *rs)
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
             sprintf_f(rs->logs, "crop meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P11", rs->logs);                     
+            print_f(rs->plogs, "P6", rs->logs);                     
             rotdn[0] = (CFLOAT)cxm;
             rotdn[1] = (CFLOAT)cxn;
 
@@ -55212,8 +55147,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
             
             csws = 0;
             cfgTableGetChk(pct, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
@@ -55233,8 +55168,8 @@ static int p6(struct procRes_s *rs)
             sendbuf[5+n+1] = '\n';
             sendbuf[5+n+2] = '\0';
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-            sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             val = 0;
             cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_UPD);
@@ -55746,7 +55681,7 @@ static int p6(struct procRes_s *rs)
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
             sprintf_f(rs->logs, "crop meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P11", rs->logs);                     
+            print_f(rs->plogs, "P6", rs->logs);                     
             rotlf[0] = (CFLOAT)cxm;
             rotlf[1] = (CFLOAT)cxn;
 
@@ -55754,7 +55689,7 @@ static int p6(struct procRes_s *rs)
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
             sprintf_f(rs->logs, "crop meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P11", rs->logs);                     
+            print_f(rs->plogs, "P6", rs->logs);                     
             rotup[0] = (CFLOAT)cxm;
             rotup[1] = (CFLOAT)cxn;
 
@@ -55762,7 +55697,7 @@ static int p6(struct procRes_s *rs)
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
             sprintf_f(rs->logs, "crop meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P11", rs->logs);                     
+            print_f(rs->plogs, "P6", rs->logs);                     
             rotrt[0] = (CFLOAT)cxm;
             rotrt[1] = (CFLOAT)cxn;
 
@@ -55770,7 +55705,7 @@ static int p6(struct procRes_s *rs)
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
             sprintf_f(rs->logs, "crop meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P11", rs->logs);                     
+            print_f(rs->plogs, "P6", rs->logs);                     
             rotdn[0] = (CFLOAT)cxm;
             rotdn[1] = (CFLOAT)cxn;
 
