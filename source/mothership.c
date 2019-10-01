@@ -630,6 +630,11 @@ typedef enum {
     ASPOP_USBCROP_FP02,
     ASPOP_USBCROP_FP03,
     ASPOP_USBCROP_FP04,
+    ASPOP_USBCROP_FP01_DUO,
+    ASPOP_USBCROP_FP02_DUO,
+    ASPOP_USBCROP_FP03_DUO,
+    ASPOP_USBCROP_FP04_DUO,
+
     ASPOP_CODE_MAX, /* 121 */
 } aspOpCode_e;
 
@@ -4162,6 +4167,16 @@ static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, cha
         }
 
         memcpy(pmass->masspt, pch, linLength);
+
+        pt = &(pmetausb->CROP_POS_F1);
+        for (i = ASPOP_USBCROP_FP01; i <= ASPOP_USBCROP_FP04; i++) {
+            pct[i].opValue = msb2lsb(pt);
+            pct[i].opStatus = ASPOP_STA_UPD;
+
+            printf("[META] F%d. = (%d, %d) \n", i - ASPOP_USBCROP_FP01 + 1, (pct[i].opValue >> 16) & 0xffff, (pct[i].opValue >> 0) & 0xffff);
+        
+            pt++;
+        }
     }
     
     msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
@@ -4283,6 +4298,16 @@ static int aspMetaReleaseviaUsbDuo(struct mainRes_s *mrs, struct procRes_s *rs, 
         }
 
         memcpy(pmassduo->masspt, pch, linLength);
+
+        pt = &(pmetausbduo->CROP_POS_F1);
+        for (i = ASPOP_USBCROP_FP01_DUO; i <= ASPOP_USBCROP_FP04_DUO; i++) {
+            pct[i].opValue = msb2lsb(pt);
+            pct[i].opStatus = ASPOP_STA_UPD;
+
+            printf("[META] duo F%d. = (%d, %d) \n", i - ASPOP_USBCROP_FP01_DUO + 1, (pct[i].opValue >> 16) & 0xffff, (pct[i].opValue >> 0) & 0xffff);
+        
+            pt++;
+        }
     }
     
     msync(pct, ASPOP_CODE_MAX * sizeof(struct aspConfig_s), MS_SYNC);
@@ -10251,6 +10276,11 @@ static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, st
 
             ppt36->crp36Pots[ix*2+0] = val;
             ppt36->crp36Pots[ix*2+1] = hval;
+
+            #if 1//CROP_CALCU_PROCESS
+            sprintf_f(rs->logs, "%d. (%d, %d) \n", ix, val, hval);
+            print_f(rs->plogs, "DoC", rs->logs);
+            #endif
                             
             pt++;
         }
@@ -28640,6 +28670,7 @@ static int ring_buf_init(struct shmem_s *pp)
         if (pp->uget) {
             pp->uget[idx] = 0;
         }
+        
         //memset(pp->pp[idx], 0xa5, pp->chksz);
         //msync(pp->pp[idx], pp->chksz, MS_SYNC);
     }
@@ -45384,11 +45415,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         print_f(&mrs->plog, "fs145", mrs->log);
                                         
                                         memcpy(addrc, ptscaninfoduo, val);
-                                        //shmem_dump(addrc, val);
+                                        shmem_dump(addrc, val);
                                         //addrc += val;
 
                                         memcpy(addrc + val, addrs, lens);
-                                        //shmem_dump(addrs, lens);
+                                        shmem_dump(addrc + val, 32);
 
                                         //shmem_dump(addrc, val+lens);
                                         
@@ -45423,11 +45454,11 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         print_f(&mrs->plog, "fs145", mrs->log);
 
                                         memcpy(addrc, ptscaninfo, val);
-                                        //shmem_dump(addrc, val);
+                                        shmem_dump(addrc, val);
                                         //addrc += val;
 
                                         memcpy(addrc+val, addrs, lens);
-                                        //shmem_dump(addrs, lens);
+                                        shmem_dump(addrc+val, 32);
                                         
                                         //shmem_dump(addrc, val+lens);
 
@@ -48173,75 +48204,128 @@ static int p2(struct procRes_s *rs)
                 //sleep(10);
                 len = ring_buf_cons(rs->pdataRx, &addr);
                 if (len >= 0) {
-                    //sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
-                    //print_f(rs->plogs, "P2", rs->logs);
+                    sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
+                    print_f(rs->plogs, "P2", rs->logs);
 
                     //shmem_dump(addr, sizeof(struct aspMetaDataviaUSB_s));
-                
                     pusbmeta = aspMemalloc(len, 2);
-
                     if (pusbmeta) {
                         memset(pusbmeta, 0, len);
                         memcpy(pusbmeta, addr, len);  
+
+                        msync(pusbmeta, len, MS_SYNC);
                         
                         if ((pusbmeta->ASP_MAGIC_ASPC[0] == finfo[0]) && 
-                             (pusbmeta->ASP_MAGIC_ASPC[1] == finfo[1])) {
+                            (pusbmeta->ASP_MAGIC_ASPC[1] == finfo[1])) {
 
-                             totsz = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
-                             totsz += sizeof(struct aspMetaDataviaUSB_s);
+                            totsz = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
+                            totsz += sizeof(struct aspMetaDataviaUSB_s);
 
-                             //shmem_dump(addr, totsz);
+                            //shmem_dump(addr, totsz);
 
-                             pcrpdo = aspMemalloc(sizeof(struct aspDoCropCalcu), 2);
-                             pcrpex = aspMemalloc(sizeof(struct aspCropExtra_s), 2); 
-                             pcrp36 = aspMemalloc(sizeof(struct aspCrop36_s), 2); 
-                             if ((pcrpdo) && (pcrpex) && (pcrp36)) {
-                                 memset(pcrpdo, 0, sizeof(struct aspDoCropCalcu));
-                                 memset(pcrpex, 0, sizeof(struct aspCropExtra_s));
-                                 memset(pcrp36, 0, sizeof(struct aspCrop36_s));
-                                 
-                                 pcrpdo->acrpex = pcrpex;
-                                 pcrpdo->acrp36 = pcrp36;
-                                 
-                                 sprintf_f(rs->logs, "crop memory allocate succeed size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
-                                 print_f(rs->plogs, "P2", rs->logs);
-                                 
-                                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
-                                 print_f(rs->plogs, "P2", rs->logs);
-                                 switch (tmp) {
-                                 case RESOLUTION_1200:
-                                     pcrpdo->acrpDPI = 1200;
-                                     break;
-                                 case RESOLUTION_600:
-                                     pcrpdo->acrpDPI = 600;
-                                     break;
-                                 case RESOLUTION_300:
-                                     pcrpdo->acrpDPI = 300;
-                                     break;
-                                 case RESOLUTION_200:
-                                     pcrpdo->acrpDPI = 200;
-                                     break;
-                                 case RESOLUTION_150:
-                                     pcrpdo->acrpDPI = 150;
-                                     break;
-                                 default:
-                                     pcrpdo->acrpDPI = 300;
-                                     break;
-                                 }
+                            pcrpdo = aspMemalloc(sizeof(struct aspDoCropCalcu), 2);
+                            pcrpex = aspMemalloc(sizeof(struct aspCropExtra_s), 2); 
+                            pcrp36 = aspMemalloc(sizeof(struct aspCrop36_s), 2); 
+                            if ((pcrpdo) && (pcrpex) && (pcrp36)) {
+                                memset(pcrpdo, 0, sizeof(struct aspDoCropCalcu));
+                                memset(pcrpex, 0, sizeof(struct aspCropExtra_s));
+                                memset(pcrp36, 0, sizeof(struct aspCrop36_s));
+                                
+                                pcrpdo->acrpex = pcrpex;
+                                pcrpdo->acrp36 = pcrp36;
+                                
+                                sprintf_f(rs->logs, "crop memory allocate succeed size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
+                                print_f(rs->plogs, "P2", rs->logs);
+                                
+                                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                                sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                                print_f(rs->plogs, "P2", rs->logs);
+                                switch (tmp) {
+                                case RESOLUTION_1200:
+                                    pcrpdo->acrpDPI = 1200;
+                                    break;
+                                case RESOLUTION_600:
+                                    pcrpdo->acrpDPI = 600;
+                                    break;
+                                case RESOLUTION_300:
+                                    pcrpdo->acrpDPI = 300;
+                                    break;
+                                case RESOLUTION_200:
+                                    pcrpdo->acrpDPI = 200;
+                                    break;
+                                case RESOLUTION_150:
+                                    pcrpdo->acrpDPI = 150;
+                                    break;
+                                default:
+                                    pcrpdo->acrpDPI = 300;
+                                    break;
+                                }
 
-                                 ret = doCropCalcuPt(pcrpdo, pusbmeta, &pusbmeta->EXTRA_POINT[4], len - sizeof(struct aspMetaDataviaUSB_s), rs, 2);
-                                 sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
-                                 print_f(rs->plogs, "P2", rs->logs);
-                                 
-                                 ret = doCropCalcu36(pcrpdo, addr, len, rs, 2);
-                                 sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
-                                 print_f(rs->plogs, "P2", rs->logs);
+                                ret = doCropCalcuPt(pcrpdo, pusbmeta, &pusbmeta->EXTRA_POINT[4], len - sizeof(struct aspMetaDataviaUSB_s), rs, 2);
+                                sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
+                                print_f(rs->plogs, "P2", rs->logs);
+                                
+                                ret = doCropCalcu36(pcrpdo, addr, len, rs, 2);
+                                sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
+                                print_f(rs->plogs, "P2", rs->logs);
 
-                                 ret = doCropCalcu(pcrpdo, addr, len, rs, 2);                                 
-                                 sprintf_f(rs->logs, "do crop extra ret: %d \n", ret);
-                                 print_f(rs->plogs, "P2", rs->logs);
+                                ret = doCropCalcu(pcrpdo, addr, len, rs, 2);                                 
+                                sprintf_f(rs->logs, "do crop extra ret: %d \n", ret);
+                                print_f(rs->plogs, "P2", rs->logs);
 
+                                ret = getRotateP1(pcrp36, rotlf);
+                                if (!ret) {
+                                    sprintf_f(rs->logs, "get rotateP1 (%.2lf, %.2lf) \n", rotlf[0], rotlf[1]);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                                
+                                ret = getRotateP2(pcrp36, rotup);
+                                if (!ret) {
+                                    sprintf_f(rs->logs, "get rotateP2 (%.2lf, %.2lf) \n", rotup[0], rotup[1]);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                                
+                                ret = getRotateP3(pcrp36, rotrt);
+                                if (!ret) {
+                                    sprintf_f(rs->logs, "get rotateP3 (%.2lf, %.2lf) \n", rotrt[0], rotrt[1]);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                                
+                                ret = getRotateP4(pcrp36, rotdn);
+                                if (!ret) {
+                                    sprintf_f(rs->logs, "get rotateP4 (%.2lf, %.2lf) \n", rotdn[0], rotdn[1]);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                                
+                                tmp = (uint32_t)round(rotlf[0]);
+                                cord = (uint32_t)round(rotlf[1]);
+                                cord = cord | (tmp <<16);
+                                lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
+                                
+                                tmp = (uint32_t)round(rotup[0]);
+                                cord = (uint32_t)round(rotup[1]);
+                                cord = cord | (tmp <<16);
+                                lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
+                                
+                                tmp = (uint32_t)round(rotrt[0]);
+                                cord = (uint32_t)round(rotrt[1]);
+                                cord = cord | (tmp <<16);
+                                lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
+                                
+                                tmp = (uint32_t)round(rotdn[0]);
+                                cord = (uint32_t)round(rotdn[1]);
+                                cord = cord | (tmp <<16);
+                                lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
+                                
+                                addr = (char *) &pusbmeta->CROP_POS_F1;
+                                
+                                //sprintf_f(rs->logs, "print usb info: \n");
+                                //print_f(rs->plogs, "P2", rs->logs);
+                                
+                                //shmem_dump(addr, 16);
+                                
+                                //dbgMetaUsb(pusbmeta);
+                                //getRotRectPoint(pcrp36, 0, 0, 2);
                              }
                              else {
                                  sprintf_f(rs->logs, "crop memory allocate failed!!! size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
@@ -48251,6 +48335,11 @@ static int p2(struct procRes_s *rs)
                         else {
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
                             print_f(rs->plogs, "P2", rs->logs);
+
+                            shmem_dump(addr, 512);
+                            dbgMetaUsb(pusbmeta);
+
+                            memset(addr, 0, 16);
                         }
                         
                         //dbgMetaUsb(pusbmeta);
@@ -48260,60 +48349,6 @@ static int p2(struct procRes_s *rs)
                     }
                 
                 }
-
-                ret = getRotateP1(pcrp36, rotlf);
-                if (!ret) {
-                    sprintf_f(rs->logs, "get rotateP1 (%.2lf, %.2lf) \n", rotlf[0], rotlf[1]);
-                    print_f(rs->plogs, "P2", rs->logs);
-                }
-
-                ret = getRotateP2(pcrp36, rotup);
-                if (!ret) {
-                    sprintf_f(rs->logs, "get rotateP2 (%.2lf, %.2lf) \n", rotup[0], rotup[1]);
-                    print_f(rs->plogs, "P2", rs->logs);
-                }
-
-                ret = getRotateP3(pcrp36, rotrt);
-                if (!ret) {
-                    sprintf_f(rs->logs, "get rotateP3 (%.2lf, %.2lf) \n", rotrt[0], rotrt[1]);
-                    print_f(rs->plogs, "P2", rs->logs);
-                }
-
-                ret = getRotateP4(pcrp36, rotdn);
-                if (!ret) {
-                    sprintf_f(rs->logs, "get rotateP4 (%.2lf, %.2lf) \n", rotdn[0], rotdn[1]);
-                    print_f(rs->plogs, "P2", rs->logs);
-                }
-
-                tmp = (uint32_t)round(rotlf[0]);
-                cord = (uint32_t)round(rotlf[1]);
-                cord = cord | (tmp <<16);
-                lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
-
-                tmp = (uint32_t)round(rotup[0]);
-                cord = (uint32_t)round(rotup[1]);
-                cord = cord | (tmp <<16);
-                lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
-                
-                tmp = (uint32_t)round(rotrt[0]);
-                cord = (uint32_t)round(rotrt[1]);
-                cord = cord | (tmp <<16);
-                lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
-
-                tmp = (uint32_t)round(rotdn[0]);
-                cord = (uint32_t)round(rotdn[1]);
-                cord = cord | (tmp <<16);
-                lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
-                
-                addr = (char *) &pusbmeta->CROP_POS_F1;
-                
-                //sprintf_f(rs->logs, "print usb info: \n");
-                //print_f(rs->plogs, "P2", rs->logs);
-
-                //shmem_dump(addr, 16);
-
-                //dbgMetaUsb(pusbmeta);
-                //getRotRectPoint(pcrp36, 0, 0, 2);
                 
                 memset(uinfo, 0, 32);
                 uinfo[0] = 'O';
@@ -48831,83 +48866,149 @@ static int p3(struct procRes_s *rs)
                 //sleep(10);
                 len = ring_buf_cons(rs->pcmdTx, &addr);
                 if (len >= 0) {
-                    //sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
-                    //print_f(rs->plogs, "P3", rs->logs);
+                    sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
+                    print_f(rs->plogs, "P3", rs->logs);
                 
                     pusbmeta = aspMemalloc(len, 3);
-
                     if (pusbmeta) {
                         memset(pusbmeta, 0, len);
                         memcpy(pusbmeta, addr, len);  
+                        
+                        shmem_dump(addr, 228);
+                        shmem_dump(addr+228, 32);
+                        
+                        msync(pusbmeta, len, MS_SYNC);
 
                         if ((pusbmeta->ASP_MAGIC_ASPC[0] == finfo[0]) && 
-                             (pusbmeta->ASP_MAGIC_ASPC[1] == finfo[1])) {
+                            (pusbmeta->ASP_MAGIC_ASPC[1] == finfo[1])) {
 
-                             totsz = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
-                             totsz += sizeof(struct aspMetaDataviaUSB_s);
+                            totsz = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
+                            totsz += sizeof(struct aspMetaDataviaUSB_s);
 
-                             //shmem_dump(addr, totsz);
+                            //shmem_dump(addr, totsz);
 
-                             pcrpdo = aspMemalloc(sizeof(struct aspDoCropCalcu), 3);
-                             pcrpex = aspMemalloc(sizeof(struct aspCropExtra_s), 3); 
-                             pcrp36 = aspMemalloc(sizeof(struct aspCrop36_s), 3); 
-                             if ((pcrpdo) && (pcrpex) && (pcrp36)) {
-                                 memset(pcrpdo, 0, sizeof(struct aspDoCropCalcu));
-                                 memset(pcrpex, 0, sizeof(struct aspCropExtra_s));
-                                 memset(pcrp36, 0, sizeof(struct aspCrop36_s));
-                                 
-                                 pcrpdo->acrpex = pcrpex;
-                                 pcrpdo->acrp36 = pcrp36;
-                                 
-                                 sprintf_f(rs->logs, "crop memory allocate succeed size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
-                                 print_f(rs->plogs, "P3", rs->logs);
-                                 
-                                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
-                                 print_f(rs->plogs, "P3", rs->logs);
-                                 switch (tmp) {
-                                 case RESOLUTION_1200:
-                                     pcrpdo->acrpDPI = 1200;
-                                     break;
-                                 case RESOLUTION_600:
-                                     pcrpdo->acrpDPI = 600;
-                                     break;
-                                 case RESOLUTION_300:
-                                     pcrpdo->acrpDPI = 300;
-                                     break;
-                                 case RESOLUTION_200:
-                                     pcrpdo->acrpDPI = 200;
-                                     break;
-                                 case RESOLUTION_150:
-                                     pcrpdo->acrpDPI = 150;
-                                     break;
-                                 default:
-                                     pcrpdo->acrpDPI = 300;
-                                     break;
-                                 }
+                            pcrpdo = aspMemalloc(sizeof(struct aspDoCropCalcu), 3);
+                            pcrpex = aspMemalloc(sizeof(struct aspCropExtra_s), 3); 
+                            pcrp36 = aspMemalloc(sizeof(struct aspCrop36_s), 3); 
+                            if ((pcrpdo) && (pcrpex) && (pcrp36)) {
+                                memset(pcrpdo, 0, sizeof(struct aspDoCropCalcu));
+                                memset(pcrpex, 0, sizeof(struct aspCropExtra_s));
+                                memset(pcrp36, 0, sizeof(struct aspCrop36_s));
+                                
+                                pcrpdo->acrpex = pcrpex;
+                                pcrpdo->acrp36 = pcrp36;
+                                
+                                sprintf_f(rs->logs, "crop memory allocate succeed size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
+                                print_f(rs->plogs, "P3", rs->logs);
+                                
+                                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                                sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                                print_f(rs->plogs, "P3", rs->logs);
+                                switch (tmp) {
+                                case RESOLUTION_1200:
+                                    pcrpdo->acrpDPI = 1200;
+                                    break;
+                                case RESOLUTION_600:
+                                    pcrpdo->acrpDPI = 600;
+                                    break;
+                                case RESOLUTION_300:
+                                    pcrpdo->acrpDPI = 300;
+                                    break;
+                                case RESOLUTION_200:
+                                    pcrpdo->acrpDPI = 200;
+                                    break;
+                                case RESOLUTION_150:
+                                    pcrpdo->acrpDPI = 150;
+                                    break;
+                                default:
+                                    pcrpdo->acrpDPI = 300;
+                                    break;
+                                }
 
-                                 ret = doCropCalcuPt(pcrpdo, pusbmeta, &pusbmeta->EXTRA_POINT[4], len - sizeof(struct aspMetaDataviaUSB_s), rs, 2);
-                                 sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
-                                 print_f(rs->plogs, "P3", rs->logs);
+                                ret = doCropCalcuPt(pcrpdo, pusbmeta, &pusbmeta->EXTRA_POINT[4], len - sizeof(struct aspMetaDataviaUSB_s), rs, 2);
+                                sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
+                                print_f(rs->plogs, "P3", rs->logs);
 
-                                 ret = doCropCalcu36(pcrpdo, addr, len, rs, 3);
-                                 sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
-                                 print_f(rs->plogs, "P3", rs->logs);
+                                ret = doCropCalcu36(pcrpdo, addr, len, rs, 3);
+                                sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
+                                print_f(rs->plogs, "P3", rs->logs);
 
-                                 ret = doCropCalcu(pcrpdo, addr, len, rs, 3);
-                                 sprintf_f(rs->logs, "do crop extra ret: %d \n", ret);
-                                 print_f(rs->plogs, "P3", rs->logs);
+                                ret = doCropCalcu(pcrpdo, addr, len, rs, 3);
+                                sprintf_f(rs->logs, "do crop extra ret: %d \n", ret);
+                                print_f(rs->plogs, "P3", rs->logs);
 
-                             }
-                             else {
-                                 sprintf_f(rs->logs, "crop memory allocate failed!!! size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
-                                 print_f(rs->plogs, "P3", rs->logs);
-                             }
-                        } else {
+                            }
+                            else {
+                                sprintf_f(rs->logs, "crop memory allocate failed!!! size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
+                                print_f(rs->plogs, "P3", rs->logs);
+                            }
+                              
+                            ret = getRotateP1(pcrp36, rotlf);
+                            if (!ret) {
+                                sprintf_f(rs->logs, "get rotateP1 (%.2lf, %.2lf) \n", rotlf[0], rotlf[1]);
+                                print_f(rs->plogs, "P3", rs->logs);
+                            }
+                            
+                            ret = getRotateP2(pcrp36, rotup);
+                            if (!ret) {
+                                sprintf_f(rs->logs, "get rotateP2 (%.2lf, %.2lf) \n", rotup[0], rotup[1]);
+                                print_f(rs->plogs, "P3", rs->logs);
+                            }
+                            
+                            ret = getRotateP3(pcrp36, rotrt);
+                            if (!ret) {
+                                sprintf_f(rs->logs, "get rotateP3 (%.2lf, %.2lf) \n", rotrt[0], rotrt[1]);
+                                print_f(rs->plogs, "P3", rs->logs);
+                            }
+                            
+                            ret = getRotateP4(pcrp36, rotdn);
+                            if (!ret) {
+                                sprintf_f(rs->logs, "get rotateP4 (%.2lf, %.2lf) \n", rotdn[0], rotdn[1]);
+                                print_f(rs->plogs, "P3", rs->logs);
+                            }
+                            
+                            tmp = (uint32_t)round(rotlf[0]);
+                            cord = (uint32_t)round(rotlf[1]);
+                            cord = cord | (tmp <<16);
+                            lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
+                            
+                            tmp = (uint32_t)round(rotup[0]);
+                            cord = (uint32_t)round(rotup[1]);
+                            cord = cord | (tmp <<16);
+                            lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
+                            
+                            tmp = (uint32_t)round(rotrt[0]);
+                            cord = (uint32_t)round(rotrt[1]);
+                            cord = cord | (tmp <<16);
+                            lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
+                            
+                            tmp = (uint32_t)round(rotdn[0]);
+                            cord = (uint32_t)round(rotdn[1]);
+                            cord = cord | (tmp <<16);
+                            lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
+                            
+                            addr = (char *) &pusbmeta->CROP_POS_F1;
+                            
+                            //sprintf_f(rs->logs, "print usb info: \n");
+                            //print_f(rs->plogs, "P3", rs->logs);
+                            
+                            //shmem_dump(addr, 16);
+                            
+                            //dbgMetaUsb(pusbmeta);
+                            
+                            //getRotRectPoint(pcrp36, 0, 0, 3);
+                             
+                        }
+                        else {
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
                             print_f(rs->plogs, "P3", rs->logs);
+
+                            //shmem_dump(addr, 512);
+                            //dbgMetaUsb(pusbmeta);
+
+                            memset(addr, 0, 16);
                         }
-                        
+
                         //dbgMetaUsb(pusbmeta);
                     } else {
                         sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
@@ -48915,61 +49016,6 @@ static int p3(struct procRes_s *rs)
                     }
                 
                 }
-
-                ret = getRotateP1(pcrp36, rotlf);
-                if (!ret) {
-                    sprintf_f(rs->logs, "get rotateP1 (%.2lf, %.2lf) \n", rotlf[0], rotlf[1]);
-                    print_f(rs->plogs, "P3", rs->logs);
-                }
-
-                ret = getRotateP2(pcrp36, rotup);
-                if (!ret) {
-                    sprintf_f(rs->logs, "get rotateP2 (%.2lf, %.2lf) \n", rotup[0], rotup[1]);
-                    print_f(rs->plogs, "P3", rs->logs);
-                }
-
-                ret = getRotateP3(pcrp36, rotrt);
-                if (!ret) {
-                    sprintf_f(rs->logs, "get rotateP3 (%.2lf, %.2lf) \n", rotrt[0], rotrt[1]);
-                    print_f(rs->plogs, "P3", rs->logs);
-                }
-
-                ret = getRotateP4(pcrp36, rotdn);
-                if (!ret) {
-                    sprintf_f(rs->logs, "get rotateP4 (%.2lf, %.2lf) \n", rotdn[0], rotdn[1]);
-                    print_f(rs->plogs, "P3", rs->logs);
-                }
-
-                tmp = (uint32_t)round(rotlf[0]);
-                cord = (uint32_t)round(rotlf[1]);
-                cord = cord | (tmp <<16);
-                lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
-
-                tmp = (uint32_t)round(rotup[0]);
-                cord = (uint32_t)round(rotup[1]);
-                cord = cord | (tmp <<16);
-                lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
-                
-                tmp = (uint32_t)round(rotrt[0]);
-                cord = (uint32_t)round(rotrt[1]);
-                cord = cord | (tmp <<16);
-                lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
-
-                tmp = (uint32_t)round(rotdn[0]);
-                cord = (uint32_t)round(rotdn[1]);
-                cord = cord | (tmp <<16);
-                lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
-                
-                addr = (char *) &pusbmeta->CROP_POS_F1;
-                
-                //sprintf_f(rs->logs, "print usb info: \n");
-                //print_f(rs->plogs, "P3", rs->logs);
-
-                //shmem_dump(addr, 16);
-
-                //dbgMetaUsb(pusbmeta);
-
-                //getRotRectPoint(pcrp36, 0, 0, 3);
                 
                 memset(uinfo, 0, 32);
                 uinfo[0] = 'O';
@@ -51021,7 +51067,7 @@ static int atFindIdx(char *str, char ch)
 #define LOG_P6_RX_EN    (0)
 #define LOG_P6_UTC_EN  (0)
 #define LOG_P6_PARA_EN  (0)
-#define LOG_P6_CROP_EN    (0)
+#define LOG_P6_CROP_EN    (1)
 static int p6(struct procRes_s *rs)
 {
     char ssidPath[128] = "/root/scaner/ssid.bin";
@@ -53145,11 +53191,13 @@ static int p6(struct procRes_s *rs)
             }
             
             /* initial cropping config */
+            #if 0
             memset(pcp36, 0, sizeof(struct aspCrop36_s));
             memset(pcpex, 0, sizeof(struct aspCropExtra_s));
 
             memset(pcp36duo, 0, sizeof(struct aspCrop36_s));
             memset(pcpexduo, 0, sizeof(struct aspCropExtra_s));
+            #endif
             
             #if 1
             pdt = &pct[ASPOP_CROP_02];
@@ -53510,7 +53558,8 @@ static int p6(struct procRes_s *rs)
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
             sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
             print_f(rs->plogs, "P6", rs->logs);
-            
+
+            #if 0
             cpn = 0;
             pcp36->crp36Pots[cpn*2+0] = 100;
             pcp36->crp36Pots[cpn*2+1] = 0;
@@ -53546,6 +53595,7 @@ static int p6(struct procRes_s *rs)
             ret = doCropCalcu36(pcpdoduo, 0, 0, rs, 6); 
             sprintf_f(rs->logs, "do crop 36 duo ret: %d \n", ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
 
             msync(pmass, sizeof(struct aspMetaMass_s), MS_SYNC);
 
@@ -53567,9 +53617,9 @@ static int p6(struct procRes_s *rs)
 
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
             //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
-            //print_f(rs->plogs, "P6", rs->logs);
-                
+            //print_f(rs->plogs, "P6", rs->logs);  
             if (pmass->massRecd > 1) {
+                #if 0
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpx = 0;
                     cpn = 2;
@@ -53636,8 +53686,10 @@ static int p6(struct procRes_s *rs)
                     pcpex->crpexRtPots[cpx*2+0] = pcp36->crp36Pots[cpn*2+0];
                     pcpex->crpexRtPots[cpx*2+1] = pcp36->crp36Pots[cpn*2+1];
                 }
-
                 cof = cpx + 1;
+                #else
+                cof = 0;
+                #endif
 
                 ret = 0;
 
@@ -53735,10 +53787,12 @@ static int p6(struct procRes_s *rs)
 
                     linecnt ++;
 
+                    #if 0
                     pcpex->crpexLfPots[cpx*2+0] = cxm;
                     pcpex->crpexLfPots[cpx*2+1] = vhi;
                     pcpex->crpexRtPots[cpx*2+0] = cxn;
                     pcpex->crpexRtPots[cpx*2+1] = vhi;
+                    #endif
 
                     #if 0
                     print_f(rs->plogs, "P6", rs->logs);
@@ -53764,6 +53818,7 @@ static int p6(struct procRes_s *rs)
                 cpx = linecnt + cof;
                 cls =  masRecd + cof - 1;
 
+                #if 0
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpn = 9;
                     if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
@@ -53942,13 +53997,14 @@ static int p6(struct procRes_s *rs)
                     #endif  // #if 1//CROP_MIGRATE_TO_APP
 
                 }
+                #endif
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
                 //pmass->massRecd = 0; /* move to the end of transmitting */ 
                 //pmass->massUsed = 0;
 
-                #if !CROP_MIGRATE_TO_APP
+                #if 0//!CROP_MIGRATE_TO_APP
                 /* fix most left and most right shift */  
                 fhi = 0.0; fwh = 0.0; fwe = 0.0;
                 for (ix=0; ix < 4; ix++) {
@@ -53997,10 +54053,46 @@ static int p6(struct procRes_s *rs)
                     #endif
                 
                 }
+                #endif // #if !CROP_MIGRATE_TO_APP
             } 
 
+            #if 0
             ret = doCropCalcu(pcpdo, 0, 0, rs, 6); 
-            
+            #endif // #if CROP_MIGRATE_TO_APP
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P11", rs->logs);                     
+            rotlf[0] = (CFLOAT)cxm;
+            rotlf[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP02, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P11", rs->logs);                     
+            rotup[0] = (CFLOAT)cxm;
+            rotup[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP03, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P11", rs->logs);                     
+            rotrt[0] = (CFLOAT)cxm;
+            rotrt[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP04, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P11", rs->logs);                     
+            rotdn[0] = (CFLOAT)cxm;
+            rotdn[1] = (CFLOAT)cxn;
+
+            #if 0
             msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
             ret = getRotateP1(pcp36, rotlf);
             if (!ret) {
@@ -54025,8 +54117,8 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-            #endif // #if !CROP_MIGRATE_TO_APP
-
+            #endif
+            
             #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
                 sprintf_f(rs->logs, "%d. %lf, %lf \n", i, pcp36->crp36Pots[i*2+0], pcp36->crp36Pots[i*2+1]);
@@ -54072,7 +54164,7 @@ static int p6(struct procRes_s *rs)
                 sendbuf[5+n+1] = '\n';
                 sendbuf[5+n+2] = '\0';
                 ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
-                #if 0//LOG_P6_CROP_EN
+                #if 0 //LOG_P6_CROP_EN
                 sprintf_f(rs->logs, "socket send CROP  %c %d [ %s ], len:%d \n", sendbuf[3], i, &sendbuf[5], 5+n+3);
                 print_f(rs->plogs, "P6", rs->logs);
                 #endif
@@ -54099,8 +54191,8 @@ static int p6(struct procRes_s *rs)
             ret = write(rs->psocket_at->connfd, sendbuf, 5+n+3);
             //sprintf(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
             //print_f(rs->plogs, "P6", rs->logs);
-
             if (pmassduo->massRecd > 1) {
+                #if 0
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpx = 0;
                     cpn = 2;
@@ -54169,6 +54261,9 @@ static int p6(struct procRes_s *rs)
                 }
 
                 cof = cpx + 1;
+                #else
+                cof = 0;
+                #endif
 
                 ret = 0;
 
@@ -54265,11 +54360,13 @@ static int p6(struct procRes_s *rs)
                     }
 
                     linecnt ++;
-
+                    
+                    #if 0
                     pcpexduo->crpexLfPots[cpx*2+0] = cxm;
                     pcpexduo->crpexLfPots[cpx*2+1] = vhi;
                     pcpexduo->crpexRtPots[cpx*2+0] = cxn;
                     pcpexduo->crpexRtPots[cpx*2+1] = vhi;
+                    #endif
 
                     #if 0
                     print_f(rs->plogs, "P6", rs->logs);
@@ -54296,6 +54393,7 @@ static int p6(struct procRes_s *rs)
                 cpx = linecnt + cof;
                 cls =  masRecd + cof - 1;
 
+                #if 0
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpn = 9;
                     if (pcp36duo->crp36Pots[cpn*2+1] > pcpexduo->crpexRtPots[cls*2+1]) {
@@ -54475,12 +54573,13 @@ static int p6(struct procRes_s *rs)
                     #endif
 
                 }
+                #endif 
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
                 //pmassduo->massRecd = 0; /* move to the end of transmitting */
                 //pmassduo->massUsed = 0;
-                #if !CROP_MIGRATE_TO_APP
+                #if 0 //!CROP_MIGRATE_TO_APP
                 /* fix most left and most right shift */  
                 fhi = 0.0; fwh = 0.0; fwe = 0.0;
                 for (ix=0; ix < 4; ix++) {
@@ -54529,11 +54628,46 @@ static int p6(struct procRes_s *rs)
                     #endif
                 
                 }
+                #endif // #if !CROP_MIGRATE_TO_APP
             } 
-            
 
+            #if 0
             ret = doCropCalcu(pcpdoduo, 0, 0, rs, 6); 
+            #endif // #if CROP_MIGRATE_TO_APP
 
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP01_DUO, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get duo F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P6", rs->logs);                     
+            rotlf[0] = (CFLOAT)cxm;
+            rotlf[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP02_DUO, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get duo F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P6", rs->logs);                     
+            rotup[0] = (CFLOAT)cxm;
+            rotup[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP03_DUO, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get duo F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P6", rs->logs);                     
+            rotrt[0] = (CFLOAT)cxm;
+            rotrt[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP04_DUO, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get duo F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P6", rs->logs);                     
+            rotdn[0] = (CFLOAT)cxm;
+            rotdn[1] = (CFLOAT)cxn;
+
+            #if 0
             msync(pcp36duo, sizeof(struct aspCrop36_s), MS_SYNC);
             ret = getRotateP1(pcp36duo, rotlf);
             if (!ret) {
@@ -54968,8 +55102,10 @@ static int p6(struct procRes_s *rs)
                             sprintf(rs->logs, "%d,%d,", val, vhi);
                             n = strlen(rs->logs);
 
+                            #if 0
                             pcp36->crp36Pots[cpn*2+0] = val;
                             pcp36->crp36Pots[cpn*2+1] = vhi;
+                            #endif
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -55017,8 +55153,10 @@ static int p6(struct procRes_s *rs)
                             sprintf(rs->logs, "%d,%d,", val, vhi);
                             n = strlen(rs->logs);
 
+                            #if 0
                             pcp36->crp36Pots[cpn*2+0] = val;
                             pcp36->crp36Pots[cpn*2+1] = vhi;
+                            #endif
 
                             pdt->opStatus = ASPOP_STA_APP;
                         }
@@ -55119,6 +55257,7 @@ static int p6(struct procRes_s *rs)
             sprintf_f(rs->logs, "socket send, len:%d content[%s] from %d, ret:%d\n", 5+n+3, sendbuf, rs->psocket_at->connfd, ret);
             print_f(rs->plogs, "P6", rs->logs);
 
+            #if 0
             cpn = 0;
             pcp36->crp36Pots[cpn*2+0] = 100;
             pcp36->crp36Pots[cpn*2+1] = 0;
@@ -55136,7 +55275,8 @@ static int p6(struct procRes_s *rs)
             ret = doCropCalcu36(pcpdo, 0, 0, rs, 6);
             sprintf_f(rs->logs, "do crop 36 ret: %d \n", ret);
             print_f(rs->plogs, "P6", rs->logs);
-
+            #endif
+            
             masRecd = pmass->massRecd;
 
             sendbuf[3] = 'T';
@@ -55155,6 +55295,8 @@ static int p6(struct procRes_s *rs)
             //print_f(rs->plogs, "P6", rs->logs);
 
             if (pmass->massRecd > 1) {
+
+                #if 0
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpx = 0;
                     cpn = 2;
@@ -55223,6 +55365,9 @@ static int p6(struct procRes_s *rs)
                 }
 
                 cof = cpx + 1;
+                #else
+                cof = 0;
+                #endif
 
                 ret = 0;
                 
@@ -55319,11 +55464,13 @@ static int p6(struct procRes_s *rs)
                     }
 
                     linecnt ++;
-                    
+
+                    #if 0
                     pcpex->crpexLfPots[cpx*2+0] = cxm;
                     pcpex->crpexLfPots[cpx*2+1] = vhi;
                     pcpex->crpexRtPots[cpx*2+0] = cxn;
                     pcpex->crpexRtPots[cpx*2+1] = vhi;
+                    #endif
 
                     cy += gap;
 
@@ -55347,6 +55494,7 @@ static int p6(struct procRes_s *rs)
                 cpx = linecnt + cof;
                 cls =  masRecd + cof - 1;
 
+                #if 0
                 if (ffrmt == FILE_FORMAT_RAW) {
                     cpn = 9;
                     if (pcp36->crp36Pots[cpn*2+1] > pcpex->crpexRtPots[cls*2+1]) {
@@ -55524,6 +55672,7 @@ static int p6(struct procRes_s *rs)
                     }
                     
                 }
+                #endif
                 
                 //shmem_dump(pmass->masspt, pmass->massUsed);
 
@@ -55537,7 +55686,7 @@ static int p6(struct procRes_s *rs)
 
                 //pmass->massRecd = 0; /* move to the end of transmitting */
                 //pmass->massUsed = 0;
-                #if !CROP_MIGRATE_TO_APP
+                #if 0// !CROP_MIGRATE_TO_APP
                 /* fix most left and most right shift */  
                 fhi = 0.0; fwh = 0.0; fwe = 0.0;
                 for (ix=0; ix < 4; ix++) {
@@ -55586,11 +55735,46 @@ static int p6(struct procRes_s *rs)
                     #endif
                 
                 }
+                #endif  // #if !CROP_MIGRATE_TO_APP
             } 
 
-
+            #if 0
             ret = doCropCalcu(pcpdo, 0, 0, rs, 6); 
-            
+            #endif
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P11", rs->logs);                     
+            rotlf[0] = (CFLOAT)cxm;
+            rotlf[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP02, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P11", rs->logs);                     
+            rotup[0] = (CFLOAT)cxm;
+            rotup[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP03, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P11", rs->logs);                     
+            rotrt[0] = (CFLOAT)cxm;
+            rotrt[1] = (CFLOAT)cxn;
+
+            ret = cfgTableGet(pct, ASPOP_USBCROP_FP04, &val);
+            cxm = (val>>16)&0xffff;
+            cxn = val & 0xffff;
+            sprintf_f(rs->logs, "crop meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            print_f(rs->plogs, "P11", rs->logs);                     
+            rotdn[0] = (CFLOAT)cxm;
+            rotdn[1] = (CFLOAT)cxn;
+
+            #if 0
             msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
             ret = getRotateP1(pcp36, rotlf);
             if (!ret) {
@@ -55615,7 +55799,7 @@ static int p6(struct procRes_s *rs)
                 sprintf_f(rs->logs, "get rotateP4 (%lf, %lf) \n", rotdn[0], rotdn[1]);
                 print_f(rs->plogs, "P6", rs->logs);
             }
-            #endif  // #if !CROP_MIGRATE_TO_APP
+            #endif
 
             #if 0 /* debug print */
             for (i = 0; i < CROP_MAX_NUM_META+2; i++) {
@@ -72349,6 +72533,38 @@ int main(int argc, char *argv[])
                 ctb->opMask = ASPOP_MASK_32;
                 ctb->opBitlen = 32;
                 break;
+            case ASPOP_USBCROP_FP01_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP02_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP03_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP04_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
             default: break;
             }
         }
@@ -73491,6 +73707,38 @@ int main(int argc, char *argv[])
                 ctb->opBitlen = 32;
                 break;
             case ASPOP_USBCROP_FP04: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP01_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP02_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP03_DUO: 
+                ctb->opStatus = ASPOP_STA_NONE;
+                ctb->opCode = OP_NONE;
+                ctb->opType = ASPOP_TYPE_VALUE;
+                ctb->opValue = 0xffffffff;
+                ctb->opMask = ASPOP_MASK_32;
+                ctb->opBitlen = 32;
+                break;
+            case ASPOP_USBCROP_FP04_DUO: 
                 ctb->opStatus = ASPOP_STA_NONE;
                 ctb->opCode = OP_NONE;
                 ctb->opType = ASPOP_TYPE_VALUE;
