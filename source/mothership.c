@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (0)
+#define GHP_EN (1)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -39,7 +39,7 @@ int pipe2(int pipefd[2], int flags);
 #if GHP_EN
 #include <jpeglib.h>
 #include <jerror.h>
-#include <turbojpeg.h>
+//#include <turbojpeg.h>
 //#include <GL/gl.h>
 //#include <GL/glext.h>
 #include <GLES2/gl2.h>
@@ -1857,6 +1857,7 @@ static char **memory_init_vtable(char **pbuf, int tsize, int csize, uint32_t *tb
 static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf);
 static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen);
 static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin);
+static CFLOAT aspMin(CFLOAT d1, CFLOAT d2);
 
 static int qsort_comp(const void *a, const void *b) {
     CFLOAT *pa = (CFLOAT *) a;
@@ -1869,6 +1870,7 @@ static int qsort_comp(const void *a, const void *b) {
 }
 
 #if GHP_EN
+#if 0 // tubojpeg
 static int tj_jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int *getH, int clrsp)
 {
     long unsigned int _jpegSize=0;
@@ -1887,7 +1889,7 @@ static int tj_jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, in
 
     return 0;
 }
-
+#endif
 #define WIN_WIDTH (400)
 #define WIN_HEIGHT (400)
 
@@ -2959,6 +2961,18 @@ static int dbgBitmapHeader(struct bitmapHeader_s *ph, int len)
     print_f(mlogPool, "BMP", mlog);
 
     return 0;
+}
+
+static void dbgprintRect(struct aspRectObj *rect)
+{
+    char mlog[256];
+    
+    sprintf_f(mlog, "LU[%.2lf, %.2lf] LD[%.2lf, %.2lf] RD[%.2lf, %.2lf] RU[%.2lf, %.2lf]\n", 
+        rect->aspRectLU[0], rect->aspRectLU[1], 
+        rect->aspRectLD[0], rect->aspRectLD[1], 
+        rect->aspRectRD[0], rect->aspRectRD[1], 
+        rect->aspRectRU[0], rect->aspRectRU[1]);
+    print_f(mlogPool, "RECT", mlog);
 }
 
 static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb) 
@@ -4767,13 +4781,15 @@ static CFLOAT getAngle(CFLOAT *pSrc, CFLOAT *p1, CFLOAT *p2)
     CFLOAT vb_val = sqrt(vb_x * vb_x + vb_y * vb_y);  
     CFLOAT cosValue = productValue / (va_val * vb_val);      
 
+    //printf("[AnG] cos: %.2lf \n", cosValue);
+
     if(cosValue < -1 && cosValue > -2) {
         cosValue = -1;
     } else if (cosValue > 1 && cosValue < 2) {
         cosValue = 1;
     }
 
-    angle = acos(cosValue) * 180 / M_PI; 
+    angle = acos(cosValue) * 180.0 / M_PI; 
     
     return angle;
 }
@@ -5762,50 +5778,78 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36, int midx)
     return 0;
 }
 
-static int getRotRectPoint(struct aspCrop36_s *pcp36, int edwidth, int edheight, int pidx) 
+static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
 {
-#define UNIT_DEG (1000.0)
-    int ret=0, err=0;
-    int LUt[2], RUt[2], LDt[2], RDt[2];
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
     CFLOAT *pLU, *pLD, *pRU, *pRD;
-    CFLOAT pT1[2], pT2[2], pT3[2], pT4[2];
     CFLOAT *LUn, *RUn, *LDn, *RDn;
-    struct aspRectObj *pRectout=0, *pRectin=0, *pRectorg=0;    
-    int deg = 0;
-    if (!pcp36) return -2;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
 
-    pRectout = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectin = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx);
     
-    msync(pcp36, sizeof(struct aspCrop36_s), MS_SYNC);
-    
-    memcpy(pRectorg->aspRectLU, pcp36->crp36P1, sizeof(CFLOAT)*2);
-    memcpy(pRectorg->aspRectRU, pcp36->crp36P4, sizeof(CFLOAT)*2);
-    memcpy(pRectorg->aspRectRD, pcp36->crp36P3, sizeof(CFLOAT)*2);
-    memcpy(pRectorg->aspRectLD, pcp36->crp36P2, sizeof(CFLOAT)*2);
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
 
-    pLU = pRectorg->aspRectLU;
-    pRU = pRectorg->aspRectRU;
-    pLD = pRectorg->aspRectLD;
-    pRD = pRectorg->aspRectRD;
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
 
-    LUn = pRectin->aspRectLU;
-    RUn = pRectin->aspRectRU;
-    LDn = pRectin->aspRectLD;
-    RDn = pRectin->aspRectRD;
-    
-    //for (deg=0; deg < 360000; deg += 5000) {
-    
-    if (deg == 0) {
-        theta = 0.0;
-    } else {
-        theta = (CFLOAT)deg;
-        theta = theta / UNIT_DEG;
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
     }
     
-    printf("[rect%d] rotate angle = %lf \n", pidx, theta);
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+
+    printf("[RectAlign] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0] + 200.0;
+        plf[1] = p1[1];
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            dg += 0;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            dg += 0;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            dg = 360.0 - dg;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            dg = 360.0 - dg;
+        }
+    }
+
+    printf("[RectAlign] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+
+    theta = 360.0 - dg;
 
     theta = theta * M_PI / piAngle;
 
@@ -5814,22 +5858,385 @@ static int getRotRectPoint(struct aspCrop36_s *pcp36, int edwidth, int edheight,
     
     rangle[0] = thacos;
     rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
     
-    calcuRotateCoordinates(LUt, LUn, pLU, rangle);
-    calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    printf("[RectAlign] pLU: (%.2lf, %.2lf) -> LUn(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], dg, ret);
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    printf("[RectAlign] pLU: (%.2lf, %.2lf) -> LUn(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], dg, ret);
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    printf("[RectAlign] pLU: (%.2lf, %.2lf) -> LUn(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], dg, ret);
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    printf("[RectAlign] pLU: (%.2lf, %.2lf) -> LUn(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], dg, ret);
+
+    printf("[RectAlign] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    printf("[RectAlign] p1: (%.2lf, %.2lf) -> plf(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], dg, ret);
+
+    printf("[RectAlign] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    
+    dh = p1[0] - plf[0];
+    dv = p1[1] - plf[1];
+
+    #if 0
+    LUn[0] += dh;
+    LUn[1] += dv;
+
+    RUn[0] += dh;
+    RUn[1] += dv;
+
+    LDn[0] += dh;
+    LDn[1] += dv;
+
+    RDn[0] += dh;
+    RDn[1] += dv;
+    #endif
+    
+    dht = round(dh);
+    dvt = round(dv);
+
+    LUt[0] += dht;
+    LUt[1] += dvt;
+
+    LDt[0] += dht;
+    LDt[1] += dvt;
+
+    RDt[0] += dht;
+    RDt[1] += dvt;
+
+    RUt[0] += dht;
+    RUt[1] += dvt;
+
+    printf("[RectAlign] (%d, %d) (%d, %d) (%d, %d) (%d, %d) dht: %d, dvt: %d\n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1], dht, dvt);
+    
+    return dg;
+}
+
+static CFLOAT getRectOffset(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+
+    minH = aspMin(LUn[0], RUn[0]);
+    minH = aspMin(minH, LDn[0]);
+    minH = aspMin(minH, RDn[0]);
+
+    minV = aspMin(LUn[1], RUn[1]);
+    minV = aspMin(minV, LDn[1]);
+    minV = aspMin(minV, RDn[1]);
+
+    //offsetH = 0 - minH;
+    //offsetV = 0 - minV;
+    
+    offsetH = LDn[0] - 1;
+    offsetV = LDn[1] - 1;
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    printf("[offset] pLU(%.2lf, %.2lf) pLD(%.2lf, %.2lf) pRD(%.2lf, %.2lf) pRU(%.2lf, %.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+        
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+static int getRectTran(struct aspRectObj *pRectin, CFLOAT dg, CFLOAT *offset, struct aspRectObj *pRectout)
+{
+    int ret=0;
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT pLU[2], pLD[2], pRU[2], pRD[2];
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2];
+
+    theta = dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU[0] = pRectin->aspRectLU[0] + offset[0];
+    pLU[1] = pRectin->aspRectLU[1] + offset[1];
+
+    pLD[0] = pRectin->aspRectLD[0] + offset[0];
+    pLD[1] = pRectin->aspRectLD[1] + offset[1];
+
+    pRD[0] = pRectin->aspRectRD[0] + offset[0];
+    pRD[1] = pRectin->aspRectRD[1] + offset[1];
+
+    pRU[0] = pRectin->aspRectRU[0] + offset[0];
+    pRU[1] = pRectin->aspRectRU[1] + offset[1];
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    printf("[CHR] pLU: (%4.2lf, %4.2lf) -> LUn(%4.2lf, %4.2lf) dg: %.2lf ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], dg, ret);
+
     calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    printf("[CHR] pLD: (%4.2lf, %4.2lf) -> LDn(%4.2lf, %4.2lf) dg: %.2lf ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], dg, ret);
+
     calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    printf("[CHR] pRD: (%4.2lf, %4.2lf) -> RDn(%4.2lf, %4.2lf) dg: %.2lf ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], dg, ret);
+
+    calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    printf("[CHR] pRU: (%4.2lf, %4.2lf) -> RUn(%4.2lf, %4.2lf) dg: %.2lf ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], dg, ret);
+
+    #if 0
+    LUn[0] = LUn[0] + offset[0];
+    LUn[1] = LUn[1] + offset[1];
+
+    RUn[0] = RUn[0] + offset[0];
+    RUn[1] = RUn[1] + offset[1];
+
+    RDn[0] = RDn[0] + offset[0];
+    RDn[1] = RDn[1] + offset[1];
+
+    LDn[0] = LDn[0] + offset[0];
+    LDn[1] = LDn[1] + offset[1];
+    #endif
+
+    return 0;
+}
+
+static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edheight, CFLOAT *pst) 
+{
+    pRectin->aspRectLD[0] = pst[0];
+    pRectin->aspRectLD[1] = pst[1];
     
-#if 1
-    printf("[rect%d] get in rect LU = (%lf, %lf) \n", pidx, LUn[0], LUn[1]);
-    printf("[rect%d] get in rect RU = (%lf, %lf) \n", pidx, RUn[0], RUn[1]);
-    printf("[rect%d] get in rect RD = (%lf, %lf) \n", pidx, RDn[0], RDn[1]);
-    printf("[rect%d] get in rect LD = (%lf, %lf) \n", pidx, LDn[0], LDn[1]);
-#endif
+    pRectin->aspRectLU[0] = pst[0];
+    pRectin->aspRectLU[1] = pst[1] + edheight;
 
-    findRectOrient(pRectout, pRectin);
+    pRectin->aspRectRU[0] = pst[0] + edwidth;
+    pRectin->aspRectRU[1] = pst[1] + edheight;
 
-#if 1
+    pRectin->aspRectRD[0] = pst[0] + edwidth;
+    pRectin->aspRectRD[1] = pst[1];
+
+}
+
+static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg) 
+{
+#define UNIT_DEG (1000.0)
+    int ret=0, err=0;
+    int LUt[2], RUt[2], LDt[2], RDt[2];
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT pT1[2], pT2[2], pT3[2], pT4[2];
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT d12, d23, d34, d41;
+    CFLOAT v12, v23, v34, v41;
+    CFLOAT o12[2], o23[2], o34[2], o41[2];
+    CFLOAT vmin, vmin1;
+    struct aspRectObj *pRectout12=0, *pRectout23=0, *pRectout34=0, *pRectout41=0, *pRectorg=0, *pRectorgi=0;    
+    struct aspRectObj *pRectout12R=0, *pRectout23R=0, *pRectout34R=0, *pRectout41R=0;
+    struct aspRectObj *pRectout12Ro=0, *pRectout23Ro=0, *pRectout34Ro=0, *pRectout41Ro=0;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+    
+    pRectout12 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgi = aspMemalloc(sizeof(struct aspRectObj), pidx);
+
+    pRectout12R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+
+    pRectout12Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+
+    pT1[0] = 321.0;
+    pT1[1] = 199.0;
+    setRectPoint(pRectorgi, 378.0, 238.0, pT1);
+    
+    pRectorg->aspRectLU[0] = (CFLOAT)1;
+    pRectorg->aspRectLU[1] = (CFLOAT)edheight;
+
+    pRectorg->aspRectLD[0] = (CFLOAT)1;
+    pRectorg->aspRectLD[1] = (CFLOAT)1;
+    
+    pRectorg->aspRectRD[0] = (CFLOAT)edwidth;
+    pRectorg->aspRectRD[1] = (CFLOAT)1;
+
+    pRectorg->aspRectRU[0] = (CFLOAT)edwidth;
+    pRectorg->aspRectRU[1] = (CFLOAT)edheight;
+
+    printf("[rect] pLU:(%.2lf, %.2lf) pRU:(%.2lf, %.2lf) pLD:(%.2lf, %.2lf) pRD:(%.2lf, %.2lf) w:%d h:%d \n", pLU[0], pLU[1], pRU[0], pRU[1], pLD[0], pLD[1], pRD[0], pRD[1], edwidth, edheight);
+    
+    d12 = getRectAlign(pRectin, pRectin->aspRectLU, pRectin->aspRectLD, pRectout12);
+    printf("[rect] d12: %.2lf aspRectLU:(%.2lf, %.2lf) aspRectLD:(%.2lf, %.2lf) \n", d12, 
+        pRectin->aspRectLU[0], pRectin->aspRectLU[1], pRectin->aspRectLD[0], pRectin->aspRectLD[1]);
+    d23 = getRectAlign(pRectin, pRectin->aspRectLD, pRectin->aspRectRD, pRectout23);
+    printf("[rect] d23: %.2lf aspRectLD:(%.2lf, %.2lf) aspRectRD:(%.2lf, %.2lf) \n", d23, 
+        pRectin->aspRectLD[0], pRectin->aspRectLD[1], pRectin->aspRectRD[0], pRectin->aspRectRD[1]);
+    d34 = getRectAlign(pRectin, pRectin->aspRectRD, pRectin->aspRectRU, pRectout34);
+    printf("[rect] d34: %.2lf aspRectRD:(%.2lf, %.2lf) aspRectRU:(%.2lf, %.2lf) \n", d34, 
+        pRectin->aspRectRD[0], pRectin->aspRectRD[1], pRectin->aspRectRU[0], pRectin->aspRectRU[1]);
+    d41 = getRectAlign(pRectin, pRectin->aspRectRU, pRectin->aspRectLU, pRectout41);
+    printf("[rect] d41: %.2lf aspRectRU:(%.2lf, %.2lf) aspRectLU:(%.2lf, %.2lf) \n", d41, 
+        pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectin->aspRectLU[0], pRectin->aspRectLU[1]);
+
+    findRectOrient(pRectout12R, pRectout12);
+    
+    dbgprintRect(pRectout12);
+    dbgprintRect(pRectout12R);
+
+    findRectOrient(pRectout23R, pRectout23);
+
+    dbgprintRect(pRectout23);
+    dbgprintRect(pRectout23R);
+
+    findRectOrient(pRectout34R, pRectout34);
+
+    dbgprintRect(pRectout34);
+    dbgprintRect(pRectout34R);
+
+    findRectOrient(pRectout41R, pRectout41);
+
+    dbgprintRect(pRectout41);
+    dbgprintRect(pRectout41R);
+
+    v12 = getRectOffset(pRectout12Ro, pRectout12R, pRectorg, o12);
+    v23 = getRectOffset(pRectout23Ro, pRectout23R, pRectorg, o23);
+    v34 = getRectOffset(pRectout34Ro, pRectout34R, pRectorg, o34);
+    v41 = getRectOffset(pRectout41Ro, pRectout41R, pRectorg, o41);
+
+    //findRectOrient(pRectout, pRectin);
+    vmin = aspMin(v12, v23);
+    vmin = aspMin(vmin, v34);
+    vmin = aspMin(vmin, v41);
+
+    if (vmin == v12) {
+        printf("[rect] v12: %.2lf o12:(%.2lf, %.2lf) d12: %.2lf \n", v12, o12[0], o12[1], d12);
+    
+        getRectTran(pRectorgi, d12, o12, pRectroi);
+        getRectTran(pRectout12Ro, d12, o12, pRectout12);
+
+        *pdeg = d12;
+
+        dbgprintRect(pRectout12Ro);
+        dbgprintRect(pRectout12R);
+        dbgprintRect(pRectout12);
+    } 
+    else if (vmin == v23) {
+        printf("[rect] v23: %.2lf o23:(%.2lf, %.2lf) d23: %.2lf \n", v23, o23[0], o23[1], d23);
+        
+        getRectTran(pRectorgi, d23, o23, pRectroi);
+        getRectTran(pRectout23Ro, d23, o23, pRectout23);
+
+        *pdeg = d23;
+
+        dbgprintRect(pRectout23Ro);
+        dbgprintRect(pRectout23R);
+        dbgprintRect(pRectout23);
+    }
+    else if (vmin == v34) {
+        printf("[rect] v34: %.2lf o34:(%.2lf, %.2lf) d34: %.2lf \n", v34, o34[0], o34[1], d34);
+        
+        getRectTran(pRectorgi, d34, o34, pRectroi);
+        getRectTran(pRectout34Ro, d34, o34, pRectout34);
+
+        *pdeg = d34;
+        
+        dbgprintRect(pRectout34Ro);
+        dbgprintRect(pRectout34R);
+        dbgprintRect(pRectout34);
+
+    }
+    else {
+        printf("[rect] v41: %.2lf o41:(%.2lf, %.2lf) d41: %.2lf \n", v41, o41[0], o41[1], d41);
+        
+        getRectTran(pRectorgi, d41, o41, pRectroi);
+        getRectTran(pRectout41Ro, d41, o41, pRectout41);
+
+        *pdeg = d41;
+
+        dbgprintRect(pRectout41Ro);
+        dbgprintRect(pRectout41R);
+        dbgprintRect(pRectout41);
+    }
+    
+    dbgprintRect(pRectorgi);
+    dbgprintRect(pRectroi);
+#if 0
     printf("[rect%d] get out rect LU = (%lf, %lf) \n", pidx, pRectout->aspRectLU[0], pRectout->aspRectLU[1]);
     printf("[rect%d] get out rect RU = (%lf, %lf) \n", pidx, pRectout->aspRectRU[0], pRectout->aspRectRU[1]);
     printf("[rect%d] get out rect RD = (%lf, %lf) \n", pidx, pRectout->aspRectRD[0], pRectout->aspRectRD[1]);
@@ -10660,6 +11067,7 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
     offsetH = 0 - minH;
     offsetV = 0 - minV;
 
+    #if 0
     LUn[0] += offsetH;
     LUn[1] += offsetV;
 
@@ -10671,6 +11079,7 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
 
     RDn[0] += offsetH;
     RDn[1] += offsetV;
+    #endif
 
     LUt[0] = (int)round(LUn[0]);
     LUt[1] = (int)round(LUn[1]);
@@ -11225,13 +11634,23 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     CFLOAT pLU[2], pRU[2], pLD[2], pRD[2], pal[2], par[2], pt[2];
     CFLOAT plm[2], prm[2], plc[2], prc[2], pn[2];
     CFLOAT maxhf=0, maxvf=0, minhf=0, minvf=0;
-    CFLOAT imgw=0.0, imgh=0.0;
+    CFLOAT imgw=0.0, imgh=0.0, imgdeg=0.0;
     int ublen=0, ubret=0, ubrst=0;
-
+    struct aspConfig_s *pct=0;
+    uint32_t val=0;
+    int cxm, cxn;
+    struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
+    
     #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "deg: %d\n", deg);
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
+
+    pRectin = aspMemalloc(sizeof(struct aspRectObj), 11);
+    pRectROI = aspMemalloc(sizeof(struct aspRectObj), 11);
+    pRectinR = aspMemalloc(sizeof(struct aspRectObj), 11);
+    
+    pct = rs->pcfgTable;
 
     pabuf = &rs->psFat->parBuf;
     srcbuf = bmpsrc;
@@ -11291,11 +11710,55 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
 
     RD[0] = 1719;
     RD[1] = 1005;
+    #elif 1
+    ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
+    cxm = (val>>16)&0xffff;
+    cxn = val & 0xffff;
+
+    sprintf_f(rs->logs, "rot meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+    print_f(rs->plogs, "ROT", rs->logs);                     
+
+    LD[0] = (CFLOAT)cxm;
+    LD[1] = (CFLOAT)cxn;
+
+    ret = cfgTableGet(pct, ASPOP_USBCROP_FP02, &val);
+    cxm = (val>>16)&0xffff;
+    cxn = val & 0xffff;
+
+    sprintf_f(rs->logs, "rot meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+    print_f(rs->plogs, "ROT", rs->logs);                     
+
+    RD[0] = (CFLOAT)cxm;
+    RD[1] = (CFLOAT)cxn;
+
+    ret = cfgTableGet(pct, ASPOP_USBCROP_FP03, &val);
+    cxm = (val>>16)&0xffff;
+    cxn = val & 0xffff;
+
+    sprintf_f(rs->logs, "rot meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+    print_f(rs->plogs, "ROT", rs->logs);                     
+
+    RU[0] = (CFLOAT)cxm;
+    RU[1] = (CFLOAT)cxn;
+
+    ret = cfgTableGet(pct, ASPOP_USBCROP_FP04, &val);
+    cxm = (val>>16)&0xffff;
+    cxn = val & 0xffff;
+
+    sprintf_f(rs->logs, "rot meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+    print_f(rs->plogs, "ROT", rs->logs);                     
+
+    LU[0] = (CFLOAT)cxm;
+    LU[1] = (CFLOAT)cxn;
+    
     #else
-    LU[0] = 0;
+    LU[0] = 0+300;
     LU[1] = bheader->aspbiHeight-1;
 
-    RU[0] = bheader->aspbiWidth-1;
+    //RU[0] = bheader->aspbiWidth-1;
+    //RU[1] = bheader->aspbiHeight-1;        
+
+    RU[0] = bheader->aspbiWidth-300;
     RU[1] = bheader->aspbiHeight-1;        
 
     LD[0] = 0;
@@ -11303,28 +11766,49 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
 
     RD[0] = bheader->aspbiWidth-1;
     RD[1] = 0;
-    #endif
-    
-    #if LOG_ROT_DBG    
-    sprintf_f(rs->logs, "enter: LUn: %lf, %lf\n", LU[0], LU[1]);
-    print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "enter: RUn: %lf, %lf \n", RU[0], RU[1]);
-    print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "enter: LDn: %lf, %lf \n", LD[0], LD[1]);
-    print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "enter: RDn: %lf, %lf \n", RD[0], RD[1]);
-    print_f(rs->plogs, "ROT", rs->logs);
-    #endif
 
-    if (deg == 0) {
-        theta = 0.0;
-    } else {
-        theta = (CFLOAT)deg;
-        theta = theta / UNIT_DEG;
-    }
+    #endif
     
-    //sprintf_f(rs->logs, "rotate angle = %f \n", theta);
-    //print_f(rs->plogs, "ROT", rs->logs);
+    memcpy(pRectin->aspRectLU, LU, sizeof(CFLOAT)*2);
+    memcpy(pRectin->aspRectLD, LD, sizeof(CFLOAT)*2);
+    memcpy(pRectin->aspRectRD, RD, sizeof(CFLOAT)*2);
+    memcpy(pRectin->aspRectRU, RU, sizeof(CFLOAT)*2);
+
+    findRectOrient(pRectinR, pRectin);
+    
+    dbgprintRect(pRectin);
+    dbgprintRect(pRectinR);
+    
+    getRotRectPoint(pRectinR, 1460, 900, 11, pRectROI, &imgdeg);
+
+    memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
+    memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
+    memcpy(RD, pRectROI->aspRectRD, sizeof(CFLOAT)*2);
+    memcpy(RU, pRectROI->aspRectRU, sizeof(CFLOAT)*2);
+
+    #if LOG_ROT_DBG    
+    sprintf_f(rs->logs, "getRotRectPoint: LUn: %lf, %lf\n", LU[0], LU[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "getRotRectPoint: LDn: %lf, %lf \n", LD[0], LD[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "getRotRectPoint: RDn: %lf, %lf \n", RD[0], RD[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "getRotRectPoint: RUn: %lf, %lf \n", RU[0], RU[1]);
+    print_f(rs->plogs, "ROT", rs->logs);
+    sprintf_f(rs->logs, "getRotRectPoint: degree: %.2lf \n", imgdeg);
+    print_f(rs->plogs, "ROT", rs->logs);
+    #endif
+    
+    if (deg == 0) {
+        deg = (int)(imgdeg * UNIT_DEG);
+        deg = 0 - deg;
+    }
+
+    theta = (CFLOAT)deg;
+    theta = theta / UNIT_DEG;
+    
+    sprintf_f(rs->logs, "rotate angle = %lf \n", theta);
+    print_f(rs->plogs, "ROT", rs->logs);
 
     theta = theta * M_PI / piAngle;
 
@@ -11340,13 +11824,13 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     calcuRotateCoordinates(RDt, RDn, RD, rangle);
     
     #if LOG_ROT_DBG
-    sprintf_f(rs->logs, "rotate: LUn: %lf, %lf -> %3d, %3d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+    sprintf_f(rs->logs, "rotate: LU: %.2lf, %.2lf -> %3d, %3d\n", LU[0], LU[1], LUt[0], LUt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "rotate: RUn: %lf, %lf -> %3d, %3d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+    sprintf_f(rs->logs, "rotate: LD: %.2lf, %.2lf -> %3d, %3d \n", LD[0], LD[1], LDt[0], LDt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "rotate: LDn: %lf, %lf -> %3d, %3d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+    sprintf_f(rs->logs, "rotate: RD: %.2lf, %.2lf -> %3d, %3d \n", RD[0], RD[1], RDt[0], RDt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
-    sprintf_f(rs->logs, "rotate: RDn: %lf, %lf -> %3d, %3d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+    sprintf_f(rs->logs, "rotate: RU: %.2lf, %.2lf -> %3d, %3d \n", RU[0], RU[1], RUt[0], RUt[1]);
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
     
@@ -67940,16 +68424,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //bdeg = 450;
 
                                     #if DUMP_JPG_ROT
-                                    for (bdeg = 0; bdeg <= 360000; bdeg += 100) {
+                                    for (bdeg = 0; bdeg <= 360000; bdeg += 5000) {
                                     //bdeg = 180000;
                                     #else
-                                    bdeg = 15000;
+                                    bdeg = 0;
                                     #endif
                                     
                                     //bdeg = -915;
 
                                     memcpy(ph, bmpcolrtb, 54);
-                                    
+
                                     sprintf_f(rs->logs, "[BMP] rotate degree: %d \n", bdeg/1000);
                                     print_f(rs->plogs, "P11", rs->logs);
                                     
