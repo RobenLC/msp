@@ -1858,7 +1858,7 @@ static int fileid_save(char *fileidpoll, struct usbFileidAccess_s *pubf);
 static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen);
 static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin);
 static CFLOAT aspMin(CFLOAT d1, CFLOAT d2);
-
+static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset);
 static int qsort_comp(const void *a, const void *b) {
     CFLOAT *pa = (CFLOAT *) a;
     CFLOAT *pb = (CFLOAT *) b;
@@ -4665,22 +4665,22 @@ static int tiffDrawLine(char *img, int *cord, int *scale)
 
     bpp = scale[3] / 8;
     
-    if (abs(offx) < 0.0001) {
+    if (fabs(offx) < 0.0001) {
         offx = 0;
-    } else if (abs(offy) < 0.0001) {
+    } else if (fabs(offy) < 0.0001) {
         offy = 0;
     } 
 
-    if (abs(offx) > abs(offy)) {
-        offy = offy / abs(offx);
-        offx = offx / abs(offx);
-    } else if (abs(offy) > abs(offx)) {
-        offx = offx / abs(offy);
-        offy = offy / abs(offy);
+    if (fabs(offx) > fabs(offy)) {
+        offy = offy / fabs(offx);
+        offx = offx / fabs(offx);
+    } else if (fabs(offy) > fabs(offx)) {
+        offx = offx / fabs(offy);
+        offy = offy / fabs(offy);
     } else {
-        if (abs(offy) > 0) {
-            offx = offx / abs(offx);
-            offy = offy / abs(offy);
+        if (fabs(offy) > 0) {
+            offx = offx / fabs(offx);
+            offy = offy / fabs(offy);
         }
     }
 
@@ -4992,12 +4992,12 @@ static int aspCrp36GetBoundry(struct aspCrop36_s *pcrp36, int max, CFLOAT *exlf,
     printf("[crp36] acu1: %.2lf, acu2: %.2lf, d1:%.2lf d2:%.2lf tmf1: %.2lf tmf2: %.2lf w:%.2lf, h: %.2lf\n", acu1, acu2, d1, d2, tmf1, tmf2, w, h);
 #endif
 
-    diff = abs(tmf1 - d1);
+    diff = fabs(tmf1 - d1);
     if (diff < (w/3)) {
         d1 = tmf1;
     }
 
-    diff = abs(tmf2 - d2);
+    diff = fabs(tmf2 - d2);
     if (diff < (w/3)) {
         d2 = tmf2;
     }
@@ -6084,7 +6084,7 @@ static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edhe
 
 }
 
-static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg) 
+static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc) 
 {
 #define UNIT_DEG (1000.0)
     int ret=0, err=0;
@@ -6097,7 +6097,7 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     CFLOAT v12, v23, v34, v41;
     CFLOAT o12[2], o23[2], o34[2], o41[2];
     CFLOAT vmin, vmin1;
-    struct aspRectObj *pRectout12=0, *pRectout23=0, *pRectout34=0, *pRectout41=0, *pRectorg=0, *pRectorgi=0;    
+    struct aspRectObj *pRectout12=0, *pRectout23=0, *pRectout34=0, *pRectout41=0, *pRectorg=0, *pRectorgi=0, *pRectorgc=0;    
     struct aspRectObj *pRectout12R=0, *pRectout23R=0, *pRectout34R=0, *pRectout41R=0;
     struct aspRectObj *pRectout12Ro=0, *pRectout23Ro=0, *pRectout34Ro=0, *pRectout41Ro=0;
 
@@ -6112,7 +6112,8 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     pRectout41 = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectorgi = aspMemalloc(sizeof(struct aspRectObj), pidx);
-
+    pRectorgc = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    
     pRectout12R = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectout23R = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectout34R = aspMemalloc(sizeof(struct aspRectObj), pidx);
@@ -6126,6 +6127,10 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     pT1[0] = 321.0;
     pT1[1] = 199.0;
     setRectPoint(pRectorgi, 378.0, 238.0, pT1);
+
+    pT2[0] = 1288.0;
+    pT2[1] = 844.0;
+    setRectPoint(pRectorgc, 5.0, 5.0, pT2);
     
     pRectorg->aspRectLU[0] = (CFLOAT)1;
     pRectorg->aspRectLU[1] = (CFLOAT)edheight;
@@ -6503,7 +6508,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
             csUp[1] = pn[6*2+1];
             csupset = 1;
     
-            offset = abs(pn[4*2+0] - pn[5*2+0]);
+            offset = fabs(pn[4*2+0] - pn[5*2+0]);
             if (offset < 100) {
                 memcpy(pcp36->crp36MsRt, &pn[5*2], sizeof(CFLOAT)*2);
 
@@ -6514,7 +6519,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
             csUp[1] = pn[5*2+1];
             csupset = 1;
             
-            offset = abs(pn[1*2+0] - pn[6*2+0]);
+            offset = fabs(pn[1*2+0] - pn[6*2+0]);
             if (offset < 100) {
                 memcpy(pcp36->crp36MsLf, &pn[6*2], sizeof(CFLOAT)*2);
                 
@@ -6532,7 +6537,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
             csDn[1] = pn[2*2+1];
             csdnset = 1;
             
-            offset = abs(pn[4*2+0] - pn[3*2+0]);
+            offset = fabs(pn[4*2+0] - pn[3*2+0]);
             if (offset < 100) {
                 memcpy(pcp36->crp36MsRt, &pn[3*2], sizeof(CFLOAT)*2);
 
@@ -6543,7 +6548,7 @@ static int calcuMostRtLf(struct aspCrop36_s *pcp36)
             csDn[1] = pn[3*2+1];
             csdnset = 1;
     
-            offset = abs(pn[1*2+0] - pn[2*2+0]);
+            offset = fabs(pn[1*2+0] - pn[2*2+0]);
             if (offset < 100) {    
                 memcpy(pcp36->crp36MsLf, &pn[2*2], sizeof(CFLOAT)*2);
                 
@@ -7694,7 +7699,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
                         diff = 0;
                     } else {
                         dist2 = calcuLineGroupDist(allgrp[id], &allverTr[i][0], allnum[id]);
-                        diff = abs(dist - dist2);
+                        diff = fabs(dist - dist2);
                     }
 
                     #if LOG_CROP_FINDBASELINE
@@ -7856,7 +7861,7 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
                         diff = 0;
                     } else {
                         dist2 = calcuLineGroupDist(allgrp[id], &allverTr[i][0], allnum[id]);
-                        diff = abs(dist - dist2);
+                        diff = fabs(dist - dist2);
                     }
                     
                     #if LOG_CROP_FINDBASELINE
@@ -9304,7 +9309,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
             pGrp[0], pGrp[1], *(pGrp+(szlu-1)*2), *(pGrp+(szlu-1)*2+1), pcpex->crpexGrpLUDist);
 #endif
         } else {
-            pcpex->crpexLinLUDiv = abs(ret);
+            pcpex->crpexLinLUDiv = (CFLOAT)abs(ret);
 #if LOG_CROP_CALCULINE
             printf("(LU) ret (%d), divLU (%lf)\n", ret, divLU); 
 #endif
@@ -9329,7 +9334,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
             pGrp[0], pGrp[1], *(pGrp+(szld-1)*2), *(pGrp+(szld-1)*2+1), pcpex->crpexGrpLDDist);
 #endif
         } else {
-            pcpex->crpexLinLDDiv = abs(ret);
+            pcpex->crpexLinLDDiv = (CFLOAT)abs(ret);
 #if LOG_CROP_CALCULINE
             printf("(LD) ret (%d), divLD (%lf)\n", ret, divLD);
 #endif
@@ -9354,7 +9359,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
             pGrp[0], pGrp[1], *(pGrp+(szru-1)*2), *(pGrp+(szru-1)*2+1), pcpex->crpexGrpRUDist);
 #endif
         } else {
-            pcpex->crpexLinRUDiv = abs(ret);
+            pcpex->crpexLinRUDiv = (CFLOAT)abs(ret);
 #if LOG_CROP_CALCULINE
             printf("(RU) ret (%d), divRU (%lf)\n", ret, divRU);
 #endif
@@ -9379,7 +9384,7 @@ static int calcuLine(struct aspCropExtra_s *pcpex, int midx)
             pGrp[0], pGrp[1], *(pGrp+(szrd-1)*2), *(pGrp+(szrd-1)*2+1), pcpex->crpexGrpRDDist);
 #endif
         } else {
-            pcpex->crpexLinRDDiv = abs(ret);
+            pcpex->crpexLinRDDiv = (CFLOAT)abs(ret);
 #if LOG_CROP_CALCULINE
             printf("(RD) ret (%d), divRD (%lf)\n",  ret, divRD);
 #endif
@@ -11605,6 +11610,12 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
     return 0;
 }
 
+static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset) 
+{
+    return (rawCpy + dx * bitset + dy * rowsz);
+}
+            
+
 #define LOG_ROT_DBG  (0)
 static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff)
 {
@@ -11639,7 +11650,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     struct aspConfig_s *pct=0;
     uint32_t val=0;
     int cxm, cxn;
-    struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
+    struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0, *pRectroc=0;
     
     #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "deg: %d\n", deg);
@@ -11648,6 +11659,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
 
     pRectin = aspMemalloc(sizeof(struct aspRectObj), 11);
     pRectROI = aspMemalloc(sizeof(struct aspRectObj), 11);
+    pRectroc = aspMemalloc(sizeof(struct aspRectObj), 11);
     pRectinR = aspMemalloc(sizeof(struct aspRectObj), 11);
     
     pct = rs->pcfgTable;
@@ -11779,7 +11791,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     dbgprintRect(pRectin);
     dbgprintRect(pRectinR);
     
-    getRotRectPoint(pRectinR, 1460, 900, 11, pRectROI, &imgdeg);
+    getRotRectPoint(pRectinR, 1460, 900, 11, pRectROI, &imgdeg, pRectroc);
 
     memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
     memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -12982,10 +12994,11 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
                 continue;
             }
 
-
             bitset = bpp / 8;
-            src = rawCpy + (dx*bitset + dy*oldRowsz);
-            dst = rawTmp + (ix*bitset + iy*rowsize);
+            //src = rawCpy + (dx*bitset + dy*oldRowsz);
+            src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
+            //dst = rawTmp + (ix*bitset + iy*rowsize);
+            dst = getPixel(rawTmp, ix, iy, rowsize, bitset);
 
             //sprintf(rs->logs, "%d. %d, %d => %d, %d (0x%.2x)\n",id, ix, iy,  dx, dy, (unsigned int)(*src));
             //print_f(rs->plogs, "ROT", rs->logs);
@@ -67365,7 +67378,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             print_f(rs->plogs, "P11", rs->logs);
                                         }
                                     }
-                                    #endif
+                                    #endif // #if GHP_EN
 
                                     switch (cmdprisec) {
                                     case 1:
