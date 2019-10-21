@@ -400,6 +400,8 @@ static int *totSalloc=0;
 #define CROP_SELEC_TAIL (10)
 #define CROP_MIGRATE_TO_APP (0)
 
+#define CROP_SINGLE_LAST_SET (0x1<<24)
+
 #define CFLOAT double
 
 #define FAT_DIRPOOL_IDX_MAX   (65535)
@@ -11111,6 +11113,324 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
     #endif
 
     return 0;
+}
+
+void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, struct procRes_s *rs, int midx) {
+    char dfile[128] = { 0 };
+
+    sprintf_f(rs->logs, "doCalculate org_len = %d, mass_len = %d \n", org_len, mass_len);
+    print_f(rs->plogs, "DoC", rs->logs);
+        
+    struct aspCrop36_s *pcp36 = (struct aspCrop36_s *) aspMemalloc(sizeof(struct aspCrop36_s), midx);
+    struct aspCropExtra_s *pcpex = (struct aspCropExtra_s *) aspMemalloc(sizeof(struct aspCropExtra_s), midx);
+    
+    memset(pcp36, 0, sizeof(struct aspCrop36_s));
+    memset(pcpex, 0, sizeof(struct aspCropExtra_s));
+
+    int new_mass_len = mass_len;
+
+    pcp36->crp36Pots[0] = 100;
+    pcp36->crp36Pots[1] = 0;
+    pcp36->crp36Pots[(CROP_MAX_NUM_META + 1) * 2] = 1100;
+    pcp36->crp36Pots[(CROP_MAX_NUM_META + 1) * 2 + 1] = 0;
+
+    for (int i = 0; i < CROP_MAX_NUM_META * 2; i++) {
+        pcp36->crp36Pots[i + 2] = (double) org[i];
+    }
+
+    int messpair = new_mass_len / 4;
+
+    sprintf_f(rs->logs, "messpair = %d, new_mass_len = %d \n", messpair, new_mass_len);
+    print_f(rs->plogs, "DoC", rs->logs);
+
+    for (int i = 0; i < messpair; i++) {
+        pcpex->crpexLfPots[i * 2] = mass[4 * i];
+        pcpex->crpexLfPots[i * 2 + 1] = mass[4 * i + 1];
+        
+        pcpex->crpexRtPots[i * 2] = mass[4 * i + 2];
+        pcpex->crpexRtPots[i * 2 + 1] = mass[4 * i + 3];
+    }
+
+    int ret=0;
+    ret = aspCrp36GetBoundry(pcp36, CROP_MAX_NUM_META + 2, pcpex->crpexLfPots, pcpex->crpexRtPots, messpair);
+
+    for (int i = 0; i < CROP_MAX_NUM_META; i++) {
+        sprintf_f(rs->logs, "new 36 pts %d = (%.1lf, %.1lf) vs old (%d, %d) \n", (i+1), pcp36->crp36Pots[(i+1)*2], pcp36->crp36Pots[(i+1)*2+1], org[i*2], org[i*2+1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
+    
+    int messpair_pos = messpair * 2;
+    int ext_cnt_lf = 0;
+    int ext_cnt_rt = 0;
+
+    sprintf_f(rs->logs, "messpair_pos = %d \n", messpair_pos);
+    print_f(rs->plogs, "DoC", rs->logs);
+    {
+    
+        if ((org[2] > pcp36->crp36Lf) && (org[4] < pcp36->crp36Rt)) {
+            sprintf_f(rs->logs, "org pos %d (%d, %d) to extra lf%d \n", 2, org[2], org[3], ext_cnt_lf);
+            print_f(rs->plogs, "DoC", rs->logs);
+         
+            pcpex->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[2];
+            pcpex->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[3];
+
+             sprintf_f(rs->logs, "org pos %d (%d, %d) to extra rt%d \n", 4, org[4], org[5], ext_cnt_rt);
+             print_f(rs->plogs, "DoC", rs->logs);
+
+            pcpex->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[4];
+            pcpex->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[5];
+        }
+        
+        if ((org[10] > pcp36->crp36Lf) && (org[8] < pcp36->crp36Rt)) {      
+            sprintf_f(rs->logs, "org pos %d (%d, %d) to extra lf%d\n", 10, org[10], org[11], ext_cnt_lf);
+            print_f(rs->plogs, "DoC", rs->logs);
+
+            pcpex->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[10];
+            pcpex->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[11];
+
+            sprintf_f(rs->logs, "org pos %d (%d, %d) to extra rf%d\n", 8, org[8], org[9], ext_cnt_rt);
+            print_f(rs->plogs, "DoC", rs->logs);
+
+            pcpex->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[8];
+            pcpex->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[9];
+        }
+
+        for (int i = 3; i < CROP_MAX_NUM_META / 2; i++) {
+            if ((org[i * 4] > pcp36->crp36Lf) && (org[i * 4 + 2] < pcp36->crp36Rt)) {   
+                sprintf_f(rs->logs, "org pos %d (%d, %d) to extra lf%d\n", i*4, org[i*4], org[i*4+1], ext_cnt_lf);
+                print_f(rs->plogs, "DoC", rs->logs);
+         
+                pcpex->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[i * 4];
+                pcpex->crpexLfPots[messpair_pos + ext_cnt_lf++] = org[i * 4 + 1];
+         
+                sprintf_f(rs->logs, "org pos %d (%d, %d) to extra rt%d\n", i*4+2, org[i*4+2], org[i*4+3], ext_cnt_rt);
+                print_f(rs->plogs, "DoC", rs->logs);
+
+                pcpex->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[i * 4 + 2];
+                pcpex->crpexRtPots[messpair_pos + ext_cnt_rt++] = org[i * 4 + 3];
+            }
+        }
+    }
+    
+    new_mass_len += ext_cnt_lf * 2;
+
+    sprintf_f(rs->logs, "after add new_mass_len = %d \n", new_mass_len);
+    print_f(rs->plogs, "DoC", rs->logs);
+    
+    qsort((void *) pcpex->crpexLfPots, (new_mass_len / 4), sizeof(double) * 2, qsort_comp);
+    qsort((void *) pcpex->crpexRtPots, (new_mass_len / 4), sizeof(double) * 2, qsort_comp);
+    pcpex->crpexSize = new_mass_len / 2;
+
+    #if 1
+    for (int i = 0; i < new_mass_len / 4; i++) {
+        sprintf_f(rs->logs, "res pcpex->crpexLfPots[%d] = %.2lf, %.2lf \n", i, pcpex->crpexLfPots[2 * i], pcpex->crpexLfPots[2 * i + 1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
+    
+    for (int i = 0; i < new_mass_len / 4; i++) {
+        sprintf_f(rs->logs, "res pcpex->crpexRtPots[%d] = %.2lf, %.2lf \n", i, pcpex->crpexRtPots[2 * i], pcpex->crpexRtPots[2 * i + 1]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
+    #endif
+
+    ret = 0;
+    ret |= calcuCrossUpAph(pcp36, midx);
+
+    ret |= calcuCrossDnAph(pcp36, midx);
+
+    if (ret) {
+        getRectPoint(pcp36);
+    } else {
+        ret = calcuMostRtLf(pcp36);
+        if (ret == 0) {
+            ret = calcuCrossUpLine(pcp36);
+            ret = calcuCrossDnLine(pcp36);
+            ret = getCrop36RotatePoints(pcp36);
+        } else {
+            getRectPoint(pcp36);
+        }
+    }
+
+    result[0] = pcp36->crp36P1[0];
+    result[1] = pcp36->crp36P1[1];
+    result[2] = pcp36->crp36P2[0];
+    result[3] = pcp36->crp36P2[1];
+    result[4] = pcp36->crp36P3[0];
+    result[5] = pcp36->crp36P3[1];
+    result[6] = pcp36->crp36P4[0];
+    result[7] = pcp36->crp36P4[1];
+
+    sprintf_f(rs->logs, "first stage result p1 (%d, %d) \n", result[0], result[1]);
+    print_f(rs->plogs, "DoC", rs->logs);
+    
+    sprintf_f(rs->logs, "first stage result p2 (%d, %d)\n", result[2], result[3]);
+    print_f(rs->plogs, "DoC", rs->logs);
+
+    sprintf_f(rs->logs, "first stage result p3 (%d, %d)\n", result[4], result[5]);
+    print_f(rs->plogs, "DoC", rs->logs);
+
+    sprintf_f(rs->logs, "first stage result p4 (%d, %d)\n", result[6], result[7]);
+    print_f(rs->plogs, "DoC", rs->logs);
+
+    if (mass_len >= 8) {
+        int gap = 0;
+        for (int i = 0; i < mass_len / 4 - 1; i++) {
+            int y1 = mass[i * 4 + 1];
+            int y2 = mass[(i + 1) * 4 + 1];
+            int tempgap = y2 - y1;
+
+            sprintf_f(rs->logs, "gap : index %d %d, yvalues %d %d, tempgap %d \n", i * 4 + 1, (i + 1) * 4 + 1, y1, y2, tempgap);
+            print_f(rs->plogs, "DoC", rs->logs);
+
+            gap = tempgap;  
+        }
+        
+        double mostlft[2] = {0.0, 0.0};
+        double mostrgt[2] = {0.0, 0.0};
+        double lftgrp[10][2], rgtgrp[10][2], fhi = 0.0, fwh = 0.0, fwe = 0.0;
+        memset(lftgrp, 0, sizeof(double) * 10 * 2);
+        memset(rgtgrp, 0, sizeof(double) * 10 * 2);
+        ret = getRotateP1(pcp36, mostlft);
+
+        fwh = mostlft[1] - (gap * 2);
+        if (fwh < 0.0) {
+            fwh = 0.0;
+        }
+
+        ret = getRotateP3(pcp36, mostrgt);
+
+        fwe = mostrgt[1] - (gap * 2);
+        if (fwe < 0.0) {
+            fwe = 0.0;
+        }
+
+        int cnt = 0;
+        int ix = 0;
+        int vhi, cxm, cxn;
+        int cpx = pcpex->crpexSize / 2;
+        
+        sprintf_f(rs->logs, "cpx is %d \n", cpx);
+        print_f(rs->plogs, "DoC", rs->logs);
+
+        for (int i = 0; i < cpx; i++) {
+
+            vhi = (int) pcpex->crpexLfPots[i * 2 + 1];
+            cxm = (int) pcpex->crpexLfPots[i * 2 + 0];
+            cxn = (int) pcpex->crpexRtPots[i * 2 + 0];
+
+            fhi = (double) vhi;
+            if (cnt < 4) {
+                if (fhi > fwh) {
+                    lftgrp[cnt][0] = cxm;
+                    lftgrp[cnt][1] = fhi;
+
+                    cnt++;
+                }
+            }
+
+            if (ix < 4) {
+                if (fhi > fwe) {
+                    rgtgrp[ix][0] = cxn;
+                    rgtgrp[ix][1] = fhi;
+
+                    ix++;
+                }
+            }
+        }
+
+        /* fix most left and most right shift */
+        fhi = 0.0;
+        fwh = 0.0;
+        fwe = 0.0;
+        for (ix = 0; ix < 4; ix++) {
+            fhi += lftgrp[ix][0] - mostlft[0];
+            fwh += lftgrp[ix][0];
+        }
+
+        fwe = fhi / 4.0;
+        if (fwe > 15.0) {
+            mostlft[0] = fwh / 4.0;
+            setRotateP1(pcp36, mostlft);
+        }
+
+        fhi = 0.0;
+        fwh = 0.0;
+        fwe = 0.0;
+        for (ix = 0; ix < 4; ix++) {
+            fhi += mostrgt[0] - rgtgrp[ix][0];
+            fwh += rgtgrp[ix][0];
+        }
+
+        fwe = fhi / 4.0;
+        if (fwe > 15.0) {
+            mostrgt[0] = fwh / 4.0;
+            setRotateP3(pcp36, mostrgt);
+        }
+        //PAPA new version end
+
+        pcp36->crp36Flag &= ~(CROP_SINGLE_LAST_SET);
+        
+        /* second stage of cropping algorithm */
+        ret = findLine(pcp36, pcpex, midx);
+
+        sprintf_f(rs->logs, "findLine ret = %d lfcut: %d, rtcut: %d \n", ret, pcpex->crpexLfAbsCut, pcpex->crpexRtAbsCut);
+        print_f(rs->plogs, "DoC", rs->logs);
+        
+        ret = findUniPoints(pcp36, pcpex);
+
+        sprintf_f(rs->logs, "findUniPoints ret = %d", ret);
+        print_f(rs->plogs, "DoC", rs->logs);
+
+        if (!ret) {
+            calcuLine(pcpex, midx);
+            findBestLine(pcp36, pcpex, midx);
+        } else {
+            getRectPoint(pcp36);
+        }
+
+        double rotlf[2], rotup[2], rotrt[2], rotdn[2];
+
+        ret = getRotateP1(pcp36, rotlf);
+        if (!ret && CROP_CALCU_PROCESS) {
+            sprintf_f(rs->logs, "getRotateP1 ret = %d, rotlf[0] = %.2lf, rotlf[1] = %.2lf \n", ret, rotlf[0], rotlf[1]);
+            print_f(rs->plogs, "DoC", rs->logs);
+        }
+
+        ret = getRotateP2(pcp36, rotup);
+        if (!ret && CROP_CALCU_PROCESS) {
+            sprintf_f(rs->logs, "getRotateP2 ret = %d, rotup[0] = %.2lf, rotup[1] = %.2lf", ret, rotup[0], rotup[1]);
+            print_f(rs->plogs, "DoC", rs->logs);
+
+        }
+
+        ret = getRotateP3(pcp36, rotrt);
+        if (!ret && CROP_CALCU_PROCESS) {
+            sprintf_f(rs->logs, "getRotateP3 ret = %d, rotrt[0] = %.2lf, rotrt[1] = %.2lf", ret, rotrt[0], rotrt[1]);
+            print_f(rs->plogs, "DoC", rs->logs);
+
+        }
+
+        ret = getRotateP4(pcp36, rotdn);
+        if (!ret && CROP_CALCU_PROCESS) {
+            sprintf_f(rs->logs, "getRotateP4 ret = %d, rotdn[0] = %.2lf, rotdn[1] = %.2lf \n", ret, rotdn[0], rotdn[1]);
+            print_f(rs->plogs, "DoC", rs->logs);
+        }
+        
+        result[0] = rotlf[0];
+        result[1] = rotlf[1];
+        result[2] = rotup[0];
+        result[3] = rotup[1];
+        result[4] = rotrt[0];
+        result[5] = rotrt[1];
+        result[6] = rotdn[0];
+        result[7] = rotdn[1];
+    }
+    
+    for (int i = 0; i < 8; i++) {
+        sprintf_f(rs->logs, "result[%d] = %d\n", i, result[i]);
+        print_f(rs->plogs, "DoC", rs->logs);
+    }
+
 }
 
 #define LOG_ROTORI_DBG  (0)
@@ -49444,67 +49764,66 @@ static int p3(struct procRes_s *rs)
                                 sprintf_f(rs->logs, "do crop extra ret: %d \n", ret);
                                 print_f(rs->plogs, "P3", rs->logs);
 
+                                ret = getRotateP1(pcrp36, rotlf);
+                                if (!ret) {
+                                    sprintf_f(rs->logs, "get rotateP1 (%.2lf, %.2lf) \n", rotlf[0], rotlf[1]);
+                                    print_f(rs->plogs, "P3", rs->logs);
+                                }
+                                
+                                ret = getRotateP2(pcrp36, rotup);
+                                if (!ret) {
+                                    sprintf_f(rs->logs, "get rotateP2 (%.2lf, %.2lf) \n", rotup[0], rotup[1]);
+                                    print_f(rs->plogs, "P3", rs->logs);
+                                }
+                                
+                                ret = getRotateP3(pcrp36, rotrt);
+                                if (!ret) {
+                                    sprintf_f(rs->logs, "get rotateP3 (%.2lf, %.2lf) \n", rotrt[0], rotrt[1]);
+                                    print_f(rs->plogs, "P3", rs->logs);
+                                }
+                                
+                                ret = getRotateP4(pcrp36, rotdn);
+                                if (!ret) {
+                                    sprintf_f(rs->logs, "get rotateP4 (%.2lf, %.2lf) \n", rotdn[0], rotdn[1]);
+                                    print_f(rs->plogs, "P3", rs->logs);
+                                }
+                                
+                                tmp = (uint32_t)round(rotlf[0]);
+                                cord = (uint32_t)round(rotlf[1]);
+                                cord = cord | (tmp <<16);
+                                lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
+                                
+                                tmp = (uint32_t)round(rotup[0]);
+                                cord = (uint32_t)round(rotup[1]);
+                                cord = cord | (tmp <<16);
+                                lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
+                                
+                                tmp = (uint32_t)round(rotrt[0]);
+                                cord = (uint32_t)round(rotrt[1]);
+                                cord = cord | (tmp <<16);
+                                lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
+                                
+                                tmp = (uint32_t)round(rotdn[0]);
+                                cord = (uint32_t)round(rotdn[1]);
+                                cord = cord | (tmp <<16);
+                                lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
+                                
+                                addr = (char *) &pusbmeta->CROP_POS_F1;
+                                
+                                //sprintf_f(rs->logs, "print usb info: \n");
+                                //print_f(rs->plogs, "P3", rs->logs);
+                                
+                                //shmem_dump(addr, 16);
+                                
+                                //dbgMetaUsb(pusbmeta);
+                                
+                                //getRotRectPoint(pcrp36, 0, 0, 3);
                             }
                             else {
                                 sprintf_f(rs->logs, "crop memory allocate failed!!! size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
                                 print_f(rs->plogs, "P3", rs->logs);
                             }
-                              
-                            ret = getRotateP1(pcrp36, rotlf);
-                            if (!ret) {
-                                sprintf_f(rs->logs, "get rotateP1 (%.2lf, %.2lf) \n", rotlf[0], rotlf[1]);
-                                print_f(rs->plogs, "P3", rs->logs);
-                            }
-                            
-                            ret = getRotateP2(pcrp36, rotup);
-                            if (!ret) {
-                                sprintf_f(rs->logs, "get rotateP2 (%.2lf, %.2lf) \n", rotup[0], rotup[1]);
-                                print_f(rs->plogs, "P3", rs->logs);
-                            }
-                            
-                            ret = getRotateP3(pcrp36, rotrt);
-                            if (!ret) {
-                                sprintf_f(rs->logs, "get rotateP3 (%.2lf, %.2lf) \n", rotrt[0], rotrt[1]);
-                                print_f(rs->plogs, "P3", rs->logs);
-                            }
-                            
-                            ret = getRotateP4(pcrp36, rotdn);
-                            if (!ret) {
-                                sprintf_f(rs->logs, "get rotateP4 (%.2lf, %.2lf) \n", rotdn[0], rotdn[1]);
-                                print_f(rs->plogs, "P3", rs->logs);
-                            }
-                            
-                            tmp = (uint32_t)round(rotlf[0]);
-                            cord = (uint32_t)round(rotlf[1]);
-                            cord = cord | (tmp <<16);
-                            lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
-                            
-                            tmp = (uint32_t)round(rotup[0]);
-                            cord = (uint32_t)round(rotup[1]);
-                            cord = cord | (tmp <<16);
-                            lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
-                            
-                            tmp = (uint32_t)round(rotrt[0]);
-                            cord = (uint32_t)round(rotrt[1]);
-                            cord = cord | (tmp <<16);
-                            lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
-                            
-                            tmp = (uint32_t)round(rotdn[0]);
-                            cord = (uint32_t)round(rotdn[1]);
-                            cord = cord | (tmp <<16);
-                            lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
-                            
-                            addr = (char *) &pusbmeta->CROP_POS_F1;
-                            
-                            //sprintf_f(rs->logs, "print usb info: \n");
-                            //print_f(rs->plogs, "P3", rs->logs);
-                            
-                            //shmem_dump(addr, 16);
-                            
-                            //dbgMetaUsb(pusbmeta);
-                            
-                            //getRotRectPoint(pcrp36, 0, 0, 3);
-                             
+
                         }
                         else {
                             sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
