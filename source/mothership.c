@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (0)
+#define GHP_EN (1)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -6087,10 +6087,12 @@ static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edhe
 
 }
 
-static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc) 
+static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc, char *bmp, int oldRowsz, int bpp) 
 {
 #define UNIT_DEG (1000.0)
-    int ret=0, err=0;
+#define GRAY_THD_H (170)
+#define GRAY_THD_L (120)
+    int ret=0, err=0, bitset=0, dx=0, dy=0;
     int LUt[2], RUt[2], LDt[2], RDt[2];
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
     CFLOAT *pLU, *pLD, *pRU, *pRD;
@@ -6100,10 +6102,15 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     CFLOAT v12, v23, v34, v41;
     CFLOAT o12[2], o23[2], o34[2], o41[2];
     CFLOAT vmin, vmin1;
-    struct aspRectObj *pRectout12=0, *pRectout23=0, *pRectout34=0, *pRectout41=0, *pRectorg=0, *pRectorgi=0, *pRectorgc=0;    
+    struct aspRectObj *pRectout12=0, *pRectout23=0, *pRectout34=0, *pRectout41=0, *pRectorg=0;
+    struct aspRectObj *pRectorgi=0, *pRectorgv=0, *pRectorgc=0, *pRectorgk=0, *pRectorgcOut=0, *pRectorgkOut=0;;
     struct aspRectObj *pRectout12R=0, *pRectout23R=0, *pRectout34R=0, *pRectout41R=0;
     struct aspRectObj *pRectout12Ro=0, *pRectout23Ro=0, *pRectout34Ro=0, *pRectout41Ro=0;
+    char *src=0;
+    char rgb[4][3];
 
+    bitset = bpp / 8;
+    
     pLU = pRectin->aspRectLU;
     pRU = pRectin->aspRectRU;
     pLD = pRectin->aspRectLD;
@@ -6115,7 +6122,11 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     pRectout41 = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectorgi = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgv = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectorgc = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgk = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgcOut = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgkOut = aspMemalloc(sizeof(struct aspRectObj), pidx);
     
     pRectout12R = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectout23R = aspMemalloc(sizeof(struct aspRectObj), pidx);
@@ -6127,13 +6138,35 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     pRectout34Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectout41Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
+    #if 0
+    pT1[0] = 1.0;
+    pT1[1] = 1.0;
+    setRectPoint(pRectorgi, edwidth - 1, edheight - 1, pT1);
+    #elif 0
+    /*
     pT1[0] = 321.0;
     pT1[1] = 199.0;
     setRectPoint(pRectorgi, 378.0, 238.0, pT1);
+    */
+    #else
+    
+    pT1[0] = 1494.0;
+    pT1[1] = 52.0;
+    setRectPoint(pRectorgi, 368.0, 67.0, pT1);
+    
+    #endif
 
-    pT2[0] = 1288.0;
-    pT2[1] = 844.0;
-    setRectPoint(pRectorgc, 5.0, 5.0, pT2);
+    pT2[0] = 802.0;
+    pT2[1] = 259.0;
+    setRectPoint(pRectorgv, 209.0, 248.0, pT2);
+
+    pT3[0] = 103.0;
+    pT3[1] = 422.0;
+    setRectPoint(pRectorgc, 2.0, 2.0, pT3);
+
+    pT4[0] = 1808.0;
+    pT4[1] = 414.0;
+    setRectPoint(pRectorgk, 2.0, 2.0, pT4);
     
     pRectorg->aspRectLU[0] = (CFLOAT)1;
     pRectorg->aspRectLU[1] = (CFLOAT)edheight;
@@ -6192,55 +6225,340 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     vmin = aspMin(vmin, v34);
     vmin = aspMin(vmin, v41);
 
+    printf("[rect] v12: %.2lf o12:(%.2lf, %.2lf) d12: %.2lf \n", v12, o12[0], o12[1], d12);
+    printf("[rect] v23: %.2lf o23:(%.2lf, %.2lf) d23: %.2lf \n", v23, o23[0], o23[1], d23);
+    printf("[rect] v34: %.2lf o34:(%.2lf, %.2lf) d34: %.2lf \n", v34, o34[0], o34[1], d34);
+    printf("[rect] v41: %.2lf o41:(%.2lf, %.2lf) d41: %.2lf \n", v41, o41[0], o41[1], d41);
+    #if 0
     if (vmin == v12) {
-        printf("[rect] v12: %.2lf o12:(%.2lf, %.2lf) d12: %.2lf \n", v12, o12[0], o12[1], d12);
-    
+        printf("[rect] v12\n");
+        
         getRectTran(pRectorgi, d12, o12, pRectroi);
-        getRectTran(pRectout12Ro, d12, o12, pRectout12);
-
         *pdeg = d12;
+
+        dbgprintRect(pRectorgi);
+        dbgprintRect(pRectroi);
+    } 
+    else if (vmin == v23) {
+        printf("[rect] v23\n");
+
+        getRectTran(pRectorgi, d23, o23, pRectroi);
+        *pdeg = d23;
+
+        dbgprintRect(pRectorgi);
+        dbgprintRect(pRectroi);
+    }
+    else if (vmin == v34) {
+        printf("[rect] v34\n");
+
+        getRectTran(pRectorgi, d34, o34, pRectroi);
+        *pdeg = d34;
+
+        dbgprintRect(pRectorgi);
+        dbgprintRect(pRectroi);
+    }
+    else {
+        printf("[rect] v41 \n");
+
+        getRectTran(pRectorgi, d41, o41, pRectroi);
+        *pdeg = d41;
+
+        dbgprintRect(pRectorgi);
+        dbgprintRect(pRectroi);
+    }
+    #else
+    if (vmin == v12) {
+        printf("[rect] v12 + v34 \n");
+                
+        getRectTran(pRectorgc, d12, o12, pRectorgcOut);
+        getRectTran(pRectorgk, d12, o12, pRectorgkOut);
+
+        dx = round(pRectorgcOut->aspRectLU[0]);
+        dy = round(pRectorgcOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[0][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - c1\n", rgb[0][0], rgb[0][1], rgb[0][2]);
+
+        dx = round(pRectorgkOut->aspRectLU[0]);
+        dy = round(pRectorgkOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[1][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - k1 \n", rgb[1][0], rgb[1][1], rgb[1][2]);
+
+        getRectTran(pRectorgc, d34, o34, pRectorgcOut);
+        getRectTran(pRectorgk, d34, o34, pRectorgkOut);
+
+        dx = round(pRectorgcOut->aspRectLU[0]);
+        dy = round(pRectorgcOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[2][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - c2\n", rgb[2][0], rgb[2][1], rgb[2][2]);
+
+        dx = round(pRectorgkOut->aspRectLU[0]);
+        dy = round(pRectorgkOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[3][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - k2 \n", rgb[3][0], rgb[3][1], rgb[3][2]);
+
+        if (((rgb[0][0] > GRAY_THD_L) && (rgb[0][0] < GRAY_THD_H)) &&
+            ((rgb[0][1] > GRAY_THD_L) && (rgb[0][1] < GRAY_THD_H)) &&
+            ((rgb[0][2] > GRAY_THD_L) && (rgb[0][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgi, d12, o12, pRectroi);
+            *pdeg = d12;
+        }
+        else if (((rgb[1][0] > GRAY_THD_L) && (rgb[1][0] < GRAY_THD_H)) &&
+            ((rgb[1][1] > GRAY_THD_L) && (rgb[1][1] < GRAY_THD_H)) &&
+            ((rgb[1][2] > GRAY_THD_L) && (rgb[1][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgv, d12, o12, pRectroi);
+            *pdeg = d12;
+        }
+        else if (((rgb[2][0] > GRAY_THD_L) && (rgb[2][0] < GRAY_THD_H)) &&
+            ((rgb[2][1] > GRAY_THD_L) && (rgb[2][1] < GRAY_THD_H)) &&
+            ((rgb[2][2] > GRAY_THD_L) && (rgb[2][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgi, d34, o34, pRectroi);
+            *pdeg = d34;
+        }
+        else if (((rgb[3][0] > GRAY_THD_L) && (rgb[3][0] < GRAY_THD_H)) &&
+            ((rgb[3][1] > GRAY_THD_L) && (rgb[3][1] < GRAY_THD_H)) &&
+            ((rgb[3][2] > GRAY_THD_L) && (rgb[3][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgv, d34, o34, pRectroi);
+            *pdeg = d34;
+        }
+        else {
+            printf("[rect] v12 + v34 get tag failed \n");
+            
+            getRectTran(pRectorgi, d12, o12, pRectroi);
+            *pdeg = d12;
+        }
 
         dbgprintRect(pRectout12Ro);
         dbgprintRect(pRectout12R);
-        dbgprintRect(pRectout12);
+        //dbgprintRect(pRectout12);
     } 
     else if (vmin == v23) {
-        printf("[rect] v23: %.2lf o23:(%.2lf, %.2lf) d23: %.2lf \n", v23, o23[0], o23[1], d23);
-        
-        getRectTran(pRectorgi, d23, o23, pRectroi);
-        getRectTran(pRectout23Ro, d23, o23, pRectout23);
+        printf("[rect] v23 + v41 \n");
 
-        *pdeg = d23;
+        getRectTran(pRectorgc, d23, o23, pRectorgcOut);
+        getRectTran(pRectorgk, d23, o23, pRectorgkOut);
+
+        dx = round(pRectorgcOut->aspRectLU[0]);
+        dy = round(pRectorgcOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[0][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - c1\n", rgb[0][0], rgb[0][1], rgb[0][2]);
+
+        dx = round(pRectorgkOut->aspRectLU[0]);
+        dy = round(pRectorgkOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[1][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - k1 \n", rgb[1][0], rgb[1][1], rgb[1][2]);
+
+        getRectTran(pRectorgc, d41, o41, pRectorgcOut);
+        getRectTran(pRectorgk, d41, o41, pRectorgkOut);
+
+        dx = round(pRectorgcOut->aspRectLU[0]);
+        dy = round(pRectorgcOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[2][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - c2\n", rgb[2][0], rgb[2][1], rgb[2][2]);
+
+        dx = round(pRectorgkOut->aspRectLU[0]);
+        dy = round(pRectorgkOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[3][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - k2 \n", rgb[3][0], rgb[3][1], rgb[3][2]);
+
+        if (((rgb[0][0] > GRAY_THD_L) && (rgb[0][0] < GRAY_THD_H)) &&
+            ((rgb[0][1] > GRAY_THD_L) && (rgb[0][1] < GRAY_THD_H)) &&
+            ((rgb[0][2] > GRAY_THD_L) && (rgb[0][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgi, d23, o23, pRectroi);
+            *pdeg = d23;
+        }
+        else if (((rgb[1][0] > GRAY_THD_L) && (rgb[1][0] < GRAY_THD_H)) &&
+            ((rgb[1][1] > GRAY_THD_L) && (rgb[1][1] < GRAY_THD_H)) &&
+            ((rgb[1][2] > GRAY_THD_L) && (rgb[1][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgv, d23, o23, pRectroi);
+            *pdeg = d23;
+        }
+        else if (((rgb[2][0] > GRAY_THD_L) && (rgb[2][0] < GRAY_THD_H)) &&
+            ((rgb[2][1] > GRAY_THD_L) && (rgb[2][1] < GRAY_THD_H)) &&
+            ((rgb[2][2] > GRAY_THD_L) && (rgb[2][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgi, d41, o41, pRectroi);
+            *pdeg = d41;
+        }
+        else if (((rgb[3][0] > GRAY_THD_L) && (rgb[3][0] < GRAY_THD_H)) &&
+            ((rgb[3][1] > GRAY_THD_L) && (rgb[3][1] < GRAY_THD_H)) &&
+            ((rgb[3][2] > GRAY_THD_L) && (rgb[3][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgv, d41, o41, pRectroi);
+            *pdeg = d41;
+        }
+        else {
+            printf("[rect]  v23 + v41 get tag failed \n");
+            
+            getRectTran(pRectorgi, d23, o23, pRectroi);
+            *pdeg = d23;
+        }
 
         dbgprintRect(pRectout23Ro);
         dbgprintRect(pRectout23R);
-        dbgprintRect(pRectout23);
+        //dbgprintRect(pRectout23);
     }
     else if (vmin == v34) {
-        printf("[rect] v34: %.2lf o34:(%.2lf, %.2lf) d34: %.2lf \n", v34, o34[0], o34[1], d34);
-        
-        getRectTran(pRectorgi, d34, o34, pRectroi);
-        getRectTran(pRectout34Ro, d34, o34, pRectout34);
+        printf("[rect] v34 + v12 \n");
 
-        *pdeg = d34;
+        getRectTran(pRectorgc, d12, o12, pRectorgcOut);
+        getRectTran(pRectorgk, d12, o12, pRectorgkOut);
+
+        dx = round(pRectorgcOut->aspRectLU[0]);
+        dy = round(pRectorgcOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[0][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - c1\n", rgb[0][0], rgb[0][1], rgb[0][2]);
+
+        dx = round(pRectorgkOut->aspRectLU[0]);
+        dy = round(pRectorgkOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[1][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - k1 \n", rgb[1][0], rgb[1][1], rgb[1][2]);
+
+        getRectTran(pRectorgc, d34, o34, pRectorgcOut);
+        getRectTran(pRectorgk, d34, o34, pRectorgkOut);
+
+        dx = round(pRectorgcOut->aspRectLU[0]);
+        dy = round(pRectorgcOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[2][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - c2\n", rgb[2][0], rgb[2][1], rgb[2][2]);
+
+        dx = round(pRectorgkOut->aspRectLU[0]);
+        dy = round(pRectorgkOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[3][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - k2 \n", rgb[3][0], rgb[3][1], rgb[3][2]);
+
+        if (((rgb[2][0] > GRAY_THD_L) && (rgb[2][0] < GRAY_THD_H)) &&
+            ((rgb[2][1] > GRAY_THD_L) && (rgb[2][1] < GRAY_THD_H)) &&
+            ((rgb[2][2] > GRAY_THD_L) && (rgb[2][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgi, d34, o34, pRectroi);
+            *pdeg = d34;
+        }
+        else if (((rgb[3][0] > GRAY_THD_L) && (rgb[3][0] < GRAY_THD_H)) &&
+            ((rgb[3][1] > GRAY_THD_L) && (rgb[3][1] < GRAY_THD_H)) &&
+            ((rgb[3][2] > GRAY_THD_L) && (rgb[3][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgv, d34, o34, pRectroi);
+            *pdeg = d34;
+        }
+        else if (((rgb[0][0] > GRAY_THD_L) && (rgb[0][0] < GRAY_THD_H)) &&
+            ((rgb[0][1] > GRAY_THD_L) && (rgb[0][1] < GRAY_THD_H)) &&
+            ((rgb[0][2] > GRAY_THD_L) && (rgb[0][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgi, d12, o12, pRectroi);
+            *pdeg = d12;
+        }
+        else if (((rgb[1][0] > GRAY_THD_L) && (rgb[1][0] < GRAY_THD_H)) &&
+            ((rgb[1][1] > GRAY_THD_L) && (rgb[1][1] < GRAY_THD_H)) &&
+            ((rgb[1][2] > GRAY_THD_L) && (rgb[1][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgv, d12, o12, pRectroi);
+            *pdeg = d12;
+        }
+        else {
+            printf("[rect] v34 + v12 get tag failed \n");
+
+            getRectTran(pRectorgi, d34, o34, pRectroi);
+            *pdeg = d34;            
+        }
+        
         
         dbgprintRect(pRectout34Ro);
         dbgprintRect(pRectout34R);
-        dbgprintRect(pRectout34);
+        //dbgprintRect(pRectout34);
 
     }
     else {
-        printf("[rect] v41: %.2lf o41:(%.2lf, %.2lf) d41: %.2lf \n", v41, o41[0], o41[1], d41);
+        printf("[rect] v41 + v23 \n");
+
+        getRectTran(pRectorgc, d23, o23, pRectorgcOut);
+        getRectTran(pRectorgk, d23, o23, pRectorgkOut);
+
+        dx = round(pRectorgcOut->aspRectLU[0]);
+        dy = round(pRectorgcOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[0][0], src, 3);
         
-        getRectTran(pRectorgi, d41, o41, pRectroi);
-        getRectTran(pRectout41Ro, d41, o41, pRectout41);
+        printf("[rect] rgb: %d, %d, %d - c1\n", rgb[0][0], rgb[0][1], rgb[0][2]);
 
-        *pdeg = d41;
+        dx = round(pRectorgkOut->aspRectLU[0]);
+        dy = round(pRectorgkOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[1][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - k1 \n", rgb[1][0], rgb[1][1], rgb[1][2]);
 
+        getRectTran(pRectorgc, d41, o41, pRectorgcOut);
+        getRectTran(pRectorgk, d41, o41, pRectorgkOut);
+
+        dx = round(pRectorgcOut->aspRectLU[0]);
+        dy = round(pRectorgcOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[2][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - c2\n", rgb[2][0], rgb[2][1], rgb[2][2]);
+
+        dx = round(pRectorgkOut->aspRectLU[0]);
+        dy = round(pRectorgkOut->aspRectLU[1]);
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+        memcpy(&rgb[3][0], src, 3);
+        
+        printf("[rect] rgb: %d, %d, %d - k2 \n", rgb[3][0], rgb[3][1], rgb[3][2]);
+
+        if (((rgb[2][0] > GRAY_THD_L) && (rgb[2][0] < GRAY_THD_H)) &&
+            ((rgb[2][1] > GRAY_THD_L) && (rgb[2][1] < GRAY_THD_H)) &&
+            ((rgb[2][2] > GRAY_THD_L) && (rgb[2][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgi, d41, o41, pRectroi);
+            *pdeg = d41;
+        }
+        else if (((rgb[3][0] > GRAY_THD_L) && (rgb[3][0] < GRAY_THD_H)) &&
+            ((rgb[3][1] > GRAY_THD_L) && (rgb[3][1] < GRAY_THD_H)) &&
+            ((rgb[3][2] > GRAY_THD_L) && (rgb[3][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgv, d41, o41, pRectroi);
+            *pdeg = d41;
+        }
+        else if (((rgb[0][0] > GRAY_THD_L) && (rgb[0][0] < GRAY_THD_H)) &&
+            ((rgb[0][1] > GRAY_THD_L) && (rgb[0][1] < GRAY_THD_H)) &&
+            ((rgb[0][2] > GRAY_THD_L) && (rgb[0][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgi, d23, o23, pRectroi);
+            *pdeg = d23;
+        }
+        else if (((rgb[1][0] > GRAY_THD_L) && (rgb[1][0] < GRAY_THD_H)) &&
+            ((rgb[1][1] > GRAY_THD_L) && (rgb[1][1] < GRAY_THD_H)) &&
+            ((rgb[1][2] > GRAY_THD_L) && (rgb[1][2] < GRAY_THD_H))) {
+            getRectTran(pRectorgv, d23, o23, pRectroi);
+            *pdeg = d23;
+        }
+        else {
+            printf("[rect] v41 + v23 get tag failed \n");
+
+            getRectTran(pRectorgi, d41, o41, pRectroi);
+            *pdeg = d41;
+
+        }
+        
         dbgprintRect(pRectout41Ro);
         dbgprintRect(pRectout41R);
-        dbgprintRect(pRectout41);
+        //dbgprintRect(pRectout41);
     }
+    #endif
     
     dbgprintRect(pRectorgi);
     dbgprintRect(pRectroi);
@@ -6258,6 +6576,12 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     memcpy(pcp36->crp36P3, pRD, sizeof(CFLOAT)*2);
     memcpy(pcp36->crp36P4, pLD, sizeof(CFLOAT)*2);
     #endif
+
+    return 0;
+}
+
+static int getTagOrient(struct aspRectObj *pRectin, int edwidth, int edheight, int pidx, int *tag)
+{
 
     return 0;
 }
@@ -12365,8 +12689,8 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     
     dbgprintRect(pRectin);
     dbgprintRect(pRectinR);
-    
-    getRotRectPoint(pRectinR, 1460, 900, 11, pRectROI, &imgdeg, pRectroc);
+            
+    getRotRectPoint(pRectinR, 1920, 650, 11, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp);
 
     memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
     memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -13219,7 +13543,8 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
                     sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 1\n", RDt[0], RDt[1]);
                     print_f(rs->plogs, "ROT", rs->logs);
                 }
-            } else {
+            }
+            else {
                 sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 2\n", RDt[0], RDt[1]);
                 print_f(rs->plogs, "ROT", rs->logs);
             }
