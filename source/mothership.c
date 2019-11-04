@@ -6007,6 +6007,21 @@ static CFLOAT getRectOffset(struct aspRectObj *pRectout, struct aspRectObj *pRec
     return diff;
 }
 
+static inline int getPtTran(CFLOAT *ptout, CFLOAT *rangle, CFLOAT *offset, CFLOAT *ptin)
+{
+    CFLOAT pLU[2];
+    int ret=0, LUt[2];
+    
+    pLU[0] = ptin[0] + offset[0];
+    pLU[1] = ptin[1] + offset[1];
+    
+    ret = calcuRotateCoordinates(LUt, ptout, pLU, rangle);
+    
+    printf("[PT] in:(%4.2lf, %4.2lf), out:(%4.2lf, %4.2lf) ret: %d\n", ptin[0], ptin[1], ptout[0], ptout[1], ret);
+
+    return ret;
+}
+
 static int getRectTran(struct aspRectObj *pRectin, CFLOAT dg, CFLOAT *offset, struct aspRectObj *pRectout)
 {
     int ret=0;
@@ -6024,49 +6039,24 @@ static int getRectTran(struct aspRectObj *pRectin, CFLOAT dg, CFLOAT *offset, st
     
     rangle[0] = thacos;
     rangle[1] = thasin;
-
-    pLU[0] = pRectin->aspRectLU[0] + offset[0];
-    pLU[1] = pRectin->aspRectLU[1] + offset[1];
-
-    pLD[0] = pRectin->aspRectLD[0] + offset[0];
-    pLD[1] = pRectin->aspRectLD[1] + offset[1];
-
-    pRD[0] = pRectin->aspRectRD[0] + offset[0];
-    pRD[1] = pRectin->aspRectRD[1] + offset[1];
-
-    pRU[0] = pRectin->aspRectRU[0] + offset[0];
-    pRU[1] = pRectin->aspRectRU[1] + offset[1];
-
-    LUn = pRectout->aspRectLU;
-    RUn = pRectout->aspRectRU;
-    LDn = pRectout->aspRectLD;
-    RDn = pRectout->aspRectRD;
-
-    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
-    printf("[CHR] pLU: (%4.2lf, %4.2lf) -> LUn(%4.2lf, %4.2lf) dg: %.2lf ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], dg, ret);
-
-    calcuRotateCoordinates(LDt, LDn, pLD, rangle);
-    printf("[CHR] pLD: (%4.2lf, %4.2lf) -> LDn(%4.2lf, %4.2lf) dg: %.2lf ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], dg, ret);
-
-    calcuRotateCoordinates(RDt, RDn, pRD, rangle);
-    printf("[CHR] pRD: (%4.2lf, %4.2lf) -> RDn(%4.2lf, %4.2lf) dg: %.2lf ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], dg, ret);
-
-    calcuRotateCoordinates(RUt, RUn, pRU, rangle);
-    printf("[CHR] pRU: (%4.2lf, %4.2lf) -> RUn(%4.2lf, %4.2lf) dg: %.2lf ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], dg, ret);
-
-    #if 0
-    LUn[0] = LUn[0] + offset[0];
-    LUn[1] = LUn[1] + offset[1];
-
-    RUn[0] = RUn[0] + offset[0];
-    RUn[1] = RUn[1] + offset[1];
-
-    RDn[0] = RDn[0] + offset[0];
-    RDn[1] = RDn[1] + offset[1];
-
-    LDn[0] = LDn[0] + offset[0];
-    LDn[1] = LDn[1] + offset[1];
-    #endif
+    
+    printf("[CHR] getRectTran() degree: %4.2lf, offset: (%4.2lf, %4.2lf) \n", dg, offset[0], offset[1]);
+    
+    ret = getPtTran(pRectout->aspRectLU, rangle, offset, pRectin->aspRectLU);
+    printf("[CHR] LU: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", 
+        pRectin->aspRectLU[0], pRectin->aspRectLU[1], pRectout->aspRectLU[0], pRectout->aspRectLU[1], ret);
+    
+    ret = getPtTran(pRectout->aspRectLD, rangle, offset, pRectin->aspRectLD);
+    printf("[CHR] LD: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", 
+        pRectin->aspRectLD[0], pRectin->aspRectLD[1], pRectout->aspRectLD[0], pRectout->aspRectLD[1], ret);
+        
+    ret = getPtTran(pRectout->aspRectRD, rangle, offset, pRectin->aspRectRD);
+    printf("[CHR] RD: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", 
+        pRectin->aspRectRD[0], pRectin->aspRectRD[1], pRectout->aspRectRD[0], pRectout->aspRectRD[1], ret);
+        
+    ret = getPtTran(pRectout->aspRectRU, rangle, offset, pRectin->aspRectRU);
+    printf("[CHR] RU: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", 
+        pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectout->aspRectRU[0], pRectout->aspRectRU[1], ret);
 
     return 0;
 }
@@ -6138,10 +6128,14 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     pRectout34Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
     pRectout41Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
-    #if 0
+    #if 1
     pT1[0] = 1.0;
     pT1[1] = 1.0;
     setRectPoint(pRectorgi, edwidth - 1, edheight - 1, pT1);
+
+    pT2[0] = 1.0;
+    pT2[1] = 1.0;
+    setRectPoint(pRectorgv, edwidth - 1, edheight - 1, pT2);
     #elif 0
     /*
     pT1[0] = 321.0;
@@ -6153,12 +6147,11 @@ static int getRotRectPoint(struct aspRectObj *pRectin, int edwidth, int edheight
     pT1[0] = 1494.0;
     pT1[1] = 52.0;
     setRectPoint(pRectorgi, 368.0, 67.0, pT1);
-    
-    #endif
 
     pT2[0] = 802.0;
     pT2[1] = 259.0;
     setRectPoint(pRectorgv, 209.0, 248.0, pT2);
+    #endif
 
     pT3[0] = 103.0;
     pT3[1] = 422.0;
