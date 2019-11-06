@@ -6007,17 +6007,32 @@ static CFLOAT getRectOffset(struct aspRectObj *pRectout, struct aspRectObj *pRec
     return diff;
 }
 
-static inline int getPtTranRvs(CFLOAT *ptout, CFLOAT *rangle, CFLOAT *offset, CFLOAT *ptin)
+static int getPtTranRvs(CFLOAT *ptout, CFLOAT dg, CFLOAT *offset, CFLOAT *ptin)
 {
-    CFLOAT pLU[2];
-    int ret=0, LUt[2];
+    int ret=0, ptn[2];
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT ptf[2];
+
+    theta = dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
     
-    ret = calcuRotateCoordinates(LUt, pLU, ptin, rangle);
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+    
+    printf("[RVS] getPtTranRvs() degree: %4.2lf, offset: (%4.2lf, %4.2lf) \n", dg, offset[0], offset[1]);
 
-    ptout[0] = pLU[0] + offset[0];
-    ptout[1] = pLU[1] + offset[1];
+    ret = calcuRotateCoordinates(ptn, ptf, ptin, rangle);
 
-    return ret;
+    ptout[0] = ptf[0] + offset[0];
+    ptout[1] = ptf[1] + offset[1];
+    
+    printf("[RVS] LU: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", ptin[0], ptin[1], ptout[0], ptout[1], ret);
+
+    return 0;
 }
 
 static inline int getPtTran(CFLOAT *ptout, CFLOAT *rangle, CFLOAT *offset, CFLOAT *ptin)
@@ -6092,6 +6107,7 @@ static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edhe
 
 static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx)
 {
+#define SRH_RANGE (80)
     int dx=0, dy=0, ix=0, bitset=0, ret=0, flag=0;
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
     CFLOAT fval[2]={0}, rval[2]={0}, tmp=0;
@@ -6128,7 +6144,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
     sprintf_f(rs->logs, "org (%4d, %4d) RGB(%d, %d, %d)\n", dx, dy, orgb[0], orgb[1], orgb[2]);
     print_f(rs->plogs, "SRH", rs->logs);
     
-    for (ix=0; ix < 50; ix++) {
+    for (ix=0; ix < SRH_RANGE; ix++) {
         tmp = ix;
         fval[0] = pfound[0] + (tmp * 1.0);
         fval[1] = pfound[1];
@@ -6156,7 +6172,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
         }
     }
 
-    for (ix=0; ix < 50; ix++) {
+    for (ix=0; ix < SRH_RANGE; ix++) {
         tmp = ix;
         fval[0] = pfound[0] - (tmp * 1.0);
         fval[1] = pfound[1];
@@ -6184,7 +6200,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
         }
     }
 
-    for (ix=0; ix < 50; ix++) {
+    for (ix=0; ix < SRH_RANGE; ix++) {
         tmp = ix;
         fval[0] = pfound[0];
         fval[1] = pfound[1] - (tmp * 1.0);
@@ -6212,7 +6228,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
         }
     }
 
-    for (ix=0; ix < 50; ix++) {
+    for (ix=0; ix < SRH_RANGE; ix++) {
         tmp = ix;
         fval[0] = pfound[0];
         fval[1] = pfound[1] + (tmp * 1.0);
@@ -6394,13 +6410,14 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
     CFLOAT width=0, high=0, tmp=0, wshif=0, hshif=0, fval=0;
     int *ptU=0, *ptD=0, *ptL=0, *ptR=0;
     CFLOAT *ptUf=0, *ptDf=0, *ptLf=0, *ptRf=0;
-    int wsize=0, hsize=0, ix=0, bitset=0;
+    int wsize=0, hsize=0, ix=0, bitset=0, ret=0;
     char *src=0;
     int dx=0, dy=0;
     char *drgbU=0, *drgbD=0, *drgbL=0, *drgbR=0;
     char *orgbU=0, *orgbD=0, *orgbL=0, *orgbR=0;
     char mindrgb[3]={0};
     CFLOAT minfound[2]={0};
+    CFLOAT roffset[2]={0};
 
     bitset = bpp / 8;
     
@@ -6626,12 +6643,17 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
         }
     }
 
-    if ((mindrgb[0] > 15) || (mindrgb[1] > 15) || (mindrgb[2] > 15)) {
+    if ((mindrgb[0] > 25) || (mindrgb[1] > 25) || (mindrgb[2] > 25)) {
         return -9;
     }
 
-    pfound[0] = minfound[0];
-    pfound[1] = minfound[1];
+    roffset[0] = 0.0 - offset[0];
+    roffset[1] = 0.0 - offset[1];
+    
+    ret = getPtTranRvs(pfound, 360.0 - dg, roffset, minfound);
+    
+    //pfound[0] = minfound[0];
+    //pfound[1] = minfound[1];
     
     return 0;
 }
@@ -6641,7 +6663,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
 #define UNIT_DEG (1000.0)
 #define GRAY_THD_H (170)
 #define GRAY_THD_L (120)
-    int ret=0, err=0, bitset=0, dx=0, dy=0;
+    int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0;
     int LUt[2], RUt[2], LDt[2], RDt[2];
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
     CFLOAT *pLU, *pLD, *pRU, *pRD;
@@ -6652,6 +6674,8 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     CFLOAT o12[2], o23[2], o34[2], o41[2];
     CFLOAT vmin, vmin1;
     CFLOAT pfound[2];
+    CFLOAT ptStart[4][2], dgs[4], *offsets[4], ptEnd[4][4], correct[2];
+    
     int ptreal[2];
     struct aspRectObj *pRectout12=0, *pRectout23=0, *pRectout34=0, *pRectout41=0, *pRectorg=0;
     struct aspRectObj *pRectorgi=0, *pRectorgv=0, *pRectorgc=0, *pRectorgk=0, *pRectorgcOut=0, *pRectorgkOut=0;;
@@ -6661,7 +6685,8 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     char *src=0;
     char rgb[4][3];
     char rgbtga[3];
-
+    char rgbdiff[3];
+    
     bitset = bpp / 8;
     
     pLU = pRectin->aspRectLU;
@@ -6848,15 +6873,104 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
 
         sprintf_f(rs->logs, "search start \n");
         print_f(rs->plogs, "RECT", rs->logs);
+
+        ptStart[0][0] = pT4[0];
+        ptStart[0][1] = pT4[1];
+
+        ptStart[1][0] = pT3[0];
+        ptStart[1][1] = pT3[1];
+
+        ptStart[2][0] = pT4[0];
+        ptStart[2][1] = pT4[1];
+
+        ptStart[3][0] = pT3[0];
+        ptStart[3][1] = pT3[1];
         
-        pT1[0] = 78.0;
-        pT1[1] = 397.0;
-        setRectPoint(pRectTga, 50.0, 100.0, pT1);
+        ptEnd[0][0] = pT1[0];
+        ptEnd[0][1] = pT1[1];
+        ptEnd[0][2] = edwidth - 1;
+        ptEnd[0][3] = edheight - 1;
+        ptEnd[1][0] = pT2[0];
+        ptEnd[1][1] = pT2[1];
+        ptEnd[1][2] = edwidth - 1;
+        ptEnd[1][3] = edheight - 1;
+        ptEnd[2][0] = pT1[0];
+        ptEnd[2][1] = pT1[1];
+        ptEnd[2][2] = edwidth - 1;
+        ptEnd[2][3] = edheight - 1;
+        ptEnd[3][0] = pT2[0];
+        ptEnd[3][1] = pT2[1];
+        ptEnd[3][2] = edwidth - 1;
+        ptEnd[3][3] = edheight - 1;
+
+        
+        dgs[0] = d12;
+        dgs[1] = d12;
+        dgs[2] = d34;
+        dgs[3] = d34;
+
+        offsets[0] = o12;
+        offsets[1] = o12;
+        offsets[2] = o34;
+        offsets[3] = o34;
+
+        rgbtga[0] = 130;
+        rgbtga[1] = 130;
+        rgbtga[2] = 130;
+
+        rgbdiff[0] = 80;
+        rgbdiff[1] = 50;
+        rgbdiff[2] = 10;
+
+        ptreal[0] = 0;
+        ptreal[1] = 0;
+        for (ix=0; ix < 4; ix++) {
+            setRectPoint(pRectTga, 30.0, 30.0, &ptStart[ix][0]);
+            dbgprintRect(pRectTga);
+
+            ret = srhRotRect(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga, bmp, oldRowsz, bpp, pidx, 1.0, 1.0);
+            if (ret == 0) {
+                err = adjCircleRect(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff, bmp, oldRowsz, bpp, pidx);
+                if (err == 0) {
+
+                    correct[0] = ptreal[0] - ptStart[ix][0];
+                    correct[1] = ptreal[1] - ptStart[ix][1];
+                    sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) \n", ptreal[0], ptreal[1], correct[0], correct[1]);
+                    print_f(rs->plogs, "RECT", rs->logs);       
+
+                    ptEnd[ix][0] += correct[0];
+                    ptEnd[ix][1] += correct[1];
+                    
+                    setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
+
+                    getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
+                    *pdeg = dgs[ix];
+                    
+                    break;
+                }
+            }
+        }
+
+        if ((!ptreal[0]) && (!ptreal[1])) {
+            //getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
+            *pdeg = 0.0;
+
+            sprintf_f(rs->logs, "tag search failed !!\n");
+            print_f(rs->plogs, "RECT", rs->logs);       
+
+            return -9;
+        }
+
+
+        //pT4[0] = 1808.0;
+        //pT4[1] = 414.0;
+        #if 0
+        setRectPoint(pRectTga, 30.0, 30.0, pT4);
         dbgprintRect(pRectTga);
-        rgbtga[0] = 125;
-        rgbtga[1] = 125;
-        rgbtga[2] = 125;
-        ret = srhRotRect(rs, pfound, pRectTga, d12, o12, rgbtga, bmp, oldRowsz, bpp, pidx, 2.0, 4.0);
+        rgbtga[0] = 130;
+        rgbtga[1] = 130;
+        rgbtga[2] = 130;
+        ret = srhRotRect(rs, pfound, pRectTga, d12, o12, rgbtga, bmp, oldRowsz, bpp, pidx, 1.0, 1.0);
         //srhRotRectTran(rs, pfound, pRectTga, d12, o12, rgbtga, bmp, oldRowsz, bpp, pidx, 1.0, 1.0);
         if (ret == 0) {
             rgbtga[0] = 80;
@@ -6868,51 +6982,80 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
 
             pT1[0] = ptreal[0];
             pT1[1] = ptreal[1];
-            setRectPoint(pRectorgc, 2.0, 2.0, pT1);
+            setRectPoint(pRectorgk, 2.0, 2.0, pT1);
 
-            sprintf_f(rs->logs, "page shift: (%4.2lf, %4.2lf) \n", pT1[0] - pT3[0], pT1[1] - pT3[1]);
+            sprintf_f(rs->logs, "page shift: (%4.2lf, %4.2lf) \n", pT1[0] - pT4[0], pT1[1] - pT4[1]);
             print_f(rs->plogs, "RECT", rs->logs);        
+        } else {
+            sprintf_f(rs->logs, "next (%4.2lf, %4.2lf) \n", pT1[0] - pT3[0], pT1[1] - pT3[1]);
+            print_f(rs->plogs, "RECT", rs->logs);  
+            
+            pT3[0] = 103.0;
+            pT3[1] = 422.0;
+        
+            setRectPoint(pRectTga, 30.0, 30.0, pT3);
+            dbgprintRect(pRectTga);
+            rgbtga[0] = 130;
+            rgbtga[1] = 130;
+            rgbtga[2] = 130;
+            ret = srhRotRect(rs, pfound, pRectTga, d12, o12, rgbtga, bmp, oldRowsz, bpp, pidx, 1.0, 1.0);
+            if (ret == 0) {
+                rgbtga[0] = 80;
+                rgbtga[1] = 50;
+                rgbtga[2] = 10;
+                //pfound[0] = pRectorgc->aspRectLU[0];
+                //pfound[1] = pRectorgc->aspRectLU[1];
+                adjCircleRect(rs, ptreal, pfound, d12, o12, rgbtga, bmp, oldRowsz, bpp, pidx);
+
+                pT1[0] = ptreal[0];
+                pT1[1] = ptreal[1];
+                setRectPoint(pRectorgc, 2.0, 2.0, pT1);
+
+                sprintf_f(rs->logs, "page shift: (%4.2lf, %4.2lf) next\n", pT1[0] - pT3[0], pT1[1] - pT3[1]);
+                print_f(rs->plogs, "RECT", rs->logs);     
+            }
         }
+        #endif
         
         sprintf_f(rs->logs, "search end \n");
         print_f(rs->plogs, "RECT", rs->logs);
-        
+        #if 0
         getRectTran(pRectorgc, d12, o12, pRectorgcOut);
         getRectTran(pRectorgk, d12, o12, pRectorgkOut);
         
-        dx = round(pRectorgcOut->aspRectLU[0]);
-        dy = round(pRectorgcOut->aspRectLU[1]);
+        dx = round(pRectorgcOut->aspRectLD[0]);
+        dy = round(pRectorgcOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[0][0], src, 3);
         
-        sprintf_f(rs->logs, " rgb: %d, %d, %d - c1\n", rgb[0][0], rgb[0][1], rgb[0][2]);
+        sprintf_f(rs->logs, " (%4d, %4d) rgb: %d, %d, %d - c1\n", dx, dy, rgb[0][0], rgb[0][1], rgb[0][2]);
         print_f(rs->plogs, "RECT", rs->logs);
 
-        dx = round(pRectorgkOut->aspRectLU[0]);
-        dy = round(pRectorgkOut->aspRectLU[1]);
+        dx = round(pRectorgkOut->aspRectLD[0]);
+        dy = round(pRectorgkOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[1][0], src, 3);
         
-        sprintf_f(rs->logs, " rgb: %d, %d, %d - k1 \n", rgb[1][0], rgb[1][1], rgb[1][2]);
+        sprintf_f(rs->logs, " (%4d, %4d) rgb: %d, %d, %d - k1 \n", dx, dy, rgb[1][0], rgb[1][1], rgb[1][2]);
         print_f(rs->plogs, "RECT", rs->logs);
 
         getRectTran(pRectorgc, d34, o34, pRectorgcOut);
         getRectTran(pRectorgk, d34, o34, pRectorgkOut);
 
-        dx = round(pRectorgcOut->aspRectLU[0]);
-        dy = round(pRectorgcOut->aspRectLU[1]);
+        dx = round(pRectorgcOut->aspRectLD[0]);
+        dy = round(pRectorgcOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[2][0], src, 3);
         
-        sprintf_f(rs->logs, " rgb: %d, %d, %d - c2\n", rgb[2][0], rgb[2][1], rgb[2][2]);
+        sprintf_f(rs->logs, " (%4d, %4d) rgb: %d, %d, %d - c2\n", dx, dy, rgb[2][0], rgb[2][1], rgb[2][2]);
         print_f(rs->plogs, "RECT", rs->logs);
 
-        dx = round(pRectorgkOut->aspRectLU[0]);
-        dy = round(pRectorgkOut->aspRectLU[1]);
+        dx = round(pRectorgkOut->aspRectLD[0]);
+        dy = round(pRectorgkOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[3][0], src, 3);
         
-        sprintf_f(rs->logs, " rgb: %d, %d, %d - k2 \n", rgb[3][0], rgb[3][1], rgb[3][2]);
+        sprintf_f(rs->logs, " (%4d, %4d) rgb: %d, %d, %d - k2 \n", dx, dy, rgb[3][0], rgb[3][1], rgb[3][2]);
         print_f(rs->plogs, "RECT", rs->logs);
 
         if (((rgb[0][0] > GRAY_THD_L) && (rgb[0][0] < GRAY_THD_H)) &&
@@ -6946,9 +7089,10 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
             getRectTran(pRectorgi, d12, o12, pRectroi);
             *pdeg = d12;
         }
+        #endif
 
-        dbgprintRect(pRectout12Ro);
-        dbgprintRect(pRectout12R);
+        //dbgprintRect(pRectout12Ro);
+        //dbgprintRect(pRectout12R);
         //dbgprintRect(pRectout12);
     } 
     else if (vmin == v23) {
@@ -6958,16 +7102,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         getRectTran(pRectorgc, d23, o23, pRectorgcOut);
         getRectTran(pRectorgk, d23, o23, pRectorgkOut);
 
-        dx = round(pRectorgcOut->aspRectLU[0]);
-        dy = round(pRectorgcOut->aspRectLU[1]);
+        dx = round(pRectorgcOut->aspRectLD[0]);
+        dy = round(pRectorgcOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[0][0], src, 3);
         
         sprintf_f(rs->logs, " rgb: %d, %d, %d - c1\n", rgb[0][0], rgb[0][1], rgb[0][2]);
         print_f(rs->plogs, "RECT", rs->logs);
         
-        dx = round(pRectorgkOut->aspRectLU[0]);
-        dy = round(pRectorgkOut->aspRectLU[1]);
+        dx = round(pRectorgkOut->aspRectLD[0]);
+        dy = round(pRectorgkOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[1][0], src, 3);
         
@@ -6977,16 +7121,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         getRectTran(pRectorgc, d41, o41, pRectorgcOut);
         getRectTran(pRectorgk, d41, o41, pRectorgkOut);
 
-        dx = round(pRectorgcOut->aspRectLU[0]);
-        dy = round(pRectorgcOut->aspRectLU[1]);
+        dx = round(pRectorgcOut->aspRectLD[0]);
+        dy = round(pRectorgcOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[2][0], src, 3);
         
         sprintf_f(rs->logs, " rgb: %d, %d, %d - c2\n", rgb[2][0], rgb[2][1], rgb[2][2]);
         print_f(rs->plogs, "RECT", rs->logs);
         
-        dx = round(pRectorgkOut->aspRectLU[0]);
-        dy = round(pRectorgkOut->aspRectLU[1]);
+        dx = round(pRectorgkOut->aspRectLD[0]);
+        dy = round(pRectorgkOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[3][0], src, 3);
         
@@ -7036,16 +7180,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         getRectTran(pRectorgc, d12, o12, pRectorgcOut);
         getRectTran(pRectorgk, d12, o12, pRectorgkOut);
 
-        dx = round(pRectorgcOut->aspRectLU[0]);
-        dy = round(pRectorgcOut->aspRectLU[1]);
+        dx = round(pRectorgcOut->aspRectLD[0]);
+        dy = round(pRectorgcOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[0][0], src, 3);
         
         sprintf_f(rs->logs, " rgb: %d, %d, %d - c1\n", rgb[0][0], rgb[0][1], rgb[0][2]);
         print_f(rs->plogs, "RECT", rs->logs);
         
-        dx = round(pRectorgkOut->aspRectLU[0]);
-        dy = round(pRectorgkOut->aspRectLU[1]);
+        dx = round(pRectorgkOut->aspRectLD[0]);
+        dy = round(pRectorgkOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[1][0], src, 3);
         
@@ -7055,16 +7199,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         getRectTran(pRectorgc, d34, o34, pRectorgcOut);
         getRectTran(pRectorgk, d34, o34, pRectorgkOut);
 
-        dx = round(pRectorgcOut->aspRectLU[0]);
-        dy = round(pRectorgcOut->aspRectLU[1]);
+        dx = round(pRectorgcOut->aspRectLD[0]);
+        dy = round(pRectorgcOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[2][0], src, 3);
         
         sprintf_f(rs->logs, " rgb: %d, %d, %d - c2\n", rgb[2][0], rgb[2][1], rgb[2][2]);
         print_f(rs->plogs, "RECT", rs->logs);
         
-        dx = round(pRectorgkOut->aspRectLU[0]);
-        dy = round(pRectorgkOut->aspRectLU[1]);
+        dx = round(pRectorgkOut->aspRectLD[0]);
+        dy = round(pRectorgkOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[3][0], src, 3);
         
@@ -7116,16 +7260,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         getRectTran(pRectorgc, d23, o23, pRectorgcOut);
         getRectTran(pRectorgk, d23, o23, pRectorgkOut);
 
-        dx = round(pRectorgcOut->aspRectLU[0]);
-        dy = round(pRectorgcOut->aspRectLU[1]);
+        dx = round(pRectorgcOut->aspRectLD[0]);
+        dy = round(pRectorgcOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[0][0], src, 3);
         
         sprintf_f(rs->logs, " rgb: %d, %d, %d - c1\n", rgb[0][0], rgb[0][1], rgb[0][2]);
         print_f(rs->plogs, "RECT", rs->logs);
         
-        dx = round(pRectorgkOut->aspRectLU[0]);
-        dy = round(pRectorgkOut->aspRectLU[1]);
+        dx = round(pRectorgkOut->aspRectLD[0]);
+        dy = round(pRectorgkOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[1][0], src, 3);
         
@@ -7135,16 +7279,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         getRectTran(pRectorgc, d41, o41, pRectorgcOut);
         getRectTran(pRectorgk, d41, o41, pRectorgkOut);
 
-        dx = round(pRectorgcOut->aspRectLU[0]);
-        dy = round(pRectorgcOut->aspRectLU[1]);
+        dx = round(pRectorgcOut->aspRectLD[0]);
+        dy = round(pRectorgcOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[2][0], src, 3);
         
         sprintf_f(rs->logs, " rgb: %d, %d, %d - c2\n", rgb[2][0], rgb[2][1], rgb[2][2]);
         print_f(rs->plogs, "RECT", rs->logs);
         
-        dx = round(pRectorgkOut->aspRectLU[0]);
-        dy = round(pRectorgkOut->aspRectLU[1]);
+        dx = round(pRectorgkOut->aspRectLD[0]);
+        dy = round(pRectorgkOut->aspRectLD[1]);
         src = getPixel(bmp, dx, dy, oldRowsz, bitset);
         memcpy(&rgb[3][0], src, 3);
         
@@ -13320,12 +13464,25 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     dbgprintRect(pRectin);
     dbgprintRect(pRectinR);
             
-    getRotRectPoint(rs, pRectinR, 1920, 650, 11, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp);
+    ret = getRotRectPoint(rs, pRectinR, 1920, 650, 11, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp);
+    if (ret == 0) {
+        memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
+        memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
+        memcpy(RD, pRectROI->aspRectRD, sizeof(CFLOAT)*2);
+        memcpy(RU, pRectROI->aspRectRU, sizeof(CFLOAT)*2);
+    } else {
+        LU[0] = 0;
+        LU[1] = bheader->aspbiHeight-1;
 
-    memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
-    memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
-    memcpy(RD, pRectROI->aspRectRD, sizeof(CFLOAT)*2);
-    memcpy(RU, pRectROI->aspRectRU, sizeof(CFLOAT)*2);
+        RU[0] = bheader->aspbiWidth-1;
+        RU[1] = bheader->aspbiHeight-1;        
+
+        LD[0] = 0;
+        LD[1] = 0;
+
+        RD[0] = bheader->aspbiWidth-1;
+        RD[1] = 0;
+    }
 
     #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "getRotRectPoint: LUn: %lf, %lf\n", LU[0], LU[1]);
