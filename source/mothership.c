@@ -5837,15 +5837,19 @@ static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, s
         dg = getAngle(p1, plf, p2);
 
         if ((dh > 0.0) && (dv > 0.0)) {
-            dg += 0;
+            dg += 0.0;
+            //dg = 360.0 - dg;
         }
         else if ((dh < 0.0) && (dv > 0.0)) {
-            dg += 0;
+            dg += 0.0;
+            //dg = 360.0 - dg;
         }
         else if ((dh < 0.0) && (dv < 0.0)) {
+            //dg += 0.0;
             dg = 360.0 - dg;
         }
         else if ((dh > 0.0) && (dv < 0.0)) {
+            //dg += 0.0;
             dg = 360.0 - dg;
         }
     }
@@ -5873,28 +5877,29 @@ static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, s
     RDn = pRectout->aspRectRD;
     
     ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
-    printf("[RectAlign] pLU: (%.2lf, %.2lf) -> LUn(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], dg, ret);
+    printf("[RectAlign] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
     
     ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
-    printf("[RectAlign] pLU: (%.2lf, %.2lf) -> LUn(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], dg, ret);
+    printf("[RectAlign] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
     
     ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
-    printf("[RectAlign] pLU: (%.2lf, %.2lf) -> LUn(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], dg, ret);
+    printf("[RectAlign] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
     
     ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
-    printf("[RectAlign] pLU: (%.2lf, %.2lf) -> LUn(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], dg, ret);
+    printf("[RectAlign] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
 
-    printf("[RectAlign] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    printf("[RectAlign] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
 
     ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
-    printf("[RectAlign] p1: (%.2lf, %.2lf) -> plf(%.2lf, %.2lf) dg: %.2lf ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], dg, ret);
+    printf("[RectAlign] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
 
     printf("[RectAlign] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
     
+
+    #if 0
     dh = p1[0] - plf[0];
     dv = p1[1] - plf[1];
 
-    #if 0
     LUn[0] += dh;
     LUn[1] += dv;
 
@@ -5906,7 +5911,20 @@ static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, s
 
     RDn[0] += dh;
     RDn[1] += dv;
-    #endif
+    
+    findRectOrient(pRectout, pRectout);
+    
+    LUn[0] -= dh;
+    LUn[1] -= dv;
+
+    RUn[0] -= dh;
+    RUn[1] -= dv;
+
+    LDn[0] -= dh;
+    LDn[1] -= dv;
+
+    RDn[0] -= dh;
+    RDn[1] -= dv;
     
     dht = round(dh);
     dvt = round(dv);
@@ -5924,6 +5942,9 @@ static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, s
     RUt[1] += dvt;
 
     printf("[RectAlign] (%d, %d) (%d, %d) (%d, %d) (%d, %d) dht: %d, dvt: %d\n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1], dht, dvt);
+
+    #endif
+    
     
     return dg;
 }
@@ -5946,6 +5967,7 @@ static CFLOAT getRectOffset(struct aspRectObj *pRectout, struct aspRectObj *pRec
     LDn = pRectin->aspRectLD;
     RDn = pRectin->aspRectRD;
 
+    /*
     minH = aspMin(LUn[0], RUn[0]);
     minH = aspMin(minH, LDn[0]);
     minH = aspMin(minH, RDn[0]);
@@ -5953,9 +5975,10 @@ static CFLOAT getRectOffset(struct aspRectObj *pRectout, struct aspRectObj *pRec
     minV = aspMin(LUn[1], RUn[1]);
     minV = aspMin(minV, LDn[1]);
     minV = aspMin(minV, RDn[1]);
-
-    //offsetH = 0 - minH;
-    //offsetV = 0 - minV;
+    
+    offsetH = minH - 1;
+    offsetV = minV - 1;
+    */
     
     offsetH = LDn[0] - 1;
     offsetV = LDn[1] - 1;
@@ -5972,9 +5995,13 @@ static CFLOAT getRectOffset(struct aspRectObj *pRectout, struct aspRectObj *pRec
     pRU[0] = RUn[0] - offsetH;
     pRU[1] = RUn[1] - offsetV;
 
-    printf("[offset] pLU(%.2lf, %.2lf) pLD(%.2lf, %.2lf) pRD(%.2lf, %.2lf) pRU(%.2lf, %.2lf) offH: %.2lf offV: %.2lf \n", 
+    printf("[offset] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
         pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
-        
+    /*
+    printf("[offset] perfect LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf)\n", 
+        pRectorg->aspRectLU[0], pRectorg->aspRectLU[1], pRectorg->aspRectLD[0], pRectorg->aspRectLD[1], 
+        pRectorg->aspRectRD[0], pRectorg->aspRectRD[1], pRectorg->aspRectRU[0], pRectorg->aspRectRU[1]);
+    */    
     diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
     divH += diff;
 
@@ -6109,13 +6136,13 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
 {
 #define SRH_RANGE (80)
 #define SRH_COUNT_MIN (95)
-    int dx=0, dy=0, ix=0, bitset=0, ret=0, flag=0;
+    int dx=0, dy=0, ix=0, bitset=0, ret=0, flag=0x100;
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
     CFLOAT fval[2]={0}, rval[2]={0}, tmp=0;
     char *src;
     char drgb[3], orgb[3];
     CFLOAT ptup[2]={0}, ptdn[2]={0}, ptrt[2]={0}, ptlf[2]={0};
-    int srhcount=0;
+    int srhcount=1;
     
     sprintf_f(rs->logs, "org center (%4lf, %4lf) (%d, %d, %d)\n", pfound[0], pfound[1], colr[0], colr[1], colr[2]);
     print_f(rs->plogs, "SRH", rs->logs);
@@ -6146,7 +6173,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
     sprintf_f(rs->logs, "org (%4d, %4d) RGB(%d, %d, %d)\n", dx, dy, orgb[0], orgb[1], orgb[2]);
     print_f(rs->plogs, "SRH", rs->logs);
     
-    for (ix=0; ix < SRH_RANGE; ix++) {
+    for (ix=1; ix < SRH_RANGE; ix++) {
         tmp = ix;
         fval[0] = pfound[0] + (tmp * 1.0);
         fval[1] = pfound[1];
@@ -6175,7 +6202,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
         srhcount++;
     }
 
-    for (ix=0; ix < SRH_RANGE; ix++) {
+    for (ix=1; ix < SRH_RANGE; ix++) {
         tmp = ix;
         fval[0] = pfound[0] - (tmp * 1.0);
         fval[1] = pfound[1];
@@ -6204,7 +6231,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
         srhcount++;
     }
 
-    for (ix=0; ix < SRH_RANGE; ix++) {
+    for (ix=1; ix < SRH_RANGE; ix++) {
         tmp = ix;
         fval[0] = pfound[0];
         fval[1] = pfound[1] - (tmp * 1.0);
@@ -6233,7 +6260,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
         srhcount++;
     }
 
-    for (ix=0; ix < SRH_RANGE; ix++) {
+    for (ix=1; ix < SRH_RANGE; ix++) {
         tmp = ix;
         fval[0] = pfound[0];
         fval[1] = pfound[1] + (tmp * 1.0);
@@ -6262,7 +6289,7 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
         srhcount++;
     }
 
-    if (flag != 0xf) {
+    if ((flag & 0xff) != 0xf) {
         return flag;
     }
 
@@ -6429,7 +6456,7 @@ static int srhRotRectTran(struct procRes_s *rs, CFLOAT *pfound, struct aspRectOb
 
 static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *pRect, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx, CFLOAT wcnt, CFLOAT hcnt)
 {
-#define DRAW_COLOR (0)
+#define DRAW_COLOR (1)
 #define COLOR_RANGE (15)
     struct aspRectObj *pRectsrh=0;
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
@@ -6524,8 +6551,12 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
         drgbD[ix*3+0] = abs(src[0] - colr[0]);
         drgbD[ix*3+1] = abs(src[1] - colr[1]);
         drgbD[ix*3+2] = abs(src[2] - colr[2]);
+        
         #if DRAW_COLOR
-        memcpy(src, drawclor, 3);
+        //memcpy(src, drawclor, 3);
+        //src[0] = drawclor[0];
+        src[1] = drawclor[1];
+        //src[2] = drawclor[2];
         #endif
     }
 
@@ -6555,7 +6586,10 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
         drgbR[ix*3+1] = abs(src[1] - colr[1]);
         drgbR[ix*3+2] = abs(src[2] - colr[2]);
         #if DRAW_COLOR
-        memcpy(src, drawclor, 3);
+        //memcpy(src, drawclor, 3);
+        //src[0] = drawclor[0];
+        src[1] = drawclor[1];
+        //src[2] = drawclor[2];
         #endif
     }
 
@@ -6585,7 +6619,10 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
         drgbU[ix*3+1] = abs(src[1] - colr[1]);
         drgbU[ix*3+2] = abs(src[2] - colr[2]);
         #if DRAW_COLOR
-        memcpy(src, drawclor, 3);
+        //memcpy(src, drawclor, 3);
+        //src[0] = drawclor[0];
+        src[1] = drawclor[1];
+        //src[2] = drawclor[2];
         #endif
     }
 
@@ -6615,7 +6652,10 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
         drgbL[ix*3+1] = abs(src[1] - colr[1]);
         drgbL[ix*3+2] = abs(src[2] - colr[2]);
         #if DRAW_COLOR
-        memcpy(src, drawclor, 3);
+        //memcpy(src, drawclor, 3);
+        //src[0] = drawclor[0];
+        src[1] = drawclor[1];
+        //src[2] = drawclor[2];
         #endif
     }
 
@@ -6858,26 +6898,35 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectin->aspRectLU[0], pRectin->aspRectLU[1]);
     print_f(rs->plogs, "RECT", rs->logs);
 
-    findRectOrient(pRectout12R, pRectout12);
+    #if 1
+    msync(pRectout12, sizeof(struct aspRectObj), MS_SYNC);
+    msync(pRectout23, sizeof(struct aspRectObj), MS_SYNC);
+    msync(pRectout34, sizeof(struct aspRectObj), MS_SYNC);
+    msync(pRectout41, sizeof(struct aspRectObj), MS_SYNC);
     
+    findRectOrient(pRectout12R, pRectout12);
     dbgprintRect(pRectout12);
     dbgprintRect(pRectout12R);
 
     findRectOrient(pRectout23R, pRectout23);
-
     dbgprintRect(pRectout23);
     dbgprintRect(pRectout23R);
 
     findRectOrient(pRectout34R, pRectout34);
-
     dbgprintRect(pRectout34);
     dbgprintRect(pRectout34R);
 
     findRectOrient(pRectout41R, pRectout41);
-
     dbgprintRect(pRectout41);
     dbgprintRect(pRectout41R);
-
+    #else
+    dbgprintRect(pRectout12);
+    dbgprintRect(pRectout23);
+    dbgprintRect(pRectout34);
+    dbgprintRect(pRectout41);
+    #endif
+    dbgprintRect(pRectorg);
+    
     v12 = getRectOffset(pRectout12Ro, pRectout12R, pRectorg, o12);
     v23 = getRectOffset(pRectout23Ro, pRectout23R, pRectorg, o23);
     v34 = getRectOffset(pRectout34Ro, pRectout34R, pRectorg, o34);
@@ -12566,7 +12615,7 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_ROTORI_DBG  (0)
+#define LOG_ROTORI_DBG  (1)
 static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
 {
     CFLOAT minH=0, minV=0, offsetH=0, offsetV=0;
