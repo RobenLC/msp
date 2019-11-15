@@ -4795,9 +4795,10 @@ static inline int setDefaultConf(struct aspConfig_s* ctb)
 static inline int printSysinfo(struct sysinfo *pminfo)
 {
     sysinfo(pminfo);
-    printf("[M] sysinfo free: %ld total: %ld unit: %d \n", pminfo->freeram, pminfo->totalram, pminfo->mem_unit);
-    printf("[M] sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", pminfo->freeswap, pminfo->totalswap, pminfo->bufferram);
-    printf("[M] sysinfo freehi: %ld totalhi: %ld shd: %ld \n", pminfo->freehigh, pminfo->totalhigh, pminfo->sharedram);
+    
+    printf("   sysinfo free: %ld total: %ld unit: %d \n", pminfo->freeram, pminfo->totalram, pminfo->mem_unit);
+    printf("   sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", pminfo->freeswap, pminfo->totalswap, pminfo->bufferram);
+    printf("   sysinfo freehi: %ld totalhi: %ld shd: %ld \n", pminfo->freehigh, pminfo->totalhigh, pminfo->sharedram);
 }
 
 static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *rs, int shift, char *bks) 
@@ -4822,7 +4823,7 @@ static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *
     }
 
     clock_gettime(CLOCK_REALTIME, &cur);    
-    tdiff = time_diff(zot, &cur, 1000);
+    tdiff = time_diff(zot, &cur, 1000000);
     if (logconf == 0) {
         pstring = str;
     } else if (logconf & 0x1) {
@@ -4839,7 +4840,7 @@ static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *
 
 #if 1
 
-    printf("\n %*s[%s] (%d) us\n", shift, "", pstring, tdiff);
+    printf("\n %*s[%s] (%d) ms\n", shift, "", pstring, tdiff);
 
 #else
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
@@ -16373,12 +16374,14 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     expCAsize = maxvint-minvint+1;
     len = 3*sizeof(int);
     //crsAry = aspMemalloc(expCAsize*len);
+    crsAry = aspMemalloc(expCAsize*len, 11);
+    #if 0
     crsAry = (int *)rs->pbrotate->aspRotCrossAry;
     crsASize = rs->pbrotate->aspRotCASize /len;
-
     if (expCAsize > crsASize) {
         expCAsize = crsASize;
     }
+    #endif
 
     pt[0] = 200.0;
     for (iy=minvint, ix=0; ix < expCAsize; iy++, ix++) {
@@ -45699,13 +45702,14 @@ static int fs116(struct mainRes_s *mrs, struct modersp_s *modersp)
 
         expCAsize = maxvint-minvint+1;
         len = 3*sizeof(int);
-        //crsAry = aspMemalloc(expCAsize*len);
+        crsAry = aspMemalloc(expCAsize*len, 10);
+        #if 0
         crsAry = (int *)mrs->bmpRotate.aspRotCrossAry;
         crsASize = mrs->bmpRotate.aspRotCASize /len;
-
         if (expCAsize > crsASize) {
             expCAsize = crsASize;
         }
+        #endif
 
         pt[0] = 200.0;
         for (iy=minvint, ix=0; ix < expCAsize; iy++, ix++) {
@@ -61834,7 +61838,7 @@ int getaddoffset(char *na, char *lstn)
     return id;
 }
 
-#define LOG_P8_EN (1)
+#define LOG_P8_EN (0)
 static int p8(struct procRes_s *rs)
 {
 #define RECVLEN 1024
@@ -61872,7 +61876,7 @@ static int p8(struct procRes_s *rs)
     p8_init(rs);
 
     /* test */
-    dbgShowTimeStamp("s7s-1", NULL, rs, 2, NULL);
+    dbgShowTimeStamp("CONFIG ETH0 USB_MODESWITCH", NULL, rs, 2, NULL);
     
     recvbuf = aspMemalloc(RECVLEN, 8);
     if (!recvbuf) {
@@ -61888,7 +61892,10 @@ static int p8(struct procRes_s *rs)
 
     #if 1//AP_CLR_STATUS
     /* clear status */
-    sprintf(syscmd, "kill -9 $(ps aux | grep 'uap0' | awk '{print $1}')");
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'wlan0' | awk '{print $1}')");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "kill -9 $(ps aux | grep 'wlan1' | awk '{print $1}')");
     ret = doSystemCmd(syscmd);
 
     //sprintf(syscmd, "kill -9 $(ps aux | grep 'mothership' | awk '{print $1}')");
@@ -61897,8 +61904,11 @@ static int p8(struct procRes_s *rs)
     sprintf(syscmd, "kill -9 $(ps aux | grep 'hostapd' | awk '{print $1}')");
     ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "ifconfig uap0 down");
+    sprintf(syscmd, "/root/script/connect.sh > /dev/null 2>&1");
     ret = doSystemCmd(syscmd);
+
+    //sprintf(syscmd, "ifconfig uap0 down");
+    //ret = doSystemCmd(syscmd);
 
     sprintf(syscmd, "kill -9 $(ps aux | grep '%s' | awk '{print $1}')", WIRELESS_INT);
     ret = doSystemCmd(syscmd);
@@ -61914,9 +61924,6 @@ static int p8(struct procRes_s *rs)
 
     sprintf(syscmd, "ifconfig %s down", WIRELESS_INT_WPA);
     ret = doSystemCmd(syscmd);
-
-    sprintf(syscmd, "/root/script/connect.sh > /dev/null 2>&1");
-    ret = doSystemCmd(syscmd);
         
     sprintf_f(rs->logs, "AP network interface: %s \n", rs->pnetIntfs);
     print_f(rs->plogs, "P8", rs->logs);
@@ -61924,7 +61931,7 @@ static int p8(struct procRes_s *rs)
     sprintf_f(rs->logs, "WPA network interface: %s \n", rs->pnetIntwpa);
     print_f(rs->plogs, "P8", rs->logs);
 
-    dbgShowTimeStamp("s7s-2", NULL, rs, 2, NULL);
+    //dbgShowTimeStamp("s7s-2", NULL, rs, 2, NULL);
     
     //sleep(1);
     #endif
@@ -61937,7 +61944,8 @@ static int p8(struct procRes_s *rs)
     char aptypestr[32] = WIRELESS_INT;
     int itypelen=0, addroffset=0;
     struct apWifiConfig_s *pwfc=0;
-    
+
+    pwfc = rs->pwifconf;
     ctb = &rs->pcfgTable[ASPOP_AP_MODE];
     if (ctb->opCode != OP_AP_MODEN) {        
         sprintf_f(rs->logs, " WARNING!!! get wrong opcode value 0x%x", ctb->opCode);
@@ -61947,12 +61955,61 @@ static int p8(struct procRes_s *rs)
     sprintf_f(rs->logs, "opc: 0x%x, status: 0x%x, value: %d \n", ctb->opCode, ctb->opStatus, ctb->opValue);
     print_f(rs->plogs, "P8", rs->logs);
 
+    if (ctb->opValue) {
+        /* launch AP  */
+        //sprintf(syscmd, "/root/script/clr_all.sh");
+        //ret = doSystemCmd(syscmd);
+        //sleep(1);
+
+        memset(aptypestr, 0, 32);
+        memset(rs->pnetIntfs, 0, 16);
+        
+        faptpe = fopen("/root/config/aptype", "r");
+        if (faptpe) {
+            itypelen = fread(aptypestr, 1, 16, faptpe);
+            if ((itypelen > 0) && (itypelen < 16)) {
+                aptypestr[itypelen] = '\0';
+                if (aptypestr[itypelen-1] == '\n') {
+                    aptypestr[itypelen-1] = '\0';
+                }
+                if (aptypestr[itypelen-1] == '\r') {
+                    aptypestr[itypelen-1] = '\0';
+                }
+                sprintf(rs->pnetIntfs, "%s", aptypestr);
+            } else {
+                memset(rs->pnetIntfs, 0, 16);
+                sprintf(rs->pnetIntfs, WIRELESS_INT);
+            }
+            fclose(faptpe);
+        } else {
+            memset(rs->pnetIntfs, 0, 16);
+            sprintf(rs->pnetIntfs, WIRELESS_INT);
+        }
+        
+        //sprintf(syscmd, "/root/script/launchAP_now.sh > /dev/null 2>&1");
+        sprintf(syscmd, "/root/script/launchAP_now.sh");
+        ret = doSystemCmd(syscmd);
+        
+        sprintf_f(rs->logs, "AP interface = [%s] \n", rs->pnetIntfs);
+        print_f(rs->plogs, "P8", rs->logs);
+
+        sprintf_f(rs->logs, "DIRECT MODE CONFIG IF = %s ", rs->pnetIntfs);
+        dbgShowTimeStamp(rs->logs, NULL, rs, 2, NULL);
+
+        //shmem_dump(pmrs->netIntfs, 16);
+        //shmem_dump(aptypestr, 16);
+    }
+  
     if (ctb->opValue == APM_AP) {
+        dbgShowTimeStamp("AP MODE CONFIG", NULL, rs, 2, NULL);
         /* launch wpa connect */
-        pwfc = rs->pwifconf;
+
         if ((pwfc->wfpskLen > 0) && (pwfc->wfsidLen > 0)) {
             sprintf_f(rs->logs, "launch AP mode ... ssid: \"%s\", psk: \"%s\"\n", pwfc ->wfssid, pwfc->wfpsk);
             print_f(rs->plogs, "P8", rs->logs);
+
+            sprintf_f(rs->logs, "AP MODE CONFIG SSID: \"%s\", PSK: \"%s\"\n", pwfc ->wfssid, pwfc->wfpsk);
+            dbgShowTimeStamp("rs->logs", NULL, rs, 2, NULL);
 
             faptpe = 0;
             memset(aptypestr, 0, 32);
@@ -61993,7 +62050,7 @@ static int p8(struct procRes_s *rs)
 
             sleep(1);
 
-            sprintf(syscmd, "udhcpc -i %s -t 5 -n", rs->pnetIntwpa);
+            sprintf(syscmd, "udhcpc -i %s -b", rs->pnetIntwpa);
             ret = doSystemCmd(syscmd);
 
             sprintf_f(rs->logs, "exec [%s]...\n", syscmd);
@@ -62045,11 +62102,18 @@ static int p8(struct procRes_s *rs)
 
                 freeifaddrs(ifaddr);
             }
-            
+
+            if (!isLaunch) {
+                sprintf_f(rs->logs, "AP MODE CONFIG IF = %s ", rs->pnetIntwpa);
+                dbgShowTimeStamp(rs->logs, NULL, rs, 2, NULL);
+            }
+
+            #if 0 /* always connect */
             if (!isLaunch) {
                 ctb->opValue = APM_DIRECT;
                 fs109rs(rs);
             }
+            #endif
         }
         else {
             sprintf_f(rs->logs, "failed to launch AP mode, no ssid and psk ...\n");
@@ -62057,50 +62121,8 @@ static int p8(struct procRes_s *rs)
         }
     }
 
-    dbgShowTimeStamp("s7s-3", NULL, rs, 2, NULL);
-    
-    if (ctb->opValue) {
-        /* launch AP  */
-        //sprintf(syscmd, "/root/script/clr_all.sh");
-        //ret = doSystemCmd(syscmd);
-        //sleep(1);
+    //dbgShowTimeStamp("s7s-3", NULL, rs, 2, NULL);
 
-        memset(aptypestr, 0, 32);
-        memset(rs->pnetIntfs, 0, 16);
-        
-        faptpe = fopen("/root/config/aptype", "r");
-        if (faptpe) {
-            itypelen = fread(aptypestr, 1, 16, faptpe);
-            if ((itypelen > 0) && (itypelen < 16)) {
-                aptypestr[itypelen] = '\0';
-                if (aptypestr[itypelen-1] == '\n') {
-                    aptypestr[itypelen-1] = '\0';
-                }
-                if (aptypestr[itypelen-1] == '\r') {
-                    aptypestr[itypelen-1] = '\0';
-                }
-                sprintf(rs->pnetIntfs, "%s", aptypestr);
-            } else {
-                memset(rs->pnetIntfs, 0, 16);
-                sprintf(rs->pnetIntfs, WIRELESS_INT);
-            }
-            fclose(faptpe);
-        } else {
-            memset(rs->pnetIntfs, 0, 16);
-            sprintf(rs->pnetIntfs, WIRELESS_INT);
-        }
-        
-        sprintf(syscmd, "/root/script/launchAP_now.sh > /dev/null 2>&1");
-        //sprintf(syscmd, "/root/script/launchAP_now.sh");
-        ret = doSystemCmd(syscmd);
-        
-        sprintf_f(rs->logs, "AP interface = [%s] \n", rs->pnetIntfs);
-        print_f(rs->plogs, "P8", rs->logs);
-
-        //shmem_dump(pmrs->netIntfs, 16);
-        //shmem_dump(aptypestr, 16);
-    }
-  
     if ((pwfc->wfsidLen > 0) && (pwfc->wfpskLen > 0)) {
         sprintf_f(rs->logs, " get ssid: [%s] size: %d, psk: [%s] size: %d\n", pwfc->wfssid, pwfc->wfsidLen, pwfc->wfpsk, pwfc->wfpskLen);
         print_f(rs->plogs, "P8", rs->logs);
@@ -62109,7 +62131,7 @@ static int p8(struct procRes_s *rs)
         print_f(rs->plogs, "P8", rs->logs);
     }    
 
-    dbgShowTimeStamp("s7e", NULL, rs, 2, NULL);
+    dbgShowTimeStamp("WIRELESS CONFIG FINISH", NULL, rs, 2, NULL);
 
     #endif
     
@@ -62717,7 +62739,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             puhsinfo->ushostpidvid[0] = pidvid[0];
                             puhsinfo->ushostpidvid[1] = pidvid[1];
 
-                            sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s]__", pidvid[0], pidvid[1], sp); 
+                            sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                             if (puhsinfo->ushostpidvid[1] == 0x0a01) {
@@ -62739,7 +62761,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                     print_f(rs->plogs, sp, rs->logs);
 
-                    sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s]__", pidvid[0], pidvid[1], sp); 
+                    sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                     if (puhsinfo->ushostpidvid[1] == 0x0a01) {
@@ -63004,7 +63026,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         puhsinfo->ushostpidvid[0] = pidvid[0];
                         puhsinfo->ushostpidvid[1] = pidvid[1];
 
-                        sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s]__", pidvid[0], pidvid[1], sp); 
+                        sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                         dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                         if (puhsinfo->ushostpidvid[1] == 0x0a01) {
@@ -63111,7 +63133,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 puhsinfo->ushostpidvid[0] = pidvid[0];
                                 puhsinfo->ushostpidvid[1] = pidvid[1];
 
-                                sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s]__", pidvid[0], pidvid[1], sp); 
+                                sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                                 if (puhsinfo->ushostid) {
@@ -63131,7 +63153,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                             print_f(rs->plogs, sp, rs->logs);
 
-                            sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s]__", pidvid[0], pidvid[1], sp); 
+                            sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                         }
                 
@@ -63659,7 +63681,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             if (usbid > 0) {
 
-            sprintf_f(rs->logs, "__USB_DEV_ META_[%s]__", sp); 
+            sprintf_f(rs->logs, "__USB_DEV_ META_[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
@@ -63727,7 +63749,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             sprintf_f(rs->logs, "ENT reset to rom vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
             print_f(rs->plogs, sp, rs->logs);
             
-            sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_[%s]__", sp); 
+            sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             usleep(1000000);
@@ -63835,7 +63857,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                             print_f(rs->plogs, sp, rs->logs);
 
-                            sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_GETVIDPID[0x%.4x][0x%.4x][%s]__", pidvid[0], pidvid[1], sp); 
+                            sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_GETVIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
                             puhsinfo->ushostpidvid[0] = pidvid[0];
@@ -63864,7 +63886,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                         print_f(rs->plogs, sp, rs->logs);
 
-                        sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_GETVIDPID[0x%.4x][0x%.4x][%s]__", pidvid[0], pidvid[1], sp); 
+                        sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_GETVIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                         dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                         
                         puhsinfo->ushostpidvid[0] = pidvid[0];
@@ -64688,7 +64710,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 pllst = dcswBuff[12];
             }
 
-            sprintf_f(rs->logs, "__USB_DEV_ CBW[0x%.2x][0x%.2x]CSW[0x%.2x][0x%.2x][%s]__", cubsBuff[15], cubsBuff[16], ptrecv[11], ptrecv[12], sp); 
+            sprintf_f(rs->logs, "__USB_DEV_ CBW[0x%.2x][0x%.2x]CSW[0x%.2x][0x%.2x][%s][%s]__", cubsBuff[15], cubsBuff[16], ptrecv[11], ptrecv[12], sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
             
             cplls[0] = 'J';
@@ -64696,7 +64718,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             pieRet = write(pPrx[1], &cplls, 2);
         }
         else if (cmdchr == 0x08) {
-            sprintf_f(rs->logs, "__USB_DEV_ STOPSCAN[%s]__", sp); 
+            sprintf_f(rs->logs, "__USB_DEV_ STOPSCAN[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
@@ -64778,7 +64800,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         
                             puhs->pushcswerr = cswst;
 
-                            sprintf_f(rs->logs, "__USB_DEV_ ERROR[0x%.2x][%s]__", cswst & 0x7f, sp); 
+                            sprintf_f(rs->logs, "__USB_DEV_ ERROR[0x%.2x][%s][%s]__", cswst & 0x7f, sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
                             chr = 'R';                        
@@ -64802,7 +64824,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs, "get the end signal 0x20000 \n");
                         print_f(rs->plogs, sp, rs->logs);
 
-                        sprintf_f(rs->logs, "__USB_DEV_ END[0x%.5x][%s]__", 0x20000, sp); 
+                        sprintf_f(rs->logs, "__USB_DEV_ END[0x%.5x][%s][%s]__", 0x20000, sp, puhsinfo->ushostname); 
                         dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
                         #if USB_CALLBACK_LOOP 
@@ -65114,7 +65136,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
                     print_f(rs->plogs, sp, rs->logs);
 
-                    sprintf_f(rs->logs, "__USB_DEV_ EXTRA_META[%d][%s]__", acusz, sp); 
+                    sprintf_f(rs->logs, "__USB_DEV_ EXTRA_META[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
                     break;
@@ -65287,7 +65309,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             sprintf_f(rs->logs, "conti read once ret: %d \n", ptret);
             print_f(rs->plogs, sp, rs->logs);
 
-            sprintf_f(rs->logs, "__USB_DEV_ START[%s]__", sp); 
+            sprintf_f(rs->logs, "__USB_DEV_ START[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             puhsinfo->ushostbtrktot = 0;
@@ -65720,7 +65742,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
                     print_f(rs->plogs, sp, rs->logs);
 
-                    sprintf_f(rs->logs, "__USB_DEV_ IMG_SIZE[%d][%s]__", acusz, sp); 
+                    sprintf_f(rs->logs, "__USB_DEV_ IMG_SIZE[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                     
                     break;
@@ -66003,7 +66025,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                        puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                         print_f(rs->plogs, sp, rs->logs);
 
-                        sprintf_f(rs->logs, "__USB_DEV_ VIDPID[0x%.4x][0x%.4x][%s]__", pidvid[0], pidvid[1], sp); 
+                        sprintf_f(rs->logs, "__USB_DEV_ VIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                         dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                     
                         puhsinfo->ushostpidvid[0] = pidvid[0];
@@ -66256,7 +66278,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             #endif
         }
         else if (cmdchr == 0x13) {
-            sprintf_f(rs->logs, "__USB_DEV_ PAUSE[%s]__", pidvid[0], pidvid[1], sp); 
+            sprintf_f(rs->logs, "__USB_DEV_ PAUSE[%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ix = puhsinfo->ushostpause;
@@ -66266,7 +66288,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             print_f(rs->plogs, sp, rs->logs);
         }
         else if (cmdchr == 0x14) {
-            sprintf_f(rs->logs, "__USB_DEV_ RESUME[%s]__", pidvid[0], pidvid[1], sp); 
+            sprintf_f(rs->logs, "__USB_DEV_ RESUME[%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ix = puhsinfo->ushostresume;
@@ -66403,7 +66425,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0, *puimCud=0;
     char *endf=0, *endm=0;
     char endstr[] = "usb_conti_stop";
-    int seqtx=0, lens=0, maxsz=0, pipRet=0, idlet=0, ix=0, waitCylen=0, chr=0, cindex=0, lastCylen=0;
+    int seqtx=0, lens=0, maxsz=0, pipRet=0, idlet=0, ix=0, waitCylen=0, chr=0, cindex=0, lastCylen=0, pagecnt=0;
     char chq=0, chd=0, mindexfo[2], cindexfo[2], cinfo[12], chn=0, chm=0, chw=0, chy=0;;
     char cmdprisec=0, cswerr=0, pagerst=2, che=0, cswstatus[2];
     int *piptx=0, *piprx=0, *pipm=0, *pipn=0;
@@ -69031,6 +69053,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 
                                 if ((opc == 0x4c) && (dat == 0x01)) {     
                                     clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                                    pagecnt=0;
                                     
                                     #if 1
                                     if (strcmp(msgcmd, "usbscan") == 0) {
@@ -73343,7 +73366,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
                 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x](Page_%d_size:%d_bytes)__", csw[10], csw[11], csw[12], pagecnt++, acusz); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] 0x12 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
@@ -75727,7 +75750,7 @@ int main(int argc, char *argv[])
     uint32_t bitset;
     char syscmd[256] = "ls -al";
     struct sysinfo minfo;
-    struct usbHostmem_s *usbh[2];
+    struct usbHostmem_s *usbh[2], *tusb=0;
     uint32_t *tbl0, *tbl1;
     uint32_t ut32=0, vt32=0;
     int usbid0=0, usbid1=0;
@@ -75798,8 +75821,8 @@ int main(int argc, char *argv[])
 
     
     clock_gettime(CLOCK_REALTIME, &pmrs->time[0]);
-    dbgShowTimeStamp("s1", pmrs, NULL, 4, NULL);
-    printSysinfo(&minfo);
+    //dbgShowTimeStamp("s1 init system resource", pmrs, NULL, 2, NULL);
+    //printSysinfo(&minfo);
     
     ret = file_save_get(&pmrs->flog, "/mnt/mmc2/rx/%d.log");
     if (ret) {printf("get log file failed\n"); return 0;}
@@ -75853,12 +75876,13 @@ int main(int argc, char *argv[])
             pmrs->mspconfig |= 0x1;
             break;
     }
-    sprintf(pmrs->log, "log type: 0x%.2x", pmrs->mspconfig & 0x7);    
-    dbgShowTimeStamp(pmrs->log, pmrs, NULL, 4, NULL);
+    sprintf(pmrs->log, "LOG TYPE 0x%.2x", pmrs->mspconfig & 0x7);    
+    dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
 
-    sprintf(pmrs->log, "pull low delay: %d", PULL_LOW_AFTER_DATA);    
-    dbgShowTimeStamp(pmrs->log, pmrs, NULL, 4, NULL);
-    
+    //sprintf(pmrs->log, "pull low delay: %d", PULL_LOW_AFTER_DATA);    
+    //dbgShowTimeStamp(pmrs->log, pmrs, NULL, 4, NULL);
+
+    #if 0
     dbgShowTimeStamp("s2", pmrs, NULL, 2, NULL);
     printSysinfo(&minfo);
 
@@ -75886,7 +75910,8 @@ int main(int argc, char *argv[])
 
     sprintf(syscmd, "mkdir -p /mnt/mmc2/tx");
     ret = doSystemCmd(syscmd);
-
+    #endif
+    
     // launchAP or directAccess
     #if 0//AP_CLR_STATUS
     /* clear status */
@@ -75926,8 +75951,8 @@ int main(int argc, char *argv[])
     sleep(1);
     #endif
 
-    dbgShowTimeStamp("s3", pmrs, NULL, 2, NULL);
-    printSysinfo(&minfo);
+    //dbgShowTimeStamp("s3 allocate share memory", pmrs, NULL, 2, NULL);
+    //printSysinfo(&minfo);
 
 // initial share parameter
     len = sizeof(struct aspMetaData_s);
@@ -76030,8 +76055,8 @@ int main(int argc, char *argv[])
     }
     pmrs->wtg.wtMrs = pmrs;
 
-    dbgShowTimeStamp("s4", pmrs, NULL, 2, NULL);
-    printSysinfo(&minfo);
+    //dbgShowTimeStamp("s4 check default param", pmrs, NULL, 2, NULL);
+    //printSysinfo(&minfo);
     
     ret = file_save_get(&pmrs->fs, "/mnt/mmc2/rx/%d.bin");
     if (ret) {printf("get save file failed\n"); return 0;}
@@ -76086,8 +76111,8 @@ int main(int argc, char *argv[])
         fs109(pmrs, &tmpModersp);
     }
 
-    dbgShowTimeStamp("s5", pmrs, NULL, 2, NULL);
-    printSysinfo(&minfo);
+    //dbgShowTimeStamp("s5 wireless status check", pmrs, NULL, 2, NULL);
+    //printSysinfo(&minfo);
     
     #if 0 /* manual launch AP mode or Direct mode, will disable if AP mode complete */
     if (arg[1] == 0) {
@@ -76201,9 +76226,10 @@ int main(int argc, char *argv[])
         }
         fclose(fssid);
     }
-
-    dbgShowTimeStamp("s6", pmrs, NULL, 2, NULL);
-    printSysinfo(&minfo);
+    
+    sprintf_f(pmrs->log, "LAST TIME ACCESS SSID: %s ", pwfc->wfsidLen>0?pwfc->wfssid:" ");
+    dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
+    //printSysinfo(&minfo);
 
     #if 0 //AP_AUTO
     /* AP mode launch or not */
@@ -76440,6 +76466,7 @@ int main(int argc, char *argv[])
     }
     #endif
     /* BITMAP */
+    #if 0
     pmrs->bmpRotate.aspRotCrossAry= aspSalloc(8192*4*3);
     if (!pmrs->bmpRotate.aspRotCrossAry) {
         sprintf_f(pmrs->log, "alloc share memory for BITMAP ROTATE FAIL!!! size = %d\n", 8192*4*3); 
@@ -76452,6 +76479,7 @@ int main(int argc, char *argv[])
         sprintf_f(pmrs->log, "alloc share memory for BITMAP ROTATE DONE [0x%.8x]!!! size = %d\n", (uint32_t)pmrs->bmpRotate.aspRotCrossAry, pmrs->bmpRotate.aspRotCASize); 
         print_f(pmrs->plog, "BITMAP", pmrs->log);
     }
+    #endif
 
 /*
     pmrs->bmpRotate.aspRotCpyBuff= aspSalloc(8*1024*1024);
@@ -76467,8 +76495,8 @@ int main(int argc, char *argv[])
     }
 */
 
-    dbgShowTimeStamp("s8", pmrs, NULL, 2, NULL);
-    printSysinfo(&minfo);
+    //dbgShowTimeStamp("s8", pmrs, NULL, 2, NULL);
+    //printSysinfo(&minfo);
 
     
     /* FAT */
@@ -76556,13 +76584,13 @@ int main(int argc, char *argv[])
 
     pmrs->aspFat.fatStatus = ASPFAT_STATUS_INIT;
 
-    dbgShowTimeStamp("s9", pmrs, NULL, 2, NULL);
-    printSysinfo(&minfo);
+    //dbgShowTimeStamp("s9", pmrs, NULL, 2, NULL);
+    //printSysinfo(&minfo);
 
     sprintf_f(pmrs->log, "before open device[%s]\n", spidev_0); 
     print_f(pmrs->plog, "SPI", pmrs->log);
 
-#if DISABLE_SPI
+#if 1 //DISABLE_SPI
     pmrs->sfm[0] = 0;
     pmrs->sfm[1] = 0;
     pmrs->smode = 0;
@@ -77078,8 +77106,6 @@ int main(int argc, char *argv[])
         gateTx->svdist = 8;
     }
 
-
-        
     if (pmrs->usbmh[1]->ushostid == 0) {
         sprintf_f(pmrs->log, "Error!!! USB not available \n");
         print_f(pmrs->plog, "USB", pmrs->log);
@@ -77204,27 +77230,55 @@ int main(int argc, char *argv[])
     #if 1
     pmrs->usbdv = open(usbdevpath, O_RDWR);
     if (pmrs->usbdv <= 0) {
-        printf("can't open device[%s]!!\n", usbdevpath); 
+        sprintf_f(pmrs->log, "can't open device[%s]!!\n", usbdevpath); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+
         pmrs->usbdv = open(usbdevpath0, O_RDWR);    
         if (pmrs->usbdv <= 0) {
-            printf("can't open device[%s]\n", usbdevpath0); 
+            sprintf_f(pmrs->log, "can't open device[%s]\n", usbdevpath0); 
+            print_f(pmrs->plog, "USB", pmrs->log);
+
             goto end;
         }
         else {
             pmrs->usbdvname = usbdevpath0;
-            printf("open device[%s]\n", usbdevpath0); 
+            sprintf_f(pmrs->log, "open device[%s]\n", usbdevpath0); 
+            print_f(pmrs->plog, "USB", pmrs->log);
         }
     }
     else {
         pmrs->usbdvname = usbdevpath;
-        printf("open device[%s]\n", usbdevpath); 
+
+        sprintf_f(pmrs->log, "open device[%s]\n", usbdevpath); 
+        print_f(pmrs->plog, "USB", pmrs->log);
     }
     close(pmrs->usbdv);
     pmrs->usbdv = 0;
     #endif
 
-    dbgShowTimeStamp("s11", pmrs, NULL, 2, NULL);
+    sprintf_f(pmrs->log, "USB to PC %s", pmrs->usbdvname==0?"FAILED":pmrs->usbdvname);
+    dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
+
+    tusb = pmrs->usbmh[0];
+    if (tusb->ushostid) {
+        sprintf_f(pmrs->log, "USB to ASIC (1)VIDPID: 0x%.4x 0x%.4x BUFFNUM:%d %s ", tusb->ushostpidvid[0], tusb->ushostpidvid[1], tusb->ushostbmax, tusb->ushostname);
+        dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
+    } else {
+        sprintf_f(pmrs->log, "USB to ASIC (1) FAILED");
+        dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
+    }
+
+    tusb = pmrs->usbmh[1];
+    if (tusb->ushostid) {
+        sprintf_f(pmrs->log, "USB to ASIC (2)VIDPID: 0x%.4x 0x%.4x BUFFNUM:%d %s ", tusb->ushostpidvid[0], tusb->ushostpidvid[1], tusb->ushostbmax, tusb->ushostname);
+        dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
+    } else {
+        sprintf_f(pmrs->log, "USB to ASIC (2) FAILED");
+        dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
+    }
+    
     printSysinfo(&minfo);
+    
 #endif //#if DISABLE_USB
 
 // IPC
