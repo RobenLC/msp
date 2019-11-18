@@ -4792,7 +4792,7 @@ static inline int setDefaultConf(struct aspConfig_s* ctb)
     return ix;
 }
 
-static inline int printSysinfo(struct sysinfo *pminfo)
+static inline void printSysinfo(struct sysinfo *pminfo)
 {
     sysinfo(pminfo);
     
@@ -4823,7 +4823,7 @@ static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *
     }
 
     clock_gettime(CLOCK_REALTIME, &cur);    
-    tdiff = time_diff(zot, &cur, 1000000);
+    tdiff = time_diff(zot, &cur, 1000);
     if (logconf == 0) {
         pstring = str;
     } else if (logconf & 0x1) {
@@ -4840,7 +4840,7 @@ static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *
 
 #if 1
 
-    printf("\n %*s[%s] (%d) ms\n", shift, "", pstring, tdiff);
+    printf("\n %*s[%s] (%d) ms\n", shift, "", pstring, tdiff / 1000);
 
 #else
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
@@ -4882,6 +4882,7 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
 {
     int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
     float resH=0, resV=0, ratio=39.27, fval=0;
+    uint32_t cmpl=0xffffffff;
 
     if (!w) return -1;
     if (!h) return -2;
@@ -4929,7 +4930,8 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     ph->aspbhRawoffset = rawoffset; // header size include color table 54 + 1024 = 1078
     ph->aspbiSize = 40;
     ph->aspbiWidth = w; // W
-    ph->aspbiHeight = h; // H
+    cmpl = (cmpl - h) + 1;
+    ph->aspbiHeight = cmpl; // H
     ph->aspbiCPP = 1;
     //ph->aspbiCPP = 0;
     ph->aspbiCPP |= clr << 16;  // 8 or 24
@@ -62005,11 +62007,11 @@ static int p8(struct procRes_s *rs)
         /* launch wpa connect */
 
         if ((pwfc->wfpskLen > 0) && (pwfc->wfsidLen > 0)) {
-            sprintf_f(rs->logs, "launch AP mode ... ssid: \"%s\", psk: \"%s\"\n", pwfc ->wfssid, pwfc->wfpsk);
+            sprintf_f(rs->logs, "launch AP mode ... ssid: %s, psk: %s\n", pwfc ->wfssid, pwfc->wfpsk);
             print_f(rs->plogs, "P8", rs->logs);
 
-            sprintf_f(rs->logs, "AP MODE CONFIG SSID: \"%s\", PSK: \"%s\"\n", pwfc ->wfssid, pwfc->wfpsk);
-            dbgShowTimeStamp("rs->logs", NULL, rs, 2, NULL);
+            sprintf_f(rs->logs, "AP MODE CONFIG SSID: %s, PSK: %s\n", pwfc ->wfssid, pwfc->wfpsk);
+            dbgShowTimeStamp(rs->logs, NULL, rs, 2, NULL);
 
             faptpe = 0;
             memset(aptypestr, 0, 32);
@@ -66278,7 +66280,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             #endif
         }
         else if (cmdchr == 0x13) {
-            sprintf_f(rs->logs, "__USB_DEV_ PAUSE[%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+            sprintf_f(rs->logs, "__USB_DEV_ PAUSE[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ix = puhsinfo->ushostpause;
@@ -66288,7 +66290,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             print_f(rs->plogs, sp, rs->logs);
         }
         else if (cmdchr == 0x14) {
-            sprintf_f(rs->logs, "__USB_DEV_ RESUME[%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+            sprintf_f(rs->logs, "__USB_DEV_ RESUME[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ix = puhsinfo->ushostresume;
@@ -66380,7 +66382,7 @@ static int p10(struct procRes_s *rs)
 #define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
-#define DBG_USB_TIME_MEASURE (0)
+#define DBG_USB_TIME_MEASURE (1)
 #define BYPASS_TWO  (1)
 #define OP_WRITE_FILE (0x0b)
 #define DUMP_JPG_ROT (0)
