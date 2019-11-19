@@ -4907,7 +4907,7 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     }
 
     if (calcuraw != flen) {
-        printf("[BMP] WARNNING!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
+        //printf("[BMP] WARNNING!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
         if (flen > calcuraw) {
             rawsize = calcuraw;
         } else {
@@ -64802,7 +64802,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         
                             puhs->pushcswerr = cswst;
 
-                            sprintf_f(rs->logs, "__USB_DEV_ ERROR[0x%.2x][%s][%s]__", cswst & 0x7f, sp, puhsinfo->ushostname); 
+                            sprintf_f(rs->logs, "__USB_DEV_ STATUS[0x%.2x][%s][%s]__", cswst & 0x7f, sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
                             chr = 'R';                        

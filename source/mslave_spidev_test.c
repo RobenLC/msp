@@ -7,6 +7,10 @@
 #include <fcntl.h> 
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
+
+#include <sys/types.h>  
+#include <signal.h>
+
 #include <linux/types.h> 
 #include <linux/spi/spidev.h> 
 #include <sys/times.h> 
@@ -15,9 +19,8 @@
 
 #include <dirent.h>
 #include <sys/stat.h>  
-
-#include <linux/poll.h>
-
+//#include <linux/poll.h>
+#include <poll.h>
 #include <sys/epoll.h>
 #include <errno.h> 
 
@@ -528,7 +531,7 @@ static int shmem_dump(char *src, int size)
     if (!src) return -1;
 
     inc = 0;
-    printf("memdump[0x%.8x] sz%d: \n", src, size);
+    printf("memdump[0x%.8x] sz%d: \n", (uint32_t)src, size);
     while (inc < size) {
         printf("%.2x ", *src);
 
@@ -695,7 +698,7 @@ static int aspRawParseDir(char *raw, struct directnFile_s *fs, int last)
         if (fs->dflen) {
             //printf("LONG file name parsing... last parsing [len:%d]\n", fs->dflen);
             sum = aspFSchecksum(raw);
-            if (sum != (fs->dfstats >> 16) & 0xff) {
+            if (sum != ((fs->dfstats >> 16) & 0xff)) {
                 ret = -11;
                 //memset(fs, 0x00, sizeof(struct directnFile_s));
                 //printf("checksum error: %x / %x\n", sum, (fs->dfstats >> 16) & 0xff);
@@ -980,10 +983,11 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
             if (strcmp(fs->dfSFN, ".") != 0 && 
                  strcmp(fs->dfSFN, "..") != 0 )  {
                 if (fs->dflen) {
-                    printf("%*s\"%s\"\n", depth, "", fs->dfLFN, depth);
-                    printf("%*s\"%s\"\n", depth, "", fs->dfSFN, depth);
+                    printf("%*s\"%s\"\n", depth, "", fs->dfLFN);
+                    
+                    printf("%*s\"%s\"\n", depth, "", fs->dfSFN);
                 } else {
-                    printf("%*s\"%s\"\n", depth, "", fs->dfSFN, depth);
+                    printf("%*s\"%s\"\n", depth, "", fs->dfSFN);
                 }
                 sec = (fs->dfclstnum - 2) * per;
                 offset = root + sec;
@@ -997,28 +1001,28 @@ void prinfatdir(char *df, int rsz, int shift, int depth, int root, int per)
                 }            
             } else {
                 if (fs->dflen) {
-                    printf("%*s%s\n", depth, "", fs->dfLFN, depth);
-                    printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+                    printf("%*s%s\n", depth, "", fs->dfLFN);
+                    printf("%*s%s\n", depth, "", fs->dfSFN);
                 } else {
-                    printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+                    printf("%*s%s\n", depth, "", fs->dfSFN);
                 }
             }
 
         } else if (fs->dfattrib & ASPFS_ATTR_ARCHIVE) {
             printf("**archive**\n");
             if (fs->dflen) {
-                printf("%*s%s\n", depth, "", fs->dfLFN, depth);
-                printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+                printf("%*s%s\n", depth, "", fs->dfLFN);
+                printf("%*s%s\n", depth, "", fs->dfSFN);
             } else {
-                printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+                printf("%*s%s\n", depth, "", fs->dfSFN);
             }
         } else if (fs->dfattrib & ASPFS_ATTR_HIDDEN) {
             printf("**hidden**\n");
             if (fs->dflen) {
-                printf("%*s%s\n", depth, "", fs->dfLFN, depth);
-                printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+                printf("%*s%s\n", depth, "", fs->dfLFN);
+                printf("%*s%s\n", depth, "", fs->dfSFN);
             } else {
-                printf("%*s%s\n", depth, "", fs->dfSFN, depth);
+                printf("%*s%s\n", depth, "", fs->dfSFN);
             }
         } else {
             printf("unknown! [0x%.4x]\n", fs->dfattrib);     
@@ -1054,10 +1058,10 @@ void printdir(char *dir, int depth)
             if (strcmp(entry->d_name, ".") == 0 || 
                 strcmp(entry->d_name, "..") == 0 )  
                 continue;   
-            printf("%*s%s\n", depth, "", entry->d_name, depth);
+            printf("%*s%s\n", depth, "", entry->d_name);
             printdir(entry->d_name, depth+4);
         } else
-            printf("%*s%s\n", depth, "", entry->d_name, depth);
+            printf("%*s%s\n", depth, "", entry->d_name);
     }
     chdir("..");
     closedir(dp);   
@@ -1079,7 +1083,7 @@ static int aspFS_createRoot(struct directnFile_s **root, char *dir)
     if (!r) {
         return (-2);
     }else {
-            printf("[R]alloc root fs done [0x%x]\n", r);
+            printf("[R]alloc root fs done [0x%x]\n", (uint32_t)r);
     }
 
     r->pa = 0;
@@ -1108,7 +1112,7 @@ static int aspFS_insertChilds(struct directnFile_s *root)
     struct stat statbuf;
 
     if (!root) {
-        printf("[R]root error 0x%x\n", root);
+        printf("[R]root error 0x%x\n", (uint32_t)root);
         ret = -1;
         goto insertEnd;
     }
@@ -1131,12 +1135,12 @@ static int aspFS_insertChilds(struct directnFile_s *root)
                 strcmp(entry->d_name, "..") == 0 ) {
                 continue;   
             }
-            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name);
             //printdir(entry->d_name, TAB_DEPTH+4);
             ret = aspFS_insertChildDir(root, entry->d_name);
             if (ret) goto insertEnd;
         } else {
-            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name, TAB_DEPTH);
+            printf("%*s%s\n", TAB_DEPTH, "", entry->d_name);
             ret = aspFS_insertChildFile(root, entry->d_name);
             if (ret) goto insertEnd;
         }
@@ -1278,7 +1282,7 @@ static int aspFS_insertFATChilds(struct directnFile_s *root, char *dir, int max)
     char *dkbuf=0;
 
     if (!root) {
-        printf("[R]root error 0x%x\n", root);
+        printf("[R]root error 0x%x\n", (uint32_t)root);
         ret = -1;
         goto insertEnd;
     }
@@ -1442,7 +1446,7 @@ static int aspFS_search(struct directnFile_s **dir, struct directnFile_s *root, 
         }
     }
 
-    printf("path len: %d, match num: %d, brt:0x%x \n", a, b, brt);
+    printf("path len: %d, match num: %d, brt:0x%x \n", a, b, (uint32_t)brt);
 
     while((brt) && (b>=0)) {
         printf("[%d][%s][%s] \n", b, &rmp[b][0], brt->dfLFN);
@@ -2143,7 +2147,7 @@ FILE *find_open(char *dst, char *tmple)
     return f;
 }
 
-static int data_process(char *rx, char *tx, FILE *fp, int fd, int pktsz, int num)
+static void data_process(char *rx, char *tx, FILE *fp, int fd, int pktsz, int num)
 {
     int ret;
     int wtsz;
@@ -2479,10 +2483,10 @@ static char path[256];
 
     fp = find_save(path, data_save);
     if (!fp) {
-        printf("find save dst failed ret:%d\n", fp);
+        printf("find save dst failed ret:%d\n", (uint32_t)fp);
         goto end;
     } else
-        printf("find save dst succeed[%s] ret:%d\n", path, fp);
+        printf("find save dst succeed[%s] ret:%d\n", path, (uint32_t)fp);
 
     /* scanner default setting */
     mode &= ~SPI_MODE_3;
@@ -2570,7 +2574,7 @@ static char path[256];
     else 
         printf("open device[%s]\n", spi0); 
         
-    if (spi1) {
+    if (spi1!=0) {
         fd1 = open(spi1, O_RDWR);
         if (fd1 <= 0) {
                 fd1 = 0;
@@ -2675,7 +2679,7 @@ static char path[256];
         }
 
         for (icx=0; icx < 1000; icx++) {
-            printf("%d ", ckx[icx]);
+            printf("%ld ", ckx[icx]);
             if (!(icx+1)%10) printf("\n");
         }
 
@@ -4039,7 +4043,7 @@ while (looptimes) {
 
                                     memcpy(ptbuf, &pbh->aspbmpMagic[2], sizeof(struct slvbitMapHeader_s) - 2);
                                     
-                                    printf("%s scan length: %d filelen\n", fileStr, tlen, filelen);
+                                    printf("%s scan length: %d filelen: %d\n", fileStr, tlen, filelen);
                                     break;
                                 default:
                                     printf("unknown file format: %d \n", fileformat);
@@ -4704,7 +4708,7 @@ while (looptimes) {
 
                                     memcpy(ptbuf, &pbh->aspbmpMagic[2], sizeof(struct slvbitMapHeader_s) - 2);
                                     
-                                    printf("%s scan length: %d filelen\n", fileStr, tlen, filelen);
+                                    printf("%s scan length: %d filelen: %d\n", fileStr, tlen, filelen);
                                     break;
                                 default:
                                     printf("unknown file format: %d \n", fileformat);
@@ -5256,14 +5260,15 @@ while (looptimes) {
         int pid = 0;
         int txhldsz = 0;
 
-redo: 
+//redo:  /*not used*/
 
     sz = 0;
     wtsz = 0;
     lsz = 0;
     pid = 0;
     txhldsz = 0;
-    *tmp, buf='c';
+    tmp = 0;
+    buf='c';
         //tbuff = malloc(TSIZE);
         tbuff = rx_buff[0];
         dstBuff = mmap(NULL, TSIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -5332,7 +5337,7 @@ redo:
         
         struct timespec *tspi = (struct timespec *)mmap(NULL, sizeof(struct timespec) * 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
         if (!tspi) {
-            printf("get share memory for timespec failed - %d\n", tspi);
+            printf("get share memory for timespec failed - %d\n", (uint32_t)tspi);
             goto end;
         }
         clock_gettime(CLOCK_REALTIME, &tspi[0]);  
@@ -5341,8 +5346,8 @@ redo:
         struct tms time;
         struct timespec curtime, tdiff[2];
         
-        if (tbuff)
-            printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
+        if (tbuff!=0)
+            printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, (uint32_t)tbuff);
         else 
             goto end;
         
@@ -5479,8 +5484,8 @@ redo:
                         dstBuff -= chunksize;
                         lsz = ret;
                         write(pipefd[1], "e", 1); // send the content of argv[1] to the reader
-                        sprintf(lastaddr, "%d", dstBuff);
-                        printf("p0 write e  addr:%x str:%s ret:%d\n", dstBuff, lastaddr, ret);
+                        sprintf(lastaddr, "%d", (uint32_t)dstBuff);
+                        printf("p0 write e  addr:%x str:%s ret:%d\n", (uint32_t)dstBuff, lastaddr, ret);
                         write(pipefd[1], lastaddr, 32); 
                         break;
                     }
@@ -5505,13 +5510,13 @@ redo:
                     } else if (buf == 'e') {
                         ret = read(pipefs[0], lastaddr, 32); 
                         addr = (char *)atoi(lastaddr);
-                        printf("p0 process wait wtsz:%d, lastaddr:%x/%x\n", wtsz, addr, dstBuff);
+                        printf("p0 process wait wtsz:%d, lastaddr:%x/%x\n", wtsz, (uint32_t)addr, (uint32_t)dstBuff);
                         break;
                     }
                 }
                 
                 if (dstBuff > addr) {
-                    printf("p0 memcpy from  %x to %x sz:%d\n", dstBuff-lsz, addr, lsz);
+                    printf("p0 memcpy from  %x to %x sz:%d\n", (uint32_t)dstBuff-lsz, (uint32_t)addr, lsz);
                     msync(dstBuff-lsz, lsz, MS_SYNC);
                     #if 0
                     memcpy(addr, dstBuff-lsz, lsz);
@@ -5584,8 +5589,8 @@ redo:
                     dstBuff -= chunksize;
                     lsz = ret;
                     write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
-                    sprintf(lastaddr, "%d", dstBuff);
-                    printf("p1 write e addr:%x str:%s ret:%d\n", dstBuff, lastaddr, ret);
+                    sprintf(lastaddr, "%d", (uint32_t)dstBuff);
+                    printf("p1 write e addr:%x str:%s ret:%d\n", (uint32_t)dstBuff, lastaddr, ret);
                     write(pipefs[1], lastaddr, 32); // send the content of argv[1] to the reader
 
                     break;
@@ -5610,13 +5615,13 @@ redo:
                 else if (buf == 'e') {
                     ret = read(pipefd[0], lastaddr, 32); 
                     addr = (char *)atoi(lastaddr);
-                    printf("p1 process wtsz:%d, lastaddr:%x/%x\n",  wtsz, addr, dstBuff);
+                    printf("p1 process wtsz:%d, lastaddr:%x/%x\n",  wtsz, (uint32_t)addr, (uint32_t)dstBuff);
                     break;
                 }
             }
         
             if (dstBuff > addr) {
-                printf("p1 memcpy from  %x to %x sz:%d\n", dstBuff-lsz, addr, lsz);
+                printf("p1 memcpy from  %x to %x sz:%d\n", (uint32_t)dstBuff-lsz, (uint32_t)addr, lsz);
                 msync(dstBuff-lsz, lsz, MS_SYNC);
                 #if 0
                 memcpy(addr, dstBuff-lsz, lsz);
@@ -5836,7 +5841,7 @@ redo:
             printf(" raw parsing end: %d \n", ret);
             break;
         case 2: /* read the dir tree */
-            printf("[0x%x]root dir offset: %d per:%d\n", dkbuf, arg2, arg3);
+            printf("[0x%x]root dir offset: %d per:%d\n", (uint32_t)dkbuf, arg2, arg3);
             prinfatdir(dkbuf, max, arg2, 4, arg2, arg3);
             break;
         case 3:
@@ -6111,10 +6116,10 @@ redo:
 
     fp_02 = find_save(path_02, data_save);
     if (!fp_02) {
-        printf("find save dst failed ret:%d\n", fp_02);
+        printf("find save dst failed ret:%d\n", (uint32_t)fp_02);
         goto end;
     } else {
-        printf("find save dst succeed ret:%d\n", fp_02);
+        printf("find save dst succeed ret:%d\n",(uint32_t)fp_02);
     }
 
        modeSel = 1;
@@ -6300,7 +6305,7 @@ redo:
         fsize = fread(dstBuff, 1, TSIZE, f);
         printf("open [%s] size: %d \n", argv[3], fsize);
 #else
-        printf("allcate buff [0x%x] size: %d \n", dstBuff, TSIZE);
+        printf("allcate buff [0x%x] size: %d \n", (uint32_t)dstBuff, TSIZE);
 #endif
 
        modeSel = 1;
@@ -6599,9 +6604,9 @@ redo:
                                size = strtoul(&rxbuf[2], &stop_at, 10);
                                opsz = 16 - (size % 16);
                                ret = fwrite(dbgbuf[pi], 1, size, fp);
-                   printf("[%d]file %d write size: %d\n", gid, fp, ret);
+                   printf("[%d]file %d write size: %d\n", gid, (uint32_t)fp, ret);
                                ret = fwrite("================", 1, opsz, fp);
-                   printf("[%d]file %d write size: %d\n", gid, fp, ret);
+                   printf("[%d]file %d write size: %d\n", gid, (uint32_t)fp, ret);
                         }
                         else if (op == 'e') {
                              printf("[%d] %c \n", gid, op);
@@ -6613,8 +6618,8 @@ redo:
 #endif
                 }
                 close(pipe_t.rt[0]);
-                kill(sid[0]);
-                kill(sid[1]);
+                kill(sid[0], SIGKILL);
+                kill(sid[1], SIGKILL);
             }
         }
 
@@ -6686,7 +6691,7 @@ redo:
         ret = tx_data(fm[arg0], rx_buff[0], tx_buff[0], arg1, SPI_TRUNK_SZ, 1024*1024);
         printf("[%d]rx %d\n", arg0, ret);
         wtsz = fwrite(rx_buff[0], 1, ret, fp);
-        printf("write file %d size %d/%d \n", fp, wtsz, ret);
+        printf("write file %d size %d/%d \n", (uint32_t)fp, wtsz, ret);
         goto end;
     }
     if (sel == 14){ /* dual band data mode test ex[14 1 2 5 1 30720]*/
@@ -6774,7 +6779,7 @@ redo:
     
         struct timespec *tspi = (struct timespec *)mmap(NULL, sizeof(struct timespec) * 2, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);;
         if (!tspi) {
-            printf("get share memory for timespec failed - %d\n", tspi);
+            printf("get share memory for timespec failed - %d\n", (uint32_t)tspi);
             goto end;
         }
         clock_gettime(CLOCK_REALTIME, &tspi[0]);  
@@ -6784,7 +6789,7 @@ redo:
         struct timespec curtime, tdiff[2];
 
         if (tbuff)
-            printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, tbuff);
+            printf("%d bytes memory alloc succeed! [0x%.8x]\n", TSIZE, (uint32_t)tbuff);
         else 
             goto end;
 
@@ -6926,8 +6931,8 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                         if (ret == 1) ret = 0;
                         lsz = ret;
                         write(pipefd[1], "e", 1); // send the content of argv[1] to the reader
-                        sprintf(lastaddr, "%d", dstBuff);
-                        printf("p0 write e  addr:%x str:%s ret:%d\n", dstBuff, lastaddr, ret);
+                        sprintf(lastaddr, "%d", (uint32_t)dstBuff);
+                        printf("p0 write e  addr:%x str:%s ret:%d\n", (uint32_t)dstBuff, lastaddr, ret);
                         write(pipefd[1], lastaddr, 32); 
                         break;
                     }
@@ -6947,13 +6952,13 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                     else if (buf == 'e') {
                         ret = read(pipefs[0], lastaddr, 32); 
                         addr = (char *)atoi(lastaddr);
-                        printf("p0 process wait wtsz:%d, lastaddr:%x/%x\n", wtsz, addr, dstBuff);
+                        printf("p0 process wait wtsz:%d, lastaddr:%x/%x\n", wtsz, (uint32_t)addr, (uint32_t)dstBuff);
                         break;
                     }
                 }
                 
                 if (dstBuff > addr) {
-                    printf("p0 memcpy from  %x to %x sz:%d\n", dstBuff-lsz, addr, lsz);
+                    printf("p0 memcpy from  %x to %x sz:%d\n", (uint32_t)dstBuff-lsz, (uint32_t)addr, lsz);
                     msync(dstBuff-lsz, lsz, MS_SYNC);
                     #if 0
                     memcpy(addr, dstBuff-lsz, lsz);
@@ -7025,8 +7030,8 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                     if (ret == 1) ret = 0;
                     lsz = ret;
                     write(pipefs[1], "e", 1); // send the content of argv[1] to the reader
-                    sprintf(lastaddr, "%d", dstBuff);
-                    printf("p1 write e addr:%x str:%s ret:%d\n", dstBuff, lastaddr, ret);
+                    sprintf(lastaddr, "%d", (uint32_t)dstBuff);
+                    printf("p1 write e addr:%x str:%s ret:%d\n", (uint32_t)dstBuff, lastaddr, ret);
                     write(pipefs[1], lastaddr, 32); // send the content of argv[1] to the reader
                     break;
                 }
@@ -7046,13 +7051,13 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
                 else if (buf == 'e') {
                     ret = read(pipefd[0], lastaddr, 32); 
                     addr = (char *)atoi(lastaddr);
-                    printf("p1 process wtsz:%d, lastaddr:%x/%x\n",  wtsz, addr, dstBuff);
+                    printf("p1 process wtsz:%d, lastaddr:%x/%x\n",  wtsz, (uint32_t)addr, (uint32_t)dstBuff);
                     break;
                 }
             }
 
             if (dstBuff > addr) {
-                printf("p1 memcpy from  %x to %x sz:%d\n", dstBuff-lsz, addr, lsz);
+                printf("p1 memcpy from  %x to %x sz:%d\n", (uint32_t)dstBuff-lsz, (uint32_t)addr, lsz);
                 msync(dstBuff-lsz, lsz, MS_SYNC);
                 #if 0
                 memcpy(addr, dstBuff-lsz, lsz);
@@ -7178,13 +7183,13 @@ if (((dstBuff - dstmp) < 0x28B9005) && ((dstBuff - dstmp) > 0x28B8005)) {
     if (sel == 10){
         fp = find_save(path, data_save);
         if (!fp)
-            printf("find save dst failed ret:%d\n", fp);
+            printf("find save dst failed ret:%d\n", (uint32_t)fp);
         else
-            printf("find save dst succeed ret:%d\n", fp);
+            printf("find save dst succeed ret:%d\n", (uint32_t)fp);
         goto end;
     }
     if (sel == 12){
-        return;
+        return -9;
     }
     
     ret = 0;
