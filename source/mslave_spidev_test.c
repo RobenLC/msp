@@ -2625,8 +2625,8 @@ static char path[256];
     bitset = 1;
     spi_config(fm[1], _IOW(SPI_IOC_MAGIC, 12, __u32), &bitset);   //SPI_IOC_WR_KBUFF_SEL
 
-#define RING_BUFF_NUM (1536)
-#define PT_BUF_SIZE (98304)//32768
+#define RING_BUFF_NUM (500)
+#define PT_BUF_SIZE (65536)//32768
 #define MAX_EVENTS (2)
 #define EPOLLLT (0)
 #define CBW_CMD_SEND_OPCODE   0x11
@@ -2799,7 +2799,7 @@ err:
     if (sel == 36){ /* usb printer duplex scan */
         static char ptdevpath[] = "/dev/usb/lp0";
         static char ptfileMeta[] = "/mnt/mmc2/usb/meta.bin";
-        static char ptfileSave[] = "/mnt/mmc1/output/image%.3d.jpg";
+        static char ptfileSave[] = "/mnt/mmc2/output/image%.3d.jpg";
         char ptfilepath[128];
         int ptret=0;
         char *ptm=0;
@@ -2816,7 +2816,7 @@ err:
         uint32_t *viraddr0=0, vt32=0;
         uint32_t *tbl0, *tbl1;
         char *chvir=0, *ptrecv=0, *pkcbw=0;
-        char opc=0, dat=0, cswst=0, chr=0;
+        char opc=0, dat=0, cswst=0, chr=0, csworg=0;
         int recvsz=0, acusz=0, tcnt=0, usbrun=0, usbfolw=0, len=0, wrtsz=0, loopcnt=0;
         int usCost=0;
         double throughput=0.0;
@@ -3028,7 +3028,7 @@ err:
 
                         acucnt++;
 
-                        fwrite(chvir, 1, 98304, fsave);
+                        fwrite(chvir, 1, PT_BUF_SIZE, fsave);
 
                         if (ch == 'd') {
                             printf("[SAVE] get ch: %c break\n", ch);
@@ -3049,7 +3049,7 @@ err:
         }
 
         while(1) {
-        
+            usbrun = -1;
             recvsz = 0;
             acusz = 0;
             tcnt = 0;
@@ -3075,24 +3075,34 @@ err:
                 }
                 #endif 
                 
-                if (recvsz > len) {
+                if (recvsz & 0x10000000) {
+                    if (recvsz > 0) {
+                        usbrun = recvsz  & 0xfffffff;
+                        recvsz = len;
+
+                        #if DBG_USB_HS
+                        printf("[DVF] recvsz: %d, usbrun: %d - 0\n", recvsz, usbrun);
+                        #endif
+                    }
+                } else if (recvsz > len) {
                     cswst = 0;
                     if (recvsz > 0xfffff) {
                         cswst = (recvsz >> 20) & 0xff;
                         
                         /*should not be here*/
-                        printf("[DVF] Error!!!, get csw status: 0x%.2x recv:%d\n", cswst, recvsz);
+                        printf("[DVF] Error!!! get status: 0x%.2x recv:%d\n", cswst, recvsz);
 
                         //chr = 'I';
                     }
-                    
+
                     if (recvsz & 0x20000) {
                         recvsz = recvsz  & 0x1ffff;
                         usbrun = -1;
-                        printf("[DVF] Error!!! data get the end signal 0x20000 recvsz: %d\n", recvsz);
+                        //printf("[%s] Error!!! data get the end signal 0x20000 recvsz: %d\n", strpath, recvsz);
                     }
                     else if (recvsz & 0x40000) {
                         recvsz = recvsz  & 0x1ffff;
+                        usbrun = 0;
                     }
                     else if (recvsz & 0x80000) {
                         recvsz = recvsz  & 0x1ffff;
@@ -3101,15 +3111,21 @@ err:
                     else {
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
-                        
-                        //printf("[%s] recvsz: %d, usbrun: %d - 1\n", strpath, recvsz, usbrun);
+
+                        #if DBG_USB_HS
+                        printf("[DVF] recvsz: %d, usbrun: %d - 1\n", recvsz, usbrun);
+                        #endif
                     }
+                    //sprintf_f(rs->logs, "last trunk size: %d \n", recvsz);
                 }
                 else {
                     if (recvsz > 0) {
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
-                        //printf("[%s] recvsz: %d, usbrun: %d - 2\n", strpath, recvsz, usbrun);
+
+                        #if 1//DBG_USB_HS
+                        printf("[DVF] recvsz: %d, usbrun: %d - 2\n", recvsz, usbrun);
+                        #endif
                     }
                 }
                 
@@ -3129,8 +3145,8 @@ err:
                 write(pipeInfo[1], "c", 1);
 
                 #if DBG_USB_HS
-                //printf("[DVF] usb read %d / %d!!\n", recvsz, len);
-                printf(".");
+                printf("[DVF] usb read %d / %d!!\n", recvsz, len);
+                //printf(".");
                 #endif
                 
                 //printf("[HS] dump 32 - 0 \n");
@@ -3146,7 +3162,7 @@ err:
                 
                 acusz += recvsz;
 
-                if ((recvsz < len) && (usbrun < 0)) {
+                if (((recvsz > 0) && (recvsz < len)) && (usbrun < 0)) {
                     clock_gettime(CLOCK_REALTIME, &utend);
                     //ring_buf_set_last(pTx, recvsz);
                     printf("[DVF] loop last ret: %d, the last size: %d \n", ptret, recvsz);
@@ -3160,6 +3176,7 @@ err:
 
             printf("[DVF] total read size: %d, write file size: %d throughput: %lf Mbits \n", acusz, wrtsz, throughput);
 
+            usbrun = -1;
             recvsz = 0;
             acusz = 0;
             tcnt = 0;
@@ -3169,45 +3186,77 @@ err:
             
                 recvsz = USB_IOCT_LOOP_CONTI_READ(usbids[0], &usbfolw);
 
-                usbfolw += 1;
-
                 if (recvsz > len) {
-                    //printf("[%s] last trunk size: %d 0x%x\n", strpath, recvsz, recvsz);
+                    //sprintf_f(rs->logs, "last trunk size: %d 0x%x\n", recvsz, recvsz);
+                    //print_f(rs->plogs, sp, rs->logs);
+
                     cswst = 0;
                     if (recvsz > 0xfffff) {
 
                         cswst = (recvsz >> 20) & 0xff;
-
+                        
                         if (cswst == 0x80) {
                             cswst = 0x7f;
                         }
-
-                        if ((cswst & 0x7f) == 0x21) {
-                            cswst = 0x7f;
-                        }
-
-                        printf("[DVF] get the error status: 0x%.2x\n",  cswst);
                         
-#if 1 /* stop scan if get error status */
+                        csworg = cswst;
+
+                        #if 1 /* pause status */
+                        if ((cswst & 0x7f) == 0x22) {
+                            cswst = 0x7f;
+                            //cswst = 0x21;                        
+                            //puhs->pushcswerr = cswst;
+                        }
+                        else if ((cswst & 0x7f) == 0x23) {
+                            cswst = 0x7f;
+                            //cswst = 0x21;                        
+                            //puhs->pushcswerr = cswst;
+                        } else 
+                        #endif
+                        #if 1 /* stop scan if get error status */
                         if ((cswst & 0x7f) && (cswst != 0x7f)) {
+
                             chr = 'R';                        
                         }
-#endif
+                        #endif
 
+                        printf("[DVF] get the error status: 0x%.2x (org: 0x%.2x)\n", cswst, csworg & 0x7f);
+
+                        #if 0 /* stop scan if get error status */
+                        if ((cswst & 0x7f) && (cswst != 0x7f)) {
+                        
+                            puhs->pushcswerr = cswst;
+                            
+                            chr = 'R';                        
+                        }
+                        #endif
                     } 
-                    
+
                     if (recvsz & 0x20000) {
                         printf("[DVF] get the end signal 0x20000 \n");
-                        
+
+
+                        #if USB_CALLBACK_LOOP 
                         chr = 'R';
+                        #else
+                        chr = 0;
+                        #endif
 
                         recvsz = recvsz  & 0x1ffff;
                         usbrun = -1;
+
+                        #if 1 /* stop scan by default status */
+                        if (cswst == 0x7f) {
+                            cswst = 0x21;                        
+                        }
+                        #endif
                         
-                        //printf("[%s] use the error status: 0x%.2x recv: %d\n", strpath, cswst, recvsz);
+                        //sprintf_f(rs->logs, "use the error status: 0x%.2x recv: %d\n", cswst, recvsz);
+                        //print_f(rs->plogs, sp, rs->logs);
                     }
                     else if (recvsz & 0x40000) {
                         recvsz = recvsz  & 0x1ffff;
+                        usbrun = 0;
                     }
                     else if (recvsz & 0x80000) {
                         recvsz = recvsz  & 0x1ffff;
@@ -3216,15 +3265,19 @@ err:
                     else {
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
-                        
-                        //printf("[%s] recvsz: %d, usbrun: %d - m1\n", strpath, recvsz, usbrun);
+
+                        printf("[DVF] recvsz: %d, usbrun: %d - m1\n", recvsz, usbrun);
                     }
                 }
                 else {
                     if (recvsz > 0) {
-                        usbrun = recvsz  & 0xfff;
+                        usbrun = recvsz  & 0xffff;
                         recvsz = len;
-                        //printf("[%s] recvsz: %d, usbrun: %d - m2\n", strpath, recvsz, usbrun);
+
+
+                        #if DBG_USB_HS
+                        printf("[DVF] recvsz: %d, usbrun: %d - m2\n", recvsz, usbrun);
+                        #endif
                     }
                 }
                                 
@@ -3241,8 +3294,8 @@ err:
 
                 write(pipeInfo[1], "d", 1);
                 
-                //printf("[DVF] usb read %d / %d!!\n", recvsz, len);
-                printf(".");
+                printf("[DVF] usb read %d / %d!!\n", recvsz, len);
+                //printf(".");
                 
                 //printf("[HS] dump 32 - 0 \n");
                 //msync(addr, recvsz, MS_SYNC);
@@ -3257,7 +3310,7 @@ err:
                 
                 acusz += recvsz;
 
-                if ((recvsz < len) && (usbrun < 0)) {
+                if (((recvsz > 0) && (recvsz < len)) && (usbrun < 0)) {
                     //clock_gettime(CLOCK_REALTIME, &utend);
                     //ring_buf_set_last(pTx, recvsz);
                     printf("[DVF] loop last ret: %d, the last size: %d \n", ptret, recvsz);
