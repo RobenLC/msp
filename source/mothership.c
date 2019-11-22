@@ -76,7 +76,7 @@ static char genssid[128];
 
 #define LOG_ALL_DISABLE (0)
 
-#define ONLY_ONE_USB (1)
+#define ONLY_ONE_USB (0)
 #if DISABLE_USB
 #define USB_META (0)
 #define MOVE_MUTX_TO_FRONT_P6  (0)
@@ -33496,7 +33496,9 @@ static int rs_ipc_get_ms(struct procRes_s *rs, char *str, int size, int wms)
             return ret;
         }
 
-        if (((tcnt+1) % 2) == 0) {
+        if (wms) break;
+
+        if (((tcnt+1) % 10) == 0) {
             //sprintf_f(rs->logs, "[%s] poll wait\n", rs->nrs);
             //print_f(rs->plogs, "IPC", rs->logs);
             break;
@@ -66383,7 +66385,11 @@ static int p10(struct procRes_s *rs)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (1)
+#if ONLY_ONE_USB
+#define BYPASS_TWO  (0)
+#else
 #define BYPASS_TWO  (1)
+#endif
 #define OP_WRITE_FILE (0x0b)
 #define DUMP_JPG_ROT (0)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
@@ -66444,7 +66450,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int fintvalS[2], fintvalE[2];
 #endif
     struct aspMetaData_s *metaRx = 0;
-    CFLOAT throughput=0.0;
+    CFLOAT throughput=0.0, thrdatasize=0.0, thrtimeconsu=0.0, thrtimebegin=0.0;
     struct info16Bit_s *iubs=0;
     struct usbCBWopc_s *ucbwopc=0;
     struct usbCBWpram_s *ucbwpram=0;
@@ -66574,6 +66580,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         usb_nonblock_set(usbfd);
 
         eventRx.data.fd = usbfd;
+        //eventRx.events = EPOLLIN |EPOLLOUT | EPOLLLT;
         eventRx.events = EPOLLIN | EPOLLLT;
         ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
         if (ret == -1) {
@@ -66678,6 +66685,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             usb_nonblock_set(usbfd);
             
                             eventRx.data.fd = usbfd;
+                            //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
                             eventRx.events = EPOLLIN | EPOLLLT;
                             ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, usbfd, &eventRx);
                             if (ret == -1) {
@@ -66805,7 +66813,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                         }
                         
-                        #if 1//BYPASS_TWO
+                        #if BYPASS_TWO
                         chd = 'i';
                         if (usbid02) {
                             pipRet = write(pipeTxd[1], &chd, 1);
@@ -66910,13 +66918,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 else if (getevents[ix].data.fd == rcmd->ppipedn->rt[0]) {
                     memset(msgret, 0, 64);
-                    ret = rs_ipc_get_ms(rcmd, msgret, 64, 0);
+                    ret = rs_ipc_get_ms(rcmd, msgret, 64, 10);
                     while (ret > 0) {
                         sprintf_f(rs->logs, "get cmd retrun msg: <%s> ret: %d\n", msgret, ret);
                         print_f(rs->plogs, "P11", rs->logs);
 
                         memset(msgret, 0, 64);
-                        ret = rs_ipc_get_ms(rcmd, msgret, 64, 0);
+                        ret = rs_ipc_get_ms(rcmd, msgret, 64, 10);
                     }
                 } 
                 else if (getevents[ix].data.fd == rs->ppipedn->rt[0]) {
@@ -66925,12 +66933,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);
 
                     chw = 0;
-                    ret = rs_ipc_get_ms(rs, &chw, 1, 100);
+                    ret = rs_ipc_get_ms(rs, &chw, 1, 10);
                     while (ret < 0) {
                         sprintf_f(rs->logs, "pget cmd: %c ret: %d\n", chw, ret);
                         print_f(rs->plogs, "P11", rs->logs);
 
-                        ret = rs_ipc_get_ms(rs, &chw, 1, 100);
+                        ret = rs_ipc_get_ms(rs, &chw, 1, 10);
                     }
 
                     sprintf_f(rs->logs, "pget cmd: %c ret: %d\n", chw, ret);
@@ -68236,12 +68244,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);
 
                     chy = 0;
-                    ret = rs_ipc_get_ms(rsd, &chy, 1, 100);
+                    ret = rs_ipc_get_ms(rsd, &chy, 1, 10);
                     while (ret < 0) {
                         sprintf_f(rs->logs, "sget duo cmd: %c ret: %d\n", chy, ret);
                         print_f(rs->plogs, "P11", rs->logs);
 
-                        ret = rs_ipc_get_ms(rsd, &chy, 1, 100);
+                        ret = rs_ipc_get_ms(rsd, &chy, 1, 10);
                     }
 
                     sprintf_f(rs->logs, "sget duo cmd: %c ret: %d\n", chy, ret);
@@ -68286,7 +68294,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                         print_f(rs->plogs, "P11", rs->logs);
                         
-                        ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                        ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                         if (ret > 0) {
                             rcmd->logs[ret] = '\n';
 
@@ -68934,7 +68942,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                     
                     sprintf_f(rs->logs, "__USB_GET  CBW_[%.2x][%.2x][%.2x]__", ptrecv[15], ptrecv[16], ptrecv[17]); 
-                    dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
+                    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
+                    thrtimebegin = tmCost;
                     
                     #if LOG_FLASH /* should close */
                     shmem_dump(ptrecv, recvsz);
@@ -69073,7 +69082,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                                         print_f(rs->plogs, "P11", rs->logs);
 
-                                        ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                                        ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                                         if (ret > 0) {
                                             rcmd->logs[ret] = '\n';
 
@@ -70441,7 +70450,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
         }
         
-        if (usbentsTx == 1) { 
+        while (usbentsTx == 1) { 
             if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e))) { /* usbentsTx == 1*/
                 #if USB_HS_SAVE_RESULT_DV
                 fsave = find_save(ptfilepath, ptfileSave);
@@ -71571,7 +71580,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
                                 print_f(rs->plogs, "P11", rs->logs);
 
-                                usleep(500000);
+                                usleep(500);
                                 lens = ring_buf_cons_u(usbCur, &addrd);                
                             }
 
@@ -71983,7 +71992,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 else {
                                     sprintf_f(rs->logs, "[DV] get buff ret: %d, wait for tx size: %d!!!\n", lenrs, sendsz);
                                     print_f(rs->plogs, "P11", rs->logs);
-                                    usleep(500000);
+                                    usleep(500);
                                 }
                             }
                             sendsz = lens;
@@ -72129,7 +72138,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 else {
                                     sprintf_f(rs->logs, "[DV] get buff ret: %d, wait for tx size: %d!!!\n", lenrs, sendsz);
                                     print_f(rs->plogs, "P11", rs->logs);
-                                    usleep(500000);
+                                    usleep(500);
                                 }
                             }
                             sendsz = lens;
@@ -72866,6 +72875,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);
                     
                     shmem_dump(csw, wrtsz);
+
+                    break;
                 }
 
                 msgret[0] = 'x';
@@ -72884,7 +72895,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                 print_f(rs->plogs, "P11", rs->logs);
 
-                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
 
@@ -72966,7 +72977,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
-                #if 1
+                #if BYPASS_TWO
                 if (usbid02) {
                     chd = 'm';
                     pipRet = write(pipeTxd[1], &chd, 1);
@@ -72976,7 +72987,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
                 }
-                #endif
                     
                 if (usbid02) {
                     while (1) {
@@ -73005,7 +73015,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                     }
                 }
-
+                #endif
+                
                 #if 0
                 csw[11] = 0;
                 csw[12] = chn;
@@ -73044,6 +73055,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] 0x11 0x4c meat cmd: (0x%.2x) opc: (0x%.2x) dump \n", cmd, opc);
                     print_f(rs->plogs, "P11", rs->logs);
                     shmem_dump(csw, wrtsz);
+                    break;
                 }
                 
                 #if DBG_USB_TIME_MEASURE
@@ -73094,7 +73106,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                 print_f(rs->plogs, "P11", rs->logs);
 
-                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
 
@@ -73196,7 +73208,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                 print_f(rs->plogs, "P11", rs->logs);
 
-                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
 
@@ -73286,7 +73298,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 shmem_dump(csw, wrtsz);
                 
                 cmd = 0;
-                    
+                break;
             }
             else if (cmd == 0x12) { /* usbentsTx == 1*/
 
@@ -73369,6 +73381,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 
                 sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x](Page_%d_size:%d_bytes)__", csw[10], csw[11], csw[12], pagecnt++, acusz); 
+                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
+                thrdatasize = acusz;
+                thrtimeconsu = tmCost;
+                thrtimeconsu = thrtimeconsu - thrtimebegin;
+                throughput = thrdatasize / thrtimeconsu;
+                sprintf_f(rs->logs, "__USB_TO_PC THROUGHPUT_(%.2lf / %.2lf = %.3lf_MB)__", thrdatasize, thrtimeconsu, throughput); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] 0x12 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
@@ -73377,6 +73395,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 shmem_dump(csw, wrtsz);
                 
                 cmd = 0;
+                break;
             }
             else if (cmd == 0x13) { /* usbentsTx == 1*/
 
@@ -73495,7 +73514,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                     print_f(rs->plogs, "P11", rs->logs);
 
-                    ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                    ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                     if (ret > 0) {
                         rcmd->logs[ret] = '\n';
 
@@ -73535,6 +73554,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 #endif
 
                 cmd = 0;
+                break;
             }
             else if (cmd == 0x14) { /* usbentsTx == 1*/
 
@@ -73641,6 +73661,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 chn = csw[11];
                     
                 cmd = 0;
+                break;
             }
             else if (cmd == 0x15) { /* usbentsTx == 1*/
                 csw[11] = 0;
@@ -73713,7 +73734,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 shmem_dump(csw, wrtsz);
                 
                 cmd = 0;
-                    
+                break;
             }
             else if ((cmd == OP_WRITE_FILE) && (opc == 0xff) && (dat == 0)) { /* usbentsTx == 1*/
                 sprintf_f(rs->logs, "[DV] usbentsTx 0x0b cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", cmd, opc, dat); 
@@ -73721,22 +73742,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 act = ucbwfile->ASIC_sel;
                 
                 chy = 0;
-                ret = rs_ipc_get_ms(rs, &chy, 1, 100);
+                ret = rs_ipc_get_ms(rs, &chy, 1, 10);
                 while (ret < 0) {
                     sprintf_f(rs->logs, "[DVB] write file response: 0x%.2x ret: %d \n", chy, ret);
                     print_f(rs->plogs, "P11", rs->logs);
 
-                    ret = rs_ipc_get_ms(rs, &chy, 1, 100);
+                    ret = rs_ipc_get_ms(rs, &chy, 1, 10);
                 }
 
                 if (chy == 'w') {
-                    ret = rs_ipc_get_ms(rs, msgret, 4, 100);
+                    ret = rs_ipc_get_ms(rs, msgret, 4, 10);
                     while (ret < 0) {
                         
                         sprintf_f(rs->logs, "[DVB] write file lengh ret: %d \n", ret);
                         print_f(rs->plogs, "P11", rs->logs);
 
-                        ret = rs_ipc_get_ms(rs, msgret, 4, 100);
+                        ret = rs_ipc_get_ms(rs, msgret, 4, 10);
                     }
                     
                     filesz = msb2lsb(&ucbwfile->pramDataLength);
@@ -73871,7 +73892,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                     cmd = 0;
                     opc = 0;
-
+                    break;
                 }
                 else {
                     sprintf_f(rs->logs, "[DV] Error!!! 0x0b get write file result ch: %c cmd: 0x%.2x opc: 0x%.2x\n", chy, cmd, opc); 
@@ -73889,22 +73910,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 rs_ipc_put(rs, "i", 1);
                 
                 chy = 0;
-                ret = rs_ipc_get_ms(rs, &chy, 1, 100);
+                ret = rs_ipc_get_ms(rs, &chy, 1, 10);
                 while (ret < 0) {
                     sprintf_f(rs->logs, "[DVB] write file response: 0x%.2x ret: %d \n", chy, ret);
                     print_f(rs->plogs, "P11", rs->logs);
 
-                    ret = rs_ipc_get_ms(rs, &chy, 1, 100);
+                    ret = rs_ipc_get_ms(rs, &chy, 1, 10);
                 }
 
                 if (chy == 'r') {
-                    ret = rs_ipc_get_ms(rs, msgret, 4, 100);
+                    ret = rs_ipc_get_ms(rs, msgret, 4, 10);
                     while (ret < 0) {
                         
                         sprintf_f(rs->logs, "[DVB] read file lengh ret: %d \n", ret);
                         print_f(rs->plogs, "P11", rs->logs);
 
-                        ret = rs_ipc_get_ms(rs, msgret, 4, 100);
+                        ret = rs_ipc_get_ms(rs, msgret, 4, 10);
                     }
                     
                     //filesz = msb2lsb(&ucbwfile->pramDataLength);
@@ -73954,7 +73975,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             sprintf_f(rs->logs, "[DVB] get rbuf failed ret: %d \n", lenrs);
                             print_f(rs->plogs, "P11", rs->logs);
                     
-                            usleep(100000);
+                            usleep(1000);
                             lenrs = ring_buf_cons(rs->pcmdRx, &addrs);
                         }
                     
@@ -73980,7 +74001,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 if (errcnt > 100) {
                                     break;
                                 }
-                                usleep(100000);
+                                usleep(1000);
                                 continue;
                             }
                     
@@ -74199,7 +74220,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                 print_f(rs->plogs, "P11", rs->logs);
 
-                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
 
@@ -74215,7 +74236,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0;
                 dat = 0;
                 opc = 0;
-                
+                break;
             }
             else if ((cmd == OP_WRITE_FILE) && (opc == 0) && (dat == 0xff)) { /* usbentsTx == 1*/
                 sprintf_f(rs->logs, "[DV] wait erase \n");
@@ -74490,7 +74511,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                         print_f(rs->plogs, "P11", rs->logs);
 
-                        ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                        ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                         if (ret > 0) {
                             rcmd->logs[ret] = '\n';
 
@@ -74508,6 +74529,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     cmd = 0;
                     dat = 0;
                     opc = 0;
+                    break;
                 }
             }
             else if ((cmd == OP_WRITE_FILE) && (opc == 5) && (dat == 0xff)) { /* usbentsTx == 1*/
@@ -74545,6 +74567,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0;
                 dat = 0;
                 opc = 0;
+                break;
             }
             else if ((cmd == OP_WRITE_FILE) && (opc == 6) && (dat == 0xff)) { /* usbentsTx == 1*/
                 act = ucbwfile->ASIC_sel;
@@ -74783,6 +74806,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0;
                 dat = 0;
                 opc = 0;
+                break;
             }
             else if ((cmd == OP_WRITE_FILE) && (opc == 7) && (dat == 0xff)) { /* usbentsTx == 1*/
                 
@@ -75044,6 +75068,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0;
                 dat = 0;
                 opc = 0;
+                break;
             }
             else if ((cmd == OP_WRITE_FILE) && (opc == 9) && (dat == 0xff)) { /* usbentsTx == 1*/
 
@@ -75145,6 +75170,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0;
                 dat = 0;
                 opc = 0;
+                break;
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff) && (dat == 0xff)) { /* usbentsTx == 1*/
                 if (ucbwpram->ASIC_sel) {
@@ -75384,7 +75410,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 opc = 0;
                 dat = 0;
                 
-                continue;
+                break;
             }
             else if (((cmd >= 0x00) && (cmd <= 0x0f)) && (opc == 0xff)) { /* usbentsTx == 1*/
                 if (ucbwpram->ASIC_sel) {
@@ -75579,7 +75605,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 opc = 0;
                 
-                continue;
+                break;
             }
             else if (opc == 0xff) { /* usbentsTx == 1*/
                 if (usbid01) {
@@ -75691,7 +75717,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
                 print_f(rs->plogs, "P11", rs->logs);
 
-                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
 
@@ -75706,11 +75732,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 opc = 0;
                 
-                continue;
+                break;
             }
             else {
                 /* do nothing */
-                
+                break;
             }
 
         }
