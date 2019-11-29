@@ -87,7 +87,7 @@ static char genssid[128];
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (3200) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -110,6 +110,13 @@ static char genssid[128];
 #endif
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
+
+#define GADGET_GET_PRINTER_STATUS	_IOR('g', 0x21, unsigned char)
+#define GADGET_SET_OUTPUT_ADDRESS	_IOWR('g', 0x23, unsigned char)
+#define GADGET_SET_CSW_ADDRESS		_IOWR('g', 0x24, unsigned char)
+
+#define GADGET_IOCT_GET_STATUS(a, b)     ioctl(a, GADGET_GET_PRINTER_STATUS, b)
+#define GADGET_IOCT_SET_OUT(a, b)     ioctl(a, GADGET_SET_OUTPUT_ADDRESS, b)
 
 #define IOCNR_GET_DEVICE_ID		1
 #define IOCNR_GET_VID_PID		6
@@ -1083,6 +1090,7 @@ struct shmem_s{
     int chksz;
     int slotn;
     char **pp;
+    char **bb;
     int svdist;
     struct ring_p *r;
     int lastflg;
@@ -2383,6 +2391,41 @@ static int insert_filecbw(char *cbw, struct usbCBWfile_s *dwfile)
     memcpy(cbw, (char *)dwfile, 32);
 
     return 0;
+}
+
+static inline int usbcphy_write(int usbfd, char *vir, char *phy, int len)
+{
+    int ret=0;
+    
+    #if 1
+    if (len == USB_BUF_SIZE) {
+
+        ret = GADGET_IOCT_SET_OUT(usbfd, phy);
+        
+        //printf("[USBC] wt len: %d addr: 0x%.8x ret: %d ioctl\n", len, phy, ret);
+    } else {
+        
+        ret = write(usbfd, vir, len);
+        
+        //printf("[USBC] wt len: %d addr: 0x%.8x ret: %d write\n", len, vir, ret);
+    }
+    #else
+    
+    printf("[USBC] wt len: %d write\n", len);
+    
+    ret = write(usbfd, vir, len);
+    #endif
+
+    return ret;
+}
+
+static inline int usbc_write(int usbfd, char *vir, int len)
+{
+    int ret=0;
+    
+    ret = write(usbfd, vir, len);
+
+    return ret;
 }
 
 #define USB_TX_LOG 0
@@ -33076,6 +33119,88 @@ static int ring_buf_cons_tag(struct shmem_s *pp)
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
 
     return dist;
+}
+
+static int ring_buf_cons_up(struct shmem_s *pp, char **addr, char **phyr)
+{
+    char str[128];
+    int leadn = 0;
+    int folwn = 0;
+    int dist;
+    int idx=0, nlp=0, rsz=0, rlp=0, sta=0;
+
+    folwn = pp->r->folw.run * pp->slotn + pp->r->folw.seq;
+    leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
+    dist = leadn - folwn;
+
+    //sprintf_f(str, "cons, d: %d %d/%d - %d\n", dist, leadn, folwn,pp->lastflg);
+    //print_f(mlogPool, "ring", str);
+
+    if (dist < 1)  return -1;
+
+    if ((pp->r->folw.seq + 1) < pp->slotn) {
+        //*addr = pp->pp[pp->r->folw.seq + 1];
+        //pp->r->folw.seq += 1;
+        idx = pp->r->folw.seq + 1;
+        nlp = pp->r->folw.run;
+    } else {
+        //*addr = pp->pp[0];
+        //pp->r->folw.seq = 0;
+        //pp->r->folw.run += 1;
+        idx = 0;
+        nlp = pp->r->folw.run + 1;
+    }
+
+    msync(pp->urun, sizeof(int) * RING_BUFF_NUM_USB, MS_SYNC);    
+
+    sta = pp->urun[idx];
+    
+    //printf("[R] cons u idx %d:%d content: 0x%.8x \n", idx, nlp, sta);
+
+    #if !USB_RECVLEN_ZERO_HANDLE
+    if (!sta) {
+        return -2;
+    }
+    #endif
+
+    rlp = (sta >> 20) & 0xfff;
+    if (rlp != nlp) {
+        printf("[R] %d:%d idx: %d\n", rlp, nlp, idx);
+        //return -3;
+    }
+
+    rsz = sta & 0x1ffff;
+    
+    #if USB_RECVLEN_ZERO_HANDLE
+    
+    if (rsz > pp->chksz) {
+        return -4;
+    }
+    
+    #else
+    
+    if ((rsz == 0) || (rsz > pp->chksz)) {
+        return -4;
+    }
+    
+    #endif
+
+    pp->urun[idx] = 0;
+    pp->uget[idx] = sta;
+
+    pp->r->folw.seq = idx;
+    pp->r->folw.run = nlp;
+
+    *addr = pp->pp[idx];
+    *phyr = pp->bb[idx];
+
+    msync(pp, sizeof(struct shmem_s), MS_SYNC);
+
+    if (sta & 0x40000) {
+        rsz |= 0x40000;
+    }
+
+    return rsz;
 }
 
 static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
@@ -66381,8 +66506,8 @@ static int p10(struct procRes_s *rs)
 }
 
 #define LOG_FLASH  (0)
-#define LOG_P11_EN (0)
-#define DBG_27_EPOL (0)
+#define LOG_P11_EN (1)
+#define DBG_27_EPOL (1)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (1)
 #if ONLY_ONE_USB
@@ -66428,7 +66553,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     uint8_t cmd=0, opc=0, dat=0;
     uint32_t usbentsRx=0, usbentsTx=1, getents=0;
     int usbfd=0;
-    char *addrd=0, *palloc=0;
+    char *addrd=0, *palloc=0, *addrb=0;
     int uimCylcnt=0, datCylcnt=0, distCylcnt=0, maxCylcnt=0;
     struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0, *puimCud=0;
     char *endf=0, *endm=0;
@@ -66575,6 +66700,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     }
 
     usbfd = rs->usbdvid;
+    getents = 0xffff;
+    ret = GADGET_IOCT_GET_STATUS(usbfd, getents);
+    sprintf_f(rs->logs, "Test gadget usbfd: %d ioctl send: 0x%.8x ret: %d\n", usbfd, getents, ret);
+    print_f(rs->plogs, "P11", rs->logs);
+
 
     if (usbfd) {
         usb_nonblock_set(usbfd);
@@ -66640,7 +66770,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     while (1) {
         
         rxfd = 0;
-        uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 500);
+        uret = epoll_wait(epollfd, getevents, MAX_EVENTS, 100);
         if (uret < 0) {
             perror("epoll_wait");
             sprintf_f(rs->logs, "[ePol] failed errno: %d ret: %d\n", errno, uret);
@@ -66683,7 +66813,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             usbentsTx = 1;
             
                             usb_nonblock_set(usbfd);
-            
+
+                            getents = 0xffff;
+                            ret = GADGET_IOCT_GET_STATUS(usbfd, getents);
+                            sprintf_f(rs->logs, "Test gadget usbfd: %d ioctl send: 0x%.8x ret: %d - 2\n", usbfd, getents, ret);
+                            print_f(rs->plogs, "P11", rs->logs);
+    
                             eventRx.data.fd = usbfd;
                             //eventRx.events = EPOLLIN | EPOLLOUT | EPOLLLT;
                             eventRx.events = EPOLLIN | EPOLLLT;
@@ -70648,16 +70783,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                                 memcpy(ptrecv, emptyLast, 4);
 
-                                                sendsz = write(usbfd, ptrecv, 160);
+                                                sendsz = usbc_write(usbfd, ptrecv, 160);
                                                 while (sendsz <= 0) {
-                                                    sendsz = write(usbfd, ptrecv, 160);
+                                                    sendsz = usbc_write(usbfd, ptrecv, 160);
                                                 }
 
                                                 memcpy(ptrecv, emptyLine, 4);
                                                 
-                                                sendsz = write(usbfd, ptrecv, 4);
+                                                sendsz = usbc_write(usbfd, ptrecv, 4);
                                                 while (sendsz <= 0) {
-                                                    sendsz = write(usbfd, ptrecv, 4);
+                                                    sendsz = usbc_write(usbfd, ptrecv, 4);
                                                 }
 
                                                 che = 'E';
@@ -71575,13 +71710,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         if (uimCylcnt) {
                             lens = 0;
-                            lens = ring_buf_cons_u(usbCur, &addrd);                
+                            lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
                             while (lens < 0) {
                                 sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
                                 print_f(rs->plogs, "P11", rs->logs);
 
                                 usleep(500);
-                                lens = ring_buf_cons_u(usbCur, &addrd);                
+                                lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
                             }
 
                             if (lens & 0x40000) {
@@ -72475,7 +72610,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         #if DUMP_JPG_ROT
                                         bret = blen;
                                         #else
-                                        bret = write(usbfd, bmpbufc, blen);
+                                        bret = usbc_write(usbfd, bmpbufc, blen);
                                         #endif
                                         
 
@@ -72516,7 +72651,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         #if DUMP_JPG_ROT
                                         bret = blen;
                                         #else
-                                        bret = write(usbfd, bmpbufc, blen); 
+                                        bret = usbc_write(usbfd, bmpbufc, blen); 
                                         #endif
                                         
                                         //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 2\n", blen, bret);
@@ -72540,7 +72675,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         #if DUMP_JPG_ROT
                                         bret = blen;
                                         #else
-                                        bret = write(usbfd, addrd, blen); 
+                                        bret = usbc_write(usbfd, addrd, blen); 
                                         #endif
                                         
                                         //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d -3 \n", blen, bret);
@@ -72577,7 +72712,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                     
                                     while (rawlen) {                                    
-                                        bret = write(usbfd, bmpbufc, blen);
+                                        bret = usbc_write(usbfd, bmpbufc, blen);
                                     
                                         if (bret > 0) {
                                             //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
@@ -72597,7 +72732,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     blen = lastCylen;
                                     while (blen) {
-                                        bret = write(usbfd, bmpbufc, blen); 
+                                        bret = usbc_write(usbfd, bmpbufc, blen); 
                                     
                                         if (bret > 0) {
                                             blen -= bret;
@@ -72607,7 +72742,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     blen = lens;
                                     while (blen) {
-                                        bret = write(usbfd, addrd, blen); 
+                                        bret = usbc_write(usbfd, addrd, blen); 
                                     
                                         if (bret > 0) {
                                             blen -= bret;
@@ -72624,7 +72759,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 }
 
                                 while (rawlen) {                                    
-                                    bret = write(usbfd, bmpbufc, blen);
+                                    bret = usbc_write(usbfd, bmpbufc, blen);
 
                                     if (bret > 0) {
                                         //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
@@ -72643,7 +72778,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 blen = lastCylen;
                                 while (blen) {
-                                    bret = write(usbfd, bmpbufc, blen); 
+                                    bret = usbc_write(usbfd, bmpbufc, blen); 
 
                                     if (bret > 0) {
                                         blen -= bret;
@@ -72653,7 +72788,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                 blen = lens;
                                 while (blen) {
-                                    bret = write(usbfd, addrd, blen); 
+                                    bret = usbc_write(usbfd, addrd, blen); 
 
                                     if (bret > 0) {
                                         blen -= bret;
@@ -72672,10 +72807,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (lens == 0) {
                                 sendsz = lens;
                             } else {
-                                sendsz = write(usbfd, addrd, lens);
+                                sendsz = usbcphy_write(usbfd, addrd, addrb, lens);
                             }
                             #else
-                            sendsz = write(usbfd, addrd, lens);
+                            sendsz = usbcphy_write(usbfd, addrd, addrb, lens);
                             #endif
 
                         }
@@ -72847,7 +72982,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     wrtsz = 0;
                     retry = 0;
                     while (1) {
-                        wrtsz = write(usbfd, csw, 13);
+                        wrtsz = usbc_write(usbfd, csw, 13);
                         
                         #if DBG_27_DV
                         sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -73028,7 +73163,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     wrtsz = 0;
                     retry = 0;
                     while (1) {
-                        wrtsz = write(usbfd, csw, 13);
+                        wrtsz = usbc_write(usbfd, csw, 13);
                     
                         #if DBG_27_DV
                         sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -73233,7 +73368,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -73324,7 +73459,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] cmd: 0x%.2x usb TX size: %d \n====================\n", cmd, wrtsz);
@@ -73433,7 +73568,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz);
@@ -73592,7 +73727,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz);
@@ -73670,7 +73805,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -73819,7 +73954,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     wrtsz = 0;
                     retry = 0;
                     while (1) {
-                        wrtsz = write(usbfd, csw, 13);
+                        wrtsz = usbc_write(usbfd, csw, 13);
 
                         #if DBG_27_DV
                         sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -73994,7 +74129,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         
                         errcnt = 0;
                         while (lenrs) {
-                            wrtsz = write(usbfd, addrs, lenrs);
+                            wrtsz = usbc_write(usbfd, addrs, lenrs);
                             if (wrtsz <= 0) {
                                 errcnt++;
                     
@@ -74137,7 +74272,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -74473,7 +74608,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     wrtsz = 0;
                     retry = 0;
                     while (1) {
-                        wrtsz = write(usbfd, csw, 13);
+                        wrtsz = usbc_write(usbfd, csw, 13);
                     
                         #if DBG_27_DV
                         sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -74541,7 +74676,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -74780,7 +74915,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -75042,7 +75177,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -75124,7 +75259,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, ptrecv, 128);
+                    wrtsz = usbc_write(usbfd, ptrecv, 128);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -75144,7 +75279,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -75277,7 +75412,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 msync(vubsBuff, lenflh, MS_SYNC);
 
                 while (1) {
-                    wrtsz = write(usbfd, vubsBuff, lenflh);
+                    wrtsz = usbc_write(usbfd, vubsBuff, lenflh);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -75312,7 +75447,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -75508,7 +75643,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -75676,7 +75811,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 wrtsz = 0;
                 retry = 0;
                 while (1) {
-                    wrtsz = write(usbfd, csw, 13);
+                    wrtsz = usbc_write(usbfd, csw, 13);
                     
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
@@ -75780,6 +75915,7 @@ int main(int argc, char *argv[])
     struct sysinfo minfo;
     struct usbHostmem_s *usbh[2], *tusb=0;
     uint32_t *tbl0, *tbl1;
+    uint32_t *phytbl0, *phytbl1;
     uint32_t ut32=0, vt32=0;
     int usbid0=0, usbid1=0;
     char *chvir;
@@ -77067,6 +77203,9 @@ int main(int argc, char *argv[])
     tbl0 = pmrs->usbmh[0]->ushostblvir;
     tbl1 = pmrs->usbmh[1]->ushostblvir;    
 
+    phytbl0 = pmrs->usbmh[0]->ushostblphy;
+    phytbl1 = pmrs->usbmh[1]->ushostblphy;    
+
     #if 0
     ix = RING_BUFF_NUM_USB;
     ret = USB_IOCT_LOOP_BUFF_RELEASE(usbid0, &ix);
@@ -77101,6 +77240,7 @@ int main(int argc, char *argv[])
         memset(usbTx, 0, sizeof(struct shmem_s));
         
         usbTx->pp =  (char **) memory_init_vtable(usbTx->pp, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0);  
+        usbTx->bb =  (char **) memory_init_vtable(usbTx->bb, RING_BUFF_NUM_USB * TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, phytbl0);  
         usbTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
         usbTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
         
@@ -77119,6 +77259,7 @@ int main(int argc, char *argv[])
         memset(gateTx, 0, sizeof(struct shmem_s));
         
         gateTx->pp = (char **) memory_init_vtable(gateTx->pp, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl0); 
+        gateTx->bb = (char **) memory_init_vtable(gateTx->bb, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, phytbl0);
         gateTx->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
         gateTx->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
         
@@ -77143,6 +77284,7 @@ int main(int argc, char *argv[])
         memset(usbTxd, 0, sizeof(struct shmem_s));
         
         usbTxd->pp = (char **) memory_init_vtable(usbTxd->pp, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+        usbTxd->bb = (char **) memory_init_vtable(usbTxd->bb, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, phytbl1); 
         usbTxd->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
         usbTxd->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
         if (!usbTxd->pp) goto end;
@@ -77160,6 +77302,7 @@ int main(int argc, char *argv[])
         memset(gateTxd, 0, sizeof(struct shmem_s));
         
         gateTxd->pp = (char **) memory_init_vtable(gateTxd->pp, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, tbl1); 
+        gateTxd->bb = (char **) memory_init_vtable(gateTxd->bb, RING_BUFF_NUM_USB*TABLE_SLOT_SIZE, TABLE_SLOT_SIZE, phytbl1); 
         gateTxd->urun = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
         gateTxd->uget = (int *)aspSalloc(sizeof(int) * RING_BUFF_NUM_USB);
         
