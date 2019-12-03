@@ -53,8 +53,8 @@ int pipe2(int pipefd[2], int flags);
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
-static char mver[] = "MSP Version v0.1.9.rc";
-static char gitcommit[] = "2019-10-22 09:26:19 2dc0dd1";
+static char mver[] = "MSP Version v0.1.10.rc";
+static char gitcommit[] = "2019-12-03 14:08:51 35139c7";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
