@@ -62656,7 +62656,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     uint32_t usbfolw=0;
     int cntRecv=0, usCost=0, bufsize=0;
     int bufmax=0, idx=0, printlog=0, idlecnt=0;
-    CFLOAT throughput=0.0;
+    CFLOAT throughput=0.0, thrimgsize=0.0, thrtimecost=0.0;;
     struct timespec tstart, tend;
     struct aspMetaData_s meta, *pmeta=0;
     int len=0, pieRet=0, ret=0, err=0;
@@ -65266,7 +65266,13 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     print_f(rs->plogs, sp, rs->logs);
 
                     sprintf_f(rs->logs, "__USB_DEV_ EXTRA_META[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
-                    dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
+                    thrimgsize += (CFLOAT)acusz;
+                    ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
+                    thrtimecost = (CFLOAT)ret - thrtimecost;
+                    throughput = thrimgsize / thrtimecost;
+                    sprintf_f(rs->logs, "__USB_DEV_ THROUGHPUT[%.2lf][%s][%s]__", throughput, sp, puhsinfo->ushostname); 
+                    ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
+                    thrtimecost = (CFLOAT)ret;
 
                     break;
                 } else {
@@ -65388,6 +65394,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             sprintf_f(rs->logs, "conti read start ret: %d \n", ptret);
             print_f(rs->plogs, sp, rs->logs);
 
+            sprintf_f(rs->logs, "__USB_DEV_ SCAN_START[%s][%s]__", sp, puhsinfo->ushostname); 
+            ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
+            thrtimecost = (CFLOAT)ret;
+                    
             puhsinfo->ushostbtrktot = 0;
             puhsinfo->ushostbtrkcms = 0;
             puhsinfo->ushostbtrkbuffed = 0;
@@ -65872,6 +65882,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     print_f(rs->plogs, sp, rs->logs);
 
                     sprintf_f(rs->logs, "__USB_DEV_ IMG_SIZE[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
+                    thrimgsize = acusz;
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                     
                     break;
@@ -66506,8 +66517,8 @@ static int p10(struct procRes_s *rs)
 }
 
 #define LOG_FLASH  (0)
-#define LOG_P11_EN (1)
-#define DBG_27_EPOL (1)
+#define LOG_P11_EN (0)
+#define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (1)
 #if ONLY_ONE_USB
@@ -69078,6 +69089,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                     sprintf_f(rs->logs, "__USB_GET  CBW_[%.2x][%.2x][%.2x]__", ptrecv[15], ptrecv[16], ptrecv[17]); 
                     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
+
+                    thrtimeconsu = tmCost;
+                    thrtimeconsu = thrtimeconsu - thrtimebegin;
+                    throughput = thrdatasize / thrtimeconsu;
+                    sprintf_f(rs->logs, "__USB_TO_PC THROUGHPUT_(%.2lf / %.2lf = %.3lf_MB)__", thrdatasize, thrtimeconsu, throughput); 
+                    dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
+                    
                     thrtimebegin = tmCost;
                     
                     #if LOG_FLASH /* should close */
@@ -70283,7 +70301,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rs->plogs, "P11", rs->logs);
                                     
                                     act = ucbwfile->ASIC_sel;
-                                                                        
+
                                     switch (act) {
                                     case 0: /* primary */
                                         sprintf(syscmd11, "/root/module/romPri.sh");
@@ -73518,11 +73536,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x](Page_%d_size:%d_bytes)__", csw[10], csw[11], csw[12], pagecnt++, acusz); 
                 tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                 thrdatasize = acusz;
+                
+                /*
                 thrtimeconsu = tmCost;
                 thrtimeconsu = thrtimeconsu - thrtimebegin;
                 throughput = thrdatasize / thrtimeconsu;
                 sprintf_f(rs->logs, "__USB_TO_PC THROUGHPUT_(%.2lf / %.2lf = %.3lf_MB)__", thrdatasize, thrtimeconsu, throughput); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
+                */
 
                 sprintf_f(rs->logs, "[DV] 0x12 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
                 print_f(rs->plogs, "P11", rs->logs);
@@ -74148,7 +74169,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     if (filesz) {
                         csw[12] = 0x40;//seqtx;
                     }
-                    else if ((lenflh == 1) || (lenflh == 2)) {
+                    else if ((lenflh == 1) || (lenflh == 2) || (lenflh == 3) || (lenflh == 4)) {
                         err = memcmp(msgret, elfhead, 4);
                         if (!err) {
                             csw[12] = 0;
@@ -74207,19 +74228,39 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
 
                             if (!csw[12]) {
-                                if (lenflh == 1) {
+                                switch (lenflh) {
+                                case 1:
                                     sprintf(syscmd11, "cp /root/scaner/id_00001.bin /root/MSP_rel.bin");
                                     ret = doSystemCmd(syscmd11);
                                     
                                     sprintf(syscmd11, "chmod 777 /root/MSP_rel.bin");
                                     ret = doSystemCmd(syscmd11);
-
-                                } else {
+                                    break;
+                                case 2:
                                     sprintf(syscmd11, "cp /lib/modules/4.4.68/kernel/drivers/usb/class/usblp.ko /lib/modules/4.4.68/kernel/drivers/usb/class/usblp_old.ko");
                                     ret = doSystemCmd(syscmd11);
                                     
                                     sprintf(syscmd11, "cp /root/scaner/id_00002.bin /lib/modules/4.4.68/kernel/drivers/usb/class/usblp.ko");
                                     ret = doSystemCmd(syscmd11);
+                                    break;
+                                case 3:
+                                    sprintf(syscmd11, "cp /lib/modules/4.4.68/kernel/drivers/usb/gadget/legacy/g_printer.ko /lib/modules/4.4.68/kernel/drivers/usb/gadget/legacy/g_printer_old.ko");
+                                    ret = doSystemCmd(syscmd11);
+                                    
+                                    sprintf(syscmd11, "cp /root/scaner/id_00003.bin /lib/modules/4.4.68/kernel/drivers/usb/gadget/legacy/g_printer.ko");
+                                    ret = doSystemCmd(syscmd11);
+                                    break;
+                                case 4:
+                                    sprintf(syscmd11, "cp /lib/modules/4.4.68/kernel/drivers/usb/gadget/function/usb_f_printer.ko /lib/modules/4.4.68/kernel/drivers/usb/gadget/function/usb_f_printer_old.ko");
+                                    ret = doSystemCmd(syscmd11);
+                                    
+                                    sprintf(syscmd11, "cp /root/scaner/id_00004.bin /lib/modules/4.4.68/kernel/drivers/usb/gadget/function/usb_f_printer.ko");
+                                    ret = doSystemCmd(syscmd11);
+                                    break;
+                                default:
+                                    sprintf_f(rs->logs, "[DVB] error!!! not such id: %d\n", lenflh);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    break;
                                 }
 
                                 sync();
