@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (0)
+#define GHP_EN (1)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -87,7 +87,7 @@ static char genssid[128];
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (3200) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (500) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -4925,7 +4925,7 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
 {
     int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
     float resH=0, resV=0, ratio=39.27, fval=0;
-    uint32_t cmpl=0xffffffff;
+    //uint32_t cmpl=0xffffffff;
 
     if (!w) return -1;
     if (!h) return -2;
@@ -4973,8 +4973,9 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     ph->aspbhRawoffset = rawoffset; // header size include color table 54 + 1024 = 1078
     ph->aspbiSize = 40;
     ph->aspbiWidth = w; // W
-    cmpl = (cmpl - h) + 1;
-    ph->aspbiHeight = cmpl; // H
+    //cmpl = (cmpl - h) + 1;
+    //ph->aspbiHeight = cmpl; // H
+    ph->aspbiHeight = h; // H
     ph->aspbiCPP = 1;
     //ph->aspbiCPP = 0;
     ph->aspbiCPP |= clr << 16;  // 8 or 24
@@ -8523,7 +8524,7 @@ static int srhRotRectTran(struct procRes_s *rs, CFLOAT *pfound, struct aspRectOb
 #define LOG_SEARCHRECT_EN (0)
 static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *pRect, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx, CFLOAT wcnt, CFLOAT hcnt)
 {
-#define DRAW_COLOR (1)
+#define DRAW_COLOR (0)
 #define COLOR_RANGE (15)
     struct aspRectObj *pRectsrh=0;
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
@@ -66528,6 +66529,7 @@ static int p10(struct procRes_s *rs)
 #endif
 #define OP_WRITE_FILE (0x0b)
 #define DUMP_JPG_ROT (0)
+#define CROP_TEST_EN (1)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -66611,12 +66613,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct usbFileidContent_s *pubfidc=0, *pubfidnxt=0;
     int bmplen=0, cpylen=0, rawlen=0, rotlen=0, rotlast=0, bdeg=0, bret=0, blen=0, colr=0, bmpw=0, bmph=0, bdpi=0, bdpp=0, bhlen=0;
     char *bmpbuff=0, *bmpbufc=0, *bmpcpy=0, *bmpcolrtb=0, *ph=0, *bmprot=0;
-    char *jpgout=0;
+    char *jpgout=0, *exmtaout=0;
     unsigned char *jpgrlt=0;
     int jpgetW=0, jpgetH=0, jpgLen=0, cntsent=0;
     struct sdParseBuff_s *pabuff=0;
     struct bitmapHeader_s *bheader = 0;
     struct timespec jpgS, jpgE;
+    int cutcnt=0;
     
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
@@ -70596,7 +70599,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     else {
                         sprintf_f(rs->logs, "[DV] Error!!! unknown data dump size: %d \n", recvsz);
                         print_f(rs->plogs, "P11", rs->logs);
-
+                        
+                        cmd = 0;
+                        opc = 0;
+                        dat = 0;
+                        
                         shmem_dump(ptrecv, recvsz);
                     }
                 }
@@ -71765,7 +71772,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 cpylen += lens;
                                 bmpbufc = bmpcpy + lens;
                             }
-                            #endif
+                            #endif //#if GHP_EN
                             
                             upas = pinfcur->ushostpause;
                             ursm = pinfcur->ushostresume;
@@ -72501,6 +72508,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         bmpbuff = jpgout;
                                     }
 
+                                    exmtaout = addrd;
+
                                     blen = sqrt(bmpw*bmpw + bmph*bmph);
                                     val = ((blen * colr + 31) / 32) * 4;
                                     val = val * blen;
@@ -72513,6 +72522,27 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         sprintf_f(rs->logs, "[BMP] allocate rot buff size: %d succeed!!! \n", val);
                                         print_f(rs->plogs, "P11", rs->logs);
                                     }
+                                    
+                                    #if CROP_TEST_EN
+                                    cutcnt = 3;
+
+                                    while (cutcnt) {
+
+                                    if (cutcnt < 3) {
+                                        recvsz = 0;
+                                        
+                                        while (recvsz <= 0) {
+                                            recvsz = read(usbfd, ptrecv, 31);
+
+                                            usleep(1000);
+                                        }
+
+                                        sprintf_f(rs->logs, " get cbw: [%.2x][%.2x][%.2x] recvsz: %d \n", ptrecv[15], ptrecv[16], ptrecv[17], recvsz); 
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        shmem_dump(ptrecv, recvsz);
+                                    }
+                                    #endif //#if CROP_TEST_EN
 
                                     //msync(bmpcolrtb, 1078, MS_SYNC);
                                     //memcpy(bmpbuff, bmpcolrtb, bhlen);
@@ -72522,6 +72552,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //bdeg = 900;
                                     //bdeg = 450;
 
+                                    addrd = exmtaout;
+                                    
                                     #if DUMP_JPG_ROT
                                     for (bdeg = 0; bdeg <= 360000; bdeg += 5000) {
                                     //bdeg = 180000;
@@ -72721,6 +72753,63 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     #if DUMP_JPG_ROT
                                     }
                                     #endif
+
+                                    #if CROP_TEST_EN
+                                    
+                                    cutcnt --;
+                                    
+                                    if (cutcnt) { 
+                                    sprintf_f(rs->logs, "[DV] cutcnt: %d, cswerr: 0x%.2x !!!\n", cutcnt, cswerr); 
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    /*
+                                    if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
+                                        if ((waitCylen) || (pagerst)) {
+                                            sprintf_f(rs->logs, "[DV] Warnning!!!waitCylen || pagerst != 0 and cswerr: 0x%.2x, %d : %d !!!\n", cswerr, waitCylen, pagerst); 
+                                            print_f(rs->plogs, "P11", rs->logs);
+
+                                            csw[11] = 0;
+                                            csw[12] = 0;
+                                        } else {
+                                            csw[11] = 0;
+                                            csw[12] = cswerr;
+                                        }
+                                    } else {
+
+                                        csw[11] = 0;
+                                        csw[12] = 0;
+                                    }
+                                    */
+
+                                    csw[11] = 0;
+                                    csw[12] = 0;
+
+                                    wrtsz = 0;
+                                    retry = 0;
+
+                                    while (1) {
+                                        wrtsz = usbc_write(usbfd, csw, 13);
+
+                                        #if DBG_27_DV
+                                        sprintf_f(rs->logs, "[DV] cmd: 0x%.2x usb TX size: %d \n====================\n", cmd, wrtsz);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+
+                                        if (wrtsz > 0) {
+                                            break;
+                                        }
+                                        retry++;
+                                        if (retry > 32768) {
+                                            break;
+                                        }
+                                    }
+
+                                    shmem_dump(csw, wrtsz);
+                                    }
+
+                                    }
+
+                                    #endif // #if CROP_TEST_EN
                                 }
                                 else {
                                     if (rawlen > USB_BUF_SIZE) {
@@ -72818,7 +72907,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             
                             sendsz = lens;                            
                         } else 
-                        #endif
+                        #endif //#if GHP_EN
                         {
 
                             #if USB_RECVLEN_ZERO_HANDLE
