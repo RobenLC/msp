@@ -1128,15 +1128,31 @@ struct machineCtrl_s{
     char mshmem[SPI_TRUNK_SZ];
 };
 
-struct intMbs_s{
+struct intMbs16_s{
+    union {
+        uint16_t n;
+        uint8_t d[2];
+    };
+};
+
+struct intMbs32_s{
     union {
         uint32_t n;
         uint8_t d[4];
     };
 };
 
+struct t_BKArea {
+    struct intMbs16_s	bknax;
+    struct intMbs16_s	bknaY;
+    struct intMbs16_s	bknaw;
+    struct intMbs16_s	bknah;
+    uint8_t		bknaside;
+    uint8_t		bknalayer;
+};
+
 struct aspMetaData_s{
-  struct intMbs_s     FUNC_BITS;             // byte[4] 
+  struct intMbs32_s     FUNC_BITS;             // byte[4] 
   unsigned char  ASP_MAGIC[2];            //byte[6] "0x20 0x14"
   
   /* ASPMETA_FUNC_CONF = 0x1 */       /* 0b00000001 */
@@ -1182,52 +1198,52 @@ struct aspMetaData_s{
   unsigned char  OP_FUNC_22;               //0x8a
   unsigned char  SKIP_LENGTH;              //0x8b
   unsigned char  OP_RESERVE[17];          // byte[64]
-  
-  /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */
-  struct intMbs_s CROP_POS_1;        //byte[68]
-  struct intMbs_s CROP_POS_2;        //byte[72]
-  struct intMbs_s CROP_POS_3;        //byte[76]
-  struct intMbs_s CROP_POS_4;        //byte[80]
-  struct intMbs_s CROP_POS_5;        //byte[84]
-  struct intMbs_s CROP_POS_6;        //byte[88]
-  struct intMbs_s CROP_POS_7;        //byte[92]
-  struct intMbs_s CROP_POS_8;        //byte[96]
-  struct intMbs_s CROP_POS_9;        //byte[100]
-  struct intMbs_s CROP_POS_10;        //byte[104]
-  struct intMbs_s CROP_POS_11;        //byte[108]
-  struct intMbs_s CROP_POS_12;        //byte[112]
-  struct intMbs_s CROP_POS_13;        //byte[116]
-  struct intMbs_s CROP_POS_14;        //byte[120]
-  struct intMbs_s CROP_POS_15;        //byte[124]
-  struct intMbs_s CROP_POS_16;        //byte[128]
-  struct intMbs_s CROP_POS_17;        //byte[132]
-  struct intMbs_s CROP_POS_18;        //byte[136]
-  unsigned char  Start_Pos_1st;         //byte[137]
-  unsigned char  Start_Pos_2nd;        //byte[138]
-  unsigned char  End_Pos_All;            //byte[139]
-  unsigned char  Start_Pos_RSV;        //byte[140], not using for now
-  unsigned char  YLine_Gap;               //byte[141]
-  unsigned char  Start_YLine_No;       //byte[142]
-  unsigned short YLines_Recorded;     //byte[144] 16bits
-  unsigned char CROP_RESERVE[16]; //byte[160]
 
-  /* ASPMETA_FUNC_IMGLEN = 0x4 */     /* 0b00000100 */
-  struct intMbs_s SCAN_IMAGE_LEN;     //byte[164]
+  /* bank note area */
+  unsigned char  BK_RESERVE1[64];	//byte[128]
+  struct intMbs16_s BKNA_NUM;		//byte[130] 16bits
+  struct t_BKArea  BKNA_ITEM[5];	//byte[180] 
+  unsigned char  BK_RESERVE2[8];	//byte[188]
   
-  /* ASPMETA_FUNC_SDFREE = 0x8 */     /* 0b00001000 */
-  struct intMbs_s  FREE_SECTOR_ADD;   //byte[168]
-  struct intMbs_s  FREE_SECTOR_LEN;   //byte[172]
+  /* ASPMETA_FUNC_CROP = 0x2 */       /* 0b00000010 */ /* not use in usbscan */
+  struct intMbs32_s CROP_POS_1;        //byte[192]
+  struct intMbs32_s CROP_POS_2;        //byte[196]
+  struct intMbs32_s CROP_POS_3;        //byte[200]
+  struct intMbs32_s CROP_POS_4;        //byte[204]
+  struct intMbs32_s CROP_POS_5;        //byte[208]
+  struct intMbs32_s CROP_POS_6;        //byte[212]
+  struct intMbs32_s CROP_POS_7;        //byte[216]
+  struct intMbs32_s CROP_POS_8;        //byte[220]
+  struct intMbs32_s CROP_POS_9;        //byte[224]
+  struct intMbs32_s CROP_POS_10;        //byte[228]
+  struct intMbs32_s CROP_POS_11;        //byte[232]
+  struct intMbs32_s CROP_POS_12;        //byte[236]
+  struct intMbs32_s CROP_POS_13;        //byte[240]
+  struct intMbs32_s CROP_POS_14;        //byte[244]
+  struct intMbs32_s CROP_POS_15;        //byte[248]
+  struct intMbs32_s CROP_POS_16;        //byte[252]
+  struct intMbs32_s CROP_POS_17;        //byte[256]
+  struct intMbs32_s CROP_POS_18;        //byte[260]
+  unsigned char  Start_Pos_1st;         //byte[261]
+  unsigned char  Start_Pos_2nd;        //byte[262]
+  unsigned char  End_Pos_All;            //byte[263]
+  unsigned char  Start_Pos_RSV;        //byte[264], not using for now
+  unsigned char  YLine_Gap;               //byte[265]
+  unsigned char  Start_YLine_No;       //byte[266]
+  unsigned short YLines_Recorded;     //byte[268] 16bits
   
-  /* ASPMETA_FUNC_SDUSED = 0x16 */    /* 0b00010000 */
-  struct intMbs_s  USED_SECTOR_ADD;   //byte[176]
-  struct intMbs_s  USED_SECTOR_LEN;   //byte[180]
+  struct intMbs32_s SCAN_IMAGE_LEN;     //byte[272]
   
-  /* ASPMETA_FUNC_SDRD = 0x32 */      /* 0b00100000 */
-  /* ASPMETA_FUNC_SDWT = 0x64 */      /* 0b01000000 */
-  struct intMbs_s  SD_RW_SECTOR_ADD;  //byte[184]
-  struct intMbs_s  SD_RW_SECTOR_LEN;  //byte[188]
+  struct intMbs32_s  FREE_SECTOR_ADD;   //byte[276]
+  struct intMbs32_s  FREE_SECTOR_LEN;   //byte[280]
   
-  unsigned char available[324];
+  struct intMbs32_s  USED_SECTOR_ADD;   //byte[284]
+  struct intMbs32_s  USED_SECTOR_LEN;   //byte[288]
+  
+  struct intMbs32_s  SD_RW_SECTOR_ADD;  //byte[292]
+  struct intMbs32_s  SD_RW_SECTOR_LEN;  //byte[296]
+  
+  unsigned char available[216];
 };
 
 struct aspMetaDataviaUSB_s{
@@ -1239,24 +1255,24 @@ struct aspMetaDataviaUSB_s{
   unsigned char PRI_O_SEC;                 // byte[16]
   unsigned char  MCROP_RESERVE[48];   // byte[64]
   
-  struct intMbs_s CROP_POS_1;        //byte[68]
-  struct intMbs_s CROP_POS_2;        //byte[72]
-  struct intMbs_s CROP_POS_3;        //byte[76]
-  struct intMbs_s CROP_POS_4;        //byte[80]
-  struct intMbs_s CROP_POS_5;        //byte[84]
-  struct intMbs_s CROP_POS_6;        //byte[88]
-  struct intMbs_s CROP_POS_7;        //byte[92]
-  struct intMbs_s CROP_POS_8;        //byte[96]
-  struct intMbs_s CROP_POS_9;        //byte[100]
-  struct intMbs_s CROP_POS_10;        //byte[104]
-  struct intMbs_s CROP_POS_11;        //byte[108]
-  struct intMbs_s CROP_POS_12;        //byte[112]
-  struct intMbs_s CROP_POS_13;        //byte[116]
-  struct intMbs_s CROP_POS_14;        //byte[120]
-  struct intMbs_s CROP_POS_15;        //byte[124]
-  struct intMbs_s CROP_POS_16;        //byte[128]
-  struct intMbs_s CROP_POS_17;        //byte[132]
-  struct intMbs_s CROP_POS_18;        //byte[136]
+  struct intMbs32_s CROP_POS_1;        //byte[68]
+  struct intMbs32_s CROP_POS_2;        //byte[72]
+  struct intMbs32_s CROP_POS_3;        //byte[76]
+  struct intMbs32_s CROP_POS_4;        //byte[80]
+  struct intMbs32_s CROP_POS_5;        //byte[84]
+  struct intMbs32_s CROP_POS_6;        //byte[88]
+  struct intMbs32_s CROP_POS_7;        //byte[92]
+  struct intMbs32_s CROP_POS_8;        //byte[96]
+  struct intMbs32_s CROP_POS_9;        //byte[100]
+  struct intMbs32_s CROP_POS_10;        //byte[104]
+  struct intMbs32_s CROP_POS_11;        //byte[108]
+  struct intMbs32_s CROP_POS_12;        //byte[112]
+  struct intMbs32_s CROP_POS_13;        //byte[116]
+  struct intMbs32_s CROP_POS_14;        //byte[120]
+  struct intMbs32_s CROP_POS_15;        //byte[124]
+  struct intMbs32_s CROP_POS_16;        //byte[128]
+  struct intMbs32_s CROP_POS_17;        //byte[132]
+  struct intMbs32_s CROP_POS_18;        //byte[136]
   unsigned char  Start_Pos_1st;         //byte[137]
   unsigned char  Start_Pos_2nd;        //byte[138]
   unsigned char  End_Pos_All;            //byte[139]
@@ -1264,10 +1280,10 @@ struct aspMetaDataviaUSB_s{
   unsigned char  YLine_Gap;               //byte[141]
   unsigned char  Start_YLine_No;       //byte[142]
   unsigned short YLines_Recorded;     //byte[144] 16bits
-  struct intMbs_s CROP_POS_F1;        //byte[148]
-  struct intMbs_s CROP_POS_F2;        //byte[152]
-  struct intMbs_s CROP_POS_F3;        //byte[156]
-  struct intMbs_s CROP_POS_F4;        //byte[160]
+  struct intMbs32_s CROP_POS_F1;        //byte[148]
+  struct intMbs32_s CROP_POS_F2;        //byte[152]
+  struct intMbs32_s CROP_POS_F3;        //byte[156]
+  struct intMbs32_s CROP_POS_F4;        //byte[160]
   unsigned char EPOINT_RESERVE1[64];         //byte[224]
   unsigned char ASP_MAGIC_YL[2];    //byte[226]
   unsigned short MPIONT_LEN;           //byte[228] 16bits  
@@ -1402,9 +1418,9 @@ struct bitmapRotate_s {
 };
 
 struct usbCBWopc_s{
-		struct intMbs_s 	opcID; 			// 0x55534243 
-		struct intMbs_s 	opcTag;			// sent by host , and device will send it back in CSW
-		struct intMbs_s 	opcDataLength;	// data length between CBW and CSW , 0 = no data 
+		struct intMbs32_s 	opcID; 			// 0x55534243 
+		struct intMbs32_s 	opcTag;			// sent by host , and device will send it back in CSW
+		struct intMbs32_s 	opcDataLength;	// data length between CBW and CSW , 0 = no data 
 		uint8_t	              opcreserved0[3];	// 3 byte reserved
 		uint8_t 	              opcType;		// refer to section 2.1
 		uint8_t	              opcOpcode;		// opcode 	, refer to section 4
@@ -1414,12 +1430,12 @@ struct usbCBWopc_s{
 };
 
 struct usbCBWpram_s{
-		struct intMbs_s 	pramID; 			// 0x55534243 
-		struct intMbs_s 	pramTag;			// sent by host , and device will send it back in CSW
-		struct intMbs_s 	pramDataLength;	// data length between CBW and CSW , 0 = no data 
+		struct intMbs32_s 	pramID; 			// 0x55534243 
+		struct intMbs32_s 	pramTag;			// sent by host , and device will send it back in CSW
+		struct intMbs32_s 	pramDataLength;	// data length between CBW and CSW , 0 = no data 
 		uint8_t	              pramreserved0[3];	// 3 byte reserved
 		uint8_t 	              pramType;		// 0x00 ~ 0x0F = Programmer OPCode
-		struct intMbs_s	pramAddress;		// forward to MCU
+		struct intMbs32_s	pramAddress;		// forward to MCU
 		uint8_t	              pramreserved1[8]; 	// forward to MCU
 		uint8_t	              ASIC_sel; 	             //  0=Primary ASIC , 1=Secondary ASIC
 		uint8_t	              cs; 	                           // forward to MCU
@@ -1427,14 +1443,14 @@ struct usbCBWpram_s{
 };
 
 struct usbCBWfile_s{
-		struct intMbs_s 	pramID; 			// 0x55534243 
-		struct intMbs_s 	pramTag;			// sent by host , and device will send it back in CSW
-		struct intMbs_s 	pramDataLength;	// data length between CBW and CSW , 0 = no data 
+		struct intMbs32_s 	pramID; 			// 0x55534243 
+		struct intMbs32_s 	pramTag;			// sent by host , and device will send it back in CSW
+		struct intMbs32_s 	pramDataLength;	// data length between CBW and CSW , 0 = no data 
 		uint8_t	              pramFileId[2];	       // file id for linux access
 		uint8_t	              pramWrtorRd[1];	       // write or read access to fileid 1=read 2=write
 		uint8_t 	              pramType;		      // 0x0B = file access OPCode
-		struct intMbs_s	pramAddress;		// address to MCU
-		struct intMbs_s	pramFilesize;	       // file size for file id
+		struct intMbs32_s	pramAddress;		// address to MCU
+		struct intMbs32_s	pramFilesize;	       // file size for file id
 		uint8_t	              pramreserved1[4]; 	// forward to MCU
 		uint8_t	              ASIC_sel; 	             //  0=Primary ASIC , 1=Secondary ASIC
 		uint8_t	              cs; 	                           // forward to MCU
@@ -1442,9 +1458,9 @@ struct usbCBWfile_s{
 };
 
 struct usbCSWfile_s{
-		struct intMbs_s 	pramID; 			// 0x55534243 
-		struct intMbs_s 	pramTag;			// sent by host , and device will send it back in CSW
-		struct intMbs_s 	pramFilesize;	      // file size of current file id
+		struct intMbs32_s 	pramID; 			// 0x55534243 
+		struct intMbs32_s 	pramTag;			// sent by host , and device will send it back in CSW
+		struct intMbs32_s 	pramFilesize;	      // file size of current file id
 		uint8_t	              pramStatus;		      // status of file id access
 };
 
@@ -2766,7 +2782,48 @@ static int bin2hex(char *dst, char *src, int size)
     return 0;
 }
 
-static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
+static uint16_t lsb2Msb16(struct intMbs16_s *msb, uint16_t lsb)
+{
+    uint16_t org=0;
+    int i=2;
+
+    org = lsb;
+
+    while (i) {
+        i--;
+        msb->d[i] = lsb & 0xff;
+
+        //printf("[%d] :0x%.2x -> 0x%.2x \n", i, lsb & 0xff, msb->d[i]);
+        
+        lsb = lsb >> 8;
+    }
+
+    //printf("lsb2Msb16() lsb:0x%.8x -> msb:0x%.8x \n", org, msb->n);
+
+    return msb->n;
+}
+
+static uint16_t msb2lsb16(struct intMbs16_s *msb)
+{
+    uint16_t lsb=0;
+    int i=0;
+
+    while (i < 2) {
+        lsb = lsb << 8;
+        
+        lsb |= msb->d[i];
+        
+        //printf("[%d] :0x%.2x <- 0x%.2x \n", i, lsb & 0xff, msb->d[i]);
+        
+        i++;
+    }
+
+    //printf("msb2lsb16() msb:0x%.8x -> lsb:0x%.8x \n", msb->n, lsb);
+    
+    return lsb;
+}
+
+static uint32_t lsb2Msb32(struct intMbs32_s *msb, uint32_t lsb)
 {
     uint32_t org=0;
     int i=4;
@@ -2782,12 +2839,12 @@ static uint32_t lsb2Msb(struct intMbs_s *msb, uint32_t lsb)
         lsb = lsb >> 8;
     }
 
-    //printf("lsb2Msb() lsb:0x%.8x -> msb:0x%.8x \n", org, msb->n);
+    //printf("lsb2Msb32() lsb:0x%.8x -> msb:0x%.8x \n", org, msb->n);
 
     return msb->n;
 }
 
-static uint32_t msb2lsb(struct intMbs_s *msb)
+static uint32_t msb2lsb32(struct intMbs32_s *msb)
 {
     uint32_t lsb=0;
     int i=0;
@@ -2802,7 +2859,7 @@ static uint32_t msb2lsb(struct intMbs_s *msb)
         i++;
     }
 
-    //printf("msb2lsb() msb:0x%.8x -> lsb:0x%.8x \n", msb->n, lsb);
+    //printf("msb2lsb32() msb:0x%.8x -> lsb:0x%.8x \n", msb->n, lsb);
     
     return lsb;
 }
@@ -5105,41 +5162,41 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
     }
     #endif
 
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_1), msb2lsb(&pmetausb->CROP_POS_1) >> 16, msb2lsb(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_1), msb2lsb32(&pmetausb->CROP_POS_1) >> 16, msb2lsb32(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_2, msb2lsb(&pmetausb->CROP_POS_2) >> 16, msb2lsb(&pmetausb->CROP_POS_2) & 0xffff);                      //byte[72]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_2, msb2lsb32(&pmetausb->CROP_POS_2) >> 16, msb2lsb32(&pmetausb->CROP_POS_2) & 0xffff);                      //byte[72]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_3, msb2lsb(&pmetausb->CROP_POS_3) >> 16, msb2lsb(&pmetausb->CROP_POS_3) & 0xffff);                      //byte[76]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_3, msb2lsb32(&pmetausb->CROP_POS_3) >> 16, msb2lsb32(&pmetausb->CROP_POS_3) & 0xffff);                      //byte[76]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_4, msb2lsb(&pmetausb->CROP_POS_4) >> 16, msb2lsb(&pmetausb->CROP_POS_4) & 0xffff);                      //byte[80]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_4, msb2lsb32(&pmetausb->CROP_POS_4) >> 16, msb2lsb32(&pmetausb->CROP_POS_4) & 0xffff);                      //byte[80]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_05: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_5, msb2lsb(&pmetausb->CROP_POS_5) >> 16, msb2lsb(&pmetausb->CROP_POS_5) & 0xffff);                      //byte[84]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_05: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_5, msb2lsb32(&pmetausb->CROP_POS_5) >> 16, msb2lsb32(&pmetausb->CROP_POS_5) & 0xffff);                      //byte[84]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_06: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_6, msb2lsb(&pmetausb->CROP_POS_6) >> 16, msb2lsb(&pmetausb->CROP_POS_6) & 0xffff);                      //byte[88]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_06: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_6, msb2lsb32(&pmetausb->CROP_POS_6) >> 16, msb2lsb32(&pmetausb->CROP_POS_6) & 0xffff);                      //byte[88]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_07: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_7, msb2lsb(&pmetausb->CROP_POS_7) >> 16, msb2lsb(&pmetausb->CROP_POS_7) & 0xffff);                      //byte[92]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_07: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_7, msb2lsb32(&pmetausb->CROP_POS_7) >> 16, msb2lsb32(&pmetausb->CROP_POS_7) & 0xffff);                      //byte[92]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_08: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_8, msb2lsb(&pmetausb->CROP_POS_8) >> 16, msb2lsb(&pmetausb->CROP_POS_8) & 0xffff);                      //byte[96]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_08: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_8, msb2lsb32(&pmetausb->CROP_POS_8) >> 16, msb2lsb32(&pmetausb->CROP_POS_8) & 0xffff);                      //byte[96]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_09: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_9, msb2lsb(&pmetausb->CROP_POS_9) >> 16, msb2lsb(&pmetausb->CROP_POS_9) & 0xffff);                      //byte[100]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_09: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_9, msb2lsb32(&pmetausb->CROP_POS_9) >> 16, msb2lsb32(&pmetausb->CROP_POS_9) & 0xffff);                      //byte[100]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_10: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_10, msb2lsb(&pmetausb->CROP_POS_10) >> 16, msb2lsb(&pmetausb->CROP_POS_10) & 0xffff);                      //byte[104]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_10: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_10, msb2lsb32(&pmetausb->CROP_POS_10) >> 16, msb2lsb32(&pmetausb->CROP_POS_10) & 0xffff);                      //byte[104]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_11: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_11, msb2lsb(&pmetausb->CROP_POS_11) >> 16, msb2lsb(&pmetausb->CROP_POS_11) & 0xffff);                      //byte[108]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_11: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_11, msb2lsb32(&pmetausb->CROP_POS_11) >> 16, msb2lsb32(&pmetausb->CROP_POS_11) & 0xffff);                      //byte[108]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_12: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_12, msb2lsb(&pmetausb->CROP_POS_12) >> 16, msb2lsb(&pmetausb->CROP_POS_12) & 0xffff);                      //byte[112]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_12: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_12, msb2lsb32(&pmetausb->CROP_POS_12) >> 16, msb2lsb32(&pmetausb->CROP_POS_12) & 0xffff);                      //byte[112]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_13: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_13, msb2lsb(&pmetausb->CROP_POS_13) >> 16, msb2lsb(&pmetausb->CROP_POS_13) & 0xffff);                      //byte[116]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_13: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_13, msb2lsb32(&pmetausb->CROP_POS_13) >> 16, msb2lsb32(&pmetausb->CROP_POS_13) & 0xffff);                      //byte[116]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_14: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_14, msb2lsb(&pmetausb->CROP_POS_14) >> 16, msb2lsb(&pmetausb->CROP_POS_14) & 0xffff);                      //byte[120]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_14: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_14, msb2lsb32(&pmetausb->CROP_POS_14) >> 16, msb2lsb32(&pmetausb->CROP_POS_14) & 0xffff);                      //byte[120]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_15: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_15, msb2lsb(&pmetausb->CROP_POS_15) >> 16, msb2lsb(&pmetausb->CROP_POS_15) & 0xffff);                      //byte[124]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_15: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_15, msb2lsb32(&pmetausb->CROP_POS_15) >> 16, msb2lsb32(&pmetausb->CROP_POS_15) & 0xffff);                      //byte[124]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_16: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_16, msb2lsb(&pmetausb->CROP_POS_16) >> 16, msb2lsb(&pmetausb->CROP_POS_16) & 0xffff);                      //byte[128]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_16: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_16, msb2lsb32(&pmetausb->CROP_POS_16) >> 16, msb2lsb32(&pmetausb->CROP_POS_16) & 0xffff);                      //byte[128]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_17: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_17, msb2lsb(&pmetausb->CROP_POS_17) >> 16, msb2lsb(&pmetausb->CROP_POS_17) & 0xffff);                      //byte[132]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_17: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_17, msb2lsb32(&pmetausb->CROP_POS_17) >> 16, msb2lsb32(&pmetausb->CROP_POS_17) & 0xffff);                      //byte[132]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_18: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_18, msb2lsb(&pmetausb->CROP_POS_18) >> 16, msb2lsb(&pmetausb->CROP_POS_18) & 0xffff);                      //byte[136]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_18: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_18, msb2lsb32(&pmetausb->CROP_POS_18) >> 16, msb2lsb32(&pmetausb->CROP_POS_18) & 0xffff);                      //byte[136]
     print_f(mlogPool, "METAU", mlog);
     sprintf_f(mlog, "(0x%.8x) YLine_Gap: %.d      \n", (uint32_t)&pmetausb->YLine_Gap, pmetausb->YLine_Gap); 
     print_f(mlogPool, "METAU", mlog);
@@ -5149,13 +5206,13 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
     sprintf_f(mlog, "(0x%.8x) YLines_Recorded: %d      \n", (uint32_t)&pmetausb->YLines_Recorded, (pch[0] << 8) | pch[1]); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_F1), msb2lsb(&pmetausb->CROP_POS_F1) >> 16, msb2lsb(&pmetausb->CROP_POS_F1) & 0xffff);                      //byte[148]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_F1), msb2lsb32(&pmetausb->CROP_POS_F1) >> 16, msb2lsb32(&pmetausb->CROP_POS_F1) & 0xffff);                      //byte[148]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F2, msb2lsb(&pmetausb->CROP_POS_F2) >> 16, msb2lsb(&pmetausb->CROP_POS_F2) & 0xffff);                      //byte[152]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F2, msb2lsb32(&pmetausb->CROP_POS_F2) >> 16, msb2lsb32(&pmetausb->CROP_POS_F2) & 0xffff);                      //byte[152]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F3, msb2lsb(&pmetausb->CROP_POS_F3) >> 16, msb2lsb(&pmetausb->CROP_POS_F3) & 0xffff);                      //byte[156]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F3, msb2lsb32(&pmetausb->CROP_POS_F3) >> 16, msb2lsb32(&pmetausb->CROP_POS_F3) & 0xffff);                      //byte[156]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F4, msb2lsb(&pmetausb->CROP_POS_F4) >> 16, msb2lsb(&pmetausb->CROP_POS_F4) & 0xffff);                      //byte[160]
+    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F4, msb2lsb32(&pmetausb->CROP_POS_F4) >> 16, msb2lsb32(&pmetausb->CROP_POS_F4) & 0xffff);                      //byte[160]
     print_f(mlogPool, "METAU", mlog);
     
     sprintf_f(mlog, "(0x%.8x) EPOINT_RESERVE1      \n", (uint32_t)pmetausb->EPOINT_RESERVE1); 
@@ -5180,6 +5237,7 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta)
 {
     char mlog[256];
     char *pch=0;
+    int ix=0, num=0;
     
     msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     sprintf_f(mlog, "********************************************\n");
@@ -5283,45 +5341,46 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta)
         sprintf_f(mlog, "OP_FUNC_21: 0x%.2x      \n",pmeta->OP_FUNC_21);
         print_f(mlogPool, "META", mlog);
     }
-    
+
+    #if 0
     if (funcbits & ASPMETA_FUNC_CROP) {
         sprintf_f(mlog, "__ASPMETA_FUNC_CROP__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_CROP, (funcbits & ASPMETA_FUNC_CROP));
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_01: %d, %d\n", msb2lsb(&pmeta->CROP_POS_1) >> 16, msb2lsb(&pmeta->CROP_POS_1) & 0xffff);                      //byte[68]
+        sprintf_f(mlog, "CROP_POSX_01: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_1) >> 16, msb2lsb32(&pmeta->CROP_POS_1) & 0xffff);                      //byte[68]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_02: %d, %d\n", msb2lsb(&pmeta->CROP_POS_2) >> 16, msb2lsb(&pmeta->CROP_POS_2) & 0xffff);                      //byte[72]
+        sprintf_f(mlog, "CROP_POSX_02: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_2) >> 16, msb2lsb32(&pmeta->CROP_POS_2) & 0xffff);                      //byte[72]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_03: %d, %d\n", msb2lsb(&pmeta->CROP_POS_3) >> 16, msb2lsb(&pmeta->CROP_POS_3) & 0xffff);                      //byte[76]
+        sprintf_f(mlog, "CROP_POSX_03: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_3) >> 16, msb2lsb32(&pmeta->CROP_POS_3) & 0xffff);                      //byte[76]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_04: %d, %d\n", msb2lsb(&pmeta->CROP_POS_4) >> 16, msb2lsb(&pmeta->CROP_POS_4) & 0xffff);                      //byte[80]
+        sprintf_f(mlog, "CROP_POSX_04: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_4) >> 16, msb2lsb32(&pmeta->CROP_POS_4) & 0xffff);                      //byte[80]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_05: %d, %d\n", msb2lsb(&pmeta->CROP_POS_5) >> 16, msb2lsb(&pmeta->CROP_POS_5) & 0xffff);                      //byte[84]
+        sprintf_f(mlog, "CROP_POSX_05: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_5) >> 16, msb2lsb32(&pmeta->CROP_POS_5) & 0xffff);                      //byte[84]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_06: %d, %d\n", msb2lsb(&pmeta->CROP_POS_6) >> 16, msb2lsb(&pmeta->CROP_POS_6) & 0xffff);                      //byte[88]
+        sprintf_f(mlog, "CROP_POSX_06: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_6) >> 16, msb2lsb32(&pmeta->CROP_POS_6) & 0xffff);                      //byte[88]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_07: %d, %d\n", msb2lsb(&pmeta->CROP_POS_7) >> 16, msb2lsb(&pmeta->CROP_POS_7) & 0xffff);                      //byte[92]
+        sprintf_f(mlog, "CROP_POSX_07: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_7) >> 16, msb2lsb32(&pmeta->CROP_POS_7) & 0xffff);                      //byte[92]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_08: %d, %d\n", msb2lsb(&pmeta->CROP_POS_8) >> 16, msb2lsb(&pmeta->CROP_POS_8) & 0xffff);                      //byte[96]
+        sprintf_f(mlog, "CROP_POSX_08: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_8) >> 16, msb2lsb32(&pmeta->CROP_POS_8) & 0xffff);                      //byte[96]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_09: %d, %d\n", msb2lsb(&pmeta->CROP_POS_9) >> 16, msb2lsb(&pmeta->CROP_POS_9) & 0xffff);                      //byte[100]
+        sprintf_f(mlog, "CROP_POSX_09: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_9) >> 16, msb2lsb32(&pmeta->CROP_POS_9) & 0xffff);                      //byte[100]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_10: %d, %d\n", msb2lsb(&pmeta->CROP_POS_10) >> 16, msb2lsb(&pmeta->CROP_POS_10) & 0xffff);                      //byte[104]
+        sprintf_f(mlog, "CROP_POSX_10: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_10) >> 16, msb2lsb32(&pmeta->CROP_POS_10) & 0xffff);                      //byte[104]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_11: %d, %d\n", msb2lsb(&pmeta->CROP_POS_11) >> 16, msb2lsb(&pmeta->CROP_POS_11) & 0xffff);                      //byte[108]
+        sprintf_f(mlog, "CROP_POSX_11: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_11) >> 16, msb2lsb32(&pmeta->CROP_POS_11) & 0xffff);                      //byte[108]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_12: %d, %d\n", msb2lsb(&pmeta->CROP_POS_12) >> 16, msb2lsb(&pmeta->CROP_POS_12) & 0xffff);                      //byte[112]
+        sprintf_f(mlog, "CROP_POSX_12: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_12) >> 16, msb2lsb32(&pmeta->CROP_POS_12) & 0xffff);                      //byte[112]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_13: %d, %d\n", msb2lsb(&pmeta->CROP_POS_13) >> 16, msb2lsb(&pmeta->CROP_POS_13) & 0xffff);                      //byte[116]
+        sprintf_f(mlog, "CROP_POSX_13: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_13) >> 16, msb2lsb32(&pmeta->CROP_POS_13) & 0xffff);                      //byte[116]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_14: %d, %d\n", msb2lsb(&pmeta->CROP_POS_14) >> 16, msb2lsb(&pmeta->CROP_POS_14) & 0xffff);                      //byte[120]
+        sprintf_f(mlog, "CROP_POSX_14: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_14) >> 16, msb2lsb32(&pmeta->CROP_POS_14) & 0xffff);                      //byte[120]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_15: %d, %d\n", msb2lsb(&pmeta->CROP_POS_15) >> 16, msb2lsb(&pmeta->CROP_POS_15) & 0xffff);                      //byte[124]
+        sprintf_f(mlog, "CROP_POSX_15: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_15) >> 16, msb2lsb32(&pmeta->CROP_POS_15) & 0xffff);                      //byte[124]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_16: %d, %d\n", msb2lsb(&pmeta->CROP_POS_16) >> 16, msb2lsb(&pmeta->CROP_POS_16) & 0xffff);                      //byte[128]
+        sprintf_f(mlog, "CROP_POSX_16: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_16) >> 16, msb2lsb32(&pmeta->CROP_POS_16) & 0xffff);                      //byte[128]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_17: %d, %d\n", msb2lsb(&pmeta->CROP_POS_17) >> 16, msb2lsb(&pmeta->CROP_POS_17) & 0xffff);                      //byte[132]
+        sprintf_f(mlog, "CROP_POSX_17: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_17) >> 16, msb2lsb32(&pmeta->CROP_POS_17) & 0xffff);                      //byte[132]
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "CROP_POSX_18: %d, %d\n", msb2lsb(&pmeta->CROP_POS_18) >> 16, msb2lsb(&pmeta->CROP_POS_18) & 0xffff);                      //byte[136]
+        sprintf_f(mlog, "CROP_POSX_18: %d, %d\n", msb2lsb32(&pmeta->CROP_POS_18) >> 16, msb2lsb32(&pmeta->CROP_POS_18) & 0xffff);                      //byte[136]
         print_f(mlogPool, "META", mlog);
         sprintf_f(mlog, "YLine_Gap: %.d      \n",pmeta->YLine_Gap); 
         print_f(mlogPool, "META", mlog);
@@ -5335,45 +5394,72 @@ static int dbgMeta(unsigned int funcbits, struct aspMetaData_s *pmeta)
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
         sprintf_f(mlog, "__ASPMETA_FUNC_IMGLEN__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_IMGLEN, (funcbits & ASPMETA_FUNC_IMGLEN));
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "SCAN_IMAGE_LEN: %d\n", msb2lsb(&pmeta->SCAN_IMAGE_LEN));                      //byte[124]        
+        sprintf_f(mlog, "SCAN_IMAGE_LEN: %d\n", msb2lsb32(&pmeta->SCAN_IMAGE_LEN));                      //byte[124]        
         print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_SDFREE) {      
         sprintf_f(mlog, "__ASPMETA_FUNC_SDFREE__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDFREE, (funcbits & ASPMETA_FUNC_SDFREE));
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "FREE_SECTOR_ADD: %d\n", msb2lsb(&pmeta->FREE_SECTOR_ADD));                      //byte[128]            
+        sprintf_f(mlog, "FREE_SECTOR_ADD: %d\n", msb2lsb32(&pmeta->FREE_SECTOR_ADD));                      //byte[128]            
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "FREE_SECTOR_LEN: %d\n", msb2lsb(&pmeta->FREE_SECTOR_LEN));                      //byte[132]        
+        sprintf_f(mlog, "FREE_SECTOR_LEN: %d\n", msb2lsb32(&pmeta->FREE_SECTOR_LEN));                      //byte[132]        
         print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_SDUSED) {
         sprintf_f(mlog, "__ASPMETA_FUNC_SDUSED__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDUSED, (funcbits & ASPMETA_FUNC_SDUSED));
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "USED_SECTOR_ADD: %d\n", msb2lsb(&pmeta->USED_SECTOR_ADD));                      //byte[136]            
+        sprintf_f(mlog, "USED_SECTOR_ADD: %d\n", msb2lsb32(&pmeta->USED_SECTOR_ADD));                      //byte[136]            
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "USED_SECTOR_LEN: %d\n", msb2lsb(&pmeta->USED_SECTOR_LEN));                      //byte[140]        
+        sprintf_f(mlog, "USED_SECTOR_LEN: %d\n", msb2lsb32(&pmeta->USED_SECTOR_LEN));                      //byte[140]        
         print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_SDRD) {
         sprintf_f(mlog, "__ASPMETA_FUNC_SDRD__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDRD, (funcbits & ASPMETA_FUNC_SDRD));
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[144]            
+        sprintf_f(mlog, "SD_RW_SECTOR_ADD: %d\n", msb2lsb32(&pmeta->SD_RW_SECTOR_ADD));                      //byte[144]            
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[148]        
+        sprintf_f(mlog, "SD_RW_SECTOR_LEN: %d\n", msb2lsb32(&pmeta->SD_RW_SECTOR_LEN));                      //byte[148]        
         print_f(mlogPool, "META", mlog);
     }
 
     if (funcbits & ASPMETA_FUNC_SDWT) {
         sprintf_f(mlog, "__ASPMETA_FUNC_SDWT__(0x%x & 0x%x = 0x%x)\n", funcbits, ASPMETA_FUNC_SDWT, (funcbits & ASPMETA_FUNC_SDWT));
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "SD_RW_SECTOR_ADD: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_ADD));                      //byte[136]            
+        sprintf_f(mlog, "SD_RW_SECTOR_ADD: %d\n", msb2lsb32(&pmeta->SD_RW_SECTOR_ADD));                      //byte[136]            
         print_f(mlogPool, "META", mlog);
-        sprintf_f(mlog, "SD_RW_SECTOR_LEN: %d\n", msb2lsb(&pmeta->SD_RW_SECTOR_LEN));                      //byte[140]        
+        sprintf_f(mlog, "SD_RW_SECTOR_LEN: %d\n", msb2lsb32(&pmeta->SD_RW_SECTOR_LEN));                      //byte[140]        
         print_f(mlogPool, "META", mlog);
     }
+    #else
+    if (msb2lsb16(&pmeta->BKNA_NUM)) {
+        num = msb2lsb16(&pmeta->BKNA_NUM);
+        sprintf_f(mlog, "BKNA_NUM: %d\n", num);                      //byte[140]
+        print_f(mlogPool, "META", mlog);
+
+        for (ix=0; ix < num; ix++) {
+            sprintf_f(mlog, "BKNA_ITEM[%d].bknax: %d\n", ix, msb2lsb16(&pmeta->BKNA_ITEM[ix].bknax));
+            print_f(mlogPool, "META", mlog);
+
+            sprintf_f(mlog, "BKNA_ITEM[%d].bknay: %d\n", ix, msb2lsb16(&pmeta->BKNA_ITEM[ix].bknaY));
+            print_f(mlogPool, "META", mlog);
+
+            sprintf_f(mlog, "BKNA_ITEM[%d].bknaw: %d\n", ix, msb2lsb16(&pmeta->BKNA_ITEM[ix].bknaw));
+            print_f(mlogPool, "META", mlog);
+
+            sprintf_f(mlog, "BKNA_ITEM[%d].bknah: %d\n", ix, msb2lsb16(&pmeta->BKNA_ITEM[ix].bknah));
+            print_f(mlogPool, "META", mlog);
+
+            sprintf_f(mlog, "BKNA_ITEM[%d].bknaside: %d\n", ix, pmeta->BKNA_ITEM[ix].bknaside);
+            print_f(mlogPool, "META", mlog);
+
+            sprintf_f(mlog, "BKNA_ITEM[%d].bknalayer: %d\n", ix, pmeta->BKNA_ITEM[ix].bknalayer);
+            print_f(mlogPool, "META", mlog);
+        }
+    }
+    #endif
 
     sprintf_f(mlog, "********************************************\n");
     print_f(mlogPool, "META", mlog);
@@ -5593,8 +5679,8 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         b32 |= val;
         secLen = b32;
 
-        lsb2Msb(&pmeta->SD_RW_SECTOR_ADD, secStr);
-        lsb2Msb(&pmeta->SD_RW_SECTOR_LEN, secLen);
+        lsb2Msb32(&pmeta->SD_RW_SECTOR_ADD, secStr);
+        lsb2Msb32(&pmeta->SD_RW_SECTOR_LEN, secLen);
     }
 
     if (funcbits & ASPMETA_FUNC_SDWT) {
@@ -5627,8 +5713,8 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
         b32 |= val;
         secLen = b32;
 
-        lsb2Msb(&pmeta->SD_RW_SECTOR_ADD, secStr);
-        lsb2Msb(&pmeta->SD_RW_SECTOR_LEN, secLen);
+        lsb2Msb32(&pmeta->SD_RW_SECTOR_ADD, secStr);
+        lsb2Msb32(&pmeta->SD_RW_SECTOR_LEN, secLen);
     
     }
 
@@ -5636,9 +5722,9 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     pmeta->ASP_MAGIC[1] = 0x14;
     
     //pmeta->FUNC_BITS |= funcbits;
-    tbits = msb2lsb(&pmeta->FUNC_BITS);
+    tbits = msb2lsb32(&pmeta->FUNC_BITS);
     tbits |= funcbits;
-    lsb2Msb(&pmeta->FUNC_BITS, tbits);
+    lsb2Msb32(&pmeta->FUNC_BITS, tbits);
 
     msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
     
@@ -5651,7 +5737,7 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     int opSt=0, opEd=0;
     int istr=0, iend=0, idx=0, ret=0;
     char *pvdst=0, *pvend=0;
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspMetaData_s *pmeta;
     struct aspMetaMass_s *pmass;
     struct aspConfig_s *pct=0, *pdt=0;
@@ -5782,13 +5868,13 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         pt = &(pmeta->CROP_POS_1);
 
         for (i = ASPOP_CROP_01; i <= ASPOP_CROP_06; i++) {
-            pct[i].opValue = msb2lsb(pt);
+            pct[i].opValue = msb2lsb32(pt);
             pct[i].opStatus = ASPOP_STA_UPD;
             pt++;
         }
 
         for (i = ASPOP_CROP_07; i <= ASPOP_CROP_18; i++) {
-            pct[i].opValue = msb2lsb(pt);
+            pct[i].opValue = msb2lsb32(pt);
             pct[i].opStatus = ASPOP_STA_UPD;
             pt++;
         }
@@ -5826,7 +5912,7 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
         pt = &(pmeta->SCAN_IMAGE_LEN);    
 
-        pct[ASPOP_IMG_LEN].opValue = msb2lsb(pt);
+        pct[ASPOP_IMG_LEN].opValue = msb2lsb32(pt);
         pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_UPD;
     }
 
@@ -5854,7 +5940,7 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
 static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
     int i=0, act=0;
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspMetaData_s *pmetaDuo;
     struct aspMetaMass_s *pmassDuo;
     struct aspConfig_s *pct=0, *pdt=0;
@@ -5891,13 +5977,13 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
         pt = &(pmetaDuo->CROP_POS_1);
 
         for (i = ASPOP_CROP_01_DUO; i <= ASPOP_CROP_06_DUO; i++) {
-            pct[i].opValue = msb2lsb(pt);
+            pct[i].opValue = msb2lsb32(pt);
             pct[i].opStatus = ASPOP_STA_UPD;
             pt++;
         }
 
         for (i = ASPOP_CROP_07_DUO; i <= ASPOP_CROP_18_DUO; i++) {
-            pct[i].opValue = msb2lsb(pt);
+            pct[i].opValue = msb2lsb32(pt);
             pct[i].opStatus = ASPOP_STA_UPD;
             pt++;
         }
@@ -5935,7 +6021,7 @@ static int aspMetaReleaseDuo(unsigned int funcbits, struct mainRes_s *mrs, struc
     if (funcbits & ASPMETA_FUNC_IMGLEN) {
         pt = &(pmetaDuo->SCAN_IMAGE_LEN);    
 
-        pct[ASPOP_IMG_LEN_DUO].opValue = msb2lsb(pt);
+        pct[ASPOP_IMG_LEN_DUO].opValue = msb2lsb32(pt);
         pct[ASPOP_IMG_LEN_DUO].opStatus = ASPOP_STA_UPD;
     }
 
@@ -6004,7 +6090,7 @@ static int aspMetafs145GetlenviaUsb(struct mainRes_s *mrs)
 
 static int aspMetaReleaseviaUsbdlBmpUpd(struct mainRes_s *mrs, struct procRes_s *rs, int updw, int updh) 
 {
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspMetaDataviaUSB_s *pmetausb=0;
     struct aspMetaMass_s *pmass=0;
     unsigned int val=0;
@@ -6036,7 +6122,7 @@ static int aspMetaReleaseviaUsbdlBmp(struct mainRes_s *mrs, struct procRes_s *rs
     int opSt=0, opEd=0;
     int istr=0, iend=0, idx=0, ret=0;
     char *pvdst=0, *pvend=0;
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspMetaDataviaUSB_s *pmetausb=0, *pmetainput=0;
     struct aspMetaMass_s *pmass=0;
     struct aspConfig_s *pct=0, *pdt=0;
@@ -6067,7 +6153,7 @@ static int aspMetaReleaseviaUsbdlBmp(struct mainRes_s *mrs, struct procRes_s *rs
 
     pt = &(pmetausb->CROP_POS_1);
     for (i = ASPOP_CROP_01; i <= ASPOP_CROP_06; i++) {
-        pct[i].opValue = msb2lsb(pt);
+        pct[i].opValue = msb2lsb32(pt);
         pct[i].opStatus = ASPOP_STA_UPD;
 
         //printf("%d. 0x%.8x \n", i, pct[i].opValue);
@@ -6076,7 +6162,7 @@ static int aspMetaReleaseviaUsbdlBmp(struct mainRes_s *mrs, struct procRes_s *rs
     }
 
     for (i = ASPOP_CROP_07; i <= ASPOP_CROP_18; i++) {
-        pct[i].opValue = msb2lsb(pt);
+        pct[i].opValue = msb2lsb32(pt);
         pct[i].opStatus = ASPOP_STA_UPD;
 
         //printf("%d. 0x%.8x \n", i, pct[i].opValue);
@@ -6146,7 +6232,7 @@ static int aspMetaReleaseviaUsbdlBmp(struct mainRes_s *mrs, struct procRes_s *rs
     if (linLength) {
         pt = &(pmetausb->CROP_POS_F1);
         for (i = ASPOP_USBCROP_FP01; i <= ASPOP_USBCROP_FP04; i++) {
-            pct[i].opValue = msb2lsb(pt);
+            pct[i].opValue = msb2lsb32(pt);
             pct[i].opStatus = ASPOP_STA_UPD;
 
             //printf("[META] F%d. = (%d, %d) \n", i - ASPOP_USBCROP_FP01 + 1, (pct[i].opValue >> 16) & 0xffff, (pct[i].opValue >> 0) & 0xffff);
@@ -6166,7 +6252,7 @@ static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, cha
     int opSt=0, opEd=0;
     int istr=0, iend=0, idx=0, ret=0;
     char *pvdst=0, *pvend=0;
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspMetaDataviaUSB_s *pmetausb=0, *pmetainput=0;
     struct aspMetaMass_s *pmass=0;
     struct aspConfig_s *pct=0, *pdt=0;
@@ -6197,7 +6283,7 @@ static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, cha
 
     pt = &(pmetausb->CROP_POS_1);
     for (i = ASPOP_CROP_01; i <= ASPOP_CROP_06; i++) {
-        pct[i].opValue = msb2lsb(pt);
+        pct[i].opValue = msb2lsb32(pt);
         pct[i].opStatus = ASPOP_STA_UPD;
 
         //printf("%d. 0x%.8x \n", i, pct[i].opValue);
@@ -6206,7 +6292,7 @@ static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, cha
     }
 
     for (i = ASPOP_CROP_07; i <= ASPOP_CROP_18; i++) {
-        pct[i].opValue = msb2lsb(pt);
+        pct[i].opValue = msb2lsb32(pt);
         pct[i].opStatus = ASPOP_STA_UPD;
 
         //printf("%d. 0x%.8x \n", i, pct[i].opValue);
@@ -6283,7 +6369,7 @@ static int aspMetaReleaseviaUsb(struct mainRes_s *mrs, struct procRes_s *rs, cha
 
         pt = &(pmetausb->CROP_POS_F1);
         for (i = ASPOP_USBCROP_FP01; i <= ASPOP_USBCROP_FP04; i++) {
-            pct[i].opValue = msb2lsb(pt);
+            pct[i].opValue = msb2lsb32(pt);
             pct[i].opStatus = ASPOP_STA_UPD;
 
             //printf("[META] F%d. = (%d, %d) \n", i - ASPOP_USBCROP_FP01 + 1, (pct[i].opValue >> 16) & 0xffff, (pct[i].opValue >> 0) & 0xffff);
@@ -6303,7 +6389,7 @@ static int aspMetaReleaseviaUsbDuo(struct mainRes_s *mrs, struct procRes_s *rs, 
     int opSt=0, opEd=0;
     int istr=0, iend=0, idx=0, ret=0;
     char *pvdst=0, *pvend=0;
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspMetaDataviaUSB_s *pmetausbduo=0, *pmetainput=0;
     struct aspMetaMass_s *pmassduo=0;
     struct aspConfig_s *pct=0, *pdt=0;
@@ -6334,13 +6420,13 @@ static int aspMetaReleaseviaUsbDuo(struct mainRes_s *mrs, struct procRes_s *rs, 
 
     pt = &(pmetausbduo->CROP_POS_1);
     for (i = ASPOP_CROP_01_DUO; i <= ASPOP_CROP_06_DUO; i++) {
-        pct[i].opValue = msb2lsb(pt);
+        pct[i].opValue = msb2lsb32(pt);
         pct[i].opStatus = ASPOP_STA_UPD;
         pt++;
     }
 
     for (i = ASPOP_CROP_07_DUO; i <= ASPOP_CROP_18_DUO; i++) {
-        pct[i].opValue = msb2lsb(pt);
+        pct[i].opValue = msb2lsb32(pt);
         pct[i].opStatus = ASPOP_STA_UPD;
         pt++;
     }
@@ -6414,7 +6500,7 @@ static int aspMetaReleaseviaUsbDuo(struct mainRes_s *mrs, struct procRes_s *rs, 
 
         pt = &(pmetausbduo->CROP_POS_F1);
         for (i = ASPOP_USBCROP_FP01_DUO; i <= ASPOP_USBCROP_FP04_DUO; i++) {
-            pct[i].opValue = msb2lsb(pt);
+            pct[i].opValue = msb2lsb32(pt);
             pct[i].opStatus = ASPOP_STA_UPD;
 
             //printf("[META] duo F%d. = (%d, %d) \n", i - ASPOP_USBCROP_FP01_DUO + 1, (pct[i].opValue >> 16) & 0xffff, (pct[i].opValue >> 0) & 0xffff);
@@ -13562,7 +13648,7 @@ static int topPositive(struct aspCropExtra_s *pcpex)
 
 static int doCropCalcuPt(struct aspDoCropCalcu *crpdo, struct aspMetaDataviaUSB_s *pscanInfo, char *indat, int maxs, struct procRes_s *rs, int midx) 
 {
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspCropExtra_s *pextra=0;
     struct aspCrop36_s *ppt36 = 0;
     char *ptext=0, *pch=0;
@@ -13692,7 +13778,7 @@ static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, st
     uint32_t cord=0;
     int len=0, val=0, hval=0, ret=0, ix=0, xpn=0, adpi=0;
     struct aspMetaDataviaUSB_s *pscanInfo=0;
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspCropExtra_s *pextra=0;
     struct aspCrop36_s *ppt36 = 0;
     CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
@@ -13725,7 +13811,7 @@ static int doCropCalcu36(struct aspDoCropCalcu *crpdo, char *indat, int maxs, st
         pt = &(pscanInfo->CROP_POS_1);
         for (ix = 1; ix < (CROP_MAX_NUM_META+1); ix++) {
     
-            cord = msb2lsb(pt);
+            cord = msb2lsb32(pt);
             val = cord >> 16;
             if (adpi < 300) {
                 val = (val * adpi) / 300;
@@ -13851,7 +13937,7 @@ static int doCropCalcu(struct aspDoCropCalcu *crpdo, char *indat, int maxs, stru
     CFLOAT cxm=0.0, cxn=0.0, gap=0.0, hval=0.0;
     int adpi=0;
     struct aspMetaDataviaUSB_s *pscanInfo=0;
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
     struct aspCropExtra_s *pextra=0;
     struct aspCrop36_s *ppt36 = 0;
     char *ptext=0, *pch=0;
@@ -14515,7 +14601,7 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
     uint32_t cord=0;
     int len=0, val=0, hval=0, ret=0, ix=0;
     struct aspMetaDataviaUSB_s *pscanInfo=0;
-    struct intMbs_s *pt=0;
+    struct intMbs32_s *pt=0;
 
     if (!indat) {
         return -1;
@@ -14543,7 +14629,7 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
     pt = &(pscanInfo->CROP_POS_1);
     for (ix = 0; ix < CROP_MAX_NUM_META; ix++) {
     
-        cord = msb2lsb(pt);
+        cord = msb2lsb32(pt);
         val = cord >> 16;
         
         hval = cord & 0xffff;
@@ -29558,7 +29644,7 @@ static int stsparam_88(struct psdata_s *data)
             sprintf_f(rs->logs, "dump meta output\n"); 
             print_f(rs->plogs, "SPM", rs->logs);  
             //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
-            //dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
+            //dbgMeta(msb2lsb32(&pmetaOut->FUNC_BITS), pmetaOut);
             
             ch = 110; 
 
@@ -29643,8 +29729,8 @@ static int stsparam_88(struct psdata_s *data)
                 }
                 else {
                     //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
-                    dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
-                    act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
+                    dbgMeta(msb2lsb32(&pmetaIn->FUNC_BITS), pmetaIn);
+                    act = aspMetaRelease(msb2lsb32(&pmetaIn->FUNC_BITS), 0, rs);
 
                     switch(t->data) {
                         case ASPMETA_POWON_INIT:
@@ -29795,7 +29881,7 @@ static int stcropmeta_90(struct psdata_s *data)
             t->data = ASPMETA_POWON_INIT;
             aspMetaClear(0, rs, ASPMETA_OUTPUT);
             aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-            dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+            dbgMeta(msb2lsb32(&pmeta->FUNC_BITS), pmeta);
 
             data->result = emb_result(data->result, NEXT);
             sprintf_f(rs->logs, "op_90: result: %x, goto %d\n", data->result, ch); 
@@ -30226,7 +30312,7 @@ static int stmetaduo_97(struct psdata_s *data)
             sprintf_f(rs->logs, "op_97: dump meta output\n"); 
             print_f(rs->plogs, "MDUO", rs->logs);  
             //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
-            dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
+            dbgMeta(msb2lsb32(&pmetaOut->FUNC_BITS), pmetaOut);
             
             ch = 118; 
 
@@ -30312,10 +30398,10 @@ static int stmetaduo_97(struct psdata_s *data)
                     //pmass->massUsed = 0;
                 } else {
                     //shmem_dump((char *)rs->pmetain, sizeof(struct aspMetaData_s));
-                    dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
-                    dbgMeta(msb2lsb(&pmetaInduo->FUNC_BITS), pmetaInduo);
-                    act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
-                    aspMetaReleaseDuo(msb2lsb(&pmetaInduo->FUNC_BITS), 0, rs);
+                    dbgMeta(msb2lsb32(&pmetaIn->FUNC_BITS), pmetaIn);
+                    dbgMeta(msb2lsb32(&pmetaInduo->FUNC_BITS), pmetaInduo);
+                    act = aspMetaRelease(msb2lsb32(&pmetaIn->FUNC_BITS), 0, rs);
+                    aspMetaReleaseDuo(msb2lsb32(&pmetaInduo->FUNC_BITS), 0, rs);
 
                     switch(t->data) {
                         case ASPMETA_POWON_INIT:
@@ -30462,7 +30548,7 @@ static int stmetaduo_99(struct psdata_s *data)
             t->data = ASPMETA_SCAN_COMPLE_DUO;
             aspMetaClear(0, rs, ASPMETA_OUTPUT);
             //aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+            //dbgMeta(msb2lsb32(&pmeta->FUNC_BITS), pmeta);
 
             data->result = emb_result(data->result, NEXT);
             sprintf_f(rs->logs, "op_99: result: %x, goto %d\n", data->result, ch); 
@@ -30535,7 +30621,7 @@ static int stmetasd_100(struct psdata_s *data)
 
                 aspMetaClear(0, rs, ASPMETA_OUTPUT);
                 aspMetaBuild(ASPMETA_FUNC_SDRD, 0, rs);
-                dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+                dbgMeta(msb2lsb32(&pmeta->FUNC_BITS), pmeta);
                 
                 ch = 41; 
                 rs_ipc_put(data->rs, &ch, 1);
@@ -30610,7 +30696,7 @@ static int stmetasd_101(struct psdata_s *data)
 
                 aspMetaClear(0, rs, ASPMETA_OUTPUT);
                 aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
-                dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+                dbgMeta(msb2lsb32(&pmeta->FUNC_BITS), pmeta);
 
                 ch = 41; 
                 rs_ipc_put(data->rs, &ch, 1);
@@ -30669,7 +30755,7 @@ static int stmetasd_102(struct psdata_s *data)
             sprintf_f(rs->logs, "op_102: dump meta output\n"); 
             print_f(rs->plogs, "MTSD", rs->logs);  
             //shmem_dump((char *)rs->pmetaout, sizeof(struct aspMetaData_s));            
-            dbgMeta(msb2lsb(&pmetaOut->FUNC_BITS), pmetaOut);
+            dbgMeta(msb2lsb32(&pmetaOut->FUNC_BITS), pmetaOut);
             
             ch = 110; 
 
@@ -30726,7 +30812,7 @@ static int stmetasd_103(struct psdata_s *data)
             t->data = ASPMETA_CROP_300DPI;
             aspMetaClear(0, rs, ASPMETA_OUTPUT);
             aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-            dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+            dbgMeta(msb2lsb32(&pmeta->FUNC_BITS), pmeta);
 
             data->result = emb_result(data->result, NEXT);
             sprintf_f(rs->logs, "op_103: result: %x, goto %d\n", data->result, ch); 
@@ -30905,7 +30991,7 @@ static int stocrw_106(struct psdata_s *data)
                            
             //aspMetaClear(0, rs, ASPMETA_OUTPUT);
             //aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
-            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+            //dbgMeta(msb2lsb32(&pmeta->FUNC_BITS), pmeta);
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -31000,7 +31086,7 @@ static int stocrw_108(struct psdata_s *data)
 
             //aspMetaClear(0, rs, ASPMETA_OUTPUT);
             //aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
-            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+            //dbgMeta(msb2lsb32(&pmeta->FUNC_BITS), pmeta);
 
             ch = 41; 
             rs_ipc_put(data->rs, &ch, 1);                
@@ -31096,8 +31182,8 @@ static int stocrw_110(struct psdata_s *data)
 
     switch (rlt) {
         case STINIT:
-            dbgMeta(msb2lsb(&pmetaIn->FUNC_BITS), pmetaIn);
-            act = aspMetaRelease(msb2lsb(&pmetaIn->FUNC_BITS), 0, rs);
+            dbgMeta(msb2lsb32(&pmetaIn->FUNC_BITS), pmetaIn);
+            act = aspMetaRelease(msb2lsb32(&pmetaIn->FUNC_BITS), 0, rs);
 
             //sprintf_f(rs->logs, "op_110 act: 0x%x \n", act); 
             //print_f(rs->plogs, "OCR", rs->logs);  
@@ -31114,7 +31200,7 @@ static int stocrw_110(struct psdata_s *data)
 
             //aspMetaClear(0, rs, ASPMETA_OUTPUT);
             //aspMetaBuild(ASPMETA_FUNC_SDWT, 0, rs);
-            //dbgMeta(msb2lsb(&pmeta->FUNC_BITS), pmeta);
+            //dbgMeta(msb2lsb32(&pmeta->FUNC_BITS), pmeta);
 
             ch = 41; 
 
@@ -52499,22 +52585,22 @@ static int p2(struct procRes_s *rs)
                                 tmp = (uint32_t)round(rotlf[0]);
                                 cord = (uint32_t)round(rotlf[1]);
                                 cord = cord | (tmp <<16);
-                                lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F1, cord);
                                 
                                 tmp = (uint32_t)round(rotup[0]);
                                 cord = (uint32_t)round(rotup[1]);
                                 cord = cord | (tmp <<16);
-                                lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F2, cord);
                                 
                                 tmp = (uint32_t)round(rotrt[0]);
                                 cord = (uint32_t)round(rotrt[1]);
                                 cord = cord | (tmp <<16);
-                                lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F3, cord);
                                 
                                 tmp = (uint32_t)round(rotdn[0]);
                                 cord = (uint32_t)round(rotdn[1]);
                                 cord = cord | (tmp <<16);
-                                lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F4, cord);
                                 
                                 addr = (char *) &pusbmeta->CROP_POS_F1;
                                 
@@ -53136,22 +53222,22 @@ static int p3(struct procRes_s *rs)
                                 tmp = (uint32_t)result[0];
                                 cord = (uint32_t)result[1];
                                 cord = cord | (tmp <<16);
-                                lsb2Msb(&pusbmeta->CROP_POS_F1, cord);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F1, cord);
                                 
                                 tmp = (uint32_t)result[2];
                                 cord = (uint32_t)result[3];
                                 cord = cord | (tmp <<16);
-                                lsb2Msb(&pusbmeta->CROP_POS_F2, cord);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F2, cord);
                                 
                                 tmp = (uint32_t)result[4];
                                 cord = (uint32_t)result[5];
                                 cord = cord | (tmp <<16);
-                                lsb2Msb(&pusbmeta->CROP_POS_F3, cord);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F3, cord);
                                 
                                 tmp = (uint32_t)result[6];
                                 cord = (uint32_t)result[7];
                                 cord = cord | (tmp <<16);
-                                lsb2Msb(&pusbmeta->CROP_POS_F4, cord);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F4, cord);
                                 
                                 addr = (char *) &pusbmeta->CROP_POS_F1;
                             }
@@ -63467,7 +63553,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             cmdchr = cmdMtx[21][1];
 
             #if 1
-            //tagtaddr = msb2lsb(&dcbwfile->pramAddress);
+            //tagtaddr = msb2lsb32(&dcbwfile->pramAddress);
             
             ret = read(pPtx[0], cplls, 8);
             if (ret == 8) {
@@ -63536,7 +63622,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 sprintf_f(rs->logs, "get meta magic number: 0x%.2x, 0x%.2x !!!\n", meta.ASP_MAGIC[0], meta.ASP_MAGIC[1]);
                 print_f(rs->plogs, sp, rs->logs);
 
-                //dbgMeta(msb2lsb(&meta.FUNC_BITS), &meta);
+                //dbgMeta(msb2lsb32(&meta.FUNC_BITS), &meta);
             }
 
             pllst = 0;
@@ -64116,8 +64202,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             if (erasoffset) {
             
-                lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
-                lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
+                lsb2Msb32(&dcpyfile->pramID, msb2lsb32(&dcbwfile->pramID));
+                lsb2Msb32(&dcpyfile->pramTag, msb2lsb32(&dcbwfile->pramTag));
                 dcpyfile->pramDirect = 1;
                 dcpyfile->pramType = 1;
                 
@@ -64147,8 +64233,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     }
 
 
-                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
-                    lsb2Msb(&dcpyfile->pramDataLength, txlen);                          
+                    lsb2Msb32(&dcpyfile->pramAddress, actaddr);
+                    lsb2Msb32(&dcpyfile->pramDataLength, txlen);                          
 
                     msync(cbwcpy, 32, MS_SYNC);
 
@@ -64218,8 +64304,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             actlen = eraslen;
             actaddr = tagtaddr;
 
-            lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
-            lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
+            lsb2Msb32(&dcpyfile->pramID, msb2lsb32(&dcbwfile->pramID));
+            lsb2Msb32(&dcpyfile->pramTag, msb2lsb32(&dcbwfile->pramTag));
             dcpyfile->pramDirect = 1;
             dcpyfile->pramType = 1;
             
@@ -64267,8 +64353,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         len -= txlen;
                     }
 
-                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
-                    lsb2Msb(&dcpyfile->pramDataLength, txlen);
+                    lsb2Msb32(&dcpyfile->pramAddress, actaddr);
+                    lsb2Msb32(&dcpyfile->pramDataLength, txlen);
                     
                     msync(cbwcpy, 32, MS_SYNC);
                 
@@ -64339,8 +64425,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             if ((eraslen) && (erendoffset)) {
             
-                lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
-                lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
+                lsb2Msb32(&dcpyfile->pramID, msb2lsb32(&dcbwfile->pramID));
+                lsb2Msb32(&dcpyfile->pramTag, msb2lsb32(&dcbwfile->pramTag));
                 dcpyfile->pramDirect = 1;
                 dcpyfile->pramType = 1;
 
@@ -64371,8 +64457,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     }
 
                     
-                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
-                    lsb2Msb(&dcpyfile->pramDataLength, txlen);                          
+                    lsb2Msb32(&dcpyfile->pramAddress, actaddr);
+                    lsb2Msb32(&dcpyfile->pramDataLength, txlen);                          
 
                     msync(cbwcpy, 32, MS_SYNC);
 
@@ -64503,11 +64589,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             if (erasoffset) {
 
-                lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
-                lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
-                lsb2Msb(&dcpyfile->pramDataLength, 512);      
+                lsb2Msb32(&dcpyfile->pramID, msb2lsb32(&dcbwfile->pramID));
+                lsb2Msb32(&dcpyfile->pramTag, msb2lsb32(&dcbwfile->pramTag));
+                lsb2Msb32(&dcpyfile->pramDataLength, 512);      
                 dcpyfile->pramDirect = 2;
-                //lsb2Msb(&dcpyfile->pramAddress, erasaddr);
+                //lsb2Msb32(&dcpyfile->pramAddress, erasaddr);
 
                 actlen = erasoffset;
                 if (actlen % 64) {
@@ -64519,7 +64605,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 actbuff = erasBuff;
 
                 while (actlen) {
-                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
+                    lsb2Msb32(&dcpyfile->pramAddress, actaddr);
 
                     msync(cbwcpy, 32, MS_SYNC);
 
@@ -64535,7 +64621,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         actlen -= txlen;
                     }
 
-                    lsb2Msb(&dcpyfile->pramDataLength, txlen);      
+                    lsb2Msb32(&dcpyfile->pramDataLength, txlen);      
                     
                     #if DBG_USB_HS
                     sprintf_f(rs->logs, "dump 31 bytes");
@@ -64606,9 +64692,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             if ((eraslen) && (erendoffset)) {
 
-                lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
-                lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
-                lsb2Msb(&dcpyfile->pramDataLength, 512);      
+                lsb2Msb32(&dcpyfile->pramID, msb2lsb32(&dcbwfile->pramID));
+                lsb2Msb32(&dcpyfile->pramTag, msb2lsb32(&dcbwfile->pramTag));
+                lsb2Msb32(&dcpyfile->pramDataLength, 512);      
                 dcpyfile->pramDirect = 2;
                 
                 actlen = (0x1000 - erendoffset);
@@ -64621,7 +64707,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 actbuff = erendBuff;
 
                 while (actlen) {
-                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
+                    lsb2Msb32(&dcpyfile->pramAddress, actaddr);
 
                     msync(cbwcpy, 32, MS_SYNC);
 
@@ -64637,7 +64723,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         actlen -= txlen;
                     }
 
-                    lsb2Msb(&dcpyfile->pramDataLength, txlen);      
+                    lsb2Msb32(&dcpyfile->pramDataLength, txlen);      
 
                     #if DBG_USB_HS
                     sprintf_f(rs->logs, "dump 31 bytes");
@@ -64711,15 +64797,15 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 //insert_filecbw(cbwcpy, dcbwfile);
                 memset(cbwcpy, 0, 32);
 
-                lsb2Msb(&dcpyfile->pramID, msb2lsb(&dcbwfile->pramID));
-                lsb2Msb(&dcpyfile->pramTag, msb2lsb(&dcbwfile->pramTag));
+                lsb2Msb32(&dcpyfile->pramID, msb2lsb32(&dcbwfile->pramID));
+                lsb2Msb32(&dcpyfile->pramTag, msb2lsb32(&dcbwfile->pramTag));
                 dcpyfile->pramType = 0x05;
 
                 actlen = erendaddr - erasaddr;
                 actaddr = erasaddr;
 
                 while (actlen) {
-                    lsb2Msb(&dcpyfile->pramAddress, actaddr);
+                    lsb2Msb32(&dcpyfile->pramAddress, actaddr);
 
                     msync(cbwcpy, 32, MS_SYNC);
                     
@@ -65983,7 +66069,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         }
         else if (cmdchr == 0x10) {
             #if DBG_USB_HS
-            sprintf_f(rs->logs, "0x10 len:%d addr:0x%.8x direct:%d \n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
+            sprintf_f(rs->logs, "0x10 len:%d addr:0x%.8x direct:%d \n",msb2lsb32(&dcbwpram->pramDataLength), msb2lsb32(&dcbwpram->pramAddress), dcbwpram->pramDirect);
             print_f(rs->plogs, sp, rs->logs);
             #endif
             
@@ -66000,9 +66086,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             }
 
             if (!pllst) {
-                ret = usb_send(dubsBuff, usbid, msb2lsb(&dcbwpram->pramDataLength));
+                ret = usb_send(dubsBuff, usbid, msb2lsb32(&dcbwpram->pramDataLength));
                 if (ret <= 0) {
-                    sprintf_f(rs->logs, "usb read data size %d error ret: %d \n", msb2lsb(&dcbwpram->pramDataLength), ret);
+                    sprintf_f(rs->logs, "usb read data size %d error ret: %d \n", msb2lsb32(&dcbwpram->pramDataLength), ret);
                     print_f(rs->plogs, sp, rs->logs);
 
                     pllst = CSW_STATUS_USB_FAIL;
@@ -66011,7 +66097,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             //sprintf_f(rs->logs, "send size: %d dump: \n", ret);
             //print_f(rs->plogs, sp, rs->logs);
-            //shmem_dump(dubsBuff, msb2lsb(&dcbwpram->pramDataLength));
+            //shmem_dump(dubsBuff, msb2lsb32(&dcbwpram->pramDataLength));
             if (!pllst) {            
                 ret = usb_read(ptrecv, usbid, 13);
                 if (ret <= 0) {
@@ -66049,7 +66135,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         }
         else if (cmdchr == 0x11) {
             #if DBG_USB_HS
-            sprintf_f(rs->logs, "0x11 len:%d addr:0x%.8x direct:%d\n",msb2lsb(&dcbwpram->pramDataLength), msb2lsb(&dcbwpram->pramAddress), dcbwpram->pramDirect);
+            sprintf_f(rs->logs, "0x11 len:%d addr:0x%.8x direct:%d\n",msb2lsb32(&dcbwpram->pramDataLength), msb2lsb32(&dcbwpram->pramAddress), dcbwpram->pramDirect);
             print_f(rs->plogs, sp, rs->logs);
             #endif
             pllst = 0;
@@ -66065,9 +66151,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             }
 
             if (!pllst) {
-                ret = usb_read(dubsBuff, usbid, msb2lsb(&dcbwpram->pramDataLength));
+                ret = usb_read(dubsBuff, usbid, msb2lsb32(&dcbwpram->pramDataLength));
                 if (ret <= 0) {
-                    sprintf_f(rs->logs, "usb read size %d error ret: %d \n", msb2lsb(&dcbwpram->pramDataLength), ret);
+                    sprintf_f(rs->logs, "usb read size %d error ret: %d \n", msb2lsb32(&dcbwpram->pramDataLength), ret);
                     print_f(rs->plogs, sp, rs->logs);
 
                     pllst = CSW_STATUS_USB_FAIL;
@@ -66076,7 +66162,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             //sprintf_f(rs->logs, "read size: %d dump: \n", ret);
             //print_f(rs->plogs, sp, rs->logs);
-            //shmem_dump(dubsBuff, msb2lsb(&dcbwpram->pramDataLength));
+            //shmem_dump(dubsBuff, msb2lsb32(&dcbwpram->pramDataLength));
             
             if (!pllst) {
                 ret = usb_read(ptrecv, usbid, 13);
@@ -67173,7 +67259,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         iubsBuff[17] = dat;
                         
                         aspMetaBuild(ASPMETA_FUNC_CONF, 0, rs);
-                        //dbgMeta(msb2lsb(&ptmetaout->FUNC_BITS), ptmetaout);
+                        //dbgMeta(msb2lsb32(&ptmetaout->FUNC_BITS), ptmetaout);
 
                         #if DBG_27_DV
                         shmem_dump((char*)ptmetaout, 512);
@@ -67199,7 +67285,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             break;
                         }
 
-                        //dbgMeta(msb2lsb(&metaRx->FUNC_BITS), metaRx);
+                        //dbgMeta(msb2lsb32(&metaRx->FUNC_BITS), metaRx);
                         
                         #if 1
                         sprintf(msgcmd, "usbscan");
@@ -68796,10 +68882,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         break;
                     }
-                    pipRet = aspMetaRelease(msb2lsb(&ptmetain->FUNC_BITS), 0, rs);
+                    pipRet = aspMetaRelease(msb2lsb32(&ptmetain->FUNC_BITS), 0, rs);
                     
                     #if 1
-                    dbgMeta(msb2lsb(&metaRx->FUNC_BITS), metaRx);
+                    shmem_dump(ptrecv+128, recvsz-128);
+                    dbgMeta(msb2lsb32(&metaRx->FUNC_BITS), metaRx);
                     #endif
                     
                     chq = 'n';
@@ -68936,7 +69023,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] file access rx filesz: %d \n", filesz);
                     print_f(rs->plogs, "P11", rs->logs);
                     
-                    //lenflh = msb2lsb(&ucbwfile->pramDataLength);
+                    //lenflh = msb2lsb32(&ucbwfile->pramDataLength);
                     //filesz = lenflh;
 
                     while (1) {
@@ -69013,12 +69100,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     #if LOG_FLASH /* debug flash read/write */
                     sprintf_f(rs->logs, "[DV] data flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
-                                                msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
-                                                ucbwpram->pramType, (uint32_t)msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
+                                                msb2lsb32(&ucbwpram->pramID), msb2lsb32(&ucbwpram->pramDataLength), 
+                                                ucbwpram->pramType, (uint32_t)msb2lsb32(&ucbwpram->pramAddress), ucbwpram->pramDirect);
                     print_f(rs->plogs, "P11", rs->logs);
                     #endif
 
-                    lenflh = msb2lsb(&ucbwpram->pramDataLength);
+                    lenflh = msb2lsb32(&ucbwpram->pramDataLength);
                     while (1) {
                         recvsz = read(usbfd, vubsBuff, lenflh);
                         if (recvsz == lenflh) {
@@ -69988,7 +70075,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             memcpy(iubsBuff, ptrecv, 31);
                             val = ucbwfile->pramWrtorRd[0];
                             act = (ucbwfile->pramFileId[0] << 8) | ucbwfile->pramFileId[1];
-                            lenflh = msb2lsb(&ucbwfile->pramDataLength);
+                            lenflh = msb2lsb32(&ucbwfile->pramDataLength);
                             
                             switch (val) {
                             case 1: // write
@@ -70176,8 +70263,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             //memset(iubsBuff, 0, SPI_TRUNK_SZ);
 
                             sprintf_f(rs->logs, "[DV] file access dlen: %d, fileid: %d, wrtrd: %d, addr: 0x%.8x, fsize: %d, direct: %d select: %d\n"
-                                                        , msb2lsb(&ucbwfile->pramDataLength), act, ucbwfile->pramWrtorRd[0], (uint32_t)msb2lsb(&ucbwfile->pramAddress)
-                                                        , msb2lsb(&ucbwfile->pramFilesize) , ucbwfile->pramDirect, ucbwfile->ASIC_sel);
+                                                        , msb2lsb32(&ucbwfile->pramDataLength), act, ucbwfile->pramWrtorRd[0], (uint32_t)msb2lsb32(&ucbwfile->pramAddress)
+                                                        , msb2lsb32(&ucbwfile->pramFilesize) , ucbwfile->pramDirect, ucbwfile->ASIC_sel);
                             print_f(rs->plogs, "P11", rs->logs);
 
                             filesz = lenflh;
@@ -70402,12 +70489,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             else if (ucbwfile->pramDirect == 1) { // 1=output (BULK OUT)
 
                                 /* save to fileid poll */
-                                pubfidnxt->usfdAddr = msb2lsb(&ucbwfile->pramAddress);
+                                pubfidnxt->usfdAddr = msb2lsb32(&ucbwfile->pramAddress);
                                 pubfidnxt->usfdid[0] = ucbwfile->pramFileId[1];
                                 pubfidnxt->usfdid[1] = ucbwfile->pramFileId[0];
                                 pubfidnxt->usfdid[2] = '=';
                                 pubfidnxt->usfdid[3] = ucbwfile->ASIC_sel;
-                                pubfidnxt->usfdsize = msb2lsb(&ucbwfile->pramDataLength);
+                                pubfidnxt->usfdsize = msb2lsb32(&ucbwfile->pramDataLength);
                             
                                 ring_buf_init(rs->pcmdRx);
 
@@ -70427,11 +70514,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 if (pubfidnxt) {
                                     err=0;
                                     
-                                    if (pubfidnxt->usfdAddr != msb2lsb(&ucbwfile->pramAddress)) err++;
+                                    if (pubfidnxt->usfdAddr != msb2lsb32(&ucbwfile->pramAddress)) err++;
                                     if (pubfidnxt->usfdid[0] != ucbwfile->pramFileId[1]) err++;
                                     if (pubfidnxt->usfdid[1] != ucbwfile->pramFileId[0]) err++;
                                     if (pubfidnxt->usfdid[3] != ucbwfile->ASIC_sel) err++;
-                                    if (pubfidnxt->usfdsize != msb2lsb(&ucbwfile->pramDataLength)) err++;
+                                    if (pubfidnxt->usfdsize != msb2lsb32(&ucbwfile->pramDataLength)) err++;
 
                                     if (err) {
                                         sprintf_f(rs->logs, "[DVB] Error!!! fileid's data is wrong err count: %d  \n", err);
@@ -70487,8 +70574,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             #if LOG_FLASH
                             sprintf_f(rs->logs, "[DV] enty flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d ASIC: %d \n", 
-                                                          msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
-                                                          ucbwpram->pramType, (uint32_t)msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect, ucbwpram->ASIC_sel);
+                                                          msb2lsb32(&ucbwpram->pramID), msb2lsb32(&ucbwpram->pramDataLength), 
+                                                          ucbwpram->pramType, (uint32_t)msb2lsb32(&ucbwpram->pramAddress), ucbwpram->pramDirect, ucbwpram->ASIC_sel);
                             print_f(rs->plogs, "P11", rs->logs);
                             #else
                             switch (ucbwpram->pramDirect) {
@@ -72034,12 +72121,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 print_f(rs->plogs, "P11", rs->logs);
 
                                 #if 1 /* bypass the error for impl */
-                                lsb2Msb(&ptmetain->FUNC_BITS, (ASPMETA_FUNC_CROP | ASPMETA_FUNC_IMGLEN));
+                                lsb2Msb32(&ptmetain->FUNC_BITS, (ASPMETA_FUNC_CROP | ASPMETA_FUNC_IMGLEN));
                                 
                                 ptmetain->ASP_MAGIC[0] = 0x20;
                                 ptmetain->ASP_MAGIC[1] = 0x14;
                                 
-                                aspMetaRelease(msb2lsb(&ptmetain->FUNC_BITS), 0, rs);
+                                aspMetaRelease(msb2lsb32(&ptmetain->FUNC_BITS), 0, rs);
 
                                 pmass->massRecd = 0;
                                 
@@ -72164,7 +72251,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         if (che == 'E') {
                             //shmem_dump(addrd, lens);
                             
-                            //dbgMeta(msb2lsb(&ptmetain->FUNC_BITS), ptmetain);
+                            //dbgMeta(msb2lsb32(&ptmetain->FUNC_BITS), ptmetain);
                             act = aspMetaReleaseviaUsbDuo(0, rs, addrd, lens);
 
                             if (act < 0) {
@@ -72176,12 +72263,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 print_f(rs->plogs, "P11", rs->logs);  
                                 
                                 #if 1 /* bypass the error for impl */
-                                lsb2Msb(&ptmetainduo->FUNC_BITS, (ASPMETA_FUNC_CROP | ASPMETA_FUNC_IMGLEN));
+                                lsb2Msb32(&ptmetainduo->FUNC_BITS, (ASPMETA_FUNC_CROP | ASPMETA_FUNC_IMGLEN));
                                 
                                 ptmetainduo->ASP_MAGIC[0] = 0x20;
                                 ptmetainduo->ASP_MAGIC[1] = 0x14;
                                 
-                                aspMetaReleaseDuo(msb2lsb(&ptmetainduo->FUNC_BITS), 0, rs);
+                                aspMetaReleaseDuo(msb2lsb32(&ptmetainduo->FUNC_BITS), 0, rs);
 
                                 pmassduo->massRecd = 0;
 
@@ -73117,8 +73204,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);
                     
                     shmem_dump(csw, wrtsz);
-
-                    break;
                 }
 
                 msgret[0] = 'x';
@@ -73187,7 +73272,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 #endif
                 
-                continue;
+                break;
             }
             else if ((cmd == 0x11) && (opc == 0x4c)) { /* usbentsTx == 1*/
 
@@ -73297,7 +73382,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] 0x11 0x4c meat cmd: (0x%.2x) opc: (0x%.2x) dump \n", cmd, opc);
                     print_f(rs->plogs, "P11", rs->logs);
                     shmem_dump(csw, wrtsz);
-                    break;
                 }
                 
                 #if DBG_USB_TIME_MEASURE
@@ -73363,7 +73447,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                 cmd = 0;
                 
-                continue;
+                break;
             }
             else if ((cmd == 0x11) && (opc == 0x4e)) { /* usbentsTx == 1*/
                 chm = 0xff;
@@ -73466,7 +73550,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 cmd = 0;
                 
-                continue;
+                break;
             }
             else if (cmd == 0x11) { /* usbentsTx == 1*/
                 csw[11] = 0;
@@ -74005,7 +74089,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         ret = rs_ipc_get_ms(rs, msgret, 4, 10);
                     }
                     
-                    filesz = msb2lsb(&ucbwfile->pramDataLength);
+                    filesz = msb2lsb32(&ucbwfile->pramDataLength);
 
                     if (ret == 4) {
                         recvsz = msgret[3];
@@ -74173,7 +74257,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         ret = rs_ipc_get_ms(rs, msgret, 4, 10);
                     }
                     
-                    //filesz = msb2lsb(&ucbwfile->pramDataLength);
+                    //filesz = msb2lsb32(&ucbwfile->pramDataLength);
 
                     if (ret == 4) {
                         recvsz = msgret[3];
@@ -75534,11 +75618,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 #if LOG_FLASH /* debug flash read/write */
                 sprintf_f(rs->logs, "[DV] read flash id:0x%.8x len:%d cmd:0x%.2x addr:0x%.8x direct:%d \n", 
-                                              msb2lsb(&ucbwpram->pramID), msb2lsb(&ucbwpram->pramDataLength), 
-                                              ucbwpram->pramType, (uint32_t)msb2lsb(&ucbwpram->pramAddress), ucbwpram->pramDirect);
+                                              msb2lsb32(&ucbwpram->pramID), msb2lsb32(&ucbwpram->pramDataLength), 
+                                              ucbwpram->pramType, (uint32_t)msb2lsb32(&ucbwpram->pramAddress), ucbwpram->pramDirect);
                 print_f(rs->plogs, "P11", rs->logs);
                 #endif
-                lenflh = msb2lsb(&ucbwpram->pramDataLength);
+                lenflh = msb2lsb32(&ucbwpram->pramDataLength);
                 msync(vubsBuff, lenflh, MS_SYNC);
 
                 while (1) {
