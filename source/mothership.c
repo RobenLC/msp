@@ -5731,6 +5731,170 @@ static int aspMetaBuild(unsigned int funcbits, struct mainRes_s *mrs, struct pro
     return 0;
 }
 
+static int aspMetaGetTagPosRange(struct aspMetaData_s *meta, int *pos, int *range, char side)
+{
+    int pagenum=0, ix=0;
+    struct t_BKArea *pbka=0;
+
+    pagenum = msb2lsb16(&meta->BKNA_NUM);
+
+    for (ix=0; ix < pagenum; ix++) {
+        pbka = &meta->BKNA_ITEM[ix];
+        if ((pbka->bknalayer == 252) && (pbka->bknaside == side)) {
+
+            pos[0] = msb2lsb16(&pbka->bknax);
+            pos[1] = msb2lsb16(&pbka->bknaY);
+            range[0] = msb2lsb16(&pbka->bknaw);
+            range[1] = msb2lsb16(&pbka->bknah);
+            
+            return ix;
+        }
+    }
+    
+    return -1;
+}
+
+static int aspMetaGetTagRGBdiff(struct aspMetaData_s *meta, char *rgb, char side)
+{
+    int pagenum=0, ix=0;
+    struct t_BKArea *pbka=0;
+
+    pagenum = msb2lsb16(&meta->BKNA_NUM);
+
+    for (ix=0; ix < pagenum; ix++) {
+        pbka = &meta->BKNA_ITEM[ix];
+        if ((pbka->bknalayer == 253) && (pbka->bknaside == side)) {
+
+            rgb[0] = msb2lsb16(&pbka->bknax);
+            rgb[1] = msb2lsb16(&pbka->bknaY);
+            rgb[2] = msb2lsb16(&pbka->bknaw);
+
+            return ix;
+        }
+    }
+    
+    return -1;
+}
+
+static int aspMetaGetTagRGB(struct aspMetaData_s *meta, char *rgb, char side)
+{
+    int pagenum=0, ix=0;
+    struct t_BKArea *pbka=0;
+
+    pagenum = msb2lsb16(&meta->BKNA_NUM);
+
+    for (ix=0; ix < pagenum; ix++) {
+        pbka = &meta->BKNA_ITEM[ix];
+        if ((pbka->bknalayer == 254) && (pbka->bknaside == side)) {
+
+            rgb[0] = msb2lsb16(&pbka->bknax);
+            rgb[1] = msb2lsb16(&pbka->bknaY);
+            rgb[2] = msb2lsb16(&pbka->bknaw);
+
+            return ix;
+        }
+    }
+    
+    return -1;
+}
+
+
+static int aspMetaGetSrhCount(struct aspMetaData_s *meta, int *wsrh, int *hsrh, char side)
+{
+    int pagenum=0, ix=0;
+    struct t_BKArea *pbka=0;
+
+    pagenum = msb2lsb16(&meta->BKNA_NUM);
+
+    for (ix=0; ix < pagenum; ix++) {
+        pbka = &meta->BKNA_ITEM[ix];
+        if ((pbka->bknalayer == 255) && (pbka->bknaside == side)) {
+            *wsrh = msb2lsb16(&pbka->bknax);
+            *hsrh = msb2lsb16(&pbka->bknaY);
+            return ix;
+        }
+    }
+    
+    return -1;
+}
+
+static int aspMetaGetWH(struct aspMetaData_s *meta, int *wh, int *cnt, char side)
+{
+    int pagenum=0, ix=0;
+    struct t_BKArea *pbka=0;
+
+    pagenum = msb2lsb16(&meta->BKNA_NUM);
+
+    for (ix=0; ix < pagenum; ix++) {
+        pbka = &meta->BKNA_ITEM[ix];
+        if ((pbka->bknalayer == 255) && (pbka->bknaside == side)) {
+            cnt[0] = msb2lsb16(&pbka->bknax);
+            cnt[1] = msb2lsb16(&pbka->bknaY);
+            wh[0] = msb2lsb16(&pbka->bknaw);
+            wh[1] = msb2lsb16(&pbka->bknah);
+            return ix;
+        }
+    }
+    
+    return -1;
+}
+
+static int aspMetaGetPagePos(struct aspMetaData_s *meta, CFLOAT *pos, int idx)
+{
+    int pagenum=0;
+    struct t_BKArea *pbka=0;
+
+    pagenum = msb2lsb16(&meta->BKNA_NUM);
+
+    if (idx > pagenum) return -1;
+
+    pbka = &meta->BKNA_ITEM[idx];
+    if (pbka->bknalayer & 0xf0) {
+        return -2;
+    }
+
+    pos[0] = msb2lsb16(&pbka->bknax);
+    pos[1] = msb2lsb16(&pbka->bknaY);
+    pos[2] = msb2lsb16(&pbka->bknaw);
+    pos[3] = msb2lsb16(&pbka->bknah);
+
+    return 0;
+}
+
+static int aspMetaGetPages(struct aspMetaData_s *meta, int *sides, int num)
+{
+    int pagenum=0, ix=0, cnta=0, cntb=0;
+    int *psd=0;
+    struct t_BKArea *pbka=0;
+
+    pagenum = msb2lsb16(&meta->BKNA_NUM);
+
+    if (pagenum != num) return -1;
+
+    psd = sides;
+
+    for (ix=0; ix < pagenum; ix++) {
+        pbka = &meta->BKNA_ITEM[ix];
+        if (pbka->bknalayer & 0xf0) {
+            continue;
+        }
+
+        if (pbka->bknaside == 0) {
+            psd[cnta*2+0] = ix;
+            cnta ++;
+        } else {
+            psd[cntb*2+1] = ix;
+            cntb ++;
+        }
+    }
+
+    if (cnta > cntb) {
+        return cnta;
+    } else {
+        return cntb;
+    }
+}
+
 static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct procRes_s *rs) 
 {
     int i=0, act=0;
@@ -8934,7 +9098,7 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
 }
 
 #define LOG_ROTRECT_EN (0)
-static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int edwidth, int edheight, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc, char *bmp, int oldRowsz, int bpp) 
+static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int *page, struct aspMetaData_s *meta, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc, char *bmp, int oldRowsz, int bpp) 
 {
 #define UNIT_DEG (1000.0)
 #define GRAY_THD_H (170)
@@ -8951,7 +9115,8 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     CFLOAT vmin, vmin1;
     CFLOAT pfound[2];
     CFLOAT ptStart[4][2], dgs[4], *offsets[4], ptEnd[4][4], correct[2];
-    CFLOAT srhnum=0, srhlen=0;
+    CFLOAT srhnum[4][2]={0}, srhlen[4][2]={0}, srhran[4][2]={0};
+    int edwhA[2]={0}, edwhB[2]={0};
     
     int ptreal[2];
     struct aspRectObj *pRectout12=0, *pRectout23=0, *pRectout34=0, *pRectout41=0, *pRectorg=0;
@@ -8961,8 +9126,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     struct aspRectObj *pRectTga=0;
     char *src=0;
     char rgb[4][3];
-    char rgbtga[3];
-    char rgbdiff[3];
+    char *rgbtga[4];
+    char *rgbdiff[4];
+    int ctaga[2], ctagb[2];
+    int crana[2], cranb[2];
+    char tagrgba[3], tagrgbb[3];
+    char tagrgbdiffa[3], tagrgbdiffb[3];
+    int srhcntA[2]={0}, srhcntB[2]={0};
+    CFLOAT srhcntmax[4][2]={0};
+    int srhtotal=0;
+    int idxA=0, idxB=0;
     
     bitset = bpp / 8;
     
@@ -8995,18 +9168,111 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
 
     pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
+    idxA = page[0];
+    idxB = page[1];
+
+    /*
+    if ((idxA == 0) && (idxB == 0)) {
+        return -1;
+    }
+    */
+    
+    ret = aspMetaGetTagPosRange(meta, ctaga, crana, 0);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Errir!!! get A side tag pos and range wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "MCUT", rs->logs);
+    }
+
+    ret = aspMetaGetTagPosRange(meta, ctagb, cranb, 1);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Errir!!! get B side tag pos and range wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "MCUT", rs->logs);
+    }
+
+    ret = aspMetaGetTagRGB(meta, tagrgba, 0);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Errir!!! get A side tag rgb wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "MCUT", rs->logs);
+    }
+
+    ret = aspMetaGetTagRGB(meta, tagrgbb, 1);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Errir!!! get B side tag rgb wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "MCUT", rs->logs);
+    }
+
+    ret = aspMetaGetTagRGBdiff(meta, tagrgbdiffa, 0);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Errir!!! get A side tag rgb diff wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "MCUT", rs->logs);
+    }
+
+    ret = aspMetaGetTagRGBdiff(meta, tagrgbdiffb, 1);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Errir!!! get B side tag rgb diff wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "MCUT", rs->logs);
+
+        memcpy(tagrgbdiffb, tagrgbdiffa, 3);
+    }
+    
+    ret = aspMetaGetWH(meta, edwhA, srhcntA, 0);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Errir!!! get A side tag wh & search count wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "MCUT", rs->logs);
+    }
+
+    ret = aspMetaGetWH(meta, edwhB, srhcntB, 1);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Errir!!! get B side tag wh & search count wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "MCUT", rs->logs);
+    }
+
     #if 1
+    if ((idxA == 0) || (idxB == 0)) {
+        pT1[0] = 1.0;
+        pT1[1] = 1.0;
+        pT1[2] = edwhA[0] - 1;
+        pT1[3] = edwhA[1] - 1;
+
+
+        pT2[0] = 1.0;
+        pT2[1] = 1.0;
+        pT2[2] = edwhA[0] - 1;
+        pT2[3] = edwhA[1] - 1;
+    } else {
+        ret = aspMetaGetPagePos(meta, pT1, idxA);
+        if (ret < 0) {
+            sprintf_f(rs->logs, "Errir!!! get A side pos wrong ret: %d !!! \n", ret);
+            print_f(rs->plogs, "MCUT", rs->logs);
+        } else {
+            sprintf_f(rs->logs, "get A side idx: %d pos %.2lf, %.2lf, %.2lf, %.2lf !!! \n", idxA, pT1[0], pT1[1], pT1[2], pT1[3]);
+            print_f(rs->plogs, "MCUT", rs->logs);
+        }
+        
+        
+        ret = aspMetaGetPagePos(meta, pT2, idxB);
+        if (ret < 0) {
+            sprintf_f(rs->logs, "Errir!!! get B side pos wrong ret: %d !!! \n", ret);
+            print_f(rs->plogs, "MCUT", rs->logs);
+        } else {
+            sprintf_f(rs->logs, "get B side idx: %d pos %.2lf, %.2lf, %.2lf, %.2lf !!! \n", idxB, pT2[0], pT2[1], pT2[2], pT2[3]);
+            print_f(rs->plogs, "MCUT", rs->logs);
+        }
+    }
+    
+
+    #elif 0
     pT1[0] = 1.0;
     pT1[1] = 1.0;
-    pT1[2] = edwidth - 1;
-    pT1[3] = edheight - 1;
-    //setRectPoint(pRectorgi, edwidth - 1, edheight - 1, pT1);
+    pT1[2] = edwhA[0] - 1;
+    pT1[3] = edwhA[1] - 1;
+    //setRectPoint(pRectorgi, edwhA[0] - 1, edwhA[1] - 1, pT1);
 
     pT2[0] = 1.0;
     pT2[1] = 1.0;
-    pT2[2] = edwidth - 1;
-    pT2[3] = edheight - 1;
-    //setRectPoint(pRectorgv, edwidth - 1, edheight - 1, pT2);
+    pT2[2] = edwhA[0] - 1;
+    pT2[3] = edwhA[1] - 1;
+    //setRectPoint(pRectorgv, edwhA[0] - 1, edwhA[1] - 1, pT2);
     #else    
     pT1[0] = 1494.0;
     pT1[1] = 52.0;
@@ -9021,28 +9287,28 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     //setRectPoint(pRectorgv, 209.0, 248.0, pT2);
     #endif
 
-    pT3[0] = 103.0;
-    pT3[1] = 422.0;
+    pT3[0] = ctaga[0];
+    pT3[1] = ctaga[1];
     setRectPoint(pRectorgc, 2.0, 2.0, pT3);
 
-    pT4[0] = 1808.0;
-    pT4[1] = 414.0;
+    pT4[0] = ctagb[0];
+    pT4[1] = ctagb[1];
     setRectPoint(pRectorgk, 2.0, 2.0, pT4);
     
     pRectorg->aspRectLU[0] = (CFLOAT)1;
-    pRectorg->aspRectLU[1] = (CFLOAT)edheight;
+    pRectorg->aspRectLU[1] = (CFLOAT)edwhA[1];
 
     pRectorg->aspRectLD[0] = (CFLOAT)1;
     pRectorg->aspRectLD[1] = (CFLOAT)1;
     
-    pRectorg->aspRectRD[0] = (CFLOAT)edwidth;
+    pRectorg->aspRectRD[0] = (CFLOAT)edwhA[0];
     pRectorg->aspRectRD[1] = (CFLOAT)1;
 
-    pRectorg->aspRectRU[0] = (CFLOAT)edwidth;
-    pRectorg->aspRectRU[1] = (CFLOAT)edheight;
+    pRectorg->aspRectRU[0] = (CFLOAT)edwhA[0];
+    pRectorg->aspRectRU[1] = (CFLOAT)edwhA[1];
 
     #if LOG_ROTRECT_EN
-    sprintf_f(rs->logs, "pLU:(%.2lf, %.2lf) pRU:(%.2lf, %.2lf) pLD:(%.2lf, %.2lf) pRD:(%.2lf, %.2lf) w:%d h:%d \n", pLU[0], pLU[1], pRU[0], pRU[1], pLD[0], pLD[1], pRD[0], pRD[1], edwidth, edheight);
+    sprintf_f(rs->logs, "pLU:(%.2lf, %.2lf) pRU:(%.2lf, %.2lf) pLD:(%.2lf, %.2lf) pRD:(%.2lf, %.2lf) w:%d h:%d \n", pLU[0], pLU[1], pRU[0], pRU[1], pLD[0], pLD[1], pRD[0], pRD[1], edwhA[0], edwhA[1]);
     print_f(rs->plogs, "RECT", rs->logs);
     #endif
     
@@ -9158,13 +9424,15 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         offsets[2] = o34;
         offsets[3] = o34;
 
-        rgbtga[0] = 130;
-        rgbtga[1] = 130;
-        rgbtga[2] = 130;
+        rgbtga[0] = tagrgba;
+        rgbtga[1] = tagrgbb;
+        rgbtga[2] = tagrgba;
+        rgbtga[3] = tagrgbb;
 
-        rgbdiff[0] = 80;
-        rgbdiff[1] = 50;
-        rgbdiff[2] = 10;
+        rgbdiff[0] = tagrgbdiffa;
+        rgbdiff[1] = tagrgbdiffb;
+        rgbdiff[2] = tagrgbdiffa;
+        rgbdiff[3] = tagrgbdiffb;
 
         ptreal[0] = 0;
         ptreal[1] = 0;
@@ -9202,13 +9470,15 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         offsets[2] = o41;
         offsets[3] = o41;
 
-        rgbtga[0] = 130;
-        rgbtga[1] = 130;
-        rgbtga[2] = 130;
+        rgbtga[0] = tagrgba;
+        rgbtga[1] = tagrgbb;
+        rgbtga[2] = tagrgba;
+        rgbtga[3] = tagrgbb;
 
-        rgbdiff[0] = 80;
-        rgbdiff[1] = 50;
-        rgbdiff[2] = 10;
+        rgbdiff[0] = tagrgbdiffa;
+        rgbdiff[1] = tagrgbdiffb;
+        rgbdiff[2] = tagrgbdiffa;
+        rgbdiff[3] = tagrgbdiffb;
 
         ptreal[0] = 0;
         ptreal[1] = 0;
@@ -9246,13 +9516,15 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         offsets[2] = o12;
         offsets[3] = o12;
 
-        rgbtga[0] = 130;
-        rgbtga[1] = 130;
-        rgbtga[2] = 130;
+        rgbtga[0] = tagrgba;
+        rgbtga[1] = tagrgbb;
+        rgbtga[2] = tagrgba;
+        rgbtga[3] = tagrgbb;
 
-        rgbdiff[0] = 80;
-        rgbdiff[1] = 50;
-        rgbdiff[2] = 10;
+        rgbdiff[0] = tagrgbdiffa;
+        rgbdiff[1] = tagrgbdiffb;
+        rgbdiff[2] = tagrgbdiffa;
+        rgbdiff[3] = tagrgbdiffb;
 
         ptreal[0] = 0;
         ptreal[1] = 0;
@@ -9310,33 +9582,97 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         offsets[2] = o23;
         offsets[3] = o23;
 
-        rgbtga[0] = 130;
-        rgbtga[1] = 130;
-        rgbtga[2] = 130;
+        rgbtga[0] = tagrgba;
+        rgbtga[1] = tagrgbb;
+        rgbtga[2] = tagrgba;
+        rgbtga[3] = tagrgbb;
 
-        rgbdiff[0] = 80;
-        rgbdiff[1] = 50;
-        rgbdiff[2] = 10;
+        rgbdiff[0] = tagrgbdiffa;
+        rgbdiff[1] = tagrgbdiffb;
+        rgbdiff[2] = tagrgbdiffa;
+        rgbdiff[3] = tagrgbdiffb;
 
         ptreal[0] = 0;
         ptreal[1] = 0;
     }
-    
-    srhnum = 1.0;
-    srhlen = 30.0;
 
-    for (ic=0; ic < 3; ic++) {
+/*
+    srhcntmax[0][0] = srhcntA[0];
+    srhcntmax[0][1] = srhcntA[1];
+    srhcntmax[1][0] = srhcntB[0];
+    srhcntmax[1][1] = srhcntB[1];
+    srhcntmax[2][0] = srhcntA[0];
+    srhcntmax[2][1] = srhcntA[1];
+    srhcntmax[3][0] = srhcntB[0];
+    srhcntmax[3][1] = srhcntB[1];
+*/
+    srhcntmax[0][0] = srhcntA[0];
+    srhcntmax[0][1] = srhcntA[1];
+    srhcntmax[1][0] = srhcntA[0];
+    srhcntmax[1][1] = srhcntA[1];
+    srhcntmax[2][0] = srhcntA[0];
+    srhcntmax[2][1] = srhcntA[1];
+    srhcntmax[3][0] = srhcntA[0];
+    srhcntmax[3][1] = srhcntA[1];
+    
+    srhnum[0][0] = 1.0;
+    srhnum[0][1] = 1.0;
+    srhnum[1][0] = 1.0;
+    srhnum[1][1] = 1.0;
+    srhnum[2][0] = 1.0;
+    srhnum[2][1] = 1.0;
+    srhnum[3][0] = 1.0;
+    srhnum[3][1] = 1.0;
+
+    
+    srhlen[0][0] = crana[0];
+    srhlen[0][1] = crana[1];
+    srhlen[1][0] = cranb[0];
+    srhlen[1][1] = cranb[1];
+    srhlen[2][0] = crana[0];
+    srhlen[2][1] = crana[1];
+    srhlen[3][0] = cranb[0];
+    srhlen[3][1] = cranb[1];
+
+    srhran[0][0] = crana[0];
+    srhran[0][1] = crana[1];
+    srhran[1][0] = cranb[0];
+    srhran[1][1] = cranb[1];
+    srhran[2][0] = crana[0];
+    srhran[2][1] = crana[1];
+    srhran[3][0] = cranb[0];
+    srhran[3][1] = cranb[1];
+    
+    if (srhcntA[0] > srhcntA[1]) {
+        srhtotal = srhcntA[0];
+    } else {
+        srhtotal = srhcntA[1];
+    }
+
+    if (srhcntB[0] > srhtotal) {
+        srhtotal = srhcntB[0];
+    }
+    
+    if (srhcntB[1] > srhtotal) {
+        srhtotal = srhcntB[1];
+    }
+    
+    for (ic=0; ic < srhtotal; ic++) {
         for (ix=0; ix < 4; ix++) {
-            pT5[0] = ptStart[ix][0] - 20.0;
-            pT5[1] = ptStart[ix][1] - 20.0;
-            setRectPoint(pRectTga, srhlen, srhlen, pT5);
+            if ((srhnum[ix][0] >= srhcntmax[ix][0]) && (srhnum[ix][0] >= srhcntmax[ix][0])) {
+                continue;
+            }
+        
+            pT5[0] = ptStart[ix][0];
+            pT5[1] = ptStart[ix][1];
+            setRectPoint(pRectTga, srhlen[ix][0], srhlen[ix][1], pT5);
             #if LOG_ROTRECT_EN
             dbgprintRect(pRectTga);
             #endif
         
-            ret = srhRotRect(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga, bmp, oldRowsz, bpp, pidx, srhnum, srhnum);
+            ret = srhRotRect(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
             if (ret == 0) {
-                err = adjCircleRect(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff, bmp, oldRowsz, bpp, pidx);
+                err = adjCircleRect(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx);
                 if (err == 0) {
         
                     correct[0] = ptreal[0] - ptStart[ix][0];
@@ -9355,17 +9691,21 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
                     break;
                 }
             }
-        
-            ptStart[ix][0] -= 30.0;
-            ptStart[ix][1] -= 30.0;            
+
+            srhnum[ix][0] += 2.0;
+            srhnum[ix][1] += 2.0;
+
+            srhlen[ix][0] += 2.0 * srhran[ix][0];
+            srhlen[ix][1] += 2.0 * srhran[ix][1];
+            
+            ptStart[ix][0] -= srhran[ix][0];
+            ptStart[ix][1] -= srhran[ix][1];
         }
 
         if ((ret == 0) && (err == 0)) {
             break;
-        }
-        
-        srhnum += 2.0;
-        srhlen += 60.0;
+        }        
+    
     }
 
     if ((!ptreal[0]) && (!ptreal[1])) {
@@ -15321,7 +15661,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
             
 
 #define LOG_ROT_DBG  (0)
-static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff)
+static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff)
 {
 #define UNIT_DEG (1000.0)
 
@@ -15354,6 +15694,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     struct aspConfig_s *pct=0;
     uint32_t val=0;
     int cxm, cxn;
+    int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0, *pRectroc=0;
     
     #if LOG_ROT_DBG    
@@ -15495,7 +15836,7 @@ static int rotateBMP(struct procRes_s *rs, int deg, int usbfid, char *bmpsrc, ch
     //dbgprintRect(pRectin);
     //dbgprintRect(pRectinR);
             
-    ret = getRotRectPoint(rs, pRectinR, 1920, 650, 11, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp);
+    ret = getRotRectPoint(rs, pRectinR, page, meta, 11, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp);
     if (ret == 0) {
         memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
         memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -66705,7 +67046,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct sdParseBuff_s *pabuff=0;
     struct bitmapHeader_s *bheader = 0;
     struct timespec jpgS, jpgE;
-    int cutcnt=0;
+    int cutcnt=0, cutnum=0, *cutsides;
     
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
@@ -72611,289 +72952,300 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                     
                                     #if CROP_TEST_EN
-                                    cutcnt = 3;
+                                    cutcnt =0;
+                                    cutnum = msb2lsb16(&metaRx->BKNA_NUM);
 
-                                    while (cutcnt) {
+                                    cutsides = aspMemalloc(cutnum*sizeof(int)*2, 11);
+                                    memset(cutsides, 0, cutnum*sizeof(int)*2);
 
-                                    if (cutcnt < 3) {
-                                        recvsz = 0;
-                                        
-                                        while (recvsz <= 0) {
-                                            recvsz = read(usbfd, ptrecv, 31);
+                                    ret = aspMetaGetPages(metaRx, &cutsides[2], cutnum);
+                                    sprintf_f(rs->logs, "[CUT] get page ret: %d \n", ret);
+                                    print_f(rs->plogs, "P11", rs->logs);
 
-                                            usleep(1000);
-                                        }
-
-                                        sprintf_f(rs->logs, " get cbw: [%.2x][%.2x][%.2x] recvsz: %d \n", ptrecv[15], ptrecv[16], ptrecv[17], recvsz); 
+                                    cutnum=0;
+                                    for (; cutnum < (ret+1); cutnum++) {
+                                        sprintf_f(rs->logs, "[CUT] %d. A:%d B:%d \n", cutnum, cutsides[cutnum*2], cutsides[cutnum*2+1]);
                                         print_f(rs->plogs, "P11", rs->logs);
-
-                                        shmem_dump(ptrecv, recvsz);
                                     }
-                                    #endif //#if CROP_TEST_EN
-
-                                    //msync(bmpcolrtb, 1078, MS_SYNC);
-                                    //memcpy(bmpbuff, bmpcolrtb, bhlen);
-                                    //shmem_dump(bmpbuff, bhlen);
-                                
-                                    //bdeg = 1350;
-                                    //bdeg = 900;
-                                    //bdeg = 450;
-
-                                    addrd = exmtaout;
                                     
-                                    #if DUMP_JPG_ROT
-                                    for (bdeg = 0; bdeg <= 360000; bdeg += 5000) {
-                                    //bdeg = 180000;
-                                    #else
-                                    bdeg = 0;
-                                    #endif
-                                    
-                                    //bdeg = -915;
-
-                                    memcpy(ph, bmpcolrtb, 54);
-
-                                    sprintf_f(rs->logs, "[BMP] rotate degree: %d \n", bdeg/1000);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    
-                                    clock_gettime(CLOCK_REALTIME, &jpgS);
-
-                                    //grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
-                                    rotateBMP(rs, bdeg, usbfd, bmpbuff, bmpcolrtb, bhlen, bmprot);
-                                    //grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
-                                    
-                                    //draw();
-                                    //grapbmp();
-                                    clock_gettime(CLOCK_REALTIME, &jpgE);
-
-                                    sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d \n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    
-                                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
-                                    sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", tmCost);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    
-                                    bmpbufc = pabuff->dirParseBuff;   
-                                    rotlen = pabuff->dirBuffUsed;
-
-                                    if (fformat == FILE_FORMAT_JPG) {
-                                        clock_gettime(CLOCK_REALTIME, &jpgS);
-                                        err = rgb2jpg(pabuff->dirParseBuff + bheader->aspbhRawoffset, &jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
-                                        clock_gettime(CLOCK_REALTIME, &jpgE);
-                                        if (err) {
-                                            sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
+                                    while (cutcnt < cutnum) {
+                                        if (cutcnt > 0) {
+                                            recvsz = 0;
+                                            
+                                            while (recvsz <= 0) {
+                                                recvsz = read(usbfd, ptrecv, 31);
+                                        
+                                                usleep(1000);
+                                            }
+                                        
+                                            sprintf_f(rs->logs, " get cbw: [%.2x][%.2x][%.2x] recvsz: %d \n", ptrecv[15], ptrecv[16], ptrecv[17], recvsz); 
                                             print_f(rs->plogs, "P11", rs->logs);
+                                        
+                                            shmem_dump(ptrecv, recvsz);
                                         }
-                                    
-                                        tmCost = time_diff(&jpgS, &jpgE, 1000000);
-                                        sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif //#if CROP_TEST_EN
                                         
-                                        //changeJpgLen(jpgrlt, bheader->aspbiHeight, jpgLen);
+                                        //msync(bmpcolrtb, 1078, MS_SYNC);
+                                        //memcpy(bmpbuff, bmpcolrtb, bhlen);
+                                        //shmem_dump(bmpbuff, bhlen);
                                         
-                                        //shmem_dump(jpgrlt, 512);
+                                        //bdeg = 1350;
+                                        //bdeg = 900;
+                                        //bdeg = 450;
                                         
-                                        rotlen = 512 - (jpgLen % 512);
-                                        rotlen = rotlen + jpgLen;
-                                        bmpbufc = jpgrlt;
-                                    }
-                                    
-                                    aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight);
-                                    sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
-                                    print_f(rs->plogs, "P11", rs->logs);
-
-                                    lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
-                                    lrst= lastCylen % 512;
-                                    
-                                    bmpcpy = bmpbufc + rotlen;
-                                    memcpy(bmpcpy, ptmetausb, lrst);
-
-                                    //shmem_dump(bmpbufc+rotlen-512, 1024);
-                                    
-                                    sprintf_f(rs->logs, "[BMP] usb meta size check, lstlen: %d : sizeof: %d  \n", lrst, lenbs);
-                                    print_f(rs->plogs, "P11", rs->logs);
-                                    
-                                    //bmpbufc = bmpbuff;
-                                    rotlen = rotlen + lrst;
-
-                                    #if DUMP_JPG_ROT
-                                    fsmeta = find_save(ptfilepath, ptfileSavejpg);
-                                    if (fsmeta) {
-                                        sprintf_f(rs->logs, "[DV] find save jpg [%s] succeed!!! \n", ptfilepath);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                    }
-                                    #endif
-                                    
-                                    rotlast = rotlen % USB_BUF_SIZE;
-                                    rawlen = rotlen - rotlast;
-
-                                    msync(bmpbufc, rotlen, MS_SYNC);
-
-                                    //rawlen = rotlen;
-                                    
-                                    if (rawlen > USB_BUF_SIZE) {
-                                        blen = USB_BUF_SIZE;
-                                    } else {
-                                        blen = rawlen;
-                                    }
-                                    cntsent = 0;
-                                    while (rawlen) {                                    
-                                        /*
-                                        if (cntsent == 0) {
-                                            memset(bmpbufc, 0xff, 512);
-                                            msync(bmpbufc, 512, MS_SYNC);
-                                        }
-                                        */
-
+                                        addrd = exmtaout;
+                                        
                                         #if DUMP_JPG_ROT
-                                        bret = blen;
+                                        for (bdeg = 0; bdeg <= 360000; bdeg += 5000) {
+                                        //bdeg = 180000;
                                         #else
-                                        bret = usbc_write(usbfd, bmpbufc, blen);
+                                        bdeg = 0;
                                         #endif
                                         
-
-                                        //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 1\n", blen, bret);
-                                        //print_f(rs->plogs, "P11", rs->logs); 
-
-                                        /*
-                                        if (cntsent == 0) {
-                                            shmem_dump(bmpbufc, 512);
-                                        }
-                                        */
-                                    
-                                        if (bret > 0) {
-                                            cntsent ++;                                    
-                                            
-                                            rawlen -= bret;
-
-                                            #if DUMP_JPG_ROT
-                                            wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
-                                            sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                        //bdeg = -915;
+                                        
+                                        memcpy(ph, bmpcolrtb, 54);
+                                        
+                                        sprintf_f(rs->logs, "[BMP] rotate degree: %d \n", bdeg/1000);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        
+                                        clock_gettime(CLOCK_REALTIME, &jpgS);
+                                        
+                                        //grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
+                                        rotateBMP(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot);
+                                        //grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
+                                        
+                                        //draw();
+                                        //grapbmp();
+                                        clock_gettime(CLOCK_REALTIME, &jpgE);
+                                        
+                                        sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d \n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        
+                                        tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                                        sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", tmCost);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        
+                                        bmpbufc = pabuff->dirParseBuff;   
+                                        rotlen = pabuff->dirBuffUsed;
+                                        
+                                        if (fformat == FILE_FORMAT_JPG) {
+                                            clock_gettime(CLOCK_REALTIME, &jpgS);
+                                            err = rgb2jpg(pabuff->dirParseBuff + bheader->aspbhRawoffset, &jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
+                                            clock_gettime(CLOCK_REALTIME, &jpgE);
+                                            if (err) {
+                                                sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                            }
+                                        
+                                            tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                                            sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
                                             print_f(rs->plogs, "P11", rs->logs);
+                                            
+                                            //changeJpgLen(jpgrlt, bheader->aspbiHeight, jpgLen);
+                                            
+                                            //shmem_dump(jpgrlt, 512);
+                                            
+                                            rotlen = 512 - (jpgLen % 512);
+                                            rotlen = rotlen + jpgLen;
+                                            bmpbufc = jpgrlt;
+                                        }
+                                        
+                                        aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight);
+                                        sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        
+                                        lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                                        lrst= lastCylen % 512;
+                                        
+                                        bmpcpy = bmpbufc + rotlen;
+                                        memcpy(bmpcpy, ptmetausb, lrst);
+                                        
+                                        //shmem_dump(bmpbufc+rotlen-512, 1024);
+                                        
+                                        sprintf_f(rs->logs, "[BMP] usb meta size check, lstlen: %d : sizeof: %d  \n", lrst, lenbs);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        
+                                        //bmpbufc = bmpbuff;
+                                        rotlen = rotlen + lrst;
+                                        
+                                        #if DUMP_JPG_ROT
+                                        fsmeta = find_save(ptfilepath, ptfileSavejpg);
+                                        if (fsmeta) {
+                                            sprintf_f(rs->logs, "[DV] find save jpg [%s] succeed!!! \n", ptfilepath);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        }
+                                        #endif
+                                        
+                                        rotlast = rotlen % USB_BUF_SIZE;
+                                        rawlen = rotlen - rotlast;
+                                        
+                                        msync(bmpbufc, rotlen, MS_SYNC);
+                                        
+                                        //rawlen = rotlen;
+                                        
+                                        if (rawlen > USB_BUF_SIZE) {
+                                            blen = USB_BUF_SIZE;
+                                        } else {
+                                            blen = rawlen;
+                                        }
+                                        cntsent = 0;
+                                        while (rawlen) {                                    
+                                            /*
+                                            if (cntsent == 0) {
+                                                memset(bmpbufc, 0xff, 512);
+                                                msync(bmpbufc, 512, MS_SYNC);
+                                            }
+                                            */
+                                        
+                                            #if DUMP_JPG_ROT
+                                            bret = blen;
+                                            #else
+                                            bret = usbc_write(usbfd, bmpbufc, blen);
                                             #endif
-
-                                            bmpbufc += bret;
-                                    
-                                            if (rawlen > USB_BUF_SIZE) {
-                                                blen = USB_BUF_SIZE;
-                                            } else {
-                                                blen = rawlen;
+                                            
+                                        
+                                            //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 1\n", blen, bret);
+                                            //print_f(rs->plogs, "P11", rs->logs); 
+                                        
+                                            /*
+                                            if (cntsent == 0) {
+                                                shmem_dump(bmpbufc, 512);
+                                            }
+                                            */
+                                        
+                                            if (bret > 0) {
+                                                cntsent ++;                                    
+                                                
+                                                rawlen -= bret;
+                                        
+                                                #if DUMP_JPG_ROT
+                                                wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
+                                                sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+                                        
+                                                bmpbufc += bret;
+                                        
+                                                if (rawlen > USB_BUF_SIZE) {
+                                                    blen = USB_BUF_SIZE;
+                                                } else {
+                                                    blen = rawlen;
+                                                }
                                             }
                                         }
-                                    }
-
-                                    
-                                    blen = rotlast;
-                                    while (blen) {
-
+                                        
+                                        
+                                        blen = rotlast;
+                                        while (blen) {
+                                        
+                                            #if DUMP_JPG_ROT
+                                            bret = blen;
+                                            #else
+                                            bret = usbc_write(usbfd, bmpbufc, blen); 
+                                            #endif
+                                            
+                                            //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 2\n", blen, bret);
+                                            //print_f(rs->plogs, "P11", rs->logs); 
+                                        
+                                            if (bret > 0) {
+                                                blen -= bret;
+                                        
+                                                #if DUMP_JPG_ROT
+                                                wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
+                                                sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+                                        
+                                                bmpbufc += bret;
+                                            }
+                                        }
+                                        
+                                        blen = lens;
+                                        while (blen) {
+                                            #if DUMP_JPG_ROT
+                                            bret = blen;
+                                            #else
+                                            bret = usbc_write(usbfd, addrd, blen); 
+                                            #endif
+                                            
+                                            //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d -3 \n", blen, bret);
+                                            //print_f(rs->plogs, "P11", rs->logs); 
+                                        
+                                            if (bret > 0) {
+                                                blen -= bret;
+                                        
+                                                #if DUMP_JPG_ROT
+                                                wrtsz = fwrite((char*)addrd, 1, bret, fsmeta);
+                                                sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+                                        
+                                                addrd += bret;
+                                            }
+                                        }
+                                        
                                         #if DUMP_JPG_ROT
-                                        bret = blen;
-                                        #else
-                                        bret = usbc_write(usbfd, bmpbufc, blen); 
+                                        fflush(fsmeta);
+                                        fclose(fsmeta);
+                                        sync();
                                         #endif
                                         
-                                        //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 2\n", blen, bret);
-                                        //print_f(rs->plogs, "P11", rs->logs); 
-
-                                        if (bret > 0) {
-                                            blen -= bret;
-
-                                            #if DUMP_JPG_ROT
-                                            wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
-                                            sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
-                                            print_f(rs->plogs, "P11", rs->logs);
-                                            #endif
-
-                                            bmpbufc += bret;
-                                        }
-                                    }
-                                    
-                                    blen = lens;
-                                    while (blen) {
                                         #if DUMP_JPG_ROT
-                                        bret = blen;
-                                        #else
-                                        bret = usbc_write(usbfd, addrd, blen); 
+                                        }
                                         #endif
                                         
-                                        //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d -3 \n", blen, bret);
-                                        //print_f(rs->plogs, "P11", rs->logs); 
-
-                                        if (bret > 0) {
-                                            blen -= bret;
-
-                                            #if DUMP_JPG_ROT
-                                            wrtsz = fwrite((char*)addrd, 1, bret, fsmeta);
-                                            sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                        #if CROP_TEST_EN
+                                        
+                                        cutcnt ++;
+                                        
+                                        if (cutcnt < cutnum) { 
+                                            sprintf_f(rs->logs, "[DV] cutcnt: %d, cswerr: 0x%.2x !!!\n", cutcnt, cswerr); 
                                             print_f(rs->plogs, "P11", rs->logs);
-                                            #endif
-
-                                            addrd += bret;
-                                        }
-                                    }
-
-                                    #if DUMP_JPG_ROT
-                                    fflush(fsmeta);
-                                    fclose(fsmeta);
-                                    sync();
-                                    #endif
-
-                                    #if DUMP_JPG_ROT
-                                    }
-                                    #endif
-
-                                    #if CROP_TEST_EN
-                                    
-                                    cutcnt --;
-                                    
-                                    if (cutcnt) { 
-                                    sprintf_f(rs->logs, "[DV] cutcnt: %d, cswerr: 0x%.2x !!!\n", cutcnt, cswerr); 
-                                    print_f(rs->plogs, "P11", rs->logs);
-
-                                    /*
-                                    if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
-                                        if ((waitCylen) || (pagerst)) {
-                                            sprintf_f(rs->logs, "[DV] Warnning!!!waitCylen || pagerst != 0 and cswerr: 0x%.2x, %d : %d !!!\n", cswerr, waitCylen, pagerst); 
-                                            print_f(rs->plogs, "P11", rs->logs);
-
+                                            
+                                            /*
+                                            if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
+                                                if ((waitCylen) || (pagerst)) {
+                                                    sprintf_f(rs->logs, "[DV] Warnning!!!waitCylen || pagerst != 0 and cswerr: 0x%.2x, %d : %d !!!\n", cswerr, waitCylen, pagerst); 
+                                                    print_f(rs->plogs, "P11", rs->logs);
+                                            
+                                                    csw[11] = 0;
+                                                    csw[12] = 0;
+                                                } else {
+                                                    csw[11] = 0;
+                                                    csw[12] = cswerr;
+                                                }
+                                            } else {
+                                            
+                                                csw[11] = 0;
+                                                csw[12] = 0;
+                                            }
+                                            */
+                                            
                                             csw[11] = 0;
                                             csw[12] = 0;
-                                        } else {
-                                            csw[11] = 0;
-                                            csw[12] = cswerr;
+                                            
+                                            wrtsz = 0;
+                                            retry = 0;
+                                            
+                                            while (1) {
+                                                wrtsz = usbc_write(usbfd, csw, 13);
+                                            
+                                                #if DBG_27_DV
+                                                sprintf_f(rs->logs, "[DV] cmd: 0x%.2x usb TX size: %d \n====================\n", cmd, wrtsz);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+                                            
+                                                if (wrtsz > 0) {
+                                                    break;
+                                                }
+                                                retry++;
+                                                if (retry > 32768) {
+                                                    break;
+                                                }
+                                            }
+                                            shmem_dump(csw, wrtsz);
                                         }
-                                    } else {
-
-                                        csw[11] = 0;
-                                        csw[12] = 0;
-                                    }
-                                    */
-
-                                    csw[11] = 0;
-                                    csw[12] = 0;
-
-                                    wrtsz = 0;
-                                    retry = 0;
-
-                                    while (1) {
-                                        wrtsz = usbc_write(usbfd, csw, 13);
-
-                                        #if DBG_27_DV
-                                        sprintf_f(rs->logs, "[DV] cmd: 0x%.2x usb TX size: %d \n====================\n", cmd, wrtsz);
-                                        print_f(rs->plogs, "P11", rs->logs);
-                                        #endif
-
-                                        if (wrtsz > 0) {
-                                            break;
-                                        }
-                                        retry++;
-                                        if (retry > 32768) {
-                                            break;
-                                        }
-                                    }
-
-                                    shmem_dump(csw, wrtsz);
-                                    }
-
                                     }
 
                                     #endif // #if CROP_TEST_EN
