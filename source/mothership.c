@@ -8437,9 +8437,10 @@ static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edhe
 
 }
 
-#define LOG_ADJCIRCLE_EN (0)
+#define LOG_ADJCIRCLE_EN (1)
 static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx)
 {
+#define SRH_DRAW_COLOR (0)
 #define SRH_RANGE (80)
 #define SRH_COUNT_MIN (95)
     int dx=0, dy=0, ix=0, bitset=0, ret=0, flag=0x100;
@@ -8624,9 +8625,11 @@ static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT
     dy = round(rval[1]);
     src = getPixel(bmp, dx, dy, oldRowsz, bitset);
 
+    #if SRH_DRAW_COLOR
     src[0] = 255;
     src[1] = 255;
     src[2] = 255;
+    #endif
     
     real[0] = round(fval[0]);
     real[1] = round(fval[1]);
@@ -8771,7 +8774,7 @@ static int srhRotRectTran(struct procRes_s *rs, CFLOAT *pfound, struct aspRectOb
     return 0;
 }
 
-#define LOG_SEARCHRECT_EN (0)
+#define LOG_SEARCHRECT_EN (1)
 static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *pRect, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx, CFLOAT wcnt, CFLOAT hcnt)
 {
 #define DRAW_COLOR (0)
@@ -8791,7 +8794,7 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
     CFLOAT roffset[2]={0};
 
     #if DRAW_COLOR
-    char drawclor[3] = {255,255,255};
+    char drawclor[3] = {0,0,0};
     #endif
     
     int sumdiff=0, summin=0; 
@@ -9097,7 +9100,7 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
     return 0;
 }
 
-#define LOG_ROTRECT_EN (0)
+#define LOG_ROTRECT_EN (1)
 static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int *page, struct aspMetaData_s *meta, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc, char *bmp, int oldRowsz, int bpp) 
 {
 #define UNIT_DEG (1000.0)
@@ -9228,7 +9231,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     }
 
     #if 1
-    if ((idxA == 0) || (idxB == 0)) {
+    if ((idxA == -1) && (idxB == -1)) {
         pT1[0] = 1.0;
         pT1[1] = 1.0;
         pT1[2] = edwhA[0] - 1;
@@ -9239,7 +9242,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         pT2[1] = 1.0;
         pT2[2] = edwhA[0] - 1;
         pT2[3] = edwhA[1] - 1;
-    } else {
+    } else if ((idxA) || (idxB)) {
         ret = aspMetaGetPagePos(meta, pT1, idxA);
         if (ret < 0) {
             sprintf_f(rs->logs, "Errir!!! get A side pos wrong ret: %d !!! \n", ret);
@@ -9258,6 +9261,9 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
             sprintf_f(rs->logs, "get B side idx: %d pos %.2lf, %.2lf, %.2lf, %.2lf !!! \n", idxB, pT2[0], pT2[1], pT2[2], pT2[3]);
             print_f(rs->plogs, "MCUT", rs->logs);
         }
+    }
+    else {
+        return -1;
     }
     
 
@@ -9596,7 +9602,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         ptreal[1] = 0;
     }
 
-/*
+
     srhcntmax[0][0] = srhcntA[0];
     srhcntmax[0][1] = srhcntA[1];
     srhcntmax[1][0] = srhcntB[0];
@@ -9605,7 +9611,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     srhcntmax[2][1] = srhcntA[1];
     srhcntmax[3][0] = srhcntB[0];
     srhcntmax[3][1] = srhcntB[1];
-*/
+/*
     srhcntmax[0][0] = srhcntA[0];
     srhcntmax[0][1] = srhcntA[1];
     srhcntmax[1][0] = srhcntA[0];
@@ -9614,7 +9620,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     srhcntmax[2][1] = srhcntA[1];
     srhcntmax[3][0] = srhcntA[0];
     srhcntmax[3][1] = srhcntA[1];
-    
+*/
     srhnum[0][0] = 1.0;
     srhnum[0][1] = 1.0;
     srhnum[1][0] = 1.0;
@@ -9672,6 +9678,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         
             ret = srhRotRect(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
             if (ret == 0) {
+                #if 1
+                setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
+
+                getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
+                *pdeg = dgs[ix];
+
+                ptreal[0] = 1;
+                ptreal[1] = 1;
+                break;
+                #else
                 err = adjCircleRect(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx);
                 if (err == 0) {
         
@@ -9690,6 +9706,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
                     
                     break;
                 }
+                #endif
             }
 
             srhnum[ix][0] += 2.0;
@@ -15667,7 +15684,7 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
 
     struct sdParseBuff_s *pabuf=0;
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
-    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0;
+    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0;
     int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
     char ch;
     struct bitmapHeader_s *bheader;
@@ -15833,7 +15850,7 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
 
     findRectOrient(pRectinR, pRectin);
     
-    //dbgprintRect(pRectin);
+    dbgprintRect(pRectin);
     //dbgprintRect(pRectinR);
             
     ret = getRotRectPoint(rs, pRectinR, page, meta, 11, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp);
@@ -15854,6 +15871,8 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
 
         RD[0] = bheader->aspbiWidth-1;
         RD[1] = 0;
+
+        err = ret;
     }
 
     #if LOG_ROT_DBG    
@@ -17142,7 +17161,7 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     #if LOG_ROT_DBG
     dbgBitmapHeader(bheader, len);
     #endif
-    return 0; 
+    return err; 
 }
 
 static int doSystemCmd(char *sCommand)
@@ -72957,7 +72976,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                     cutsides = aspMemalloc(cutnum*sizeof(int)*2, 11);
                                     memset(cutsides, 0, cutnum*sizeof(int)*2);
-
+                                    
+                                    cutsides[0] = -1;
+                                    cutsides[1] = -1;
+                                    
                                     ret = aspMetaGetPages(metaRx, &cutsides[2], cutnum);
                                     sprintf_f(rs->logs, "[CUT] get page ret: %d \n", ret);
                                     print_f(rs->plogs, "P11", rs->logs);
@@ -73012,7 +73034,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         clock_gettime(CLOCK_REALTIME, &jpgS);
                                         
                                         //grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
-                                        rotateBMP(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot);
+                                        ret = rotateBMP(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot);
                                         //grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
                                         
                                         //draw();
@@ -73199,7 +73221,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         
                                         cutcnt ++;
                                         
-                                        if (cutcnt < cutnum) { 
+                                        if ((cutcnt < cutnum) && (!ret)) { 
                                             sprintf_f(rs->logs, "[DV] cutcnt: %d, cswerr: 0x%.2x !!!\n", cutcnt, cswerr); 
                                             print_f(rs->plogs, "P11", rs->logs);
                                             
@@ -73245,6 +73267,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 }
                                             }
                                             shmem_dump(csw, wrtsz);
+                                        }
+                                        else {
+                                            if (ret) {
+                                                break;
+                                            }
                                         }
                                     }
 
