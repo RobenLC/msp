@@ -8437,6 +8437,228 @@ static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edhe
 
 }
 
+#define LOG_ADJCIRCLE_8_BITS_EN (1)
+static int adjCircleRect8Bits(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx)
+{
+#define SRH_DRAW_COLOR_8_BITS (0)
+#define SRH_RANGE_8_BITS (45)
+#define SRH_COUNT_MIN_8_BITS (30)
+#define SRH_CROSS_W (30)//(48)
+#define SRH_CROSS_H (30)//(31)
+    int dx=0, dy=0, ix=0, bitset=0, ret=0, flag=0x100;
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT fval[2]={0}, rval[2]={0}, tmp=0, calcu[2]={0};
+    char *src;
+    char drgb=0, orgb=0;
+    CFLOAT ptup[2]={0}, ptdn[2]={0}, ptrt[2]={0}, ptlf[2]={0};
+    int srhcount=1, srhcountw=0, srhcounth=0, shrtimes=0;
+
+    #if LOG_ADJCIRCLE_8_BITS_EN
+    sprintf_f(rs->logs, "org center (%4lf, %4lf) (%d, %d, %d) - 8 bits(%d)\n", pfound[0], pfound[1], colr[0], colr[1], colr[2], bpp);
+    print_f(rs->plogs, "SRH", rs->logs);
+    #endif
+ 
+    calcu[0] = pfound[0];
+    calcu[1] = pfound[1];
+    
+    bitset = bpp / 8;
+    
+    theta = dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    fval[0] = calcu[0];
+    fval[1] = calcu[1];
+
+    getPtTran(rval, rangle, offset, fval);    
+
+    dx = round(rval[0]);
+    dy = round(rval[1]);
+
+    src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+    //memcpy(orgb, src, 3);
+    orgb = *src;
+
+repeat:
+
+
+    #if LOG_ADJCIRCLE_8_BITS_EN
+    sprintf_f(rs->logs, "org (%4d, %4d) grayscale(%d) - %d\n", dx, dy, orgb, shrtimes++);
+    print_f(rs->plogs, "SRH", rs->logs);
+    #endif
+    
+    for (ix=1; ix < SRH_RANGE_8_BITS; ix++) {
+        tmp = ix;
+        fval[0] = calcu[0] + (tmp * 1.0);
+        fval[1] = calcu[1];
+
+        getPtTran(rval, rangle, offset, fval);    
+
+        dx = round(rval[0]);
+        dy = round(rval[1]);
+
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+        drgb = abs(src[0] - orgb);
+        
+        //sprintf_f(rs->logs, "%d. (%4lf, %4lf) RGB(%d, %d, %d) diff(%d, %d, %d) - rt\n", ix, fval[0], fval[1], src[0], src[1], src[2], drgb[0], drgb[1], drgb[2]);
+        //print_f(rs->plogs, "SRH", rs->logs);
+
+        if (drgb > colr[0]) {
+            ptrt[0] = fval[0];
+            ptrt[1] = fval[1];
+
+            flag |= 0x1;
+            break;
+        }
+        srhcount++;
+        srhcountw++;
+    }
+
+    for (ix=1; ix < SRH_RANGE_8_BITS; ix++) {
+        tmp = ix;
+        fval[0] = calcu[0] - (tmp * 1.0);
+        fval[1] = calcu[1];
+
+        getPtTran(rval, rangle, offset, fval);    
+
+        dx = round(rval[0]);
+        dy = round(rval[1]);
+
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+        drgb = abs(src[0] - orgb);
+        
+        //sprintf_f(rs->logs, "%d. (%4lf, %4lf) RGB(%d, %d, %d) diff(%d, %d, %d) - lf\n", ix, fval[0], fval[1], src[0], src[1], src[2], drgb[0], drgb[1], drgb[2]);
+        //print_f(rs->plogs, "SRH", rs->logs);
+
+        if (drgb > colr[0]) {
+            ptlf[0] = fval[0];
+            ptlf[1] = fval[1];
+
+            flag |= 0x2;
+            break;
+        }
+        srhcount++;
+        srhcountw++;
+    }
+
+    for (ix=1; ix < SRH_RANGE_8_BITS; ix++) {
+        tmp = ix;
+        fval[0] = calcu[0];
+        fval[1] = calcu[1] - (tmp * 1.0);
+
+        getPtTran(rval, rangle, offset, fval);    
+
+        dx = round(rval[0]);
+        dy = round(rval[1]);
+
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+        drgb = abs(src[0] - orgb);
+        
+        //sprintf_f(rs->logs, "%d. (%4lf, %4lf) RGB(%d, %d, %d) diff(%d, %d, %d) - up\n", ix, fval[0], fval[1], src[0], src[1], src[2], drgb[0], drgb[1], drgb[2]);
+        //print_f(rs->plogs, "SRH", rs->logs);
+
+        if (drgb > colr[0]) {
+            ptup[0] = fval[0];
+            ptup[1] = fval[1];
+
+            flag |= 0x4;
+            break;
+        }
+        srhcount++;
+        srhcounth++;
+    }
+
+    for (ix=1; ix < SRH_RANGE_8_BITS; ix++) {
+        tmp = ix;
+        fval[0] = calcu[0];
+        fval[1] = calcu[1] + (tmp * 1.0);
+
+        getPtTran(rval, rangle, offset, fval);    
+
+        dx = round(rval[0]);
+        dy = round(rval[1]);
+
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+        drgb = abs(src[0] - orgb);
+        
+        //sprintf_f(rs->logs, "%d. (%4lf, %4lf) RGB(%d, %d, %d) diff(%d, %d, %d) - dn\n", ix, fval[0], fval[1], src[0], src[1], src[2], drgb[0], drgb[1], drgb[2]);
+        //print_f(rs->plogs, "SRH", rs->logs);
+
+        if (drgb > colr[0]) {
+            ptdn[0] = fval[0];
+            ptdn[1] = fval[1];
+
+            flag |= 0x8;
+            break;
+        }
+        srhcount++;
+        srhcounth++;
+    }
+
+    if ((flag & 0xff) != 0xf) {
+        return flag;
+    }
+
+    #if LOG_ADJCIRCLE_8_BITS_EN
+    sprintf_f(rs->logs, "search count: %d\n", srhcount);
+    print_f(rs->plogs, "SRH", rs->logs);
+    #endif
+
+    if (srhcount < SRH_COUNT_MIN_8_BITS) {
+        sprintf_f(rs->logs, "Warning!! search count: %d\n", srhcount);
+        print_f(rs->plogs, "SRH", rs->logs);
+
+        return srhcount;
+    }
+        
+    fval[0] = (ptlf[0] + ptrt[0]) / 2;
+    fval[1] = (ptup[1] + ptdn[1]) / 2;
+
+    if ((srhcounth < SRH_CROSS_H) || (srhcountw < SRH_CROSS_W)) {
+        calcu[0] = fval[0];
+        calcu[1] = fval[1];
+
+        srhcount=1;
+        srhcountw=0;
+        srhcounth=0;
+        flag=0x100;
+
+        goto repeat;
+    }
+
+    #if SRH_DRAW_COLOR_8_BITS
+    getPtTran(rval, rangle, offset, fval);    
+    
+    dx = round(rval[0]);
+    dy = round(rval[1]);
+    src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+    src[0] = 255;
+    src[1] = 255;
+    src[2] = 255;
+    #endif
+    
+    real[0] = round(fval[0]);
+    real[1] = round(fval[1]);
+
+    #if LOG_ADJCIRCLE_8_BITS_EN
+    sprintf_f(rs->logs, "get adj (%d, %d)\n", real[0], real[1]);
+    print_f(rs->plogs, "SRH", rs->logs);
+    #endif
+
+    return 0;
+}
+
 #define LOG_ADJCIRCLE_EN (1)
 static int adjCircleRect(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx)
 {
@@ -8774,7 +8996,304 @@ static int srhRotRectTran(struct procRes_s *rs, CFLOAT *pfound, struct aspRectOb
     return 0;
 }
 
-#define LOG_SEARCHRECT_EN (1)
+#define LOG_SEARCHRECT_8_BITS_EN (1)
+static int srhRotRect8Bits(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *pRect, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx, CFLOAT wcnt, CFLOAT hcnt)
+{
+#define DRAW_COLOR_8_BITS (0)
+#define COLOR_RANGE_8_BITS (50)
+    struct aspRectObj *pRectsrh=0;
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT width=0, high=0, tmp=0, wshif=0, hshif=0, fval=0;
+    int *ptU=0, *ptD=0, *ptL=0, *ptR=0;
+    CFLOAT *ptUf=0, *ptDf=0, *ptLf=0, *ptRf=0;
+    int wsize=0, hsize=0, ix=0, bitset=0, ret=0;
+    char *src=0;
+    int dx=0, dy=0;
+    int *drgbU=0, *drgbD=0, *drgbL=0, *drgbR=0;
+    char *orgbU=0, *orgbD=0, *orgbL=0, *orgbR=0;
+    int mindrgb=0;
+    CFLOAT minfound[2]={0};
+    CFLOAT roffset[2]={0};
+
+    #if 1 //DRAW_COLOR_8_BITS
+    char drawclor = 0;
+    #endif
+    
+    int sumdiff=0, summin=0; 
+
+    drawclor = colr[0];
+
+    bitset = bpp / 8;
+    
+    theta = dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+    
+    wsize = (int)wcnt;
+    hsize = (int)hcnt;
+    
+    pRectsrh = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    ptU = aspMemalloc(sizeof(int) * wsize * 2, pidx);
+    ptD = aspMemalloc(sizeof(int) * wsize * 2, pidx);
+    ptL = aspMemalloc(sizeof(int) * hsize * 2, pidx);
+    ptR = aspMemalloc(sizeof(int) * hsize * 2, pidx);
+
+    ptUf = aspMemalloc(sizeof(CFLOAT) * wsize * 2, pidx);
+    ptDf = aspMemalloc(sizeof(CFLOAT) * wsize * 2, pidx);
+    ptLf = aspMemalloc(sizeof(CFLOAT) * hsize * 2, pidx);
+    ptRf = aspMemalloc(sizeof(CFLOAT) * hsize * 2, pidx);
+
+    drgbU = aspMemalloc(sizeof(int) * wsize * 1, pidx);
+    drgbD = aspMemalloc(sizeof(int) * wsize * 1, pidx);
+    drgbL = aspMemalloc(sizeof(int) * hsize * 1, pidx);
+    drgbR = aspMemalloc(sizeof(int) * hsize * 1, pidx);
+
+    orgbU = aspMemalloc(sizeof(char) * wsize * 1, pidx);
+    orgbD = aspMemalloc(sizeof(char) * wsize * 1, pidx);
+    orgbL = aspMemalloc(sizeof(char) * hsize * 1, pidx);
+    orgbR = aspMemalloc(sizeof(char) * hsize * 1, pidx);
+    
+    //dbgprintRect(pRect);
+
+    width = pRect->aspRectRD[0] - pRect->aspRectLD[0];
+    high = pRect->aspRectRU[1] - pRect->aspRectRD[1];
+
+    #if LOG_SEARCHRECT_8_BITS_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf \n", width, high, wcnt, hcnt);
+    print_f(rs->plogs, "SRH", rs->logs);    
+    #endif
+
+    getRectTran(pRect, dg, offset, pRectsrh);
+
+    //dbgprintRect(pRectsrh);
+
+    width = pRectsrh->aspRectRD[0] - pRectsrh->aspRectLD[0];
+    high = pRectsrh->aspRectRD[1] - pRectsrh->aspRectLD[1];
+
+    wshif = width / wcnt;
+    hshif = high / wcnt;
+
+    #if LOG_SEARCHRECT_8_BITS_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf wshif: %4.2lf hshif: %4.2lf - DN\n", width, high, wcnt, hcnt, wshif, hshif);
+    print_f(rs->plogs, "SRH", rs->logs);    
+    #endif
+
+    for (ix=0; ix < wsize; ix++) {
+        tmp = ix;
+        fval = pRectsrh->aspRectLD[0] + (tmp * wshif);
+        ptDf[ix*2] = fval;
+        ptD[ix*2] = round(fval);
+        fval = pRectsrh->aspRectLD[1] + (tmp * hshif);
+        ptDf[ix*2+1] = fval;
+        ptD[ix*2+1] = round(fval);
+
+        src = getPixel(bmp, ptD[ix*2], ptD[ix*2+1], oldRowsz, bitset);
+
+        //memcpy(&orgbD[ix*3], src, 3);
+        orgbD[ix] = *src;
+
+        drgbD[ix] = abs(src[0] - colr[0]);
+        //drgbD[ix*3+1] = abs(src[1] - colr[1]);
+        //drgbD[ix*3+2] = abs(src[2] - colr[2]);
+        
+        #if DRAW_COLOR_8_BITS
+        src[0] = drawclor;
+        #endif
+    }
+
+    width = pRectsrh->aspRectRU[0] - pRectsrh->aspRectRD[0];
+    high = pRectsrh->aspRectRU[1] - pRectsrh->aspRectRD[1];
+
+    wshif = width / hcnt;
+    hshif = high / hcnt;
+
+    #if LOG_SEARCHRECT_8_BITS_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf wshif: %4.2lf hshif: %4.2lf - RT\n", width, high, wcnt, hcnt, wshif, hshif);
+    print_f(rs->plogs, "SRH", rs->logs);    
+    #endif
+
+    for (ix=0; ix < hsize; ix++) {
+        tmp = ix;
+        fval = pRectsrh->aspRectRD[0] + (tmp * wshif);
+        ptRf[ix*2] = fval;
+        ptR[ix*2] = round(fval);
+        fval = pRectsrh->aspRectRD[1] + (tmp * hshif);
+        ptRf[ix*2+1] = fval;
+        ptR[ix*2+1] = round(fval);
+        
+        src = getPixel(bmp, ptR[ix*2], ptR[ix*2+1], oldRowsz, bitset);
+
+        //memcpy(&orgbR[ix*3], src, 3);
+        orgbR[ix] = *src;
+
+        drgbR[ix] = abs(src[0] - colr[0]);
+        //drgbR[ix*3+1] = abs(src[1] - colr[1]);
+        //drgbR[ix*3+2] = abs(src[2] - colr[2]);
+        
+        #if DRAW_COLOR_8_BITS
+        src[0] = drawclor;
+        #endif
+    }
+
+    width = pRectsrh->aspRectLU[0] - pRectsrh->aspRectRU[0];
+    high = pRectsrh->aspRectLU[1] - pRectsrh->aspRectRU[1];
+
+    wshif = width / wcnt;
+    hshif = high / wcnt;
+
+    #if LOG_SEARCHRECT_8_BITS_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf wshif: %4.2lf hshif: %4.2lf - UP\n", width, high, wcnt, hcnt, wshif, hshif);
+    print_f(rs->plogs, "SRH", rs->logs);    
+    #endif
+
+    for (ix=0; ix < wsize; ix++) {
+        tmp = ix;
+        fval = pRectsrh->aspRectRU[0] + (tmp * wshif);
+        ptUf[ix*2] = fval;
+        ptU[ix*2] = round(fval);
+        fval = pRectsrh->aspRectRU[1] + (tmp * hshif);
+        ptUf[ix*2+1] = fval;
+        ptU[ix*2+1] = round(fval);
+
+        src = getPixel(bmp, ptU[ix*2], ptU[ix*2+1], oldRowsz, bitset);
+
+        //memcpy(&orgbU[ix*3], src, 3);
+        orgbU[ix] = *src;
+
+        drgbU[ix] = abs(src[0] - colr[0]);
+        //drgbU[ix*3+1] = abs(src[1] - colr[1]);
+        //drgbU[ix*3+2] = abs(src[2] - colr[2]);
+        
+        #if DRAW_COLOR_8_BITS
+        src[0] = drawclor;
+        #endif
+    }
+
+    width = pRectsrh->aspRectLD[0] - pRectsrh->aspRectLU[0];
+    high = pRectsrh->aspRectLD[1] - pRectsrh->aspRectLU[1];
+
+    wshif = width / hcnt;
+    hshif = high / hcnt;
+
+    #if LOG_SEARCHRECT_8_BITS_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf wshif: %4.2lf hshif: %4.2lf - LF\n", width, high, wcnt, hcnt, wshif, hshif);
+    print_f(rs->plogs, "SRH", rs->logs);    
+    #endif
+
+    for (ix=0; ix < hsize; ix++) {
+        tmp = ix;
+        fval = pRectsrh->aspRectLU[0] + (tmp * wshif);
+        ptLf[ix*2] = fval;
+        ptL[ix*2] = round(fval);
+        fval = pRectsrh->aspRectLU[1] + (tmp * hshif);
+        ptLf[ix*2+1] = fval;
+        ptL[ix*2+1] = round(fval);
+
+        src = getPixel(bmp, ptL[ix*2], ptL[ix*2+1], oldRowsz, bitset);
+        
+        //memcpy(&orgbL[ix*3], src, 3);
+        orgbL[ix] = *src;
+
+        drgbL[ix] = abs(src[0] - colr[0]);
+        //drgbL[ix*3+1] = abs(src[1] - colr[1]);
+        //drgbL[ix*3+2] = abs(src[2] - colr[2]);
+        
+        #if DRAW_COLOR_8_BITS
+        src[0] = drawclor;
+        #endif
+    }
+
+    mindrgb = drgbL[0];
+
+    minfound[0] = ptLf[0];
+    minfound[1] = ptLf[1];
+    
+    for (ix=0; ix < wsize; ix++) {
+        #if LOG_SEARCHRECT_8_BITS_EN
+        sprintf_f(rs->logs, "%d. D: (%4d, %4d), org(%3d) diff(%3d) min(%d)\n", ix, ptD[ix*2], ptD[ix*2+1], orgbD[ix], drgbD[ix], mindrgb);
+        print_f(rs->plogs, "SRH", rs->logs);
+        #endif
+
+        if (mindrgb >= drgbD[ix*3]) {
+            mindrgb = drgbD[ix*3];
+
+            minfound[0] = ptDf[ix*2];
+            minfound[1] = ptDf[ix*2+1];
+        }
+    }
+
+    for (ix=0; ix < wsize; ix++) {
+        #if LOG_SEARCHRECT_8_BITS_EN
+        sprintf_f(rs->logs, "%d. U: (%4d, %4d), org(%3d) diff(%3d) min(%d)\n", ix, ptU[ix*2], ptU[ix*2+1], orgbU[ix], drgbU[ix], mindrgb);
+        print_f(rs->plogs, "SRH", rs->logs);    
+        #endif
+        
+        if (mindrgb >= drgbU[ix*3]) {
+            mindrgb = drgbU[ix*3];
+
+            minfound[0] = ptUf[ix*2];
+            minfound[1] = ptUf[ix*2+1];
+        }
+    }
+
+    for (ix=0; ix < hsize; ix++) {
+        #if LOG_SEARCHRECT_8_BITS_EN
+        sprintf_f(rs->logs, "%d. L: (%4d, %4d), org(%3d) diff(%3d) min(%d)\n", ix, ptL[ix*2], ptL[ix*2+1], orgbL[ix], drgbL[ix], mindrgb);
+        print_f(rs->plogs, "SRH", rs->logs);   
+        #endif
+        
+        if (mindrgb >= drgbL[ix*3]) {
+            mindrgb = drgbL[ix*3];
+
+            minfound[0] = ptLf[ix*2];
+            minfound[1] = ptLf[ix*2+1];
+        }
+    }
+
+    for (ix=0; ix < hsize; ix++) {
+        #if LOG_SEARCHRECT_8_BITS_EN
+        sprintf_f(rs->logs, "%d. R: (%4d, %4d), org(%3d) diff(%3d) min(%d)\n", ix, ptR[ix*2], ptR[ix*2+1], orgbR[ix], drgbR[ix], mindrgb);
+        print_f(rs->plogs, "SRH", rs->logs);      
+        #endif
+
+        if (mindrgb >= drgbR[ix*3]) {
+            mindrgb = drgbR[ix*3];
+
+            minfound[0] = ptRf[ix*2];
+            minfound[1] = ptRf[ix*2+1];
+        }
+    }
+
+    #if 0 /* debug */
+    return -8;
+    #endif
+
+    if (mindrgb > COLOR_RANGE_8_BITS) {
+        return -9;
+    }
+
+    roffset[0] = 0.0 - offset[0];
+    roffset[1] = 0.0 - offset[1];
+    
+    ret = getPtTranRvs(pfound, 360.0 - dg, roffset, minfound);
+
+    src = getPixel(bmp, minfound[0], minfound[1], oldRowsz, bitset);    
+
+    src[0] = drawclor;
+
+    //pfound[0] = minfound[0];
+    //pfound[1] = minfound[1];
+    
+    return 0;
+}
+
+#define LOG_SEARCHRECT_EN (0)
 static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *pRect, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx, CFLOAT wcnt, CFLOAT hcnt)
 {
 #define DRAW_COLOR (0)
@@ -9230,7 +9749,6 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         print_f(rs->plogs, "MCUT", rs->logs);
     }
 
-    #if 1
     if ((idxA == -1) && (idxB == -1)) {
         pT1[0] = 1.0;
         pT1[1] = 1.0;
@@ -9265,33 +9783,6 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     else {
         return -1;
     }
-    
-
-    #elif 0
-    pT1[0] = 1.0;
-    pT1[1] = 1.0;
-    pT1[2] = edwhA[0] - 1;
-    pT1[3] = edwhA[1] - 1;
-    //setRectPoint(pRectorgi, edwhA[0] - 1, edwhA[1] - 1, pT1);
-
-    pT2[0] = 1.0;
-    pT2[1] = 1.0;
-    pT2[2] = edwhA[0] - 1;
-    pT2[3] = edwhA[1] - 1;
-    //setRectPoint(pRectorgv, edwhA[0] - 1, edwhA[1] - 1, pT2);
-    #else    
-    pT1[0] = 1494.0;
-    pT1[1] = 52.0;
-    pT1[2] = 368.0;
-    pT1[3] = 67.0;
-    //setRectPoint(pRectorgi, 368.0, 67.0, pT1);
-
-    pT2[0] = 802.0;
-    pT2[1] = 259.0;
-    pT2[2] = 209.0;
-    pT2[3] = 248.0;
-    //setRectPoint(pRectorgv, 209.0, 248.0, pT2);
-    #endif
 
     pT3[0] = ctaga[0];
     pT3[1] = ctaga[1];
@@ -9611,16 +10102,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     srhcntmax[2][1] = srhcntA[1];
     srhcntmax[3][0] = srhcntB[0];
     srhcntmax[3][1] = srhcntB[1];
-/*
-    srhcntmax[0][0] = srhcntA[0];
-    srhcntmax[0][1] = srhcntA[1];
-    srhcntmax[1][0] = srhcntA[0];
-    srhcntmax[1][1] = srhcntA[1];
-    srhcntmax[2][0] = srhcntA[0];
-    srhcntmax[2][1] = srhcntA[1];
-    srhcntmax[3][0] = srhcntA[0];
-    srhcntmax[3][1] = srhcntA[1];
-*/
+
     srhnum[0][0] = 1.0;
     srhnum[0][1] = 1.0;
     srhnum[1][0] = 1.0;
@@ -9675,10 +10157,56 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
             #if LOG_ROTRECT_EN
             dbgprintRect(pRectTga);
             #endif
+            
+            #if 1
+            if (bpp == 8) {
+                ret = srhRotRect8Bits(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
+                if (ret == 0) {
+                    err = adjCircleRect8Bits(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx);
+                    if (err == 0) {
         
-            ret = srhRotRect(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
+                        correct[0] = ptreal[0] - ptStart[ix][0];
+                        correct[1] = ptreal[1] - ptStart[ix][1];
+                        sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) 8bits \n", ptreal[0], ptreal[1], correct[0], correct[1]);
+                        print_f(rs->plogs, "RECT", rs->logs);       
+        
+                        ptEnd[ix][0] += correct[0];
+                        ptEnd[ix][1] += correct[1];
+                    
+                        setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
+        
+                        getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
+                        *pdeg = dgs[ix];
+                    
+                        break;
+                    }
+                }
+            } else {
+                ret = srhRotRect(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
+                if (ret == 0) {
+                    err = adjCircleRect(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx);
+                    if (err == 0) {
+        
+                        correct[0] = ptreal[0] - ptStart[ix][0];
+                        correct[1] = ptreal[1] - ptStart[ix][1];
+                        sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) \n", ptreal[0], ptreal[1], correct[0], correct[1]);
+                        print_f(rs->plogs, "RECT", rs->logs);       
+        
+                        ptEnd[ix][0] += correct[0];
+                        ptEnd[ix][1] += correct[1];
+                    
+                        setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
+        
+                        getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
+                        *pdeg = dgs[ix];
+                    
+                        break;
+                    }
+                }
+            }
+            #else
             if (ret == 0) {
-                #if 1
+                #if 1 /* disable the position adjust */
                 setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
 
                 getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
@@ -9708,6 +10236,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
                 }
                 #endif
             }
+            #endif
 
             srhnum[ix][0] += 2.0;
             srhnum[ix][1] += 2.0;
@@ -15749,42 +16278,7 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
         
     imgw = (CFLOAT)bheader->aspbiWidth;
     imgh = (CFLOAT)bheader->aspbiHeight;
-    
-//668, 100
-//1237, 668
-//668, 1237
-//100, 668
 
-//915, 1005
-//1719, 1005
-//1719, 1809
-//915, 1809
-
-    #if 0 /* manually setup the ROI */
-    LU[0] = 100;
-    LU[1] = 668;
-
-    RU[0] = 668;
-    RU[1] = 1237;
-
-    LD[0] = 668;
-    LD[1] = 100;
-
-    RD[0] = 1237;
-    RD[1] = 668;
-    #elif 0
-    LU[0] = 915;
-    LU[1] = 1809;
-
-    RU[0] = 1719;
-    RU[1] = 1809;
-
-    LD[0] = 915;
-    LD[1] = 1005;
-
-    RD[0] = 1719;
-    RD[1] = 1005;
-    #elif 1
     ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
     cxm = (val>>16)&0xffff;
     cxn = val & 0xffff;
@@ -15823,25 +16317,7 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     print_f(rs->plogs, "ROT", rs->logs);                     
 
     LU[0] = (CFLOAT)cxm;
-    LU[1] = (CFLOAT)cxn;
-    
-    #else
-    LU[0] = 0+300;
-    LU[1] = bheader->aspbiHeight-1;
-
-    //RU[0] = bheader->aspbiWidth-1;
-    //RU[1] = bheader->aspbiHeight-1;        
-
-    RU[0] = bheader->aspbiWidth-300;
-    RU[1] = bheader->aspbiHeight-1;        
-
-    LD[0] = 0;
-    LD[1] = 0;
-
-    RD[0] = bheader->aspbiWidth-1;
-    RD[1] = 0;
-
-    #endif
+    LU[1] = (CFLOAT)cxn;    
     
     memcpy(pRectin->aspRectLU, LU, sizeof(CFLOAT)*2);
     memcpy(pRectin->aspRectLD, LD, sizeof(CFLOAT)*2);
@@ -16772,7 +17248,7 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
 
     if (pLU[1] > pRU[1]) {
         #if LOG_ROT_DBG
-        sprintf_f(rs->logs, "PLU[1]: %lf  > PLU[1]: %lf \n", pLU[1], pRU[1]);
+        sprintf_f(rs->logs, "PLU[1]: %lf  > PRU[1]: %lf \n", pLU[1], pRU[1]);
         print_f(rs->plogs, "ROT", rs->logs);
         #endif
 
@@ -16803,7 +17279,7 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     }
     else {
         #if LOG_ROT_DBG
-        sprintf_f(rs->logs, "PLU[1]: %lf  <= PLU[1]: %lf \n", pLU[1], pRU[1]);
+        sprintf_f(rs->logs, "PLU[1]: %lf  <= PRU[1]: %lf \n", pLU[1], pRU[1]);
         print_f(rs->plogs, "ROT", rs->logs);
         #endif
 
@@ -17100,64 +17576,6 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
 
     msync(rawdest, totsz, MS_SYNC);
 
-    #if 0
-    lstsz = totsz - acusz;
-
-    sprintf_f(rs->logs, "last size: %d\n", lstsz);
-    print_f(rs->plogs, "ROT", rs->logs);
-
-    while (lstsz > 0) {
-        
-        len = SPI_TRUNK_SZ;
-        if (len > 0) {
-            if (len < lstsz) { 
-                msync(rawdest, len, MS_SYNC);
-
-                ublen = len;
-                while (ublen) {
-
-                    #if 0
-                    ubret = write(usbfid, rawdest, ublen); 
-                    #else
-                    ubret = ublen;
-                    #endif
-
-                    if (ubret > 0) {
-                        ublen -= ubret;
-                        rawdest += ubret;
-                    }
-                }
-
-                lstsz = lstsz - len;
-            } else {
-                msync(rawdest, lstsz, MS_SYNC);
-
-                ublen = lstsz;
-                while (ublen) {
-
-                    #if 0
-                    ubret = write(usbfid, rawdest, ublen); 
-                    #else
-                    ubret = ublen;
-                    #endif
-
-                    if (ubret > 0) {
-                        ublen -= ubret;
-                        rawdest += ubret;
-                    }
-                }
-            
-                lstsz = 0;
-            }
-        } else {
-            usleep(800000);
-        }
-    }                
-
-    sprintf_f(rs->logs, "ring buff count: %d\n", cnt);
-    print_f(rs->plogs, "ROT", rs->logs);
-    #endif
-    
     #if LOG_ROT_DBG
     dbgBitmapHeader(bheader, len);
     #endif
