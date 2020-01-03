@@ -1253,7 +1253,12 @@ struct aspMetaDataviaUSB_s{
   unsigned char IMG_WIDTH[2];                // byte[13] 
   unsigned char MINGS_USE[2];                 // byte[15]
   unsigned char PRI_O_SEC;                 // byte[16]
-  unsigned char  MCROP_RESERVE[48];   // byte[64]
+  unsigned char Scaned_Page[2];                            //byte[18]
+  unsigned char BKNote_Total_Layers;                    //byte[19]
+  unsigned char MUSE_RESERVE[16];   // byte[35]
+  unsigned char BKNote_Slice_idx;   // current image slice index of this Bank Note                            //byte[36]
+  unsigned char BKNote_Block_idx;   // current image block index of this Bank Note                            //byte[37]
+  unsigned char MCROP_RESERVE[27];   // byte[64]
   
   struct intMbs32_s CROP_POS_1;        //byte[68]
   struct intMbs32_s CROP_POS_2;        //byte[72]
@@ -5123,108 +5128,123 @@ static int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
 #define VERB_INFO_USB (0)
     char mlog[256];
     char *pch=0;
+    uint32_t head=0;
     int ix=0;
+
+    head = (uint32_t)pmetausb->ASP_MAGIC_ASPC;
     
     msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
     
     sprintf_f(mlog, "********************************************\n");
     print_f(mlogPool, "METAU", mlog);
     
-    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_ASPC: 0x%.2x 0x%.2x 0x%.2x 0x%.2x\n", (uint32_t)pmetausb->ASP_MAGIC_ASPC, pmetausb->ASP_MAGIC_ASPC[0], pmetausb->ASP_MAGIC_ASPC[1], 
+    sprintf_f(mlog, "(%.3d) ASP_MAGIC_ASPC: 0x%.2x 0x%.2x 0x%.2x 0x%.2x\n", (uint32_t)pmetausb->ASP_MAGIC_ASPC - head, pmetausb->ASP_MAGIC_ASPC[0], pmetausb->ASP_MAGIC_ASPC[1], 
                   pmetausb->ASP_MAGIC_ASPC[2], pmetausb->ASP_MAGIC_ASPC[3]);
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) IMG_HIGH: 0x%.2x 0x%.2x (%d)   \n",(uint32_t)&(pmetausb->IMG_HIGH), pmetausb->IMG_HIGH[0], pmetausb->IMG_HIGH[1], 
+    sprintf_f(mlog, "(%.3d) IMG_HIGH: 0x%.2x 0x%.2x (%d)   \n",(uint32_t)&(pmetausb->IMG_HIGH)  - head, pmetausb->IMG_HIGH[0], pmetausb->IMG_HIGH[1], 
                    pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8)); 
     print_f(mlogPool, "METAU", mlog);
 
     #if VERB_INFO_USB
     for (ix=0; ix < 5; ix++) {
-    sprintf_f(mlog, "(0x%.8x) WIDTH_RESERVE[%d]: 0x%.2x    \n",(uint32_t)&(pmetausb->WIDTH_RESERVE[ix]), ix, pmetausb->WIDTH_RESERVE[ix]); 
+    sprintf_f(mlog, "(%.3d) WIDTH_RESERVE[%d]: 0x%.2x    \n",(uint32_t)&(pmetausb->WIDTH_RESERVE[ix])  - head, ix, pmetausb->WIDTH_RESERVE[ix]); 
     print_f(mlogPool, "METAU", mlog);
     }
     #endif
 
-    sprintf_f(mlog, "(0x%.8x) IMG_WIDTH: 0x%.2x 0x%.2x (%d)   \n",(uint32_t)&(pmetausb->IMG_WIDTH), pmetausb->IMG_WIDTH[0], pmetausb->IMG_WIDTH[1], 
+    sprintf_f(mlog, "(%.3d) IMG_WIDTH: 0x%.2x 0x%.2x (%d)   \n",(uint32_t)&(pmetausb->IMG_WIDTH)  - head, pmetausb->IMG_WIDTH[0], pmetausb->IMG_WIDTH[1], 
                    pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8)); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) MINGS_USE: 0x%.2x 0x%.2x   \n",(uint32_t)&(pmetausb->MINGS_USE), pmetausb->MINGS_USE[0], pmetausb->MINGS_USE[1]); 
+    sprintf_f(mlog, "(%.3d) MINGS_USE: 0x%.2x 0x%.2x   \n",(uint32_t)&(pmetausb->MINGS_USE) - head, pmetausb->MINGS_USE[0], pmetausb->MINGS_USE[1]); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) PRI_O_SEC: 0x%.2x    \n",(uint32_t)&(pmetausb->PRI_O_SEC), pmetausb->PRI_O_SEC); 
+    sprintf_f(mlog, "(%.3d) PRI_O_SEC: 0x%.2x    \n",(uint32_t)&(pmetausb->PRI_O_SEC) - head, pmetausb->PRI_O_SEC); 
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(%.3d) Scaned_Page: %d    \n",(uint32_t)&(pmetausb->Scaned_Page) - head, (pmetausb->Scaned_Page[0] << 8) | pmetausb->Scaned_Page[1]); 
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(%.3d) BKNote_Total_Layers: %d    \n",(uint32_t)&(pmetausb->BKNote_Total_Layers) - head, pmetausb->BKNote_Total_Layers); 
+    print_f(mlogPool, "METAU", mlog);
+
+    sprintf_f(mlog, "(%.3d) BKNote_Slice_idx: %d    \n",(uint32_t)&(pmetausb->BKNote_Slice_idx) - head, pmetausb->BKNote_Slice_idx); 
+    print_f(mlogPool, "METAU", mlog);
+    
+    sprintf_f(mlog, "(%.3d) BKNote_Block_idx: %d    \n",(uint32_t)&(pmetausb->BKNote_Block_idx) - head, pmetausb->BKNote_Block_idx); 
     print_f(mlogPool, "METAU", mlog);
 
     #if VERB_INFO_USB
-    for (ix=0; ix < 48; ix++) {
-    sprintf_f(mlog, "(0x%.8x) MCROP_RESERVE[%d]: 0x%.2x    \n",(uint32_t)&(pmetausb->MCROP_RESERVE[ix]), ix, pmetausb->MCROP_RESERVE[ix]); 
+    for (ix=0; ix < 27; ix++) {
+    sprintf_f(mlog, "(%.3d) MCROP_RESERVE[%d]: 0x%.2x    \n",(uint32_t)&(pmetausb->MCROP_RESERVE[ix]) - head, ix, pmetausb->MCROP_RESERVE[ix]); 
     print_f(mlogPool, "METAU", mlog);
     }
     #endif
 
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_1), msb2lsb32(&pmetausb->CROP_POS_1) >> 16, msb2lsb32(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_1) - head, msb2lsb32(&pmetausb->CROP_POS_1) >> 16, msb2lsb32(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_2, msb2lsb32(&pmetausb->CROP_POS_2) >> 16, msb2lsb32(&pmetausb->CROP_POS_2) & 0xffff);                      //byte[72]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_2 - head, msb2lsb32(&pmetausb->CROP_POS_2) >> 16, msb2lsb32(&pmetausb->CROP_POS_2) & 0xffff);                      //byte[72]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_3, msb2lsb32(&pmetausb->CROP_POS_3) >> 16, msb2lsb32(&pmetausb->CROP_POS_3) & 0xffff);                      //byte[76]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_3 - head, msb2lsb32(&pmetausb->CROP_POS_3) >> 16, msb2lsb32(&pmetausb->CROP_POS_3) & 0xffff);                      //byte[76]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_4, msb2lsb32(&pmetausb->CROP_POS_4) >> 16, msb2lsb32(&pmetausb->CROP_POS_4) & 0xffff);                      //byte[80]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_4 - head, msb2lsb32(&pmetausb->CROP_POS_4) >> 16, msb2lsb32(&pmetausb->CROP_POS_4) & 0xffff);                      //byte[80]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_05: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_5, msb2lsb32(&pmetausb->CROP_POS_5) >> 16, msb2lsb32(&pmetausb->CROP_POS_5) & 0xffff);                      //byte[84]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_05: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_5 - head, msb2lsb32(&pmetausb->CROP_POS_5) >> 16, msb2lsb32(&pmetausb->CROP_POS_5) & 0xffff);                      //byte[84]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_06: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_6, msb2lsb32(&pmetausb->CROP_POS_6) >> 16, msb2lsb32(&pmetausb->CROP_POS_6) & 0xffff);                      //byte[88]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_06: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_6 - head, msb2lsb32(&pmetausb->CROP_POS_6) >> 16, msb2lsb32(&pmetausb->CROP_POS_6) & 0xffff);                      //byte[88]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_07: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_7, msb2lsb32(&pmetausb->CROP_POS_7) >> 16, msb2lsb32(&pmetausb->CROP_POS_7) & 0xffff);                      //byte[92]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_07: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_7 - head, msb2lsb32(&pmetausb->CROP_POS_7) >> 16, msb2lsb32(&pmetausb->CROP_POS_7) & 0xffff);                      //byte[92]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_08: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_8, msb2lsb32(&pmetausb->CROP_POS_8) >> 16, msb2lsb32(&pmetausb->CROP_POS_8) & 0xffff);                      //byte[96]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_08: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_8 - head, msb2lsb32(&pmetausb->CROP_POS_8) >> 16, msb2lsb32(&pmetausb->CROP_POS_8) & 0xffff);                      //byte[96]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_09: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_9, msb2lsb32(&pmetausb->CROP_POS_9) >> 16, msb2lsb32(&pmetausb->CROP_POS_9) & 0xffff);                      //byte[100]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_09: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_9 - head, msb2lsb32(&pmetausb->CROP_POS_9) >> 16, msb2lsb32(&pmetausb->CROP_POS_9) & 0xffff);                      //byte[100]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_10: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_10, msb2lsb32(&pmetausb->CROP_POS_10) >> 16, msb2lsb32(&pmetausb->CROP_POS_10) & 0xffff);                      //byte[104]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_10: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_10 - head, msb2lsb32(&pmetausb->CROP_POS_10) >> 16, msb2lsb32(&pmetausb->CROP_POS_10) & 0xffff);                      //byte[104]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_11: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_11, msb2lsb32(&pmetausb->CROP_POS_11) >> 16, msb2lsb32(&pmetausb->CROP_POS_11) & 0xffff);                      //byte[108]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_11: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_11 - head, msb2lsb32(&pmetausb->CROP_POS_11) >> 16, msb2lsb32(&pmetausb->CROP_POS_11) & 0xffff);                      //byte[108]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_12: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_12, msb2lsb32(&pmetausb->CROP_POS_12) >> 16, msb2lsb32(&pmetausb->CROP_POS_12) & 0xffff);                      //byte[112]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_12: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_12 - head, msb2lsb32(&pmetausb->CROP_POS_12) >> 16, msb2lsb32(&pmetausb->CROP_POS_12) & 0xffff);                      //byte[112]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_13: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_13, msb2lsb32(&pmetausb->CROP_POS_13) >> 16, msb2lsb32(&pmetausb->CROP_POS_13) & 0xffff);                      //byte[116]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_13: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_13 - head, msb2lsb32(&pmetausb->CROP_POS_13) >> 16, msb2lsb32(&pmetausb->CROP_POS_13) & 0xffff);                      //byte[116]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_14: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_14, msb2lsb32(&pmetausb->CROP_POS_14) >> 16, msb2lsb32(&pmetausb->CROP_POS_14) & 0xffff);                      //byte[120]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_14: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_14 - head, msb2lsb32(&pmetausb->CROP_POS_14) >> 16, msb2lsb32(&pmetausb->CROP_POS_14) & 0xffff);                      //byte[120]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_15: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_15, msb2lsb32(&pmetausb->CROP_POS_15) >> 16, msb2lsb32(&pmetausb->CROP_POS_15) & 0xffff);                      //byte[124]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_15: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_15 - head, msb2lsb32(&pmetausb->CROP_POS_15) >> 16, msb2lsb32(&pmetausb->CROP_POS_15) & 0xffff);                      //byte[124]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_16: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_16, msb2lsb32(&pmetausb->CROP_POS_16) >> 16, msb2lsb32(&pmetausb->CROP_POS_16) & 0xffff);                      //byte[128]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_16: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_16 - head, msb2lsb32(&pmetausb->CROP_POS_16) >> 16, msb2lsb32(&pmetausb->CROP_POS_16) & 0xffff);                      //byte[128]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_17: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_17, msb2lsb32(&pmetausb->CROP_POS_17) >> 16, msb2lsb32(&pmetausb->CROP_POS_17) & 0xffff);                      //byte[132]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_17: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_17 - head, msb2lsb32(&pmetausb->CROP_POS_17) >> 16, msb2lsb32(&pmetausb->CROP_POS_17) & 0xffff);                      //byte[132]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_18: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_18, msb2lsb32(&pmetausb->CROP_POS_18) >> 16, msb2lsb32(&pmetausb->CROP_POS_18) & 0xffff);                      //byte[136]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_18: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_18 - head, msb2lsb32(&pmetausb->CROP_POS_18) >> 16, msb2lsb32(&pmetausb->CROP_POS_18) & 0xffff);                      //byte[136]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) YLine_Gap: %.d      \n", (uint32_t)&pmetausb->YLine_Gap, pmetausb->YLine_Gap); 
+    sprintf_f(mlog, "(%.3d) YLine_Gap: %.d      \n", (uint32_t)&pmetausb->YLine_Gap - head, pmetausb->YLine_Gap); 
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) Start_YLine_No: %d      \n", (uint32_t)&pmetausb->Start_YLine_No, pmetausb->Start_YLine_No); 
+    sprintf_f(mlog, "(%.3d) Start_YLine_No: %d      \n", (uint32_t)&pmetausb->Start_YLine_No - head, pmetausb->Start_YLine_No); 
     print_f(mlogPool, "METAU", mlog);
     pch = (char *)&pmetausb->YLines_Recorded;
-    sprintf_f(mlog, "(0x%.8x) YLines_Recorded: %d      \n", (uint32_t)&pmetausb->YLines_Recorded, (pch[0] << 8) | pch[1]); 
+    sprintf_f(mlog, "(%.3d) YLines_Recorded: %d      \n", (uint32_t)&pmetausb->YLines_Recorded - head, (pch[0] << 8) | pch[1]); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_F1), msb2lsb32(&pmetausb->CROP_POS_F1) >> 16, msb2lsb32(&pmetausb->CROP_POS_F1) & 0xffff);                      //byte[148]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_F01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_F1) - head, msb2lsb32(&pmetausb->CROP_POS_F1) >> 16, msb2lsb32(&pmetausb->CROP_POS_F1) & 0xffff);                      //byte[148]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F2, msb2lsb32(&pmetausb->CROP_POS_F2) >> 16, msb2lsb32(&pmetausb->CROP_POS_F2) & 0xffff);                      //byte[152]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_F02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F2 - head, msb2lsb32(&pmetausb->CROP_POS_F2) >> 16, msb2lsb32(&pmetausb->CROP_POS_F2) & 0xffff);                      //byte[152]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F3, msb2lsb32(&pmetausb->CROP_POS_F3) >> 16, msb2lsb32(&pmetausb->CROP_POS_F3) & 0xffff);                      //byte[156]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_F03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F3 - head, msb2lsb32(&pmetausb->CROP_POS_F3) >> 16, msb2lsb32(&pmetausb->CROP_POS_F3) & 0xffff);                      //byte[156]
     print_f(mlogPool, "METAU", mlog);
-    sprintf_f(mlog, "(0x%.8x) CROP_POSX_F04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F4, msb2lsb32(&pmetausb->CROP_POS_F4) >> 16, msb2lsb32(&pmetausb->CROP_POS_F4) & 0xffff);                      //byte[160]
+    sprintf_f(mlog, "(%.3d) CROP_POSX_F04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F4 - head, msb2lsb32(&pmetausb->CROP_POS_F4) >> 16, msb2lsb32(&pmetausb->CROP_POS_F4) & 0xffff);                      //byte[160]
     print_f(mlogPool, "METAU", mlog);
     
-    sprintf_f(mlog, "(0x%.8x) EPOINT_RESERVE1      \n", (uint32_t)pmetausb->EPOINT_RESERVE1); 
+    sprintf_f(mlog, "(%.3d) EPOINT_RESERVE1      \n", (uint32_t)pmetausb->EPOINT_RESERVE1 - head); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) ASP_MAGIC_YL: 0x%.2x 0x%.2x\n", (uint32_t)pmetausb->ASP_MAGIC_YL, pmetausb->ASP_MAGIC_YL[0], pmetausb->ASP_MAGIC_YL[1]);
+    sprintf_f(mlog, "(%.3d) ASP_MAGIC_YL: 0x%.2x 0x%.2x\n", (uint32_t)pmetausb->ASP_MAGIC_YL - head, pmetausb->ASP_MAGIC_YL[0], pmetausb->ASP_MAGIC_YL[1]);
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) MPIONT_LEN: %d      \n", (uint32_t)&pmetausb->MPIONT_LEN, pmetausb->MPIONT_LEN); 
+    sprintf_f(mlog, "(%.3d) MPIONT_LEN: %d      \n", (uint32_t)&pmetausb->MPIONT_LEN - head, pmetausb->MPIONT_LEN); 
     print_f(mlogPool, "METAU", mlog);
 
-    sprintf_f(mlog, "(0x%.8x) EXTRA_POINT[4]: 0x%.2x, 0x%.2x, 0x%.2x, 0x%.2x  \n", (uint32_t)pmetausb->EXTRA_POINT, pmetausb->EXTRA_POINT[0], pmetausb->EXTRA_POINT[1], pmetausb->EXTRA_POINT[2], pmetausb->EXTRA_POINT[3]);
+    sprintf_f(mlog, "(%.3d) EXTRA_POINT[4]: 0x%.2x, 0x%.2x, 0x%.2x, 0x%.2x  \n", (uint32_t)pmetausb->EXTRA_POINT - head, pmetausb->EXTRA_POINT[0], pmetausb->EXTRA_POINT[1], pmetausb->EXTRA_POINT[2], pmetausb->EXTRA_POINT[3]);
     print_f(mlogPool, "METAU", mlog);
 
 
@@ -5884,17 +5904,14 @@ static int aspMetaGetPagePos(struct aspMetaData_s *meta, CFLOAT *pos, int idx)
     return 0;
 }
 
-static int aspMetaGetPages(struct aspMetaData_s *meta, int *sides, int num)
+static int aspMetaGetPages(struct aspMetaData_s *meta, int *sides, int *layers, int num)
 {
     int pagenum=0, ix=0, cnta=0, cntb=0;
-    int *psd=0;
     struct t_BKArea *pbka=0;
 
     pagenum = msb2lsb16(&meta->BKNA_NUM);
 
     if (pagenum != num) return -1;
-
-    psd = sides;
 
     for (ix=0; ix < pagenum; ix++) {
         pbka = &meta->BKNA_ITEM[ix];
@@ -5903,10 +5920,12 @@ static int aspMetaGetPages(struct aspMetaData_s *meta, int *sides, int num)
         }
 
         if (pbka->bknaside == 0) {
-            psd[cnta*2+0] = ix;
+            sides[cnta*2+0] = ix;
+            layers[cnta*2+0] = pbka->bknalayer;
             cnta ++;
         } else {
-            psd[cntb*2+1] = ix;
+            sides[cntb*2+1] = ix;
+            layers[cnta*2+0] = pbka->bknalayer;
             cntb ++;
         }
     }
@@ -6275,7 +6294,7 @@ static int aspMetafs145GetlenviaUsb(struct mainRes_s *mrs)
     return val;
 }
 
-static int aspMetaReleaseviaUsbdlBmpUpd(struct mainRes_s *mrs, struct procRes_s *rs, int updw, int updh) 
+static int aspMetaReleaseviaUsbdlBmpUpd(struct mainRes_s *mrs, struct procRes_s *rs, int updw, int updh, int sid, int aid) 
 {
     struct intMbs32_s *pt=0;
     struct aspMetaDataviaUSB_s *pmetausb=0;
@@ -6299,6 +6318,9 @@ static int aspMetaReleaseviaUsbdlBmpUpd(struct mainRes_s *mrs, struct procRes_s 
     
     pmetausb->IMG_WIDTH[0] = updw & 0xff;
     pmetausb->IMG_WIDTH[1] = (updw >> 8) & 0xff;
+
+    pmetausb->BKNote_Slice_idx = sid;
+    pmetausb->BKNote_Block_idx = aid;
     
     return 0;
 }
@@ -8460,14 +8482,14 @@ static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edhe
 
 }
 
-#define LOG_ADJCIRCLE_8_BITS_EN (1)
+#define LOG_ADJCIRCLE_8_BITS_EN (0)
 static int adjCircleRect8Bits(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx)
 {
 #define SRH_DRAW_COLOR_8_BITS (1)
 #define SRH_RANGE_8_BITS (45)
 #define SRH_COUNT_MIN_8_BITS (30)
-#define SRH_CROSS_W (28)//(48)
-#define SRH_CROSS_H (28)//(31)
+#define SRH_CROSS_W (25)//(48)
+#define SRH_CROSS_H (25)//(31)
     int dx=0, dy=0, ix=0, bitset=0, ret=0, flag=0x100;
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
     CFLOAT fval[2]={0}, rval[2]={0}, tmp=0, calcu[2]={0};
@@ -8677,11 +8699,12 @@ repeat:
         return srhcount;
     }
 
-    #if SRH_DRAW_COLOR_8_BITS
     getPtTran(rval, rangle, offset, fval);    
     
     dx = round(rval[0]);
     dy = round(rval[1]);
+
+    #if SRH_DRAW_COLOR_8_BITS
     src = getPixel(bmp, dx, dy, oldRowsz, bitset);
 
     src[0] = 255;
@@ -8696,30 +8719,59 @@ repeat:
     src = getPixel(bmp, dx, dy-1, oldRowsz, bitset);
     colrcross[3] = src[0];
 
-    src = getPixel(bmp, dx+2, dy, oldRowsz, bitset);
+    src = getPixel(bmp, dx+12, dy, oldRowsz, bitset);
     colrcross[4] = src[0];
-    src = getPixel(bmp, dx-2, dy, oldRowsz, bitset);
+    src = getPixel(bmp, dx-12, dy, oldRowsz, bitset);
     colrcross[5] = src[0];
-    src = getPixel(bmp, dx, dy+2, oldRowsz, bitset);
+    src = getPixel(bmp, dx, dy+12, oldRowsz, bitset);
     colrcross[6] = src[0];
-    src = getPixel(bmp, dx, dy-2, oldRowsz, bitset);
+    src = getPixel(bmp, dx, dy-12, oldRowsz, bitset);
     colrcross[7] = src[0];
 
     colravg = (colrcross[0] + colrcross[1] + colrcross[2] + colrcross[3]+colrcross[4] + colrcross[5] + colrcross[6] + colrcross[7]) / 8;
     
-    #if LOG_ADJCIRCLE_8_BITS_EN
-    sprintf_f(rs->logs, "get tag color (%d, %d, %d, %d, %d, %d, %d, %d) avg (%d) \n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], colrcross[4], colrcross[5], colrcross[6], colrcross[7], colravg);
+    #if 1//LOG_ADJCIRCLE_8_BITS_EN
+    sprintf_f(rs->logs, "get tag black color (%d, %d, %d, %d, %d, %d, %d, %d) avg (%d) \n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], colrcross[4], colrcross[5], colrcross[6], colrcross[7], colravg);
     print_f(rs->plogs, "ADJ", rs->logs);
     #endif
 
     if ((colravg > 85) || (colravg < 51)) {
         return (0 - colravg);
     }
+
+    src = getPixel(bmp, dx+17, dy, oldRowsz, bitset);
+    colrcross[0] = src[0];
+    src = getPixel(bmp, dx-17, dy, oldRowsz, bitset);
+    colrcross[1] = src[0];
+    src = getPixel(bmp, dx, dy+17, oldRowsz, bitset);
+    colrcross[2] = src[0];
+    src = getPixel(bmp, dx, dy-17, oldRowsz, bitset);
+    colrcross[3] = src[0];
+
+    src = getPixel(bmp, dx+18, dy, oldRowsz, bitset);
+    colrcross[4] = src[0];
+    src = getPixel(bmp, dx-18, dy, oldRowsz, bitset);
+    colrcross[5] = src[0];
+    src = getPixel(bmp, dx, dy+18, oldRowsz, bitset);
+    colrcross[6] = src[0];
+    src = getPixel(bmp, dx, dy-18, oldRowsz, bitset);
+    colrcross[7] = src[0];
+
+    colravg = (colrcross[0] + colrcross[1] + colrcross[2] + colrcross[3]+colrcross[4] + colrcross[5] + colrcross[6] + colrcross[7]) / 8;
+    
+    #if 1//LOG_ADJCIRCLE_8_BITS_EN
+    sprintf_f(rs->logs, "get tag white color (%d, %d, %d, %d, %d, %d, %d, %d) avg (%d) \n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], colrcross[4], colrcross[5], colrcross[6], colrcross[7], colravg);
+    print_f(rs->plogs, "ADJ", rs->logs);
+    #endif
+
+    if ((colravg < 200) || (colravg > 250)) {
+        return (0 - colravg);
+    }
     
     real[0] = round(fval[0]);
     real[1] = round(fval[1]);
 
-    #if LOG_ADJCIRCLE_8_BITS_EN
+    #if 1//LOG_ADJCIRCLE_8_BITS_EN
     sprintf_f(rs->logs, "get adj (%d, %d) org (%d, %d) \n", real[0], real[1], dx, dy);
     print_f(rs->plogs, "ADJ", rs->logs);
     #endif
@@ -9064,11 +9116,12 @@ static int srhRotRectTran(struct procRes_s *rs, CFLOAT *pfound, struct aspRectOb
     return 0;
 }
 
-#define LOG_SEARCHRECT_8_BITS_EN (1)
+#define LOG_SEARCHRECT_8_BITS_EN (0)
 static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *pRect, CFLOAT dg, CFLOAT *offset, char *colr, char *colrdiff, char *bmp, int oldRowsz, int bpp, int pidx, CFLOAT wcnt, CFLOAT hcnt)
 {
 #define DRAW_COLOR_8_BITS (1)
 #define DRAW_COLOR_8_BITS_RECOVER (1)
+#define ORG_COLOR_8_BITS_RECOVER (0)
 #define COLOR_RANGE_8_BITS (50)
     struct aspRectObj *pRectsrh=0;
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
@@ -9088,7 +9141,7 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
     
     int preal[2]={0};
     #if 1 //DRAW_COLOR_8_BITS
-    uint8_t drawclor = 0;
+    uint8_t drawclor = 0, bkupclor=0;
     #endif
     
     int sumdiff=0, summin=0; 
@@ -9179,8 +9232,8 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
         //drgbD[ix*3+2] = abs(src[2] - colr[2]);
         
         #if DRAW_COLOR_8_BITS
-        sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptD[ix*2], ptD[ix*2+1], (uint32_t)src, src[0], drawclor);
-        print_f(rs->plogs, "SRH", rs->logs);
+        //sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptD[ix*2], ptD[ix*2+1], (uint32_t)src, src[0], drawclor);
+        //print_f(rs->plogs, "SRH", rs->logs);
 
         src[0] = drawclor;
         #endif
@@ -9222,8 +9275,8 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
         //drgbR[ix*3+2] = abs(src[2] - colr[2]);
         
         #if DRAW_COLOR_8_BITS
-        sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptR[ix*2], ptR[ix*2+1], (uint32_t)src, src[0], drawclor);
-        print_f(rs->plogs, "SRH", rs->logs);
+        //sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptR[ix*2], ptR[ix*2+1], (uint32_t)src, src[0], drawclor);
+        //print_f(rs->plogs, "SRH", rs->logs);
 
         src[0] = drawclor;
         #endif
@@ -9265,8 +9318,8 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
         //drgbU[ix*3+2] = abs(src[2] - colr[2]);
         
         #if DRAW_COLOR_8_BITS
-        sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptU[ix*2], ptU[ix*2+1], (uint32_t)src, src[0], drawclor);
-        print_f(rs->plogs, "SRH", rs->logs);
+        //sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptU[ix*2], ptU[ix*2+1], (uint32_t)src, src[0], drawclor);
+        //print_f(rs->plogs, "SRH", rs->logs);
 
         src[0] = drawclor;
         #endif
@@ -9308,8 +9361,8 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
         //drgbL[ix*3+2] = abs(src[2] - colr[2]);
         
         #if DRAW_COLOR_8_BITS
-        sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptL[ix*2], ptL[ix*2+1], (uint32_t)src, src[0], drawclor);
-        print_f(rs->plogs, "SRH", rs->logs);
+        //sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptL[ix*2], ptL[ix*2+1], (uint32_t)src, src[0], drawclor);
+        //print_f(rs->plogs, "SRH", rs->logs);
 
         src[0] = drawclor;
         #endif
@@ -9338,13 +9391,19 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
             sprintf_f(rs->logs, "D set color to default (%2lf, %2lf) [0x%.8x] (%d) -> (%d) \n", minfound[0], minfound[1], (uint32_t)src, src[0], colr[0]);
             print_f(rs->plogs, "SRH", rs->logs);
             #endif
-            
+
+            bkupclor = src[0];
             src[0] = colr[0];    
             msync(src, 1, MS_SYNC);
             
             getPtTranRvs(pfound, rvdg, roffset, minfound);
             
             err = adjCircleRect8Bits(rs, preal, pfound, dg, offset, colrdiff, bmp, oldRowsz, bpp, pidx);
+
+            #if ORG_COLOR_8_BITS_RECOVER
+            src[0] = bkupclor;
+            msync(src, 1, MS_SYNC);
+            #endif
 
             #if DRAW_COLOR_8_BITS_RECOVER
             src[0] = drawclor;
@@ -9381,13 +9440,19 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
             sprintf_f(rs->logs, "U set color to default (%2lf, %2lf) [0x%.8x] (%d) -> (%d) \n", minfound[0], minfound[1], (uint32_t)src, src[0], colr[0]);
             print_f(rs->plogs, "SRH", rs->logs);
             #endif
-            
+
+            bkupclor = src[0];
             src[0] = colr[0];
             msync(src, 1, MS_SYNC);
 
             getPtTranRvs(pfound, rvdg, roffset, minfound);
 
             err = adjCircleRect8Bits(rs, preal, pfound, dg, offset, colrdiff, bmp, oldRowsz, bpp, pidx);
+
+            #if ORG_COLOR_8_BITS_RECOVER
+            src[0] = bkupclor;
+            msync(src, 1, MS_SYNC);
+            #endif
 
             #if DRAW_COLOR_8_BITS_RECOVER
             src[0] = drawclor;
@@ -9425,12 +9490,18 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
             print_f(rs->plogs, "SRH", rs->logs);
             #endif
             
+            bkupclor = src[0];
             src[0] = colr[0];
             msync(src, 1, MS_SYNC);
             
             getPtTranRvs(pfound, rvdg, roffset, minfound);
 
             err = adjCircleRect8Bits(rs, preal, pfound, dg, offset, colrdiff, bmp, oldRowsz, bpp, pidx);
+
+            #if ORG_COLOR_8_BITS_RECOVER
+            src[0] = bkupclor;
+            msync(src, 1, MS_SYNC);
+            #endif
 
             #if DRAW_COLOR_8_BITS_RECOVER
             src[0] = drawclor;
@@ -9467,13 +9538,19 @@ static int srhRotRect8Bits(struct procRes_s *rs, int *real, struct aspRectObj *p
             sprintf_f(rs->logs, "R set color to default (%2lf, %2lf) [0x%.8x] (%d) -> (%d) \n", minfound[0], minfound[1], (uint32_t)src, src[0], colr[0]);
             print_f(rs->plogs, "SRH", rs->logs);
             #endif
-            
+
+            bkupclor = src[0];
             src[0] = colr[0];
             msync(src, 1, MS_SYNC);
             
             getPtTranRvs(pfound, rvdg, roffset, minfound);
 
             err = adjCircleRect8Bits(rs, preal, pfound, dg, offset, colrdiff, bmp, oldRowsz, bpp, pidx);
+
+            #if ORG_COLOR_8_BITS_RECOVER
+            src[0] = bkupclor;
+            msync(src, 1, MS_SYNC);
+            #endif
 
             #if DRAW_COLOR_8_BITS_RECOVER
             src[0] = drawclor;
@@ -9831,7 +9908,7 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
 }
 
 #define LOG_ROTRECT_EN (0)
-static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int *page, struct aspMetaData_s *meta, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc, char *bmp, int oldRowsz, int bpp) 
+static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int *page, struct aspMetaData_s *meta, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc, char *bmp, int oldRowsz, int bpp, int *pside, int *pmreal) 
 {
 #define UNIT_DEG (1000.0)
 #define GRAY_THD_H (170)
@@ -9869,6 +9946,9 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     CFLOAT srhcntmax[4][2]={0};
     int srhtotal=0;
     int idxA=0, idxB=0;
+    int side=0;
+
+    side = *pside;
     
     bitset = bpp / 8;
     
@@ -10304,6 +10384,31 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         ptreal[1] = 0;
     }
 
+    if (side > 0) {
+
+        ix = side - 1;
+
+        if ((ix < 4) && (pmreal[0] > 0) && (pmreal[1] > 0)) {
+            correct[0] = pmreal[0] - ptStart[ix][0];
+            correct[1] = pmreal[1] - ptStart[ix][1];
+            sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) 8bits \n", pmreal[0], pmreal[1], correct[0], correct[1]);
+            print_f(rs->plogs, "RECT", rs->logs);       
+
+            ptEnd[ix][0] += correct[0];
+            ptEnd[ix][1] += correct[1];
+
+            setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
+            getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
+
+            *pdeg = dgs[ix];
+
+            return 0;
+        }
+
+
+        sprintf_f(rs->logs, "Error!! the side idx is wrong val: %d \n", ix);
+        print_f(rs->plogs, "RECT", rs->logs);       
+    }
 
     srhcntmax[0][0] = srhcntA[0];
     srhcntmax[0][1] = srhcntA[1];
@@ -10477,8 +10582,16 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     #if LOG_ROTRECT_EN
     dbgprintRect(pRectroi);
     #endif
-    
 
+    pmreal[0] = ptreal[0];
+    pmreal[1] = ptreal[1];
+
+    *pside = ix + 1;
+
+
+    sprintf_f(rs->logs, "tag search succeed real: (%d, %d) side: %d !!\n", pmreal[0], pmreal[1], *pside);
+    print_f(rs->plogs, "RECT", rs->logs);       
+    
     return 0;
 }
 
@@ -16418,7 +16531,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
             
 
 #define LOG_ROT_DBG  (0)
-static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff)
+static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff, int *pside, int *pmreal, int *layers)
 {
 #define UNIT_DEG (1000.0)
 
@@ -16453,11 +16566,6 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     int cxm, cxn;
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0, *pRectroc=0;
-    
-    #if LOG_ROT_DBG    
-    sprintf_f(rs->logs, "deg: %d\n", deg);
-    print_f(rs->plogs, "ROT", rs->logs);
-    #endif
 
     pRectin = aspMemalloc(sizeof(struct aspRectObj), 11);
     pRectROI = aspMemalloc(sizeof(struct aspRectObj), 11);
@@ -16540,7 +16648,7 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     dbgprintRect(pRectin);
     //dbgprintRect(pRectinR);
             
-    ret = getRotRectPoint(rs, pRectinR, page, meta, 11, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp);
+    ret = getRotRectPoint(rs, pRectinR, page, meta, 11, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp, pside, pmreal);
     if (ret == 0) {
         memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
         memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -16575,10 +16683,8 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
     
-    if (deg == 0) {
-        deg = (int)(imgdeg * UNIT_DEG);
-        deg = 0 - deg;
-    }
+    deg = (int)(imgdeg * UNIT_DEG);
+    deg = 0 - deg;
 
     theta = (CFLOAT)deg;
     theta = theta / UNIT_DEG;
@@ -54176,6 +54282,10 @@ static int p3(struct procRes_s *rs)
                                 result = aspMemalloc(sizeof(int)*8, 3);
                                 org = aspMemalloc(sizeof(int)*org_len, 3);
                                 mass = aspMemalloc(sizeof(int)*mass_len, 3);
+                                if (!mass) {
+                                    sprintf_f(rs->logs, "malloc size: %d failed !!! \n", sizeof(int)*mass_len);
+                                    print_f(rs->plogs, "P3", rs->logs);
+                                }
                                 
                                 memset(result, 0, sizeof(int)*8);
                                 memset(org, 0, sizeof(int)*org_len);
@@ -67694,7 +67804,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct sdParseBuff_s *pabuff=0;
     struct bitmapHeader_s *bheader = 0;
     struct timespec jpgS, jpgE;
-    int cutcnt=0, cutnum=0, *cutsides;
+    int cutcnt=0, cutnum=0, *cutsides=0, *cutlayers=0;
+    int sides[2]={0}, mreal[2]={0}, prisec=0, updn=0;
     
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
@@ -69991,6 +70102,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     cswstatus[1] = 0;
 
                     pagerst = 2;
+
+                    sides[0] = 0;
+                    sides[1] = 0;
                     #endif
                     
                     sprintf_f(rs->logs, "[DV] clean end \n");
@@ -73035,7 +73149,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     /* deal with bmp retate */
                                     memset(ptmetausb, 0, sizeof(struct aspMetaDataviaUSB_s));
                                     memcpy(ptmetausb, pshfmeta, shfmeta);
-                                    //dbgMetaUsb(ptmetausbduo);
+                                    dbgMetaUsb(ptmetausb);
                                 }
                             }
 
@@ -73600,32 +73714,48 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                     
                                     #if CROP_TEST_EN
+                                    prisec = ptmetausb->PRI_O_SEC;
+                                    if (prisec > 1) {
+                                        sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
+                                        print_f(rs->plogs, "P11", rs->logs);
+
+                                        prisec = 0;
+                                    }
+                                    
                                     cutcnt =0;
                                     cutnum = msb2lsb16(&metaRx->BKNA_NUM);
 
                                     cutsides = aspMemalloc(cutnum*sizeof(int)*2, 11);
                                     memset(cutsides, 0, cutnum*sizeof(int)*2);
+                                    cutlayers = aspMemalloc(cutnum*sizeof(int)*2, 11);
+                                    memset(cutlayers, 0, cutnum*sizeof(int)*2);
                                     ret = 0;
-                                    /*
-                                    ret = aspMetaGetPages(metaRx, &cutsides[0], cutnum);
+                                    
+                                    ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
                                     sprintf_f(rs->logs, "[CUT] get page ret: %d \n", ret);
                                     print_f(rs->plogs, "P11", rs->logs);
-                                    */
 
                                     cutsides[ret*2] = -1;
                                     cutsides[ret*2+1] = -1;
+                                    cutlayers[ret*2] = 0;
+                                    cutlayers[ret*2+1] = 0;
                                     
                                     ret += 1;
                                     
                                     cutsides[ret*2] = -2;
                                     cutsides[ret*2+1] = -2;
-
+                                    cutlayers[ret*2] = 0;
+                                    cutlayers[ret*2+1] = 0;
+                                    
                                     ret += 1;
 
                                     for (cutnum=0; cutnum < ret; cutnum++) {
-                                        sprintf_f(rs->logs, "[CUT] %d. A:%d B:%d \n", cutnum, cutsides[cutnum*2], cutsides[cutnum*2+1]);
+                                        sprintf_f(rs->logs, "[CUT] %d. A:%d (%d) B:%d (%d)\n", cutnum, cutsides[cutnum*2], cutlayers[cutnum*2], cutsides[cutnum*2+1], cutlayers[cutnum*2+1]);
                                         print_f(rs->plogs, "P11", rs->logs);
                                     }
+
+                                    mreal[0] = -1;
+                                    mreal[1] = -1;
                                     
                                     while (cutcnt < cutnum) {
                                         if (cutcnt > 0) {
@@ -73665,13 +73795,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         
                                         memcpy(ph, bmpcolrtb, 54);
                                         
-                                        sprintf_f(rs->logs, "[BMP] rotate degree: %d \n", bdeg/1000);
+                                        sprintf_f(rs->logs, "[BMP] %d. pri or sec: %d up or down: %d (%d, %d) \n", cutcnt, prisec, sides[prisec], mreal[0], mreal[1]);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
                                         clock_gettime(CLOCK_REALTIME, &jpgS);
                                         
                                         //grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
-                                        ret = rotateBMP(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot);
+                                        ret = rotateBMP(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot, &sides[prisec], mreal, &cutlayers[cutcnt*2]);
                                         //grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
                                         
                                         //draw();
@@ -73709,8 +73839,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             rotlen = rotlen + jpgLen;
                                             bmpbufc = jpgrlt;
                                         }
+
+                                        if (sides[prisec] > 0) {
+                                            updn = (sides[prisec] - 1) % 2;
+                                        } else {
+                                            updn = 0;
+                                        }
+                                        sprintf_f(rs->logs, "[BMP] updn: %d, side: %d \n", updn, sides[prisec]);
+                                        print_f(rs->plogs, "P11", rs->logs);
                                         
-                                        aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight);
+                                        aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1);
                                         sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
@@ -73721,6 +73859,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         memcpy(bmpcpy, ptmetausb, lrst);
                                         
                                         //shmem_dump(bmpbufc+rotlen-512, 1024);
+                                        dbgMetaUsb(ptmetausb);
                                         
                                         sprintf_f(rs->logs, "[BMP] usb meta size check, lstlen: %d : sizeof: %d  \n", lrst, lenbs);
                                         print_f(rs->plogs, "P11", rs->logs);
