@@ -5925,7 +5925,7 @@ static int aspMetaGetPages(struct aspMetaData_s *meta, int *sides, int *layers, 
             cnta ++;
         } else {
             sides[cntb*2+1] = ix;
-            layers[cnta*2+0] = pbka->bknalayer;
+            layers[cntb*2+1] = pbka->bknalayer;
             cntb ++;
         }
     }
@@ -8482,6 +8482,314 @@ static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edhe
 
 }
 
+#define LOG_ADJCIRCLEDN_8_BITS_EN (1)
+static int adjCircleRect8BitsDn(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx)
+{
+#define SRH_DRAW_COLORDN_8_BITS (1)
+#define SRH_RANGEDN_8_BITS (80)
+#define SRH_COUNT_MINDN_8_BITS (30)
+#define SRH_CROSSDN_W (24)//(48)
+#define SRH_CROSSDN_H (24)//(31)
+    int dx=0, dy=0, ix=0, bitset=0, ret=0, flag=0x100;
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT fval[2]={0}, rval[2]={0}, tmp=0, calcu[2]={0};
+    char *src=0;
+    int colrcross[8];
+    int colravg=0;
+    char drgb=0, orgb=0;
+    CFLOAT ptup[2]={0}, ptdn[2]={0}, ptrt[2]={0}, ptlf[2]={0};
+    int srhcount=1, srhcountw=0, srhcounth=0, shrtimes=0, repeatcont=0;;
+
+    #if LOG_ADJCIRCLEDN_8_BITS_EN
+    sprintf_f(rs->logs, "org center (%4lf, %4lf) (%d, %d, %d) - 8 bits(%d)\n", pfound[0], pfound[1], colr[0], colr[1], colr[2], bpp);
+    print_f(rs->plogs, "ADJDN", rs->logs);
+    #endif
+ 
+    calcu[0] = pfound[0];
+    calcu[1] = pfound[1];
+    
+    bitset = bpp / 8;
+    
+    theta = dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    fval[0] = calcu[0];
+    fval[1] = calcu[1];
+
+    getPtTran(rval, rangle, offset, fval);    
+
+    dx = round(rval[0]);
+    dy = round(rval[1]);
+
+    src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+    //memcpy(orgb, src, 3);
+    orgb = *src;
+
+repeat:
+    repeatcont ++;
+
+    #if LOG_ADJCIRCLEDN_8_BITS_EN
+    sprintf_f(rs->logs, "org (%4d, %4d) [0x%.8x]grayscale(%d) - %d\n", dx, dy, (uint32_t)src, orgb, shrtimes++);
+    print_f(rs->plogs, "ADJDN", rs->logs);
+    #endif
+    
+    for (ix=1; ix < SRH_RANGEDN_8_BITS; ix++) {
+        tmp = ix;
+        fval[0] = calcu[0] + (tmp * 1.0);
+        fval[1] = calcu[1];
+
+        getPtTran(rval, rangle, offset, fval);    
+
+        dx = round(rval[0]);
+        dy = round(rval[1]);
+
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+        drgb = abs(src[0] - orgb);
+        
+        #if 0//LOG_ADJCIRCLEDN_8_BITS_EN
+        sprintf_f(rs->logs, "%d. (%4lf, %4lf) (%d, %d) gray(%d) diff(%d) - rt\n", ix, fval[0], fval[1], dx, dy, src[0], drgb);
+        print_f(rs->plogs, "ADJDN", rs->logs);
+        #endif
+
+        if (drgb > colr[0]) {
+            ptrt[0] = fval[0];
+            ptrt[1] = fval[1];
+
+            flag |= 0x1;
+            break;
+        }
+        srhcount++;
+        srhcountw++;
+    }
+
+    for (ix=1; ix < SRH_RANGEDN_8_BITS; ix++) {
+        tmp = ix;
+        fval[0] = calcu[0] - (tmp * 1.0);
+        fval[1] = calcu[1];
+
+        getPtTran(rval, rangle, offset, fval);    
+
+        dx = round(rval[0]);
+        dy = round(rval[1]);
+
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+        drgb = abs(src[0] - orgb);
+        
+        #if 0//LOG_ADJCIRCLEDN_8_BITS_EN
+        sprintf_f(rs->logs, "%d. (%4lf, %4lf) (%d, %d) gray(%d) diff(%d) - lf\n", ix, fval[0], fval[1], dx, dy, src[0], drgb);
+        print_f(rs->plogs, "ADJDN", rs->logs);
+        #endif
+
+        if (drgb > colr[0]) {
+            ptlf[0] = fval[0];
+            ptlf[1] = fval[1];
+
+            flag |= 0x2;
+            break;
+        }
+        srhcount++;
+        srhcountw++;
+    }
+
+    for (ix=1; ix < SRH_RANGEDN_8_BITS; ix++) {
+        tmp = ix;
+        fval[0] = calcu[0];
+        fval[1] = calcu[1] - (tmp * 1.0);
+
+        getPtTran(rval, rangle, offset, fval);    
+
+        dx = round(rval[0]);
+        dy = round(rval[1]);
+
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+        drgb = abs(src[0] - orgb);
+
+        #if 0//LOG_ADJCIRCLEDN_8_BITS_EN
+        sprintf_f(rs->logs, "%d. (%4lf, %4lf) (%d, %d) gray(%d) diff(%d) - up\n", ix, fval[0], fval[1], dx, dy, src[0], drgb);
+        print_f(rs->plogs, "ADJDN", rs->logs);
+        #endif
+
+        if (drgb > colr[0]) {
+            ptup[0] = fval[0];
+            ptup[1] = fval[1];
+
+            flag |= 0x4;
+            break;
+        }
+        srhcount++;
+        srhcounth++;
+    }
+
+    for (ix=1; ix < SRH_RANGEDN_8_BITS; ix++) {
+        tmp = ix;
+        fval[0] = calcu[0];
+        fval[1] = calcu[1] + (tmp * 1.0);
+
+        getPtTran(rval, rangle, offset, fval);    
+
+        dx = round(rval[0]);
+        dy = round(rval[1]);
+
+        src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+        drgb = abs(src[0] - orgb);
+
+        #if 0//LOG_ADJCIRCLEDN_8_BITS_EN
+        sprintf_f(rs->logs, "%d. (%4lf, %4lf) (%d, %d) gray(%d) diff(%d) - dn\n", ix, fval[0], fval[1], dx, dy, src[0], drgb);
+        print_f(rs->plogs, "ADJDN", rs->logs);
+        #endif
+
+        if (drgb > colr[0]) {
+            ptdn[0] = fval[0];
+            ptdn[1] = fval[1];
+
+            flag |= 0x8;
+            break;
+        }
+        srhcount++;
+        srhcounth++;
+    }
+
+    #if LOG_ADJCIRCLEDN_8_BITS_EN
+    sprintf_f(rs->logs, "search count: %d w: %d h: %d flag: 0x%.2x \n", srhcount, srhcountw, srhcounth, flag);
+    print_f(rs->plogs, "ADJDN", rs->logs);
+    #endif
+
+    if ((flag & 0xff) != 0xf) {
+        return flag;
+    }
+
+
+    if (srhcount < SRH_COUNT_MINDN_8_BITS) {
+        sprintf_f(rs->logs, "Warning!! search count: %d < %d \n", srhcount, SRH_COUNT_MINDN_8_BITS);
+        print_f(rs->plogs, "ADJDN", rs->logs);
+
+        return srhcount;
+    }
+        
+    fval[0] = (ptlf[0] + ptrt[0]) / 2;
+    fval[1] = (ptup[1] + ptdn[1]) / 2;
+
+    rval[0] = fabs(calcu[0] - fval[0]);
+    rval[1] = fabs(calcu[1] - fval[1]);
+    
+    if ((srhcounth < SRH_CROSSDN_H) || (srhcountw < SRH_CROSSDN_W)) {
+
+        if ((rval[0] < 3.0) && (rval[1] < 3.0)) {
+            return srhcount;
+        }
+
+        if (repeatcont > 16) {
+            return 0 - repeatcont;
+        }
+
+        calcu[0] = fval[0];
+        calcu[1] = fval[1];
+
+        srhcount=1;
+        srhcountw=0;
+        srhcounth=0;
+        flag=0x100;
+
+        goto repeat;
+    }
+
+    if ((srhcounth == (SRH_RANGEDN_8_BITS*2)) && (srhcountw == (SRH_RANGEDN_8_BITS*2))) {
+        return srhcount;
+    }
+
+    getPtTran(rval, rangle, offset, fval);    
+    
+    dx = round(rval[0]);
+    dy = round(rval[1]);
+
+    #if SRH_DRAW_COLORDN_8_BITS
+    src = getPixel(bmp, dx, dy, oldRowsz, bitset);
+
+    src[0] = 255;
+    #endif
+    
+    src = getPixel(bmp, dx+1, dy, oldRowsz, bitset);
+    colrcross[0] = src[0];
+    src = getPixel(bmp, dx-1, dy, oldRowsz, bitset);
+    colrcross[1] = src[0];
+    src = getPixel(bmp, dx, dy+1, oldRowsz, bitset);
+    colrcross[2] = src[0];
+    src = getPixel(bmp, dx, dy-1, oldRowsz, bitset);
+    colrcross[3] = src[0];
+
+    src = getPixel(bmp, dx+8, dy, oldRowsz, bitset);
+    colrcross[4] = src[0];
+    src = getPixel(bmp, dx-8, dy, oldRowsz, bitset);
+    colrcross[5] = src[0];
+    src = getPixel(bmp, dx, dy+8, oldRowsz, bitset);
+    colrcross[6] = src[0];
+    src = getPixel(bmp, dx, dy-8, oldRowsz, bitset);
+    colrcross[7] = src[0];
+
+    colravg = (colrcross[0] + colrcross[1] + colrcross[2] + colrcross[3]+colrcross[4] + colrcross[5] + colrcross[6] + colrcross[7]) / 8;
+    
+    #if 1//LOG_ADJCIRCLEDN_8_BITS_EN
+    sprintf_f(rs->logs, "get tag black color (%d, %d, %d, %d, %d, %d, %d, %d) avg (%d) \n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], colrcross[4], colrcross[5], colrcross[6], colrcross[7], colravg);
+    print_f(rs->plogs, "ADJDN", rs->logs);
+    #endif
+
+    if ((colravg > 240) || (colravg < 210)) {
+        return (0 - colravg);
+    }
+
+    src = getPixel(bmp, dx+19, dy, oldRowsz, bitset);
+    colrcross[0] = src[0];
+    src = getPixel(bmp, dx-19, dy, oldRowsz, bitset);
+    colrcross[1] = src[0];
+    src = getPixel(bmp, dx, dy+19, oldRowsz, bitset);
+    colrcross[2] = src[0];
+    src = getPixel(bmp, dx, dy-19, oldRowsz, bitset);
+    colrcross[3] = src[0];
+
+    src = getPixel(bmp, dx+18, dy, oldRowsz, bitset);
+    colrcross[4] = src[0];
+    src = getPixel(bmp, dx-18, dy, oldRowsz, bitset);
+    colrcross[5] = src[0];
+    src = getPixel(bmp, dx, dy+18, oldRowsz, bitset);
+    colrcross[6] = src[0];
+    src = getPixel(bmp, dx, dy-18, oldRowsz, bitset);
+    colrcross[7] = src[0];
+
+    for (ix=0; ix< 4; ix++) {
+        if ((colrcross[ix] > 150) && (colrcross[ix] < 210)) {
+            if ((colrcross[ix+4] > 150) && (colrcross[ix+4] < 210)) {
+                real[0] = round(fval[0]);
+                real[1] = round(fval[1]);
+
+                #if 1//LOG_ADJCIRCLEDN_8_BITS_EN
+                sprintf_f(rs->logs, "get adj (%d, %d) org (%d, %d) \n", real[0], real[1], dx, dy);
+                print_f(rs->plogs, "ADJDN", rs->logs);
+                #endif
+
+                return 0;
+            }
+        }
+    }
+    
+    #if 1//LOG_ADJCIRCLEDN_8_BITS_EN
+    sprintf_f(rs->logs, "get tag center color (%d, %d, %d, %d, %d, %d, %d, %d)\n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], colrcross[4], colrcross[5], colrcross[6], colrcross[7]);
+    print_f(rs->plogs, "ADJDN", rs->logs);
+    #endif
+    
+    return -9;
+}
+
 #define LOG_ADJCIRCLE_8_BITS_EN (0)
 static int adjCircleRect8Bits(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx)
 {
@@ -9114,6 +9422,471 @@ static int srhRotRectTran(struct procRes_s *rs, CFLOAT *pfound, struct aspRectOb
     }
     
     return 0;
+}
+
+#define LOG_SEARCHRECT_8_BITSDN_EN (1)
+static int srhRotRect8BitsDn(struct procRes_s *rs, int *real, struct aspRectObj *pRect, CFLOAT dg, CFLOAT *offset, char *colr, char *colrdiff, char *bmp, int oldRowsz, int bpp, int pidx, CFLOAT wcnt, CFLOAT hcnt)
+{
+#define DRAW_COLORDN_8_BITS (1)
+#define DRAW_COLORDN_8_BITS_RECOVER (0)
+#define ORG_COLORDN_8_BITS_RECOVER (0)
+#define COLOR_RANGEDN_8_BITS (50)
+    struct aspRectObj *pRectsrh=0;
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT width=0, high=0, tmp=0, wshif=0, hshif=0, fval=0;
+    int *ptU=0, *ptD=0, *ptL=0, *ptR=0;
+    CFLOAT *ptUf=0, *ptDf=0, *ptLf=0, *ptRf=0;
+    int wsize=0, hsize=0, ix=0, bitset=0, ret=0, err=0;
+    char *src=0;
+    int dx=0, dy=0;
+    int *drgbU=0, *drgbD=0, *drgbL=0, *drgbR=0;
+    char *orgbU=0, *orgbD=0, *orgbL=0, *orgbR=0;
+    int mindrgb=0;
+    CFLOAT minfound[2]={0};
+    CFLOAT roffset[2]={0};
+    CFLOAT rvdg=0.0;
+    CFLOAT pfound[2]={0};
+    
+    int preal[2]={0};
+    #if 1 //DRAW_COLORDN_8_BITS
+    uint8_t drawclor = 50, bkupclor=0;
+    #endif
+    
+    int sumdiff=0, summin=0; 
+
+    bitset = bpp / 8;
+    
+    theta = dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+    
+    wsize = (int)wcnt;
+    hsize = (int)hcnt;
+    
+    pRectsrh = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    ptU = aspMemalloc(sizeof(int) * wsize * 2, pidx);
+    ptD = aspMemalloc(sizeof(int) * wsize * 2, pidx);
+    ptL = aspMemalloc(sizeof(int) * hsize * 2, pidx);
+    ptR = aspMemalloc(sizeof(int) * hsize * 2, pidx);
+
+    ptUf = aspMemalloc(sizeof(CFLOAT) * wsize * 2, pidx);
+    ptDf = aspMemalloc(sizeof(CFLOAT) * wsize * 2, pidx);
+    ptLf = aspMemalloc(sizeof(CFLOAT) * hsize * 2, pidx);
+    ptRf = aspMemalloc(sizeof(CFLOAT) * hsize * 2, pidx);
+
+    drgbU = aspMemalloc(sizeof(int) * wsize * 1, pidx);
+    drgbD = aspMemalloc(sizeof(int) * wsize * 1, pidx);
+    drgbL = aspMemalloc(sizeof(int) * hsize * 1, pidx);
+    drgbR = aspMemalloc(sizeof(int) * hsize * 1, pidx);
+
+    orgbU = aspMemalloc(sizeof(char) * wsize * 1, pidx);
+    orgbD = aspMemalloc(sizeof(char) * wsize * 1, pidx);
+    orgbL = aspMemalloc(sizeof(char) * hsize * 1, pidx);
+    orgbR = aspMemalloc(sizeof(char) * hsize * 1, pidx);
+    
+    dbgprintRect(pRect);
+
+    width = pRect->aspRectRD[0] - pRect->aspRectLD[0];
+    high = pRect->aspRectRU[1] - pRect->aspRectRD[1];
+
+    #if LOG_SEARCHRECT_8_BITSDN_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf \n", width, high, wcnt, hcnt);
+    print_f(rs->plogs, "SRHDN", rs->logs);    
+    #endif
+
+    getRectTran(pRect, dg, offset, pRectsrh);
+
+    //dbgprintRect(pRectsrh);
+
+    width = pRectsrh->aspRectRD[0] - pRectsrh->aspRectLD[0];
+    high = pRectsrh->aspRectRD[1] - pRectsrh->aspRectLD[1];
+
+    wshif = width / wcnt;
+    hshif = high / wcnt;
+
+    #if LOG_SEARCHRECT_8_BITSDN_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf wshif: %4.2lf hshif: %4.2lf - DN\n", width, high, wcnt, hcnt, wshif, hshif);
+    print_f(rs->plogs, "SRHDN", rs->logs);    
+    #endif
+
+    for (ix=0; ix < wsize; ix++) {
+        tmp = ix;
+        fval = pRectsrh->aspRectLD[0] + (tmp * wshif);
+        ptDf[ix*2] = fval;
+        ptD[ix*2] = round(fval);
+        fval = pRectsrh->aspRectLD[1] + (tmp * hshif);
+        ptDf[ix*2+1] = fval;
+        ptD[ix*2+1] = round(fval);
+
+        if ((ptD[ix*2] < 0) || (ptD[ix*2+1] < 0)) {
+            orgbD[ix] = -1;
+            drgbD[ix] = -1;
+            continue;
+        }
+
+        src = getPixel(bmp, ptD[ix*2], ptD[ix*2+1], oldRowsz, bitset);
+
+        //memcpy(&orgbD[ix*3], src, 3);
+        orgbD[ix] = *src;
+
+        drgbD[ix] = abs(src[0] - colr[0]);
+        //drgbD[ix*3+1] = abs(src[1] - colr[1]);
+        //drgbD[ix*3+2] = abs(src[2] - colr[2]);
+        
+        #if DRAW_COLORDN_8_BITS
+        //sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptD[ix*2], ptD[ix*2+1], (uint32_t)src, src[0], drawclor);
+        //print_f(rs->plogs, "SRHDN", rs->logs);
+
+        src[0] = drawclor;
+        #endif
+    }
+
+    width = pRectsrh->aspRectRU[0] - pRectsrh->aspRectRD[0];
+    high = pRectsrh->aspRectRU[1] - pRectsrh->aspRectRD[1];
+
+    wshif = width / hcnt;
+    hshif = high / hcnt;
+
+    #if LOG_SEARCHRECT_8_BITSDN_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf wshif: %4.2lf hshif: %4.2lf - RT\n", width, high, wcnt, hcnt, wshif, hshif);
+    print_f(rs->plogs, "SRHDN", rs->logs);    
+    #endif
+
+    for (ix=0; ix < hsize; ix++) {
+        tmp = ix;
+        fval = pRectsrh->aspRectRD[0] + (tmp * wshif);
+        ptRf[ix*2] = fval;
+        ptR[ix*2] = round(fval);
+        fval = pRectsrh->aspRectRD[1] + (tmp * hshif);
+        ptRf[ix*2+1] = fval;
+        ptR[ix*2+1] = round(fval);
+
+        if ((ptR[ix*2] < 0) || (ptR[ix*2+1] < 0)) {
+            orgbR[ix] = -1;
+            drgbR[ix] = -1;
+            continue;
+        }
+
+        src = getPixel(bmp, ptR[ix*2], ptR[ix*2+1], oldRowsz, bitset);
+
+        //memcpy(&orgbR[ix*3], src, 3);
+        orgbR[ix] = *src;
+
+        drgbR[ix] = abs(src[0] - colr[0]);
+        //drgbR[ix*3+1] = abs(src[1] - colr[1]);
+        //drgbR[ix*3+2] = abs(src[2] - colr[2]);
+        
+        #if DRAW_COLORDN_8_BITS
+        //sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptR[ix*2], ptR[ix*2+1], (uint32_t)src, src[0], drawclor);
+        //print_f(rs->plogs, "SRHDN", rs->logs);
+
+        src[0] = drawclor;
+        #endif
+    }
+
+    width = pRectsrh->aspRectLU[0] - pRectsrh->aspRectRU[0];
+    high = pRectsrh->aspRectLU[1] - pRectsrh->aspRectRU[1];
+
+    wshif = width / wcnt;
+    hshif = high / wcnt;
+
+    #if LOG_SEARCHRECT_8_BITSDN_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf wshif: %4.2lf hshif: %4.2lf - UP\n", width, high, wcnt, hcnt, wshif, hshif);
+    print_f(rs->plogs, "SRHDN", rs->logs);    
+    #endif
+
+    for (ix=0; ix < wsize; ix++) {
+        tmp = ix;
+        fval = pRectsrh->aspRectRU[0] + (tmp * wshif);
+        ptUf[ix*2] = fval;
+        ptU[ix*2] = round(fval);
+        fval = pRectsrh->aspRectRU[1] + (tmp * hshif);
+        ptUf[ix*2+1] = fval;
+        ptU[ix*2+1] = round(fval);
+
+        if ((ptU[ix*2] < 0) || (ptU[ix*2+1] < 0)) {
+            orgbU[ix] = -1;
+            drgbU[ix] = -1;
+            continue;
+        }
+        
+        src = getPixel(bmp, ptU[ix*2], ptU[ix*2+1], oldRowsz, bitset);
+
+        //memcpy(&orgbU[ix*3], src, 3);
+        orgbU[ix] = *src;
+
+        drgbU[ix] = abs(src[0] - colr[0]);
+        //drgbU[ix*3+1] = abs(src[1] - colr[1]);
+        //drgbU[ix*3+2] = abs(src[2] - colr[2]);
+        
+        #if DRAW_COLORDN_8_BITS
+        //sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptU[ix*2], ptU[ix*2+1], (uint32_t)src, src[0], drawclor);
+        //print_f(rs->plogs, "SRHDN", rs->logs);
+
+        src[0] = drawclor;
+        #endif
+    }
+
+    width = pRectsrh->aspRectLD[0] - pRectsrh->aspRectLU[0];
+    high = pRectsrh->aspRectLD[1] - pRectsrh->aspRectLU[1];
+
+    wshif = width / hcnt;
+    hshif = high / hcnt;
+
+    #if LOG_SEARCHRECT_8_BITSDN_EN
+    sprintf_f(rs->logs, "width: %4.2lf high: %4.2lf, wcnt: %4.2lf hcnt: %4.2lf wshif: %4.2lf hshif: %4.2lf - LF\n", width, high, wcnt, hcnt, wshif, hshif);
+    print_f(rs->plogs, "SRHDN", rs->logs);    
+    #endif
+
+    for (ix=0; ix < hsize; ix++) {
+        tmp = ix;
+        fval = pRectsrh->aspRectLU[0] + (tmp * wshif);
+        ptLf[ix*2] = fval;
+        ptL[ix*2] = round(fval);
+        fval = pRectsrh->aspRectLU[1] + (tmp * hshif);
+        ptLf[ix*2+1] = fval;
+        ptL[ix*2+1] = round(fval);
+
+        if ((ptL[ix*2] < 0) || (ptL[ix*2+1] < 0)) {
+            orgbL[ix] = -1;
+            drgbL[ix] = -1;
+            continue;
+        }
+        
+        src = getPixel(bmp, ptL[ix*2], ptL[ix*2+1], oldRowsz, bitset);
+        
+        //memcpy(&orgbL[ix*3], src, 3);
+        orgbL[ix] = *src;
+
+        drgbL[ix] = abs(src[0] - colr[0]);
+        //drgbL[ix*3+1] = abs(src[1] - colr[1]);
+        //drgbL[ix*3+2] = abs(src[2] - colr[2]);
+        
+        #if DRAW_COLORDN_8_BITS
+        //sprintf_f(rs->logs, "(%d, %d) [0x%.8x] draw color org: %d change to %d \n", ptL[ix*2], ptL[ix*2+1], (uint32_t)src, src[0], drawclor);
+        //print_f(rs->plogs, "SRHDN", rs->logs);
+
+        src[0] = drawclor;
+        #endif
+    }
+
+    mindrgb = colrdiff[0];
+
+    roffset[0] = 0.0 - offset[0];
+    roffset[1] = 0.0 - offset[1];
+    rvdg = 360.0 - dg;
+    
+    for (ix=0; ix < wsize; ix++) {
+        #if LOG_SEARCHRECT_8_BITSDN_EN
+        sprintf_f(rs->logs, "%d. D: (%4d, %4d), org(%3d) diff(%3d) min(%d)\n", ix, ptD[ix*2], ptD[ix*2+1], orgbD[ix], drgbD[ix], mindrgb);
+        print_f(rs->plogs, "SRHDN", rs->logs);
+        #endif
+
+        if ((mindrgb >= drgbD[ix]) && (drgbD[ix] > 0)) {
+
+            minfound[0] = ptDf[ix*2];
+            minfound[1] = ptDf[ix*2+1];
+
+            src = getPixel(bmp, ptD[ix*2], ptD[ix*2+1], oldRowsz, bitset);    
+            
+            #if LOG_SEARCHRECT_8_BITSDN_EN
+            sprintf_f(rs->logs, "D set color to default (%2lf, %2lf) [0x%.8x] (%d) -> (%d) \n", minfound[0], minfound[1], (uint32_t)src, src[0], colr[0]);
+            print_f(rs->plogs, "SRHDN", rs->logs);
+            #endif
+
+            bkupclor = src[0];
+            src[0] = colr[0];    
+            msync(src, 1, MS_SYNC);
+            
+            getPtTranRvs(pfound, rvdg, roffset, minfound);
+            
+            err = adjCircleRect8BitsDn(rs, preal, pfound, dg, offset, colrdiff, bmp, oldRowsz, bpp, pidx);
+
+            #if DRAW_COLORDN_8_BITS_RECOVER
+            src[0] = bkupclor;
+            msync(src, 1, MS_SYNC);
+            #endif
+
+            #if DRAW_COLORDN_8_BITS_RECOVER
+            src[0] = drawclor;
+            msync(src, 1, MS_SYNC);
+            #endif
+            
+            if (err == 0) {
+
+                sprintf_f(rs->logs, "D preal(%4d, %4d) 8bits \n", preal[0], preal[1]);
+                print_f(rs->plogs, "SRHDN", rs->logs);
+
+                real[0] = preal[0];
+                real[1] = preal[1];
+
+                return 0;
+            }
+        }
+    }
+
+    for (ix=0; ix < wsize; ix++) {
+        #if LOG_SEARCHRECT_8_BITSDN_EN
+        sprintf_f(rs->logs, "%d. U: (%4d, %4d), org(%3d) diff(%3d) min(%d)\n", ix, ptU[ix*2], ptU[ix*2+1], orgbU[ix], drgbU[ix], mindrgb);
+        print_f(rs->plogs, "SRHDN", rs->logs);    
+        #endif
+        
+        if ((mindrgb >= drgbU[ix]) && (drgbU[ix] > 0)) {
+
+            minfound[0] = ptUf[ix*2];
+            minfound[1] = ptUf[ix*2+1];
+
+            src = getPixel(bmp, ptU[ix*2], ptU[ix*2+1], oldRowsz, bitset);    
+            
+            #if LOG_SEARCHRECT_8_BITSDN_EN
+            sprintf_f(rs->logs, "U set color to default (%2lf, %2lf) [0x%.8x] (%d) -> (%d) \n", minfound[0], minfound[1], (uint32_t)src, src[0], colr[0]);
+            print_f(rs->plogs, "SRHDN", rs->logs);
+            #endif
+
+            bkupclor = src[0];
+            src[0] = colr[0];
+            msync(src, 1, MS_SYNC);
+
+            getPtTranRvs(pfound, rvdg, roffset, minfound);
+
+            err = adjCircleRect8BitsDn(rs, preal, pfound, dg, offset, colrdiff, bmp, oldRowsz, bpp, pidx);
+
+            #if DRAW_COLORDN_8_BITS_RECOVER
+            src[0] = bkupclor;
+            msync(src, 1, MS_SYNC);
+            #endif
+
+            #if DRAW_COLORDN_8_BITS_RECOVER
+            src[0] = drawclor;
+            msync(src, 1, MS_SYNC);
+            #endif
+
+            if (err == 0) {
+
+                sprintf_f(rs->logs, "U preal(%4d, %4d) 8bits \n", preal[0], preal[1]);
+                print_f(rs->plogs, "SRHDN", rs->logs);
+
+                real[0] = preal[0];
+                real[1] = preal[1];
+
+                return 0;
+            }
+        }
+    }
+
+    for (ix=0; ix < hsize; ix++) {
+        #if LOG_SEARCHRECT_8_BITSDN_EN
+        sprintf_f(rs->logs, "%d. L: (%4d, %4d), org(%3d) diff(%3d) min(%d)\n", ix, ptL[ix*2], ptL[ix*2+1], orgbL[ix], drgbL[ix], mindrgb);
+        print_f(rs->plogs, "SRHDN", rs->logs);   
+        #endif
+        
+        if ((mindrgb >= drgbL[ix]) && (drgbL[ix] > 0)) {
+        
+            minfound[0] = ptLf[ix*2];
+            minfound[1] = ptLf[ix*2+1];
+            
+            src = getPixel(bmp, ptL[ix*2], ptL[ix*2+1], oldRowsz, bitset);    
+
+            #if LOG_SEARCHRECT_8_BITSDN_EN
+            sprintf_f(rs->logs, "L set color to default (%2lf, %2lf) [0x%.8x] (%d) -> (%d) \n", minfound[0], minfound[1], (uint32_t)src, src[0], colr[0]);
+            print_f(rs->plogs, "SRHDN", rs->logs);
+            #endif
+            
+            bkupclor = src[0];
+            src[0] = colr[0];
+            msync(src, 1, MS_SYNC);
+            
+            getPtTranRvs(pfound, rvdg, roffset, minfound);
+
+            err = adjCircleRect8BitsDn(rs, preal, pfound, dg, offset, colrdiff, bmp, oldRowsz, bpp, pidx);
+
+            #if DRAW_COLORDN_8_BITS_RECOVER
+            src[0] = bkupclor;
+            msync(src, 1, MS_SYNC);
+            #endif
+
+            #if DRAW_COLORDN_8_BITS_RECOVER
+            src[0] = drawclor;
+            msync(src, 1, MS_SYNC);
+            #endif
+
+            if (err == 0) {
+
+                sprintf_f(rs->logs, "L preal(%4d, %4d) 8bits \n", preal[0], preal[1]);
+                print_f(rs->plogs, "SRHDN", rs->logs);
+
+                real[0] = preal[0];
+                real[1] = preal[1];
+
+                return 0;
+            }
+        }
+    }
+
+    for (ix=0; ix < hsize; ix++) {
+        #if LOG_SEARCHRECT_8_BITSDN_EN
+        sprintf_f(rs->logs, "%d. R: (%4d, %4d), org(%3d) diff(%3d) min(%d)\n", ix, ptR[ix*2], ptR[ix*2+1], orgbR[ix], drgbR[ix], mindrgb);
+        print_f(rs->plogs, "SRHDN", rs->logs);      
+        #endif
+
+        if ((mindrgb >= drgbR[ix]) && (drgbR[ix] > 0)) {
+
+            minfound[0] = ptRf[ix*2];
+            minfound[1] = ptRf[ix*2+1];
+
+            src = getPixel(bmp, ptR[ix*2], ptR[ix*2+1], oldRowsz, bitset);    
+
+            #if LOG_SEARCHRECT_8_BITSDN_EN
+            sprintf_f(rs->logs, "R set color to default (%2lf, %2lf) [0x%.8x] (%d) -> (%d) \n", minfound[0], minfound[1], (uint32_t)src, src[0], colr[0]);
+            print_f(rs->plogs, "SRHDN", rs->logs);
+            #endif
+
+            bkupclor = src[0];
+            src[0] = colr[0];
+            msync(src, 1, MS_SYNC);
+            
+            getPtTranRvs(pfound, rvdg, roffset, minfound);
+
+            err = adjCircleRect8BitsDn(rs, preal, pfound, dg, offset, colrdiff, bmp, oldRowsz, bpp, pidx);
+
+            #if DRAW_COLORDN_8_BITS_RECOVER
+            src[0] = bkupclor;
+            msync(src, 1, MS_SYNC);
+            #endif
+
+            #if DRAW_COLORDN_8_BITS_RECOVER
+            src[0] = drawclor;
+            msync(src, 1, MS_SYNC);
+            #endif
+
+            if (err == 0) {
+
+                sprintf_f(rs->logs, "R preal(%4d, %4d) 8bits \n", preal[0], preal[1]);
+                print_f(rs->plogs, "SRHDN", rs->logs);
+
+                real[0] = preal[0];
+                real[1] = preal[1];
+
+                return 0;
+            }
+        }
+    }
+
+    #if 0 /* debug */
+    return -8;
+    #endif
+
+
+    //pfound[0] = minfound[0];
+    //pfound[1] = minfound[1];
+    
+    return -9;
 }
 
 #define LOG_SEARCHRECT_8_BITS_EN (0)
@@ -9924,7 +10697,7 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     CFLOAT o12[2], o23[2], o34[2], o41[2];
     CFLOAT vmin, vmin1;
     CFLOAT pfound[2];
-    CFLOAT ptStart[4][2], dgs[4], *offsets[4], ptEnd[4][4], correct[2];
+    CFLOAT ptStart[4][2], dgs[4], *offsets[4], ptEnd[4][4], correct[2], ptShift[4][2];
     CFLOAT srhnum[4][2]={0}, srhlen[4][2]={0}, srhran[4][2]={0};
     int edwhA[2]={0}, edwhB[2]={0};
     
@@ -10389,9 +11162,12 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
         ix = side - 1;
 
         if ((ix < 4) && (pmreal[0] > 0) && (pmreal[1] > 0)) {
-            correct[0] = pmreal[0] - ptStart[ix][0];
-            correct[1] = pmreal[1] - ptStart[ix][1];
-            sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) 8bits \n", pmreal[0], pmreal[1], correct[0], correct[1]);
+
+            ptShift[ix][0] = pmreal[0];
+            ptShift[ix][1] = pmreal[1];
+            correct[0] = ptShift[ix][0] - ptStart[ix][0];
+            correct[1] = ptShift[ix][1] - ptStart[ix][1];
+            sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) 8bits - %d cont\n", pmreal[0], pmreal[1], correct[0], correct[1], ix);
             print_f(rs->plogs, "RECT", rs->logs);       
 
             ptEnd[ix][0] += correct[0];
@@ -10446,6 +11222,8 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     srhran[2][1] = crana[1];
     srhran[3][0] = cranb[0];
     srhran[3][1] = cranb[1];
+
+    memcpy(ptShift, ptStart, sizeof(CFLOAT)*8);
     
     if (srhcntA[0] > srhcntA[1]) {
         srhtotal = srhcntA[0];
@@ -10467,8 +11245,8 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
                 continue;
             }
         
-            pT5[0] = ptStart[ix][0];
-            pT5[1] = ptStart[ix][1];
+            pT5[0] = ptShift[ix][0];
+            pT5[1] = ptShift[ix][1];
             setRectPoint(pRectTga, srhlen[ix][0], srhlen[ix][1], pT5);
             #if LOG_ROTRECT_EN
             dbgprintRect(pRectTga);
@@ -10476,14 +11254,15 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
             
             #if 1
             if (bpp == 8) {
-                ret = srhRotRect8Bits(rs, ptreal, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
-                if (ret == 0) {
-                    //err = adjCircleRect8Bits(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx);
-                    //if (err == 0) {
-        
-                        correct[0] = ptreal[0] - ptStart[ix][0];
-                        correct[1] = ptreal[1] - ptStart[ix][1];
-                        sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) 8bits \n", ptreal[0], ptreal[1], correct[0], correct[1]);
+                if ((ix % 2) == 0) {
+                    ret = srhRotRect8Bits(rs, ptreal, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
+                    if (ret == 0) {
+
+                        ptShift[ix][0] = ptreal[0];
+                        ptShift[ix][1] = ptreal[1];
+                        correct[0] = ptShift[ix][0] - ptStart[ix][0];
+                        correct[1] = ptShift[ix][1] - ptStart[ix][1];
+                        sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) 8bits - %d\n", ptreal[0], ptreal[1], correct[0], correct[1], ix);
                         print_f(rs->plogs, "RECT", rs->logs);       
         
                         ptEnd[ix][0] += correct[0];
@@ -10495,7 +11274,29 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
                         *pdeg = dgs[ix];
                     
                         break;
-                    //}
+                    }
+                }
+                else {
+                    ret = srhRotRect8BitsDn(rs, ptreal, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
+                    if (ret == 0) {
+
+                        ptShift[ix][0] = ptreal[0];
+                        ptShift[ix][1] = ptreal[1];
+                        correct[0] = ptShift[ix][0] - ptStart[ix][0];
+                        correct[1] = ptShift[ix][1] - ptStart[ix][1];
+                        sprintf_f(rs->logs, "ptreal(%4d, %4d), start(%4.2lf, %4.2lf), page shift: (%4.2lf, %4.2lf) 8bits - %d\n", ptreal[0], ptreal[1], ptStart[ix][0], ptStart[ix][1], correct[0], correct[1], ix);
+                        print_f(rs->plogs, "RECT", rs->logs);       
+        
+                        ptEnd[ix][0] += correct[0];
+                        ptEnd[ix][1] += correct[1];
+                    
+                        setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
+        
+                        getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
+                        *pdeg = dgs[ix];
+                    
+                        break;
+                    }
                 }
             } else {
                 ret = srhRotRect(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
@@ -10560,8 +11361,8 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
             srhlen[ix][0] += 2.0 * srhran[ix][0];
             srhlen[ix][1] += 2.0 * srhran[ix][1];
             
-            ptStart[ix][0] -= srhran[ix][0];
-            ptStart[ix][1] -= srhran[ix][1];
+            ptShift[ix][0] -= srhran[ix][0];
+            ptShift[ix][1] -= srhran[ix][1];
         }
 
         if ((ret == 0) && (err == 0)) {
@@ -73848,7 +74649,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         sprintf_f(rs->logs, "[BMP] updn: %d, side: %d \n", updn, sides[prisec]);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
-                                        aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1);
+                                        aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt%2);
                                         sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
