@@ -211,6 +211,7 @@ static int *totSalloc=0;
 #define OP_HANDSCAN  0xb
 #define OP_NOTESCAN  0xc
 #define OP_POLL           0xd
+#define OP_BANKNOTE  0xf
 
 #define  OP_SEND_BACK        0x08
 #define  OP_Multi_Single     0x09
@@ -8482,7 +8483,7 @@ static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edhe
 
 }
 
-#define LOG_ADJCIRCLEDN_8_BITS_EN (1)
+#define LOG_ADJCIRCLEDN_8_BITS_EN (0)
 static int adjCircleRect8BitsDn(struct procRes_s *rs, int *real, CFLOAT *pfound, CFLOAT dg, CFLOAT *offset, char *colr, char *bmp, int oldRowsz, int bpp, int pidx)
 {
 #define SRH_DRAW_COLORDN_8_BITS (1)
@@ -8494,7 +8495,7 @@ static int adjCircleRect8BitsDn(struct procRes_s *rs, int *real, CFLOAT *pfound,
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
     CFLOAT fval[2]={0}, rval[2]={0}, tmp=0, calcu[2]={0};
     char *src=0;
-    int colrcross[8];
+    int colrcross[12];
     int colravg=0;
     char drgb=0, orgb=0;
     CFLOAT ptup[2]={0}, ptdn[2]={0}, ptrt[2]={0}, ptlf[2]={0};
@@ -8728,19 +8729,29 @@ repeat:
     src = getPixel(bmp, dx, dy-1, oldRowsz, bitset);
     colrcross[3] = src[0];
 
-    src = getPixel(bmp, dx+8, dy, oldRowsz, bitset);
+    src = getPixel(bmp, dx+2, dy, oldRowsz, bitset);
     colrcross[4] = src[0];
-    src = getPixel(bmp, dx-8, dy, oldRowsz, bitset);
+    src = getPixel(bmp, dx-2, dy, oldRowsz, bitset);
     colrcross[5] = src[0];
-    src = getPixel(bmp, dx, dy+8, oldRowsz, bitset);
+    src = getPixel(bmp, dx, dy+2, oldRowsz, bitset);
     colrcross[6] = src[0];
-    src = getPixel(bmp, dx, dy-8, oldRowsz, bitset);
+    src = getPixel(bmp, dx, dy-2, oldRowsz, bitset);
     colrcross[7] = src[0];
 
-    colravg = (colrcross[0] + colrcross[1] + colrcross[2] + colrcross[3]+colrcross[4] + colrcross[5] + colrcross[6] + colrcross[7]) / 8;
+    src = getPixel(bmp, dx+3, dy, oldRowsz, bitset);
+    colrcross[8] = src[0];
+    src = getPixel(bmp, dx-3, dy, oldRowsz, bitset);
+    colrcross[9] = src[0];
+    src = getPixel(bmp, dx, dy+3, oldRowsz, bitset);
+    colrcross[10] = src[0];
+    src = getPixel(bmp, dx, dy-3, oldRowsz, bitset);
+    colrcross[11] = src[0];
+
+    colravg = (colrcross[0] + colrcross[1] + colrcross[2] + colrcross[3]+colrcross[4] + colrcross[5] + colrcross[6] + colrcross[7]+colrcross[8] + colrcross[9] + colrcross[10] + colrcross[11]) / 12;
     
     #if 1//LOG_ADJCIRCLEDN_8_BITS_EN
-    sprintf_f(rs->logs, "get tag black color (%d, %d, %d, %d, %d, %d, %d, %d) avg (%d) \n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], colrcross[4], colrcross[5], colrcross[6], colrcross[7], colravg);
+    sprintf_f(rs->logs, "get tag black color (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d) avg (%d) \n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], 
+        colrcross[4], colrcross[5], colrcross[6], colrcross[7], colrcross[8], colrcross[9], colrcross[10], colrcross[11], colravg);
     print_f(rs->plogs, "ADJDN", rs->logs);
     #endif
 
@@ -8766,24 +8777,36 @@ repeat:
     src = getPixel(bmp, dx, dy-18, oldRowsz, bitset);
     colrcross[7] = src[0];
 
+    src = getPixel(bmp, dx+20, dy, oldRowsz, bitset);
+    colrcross[8] = src[0];
+    src = getPixel(bmp, dx-20, dy, oldRowsz, bitset);
+    colrcross[9] = src[0];
+    src = getPixel(bmp, dx, dy+20, oldRowsz, bitset);
+    colrcross[10] = src[0];
+    src = getPixel(bmp, dx, dy-20, oldRowsz, bitset);
+    colrcross[11] = src[0];
+
     for (ix=0; ix< 4; ix++) {
         if ((colrcross[ix] > 150) && (colrcross[ix] < 210)) {
             if ((colrcross[ix+4] > 150) && (colrcross[ix+4] < 210)) {
-                real[0] = round(fval[0]);
-                real[1] = round(fval[1]);
+                if ((colrcross[ix+8] > 150) && (colrcross[ix+8] < 210)) {
+                    real[0] = round(fval[0]);
+                    real[1] = round(fval[1]);
 
-                #if 1//LOG_ADJCIRCLEDN_8_BITS_EN
-                sprintf_f(rs->logs, "get adj (%d, %d) org (%d, %d) \n", real[0], real[1], dx, dy);
-                print_f(rs->plogs, "ADJDN", rs->logs);
-                #endif
+                    #if 1//LOG_ADJCIRCLEDN_8_BITS_EN
+                    sprintf_f(rs->logs, "get adj (%d, %d) org (%d, %d) \n", real[0], real[1], dx, dy);
+                    print_f(rs->plogs, "ADJDN", rs->logs);
+                    #endif
 
-                return 0;
+                    return 0;
+                }
             }
         }
     }
     
     #if 1//LOG_ADJCIRCLEDN_8_BITS_EN
-    sprintf_f(rs->logs, "get tag center color (%d, %d, %d, %d, %d, %d, %d, %d)\n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], colrcross[4], colrcross[5], colrcross[6], colrcross[7]);
+    sprintf_f(rs->logs, "get tag center color (%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)\n", colrcross[0], colrcross[1], colrcross[2], colrcross[3], colrcross[4], colrcross[5], 
+        colrcross[6], colrcross[7], colrcross[8], colrcross[9], colrcross[10], colrcross[11]);
     print_f(rs->plogs, "ADJDN", rs->logs);
     #endif
     
@@ -9056,13 +9079,13 @@ repeat:
     src = getPixel(bmp, dx, dy-17, oldRowsz, bitset);
     colrcross[3] = src[0];
 
-    src = getPixel(bmp, dx+18, dy, oldRowsz, bitset);
+    src = getPixel(bmp, dx+21, dy, oldRowsz, bitset);
     colrcross[4] = src[0];
-    src = getPixel(bmp, dx-18, dy, oldRowsz, bitset);
+    src = getPixel(bmp, dx-21, dy, oldRowsz, bitset);
     colrcross[5] = src[0];
-    src = getPixel(bmp, dx, dy+18, oldRowsz, bitset);
+    src = getPixel(bmp, dx, dy+21, oldRowsz, bitset);
     colrcross[6] = src[0];
-    src = getPixel(bmp, dx, dy-18, oldRowsz, bitset);
+    src = getPixel(bmp, dx, dy-21, oldRowsz, bitset);
     colrcross[7] = src[0];
 
     colravg = (colrcross[0] + colrcross[1] + colrcross[2] + colrcross[3]+colrcross[4] + colrcross[5] + colrcross[6] + colrcross[7]) / 8;
@@ -9424,7 +9447,7 @@ static int srhRotRectTran(struct procRes_s *rs, CFLOAT *pfound, struct aspRectOb
     return 0;
 }
 
-#define LOG_SEARCHRECT_8_BITSDN_EN (1)
+#define LOG_SEARCHRECT_8_BITSDN_EN (0)
 static int srhRotRect8BitsDn(struct procRes_s *rs, int *real, struct aspRectObj *pRect, CFLOAT dg, CFLOAT *offset, char *colr, char *colrdiff, char *bmp, int oldRowsz, int bpp, int pidx, CFLOAT wcnt, CFLOAT hcnt)
 {
 #define DRAW_COLORDN_8_BITS (1)
@@ -10833,7 +10856,6 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
             sprintf_f(rs->logs, "get A side idx: %d pos %.2lf, %.2lf, %.2lf, %.2lf !!! \n", idxA, pT1[0], pT1[1], pT1[2], pT1[3]);
             print_f(rs->plogs, "MCUT", rs->logs);
         }
-        
         
         ret = aspMetaGetPagePos(meta, pT2, idxB);
         if (ret < 0) {
@@ -67348,6 +67370,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         else if (cmdchr == 0x04) {
 
             usbfolw = 0;
+
+            #if 1 /* test code before MCU ready */
+            if (opc == 0x0f) {
+                opc = 0x0a;
+            }
+            #endif
             
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
             memcpy(&pkcbw[0], CBW, 32);
@@ -68507,7 +68535,7 @@ static int p10(struct procRes_s *rs)
 #define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
-#define DBG_USB_TIME_MEASURE (1)
+#define DBG_USB_TIME_MEASURE (0)
 #if ONLY_ONE_USB
 #define BYPASS_TWO  (0)
 #else
@@ -70786,7 +70814,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     pipRet = aspMetaRelease(msb2lsb32(&ptmetain->FUNC_BITS), 0, rs);
                     
                     #if 1
-                    shmem_dump(ptrecv+128, recvsz-128);
+                    shmem_dump(ptrecv, recvsz);
                     dbgMeta(msb2lsb32(&metaRx->FUNC_BITS), metaRx);
                     #endif
                     
@@ -71363,6 +71391,29 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     break;
                                 }
+                                else if ((opc == 0x0f) && (dat == 0x85)) {
+
+                                    iubs->opinfo = opc << 8 | dat;
+                                    memcpy(iubsBuff, ptrecv, 31);
+                                    
+                                    puscur = 0;
+                                    pinfcur = 0;
+                                    
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, 7);
+                                    }
+
+                                    chq = 'n';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    
+                                    break;
+                                }
                                 else if ((opc == 0x4d) && (dat == 0x00)) { /* polling status */
 
                                     iubs->opinfo = opc << 8 | dat;
@@ -71520,7 +71571,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     break;
                                 }
-                            
                         }
                         else if (cmd == 0x12) {
                             distCylcnt = 0;
@@ -71716,7 +71766,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 acusz = 0;
                                 break;
                             }
-                            else if (((opc == 0x0a) || (opc == 0x0e)) && (dat == 0x85)) {
+                            else if (((opc == 0x0a) || (opc == 0x0e) || (opc == 0x0f)) && (dat == 0x85)) {
                                 if (!puscur) {
                                     puscur = pushost;    
                                     pinfcur = pinfushost;
@@ -71843,7 +71893,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     /* should't be here */
                                 }
                 
-                                if ((puimGet) && ((opc == 0x05) || (opc == 0x0a) || (opc == 0x0e))) {
+                                if ((puimGet) && ((opc == 0x0f) || (opc == 0x0a) || (opc == 0x0e))) {
                                     if ((puimGet->uimIdex & 0x400) == 0) {
                                                 puscur = pushost;
                                                 pinfcur = pinfushost;
@@ -71891,7 +71941,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 break;
                             case 0x05:
                             case 0x0a:
-                
+                            case 0x0f:
+                            
                                 chq = 'b';
                                 pipRet = write(pipeTx[1], &chq, 1);
                                 if (pipRet < 0) {
@@ -72602,7 +72653,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         }
         
         while (usbentsTx == 1) { 
-            if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e))) { /* usbentsTx == 1*/
+            if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e) || (opc == 0x0f))) { /* usbentsTx == 1*/
                 #if USB_HS_SAVE_RESULT_DV
                 fsave = find_save(ptfilepath, ptfileSave);
                 if (!fsave) {
@@ -72678,7 +72729,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 #endif
 
                                 if (puimGet) {
-                                    if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e))) {
+                                    if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e) || (opc == 0x0f))) {
 
                                         sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex, puimGet->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
@@ -73448,7 +73499,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                     
                                     #if GHP_EN
-                                    if ((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) {
+                                    if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && ((opc == 0x0a) || (opc == 0x0f))) {
                                     //if (fformat == FILE_FORMAT_RAW) {
                                         bmpbuff = aspMemalloc(bmplen, 11);
 
@@ -74536,6 +74587,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     sprintf_f(rs->logs, "[CUT] get page ret: %d \n", ret);
                                     print_f(rs->plogs, "P11", rs->logs);
 
+                                    #if 0
                                     cutsides[ret*2] = -1;
                                     cutsides[ret*2+1] = -1;
                                     cutlayers[ret*2] = 0;
@@ -74549,6 +74601,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     cutlayers[ret*2+1] = 0;
                                     
                                     ret += 1;
+                                    #endif
 
                                     for (cutnum=0; cutnum < ret; cutnum++) {
                                         sprintf_f(rs->logs, "[CUT] %d. A:%d (%d) B:%d (%d)\n", cutnum, cutsides[cutnum*2], cutlayers[cutnum*2], cutsides[cutnum*2+1], cutlayers[cutnum*2+1]);
@@ -74649,7 +74702,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         sprintf_f(rs->logs, "[BMP] updn: %d, side: %d \n", updn, sides[prisec]);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
-                                        aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt%2);
+                                        aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1);
                                         sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
