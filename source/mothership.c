@@ -2870,11 +2870,14 @@ static uint32_t msb2lsb32(struct intMbs32_s *msb)
     return lsb;
 }
 
-static inline int setDefaultConfFile(struct aspConfig_s* ctb)
+static inline int setDefaultConfFile(struct aspConfig_s *conftb)
 {
     int ix=0;
+    struct aspConfig_s* ctb = 0;
     
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+        ctb = &conftb[ix];
+        
         switch(ix) {
         case ASPOP_SCAN_SINGLE: 
             ctb->opStatus = ASPOP_STA_NONE;
@@ -3717,11 +3720,13 @@ static inline int setDefaultConfFile(struct aspConfig_s* ctb)
     return ix;
 }
 
-static inline int setDefaultConf(struct aspConfig_s* ctb)
+static inline int setDefaultConf(struct aspConfig_s *conftb)
 {
     int ix=0;
+    struct aspConfig_s *ctb = 0;
     
     for (ix = 0; ix < ASPOP_CODE_MAX; ix++) {
+        ctb = &conftb[ix];
         switch(ix) {
         case ASPOP_CODE_NONE:   
             ctb->opStatus = ASPOP_STA_NONE;
@@ -5959,14 +5964,16 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
         pmeta = &mrs->metain;
         pct = mrs->configTable;
         pmass = &mrs->metaMass;
-
-        //printf("[aspMetaRelease] from mrs!!funcbits: 0x%x \n", funcbits);
+        #if LOG_METABUILD_EN
+        printf("[aspMetaRelease] from mrs!!funcbits: 0x%x \n", funcbits);
+        #endif
     } else {
         pmeta = rs->pmetain;
         pct = rs->pcfgTable;
         pmass = rs->pmetaMass;
-        
-        //printf("[aspMetaRelease] from rs!!funcbits: 0x%x \n", funcbits);
+        #if LOG_METABUILD_EN
+        printf("[aspMetaRelease] from rs!!funcbits: 0x%x \n", funcbits);
+        #endif
     }
     
     msync(pmeta, sizeof(struct aspMetaData_s), MS_SYNC);
@@ -6000,6 +6007,11 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
                 pvdst++;
                 opSt++;
             }
+            else {
+                #if 1//LOG_METABUILD_EN
+                printf("[meta] 0x%.2x (!0x%.2x) = 0x%.2x (0x%.2x)\n", pct[idx].opCode, opSt, pct[idx].opValue, pct[idx].opStatus);
+                #endif
+            }
 
             if (pvend < pvdst) {
                  break;
@@ -6031,6 +6043,11 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
                 pvdst++;
                 opSt++;
             }
+            else {
+                #if 1//LOG_METABUILD_EN
+                printf("[meta] 0x%.2x (!0x%.2x) = 0x%.2x (0x%.2x)\n", pct[idx].opCode, opSt, pct[idx].opValue, pct[idx].opStatus);
+                #endif
+            }
 
             if (pvend < pvdst) {
                  break;
@@ -6059,6 +6076,11 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
 
                 pvdst++;
                 opSt++;
+            }
+            else {
+                #if 1//LOG_METABUILD_EN
+                printf("[meta] 0x%.2x (!0x%.2x) = 0x%.2x (0x%.2x)\n", pct[idx].opCode, opSt, pct[idx].opValue, pct[idx].opStatus);
+                #endif
             }
 
             if (pvend < pvdst) {
@@ -68635,7 +68657,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct timespec jpgS, jpgE;
     int cutcnt=0, cutnum=0, *cutsides=0, *cutlayers=0;
     int sides[2]={0}, mreal[2]={0}, prisec=0, updn=0;
-    
+    int pipepc[2]={0}, pipeusb[2]={0};
+
+    //pipe2(pipeusb, O_NONBLOCK);
+    //pipe(pipepc);
+
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
     if (!fileidbuff) {
@@ -70811,9 +70837,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);
                         break;
                     }
-                    pipRet = aspMetaRelease(msb2lsb32(&ptmetain->FUNC_BITS), 0, rs);
                     
-                    #if 1
+                    pipRet = aspMetaRelease(msb2lsb32(&ptmetain->FUNC_BITS), 0, rs);
+                    sprintf_f(rs->logs, "[DV]  meta release ret: %d \n", pipRet);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    
+                    #if 0
                     shmem_dump(ptrecv, recvsz);
                     dbgMeta(msb2lsb32(&metaRx->FUNC_BITS), metaRx);
                     #endif
@@ -73494,6 +73523,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     cpylen = 0;
 
                                     ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                                    sprintf_f(rs->logs, "[BMP] get file format ret: %d format: 0x%.2x !!!\n", ret, fformat);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
                                     if (ret) {
                                         fformat = 0;
                                     }
@@ -74699,7 +74731,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         } else {
                                             updn = 0;
                                         }
-                                        sprintf_f(rs->logs, "[BMP] updn: %d, side: %d \n", updn, sides[prisec]);
+                                        sprintf_f(rs->logs, "[BMP] updn: %d, side: %d cutcnt: %d\n", updn, sides[prisec], cutcnt);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
                                         aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1);
@@ -78486,11 +78518,12 @@ int main(int argc, char *argv[])
         }
         fclose(fprm);
         /* reset the run time parameters */
+        setDefaultConf(pmrs->configTable);
         setDefaultConfFile(pmrs->configTable);
     }
     
     if (readLen == 0) { 
-        sprintf_f(pmrs->log, " load scaner parameter at [%s] failed !!! Reset configuration!!!", paramFilePath);
+        sprintf_f(pmrs->log, " load scaner parameter at [%s] failed !!! Reset configuration!!!\n", paramFilePath);
         print_f(pmrs->plog, "PRAM", pmrs->log);
 
         setDefaultConf(pmrs->configTable);
