@@ -68569,7 +68569,7 @@ static int p10(struct procRes_s *rs)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
-    char ch=0;
+    char ch='a';
     char fileidpoll[64] = "/root/scaner/fileidpll.bin";
     char *fileidbuff=0;
     FILE *fdpll=0, *fdrd=0;
@@ -68657,10 +68657,12 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct timespec jpgS, jpgE;
     int cutcnt=0, cutnum=0, *cutsides=0, *cutlayers=0;
     int sides[2]={0}, mreal[2]={0}, prisec=0, updn=0;
-    int pipepc[2]={0}, pipeusb[2]={0};
+    int pipepc[2]={0}, pipeusb[2]={0}, pid=-1;
+    int pids[128] = {0}, pscnt=0;
+    int pipesup[2]={0}, pipesdn[2]={0};
 
     //pipe2(pipeusb, O_NONBLOCK);
-    //pipe(pipepc);
+    //pipe2(pipepc, O_NONBLOCK);
 
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
@@ -70474,7 +70476,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         //chq = 'x';
                         msgret[0] = 'x';
                         msgret[1] = 0x02;
-                        pipRet = write(pipeTx[1], &msgret, 2);
+                        pipRet = write(pipeTx[1], msgret, 2);
                         if (pipRet < 0) {
                             printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                         }
@@ -71276,7 +71278,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         //chq = 'x';
                                         msgret[0] = 'x';
                                         msgret[1] = 0x01;
-                                        pipRet = write(pipeTx[1], &msgret, 2);
+                                        pipRet = write(pipeTx[1], msgret, 2);
                                         if (pipRet < 0) {
                                             printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                                         }
@@ -71440,6 +71442,39 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         print_f(rs->plogs, "P11", rs->logs);
                                         continue;
                                     }
+
+                                    #if 0 /* fork test code */
+                                    pid = fork();
+                                    
+                                    if (pid < 0) {
+                                        pid = fork();
+                                    }
+
+                                    sprintf_f(rs->logs, "[ISO] fork pid: %d\n", pid);
+                                    print_f(rs->plogs, "P11", rs->logs);
+
+                                    if (pid == 0) {
+
+                                        ch = 'c';
+                                        while (1) {
+                                            ret = read(pipeusb[0], &ch, 1);
+
+                                            sprintf_f(rs->logs, "[ISO] pipeusb get ch: %c, ret: %d \n", ch, ret);
+                                            ret = print_f(rs->plogs, "P11", rs->logs);
+
+                                            //printf("[ISO] test ret: %d \n", ret);
+
+                                            sleep(1);
+                                            
+                                        }
+                                    }
+                                    
+                                    ch += 1;
+                                    write(pipeusb[1], &ch, 1);
+
+                                    sprintf_f(rs->logs, "[ISO] fork pid: %d break \n", pid);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
                                     
                                     break;
                                 }
@@ -72682,7 +72717,36 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         }
         
         while (usbentsTx == 1) { 
-            if ((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e) || (opc == 0x0f))) { /* usbentsTx == 1*/
+            #if 0
+            if ((cmd == 0x12) && (opc == 0x0f) && (pid > 0)) {
+
+                while (1) {
+                    ret = read(pipepc[0], &ch, 1);
+                    sprintf_f(rs->logs, "[ISO] pipepc get ch: %c ret: %d\n", ch, ret);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    if (ret > 0) {
+                        sleep(1);
+
+                        ch = 'A';
+                        write(pipeusb[1], &ch, 1);
+                        sprintf_f(rs->logs, "[ISO] pipeusb send ch: %c \n", ch);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        
+                    }
+
+                    usleep(500000);
+                }
+            }
+            else 
+            #endif
+            if (((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e) || (opc == 0x0f))) || (pid == 0)) { /* usbentsTx == 1*/
+
+                //ch = 'A';
+                //write(pipepc[1], &ch, 1);
+                //sprintf_f(rs->logs, "[ISO] pipepc send ch: %c \n", ch);
+                //print_f(rs->plogs, "P11", rs->logs);
+
+                //do {
                 #if USB_HS_SAVE_RESULT_DV
                 fsave = find_save(ptfilepath, ptfileSave);
                 if (!fsave) {
@@ -72748,6 +72812,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);
                             #endif
 
+                            //ret = read(pipeusb[0], &ch, 1);
+                            //sprintf_f(rs->logs, "[ISO] pipeusb get ch: %c ret: %d\n", ch, ret);
+                            //print_f(rs->plogs, "P11", rs->logs);
+                            
                             pipRet = poll(ptfdc, 2, 200);
                             if (pipRet <= 0) {
                                 clock_gettime(CLOCK_REALTIME, &tidleE);
@@ -73531,8 +73599,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                     
                                     #if GHP_EN
-                                    if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && ((opc == 0x0a) || (opc == 0x0f))) {
-                                    //if (fformat == FILE_FORMAT_RAW) {
+                                    //if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && ((opc == 0x0a) || (opc == 0x0f))) {
+                                    if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && (opc == 0x0f)) {
                                         bmpbuff = aspMemalloc(bmplen, 11);
 
                                         if (bmpbuff) {
@@ -75136,8 +75204,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     opc = 0;
                     che = 0;
 
+                    #if 0
+                    ch = 'a';
+                    ret = write(pipeusb[1], &ch, 1);
+                    sprintf_f(rs->logs, "[ISO] pipeusb send ch: %c ret: %d \n", ch, ret);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    ret = read(pipepc[0], &ch, 1);
+                    sprintf_f(rs->logs, "[PC] usbpc get ch: %c ret: %d\n", ch, ret);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+
                     continue;
                 }
+                //} 
+                //while (opc == 0x0f);
+                //while (pid == 0);
             }
             else if ((cmd == 0x11) && ((opc == 0x4d) || (opc == 0x4f))) { /* usbentsTx == 1*/
 
@@ -75253,7 +75335,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 } else {
                     msgret[1] = 0x01;
                 }
-                pipRet = write(pipeTx[1], &msgret, 2);                
+                pipRet = write(pipeTx[1], msgret, 2);                
                 if (pipRet < 0) {
                     printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                 }
@@ -75462,7 +75544,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 msgret[0] = 'x';
                 msgret[1] = 0x01;
-                pipRet = write(pipeTx[1], &msgret, 2);
+                pipRet = write(pipeTx[1], msgret, 2);
                 if (pipRet < 0) {
                     printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                 }
@@ -75565,7 +75647,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
                 
-                pipRet = write(pipeTx[1], &msgret, 2);                
+                pipRet = write(pipeTx[1], msgret, 2);                
                 if (pipRet < 0) {
                     printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                 }
@@ -75874,7 +75956,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 if (chn == 0) {
                     msgret[0] = 'x';
                     msgret[1] = 0x01;
-                    pipRet = write(pipeTx[1], &msgret, 2);
+                    pipRet = write(pipeTx[1], msgret, 2);
                     if (pipRet < 0) {
                         printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                     }
@@ -76600,7 +76682,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                 msgret[0] = 'x';
                 msgret[1] = 0x01;
-                pipRet = write(pipeTx[1], &msgret, 2);
+                pipRet = write(pipeTx[1], msgret, 2);
                 if (pipRet < 0) {
                     printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                 }
@@ -76891,7 +76973,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         //chq = 'x';
                         msgret[0] = 'x';
                         msgret[1] = 0x01;
-                        pipRet = write(pipeTx[1], &msgret, 2);
+                        pipRet = write(pipeTx[1], msgret, 2);
                         if (pipRet < 0) {
                             printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                         }
@@ -78097,7 +78179,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                 msgret[0] = 'x';
                 msgret[1] = 0x01;
-                pipRet = write(pipeTx[1], &msgret, 2);
+                pipRet = write(pipeTx[1], msgret, 2);
                 if (pipRet < 0) {
                     printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
                 }
