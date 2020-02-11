@@ -1553,7 +1553,7 @@ struct usbfileid_s{
 struct mainRes_s{
     char nmrs[32];
     uint32_t mspconfig;
-    int sid[12];
+    int sid[15];
     int sfm[2];
     int smode;
     int usbmfd;
@@ -1568,8 +1568,8 @@ struct mainRes_s{
     struct folderQueue_s *folder_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
-    struct pipe_s pipedn[15];
-    struct pipe_s pipeup[15];
+    struct pipe_s pipedn[19];
+    struct pipe_s pipeup[19];
     // data mode share memory
     struct shmem_s dataRx;
     // command mode share memory
@@ -1609,6 +1609,14 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheader;
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
+    char *jpegPri;
+    char *jpegSec;
+    char *bmpPri_0;
+    char *bmpSec_0;
+    char *bmpPri_1;
+    char *bmpSec_1;
+    char *bmpPri_2;
+    char *bmpSec_2;
     char netIntfs[32];
     char netIntwpa[32];
     char *dbglog;
@@ -35808,6 +35816,50 @@ static int p11_end(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s
     ret = pn_end(rs);
     ret |= pn_end(rsd);
     ret |= pn_end(rcmd);
+    return ret;
+}
+
+static int p12_init(struct procRes_s *rs, struct procRes_s *rsd)
+{
+    int ret=0;
+    ret = pn_init(rs);
+    ret |= pn_init(rsd);
+    return ret;
+}
+
+static int p12_end(struct procRes_s *rs, struct procRes_s *rsd)
+{
+    int ret=0;
+    ret = pn_end(rs);
+    ret |= pn_end(rsd);
+    return ret;
+}
+
+static int p13_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p13_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p14_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p14_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
     return ret;
 }
 
@@ -78231,6 +78283,96 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     return 0;
 }
 
+static int p12(struct procRes_s *rs, struct procRes_s *rsd)
+{
+    char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
+    char devstr[] = "/dev/rjob0";
+    int ret=0;
+    char ch=0;
+
+    sprintf_f(rs->logs, "p12\n");
+    print_f(rs->plogs, "P12", rs->logs);
+
+    p12_init(rs, rsd);
+
+    prctl(PR_SET_NAME, "msp-p12");
+
+
+    while (1) {
+        ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+
+        if (ret > 0) {
+            sprintf_f(rs->logs, "break loop!!! get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, "P12", rs->logs);
+        } else {
+            sprintf_f(rs->logs, "host not available !!\n");
+            print_f(rs->plogs, "P12", rs->logs);
+        }
+    }
+
+    p12_end(rs, rsd);
+    
+    return 0;
+}
+
+static int jpghostd(struct procRes_s *rs, char *sp, int dlog)
+{
+    int ret=0;
+    char ch=0;
+
+    while (1) {
+        ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+
+        if (ret > 0) {
+            sprintf_f(rs->logs, "break loop!!! get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, sp, rs->logs);
+        } else {
+            sprintf_f(rs->logs, "JPG host not available !!\n");
+            print_f(rs->plogs, sp, rs->logs);
+        }
+    }
+
+    return -1;
+}
+
+#define LOG_P13_EN (1)
+static int p13(struct procRes_s *rs)
+{
+    sprintf_f(rs->logs, "p13\n");
+    print_f(rs->plogs, "P13", rs->logs);
+
+    p13_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p13");
+
+    while (1) {
+        jpghostd(rs, "P13", LOG_P13_EN);
+    }
+
+    p13_end(rs);
+
+    return 0;
+}
+
+#define LOG_P14_EN (1)
+static int p14(struct procRes_s *rs)
+{
+    sprintf_f(rs->logs, "p14\n");
+    print_f(rs->plogs, "P14", rs->logs);
+
+    p14_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p14");
+
+    while (1) {
+        jpghostd(rs, "P14", LOG_P14_EN);
+    }
+
+    p14_end(rs);
+    
+    return 0;
+}
+
 #define DATA_RX_SIZE RING_BUFF_NUM
 #define DATA_TX_SIZE RING_BUFF_NUM
 #define CMD_RX_SIZE RING_BUFF_NUM
@@ -78242,7 +78384,7 @@ int main(int argc, char *argv[])
     char dir[256] = "/mnt/mmc2";
     char wfssid[128] = "/root/scaner/ssid.gen";
     struct mainRes_s *pmrs;
-    struct procRes_s rs[15];
+    struct procRes_s rs[19];
     int ix, ret, len;
     char *log;
     int tdiff;
@@ -79785,6 +79927,98 @@ int main(int argc, char *argv[])
         sprintf_f(pmrs->log, "USB to ASIC (2) FAILED");
         dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
     }
+
+    len = (2592 * 1864 * 15) / 100;
+    pmrs->jpegPri = (char *)aspSalloc(len);
+    if (pmrs->jpegPri) {
+        sprintf_f(pmrs->log, "allocate memory for pri M4 jpeg succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pmrs->jpegPri, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for pri M4 jpeg failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    pmrs->jpegSec = (char *)aspSalloc(len);
+    if (pmrs->jpegSec) {
+        sprintf_f(pmrs->log, "allocate memory for sec M4 jpeg succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pmrs->jpegSec, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for sec M4 jpeg failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    #if 1
+    len = 2592 * 1864;
+    pmrs->bmpPri_0 = (char *)aspSalloc(len);
+    if (pmrs->bmpPri_0) {
+        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 00 succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pmrs->bmpPri_0, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 00 failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    pmrs->bmpSec_0 = (char *)aspSalloc(len);
+    if (pmrs->bmpSec_0) {
+        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 00 succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pmrs->bmpSec_0, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 00 failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    pmrs->bmpPri_1 = (char *)aspSalloc(len);
+    if (pmrs->bmpPri_1) {
+        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 01 succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pmrs->bmpPri_1, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 01 failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    pmrs->bmpSec_1 = (char *)aspSalloc(len);
+    if (pmrs->bmpSec_1) {
+        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 01 succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pmrs->bmpSec_1, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 01 failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    pmrs->bmpPri_2 = (char *)aspSalloc(len);
+    if (pmrs->bmpPri_2) {
+        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 02 succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pmrs->bmpPri_2, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 02 failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    pmrs->bmpSec_2 = (char *)aspSalloc(len);
+    if (pmrs->bmpSec_2) {
+        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 02 succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pmrs->bmpSec_2, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 02 failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    #endif
     
     printSysinfo(&minfo);
     
@@ -79812,6 +80046,10 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipedn[12].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[13].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[14].rt, O_NONBLOCK);
+    pipe2(pmrs->pipedn[15].rt, O_NONBLOCK);
+    pipe2(pmrs->pipedn[16].rt, O_NONBLOCK);
+    pipe2(pmrs->pipedn[17].rt, O_NONBLOCK);
+    pipe2(pmrs->pipedn[18].rt, O_NONBLOCK);
     
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[1].rt, O_NONBLOCK);
@@ -79828,6 +80066,10 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipeup[12].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[13].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[14].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[15].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[16].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[17].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[18].rt, O_NONBLOCK);
   
     res_put_in(&rs[0], pmrs, 0);
     res_put_in(&rs[1], pmrs, 1);
@@ -79844,6 +80086,10 @@ int main(int argc, char *argv[])
     res_put_in(&rs[12], pmrs, 12);
     res_put_in(&rs[13], pmrs, 13);
     res_put_in(&rs[14], pmrs, 14);
+    res_put_in(&rs[15], pmrs, 15);
+    res_put_in(&rs[16], pmrs, 16);
+    res_put_in(&rs[17], pmrs, 17);
+    res_put_in(&rs[18], pmrs, 18);
   
 //  Share memory init
     ring_buf_init(&pmrs->dataRx);
@@ -79943,11 +80189,35 @@ int main(int argc, char *argv[])
                                                 if (!pmrs->sid[11]) {
                                                     p11(&rs[12], &rs[13], &rs[14]);
                                                 } else {
-                                                    
                                                     len = strlen(argv[0]);
                                                     memset(argv[0], 0, len);
-                                                    sprintf(argv[0], "func");
-                                                    p0(pmrs);
+                                                    sprintf(argv[0], "m4");
+                                                    pmrs->sid[12] = fork();
+                                                    if (!pmrs->sid[12]) {
+                                                        p12(&rs[15], &rs[16]);
+                                                    } else {
+                                                        len = strlen(argv[0]);
+                                                        memset(argv[0], 0, len);
+                                                        sprintf(argv[0], "jpghost0");
+                                                        pmrs->sid[13] = fork();
+                                                        if (!pmrs->sid[13]) {
+                                                            p13(&rs[17]);
+                                                        } else {
+                                                            len = strlen(argv[0]);
+                                                            memset(argv[0], 0, len);
+                                                            sprintf(argv[0], "jpghost1");
+                                                            pmrs->sid[14] = fork();
+                                                            if (!pmrs->sid[14]) {
+                                                                p14(&rs[18]);
+                                                            } else {
+                                                    
+                                                                len = strlen(argv[0]);
+                                                                memset(argv[0], 0, len);
+                                                                sprintf(argv[0], "func");
+                                                                p0(pmrs);
+                                                            }                                                    
+                                                        }                                                    
+                                                    }
                                                 }
                                             }
                                         }
