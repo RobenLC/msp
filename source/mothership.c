@@ -470,7 +470,7 @@ typedef enum {
     FMTX, // 18
     FMTY, // 19
     USBZ, // 20
-    USBA, // 21
+    BMFA, // 21
     SMAX,
 }state_e;
 
@@ -23053,7 +23053,7 @@ static uint32_t next_MDUOU(struct psdata_s *data)
     return emb_process(tmpRlt, next);
 }
 
-static uint32_t next_USBA(struct psdata_s *data)
+static uint32_t next_BMFA(struct psdata_s *data)
 {
     int pro, rlt, next = 0;
     uint32_t tmpAns = 0, evt = 0, tmpRlt = 0;
@@ -26005,8 +26005,8 @@ static int ps_next(struct psdata_s *data)
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
-        case USBA:
-            ret = next_USBA(data);
+        case BMFA:
+            ret = next_BMFA(data);
             evt = (ret >> 24) & 0xff;
             if (evt) nxtst = evt; /* long jump */
             break;
@@ -33865,7 +33865,7 @@ static int stusbscan_125(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stusbscan_126(struct psdata_s *data)
+static int stusbbnote_126(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -33874,16 +33874,16 @@ static int stusbscan_126(struct psdata_s *data)
     rs = data->rs;
     rlt = abs_result(data->result); 
     sprintf_f(rs->logs, "op_126 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "USN", rs->logs);  
+    print_f(rs->plogs, "BM4", rs->logs);  
 
     switch (rlt) {
         case STINIT:
-            ch = 00;
+            ch = 152;
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf_f(rs->logs, "op_126: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "USN", rs->logs);  
+            print_f(rs->plogs, "BM4", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -33907,7 +33907,7 @@ static int stusbscan_126(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stusbscan_127(struct psdata_s *data)
+static int stusbbnote_127(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -33916,7 +33916,7 @@ static int stusbscan_127(struct psdata_s *data)
     rs = data->rs;
     rlt = abs_result(data->result); 
     sprintf_f(rs->logs, "op_127 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "USN", rs->logs);  
+    print_f(rs->plogs, "BM4", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -33925,7 +33925,7 @@ static int stusbscan_127(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf_f(rs->logs, "op_127: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "USN", rs->logs);  
+            print_f(rs->plogs, "BM4", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -33949,7 +33949,7 @@ static int stusbscan_127(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stusbscan_128(struct psdata_s *data)
+static int stusbbnote_128(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -33958,7 +33958,7 @@ static int stusbscan_128(struct psdata_s *data)
     rs = data->rs;
     rlt = abs_result(data->result); 
     sprintf_f(rs->logs, "op_128 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "USN", rs->logs);  
+    print_f(rs->plogs, "BM4", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -33967,7 +33967,7 @@ static int stusbscan_128(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf_f(rs->logs, "op_128: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "USN", rs->logs);  
+            print_f(rs->plogs, "BM4", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -33991,7 +33991,7 @@ static int stusbscan_128(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stusbscan_129(struct psdata_s *data)
+static int stusbbnote_129(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -34000,7 +34000,7 @@ static int stusbscan_129(struct psdata_s *data)
     rs = data->rs;
     rlt = abs_result(data->result); 
     sprintf_f(rs->logs, "op_129 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "USN", rs->logs);  
+    print_f(rs->plogs, "BM4", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -34009,7 +34009,7 @@ static int stusbscan_129(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf_f(rs->logs, "op_129: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "USN", rs->logs);  
+            print_f(rs->plogs, "BM4", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -34033,7 +34033,7 @@ static int stusbscan_129(struct psdata_s *data)
     return ps_next(data);
 }
 
-static int stusbscan_130(struct psdata_s *data)
+static int stusbbnote_130(struct psdata_s *data)
 { 
     char ch = 0; 
     uint32_t rlt;
@@ -34042,7 +34042,7 @@ static int stusbscan_130(struct psdata_s *data)
     rs = data->rs;
     rlt = abs_result(data->result); 
     sprintf_f(rs->logs, "op_130 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "USN", rs->logs);  
+    print_f(rs->plogs, "BM4", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -34051,7 +34051,7 @@ static int stusbscan_130(struct psdata_s *data)
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
             sprintf_f(rs->logs, "op_130: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "USN", rs->logs);  
+            print_f(rs->plogs, "BM4", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -38138,6 +38138,71 @@ end:
     return ret;
 }
 
+static int cmdfunc_usbbknote_opcode(int argc, char *argv[])
+{
+    char *rlt=0, rsp=0;
+    int ret=0, ix=0, n=0, brk=0;
+    struct aspWaitRlt_s *pwt;
+    struct info16Bit_s *pkt;
+    struct mainRes_s *mrs=0;
+    mrs = (struct mainRes_s *)argv[0];
+    if (!mrs) {ret = -1; goto end;}
+    sprintf_f(mrs->log, "cmdfunc_usbbknote_opcode argc:%d\n", argc); 
+    print_f(mrs->plog, "DBG", mrs->log);
+
+    pkt = &mrs->mchine.tmp;
+    pwt = &mrs->wtg;
+    if (!pkt) {ret = -2; goto end;}
+    if (!pwt) {ret = -3; goto end;}
+    rlt = pwt->wtRlt;
+    if (!rlt) {ret = -4; goto end;}
+
+    /* set wait result mechanism */
+    pwt->wtChan = 6;
+    pwt->wtMs = 300;
+
+    //clock_gettime(CLOCK_REALTIME, &mrs->time[0]);
+
+    //sprintf(mrs->log, "=====[_USB_SCAN_] BEG=====");
+    //dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
+    n = 0; rsp = 0;
+    /* set data for update to scanner */
+    pkt->opcode = OP_RGRD;
+    pkt->data = 0;
+    n = cmdfunc_upd2host(mrs, 'D', &rsp);
+    if ((n == -32) || (n == -33)) {
+        brk = 1;
+        goto end;
+    }
+        
+    if ((n) || (rsp != 0x1)) {
+         sprintf_f(mrs->log, "ERROR!!, n=%d rsp=%d opc:0x%x dat:0x%x\n", n, rsp, pkt->opcode, pkt->data); 
+         print_f(mrs->plog, "DBG", mrs->log);
+         ret = -5;
+    }
+
+    sprintf_f(mrs->log, "cmdfunc_usbbknote_opcode n = %d, rsp = %d\n", n, rsp); 
+    print_f(mrs->plog, "DBG", mrs->log);
+    
+end:
+
+    //sprintf(mrs->log, "=====[_USB_SCAN_] END=====");
+    //dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+    
+    if (brk | ret) {
+        sprintf(mrs->log, "USBBNSCAN_NG,%d,%d", ret, brk);
+    } else {
+        sprintf(mrs->log, "USBBNSCAN_OK,%d,%d", ret, brk);
+    }
+
+    n = strlen(mrs->log);
+    print_dbg(mrs->plog, mrs->log, n);
+    printf_dbgflush(mrs->plog, mrs, argc);
+
+    return ret;
+}
+
 static int cmdfunc_wusingle_opcode(int argc, char *argv[])
 {
     char *rlt=0, rsp=0;
@@ -38971,7 +39036,7 @@ static int cmdfunc_01(int argc, char *argv[])
 
 static int dbg(struct mainRes_s *mrs)
 {
-#define CMD_SIZE 44
+#define CMD_SIZE 45
 
     int ci, pi, ret, idle=0, wait=-1, loglen=0, ui=0, clen=0;
     char cmd[256], *addr[3], rsp[256], ch, *plog;
@@ -38987,7 +39052,8 @@ static int dbg(struct mainRes_s *mrs)
                                 , {28, "scango", cmdfunc_scango_opcode}, {29, "raw", cmdfunc_raw_opcode}, {30, "gosd", cmdfunc_gosd_opcode}, {31, "upsd", cmdfunc_upsd_opcode}
                                 , {32, "ocr", cmdfunc_ocr_opcode}, {33, "msingle", cmdfunc_msingle_opcode}, {34, "mdouble", cmdfunc_mdouble_opcode}, {35, "mocr", cmdfunc_mocr_opcode}
                                 , {36, "fmt32g", cmdfunc_fmt32g_opcode}, {37, "fmt16g", cmdfunc_fmt16g_opcode}, {38, "fmt64g", cmdfunc_fmt64g_opcode}, {39, "fmt128g", cmdfunc_fmt128g_opcode}
-                                , {40, "reboot", cmdfunc_reboot_opcode}, {41, "crtfdr", cmdfunc_crtfdr_opcode}, {42, "usbscan", cmdfunc_usbscan_opcode}, {43, "wusingle", cmdfunc_wusingle_opcode}};
+                                , {40, "reboot", cmdfunc_reboot_opcode}, {41, "crtfdr", cmdfunc_crtfdr_opcode}, {42, "usbscan", cmdfunc_usbscan_opcode}, {43, "wusingle", cmdfunc_wusingle_opcode}
+                                , {44, "usbbknote", cmdfunc_usbbknote_opcode}};
 
     p0_init(mrs);
 
@@ -52199,11 +52265,2141 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
+#define DBG_BKN_GATE (0)
+#define MAX_152_EVENT (11)
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
-    sprintf_f(mrs->log, "empty !!!\n");
+    sprintf_f(mrs->log, "usb gate !!!\n");
     print_f(mrs->plog, "fs152", mrs->log);
 
+    char filenames[] = "/root/scaner/id_%.5d.bin";
+    char idfile[128];
+    FILE *filefd=0;
+    struct usbhost_s *ppup, *ppdn;
+    struct pollfd pllfd[MAX_152_EVENT];
+    int *dvtx=0, *dvrx=0;
+    int *uphstx=0, *uphsrx=0;
+    int *updvtx=0, *updvrx=0;
+    int *dnhstx=0, *dnhsrx=0;
+    int *dndvtx=0, *dndvrx=0;
+    
+    int ptret=0, ins=0, evcnt=0, ons=0, gerr=0;
+    char chp=0, chq=0, cswinf=0, pllinf=0, chv=0;
+    char pllcmd[MAX_152_EVENT];
+    char latcmd[MAX_152_EVENT];
+    char matcmd[MAX_152_EVENT];
+    char minfo[12];
+    char cordbuf[16];
+    char indexfo[2];
+    char midxfo[2];
+    char chindex[2];
+    char pollfo[2];
+    int outfd[MAX_152_EVENT];
+    int infd[MAX_152_EVENT];
+    char chu=0, chs=0, cmdex=0;
+    int uidx=12, sidx=13, lenrt=0;
+
+    struct shmem_s *ringbf[4];
+    char *addrd, *addrs, *addrc;
+    uint32_t *add32d, *add32s;
+    int lens=-1, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0, csws=0, mlen=0, cswd=0, dlen=0, len=0;
+    int wfileid=0, acusz=0, maxsz=0, fileidcnt=0;
+    int totsz[MAX_152_EVENT];
+    int cycCnt[MAX_152_EVENT];
+    int idxInit=0;
+    int memsz=0, pageidx=0, trunkidx=0, memallocsz=0;
+    int mindex=0, scnt=0, smax=0;
+    uint32_t wfiaddr=0, gval=0, resltion=0;
+
+    struct usbBuffLink_s *pubffh=0, *pubffcd[4], *pubfft=0, *pubffm=0, *pubffo=0, *pubffedt=0;
+    struct usbBuff_s *curbf=0, *headbf=0, *tmpbf=0, *outbf=0;
+
+    int prisec=0;
+    struct sdFAT_s *pfat=0;
+    struct aspConfig_s *pct=0;
+    struct aspMetaDataviaUSB_s *ptscaninfo=0, *ptscaninfoduo=0;
+    struct aspMetaDataviaUSB_s *ptinfomod=0;
+    int ix=0, iv=0;
+    char *exptbuff=0;
+
+    //exptbuff = aspMemalloc(32768, 10);
+    
+    pct = mrs->configTable;
+
+    ptscaninfo = &mrs->metaUsbfs145;
+    ptscaninfoduo =&mrs->metaUsbDuofs145;
+    
+    pfat = &mrs->aspFat;
+
+    ppup = mrs->usbhost[0];
+    ppdn = mrs->usbhost[1];
+
+    idxInit = 1;
+
+    cycCnt[0] = 0;
+    cycCnt[1] = 0;
+    cycCnt[2] = 0;
+    cycCnt[3] = 0;
+    
+    pubffcd[0] = 0;
+    pubffcd[1] = 0;
+    pubffcd[2] = 0;
+    pubffcd[3] = 0;
+    
+    ringbf[0] = ppup->pushring;
+    ringbf[1] = ppup->pgatring;
+    ringbf[2] = ppdn->pushring;
+    ringbf[3] = ppdn->pgatring;
+
+    ins += 1;
+    uphstx = ppup->pushtx;
+    
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] uphstx 0:%d 1:%d (%d)\n", uphstx[0], uphstx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+
+    ins += 1;    
+    uphsrx = ppup->pushrx;
+    
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] uphsrx 0:%d 1:%d (%d)\n", uphsrx[0], uphsrx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+
+    ins += 1;
+    updvtx = ppup->pgattx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] updvtx 0:%d 1:%d (%d)\n", updvtx[0], updvtx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+
+    ins += 1;
+    updvrx = ppup->pgatrx;
+    
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] updvrx 0:%d 1:%d (%d)\n", updvrx[0], updvrx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+
+    ins += 1;
+    dnhstx = ppdn->pushtx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] dnhstx 0:%d 1:%d (%d)\n", dnhstx[0], dnhstx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+    
+    ins += 1;
+    dnhsrx = ppdn->pushrx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] dnhsrx 0:%d 1:%d (%d)\n", dnhsrx[0], dnhsrx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+    
+    ins += 1;
+    dndvtx = ppdn->pgattx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] dndvtx 0:%d 1:%d (%d)\n", dndvtx[0], dndvtx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+    
+    ins += 1;
+    dndvrx = ppdn->pgatrx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] dndvrx 0:%d 1:%d (%d)\n", dndvrx[0], dndvrx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+    
+    pllfd[0].fd = uphstx[0];
+    pllfd[0].events = POLLIN;
+    outfd[0] = updvtx[1];
+    infd[0] = uphsrx[1];
+
+    pllfd[1].fd = updvrx[0];
+    pllfd[1].events = POLLIN;
+    outfd[1] = uphsrx[1];
+    infd[1] = updvtx[1];
+    
+    pllfd[2].fd = dnhstx[0];
+    pllfd[2].events = POLLIN;
+    outfd[2] = dndvtx[1];
+    infd[2] = dnhsrx[1];
+    
+    pllfd[3].fd = dndvrx[0];
+    pllfd[3].events = POLLIN;
+    outfd[3] = dnhsrx[1];
+    infd[3] = dndvtx[1];
+
+    //mrs_ipc_get(struct mainRes_s * mrs, char * str, int size, int idx)
+
+    pllfd[4].fd = mrs->pipeup[12].rt[0];
+    pllfd[4].events = POLLIN;
+
+    pllfd[5].fd = mrs->pipeup[13].rt[0];
+    pllfd[5].events = POLLIN;
+
+    pllfd[6].fd = mrs->pipeup[7].rt[0];
+    pllfd[6].events = POLLIN;
+
+    pllfd[7].fd = mrs->pipeup[3].rt[0];
+    pllfd[7].events = POLLIN;
+
+    pllfd[8].fd = mrs->pipeup[8].rt[0];
+    pllfd[8].events = POLLIN;
+
+    pllfd[9].fd = mrs->pipeup[1].rt[0];
+    pllfd[9].events = POLLIN;
+
+    pllfd[10].fd = mrs->pipeup[2].rt[0];
+    pllfd[10].events = POLLIN;
+    
+    while (1) {
+        ret = read(pllfd[1].fd, &chv, 1);
+        while (ret > 0) {
+            ret = read(pllfd[1].fd, &chv, 1);
+        }
+
+        ret = read(pllfd[3].fd, &chv, 1);
+        while (ret > 0) {
+            ret = read(pllfd[3].fd, &chv, 1);
+        }
+        
+        ret = read(pllfd[0].fd, &chv, 1);
+        if ((ret > 0) && (chv == 'n')) {
+            latcmd[0] = 0;
+            latcmd[1] = 0;
+            latcmd[2] = 0;
+            latcmd[3] = 0;
+
+            matcmd[0] = 0;
+            matcmd[1] = 0;
+            matcmd[2] = 0;
+            matcmd[3] = 0;
+
+            idxInit = 1;
+
+            //cswinf = 0;
+
+            totsz[0] = 0;
+            totsz[1] = 0;
+            totsz[2] = 0;
+            totsz[3] = 0;
+
+            break;
+        }
+    }
+    
+    while(1) {
+        ptret = poll(pllfd, MAX_152_EVENT, 100);
+        //sprintf_f(mrs->log, "[GW] ===== poll return %d =====\n", ptret);
+        //print_f(mrs->plog, "fs152", mrs->log);
+        if (ptret < 0) {
+            perror("poll");
+            sprintf_f(mrs->log, "poll failed, errno: %d\n", errno);
+            print_f(mrs->plog, "fs152", mrs->log);
+        }
+        
+        if (ptret > 0) {
+            evcnt = 0;
+            memset(pllcmd, 0, MAX_152_EVENT);
+            for (ins=0; ins < MAX_152_EVENT; ins++) {
+                if ((pllfd[ins].revents & POLLIN) == POLLIN) {
+                
+                    read(pllfd[ins].fd, &pllcmd[ins], 1);
+                    
+                    #if DBG_BKN_GATE
+                    sprintf_f(mrs->log, "[GW] id:%d pipe%d get chr: %c(0x%.2x) total:%d\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins], ptret);
+                    print_f(mrs->plog, "fs152", mrs->log);
+                    #endif
+                    
+                    evcnt++;
+                    if (ptret == evcnt) {
+                        break;
+                    }
+                }
+            }
+            
+            evcnt = 0;
+            for (ins=0; ins < MAX_152_EVENT; ins++) {
+            
+                if (pllcmd[ins]) {
+                    evcnt++;
+                    switch(ins) {
+
+                    case 9:
+                    case 10:
+                        sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
+                        print_f(mrs->plog, "fs152", mrs->log);
+                        
+                        mrs_ipc_get(mrs, minfo, 2, 2);
+                        
+                        sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
+                        print_f(mrs->plog, "fs152", mrs->log);
+
+                        mindex = ((minfo[0] & 0x3f) << 5) | (minfo[1] & 0x1f);
+                        mindex = mindex & 0x3ff;
+
+                        pubffedt = pubffh;
+                        while (pubffedt) {
+                            
+                            #if DBG_BKN_GATE
+                            sprintf_f(mrs->log, "    [CROP]  check 0x%.3x  get index: 0x%.3x \n", pubffedt->ubindex & 0x3ff, mindex);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            #endif
+                            
+                            if ((pubffedt->ubindex & 0x3ff) == mindex) {
+                                break;
+                            }
+                            pubffedt = pubffedt->ubnxt;
+                        }
+                        
+                        if (pubffedt) {
+                            ptinfomod = (struct aspMetaDataviaUSB_s *)pubffedt->ubinfoaddr;
+                        }
+
+                        if (ptinfomod) {
+                            addrc = (char *)&ptinfomod->CROP_POS_F1;
+                            
+                            ret = mrs_ipc_get(mrs, addrc, 16, 2);
+                            if (ret != 16) {
+                                sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "10 dump crop ch result ret: %d \n", ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            //shmem_dump(addrc, 16);
+
+                            //dbgMetaUsb(ptinfomod);
+                        } else {
+                            ret = mrs_ipc_get(mrs, cordbuf, 16, 2);
+                            if (ret != 16) {
+                                sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "[GW] Error!!! can't find scan info address, get cord ret: %d\n", ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            shmem_dump(cordbuf, 16);
+                        }
+
+                        sprintf_f(mrs->log, "[GW] pri or sec: %d\n", ptinfomod->PRI_O_SEC);
+                        print_f(mrs->plog, "fs152", mrs->log);
+
+                        if (ptinfomod->PRI_O_SEC == 0) {
+                            write(outfd[1], minfo, 2);
+                        } else {
+                            write(outfd[3], minfo, 2);
+                        }
+
+                        break;
+                    case 7:
+                        modersp->c ++;
+                        if (pllcmd[ins] == 'N') {
+                            sprintf_f(mrs->log, "[GW] WiFi end transmit count: %d / %d!!! \n", modersp->c, modersp->v);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            val = 0;
+                            ret = cfgTableGetChk(mrs->configTable, ASPOP_MULTI_LOOP, &val, ASPOP_STA_WR);    
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_MULTI_LOOP !!! ret: %d val: %d \n", ins, ret, val);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            csws = 0;
+                            cfgTableGetChk(mrs->configTable, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_SCAN_STATUS !!! ret: %d csws: 0x%.2x \n", ins, ret, csws);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "pll%d get ASPOP_SCAN_STATUS(0x%.2x) ASPOP_MULTI_LOOP(%d) \n", ins, csws, val);
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            #if 1 /* test stopping multiple scan */
+                            if ((csws) && (val)) {
+                                cfgTableUpd(mrs->configTable, ASPOP_IMG_LEN, 0);
+                            }
+                            #endif
+                                
+                            if (modersp->t) {
+                                mrs_ipc_put(mrs, "d", 1, 7);
+                            } else {
+                                mrs_ipc_put(mrs, "c", 1, 7);
+                            }
+                        }
+                        break;
+                    case 8:
+                        modersp->c ++;
+                        if (pllcmd[ins] == 'N') {
+                            sprintf_f(mrs->log, "[GW] WiFi end duo transmit count: %d / %d!!! \n", modersp->c, modersp->v);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            val = 0;
+                            ret = cfgTableGetChk(mrs->configTable, ASPOP_MULTI_LOOP, &val, ASPOP_STA_WR);    
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_MULTI_LOOP !!! ret: %d val: %d \n", ins, ret, val);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            csws = 0;
+                            ret = cfgTableGetChk(mrs->configTable, ASPOP_SCAN_STATUS_DUO, &csws, ASPOP_STA_UPD);
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_SCAN_STATUS_DUO !!! ret: %d csws: 0x%.2x \n", ins, ret, csws);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "pll%d get ASPOP_SCAN_STATUS_DUO(0x%.2x) ASPOP_MULTI_LOOP(%d) \n", ins, csws, val);
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            #if 1 /* test stopping multiple scan */
+                            if ((csws) && (val)) {
+                                cfgTableUpd(mrs->configTable, ASPOP_IMG_LEN_DUO, 0);
+                            }
+                            #endif
+                            
+                            if (modersp->t) {
+                                mrs_ipc_put(mrs, "d", 1, 7);
+                            } else {
+                                mrs_ipc_put(mrs, "c", 1, 7);
+                            }
+
+                        }
+                        break;
+                    case 6:
+                        chu = pllcmd[ins];
+                        
+                        val = 0;
+                        ret = cfgTableGetChk(mrs->configTable, ASPOP_MULTI_LOOP, &val, ASPOP_STA_WR);    
+                        if (ret < 0) {
+                            sprintf_f(mrs->log, "Error get pll%d ASPOP_MULTI_LOOP failed!!! ret: %d val: %d\n", ins, ret, val);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                        
+                        sprintf_f(mrs->log, "get pll%d ASPOP_MULTI_LOOP val: %d!!! ret: %d signal: %c \n", ins, val, ret, chu);
+                        print_f(mrs->plog, "fs152", mrs->log);
+
+                        if (chu == 'C') {
+                            if (val) {
+                                mrs_ipc_put(mrs, "t", 1, 12);
+                                continue;
+                            } else {
+                                mrs_ipc_put(mrs, "b", 1, 13);
+                            }
+                        } else if (chu == 'D') {
+                            if (val) {
+                                mrs_ipc_put(mrs, "o", 1, 12);
+                                mrs_ipc_put(mrs, "o", 1, 13);
+                                continue;
+                            } else {
+                                mrs_ipc_put(mrs, "b", 1, 13);
+                            }
+                        } else {
+                            csws = 0;
+                            cfgTableGetChk(mrs->configTable, ASPOP_SCAN_STATUS, &csws, ASPOP_STA_UPD);
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_SCAN_STATUS !!! ret: %d csws: 0x%.2x \n", ins, ret, csws);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                        
+                            mlen = 0;
+                            ret = cfgTableGetChk(mrs->configTable, ASPOP_IMG_LEN, &mlen, ASPOP_STA_APP);    
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "Error get pll%d ASPOP_IMG_LEN failed!!! ret: %d mlen: %d\n", ins, ret, mlen);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            cswd = 0;
+                            cfgTableGetChk(mrs->configTable, ASPOP_SCAN_STATUS_DUO, &cswd, ASPOP_STA_UPD);
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "get pll%d ASPOP_SCAN_STATUS_DUO !!! ret: %d csws: 0x%.2x \n", ins, ret, cswd);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                        
+                            dlen = 0;
+                            ret = cfgTableGetChk(mrs->configTable, ASPOP_IMG_LEN_DUO, &dlen, ASPOP_STA_APP);    
+                            if (ret < 0) {
+                                sprintf_f(mrs->log, "Error get pll%d ASPOP_IMG_LEN_DUO failed!!! ret: %d mlen: %d\n", ins, ret, dlen);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            sprintf_f(mrs->log, "chu: [%c] csws: 0x%.2x mlen: %d cswd: 0x%.2x dlen: %d \n", chu, csws, mlen, cswd, dlen);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            if (chu == 'E') {
+                                if ((mlen == 0) || (csws != 0)) {
+                                    pfat->fatSupdata = 0;
+                                    pfat->fatSupcur = 0;
+
+                                    mrs_ipc_put(mrs, "b", 1, 13);
+                                
+                                    sprintf_f(mrs->log, "P6 response BREAK loop chu = %c \n", chu);
+                                    print_f(mrs->plog, "fs152", mrs->log);                                    
+                                } else {
+                                    mrs_ipc_put(mrs, "e", 1, 12);
+                                    
+                                    mrs_ipc_put(mrs, "t", 1, 12);
+                                    
+                                    sprintf_f(mrs->log, "P6 response CONTINUE loop chu = %c \n", chu);
+                                    print_f(mrs->plog, "fs152", mrs->log);                                    
+
+                                    continue;
+                                }                        
+                            }
+                            else {
+                                if ((mlen == 0) || (csws != 0) || (dlen == 0) || (cswd != 0)) {
+                                    pfat->fatSupdata = 0;
+                                    pfat->fatSupcur = 0;
+
+                                    mrs_ipc_put(mrs, "b", 1, 13);
+                            
+                                    sprintf_f(mrs->log, "P6 response BREAK loop chu = %c \n", chu);
+                                    print_f(mrs->plog, "fs152", mrs->log);                                    
+                                } else {
+                                    mrs_ipc_put(mrs, "e", 1, 12);
+                                    
+                                    mrs_ipc_put(mrs, "o", 1, 12);
+                                    mrs_ipc_put(mrs, "o", 1, 13);
+                                    
+                                    sprintf_f(mrs->log, "P6 response CONTINUE loop chu = %c \n", chu);
+                                    print_f(mrs->plog, "fs152", mrs->log);                                    
+
+                                    continue;
+                                }
+                            }
+                        }
+
+                        break;
+                    case 4:
+                        
+                        if (pllcmd[ins] == 's') {
+                            modersp->v = 0;
+                            modersp->c = 0;
+                            modersp->t = 0;
+                        }
+                        else if (pllcmd[ins] == 'p') {
+                            modersp->v += 1;
+                            mrs_ipc_put(mrs, "n", 1, 3);
+                        }
+                        else if (pllcmd[ins] == 'd') {
+                            modersp->v += 1;
+
+                            mrs_ipc_put(mrs, "N", 1, 3);
+
+                            sprintf_f(mrs->log, "[GW] end transmit count: %d !!! \n", modersp->v);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        } else {
+
+                            switch(pllcmd[ins]) {
+                            case 'e':
+                                ret = mrs_ipc_get(mrs, minfo, 2, 12);
+                                if (ret == 2) {
+                                    acusz = 0;
+                                    filefd = 0;
+                                    
+                                    wfileid = (minfo[0] << 8) | minfo[1];
+
+                                    #if 0 /* debug */
+                                    if (wfileid == 0) {
+                                        wfileid = fileidcnt;
+                                        fileidcnt ++;
+                                    }
+                                    #endif
+
+                                    sprintf(idfile, filenames, wfileid);
+                                    filefd = find_write(idfile);
+                                    
+                                    sprintf_f(mrs->log, "[GW] wget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, (uint32_t)filefd);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] wget file id failed ret: %d !!! \n", ret);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                                break;
+                            case 'f':
+                                len = 0;
+                                len = ring_buf_cons(&mrs->cmdRx, &addrs);
+                                while (len <= 0) {
+                                    sprintf_f(mrs->log, "[GW] wget cons len: %d \n",len);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+
+                                    usleep(100000);
+
+                                    len = ring_buf_cons(&mrs->cmdRx, &addrs);
+                                }
+
+                                if (filefd) {
+                                    ret = fwrite(addrs, 1, len, filefd);
+                                    acusz += len;
+                                    
+                                    //sprintf_f(mrs->log, "[GW] wget write: %d(%d) acusz: %d \n",ret, len, acusz);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
+
+                                    if (ret != len) {
+                                        sprintf_f(mrs->log, "[GW] warnning!!! wget write size %d but ret %d \n",len, ret);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                    }
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] error!! wget filefd: %d len: %d \n", (uint32_t)filefd, len);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                                
+                                break;
+                            case 'g':
+                                //sprintf_f(mrs->log, "[GW] wget write end last: %d acusz: %d \n", len, acusz);
+                                //print_f(mrs->plog, "fs152", mrs->log);
+
+                                fflush(filefd);
+                                fclose(filefd);
+                                sync();
+
+                                filefd = 0;
+                                
+                                filefd = find_read(idfile);
+
+                                ret = fseek(filefd, 0, SEEK_END);
+                                if (ret) {
+                                    sprintf_f(mrs->log, "[GW] wget file seek failed!! ret:%d \n", ret);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                } 
+
+                                maxsz = ftell(filefd);
+                                fclose(filefd);
+                                filefd = 0;
+                                
+                                sprintf_f(mrs->log, "[GW] wget file [%s] size: %d \n", idfile, maxsz);
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                minfo[0] = 'w';
+                                minfo[1] = (maxsz >> 24) & 0xff;
+                                minfo[2] = (maxsz >> 16) & 0xff;
+                                minfo[3] = (maxsz >> 8) & 0xff;
+                                minfo[4] = (maxsz >> 0) & 0xff;
+
+                                mrs_ipc_put(mrs, minfo, 5, 12);
+                                
+                                break;
+                            case 'h':
+                                ret = mrs_ipc_get(mrs, minfo, 2, 12);
+                                if (ret == 2) {
+                                    acusz = 0;
+                                    filefd = 0;
+                                    
+                                    wfileid = (minfo[0] << 8) | minfo[1];
+                                    
+                                    #if 0 /* debug */
+                                    if (wfileid == 0) {
+                                        wfileid = fileidcnt;
+                                        fileidcnt --;
+                                        if (fileidcnt < 0) fileidcnt = 0;
+                                    }
+                                    #endif
+                                    
+                                    sprintf(idfile, filenames, wfileid);
+                                    filefd = find_read(idfile);
+                                    
+                                    sprintf_f(mrs->log, "[GW] rget file id: %d filename[%s] filefd: %d !!! \n", wfileid, idfile, (uint32_t)filefd);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                                else {
+                                    sprintf_f(mrs->log, "[GW] rget file id failed ret: %d !!! \n", ret);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                                break;
+                            case 'i':
+                                if (!filefd) {
+                                    maxsz = 0;
+                                    
+                                    minfo[0] = 'r';
+                                    minfo[1] = (maxsz >> 24) & 0xff;
+                                    minfo[2] = (maxsz >> 16) & 0xff;
+                                    minfo[3] = (maxsz >> 8) & 0xff;
+                                    minfo[4] = (maxsz >> 0) & 0xff;
+
+                                    mrs_ipc_put(mrs, minfo, 5, 12);
+
+                                    sprintf_f(mrs->log, "[GW] rget file failed, not existed  !!! \n");
+                                    print_f(mrs->plog, "fs152", mrs->log);
+
+                                    break;
+                                }
+
+                                ret = fseek(filefd, 0, SEEK_END);
+                                if (ret) {
+                                    sprintf_f(mrs->log, "[GW] rget file seek failed!! ret:%d \n", ret);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                } 
+                                maxsz = ftell(filefd);
+
+                                minfo[0] = 'r';
+                                minfo[1] = (maxsz >> 24) & 0xff;
+                                minfo[2] = (maxsz >> 16) & 0xff;
+                                minfo[3] = (maxsz >> 8) & 0xff;
+                                minfo[4] = (maxsz >> 0) & 0xff;
+                                
+                                mrs_ipc_put(mrs, minfo, 5, 12);
+                                    
+                                sprintf_f(mrs->log, "[GW] rget file maxsz: %d !!! \n", maxsz);
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                ret = fseek(filefd, 0, SEEK_SET);
+                                if (ret) {
+                                    sprintf_f(mrs->log, "[GW] rget file seek failed!! ret:%d \n", ret);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                } 
+
+                                while (maxsz) {
+                                    len = ring_buf_get(&mrs->cmdRx, &addrs);
+                                    while (len <= 0) {
+                                        sprintf_f(mrs->log, "[GW] rget buff len: %d \n",len);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+
+                                        usleep(100000);
+
+                                        len = ring_buf_get(&mrs->cmdRx, &addrs);
+                                    }
+
+                                    if (len > maxsz) {
+                                        len = maxsz;
+                                    }
+                                    
+                                    maxsz -= len;
+                                    
+                                    //sprintf_f(mrs->log, "[GW] read rfile len: %d last: %d\n",len, maxsz);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
+
+                                    ret = fread(addrs, 1, len, filefd);
+                                    if (ret != len) {
+                                        sprintf_f(mrs->log, "[GW] read rfile failed ret: %d (%d) \n",ret, len);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+
+                                        ring_buf_prod(&mrs->cmdRx);    
+                                        break;
+                                    }                                    
+
+                                    ring_buf_prod(&mrs->cmdRx);    
+                                    
+                                }
+
+                                ring_buf_set_last(&mrs->cmdRx, len);
+
+                                fclose(filefd);
+                                filefd = 0;
+
+                                break;
+                            case 'j':
+                                break;
+                            case 'k':
+                                break;
+                            default:
+                                break;
+                            }
+                        }
+
+                        break;
+                    case 5:
+                                            
+                        //chs = pllcmd[ins];
+                        if (pllcmd[ins] == 's') {
+                            modersp->v = 0;
+                            modersp->c = 0;
+                            modersp->t = 1;
+                        }
+                        else if (pllcmd[ins] == 'p') {
+                            modersp->v += 1;
+                            mrs_ipc_put(mrs, "n", 1, 8);
+                        }
+                        else if (pllcmd[ins] == 'd') {
+                            modersp->v += 1;
+
+                            mrs_ipc_put(mrs, "N", 1, 8);
+
+                            sprintf_f(mrs->log, "[GW] end duo transmit count: %d !!! \n", modersp->t);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+
+                        break;
+                    case 0:
+                    case 2:
+                        if (latcmd[ins] == 'b') {
+                            if (((pllcmd[ins] & 0xc0) == 0xc0) || ((pllcmd[ins] & 0xc0) == 0x40)) {
+                                sprintf_f(mrs->log, "[GW] id:%d pipe%d get chr: %c(0x%.2x) skip !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                                break;
+                            } 
+                        }
+                        
+                        if ((pllcmd[ins] & 0xc0) == 0xc0) {
+                            if (!pubffh) {
+                                pllcmd[ins] = 0xff;
+                                write(infd[ins], &pllcmd[ins], 1);
+                                sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);            
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            } else {
+                                chindex[0] = pllcmd[ins];
+
+                                ptret = read(pllfd[ins].fd, &pllcmd[ins], 1);
+                                while (ptret < 0) {
+                                    ptret = read(pllfd[ins].fd, &pllcmd[ins], 1);
+                                }
+                                
+                                if ((pllcmd[ins] & 0xc0) == 0x40) {
+                                    chindex[1] = pllcmd[ins];
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] WARNNING!!! unknow ch: 0x%.2x \n", pllcmd[ins]);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    break;
+                                }
+
+                                mindex = ((chindex[0] & 0x3f) << 5) | (chindex[1] & 0x1f);
+                                mindex = mindex & 0x3ff;
+                                
+                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d(0x%.2x:0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, mindex, chindex[0], chindex[1], (uint32_t)pubffo, (uint32_t)pubffh);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                                
+                                if (!pubffo) {
+                                    //sprintf_f(mrs->log, "[GW] find outbuf in pubffo \n");
+                                    //print_f(mrs->plog, "fs152", mrs->log);
+                                    pubffo = pubffh;
+                                    while (pubffo) {
+                                        sprintf_f(mrs->log, "    [GW] 0x%.3x:0x%.3x \n", pubffo->ubindex, mindex);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        if ((pubffo->ubindex & 0x3ff) == mindex) {
+                                            break;
+                                        }
+                                        pubffo = pubffo->ubnxt;
+                                    }
+
+                                    if (pubffo) {
+                                        outbf = pubffo->ubbufh;
+                                    }
+                                }
+                                
+                                #if 0 /* memory used debug */
+                                if (pubffh) {
+                                    memsz = 0;
+                                    pageidx = 0;
+                                    pubffm = pubffh;
+                                    while (pubffm) {
+                                        pageidx += 1;
+                                        #if 0
+                                        tmpbf = pubffm->ubbufh;
+                                        trunkidx = 0;
+                                        while (tmpbf) {
+                                            memsz += USB_BUF_SIZE;
+                                            trunkidx += 1;
+                                            tmpbf = tmpbf->bn;
+                                            //sprintf_f(mrs->log, "    [GW] %d - %d\n", trunkidx, memsz);
+                                            //print_f(mrs->plog, "fs152", mrs->log);
+                                        }
+                                        sprintf_f(mrs->log, "[GW] memory used: %d - %d idx: %d \n", memsz, pageidx, pubffm->ubindex);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        #else
+                                        sprintf_f(mrs->log, "[GW] mem(%d) idx: %d \n", pageidx, pubffm->ubindex);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        #endif
+                                        
+                                        pubffm = pubffm->ubnxt;
+
+                                    }
+                                }
+                                #endif
+                                
+                                if (!outbf) {
+                                    pllcmd[ins] = 0xff;
+                                    write(infd[ins], &pllcmd[ins], 1);
+                                    sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) no outbf\n", ins, infd[ins], pllcmd[ins], pllcmd[ins]);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                } else if (mindex == (pubffo->ubindex & 0x3ff)) { 
+                                
+                                    midxfo[0] = ((pubffo->ubindex >> 5) & 0x3f) | 0x80;
+                                    midxfo[1] = (pubffo->ubindex & 0x1f) | 0x40;
+                                    prisec = pubffo->ubindex & 0x400;
+                                    
+                                    if ((pubffo->ubmetasize) && (pubffo->ublastsize)) {
+                                        smax = pubffo->ubcylcnt - cycCnt[ins] + 2;
+                                        #if 0
+                                        if (smax > 0xff) {
+                                            smax = CYCLE_LEN;
+                                        }
+                                        #else
+                                        if (smax > 0xfff) {
+                                            smax = 0xfff;
+                                        }
+                                        #endif
+                                    } else {
+                                        smax = CYCLE_LEN;
+                                    }
+
+                                    scnt = 0;
+                                    while (scnt < smax) {
+                                        ret = ring_buf_get(ringbf[ins], &addrd);
+                                        if (ret <= 0) {
+                                            sprintf_f(mrs->log, "[GW] get ring buffer failed !! ret: %d \n", ret);
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                            continue;
+                                        }
+
+                                        memallocsz -= 1;
+                                        
+                                        add32s = (uint32_t *) outbf->bpt;                                        
+                                        addrs = (char *) *add32s;
+                                        lens = outbf->bsz;
+
+                                        if (lens & 0x40000) {
+                                            lasflag = 0x40000;
+                                        } else {
+                                            lasflag = 0;
+                                        }
+                                        lens = lens & 0x1ffff;
+
+                                        tmpbf = outbf->bn;
+                                        
+                                        if ((!tmpbf) && (pubffo->ubmetasize)) {
+                                            lens = pubffo->ubmetasize;
+                                            lastlen = pubffo->ublastsize;
+                                            if ((lens == 0) || (lastlen == 0)) {
+                                                sprintf_f(mrs->log, "\n[GW] get the last trunk size error!!! lens: %d lastlen: %d\n", lens, lastlen);
+                                                print_f(mrs->plog, "fs152", mrs->log);
+                                            }
+                                            #if DBG_BKN_GATE
+                                            else {
+                                                sprintf_f(mrs->log, "\n[GW] get the last trunk size, lens: %d lastlen: %d\n\n", lens, lastlen);
+                                                print_f(mrs->plog, "fs152", mrs->log);
+                                            }
+                                            #endif
+                                        }
+                                        
+                                        msync(addrs, lens, MS_SYNC);
+                                        
+                                        #if DBG_DUMP_DAT32
+                                        sprintf_f(mrs->log, "[GW] dump 32 - 2 - 1\n");
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        shmem_dump(addrs, 32);
+                                        #endif
+                                        
+                                        if (addrs == addrd) {
+                                            
+                                            #if DBG_DUMP_DAT32
+                                            sprintf_f(mrs->log, "[GW] compare addr passed !! addr: 0x%.8x \n", addrs);
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                            #endif
+                                            
+                                        } else {
+                                            sprintf_f(mrs->log, "[GW] compare addr failed !! addrs: 0x%.8x addrd: 0x%.8x\n", (uint32_t)addrs, (uint32_t)addrd);
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                        }
+                                        
+                                        msync(addrd, lens, MS_SYNC);
+                                        
+                                        #if DBG_DUMP_DAT32
+                                        sprintf_f(mrs->log, "[GW] dump 32 - 2 - 2\n");
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        shmem_dump(addrd, 32);
+                                        #endif
+                                            
+                                        if ((lens < USB_BUF_SIZE) && (lasflag)) {
+                                            ret = ring_buf_prod_u(ringbf[ins], lens);
+                                            ring_buf_set_last(ringbf[ins], lens);
+                                            
+                                            pllcmd[ins] = 0x7f;
+                                            cswinf = pubffo->ubcswerr;
+                                            
+                                            outbf = 0;
+                                        
+                                            headbf = pubffo->ubbufh;
+                                            while (headbf) {
+                                                tmpbf = headbf;                                            
+                                                headbf = tmpbf->bn;
+                                                free(tmpbf->bpt);
+                                                free(tmpbf);
+                                            }
+                                            tmpbf = 0;
+                                        
+                                            if(pubffh == pubffo) {
+                                                pubffh = pubffo->ubnxt;
+                                            } else {
+                                                pubffm = pubffh;
+                                                while (pubffm) {
+                                                    if (pubffm->ubnxt == pubffo) {
+                                                        pubffm->ubnxt = pubffo->ubnxt;
+                                                        break;
+                                                    }
+                                                    pubffm = pubffm->ubnxt;
+                                                }
+                                            }
+                                            
+                                            free(pubffo);
+                                            
+                                            pubffo = 0;
+                                            
+                                            sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", (uint32_t)pubffh);
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                            
+                                            scnt = scnt + 1;
+                                            cycCnt[ins] = 0;
+                                        
+                                            break;
+                                        }
+                                        else if (tmpbf) {
+                                            ret = ring_buf_prod_u(ringbf[ins], lens);
+                                            outbf = tmpbf;
+                                        }
+                                        else {
+                                            //pllcmd[ins] = 0x80;                                    
+                                            sprintf_f(mrs->log, "[GW] Error!!! idle %d \n", cycCnt[ins]);
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                            break;
+                                        }
+
+                                        scnt = scnt + 1;
+                                        cycCnt[ins] = cycCnt[ins] + 1;
+
+                                    }
+                                    
+                                    if (tmpbf) {
+                                        headbf = pubffo->ubbufh;
+                                        while (headbf) {
+                                            if  (headbf != outbf) {
+                                                tmpbf = headbf;
+                                                headbf = tmpbf->bn;
+                                                //sprintf_f(mrs->log, "[GW] free used buf addr: 0x%.8x \n", tmpbf);
+                                                //print_f(mrs->plog, "fs152", mrs->log);
+                                                free(tmpbf->bpt);
+                                                free(tmpbf);
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        pubffo->ubbufh = headbf;
+                                    }
+
+                                    if (pllcmd[ins] == 0x7f) {
+                                        minfo[0] = 0x7f;
+                                        
+                                        minfo[1] = (scnt & 0x7f) | 0x80; // 0  // 0
+                                        minfo[2] = ((scnt >> 7) & 0x7f) | 0x80;  // 1
+                                        
+                                        minfo[3] = (prisec == 0) ? 1:2; //latcmd[ins]; // 1  // 2
+                                        
+                                        minfo[4] = (char)(lastlen & 0xff); // 2  // 3
+                                        minfo[5] = (char)((lastlen >> 8) & 0xff); // 3  // 4
+                                        minfo[6] = (char)((lastlen >> 16) & 0xff); // 4  // 5
+                                        minfo[7] = (char)((lastlen >> 24) & 0xff); // 5  // 6 
+
+                                        minfo[8] = cswinf; // 6  // 7
+                                        
+                                        #if 1 /* memory used debug */
+                                        pageidx = 0;
+                                        if (pubffh) {
+                                            pubffm = pubffh;
+                                            while (pubffm) {
+                                                if ((pubffm->ubindex & 0x800) == 0) {
+                                                    pageidx += 1;
+                                                }
+                                                pubffm = pubffm->ubnxt;
+                                            }
+                                        }
+                                        #endif
+                                        
+                                        minfo[9] = (char)(pageidx | 0x80); // 7  // 8
+                                        
+                                        write(infd[ins], &minfo, 10);
+                                    }
+                                    else {
+                                        write(infd[ins], midxfo, 2);
+                                    }
+                                }      
+                                else {                                   
+                                    sprintf_f(mrs->log, "[GW] WARNNING!!! in%d id:%d cur index: %d get index: %d NOT handle buffer\n", ins, infd[ins], pubffo->ubindex, mindex);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                            }
+                        }
+                        else if (pllcmd[ins] == 'd') {
+                            latcmd[ins] = 'd';
+                            latcmd[ins+1] = 'd';
+                            matcmd[ins] = 'h';
+                            matcmd[ins+1] = 'h';
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
+                        else if (pllcmd[ins] == 's') {
+                            if (ins == 2) {
+                                latcmd[ins] = 's';
+                                latcmd[ins+1] = 's';
+                                matcmd[ins] = 'h';
+                                matcmd[ins+1] = 'h';
+                            } else {
+                                latcmd[ins] = 's';
+                                latcmd[ins+1] = 's';
+                                matcmd[ins] = 'h';
+                                matcmd[ins+1] = 'h';
+                            }
+                        }
+                        else if (pllcmd[ins] == 'q') {
+                            if (latcmd[ins] == 'q') {
+                                sprintf_f(mrs->log, "[GW] already in multiple id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            } else if (latcmd[ins] == 'e') {
+                                sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                write(outfd[ins], &latcmd[ins], 1);
+                            } else if (latcmd[ins] == 'R') {
+                                sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c waiting \n", ins, latcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            } else if (latcmd[ins] == 0) {
+                                if (ins == 2) {
+                                    //write(outfd[ins], &pllcmd[ins], 1);
+                                    
+                                    #if DBG_BKN_GATE
+                                    sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    #endif
+                                    
+                                    latcmd[ins] = 'q';
+                                    latcmd[ins+1] = 'q';
+                                    matcmd[ins] = 'f';
+                                    matcmd[ins+1] = 'f';
+                                } else {
+                                    latcmd[ins] = 'q';
+                                    latcmd[ins+1] = 'q';
+                                    matcmd[ins] = 'f';
+                                    matcmd[ins+1] = 'f';
+                                }
+                            }
+                            else {
+                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:%c(0x%.2x) pll:%c(0x%.2x) - q \n", ins, latcmd[ins], latcmd[ins], pllcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                        }
+                        else if (pllcmd[ins] == 'c') {
+                            if (latcmd[ins] == 'c') {
+                                sprintf_f(mrs->log, "[GW] already in multiple single id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            } else if (latcmd[ins] == 'e') {
+                                sprintf_f(mrs->log, "[GW] already stop multiple single id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                write(outfd[ins], &latcmd[ins], 1);
+                            } else if (latcmd[ins] == 'R') {
+                                sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c waiting \n", ins, latcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            } else if (latcmd[ins] == 0) {
+                                latcmd[ins] = 'c';
+                                latcmd[ins+1] = 'c';
+                                matcmd[ins] = 'o';
+                                matcmd[ins+1] = 'o';
+                                write(outfd[ins], &pllcmd[ins], 1);
+                            }
+                            else {
+                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:%c(0x%.2x) pll:%c(0x%.2x) - c\n", ins, latcmd[ins], latcmd[ins], pllcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                        }
+                        else if ((pllcmd[ins] == 'p') || (pllcmd[ins] == 'r') || (pllcmd[ins] == 'a') || (pllcmd[ins] == 'k')) {
+                            if ((latcmd[ins] == 'q') || (latcmd[ins] == 'c')) {
+                            } else if ((latcmd[ins] == 'e') || (latcmd[ins] == 'R')) {
+                            } else if (pllcmd[ins] == 'a') {
+                                write(outfd[ins], &pllcmd[ins], 1);
+                            } else if (pllcmd[ins] == 'k') {
+                                write(outfd[ins], &pllcmd[ins], 1);
+                            } else if (latcmd[ins] == 0) {
+                                sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                                if (ins == 2) {
+                                    write(outfd[ins], &pllcmd[ins], 1);
+                                }
+                                
+                                totsz[ins] =0;
+                                totsz[ins+1] = 0;
+                            } else if (latcmd[ins] == 's') {
+                                sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                                if (ins == 2) {
+                                    write(outfd[ins], &pllcmd[ins], 1);
+                                }
+                            }
+                            else {
+                                sprintf_f(mrs->log, "[GW] unknown!! id:%d lat:%c(0x%.2x) pll:%c(0x%.2x) - qrak \n", ins, latcmd[ins], latcmd[ins], pllcmd[ins], pllcmd[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                        }
+                        else if ((pllcmd[ins] == 'm') || (pllcmd[ins] == 'n')) {
+
+                            ret = cfgTableGet(pct, ASPOP_RESOLUTION, &gval);
+                            if (!ret) {
+                                switch (gval) {
+                                case RESOLUTION_1200:
+                                    resltion = 1200;
+                                    break;
+                                case RESOLUTION_600:
+                                    resltion = 600;
+                                    break;
+                                case RESOLUTION_300:
+                                    resltion = 300;
+                                    break;
+                                case RESOLUTION_200:
+                                    resltion = 200;
+                                    break;
+                                case RESOLUTION_150:
+                                    resltion = 150;
+                                    break;
+                                default:
+                                    resltion = 0;
+                                    break;
+                                }
+                                sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                            else {
+                                sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                                
+                            /* clean msg queue */
+                            for (ix=0; ix<4; ix++) {
+                                ret = read(infd[ix], &chv, 1);
+                                while (ret > 0) {
+                                    sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    ret = read(infd[ix], &chv, 1);
+                                }
+                            }
+                        
+                            write(outfd[ins], &pllcmd[ins], 1);
+
+                            latcmd[0] = 0;
+                            latcmd[1] = 0;
+                            latcmd[2] = 0;
+                            latcmd[3] = 0;
+
+                            matcmd[0] = 0;
+                            matcmd[1] = 0;
+                            matcmd[2] = 0;
+                            matcmd[3] = 0;
+
+                            pubffcd[0] = 0;
+                            pubffcd[1] = 0;
+                            pubffcd[2] = 0;
+                            pubffcd[3] = 0;
+                            
+                            idxInit = 1;
+                            
+                            //cswinf = 0;
+
+                            cmdex = 0;
+
+                            if (pubffh) {
+                                memsz = 0;
+                                pageidx = 0;
+                                
+                                pubffm = pubffh;
+                                while (pubffm) {
+                                    pageidx += 1;
+
+                                    headbf = pubffm->ubbufh;
+                                    while (headbf) {
+                                        memsz += USB_BUF_SIZE;
+                                        tmpbf = headbf;                                            
+                                        headbf = tmpbf->bn;
+                                        //sprintf_f(mrs->log, "[GW] clean mem addr: 0x%.8x\n", tmpbf);
+                                        //print_f(mrs->plog, "fs152", mrs->log);
+                                        free(tmpbf->bpt);
+                                        free(tmpbf);
+                                    }
+                                    
+                                    tmpbf = 0;
+                                            
+                                    sprintf_f(mrs->log, "[GW] clean memory used: %d - %d idx: 0x%.2x \n", memsz, pageidx, pubffm->ubindex);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+
+                                    pubfft = pubffm;
+                                    pubffm = pubfft->ubnxt;
+
+                                    free(pubfft);
+                                }
+
+                                pubffh = 0;
+                            }
+                            
+                            totsz[ins] =0;
+                            totsz[ins+1] = 0;
+                            ring_buf_init(ringbf[ins]);
+                            ring_buf_init(ringbf[ins+1]);
+                            //ring_buf_init(&mrs->cmdTx);
+                            ring_buf_init(&mrs->dataRx);
+                        }
+                        else if (pllcmd[ins] == 'b') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
+                        else if (pllcmd[ins] == 'x') {
+                            sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            pllinf = 0;
+                            gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            while (gerr < 0) {
+                                pllinf = 0;
+                                gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            }
+
+                            modersp->r = pllinf;
+                            return 1;  
+                        }
+                        else if (pllcmd[ins] == 'x') {
+                            sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            modersp->r = 1;
+                            return 1;  
+                        }
+                        else if (pllcmd[ins] == 'i') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
+                        else if (pllcmd[ins] == 'w') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
+                        else if (pllcmd[ins] == 'y') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
+                        else if (pllcmd[ins] == 'z') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
+                        else if (pllcmd[ins] == 't') {
+                            write(outfd[0], &pllcmd[ins], 1);
+                            write(outfd[2], &pllcmd[ins], 1);
+                        }
+                        #if USB_AUTO_RESUME
+                        else if (pllcmd[ins] == 'v') {
+                            write(outfd[2], &pllcmd[ins], 1);
+                            //write(outfd[0], &pllcmd[ins], 1);
+                            
+                            sprintf_f(mrs->log, "[GW] resume id%d pipe%d get ch: %c \n", ins, outfd[ins], pllcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                        #endif
+                        else if (pllcmd[ins] == 'j') {
+                        
+                            gerr = read(pllfd[ins].fd, minfo, 6);
+                            while (gerr <= 0) {
+                                gerr = read(pllfd[ins].fd, minfo, 6);
+                            }
+
+                            if (gerr != 6) {
+                                sprintf_f(mrs->log, "[GW] fileacc id%d get minfo failed!! ret: %d\n", ins, gerr);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+
+                            wfileid = (minfo[0] << 8) | minfo[1];
+                            wfiaddr = minfo[2];
+                            wfiaddr |= minfo[3] << 8;
+                            wfiaddr |= minfo[4] << 16;
+                            wfiaddr |= minfo[5] << 24;
+
+                            sprintf(idfile, filenames, wfileid);
+                            filefd = find_read(idfile);
+
+                            if (filefd) {
+                                sprintf_f(mrs->log, "[GW] fileacc id%d get read filename:[%s] \n", ins, idfile);
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                ret = fseek(filefd, 0, SEEK_END);
+                                if (ret) {
+                                    sprintf_f(mrs->log, "[GW] fileacc seek failed!! ret:%d \n", ret);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                } 
+
+                                maxsz = ftell(filefd);
+                                fclose(filefd);
+                                filefd = 0;
+
+                                sprintf_f(mrs->log, "[GW] fileacc id%d get read filename:[%s] size: %d waddr: 0x%.8x\n", ins, idfile, maxsz, wfiaddr);
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                minfo[0] = pllcmd[ins];
+                                minfo[1] = (maxsz >> 24) & 0xff;
+                                minfo[2] = (maxsz >> 16) & 0xff;
+                                minfo[3] = (maxsz >> 8) & 0xff;
+                                minfo[4] = (maxsz >> 0) & 0xff;
+
+                                minfo[5] = wfiaddr & 0xff;
+                                minfo[6] = (wfiaddr >> 8) & 0xff;
+                                minfo[7] = (wfiaddr >> 16) & 0xff;
+                                minfo[8] = (wfiaddr >> 24) & 0xff;
+
+                                write(outfd[ins], minfo, 9);
+
+                                minfo[0] = 'H';                                
+                                write(infd[ins], minfo, 5);
+                                
+                            }
+                            else {
+                                sprintf_f(mrs->log, "[GW] fileacc id%d get read fileid failed!! ret: %d filename:[%s]\n", ins, (uint32_t)filefd, idfile);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                        }
+                        else if (pllcmd[ins] == 'u') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
+                        else if (pllcmd[ins] == '0') {
+                            write(outfd[ins], &pllcmd[ins], 1);
+                        }
+                        else {
+                            sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) Error!! \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+
+                        break;
+                    case 1:
+                    case 3:
+                    
+                        if ((pllcmd[ins] == 'D') || (pllcmd[ins] == 'E')) {
+
+                            lens = ring_buf_cons_u(ringbf[ins], &addrs);                
+                            while (lens < 0) {
+                                sprintf_f(mrs->log, "[GW] cons ring buff ret: %d \n", lens);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                                usleep(1000);
+                                lens = ring_buf_cons_u(ringbf[ins], &addrs);
+                            }
+                            
+                            if (lens & 0x40000) {
+                                lasflag = 0x40000;
+                            } else {
+                                lasflag = 0;
+                            }
+                            lens = lens & 0x1ffff;
+
+                            #if 0//DBG_BKN_GATE
+                            sprintf_f(mrs->log, "[GW] cons u len: %d \n", lens);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            #endif
+
+                            memallocsz += 1;
+
+                            if (!pubffh) {
+                                pubffh = malloc(sizeof(struct usbBuffLink_s));
+                                
+                                if (pubffh) {
+
+                                    memset(pubffh, 0, sizeof(struct usbBuffLink_s));
+                                    
+                                    pubffh->ubindex = idxInit;
+                                    idxInit += 1;
+
+                                    if (!cmdex) {
+                                        cmdex = latcmd[ins];
+                                    }
+                                    #if DBG_BKN_GATE
+                                    sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 1\n", ins, pubffh->ubindex, idxInit, latcmd[ins]);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    #endif
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+
+                                pubffcd[ins] = pubffh;
+                            }
+
+                            if (!pubffh) {
+                                break;
+                            }
+
+                            if (!pubffcd[ins]) {
+                            
+                                if (((cmdex) && (latcmd[ins] != cmdex))) {
+
+                                    #if DBG_BKN_GATE
+                                    sprintf_f(mrs->log, "[GW] warnning !! latcmd[%d] != cmdex  %c(0x%.2x) : %c(0x%.2x) \n", ins, latcmd[ins], latcmd[ins], cmdex, cmdex); 
+                                    print_f(mrs->plog, "fs152", mrs->log);  
+                                    #endif
+                                    
+                                    break;
+                                }
+
+                                pubffcd[ins] = malloc(sizeof(struct usbBuffLink_s));
+                                if (pubffcd[ins]) {
+                                    memset(pubffcd[ins], 0, sizeof(struct usbBuffLink_s));
+                                    
+                                    pubffcd[ins]->ubindex = idxInit;
+                                    idxInit += 1;
+                                    
+                                    #if DBG_BKN_GATE
+                                    sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 2\n", ins, pubffcd[ins]->ubindex, idxInit, latcmd[ins]);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    #endif
+                                    
+                                    pubffm = pubffh;
+                                    pubfft = pubffm->ubnxt;
+                                    while (pubfft) {
+                                        pubffm = pubfft;
+                                        pubfft = pubffm->ubnxt;
+                                    }
+
+                                    pubffm->ubnxt = pubffcd[ins];
+                                }
+                                else {
+                                    sprintf_f(mrs->log, "[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuffLink_s)); 
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                            }
+
+                            if (!pubffcd[ins]) {
+                                break;
+                            }
+                            
+                            if (!pubffcd[ins]->ubbufh) {
+                                pubffcd[ins]->ubbufh= malloc(sizeof(struct usbBuff_s));
+                                if (pubffcd[ins]->ubbufh) {
+                                    
+                                    pubffcd[ins]->ubbufh->bpt = malloc(sizeof(uint32_t));
+                                    
+                                    if (!pubffcd[ins]->ubbufh->bpt) {
+                                        sprintf_f(mrs->log, "[GW] ring%d ubbufh allocate memory failed!! size: %d\n", ins, USB_BUF_SIZE); 
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        break;
+                                    }
+                                    pubffcd[ins]->ubbufh->bn = 0;
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] ring%d allocate memory failed!! size: %d\n", ins, sizeof(struct usbBuff_s)); 
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    break;
+                                }
+                                
+                                curbf = pubffcd[ins]->ubbufh;
+                                pubffcd[ins]->ubbufc = curbf;
+                            }
+                            else {
+
+                                curbf = pubffcd[ins]->ubbufc;
+                                tmpbf = malloc(sizeof(struct usbBuff_s));
+                                if (tmpbf) {
+                                    
+                                    tmpbf->bpt = malloc(sizeof(uint32_t));
+                                    
+                                    if (!tmpbf->bpt) {
+                                        sprintf_f(mrs->log, "[GW] ring%d tmpbf allocate memory failed!! size: %d\n", ins, USB_BUF_SIZE); 
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        break;
+                                    }
+                                    tmpbf->bn = 0;
+                                    curbf->bn = tmpbf;
+                                    pubffcd[ins]->ubbufc = tmpbf;
+                                }
+                            }
+                            
+                            curbf = pubffcd[ins]->ubbufc;
+
+                            if ((!curbf) || (!pubffh->ubbufh)) {
+                                break;
+                            }
+                            
+                            add32d = (uint32_t *) curbf->bpt;
+                            
+                            msync(addrs, lens, MS_SYNC);
+                            
+                            #if DBG_DUMP_DAT32
+                            sprintf_f(mrs->log, "[GW] dump 32 - 1\n");
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            shmem_dump(addrs, 32);
+                            #endif
+                            
+                            *add32d = (uint32_t)addrs;
+                            curbf->bsz = lens;
+
+                            totsz[ins] += lens;
+                            
+                            if (pllcmd[ins] == 'E') {
+                                if ((matcmd[ins] == 'Q') ||(matcmd[ins] == 'D')) {
+                                    if (pubffcd[ins]->ublastsize == 0) {
+                                        pubffcd[ins]->ublastsize = lens;
+                                        sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 1\n", ins, lens, totsz[ins]);                                    
+                                        print_f(mrs->plog, "fs152", mrs->log);
+
+                                        write(infd[ins], &matcmd[ins-1], 1);
+                                                                            
+                                        lens = -1;                                    
+                                    } else {
+                                        sprintf_f(mrs->log, "[GW] ring%d meta size: %d \n", ins, lens);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        pubffcd[ins]->ubmetasize = lens;
+                                    }
+                                } else {
+                                    pubffcd[ins]->ublastsize = lens;
+                                }
+                            }
+                            
+                            if (lens < 0) {
+                                len = pubffcd[ins]->ublastsize;
+                                
+                                //sprintf_f(mrs->log, "[GW] the last trunk size: %d \n", len);
+                                //print_f(mrs->plog, "fs152", mrs->log);
+                                dlen = &ptscaninfo->EPOINT_RESERVE1[0] - &ptscaninfo->ASP_MAGIC_ASPC[0];
+                                
+                                mlen = len % 512;
+                                if (dlen < mlen) {
+                                    sprintf_f(mrs->log, "Error!!! usb scaninfo size less than expected len: %d expect: %d \n", mlen, dlen);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+
+                                sprintf_f(mrs->log, "dump scaninfo size: %d tot: %d \n", mlen, len);
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                addrd = addrs + (len - mlen);
+
+                                pubffcd[ins]->ubinfoaddr = addrd;
+                                
+                                if (ins == 1) {
+                                    memset(ptscaninfo, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memcpy(ptscaninfo, addrd, mlen);    
+                                } else {
+                                    memset(ptscaninfoduo, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memcpy(ptscaninfoduo, addrd, mlen);    
+                                }
+
+                            }
+                            else if ((lens < USB_BUF_SIZE) && (lasflag)) {
+                                #if DBG_BKN_GATE
+                                sprintf_f(mrs->log, "[GW] ring%d scaninfo size: %d total: %d - 2\n", ins, lens, totsz[ins]);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                                #endif
+
+                                maxsz = 0;
+
+                                #if 0 /* disable the skip short image mechanism */
+                                ret = cfgTableGet(pct, ASPOP_RESOLUTION, &gval);
+                                if (!ret) {
+                                    switch (gval) {
+                                    case RESOLUTION_1200:
+                                        maxsz = 1200;
+                                        break;
+                                    case RESOLUTION_600:
+                                        maxsz = 600;
+                                        break;
+                                    case RESOLUTION_300:
+                                        maxsz = 300;
+                                        break;
+                                    case RESOLUTION_200:
+                                        maxsz = 200;
+                                        break;
+                                    case RESOLUTION_150:
+                                        maxsz = 150;
+                                        break;
+                                    default:
+                                        break;
+                                    }
+                                }
+                                else {
+                                    sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+
+                                    maxsz = 300;
+                                }
+                                #endif
+            
+                                if (ins == 1) {
+                                    sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
+                                    print_f(mrs->plog, "fs152", mrs->log);
+
+                                    ret = aspMetafs145GetlenviaUsb(mrs);
+                                    if (ret > 0) {
+                                        dlen = ret;
+                                        sprintf_f(mrs->log, "get scanlength: %d!!\n", dlen); 
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                    }
+                                    else {
+                                        sprintf_f(mrs->log, "get scaninfo failed!!! ret: %d!!\n", ret); 
+                                        print_f(mrs->plog, "fs152", mrs->log);                   
+                                    }
+                                }
+                                else {          
+                                    sprintf_f(mrs->log, "duo get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    
+                                    ret = aspMetafs145GetlenviaUsbDuo(mrs);
+                                    if (ret > 0) {                                    
+                                        dlen = ret;
+                                        sprintf_f(mrs->log, "duo get scanlength: %d!!\n", dlen); 
+                                        print_f(mrs->plog, "fs152", mrs->log);                                    
+                                    }
+                                    else {
+                                        sprintf_f(mrs->log, "duo get scaninfo failed!!! ret: %d!!\n", ret); 
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                    }
+                                }
+                                
+                                #if 1//DBG_BKN_GATE
+                                sprintf_f(mrs->log, "[GW] get image length: %d max: %d \n", dlen, maxsz);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                                #endif
+                                
+                                if (((dlen > 0) && (dlen > maxsz)) || (dlen == 0)) {
+                                    //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
+                                    if (ins == 3) {
+                                        pubffcd[ins]->ubindex |= 0x400;
+                                    }
+                                
+                                    indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
+                                    indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
+
+                                    if ((pubffcd[ins]->ubindex >> 12) > 0) {
+                                        sprintf_f(mrs->log, "\n[GW] WARNNING!!! pubffcd[ins]->ubindex: %d \n", pubffcd[ins]->ubindex);                                
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                    }
+
+                                    totsz[ins] = 0;
+                                
+                                    curbf->bsz |= lasflag;
+
+                                    #if 0
+                                    write(outfd[ins], indexfo, 2);
+                                    #else
+
+                                    //memcpy(exptbuff, addrs, lens);    
+
+                                    len = ring_buf_get(&mrs->dataRx, &addrc);
+                                    while (len <= 0) {
+                                        usleep(100000);
+                                        len = ring_buf_get(&mrs->dataRx, &addrc);
+                                    }
+                                    memset(addrc, 0, len);    
+                                    
+                                    if (ins == 3) {
+                                        ptscaninfoduo->ASP_MAGIC_ASPC[0] = indexfo[0];
+                                        ptscaninfoduo->ASP_MAGIC_ASPC[1] = indexfo[1];
+                                        ptscaninfoduo->MPIONT_LEN = lens;
+
+                                        val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
+                                        
+                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d duo\n", val);                                
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        
+                                        memcpy(addrc, ptscaninfoduo, val);
+                                        //shmem_dump(addrc, val);
+                                        //addrc += val;
+
+                                        memcpy(addrc + val, addrs, lens);
+                                        //shmem_dump(addrc + val, 32);
+
+                                        //shmem_dump(addrc, val+lens);
+                                        
+                                        if ((val + lens) > len) {
+                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 2\n", val, lens, len);                                
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                        }
+                                        
+                                    }
+                                    else {
+                                        ptscaninfo->ASP_MAGIC_ASPC[0] = indexfo[0];
+                                        ptscaninfo->ASP_MAGIC_ASPC[1] = indexfo[1];
+                                        ptscaninfo->MPIONT_LEN = lens;
+
+
+                                        val = ptscaninfo->EXTRA_POINT - ptscaninfo->ASP_MAGIC_ASPC;
+
+                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
+                                        print_f(mrs->plog, "fs152", mrs->log);
+
+                                        memcpy(addrc, ptscaninfo, val);
+                                        //shmem_dump(addrc, val);
+                                        //addrc += val;
+
+                                        memcpy(addrc+val, addrs, lens);
+                                        //shmem_dump(addrc+val, 32);
+                                        
+                                        //shmem_dump(addrc, val+lens);
+
+                                        if ((val + lens) > len) {
+                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 1\n", val, lens, len);                                
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                        }
+
+                                    }
+                                    #endif
+
+                                    ring_buf_prod(&mrs->dataRx);
+
+                                    sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+
+                                    mrs_ipc_put(mrs, "o", 1, 2);
+                                    mrs_ipc_put(mrs, indexfo, 2, 2);
+                                    
+                                    sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x- end of transmission \n", 
+                                                                  ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
+                                    print_f(mrs->plog, "fs152", mrs->log);                            
+                                }
+                                else {
+                                    pubffcd[ins]->ubindex |= 0x800;
+                                    sprintf_f(mrs->log, "[GW] WARNNING!!! image too short skip this page!!! scanlen: %d min: %d\n", dlen, maxsz);                                
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                                
+                                cycCnt[ins] = 0;
+                                pubffcd[ins] = 0;
+                            }
+                            else {
+                                cycCnt[ins] += 1;                            
+                                pubffcd[ins]->ubcylcnt += 1;
+
+                                if ((cycCnt[ins] > CYCLE_LEN) && (pubffcd[ins]->ubcylcnt > CYCLE_LEN)) {
+                                    /* send back index */
+                                    //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
+                                    if (ins == 3) {
+                                        pubffcd[ins]->ubindex |= 0x400;
+                                    }
+                                    
+                                    indexfo[0] = ((pubffcd[ins]->ubindex >> 5) & 0x3f) | 0xc0;
+                                    indexfo[1] = (pubffcd[ins]->ubindex & 0x1f) | 0x40;
+
+                                    //if (resltion >= 600) {
+                                    //    write(outfd[ins], indexfo, 2);
+                                    //}
+
+                                    #if DBG_BKN_GATE
+                                    sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x - middle of transmission count: %d:%d \n", ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    #endif
+                                    
+                                    cycCnt[ins] -= CYCLE_LEN;
+                                }
+                            }
+                        }
+                        else if (pllcmd[ins] == 'S') {
+                            if (ins == 3) {
+                                ons = 0;
+                                if (latcmd[ons] == 's') {
+                                    chq = 'p';
+                                    write(outfd[ons], &chq, 1);
+
+                                    write(outfd[ons], &latcmd[ons], 1);
+
+                                } else if (latcmd[ons] == 'q') {
+                                    chq = 'r';
+                                    write(outfd[ons], &chq, 1);
+
+                                    write(outfd[ons], &latcmd[ons], 1);
+
+                                } else {
+
+                                    chq = 'r';
+                                    write(outfd[ons], &chq, 1);
+                                    sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], chq, chq);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    chq = 'q';
+                                    write(outfd[ons], &chq, 1);
+                                    sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], chq, chq);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+
+                                ons = 2;
+                                if (latcmd[ons] == 's') {
+                                    write(outfd[ons], &latcmd[ons], 1);
+
+                                } else if (latcmd[ons] == 'q') {
+                                    write(outfd[ons], &latcmd[ons], 1);
+
+                                } else {
+
+                                    chq = 'q';
+                                    write(outfd[ons], &chq, 1);
+                                    sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ons, outfd[ons], chq, chq);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                            }
+                        }
+                        else if (pllcmd[ins] == 'Q') {
+
+                            matcmd[ins] = pllcmd[ins];
+                        }
+                        else if (pllcmd[ins] == 'O') {
+
+                            matcmd[ins] = 'o';
+                            
+                            write(infd[ins], &latcmd[ins], 1);
+                            sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) \n", ins, infd[ins], latcmd[ins], latcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                        else if (pllcmd[ins] == 'F') {
+                            matcmd[ins] = pllcmd[ins];
+                            if (ins == 3) {
+                                #if 1
+                                latcmd[2] = 'q';
+                                write(outfd[2], &latcmd[2], 1);
+                                #else
+                                if (latcmd[0] == 'Q') {
+                                    latcmd[0] = 'q';
+                                    latcmd[2] = 'q';
+                                    write(outfd[2], &latcmd[2], 1);
+
+                                    write(outfd[0], &latcmd[0], 1);
+
+                                }
+                                else if (latcmd[0] == 'R') {
+                                    latcmd[3] = 's';
+                                    chq = 'q';
+                                    write(outfd[2], &chq, 1);
+                                    latcmd[2] = 'Q';
+                                } else {
+                                    latcmd[2] = 'Q';
+                                }
+                                #endif
+                            }
+                            else {
+                                #if 1
+                                latcmd[0] = 'q';
+                                write(outfd[0], &latcmd[0], 1);
+                                #else
+                                if (latcmd[2] == 'Q') {
+                                    latcmd[0] = 'q';
+                                    latcmd[2] = 'q';
+                                    write(outfd[2], &latcmd[2], 1);
+
+                                    write(outfd[0], &latcmd[0], 1);
+
+                                }
+                                else if (latcmd[2] == 'R') {
+                                    latcmd[1] = 's';
+                                    chq = 'q';
+                                    write(outfd[0], &chq, 1);
+                                    latcmd[0] = 'Q';
+                                }
+                                else {
+                                    latcmd[0] = 'Q';
+                                }
+                                #endif
+                            }
+                        }
+                        else if (pllcmd[ins] == 'R') {
+                            if (ins == 3) {
+                                if (latcmd[0] == 'R') {
+                                    latcmd[0] = 'e';
+                                    latcmd[2] = 'e';
+                                    chq = 'g';
+                                    write(outfd[0], &chq, 1);
+
+                                    write(outfd[2], &chq, 1);
+
+                                }
+                                else if (latcmd[0] == 'Q') {
+                                    latcmd[1] = 's';
+                                    chq = 'q';
+                                    write(outfd[0], &chq, 1);
+                                    latcmd[2] = 'R';
+                                }
+                                else {
+                                    latcmd[2] = 'R';
+                                }                                
+                            }
+                            else {
+                                if (latcmd[2] == 'R') {
+                                    latcmd[0] = 'e';
+                                    latcmd[2] = 'e';
+                                    chq = 'g';
+                                    write(outfd[0], &chq, 1);
+
+                                    write(outfd[2], &chq, 1);
+
+                                }
+                                else if (latcmd[2] == 'Q') {
+                                    latcmd[3] = 's';
+                                    chq = 'q';
+                                    write(outfd[2], &chq, 1);
+                                    latcmd[0] = 'R';                                    
+                                }
+                                else {
+                                    latcmd[0] = 'R';
+                                }                                
+                            }
+                        }
+                        else if (pllcmd[ins] == 'G') {
+                            //pllcmd[ins] = 0xbf;;
+                            //write(outfd[ins], &pllcmd[ins], 1);
+                            //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) - stall of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            //print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                        else if (pllcmd[ins] == 'B') {
+                            sprintf_f(mrs->log, "[GW] id:%d conti read stop !!!\n", ins);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                        else if (pllcmd[ins] == 'I') {
+                            cswinf = 0;                        
+                            gerr = read(pllfd[ins].fd, &cswinf, 1);
+                            while (gerr < 0) {
+                                cswinf = 0;
+                                gerr = read(pllfd[ins].fd, &cswinf, 1);
+                            }
+                            
+                            sprintf_f(mrs->log, "[GW] id:%d conti read get csw status: %c + 0x%.2x !!!\n", ins, pllcmd[ins], cswinf);
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            if (pubffcd[ins]) {
+                                if (pubffcd[ins]->ubcswerr == 0) {
+                                    pubffcd[ins]->ubcswerr = cswinf;
+
+                                    //pubffcd[ins] = 0;
+                                } else {
+                                    sprintf_f(mrs->log, "[GW] Error!!! id:%d conti read set error status failed alread been set val: 0x%.2x !!!\n", ins, pubffcd[ins]->ubcswerr);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                            } else {
+                                sprintf_f(mrs->log, "[GW] Error!!! id:%d conti read set error status failed contenter is null !!!\n", ins);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            }
+                            
+                        }
+                        else if (pllcmd[ins] == 'J') {
+                            pllinf = 0;                        
+                            gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            while (gerr < 0) {
+                                pllinf = 0;
+                                gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            }
+
+                            pollfo[0] = 'J';
+                            pollfo[1] = pllinf;
+                            write(outfd[ins], pollfo, 2);
+                        }
+                        else if (pllcmd[ins] == 'T') {
+                            chq = 't';
+                            write(outfd[0], &chq, 1);
+                            write(outfd[2], &chq, 1);                            
+                        }
+                        #if USB_AUTO_RESUME
+                        else if (pllcmd[ins] == 'V') {
+                            sprintf_f(mrs->log, "[GW] id:%d conti resume get ch: %c \n", ins, pllcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            //usleep(5000000);
+
+                            if (ins == 3) {
+                                chq = 'v';
+                                write(outfd[0], &chq, 1);                            
+                            }
+                        }
+                        #endif
+                        else if (pllcmd[ins] == 'X') {
+                            pllinf = 0;                        
+                            gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            while (gerr < 0) {
+                                pllinf = 0;
+                                gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            }
+                            
+                            sprintf_f(mrs->log, "[GW] id:%d write file erase get ch: %c pllinf: 0x%.2x \n", ins, pllcmd[ins], pllinf);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            
+                            
+                            if (!pllinf) {
+                                ring_buf_init(&mrs->cmdRx);
+                                
+                                sprintf(idfile, filenames, wfileid);
+                                filefd = find_read(idfile);
+
+                                if (filefd) {
+                                    write(infd[ins], "u", 1);    
+
+                                    ret = fseek(filefd, 0, SEEK_END);
+                                    if (ret) {
+                                        sprintf_f(mrs->log, "[GW] fileacc seek failed!! ret:%d \n", ret);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                    } 
+
+                                    maxsz = ftell(filefd);
+
+                                    sprintf_f(mrs->log, "[GW] fileacc id%d get read filename:[%s] size: %d \n", ins, idfile, maxsz);
+                                    print_f(mrs->plog, "fs152", mrs->log);                                
+
+                                    ret = fseek(filefd, 0, SEEK_SET);
+                                    if (ret) {
+                                        sprintf_f(mrs->log, "[GW] fileacc seek failed!! ret:%d \n", ret);
+                                        print_f(mrs->plog, "fs152", mrs->log);
+                                    } 
+                                    
+                                    while(maxsz) {
+
+                                        lens = ring_buf_get(&mrs->cmdRx, &addrs);
+                                        while (lens <= 0) {
+                                            usleep(100000);
+                                            lens = ring_buf_get(&mrs->cmdRx, &addrs);
+                                        }
+
+                                        if (lens > maxsz) {
+                                            lens = maxsz;
+                                        }
+                                        maxsz -= lens;
+
+                                        ret = fread(addrs, 1, lens, filefd);
+                                        if (ret != lens) {
+                                            sprintf_f(mrs->log, "[GW] fileacc read file failed!! ret:%d (%d) \n", ret, lens);
+                                            print_f(mrs->plog, "fs152", mrs->log);
+
+                                            break;
+                                        }
+                                        
+                                        //sprintf_f(mrs->log, "[GW] dump memory %d bytes: \n", lens);
+                                        //print_f(mrs->plog, "fs152", mrs->log);
+                                        //shmem_dump(addrs, lens);
+
+                                        ring_buf_prod(&mrs->cmdRx);
+                                    }
+
+                                    if (maxsz) {
+                                        sprintf_f(mrs->log, "[GW] fileacc error!!! read file failed!! remain size: %d \n", maxsz);
+                                        print_f(mrs->plog, "fs152", mrs->log);                                
+                                    }
+
+                                    ring_buf_set_last(&mrs->cmdRx, lens);
+                                    
+                                    fclose(filefd);
+                                    filefd = 0;
+                                }
+                            } else {
+                                pollfo[0] = 'X';
+                                pollfo[1] = pllinf;
+                                write(outfd[ins], pollfo, 2);
+                            }
+                        }
+                        else if (pllcmd[ins] == 'U') {
+                            pllinf = 0;                        
+                            gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            while (gerr < 0) {
+                                pllinf = 0;
+                                gerr = read(pllfd[ins].fd, &pllinf, 1);
+                            }
+                            
+                            sprintf_f(mrs->log, "[GW] id:%d write file get ch: %c pllinf: 0x%.2x \n", ins, pllcmd[ins], pllinf);
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            pollfo[0] = 'U';
+                            pollfo[1] = pllinf;
+                            write(outfd[ins], pollfo, 2);
+                        }
+                        else {
+                            sprintf_f(mrs->log, "\n[GW] inpo%d Error !!! pipe(%d) get unknown chr:%c(0x%.2x) \n\n", ins, pllfd[ins].fd, pllcmd[ins], pllcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                        
+                        break;
+                    default:
+                        write(outfd[ins], &pllcmd[ins], 1);
+                        sprintf_f(mrs->log, "[GW] out%d put chr: %c(0x%.2x) total:%d\n", ins, pllcmd[ins], pllcmd[ins], evcnt);
+                        print_f(mrs->plog, "fs152", mrs->log);
+                        break;
+                    }
+                }
+            }
+        }
+    }
     return 1;
 }
 
@@ -52505,7 +54701,7 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                             {stocrx_111, stfmtx_112, stfmtx_113, stfmtx_114, stfmtx_115}, //FMTX
                             {stfmty_116, stfmty_117, stcrtfdr_118, stusbscan_119, stusbscan_120},  //FMTY
                             {stusbscan_121, stusbscan_122, stusbscan_123, stusbscan_124, stusbscan_125},  //USBZ
-                            {stusbscan_126, stusbscan_127, stusbscan_128, stusbscan_129, stusbscan_130}}; //USBA
+                            {stusbbnote_126, stusbbnote_127, stusbbnote_128, stusbbnote_129, stusbbnote_130}}; //BMFA
                             
 
     p1_init(rs, rcmd);
@@ -52683,7 +54879,11 @@ static int p1(struct procRes_s *rs, struct procRes_s *rcmd)
                 } else if (cmd == 'C') {
                     cmdt = cmd;
                     stdata->result = emb_stanPro(0, STINIT, USBZ, PSTSM);
+                } else if (cmd == 'D') {
+                    cmdt = cmd;
+                    stdata->result = emb_stanPro(0, STINIT, BMFA, PSSET);
                 }
+
                 
 
                 if (cmdt != '\0') {
@@ -71482,9 +73682,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = 0;
                                     pinfcur = 0;
                                     
-                                    if (strcmp(msgcmd, "usbscan") != 0) {
-                                        sprintf(msgcmd, "usbscan");
-                                        rs_ipc_put(rcmd, msgcmd, 7);
+                                    if (strcmp(msgcmd, "usbbknote") != 0) {
+                                        sprintf(msgcmd, "usbbknote");
+                                        rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
                                     }
 
                                     chq = 'n';
@@ -80275,10 +82475,14 @@ static int printf_dbgflush(struct logPool_s *plog, struct mainRes_s *mrs, int ar
 
     //printf("[DBG] get result: [%s] len: %d (%d) \n", plog->pool, plog->len, argc);
 
-    if (argc == 42) {
-        mrs_ipc_put(mrs, plog->pool, plog->len, 14);
-    } else {
-        mrs_ipc_put(mrs, plog->pool, plog->len, 5);
+    switch (argc) {
+    case 42:
+    case 44:
+        mrs_ipc_put(mrs, plog->pool, plog->len, 14); // channel for USB
+        break;
+    default:
+        mrs_ipc_put(mrs, plog->pool, plog->len, 5); // channel for APP
+        break;
     }
     
 #if !MSP_SAVE_LOG_TO_FILE
