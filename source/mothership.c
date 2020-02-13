@@ -1423,6 +1423,26 @@ struct bitmapRotate_s {
     int aspRotBuffSize;
 };
 
+struct bitmapDecodeItem_s {
+    int aspDcMax;
+    int aspDcWidth;
+    int aspDcHeight;
+    int aspDcLen;
+    char *aspDcData;
+};
+
+struct bitmapDecodeMfour_s {
+    uint32_t aspDecStatus;
+    struct bitmapDecodeItem_s aspDecJpeg;
+    struct bitmapDecodeItem_s aspDecRaw;
+    struct bitmapDecodeItem_s aspDecMfPiRaw_01;
+    struct bitmapDecodeItem_s aspDecMfPiRaw_02;
+    struct bitmapDecodeItem_s aspDecMfPiRaw_03;
+    struct bitmapDecodeItem_s aspDecMfPiJpg_01;
+    struct bitmapDecodeItem_s aspDecMfPiJpg_02;
+    struct bitmapDecodeItem_s aspDecMfPiJpg_03;
+};
+
 struct usbCBWopc_s{
 		struct intMbs32_s 	opcID; 			// 0x55534243 
 		struct intMbs32_s 	opcTag;			// sent by host , and device will send it back in CSW
@@ -1609,14 +1629,8 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheader;
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
-    char *jpegPri;
-    char *jpegSec;
-    char *bmpPri_0;
-    char *bmpSec_0;
-    char *bmpPri_1;
-    char *bmpSec_1;
-    char *bmpPri_2;
-    char *bmpSec_2;
+    struct bitmapDecodeMfour_s bmpDecMfour[3];
+    
     char netIntfs[32];
     char netIntwpa[32];
     char *dbglog;
@@ -1691,6 +1705,7 @@ struct procRes_s{
     struct bitmapHeader_s *pbheader;
     struct bitmapHeader_s *pbheaderDuo;
     struct bitmapRotate_s *pbrotate;
+    struct bitmapDecodeMfour_s *pbDecMfour[3];
     struct logPool_s *plogs;
     char *pnetIntfs;
     char *pnetIntwpa;
@@ -2876,6 +2891,115 @@ static uint32_t msb2lsb32(struct intMbs32_s *msb)
     //printf("msb2lsb32() msb:0x%.8x -> lsb:0x%.8x \n", msb->n, lsb);
     
     return lsb;
+}
+
+static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
+{
+    int len=0;
+    struct bitmapDecodeMfour_s *pdec=0;
+
+    pdec = &pmrs->bmpDecMfour[idx];
+
+    len = (2592 * 1864 * 15) / 100;
+    pdec->aspDecJpeg.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecJpeg.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecJpeg.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d failed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecJpeg.aspDcMax = len;
+
+    len = 2592 * 1864;
+    pdec->aspDecRaw.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecRaw.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 raw for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecRaw.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 raw for id%d failed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecRaw.aspDcMax = len;
+    
+    len = 1024 * 100;
+    pdec->aspDecMfPiRaw_01.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiRaw_01.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecMfPiRaw_01.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 for id%d failed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecMfPiRaw_01.aspDcMax = len;
+
+    pdec->aspDecMfPiRaw_02.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiRaw_02.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 02 for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecMfPiRaw_02.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 02 for id%d failed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecMfPiRaw_02.aspDcMax = len;
+
+    pdec->aspDecMfPiRaw_03.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiRaw_03.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 03 for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecMfPiRaw_03.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 03 for id%d failed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecMfPiRaw_03.aspDcMax = len;
+
+    len = 1024 * 20;
+    pdec->aspDecMfPiJpg_01.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiJpg_01.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 01 for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecMfPiJpg_01.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 for id%d failed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecMfPiJpg_01.aspDcMax = len;
+
+    pdec->aspDecMfPiJpg_02.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiJpg_02.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 02 for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecMfPiJpg_02.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 02 for id%d failed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecMfPiJpg_02.aspDcMax = len;
+
+    pdec->aspDecMfPiJpg_03.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiJpg_03.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 03 for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecMfPiJpg_03.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 03 for id%d failed !! size: %d KB\n", idx, len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecMfPiJpg_03.aspDcMax = len;
+
 }
 
 static inline int setDefaultConfFile(struct aspConfig_s *conftb)
@@ -80606,6 +80730,7 @@ int main(int argc, char *argv[])
     int *spipeTx, *spipeRx, *spipeTxd, *spipeRxd;
     int *sgateUpTx, *sgateUpRx, *sgateDnTx, *sgateDnRx;
     struct usbFileidAccess_s *pusbf=0;
+    struct bitmapDecodeMfour_s *pdec=0;
     FILE *fpssid=0;
 
     memset(MSP_SSID, 0, 128);
@@ -82128,96 +82253,113 @@ int main(int argc, char *argv[])
         dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
     }
 
-    len = (2592 * 1864 * 15) / 100;
-    pmrs->jpegPri = (char *)aspSalloc(len);
-    if (pmrs->jpegPri) {
-        sprintf_f(pmrs->log, "allocate memory for pri M4 jpeg succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pmrs->jpegPri, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for pri M4 jpeg failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-
-    pmrs->jpegSec = (char *)aspSalloc(len);
-    if (pmrs->jpegSec) {
-        sprintf_f(pmrs->log, "allocate memory for sec M4 jpeg succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pmrs->jpegSec, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for sec M4 jpeg failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-
     #if 1
+    aspBMPdecodeAllocate(pmrs, 0);
+    aspBMPdecodeAllocate(pmrs, 1);
+    aspBMPdecodeAllocate(pmrs, 2);
+    #else
+    len = (2592 * 1864 * 15) / 100;
+
+    pdec = &pmrs->bmpDecMfour[0];
+
+    pdec->aspDecJpeg.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecJpeg.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 jpeg 01 succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecJpeg.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 jpeg 01 failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecJpeg.aspDcMax = len;
+
     len = 2592 * 1864;
-    pmrs->bmpPri_0 = (char *)aspSalloc(len);
-    if (pmrs->bmpPri_0) {
-        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 00 succeed !! size: %d KB\n", len / 1024); 
+    pdec->aspDecRaw.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecRaw.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 raw 01 succeed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
         
-        memset(pmrs->bmpPri_0, 0, len);
+        memset(pdec->aspDecRaw.aspDcData, 0, len);
     } else {
-        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 00 failed !! size: %d KB\n", len / 1024); 
+        sprintf_f(pmrs->log, "allocate memory for M4 raw 01 failed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
     }
+    pdec->aspDecRaw.aspDcMax = len;
+    
+    len = 1024 * 100;
+    pdec->aspDecMfPiRaw_01.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiRaw_01.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 succeed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+        
+        memset(pdec->aspDecMfPiRaw_01.aspDcData, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+    pdec->aspDecMfPiRaw_01.aspDcMax = len;
 
-    pmrs->bmpSec_0 = (char *)aspSalloc(len);
-    if (pmrs->bmpSec_0) {
-        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 00 succeed !! size: %d KB\n", len / 1024); 
+    pdec->aspDecMfPiRaw_02.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiRaw_02.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 02 succeed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
         
-        memset(pmrs->bmpSec_0, 0, len);
+        memset(pdec->aspDecMfPiRaw_02.aspDcData, 0, len);
     } else {
-        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 00 failed !! size: %d KB\n", len / 1024); 
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 02 failed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
     }
+    pdec->aspDecMfPiRaw_02.aspDcMax = len;
 
-    pmrs->bmpPri_1 = (char *)aspSalloc(len);
-    if (pmrs->bmpPri_1) {
-        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 01 succeed !! size: %d KB\n", len / 1024); 
+    pdec->aspDecMfPiRaw_03.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiRaw_03.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 03 succeed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
         
-        memset(pmrs->bmpPri_1, 0, len);
+        memset(pdec->aspDecMfPiRaw_03.aspDcData, 0, len);
     } else {
-        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 01 failed !! size: %d KB\n", len / 1024); 
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 03 failed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
     }
+    pdec->aspDecMfPiRaw_03.aspDcMax = len;
 
-    pmrs->bmpSec_1 = (char *)aspSalloc(len);
-    if (pmrs->bmpSec_1) {
-        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 01 succeed !! size: %d KB\n", len / 1024); 
+    len = 1024 * 20;
+    pdec->aspDecMfPiJpg_01.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiJpg_01.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 01 succeed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
         
-        memset(pmrs->bmpSec_1, 0, len);
+        memset(pdec->aspDecMfPiJpg_01.aspDcData, 0, len);
     } else {
-        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 01 failed !! size: %d KB\n", len / 1024); 
+        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 failed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
     }
+    pdec->aspDecMfPiJpg_01.aspDcMax = len;
 
-    pmrs->bmpPri_2 = (char *)aspSalloc(len);
-    if (pmrs->bmpPri_2) {
-        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 02 succeed !! size: %d KB\n", len / 1024); 
+    pdec->aspDecMfPiJpg_02.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiJpg_02.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 02 succeed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
         
-        memset(pmrs->bmpPri_2, 0, len);
+        memset(pdec->aspDecMfPiJpg_02.aspDcData, 0, len);
     } else {
-        sprintf_f(pmrs->log, "allocate memory for pri M4 bmp 02 failed !! size: %d KB\n", len / 1024); 
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 02 failed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
     }
+    pdec->aspDecMfPiJpg_02.aspDcMax = len;
 
-    pmrs->bmpSec_2 = (char *)aspSalloc(len);
-    if (pmrs->bmpSec_2) {
-        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 02 succeed !! size: %d KB\n", len / 1024); 
+    pdec->aspDecMfPiJpg_03.aspDcData = (char *)aspSalloc(len);
+    if (pdec->aspDecMfPiJpg_03.aspDcData) {
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 03 succeed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
         
-        memset(pmrs->bmpSec_2, 0, len);
+        memset(pdec->aspDecMfPiJpg_03.aspDcData, 0, len);
     } else {
-        sprintf_f(pmrs->log, "allocate memory for sec M4 bmp 02 failed !! size: %d KB\n", len / 1024); 
+        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 03 failed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
     }
+    pdec->aspDecMfPiJpg_03.aspDcMax = len;
     #endif
     
     printSysinfo(&minfo);
@@ -82818,6 +82960,10 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbheaderDuo = &mrs->bmpheaderDuo;
     rs->pbrotate = &mrs->bmpRotate;
 
+    rs->pbDecMfour[0] = &mrs->bmpDecMfour[0];
+    rs->pbDecMfour[1] = &mrs->bmpDecMfour[1];
+    rs->pbDecMfour[2] = &mrs->bmpDecMfour[2];
+    
     rs->usbdvid = mrs->usbdv;
     rs->usvdvname = mrs->usbdvname;
 
