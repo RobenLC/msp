@@ -1512,6 +1512,8 @@ struct usbhost_s{
     int *pushtx;
     int *pgatrx;
     int *pgattx;
+    int *pjpgrx;
+    int *pjpgtx;
     int pushcnt;
     int pushrmcnt;
     int pushcswerr;
@@ -52390,7 +52392,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 
 #define DBG_BKN_GATE (0)
-#define MAX_152_EVENT (11)
+#define MAX_152_EVENT (16)
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     sprintf_f(mrs->log, "usb gate !!!\n");
@@ -52406,6 +52408,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     int *updvtx=0, *updvrx=0;
     int *dnhstx=0, *dnhsrx=0;
     int *dndvtx=0, *dndvrx=0;
+    int *upjpgtx=0, upjpgrx=0;
+    int *dnjpgtx=0, dnjpgrx=0;
     
     int ptret=0, ins=0, evcnt=0, ons=0, gerr=0;
     char chp=0, chq=0, cswinf=0, pllinf=0, chv=0;
@@ -52538,6 +52542,40 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     sprintf_f(mrs->log, "[GW] dndvrx 0:%d 1:%d (%d)\n", dndvrx[0], dndvrx[1], ins);
     print_f(mrs->plog, "fs152", mrs->log);
     #endif
+
+
+    ins += 1;
+    upjpgtx = ppup->pjpgtx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] upjpgtx 0:%d 1:%d (%d)\n", upjpgtx[0], upjpgtx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+    
+    ins += 1;
+    upjpgrx = ppup->pjpgrx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] upjpgrx 0:%d 1:%d (%d)\n", upjpgrx[0], upjpgrx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+    
+    ins += 1;
+    dnjpgtx = ppdn->pjpgtx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] dnjpgtx 0:%d 1:%d (%d)\n", dnjpgtx[0], dnjpgtx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+    
+    ins += 1;
+    dnjpgrx = ppdn->pjpgrx;
+
+    #if DBG_BKN_GATE
+    sprintf_f(mrs->log, "[GW] dnjpgrx 0:%d 1:%d (%d)\n", dnjpgrx[0], dnjpgrx[1], ins);
+    print_f(mrs->plog, "fs152", mrs->log);
+    #endif
+
     
     pllfd[0].fd = uphstx[0];
     pllfd[0].events = POLLIN;
@@ -52559,6 +52597,16 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     outfd[3] = dnhsrx[1];
     infd[3] = dndvtx[1];
 
+    pllfd[14].fd = upjpgtx[0];
+    pllfd[14].events = POLLIN;
+    outfd[14] = updvtx[1];
+    infd[14] = dnhsrx[1];
+    
+    pllfd[15].fd = dnjpgtx[0];
+    pllfd[15].events = POLLIN;
+    outfd[15] = dnhsrx[1];
+    infd[15] = dndvtx[1];
+    
     //mrs_ipc_get(struct mainRes_s * mrs, char * str, int size, int idx)
 
     pllfd[4].fd = mrs->pipeup[12].rt[0];
@@ -52581,6 +52629,15 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     pllfd[10].fd = mrs->pipeup[2].rt[0];
     pllfd[10].events = POLLIN;
+
+    pllfd[11].fd = mrs->pipeup[15].rt[0];
+    pllfd[11].events = POLLIN;
+
+    pllfd[12].fd = mrs->pipeup[17].rt[0];
+    pllfd[12].events = POLLIN;
+
+    pllfd[13].fd = mrs->pipeup[18].rt[0];
+    pllfd[13].events = POLLIN;
     
     while (1) {
         ret = read(pllfd[1].fd, &chv, 1);
@@ -52654,7 +52711,6 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if (pllcmd[ins]) {
                     evcnt++;
                     switch(ins) {
-
                     case 9:
                     case 10:
                         sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
@@ -53149,6 +53205,12 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             print_f(mrs->plog, "fs152", mrs->log);
                         }
 
+                        break;
+                    case 11:
+                        break;
+                    case 12:
+                        break;
+                    case 13:
                         break;
                     case 0:
                     case 2:
@@ -80662,6 +80724,46 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog)
 #define LOG_P13_EN (1)
 static int p13(struct procRes_s *rs)
 {
+    char chq=0, chd=0, che=0, cindexfo[2], mindexfo[2], cinfo[12], cswerr=0, pagerst=2;
+    char *addrd=0, *palloc=0, *endf=0, *endm=0, *ptrecv=0, *bmpbufc=0, *bmpbuff=0, *addrb=0;
+    char *bmpcpy=0, *pshfmeta=0, *jpgout=0, *bmpcolrtb=0, *ph=0, *exmtaout=0, *bmprot=0;
+    unsigned char *jpgrlt=0;
+    int uimCylcnt=0, seqtx=0, maxsz=0, lens=0, pipRet=0, idlet=0, cindex=0, ix=0, waitCylen=0, chr=0, sendsz=0;
+    int usbfd=0, ret=0, act=0, lastCylen=0, cmdprisec=0, bmplen=0, cpylen=0, distCylcnt=0, cntTx=0, lenbs=0, shfmeta=0;
+    int udist=0, uthrhld=0, upas=0, ursm=0, upasd=0, ursmd=0, udistd=0, lrst=0, opsz=0, rawlen=0, val=0, bmph=0, bhlen=0;
+    int colr=0, tmp=0, bmpw=0, bdpi=0, jpgetW=0, jpgetH=0, err=0, tmCost=0, blen=0, bdpp=0, prisec=0, cutcnt=0, cutnum=0;
+    int mreal[2]={0}, recvsz=0, sides[2]={0}, rotlen=0, jpgLen=0, updn=0, rotlast=0, cntsent=0, bret=0, wrtsz=0, retry=0;
+    int acusz=0, maxCylcnt=0, bdeg=0, errcnt=0, lastflag=0;
+    int *cutsides=0, *cutlayers=0;
+    int *piptx=0, *piprx=0;
+    int *pipeRx, *pipeRxd, *pipeTx, *pipeTxd;
+    uint8_t cmd=0, opc=0, dat=0;
+    struct usbhost_s *pushost=0, *pushostd=0, *puscur=0;
+    struct usbHostmem_s *pinfushost=0, *pinfushostd=0, *pinfcur=0, *pinfcurd=0;
+    struct usbIndex_s *puimCnTH=0, *puimTmp=0, *puimUse=0, *puimCur=0, *puimGet=0, *puimNxt=0, *puimCud=0;
+    struct timespec tidleS, tidleE;
+    struct timespec tstart, tend;
+    struct shmem_s *usbTx=0, *usbTxd=0, *usbCur=0;
+    struct pollfd ptfdc[2];
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct aspMetaDataviaUSB_s *ptmetausb=0, *ptmetausbduo=0;
+    struct timespec jpgS, jpgE;
+    struct aspMetaData_s *metaRx = 0;
+    struct bitmapHeader_s *bheader = 0;
+    struct sdParseBuff_s *pabuff=0;
+    char emptyLine[4] = {0x59, 0x4c, 0x03, 0x10};
+    char emptyLast[4] = {0x41, 0x53, 0x50, 0x43};
+    char endstr[] = "usb_conti_stop";
+    char csw[16] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff};
+    uint32_t fformat=0;
+    CFLOAT throughput=0.0;
+    
+    ptfdc[0].fd = pipeRx[0];
+    ptfdc[0].events = POLLIN;
+
+    ptfdc[1].fd = pipeRxd[0];
+    ptfdc[1].events = POLLIN;
+
     sprintf_f(rs->logs, "p13\n");
     print_f(rs->plogs, "P13", rs->logs);
 
@@ -80670,7 +80772,2109 @@ static int p13(struct procRes_s *rs)
     prctl(PR_SET_NAME, "msp-p13");
 
     while (1) {
-        jpghostd(rs, "P13", LOG_P13_EN);
+        if (cmd) { /* usbentsTx == 1*/
+            while (1) {       
+                #if 0//DBG_27_DV
+                sprintf_f(rs->logs, "[DV] addrd: 0x%.8x cylcnt: %d:%d pipe%d\n", addrd, uimCylcnt, datCylcnt, piprx[0]);
+                print_f(rs->plogs, "P11", rs->logs);
+                #endif
+                
+                while (addrd == 0) {
+                    //chr = 0;
+                    while (1) {
+                        if (uimCylcnt > 0) {
+                            break;
+                        }
+        
+                        if (endf) {
+                            if (!puimCnTH) {
+                                if (endm) {
+                                    addrd = endm;
+                                    if (seqtx < USB_BUF_SIZE) {
+                                        lens = seqtx;
+                                            
+                                        seqtx = maxsz;
+                                        endm = palloc;
+                                    } else {
+                                        lens = USB_BUF_SIZE;
+                                        seqtx = seqtx - lens;
+                                        endm += lens;
+                                    }
+                                } else {
+                                    addrd = endf;
+                                    lens = strlen(endf);
+                                }
+                                break;
+                            }
+                        }
+                        
+                        chq = 0;
+                        chd = 0;
+        
+                        //ptfdc[0].fd = piprx[0];
+                        //ptfdc[0].events = POLLIN;
+                        clock_gettime(CLOCK_REALTIME, &tidleE);
+                        idlet = time_diff(&tidleS, &tidleE, 1000000);
+        
+                        #if LOG_P11_EN
+                        sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x rx: %d, 0: %d, 1: %d\n", idlet, (uint32_t)puimGet, (uint32_t)puimCnTH, piprx[0], ptfdc[0].fd, ptfdc[1].fd);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        #endif
+        
+                        //ret = read(pipeusb[0], &ch, 1);
+                        //sprintf_f(rs->logs, "[ISO] pipeusb get ch: %c ret: %d\n", ch, ret);
+                        //print_f(rs->plogs, "P11", rs->logs);
+                        
+                        pipRet = poll(ptfdc, 2, 200);
+                        if (pipRet <= 0) {
+                            clock_gettime(CLOCK_REALTIME, &tidleE);
+                            idlet = time_diff(&tidleS, &tidleE, 1000000);
+                            
+                            #if LOG_P11_EN
+                            sprintf_f(rs->logs, "[DV] wait for %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, (uint32_t)puimGet, (uint32_t)puimCnTH);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            #endif
+        
+                            if (puimGet) {
+                                if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e) || (opc == 0x0f))) {
+        
+                                    sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex, puimGet->uimCount);
+                                    print_f(rs->plogs, "P11", rs->logs);
+        
+                                    //if (idlet > 60000) {
+                                    if (idlet > 60000) {
+                                        clock_gettime(CLOCK_REALTIME, &tidleS);
+        
+                                        if (puimCnTH == puimGet) {
+                                            puimCnTH = puimGet->uimNxt;
+                                            
+                                            puimNxt = 0;
+                                            ix=0;
+                                            cindex = 0;
+                                            puimTmp = puimCnTH;
+                                            while (puimTmp) {
+                                                puimUse = puimTmp;
+        
+                                                #if 1
+                                                if (cindex == 0) {
+                                                    cindex = puimUse->uimIdex & 0x3ff;
+                                                    puimNxt = puimUse;
+                                                } else {
+                                                    if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                        cindex = puimUse->uimIdex & 0x3ff;
+                                                        puimNxt = puimUse;
+                                                    }
+                                                }
+                                                #else
+                                                if (puimUse->uimIdex == ((puimGet->uimIdex & 0x3ff) + 1)) {
+                                                    puimNxt = puimUse;
+                                                }
+                                                #endif
+                                                
+                                                puimTmp = puimUse->uimNxt;
+                                                ix++;
+                                            }
+                                        }
+                                        else {
+        
+                                            ix=0;
+                                            puimTmp = puimCnTH;
+                                            while (puimTmp) {
+                                                puimUse = puimTmp;
+                                                
+                                                #if 1
+                                                if (cindex == 0) {
+                                                    cindex = puimUse->uimIdex & 0x3ff;
+                                                    puimNxt = puimUse;
+                                                } else {
+                                                    if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                        cindex = puimUse->uimIdex & 0x3ff;
+                                                        puimNxt = puimUse;
+                                                    }
+                                                }
+                                                #else
+                                                if (puimUse->uimIdex == ((puimGet->uimIdex & 0x3ff) + 1)) {
+                                                    puimNxt = puimUse;
+                                                }
+                                                #endif
+                                                
+                                                puimTmp = puimUse->uimNxt;
+                                                if (puimTmp == puimGet) {
+                                                    puimUse->uimNxt = puimGet->uimNxt;
+                                                }                
+        
+                                                puimTmp = puimUse->uimNxt;
+                                                ix++;
+                                            }
+                                        }
+        
+                                        free(puimGet);
+                                        puimGet = 0;
+                                        
+                                        if (puimNxt) {
+                                            puimGet = puimNxt;
+                                        }
+                                        
+                                        ix = 0;
+                                        puimTmp = puimCnTH;
+                                        while(puimTmp) {
+                                            #if 1
+                                            sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d timeout srh\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+        
+                                            if (puimTmp->uimCount > 0) {
+                                                ix++;
+                                            }
+                                            puimTmp = puimTmp->uimNxt;
+                                        }                             
+        
+                                        waitCylen = ix;
+                                        sprintf_f(rs->logs, "[DV] wait page size: %d timeout\n", waitCylen);
+                                        print_f(rs->plogs, "P11", rs->logs);
+        
+                                        chr = 0;
+        
+                                        if ((puimGet) && ((opc == 0x05) || (opc == 0x0a))) {
+                                            if ((puimGet->uimIdex & 0x400) == 0) {
+                                                puscur = pushost;
+                                                pinfcur = pinfushost;
+                                                usbCur = puscur->pushring;
+                                                piptx = puscur->pushtx;
+                                                piprx = puscur->pushrx; 
+                                            } else {
+                                                puscur = pushostd;
+                                                pinfcur = pinfushostd;
+                                                usbCur = puscur->pushring;
+                                                piptx = puscur->pushtx;
+                                                piprx = puscur->pushrx; 
+                                            }
+                                        } else {
+                                            sprintf_f(rs->logs, "[DV] puimGet is null timeout break\n");
+                                            print_f(rs->plogs, "P11", rs->logs);
+        
+                                            memset(ptrecv, 0, 160);
+        
+                                            memcpy(ptrecv, emptyLast, 4);
+        
+                                            sendsz = usbc_write(usbfd, ptrecv, 160);
+                                            while (sendsz <= 0) {
+                                                sendsz = usbc_write(usbfd, ptrecv, 160);
+                                            }
+        
+                                            memcpy(ptrecv, emptyLine, 4);
+                                            
+                                            sendsz = usbc_write(usbfd, ptrecv, 4);
+                                            while (sendsz <= 0) {
+                                                sendsz = usbc_write(usbfd, ptrecv, 4);
+                                            }
+        
+                                            che = 'E';
+                                            uimCylcnt = 0;
+                                            lens = 0;
+                                            
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else {
+        
+                            for (ix=0; ix < 2; ix++) {
+                                if ((ptfdc[ix].revents & POLLIN) == POLLIN) {
+                                    if (ptfdc[ix].fd == piprx[0]) {
+                                        ret = read(ptfdc[ix].fd, &chq, 1);
+        
+                                        #if LOG_P11_EN
+                                        sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x %d.pipe%d ret=%d \n", chq, chr, ix, ptfdc[ix].fd, ret);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+        
+                                    } else {
+                                        ret = read(ptfdc[ix].fd, &chd, 1);
+                                        
+                                        #if LOG_P11_EN
+                                        sprintf_f(rs->logs, "[DV] extra chd: 0x%.2x chr: 0x%.2x %d.pipe%d ret=%d \n", chd, chr, ix, ptfdc[ix].fd, ret);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+                                    }
+        
+                                    if ((chd & 0xc0) == 0xc0) {
+                                        cindexfo[0] = chd;
+                                        pipRet = read(ptfdc[ix].fd, &chd, 1);
+                                        while (pipRet < 0) {
+                                            pipRet = read(ptfdc[ix].fd, &chd, 1);
+                                        }
+        
+                                        #if LOG_P11_EN
+                                        sprintf_f(rs->logs, "[DV] extra pre: 0x%.2x nxt: 0x%.2x pipe%d\n", cindexfo[0], chd, ptfdc[ix].fd);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+        
+                                        if ((chd & 0xc0) == 0x40) {
+                                            cindexfo[1] = chd;
+                                        } else {
+                                            sprintf_f(rs->logs, "[DV]  WARNNING get unknown chd: 0x%.2x \n", chd);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            break;
+                                        }
+        
+                                        cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
+        
+                                        #if LOG_P11_EN
+                                        sprintf_f(rs->logs, "[DV] get page index extra: 0x%.3x currx: %d \n", cindex, piprx[0]);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+        
+                                        if (!puimCnTH) {
+                                            sprintf_f(rs->logs, "extra puimCnTH is null!!! \n");
+                                            print_f(rs->plogs, "P11", rs->logs);
+        
+                                            puimCnTH = malloc(sizeof(struct usbIndex_s));
+                                            if (!puimCnTH) {
+                                                sprintf_f(rs->logs, "Error!!! can't get memory for usbIndex_s\n\n\n");
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                break;
+                                            }
+        
+                                            memset(puimCnTH, 0, sizeof(struct usbIndex_s));
+        
+                                            puimCnTH->uimIdex = cindex;
+                                        }
+                                        #if DBG_27_DV
+                                        else {
+                                            act = 0;
+                                            puimTmp = puimCnTH;
+                                            while(puimTmp) {
+        
+                                                sprintf_f(rs->logs, "[DV] extra page.%d - 0x%.3x %d/%d (addr: 0x%.8x) \n", act, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
+                                                print_f(rs->plogs, "P11", rs->logs);
+        
+                                                puimTmp = puimTmp->uimNxt;
+        
+                                                act++;
+                                            }                             
+                                        }
+                                        #endif
+        
+                                        if (puimCud) {
+                                            if ((puimCud->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                                puimCud->uimCount += 1;
+                                            }
+                                            else {
+        
+                                                sprintf_f(rs->logs, "[DV] extra current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x!!!\n\n", puimCud->uimIdex, cindex, chr);
+                                                print_f(rs->plogs, "P11", rs->logs);
+        
+                                                puimTmp= puimCnTH;
+                                                while(puimTmp) {
+                                                    puimUse = puimTmp;
+                                                    if ((puimUse->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                                        puimTmp = puimUse;
+                                                        break;
+                                                    }
+                                                    puimTmp = puimUse->uimNxt;
+                                                }
+        
+                                                if (puimTmp) {
+                                                    puimTmp->uimCount += 1;
+                                                    puimCud = puimTmp;
+                                                } else {
+        
+                                                    puimTmp = malloc(sizeof(struct usbIndex_s));
+                                                    if (!puimTmp) {
+                                                        sprintf_f(rs->logs, "Error!!! can't get memory for puimTmp -2 !!!\n\n\n");
+                                                        print_f(rs->plogs, "P11", rs->logs);
+                                                        break;
+                                                    }
+        
+                                                    memset(puimTmp, 0, sizeof(struct usbIndex_s));
+        
+                                                    puimTmp->uimIdex = cindex;
+                                                    puimTmp->uimCount += 1;
+                                                    puimUse->uimNxt = puimTmp;
+        
+                                                    puimCud = puimTmp;
+                                                }
+                                            }
+                                        }
+                                        else {
+                                            if ((puimCnTH->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                                puimCnTH->uimCount += 1;
+                                                puimCud = puimCnTH;
+                                            } else {
+        
+                                                puimTmp= puimCnTH;
+                                                while(puimTmp) {
+                                                    puimUse = puimTmp;
+                                                    if ((puimUse->uimIdex & 0x3ff) == (cindex  & 0x3ff)) {
+                                                        puimTmp = puimUse;
+                                                        break;
+                                                    }
+                                                    puimTmp = puimUse->uimNxt;
+                                                }
+        
+                                                if (puimTmp) {
+                                                    puimTmp->uimCount += 1;                            
+                                                    puimCud = puimTmp;
+                                                } else {
+                                                    puimTmp = malloc(sizeof(struct usbIndex_s));
+                                                    if (!puimTmp) {
+                                                        sprintf_f(rs->logs, "Error!!! can't get memory for puimTmp!!! \n\n\n");
+                                                        print_f(rs->plogs, "P11", rs->logs);
+                                                        break;
+                                                    }
+        
+                                                    memset(puimTmp, 0, sizeof(struct usbIndex_s));
+        
+                                                    puimTmp->uimIdex = cindex;
+                                                    puimTmp->uimCount += 1;
+                                                    puimUse->uimNxt = puimTmp;
+        
+                                                    puimCud = puimTmp;
+                                                }
+                                            }
+                                        }  
+        
+                                        chd = 0;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (chq == 0xff) {
+                            if (chr) {
+                            
+                                mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                mindexfo[1] = (chr & 0x1f) | 0x40;
+                                    
+                                pipRet = write(piptx[1], mindexfo, 2);
+                                if (pipRet < 0) {
+                                    sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d act 0x80\n", piptx[1], chr, pipRet);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+                            } else {
+                                sprintf_f(rs->logs, "[DV] warnning!!! chr should not be 0 !! \n");
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+                        }
+                        else if (chq == 0xbf) {
+                            sprintf_f(rs->logs, "[DV] send redundant page size: %d\n", maxsz);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            endf = endstr;
+                            if (maxsz) {
+                                seqtx = maxsz;
+                                endm = palloc;
+        
+                                #if 0                                                
+                                addrd = endm;
+                                if (seqtx < USB_BUF_SIZE) {
+                                    lens = seqtx;
+                                    seqtx = maxsz;
+                                    endm = palloc;                                                    
+                                } else {
+                                    lens = USB_BUF_SIZE;
+                                    seqtx = seqtx - lens;
+                                    endm += lens;
+                                }
+                                #endif                                                
+                            }
+                            
+                            #if 0
+                            else {
+                                addrd = endf;
+                                lens = strlen(endf);                                    
+                            }
+                            #endif                                                                             
+                            break;
+                        }
+                        else if ((chq & 0xc0) == 0xc0) {
+                            cindexfo[0] = chq;
+                            pipRet = read(piprx[0], &chq, 1);
+                            while (pipRet < 0) {
+                                pipRet = read(piprx[0], &chq, 1);
+                            }
+        
+                            #if LOG_P11_EN
+                            sprintf_f(rs->logs, "[DV] pre: 0x%.2x nxt: 0x%.2x pipe%d\n", cindexfo[0], chq, piprx[0]);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            #endif
+        
+                            if ((chq & 0xc0) == 0x40) {
+                                cindexfo[1] = chq;
+                            } else {
+                                sprintf_f(rs->logs, "[DV]  WARNNING get unknown chq: 0x%.2x \n", chq);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+        
+                            cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
+        
+                            #if LOG_P11_EN
+                            sprintf_f(rs->logs, "[DV] get page index: 0x%.3x currx: %d \n", cindex, piprx[0]);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            #endif
+        
+                            if ((cindex & 0x400) == 0) {
+                                #if LOG_P11_EN
+                                sprintf_f(rs->logs, "[DV]  primary 0x%.8x \n", cindex);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                #endif
+        
+                                puscur = pushost;
+                                pinfcur = pinfushost;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            } else {
+                                #if LOG_P11_EN
+                                sprintf_f(rs->logs, "[DV]  secondary 0x%.8x \n", cindex);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                #endif
+        
+                                puscur = pushostd;
+                                pinfcur = pinfushostd;
+                                usbCur = puscur->pushring;
+                                piptx = puscur->pushtx;
+                                piprx = puscur->pushrx; 
+                            }
+                            
+                            if (!puimCnTH) {
+                                puimCnTH = malloc(sizeof(struct usbIndex_s));
+                                if (!puimCnTH) {
+                                    sprintf_f(rs->logs, "\n\nError!!! can't get memory for usbIndex_s\n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+                                
+                                memset(puimCnTH, 0, sizeof(struct usbIndex_s));
+        
+                                puimCnTH->uimIdex = cindex;
+                                puimGet = puimCnTH;
+                                    
+                                if (!chr) {
+                                    chr = puimGet->uimIdex & 0x3ff;
+        
+                                    if (chr == (cindex & 0x3ff)) {
+                                    mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                    mindexfo[1] = (chr & 0x1f) | 0x40;
+        
+                                    pipRet = write(piptx[1], mindexfo, 2);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    }
+                                } else {
+                                    sprintf_f(rs->logs, "[DV] warring!!! puimCnTH == 0, and chr == %d \n", chr);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    if (chr == (cindex & 0x3ff)) {
+                                    mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                    mindexfo[1] = (chr & 0x1f) | 0x40;
+        
+                                    pipRet = write(piptx[1], mindexfo, 2);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    }
+                                }
+                            }
+        
+                            #if DBG_27_DV
+                            else {
+                                ix = 0;
+                                puimTmp = puimCnTH;
+                                while(puimTmp) {
+                                
+                                    sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    puimTmp = puimTmp->uimNxt;
+        
+                                    ix++;
+                                }                             
+                            }
+                            #endif
+        
+                            if (puimGet) {
+                                if (!chr) {
+                                    if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                        chr = puimGet->uimIdex & 0x3ff;
+                                        mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x1f) | 0x40;
+        
+                                        pipRet = write(piptx[1], mindexfo, 2);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    } else {
+                                        sprintf_f(rs->logs, "\n[DV] %d:%d wait for new data get begin \n", puimGet->uimGetCnt, puimGet->uimCount);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+                                } else {
+                                    //sprintf_f(rs->logs, "[DV] wait for response (0x%.2x) %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                }
+                            }
+                            else {
+        
+                                ix = 0;
+                                puimTmp = puimCnTH;
+                                puimUse = puimCnTH;
+                                while (puimTmp) {
+                                    if ((puimTmp->uimIdex & 0x3ff) > (puimUse->uimIdex & 0x3ff)) {
+                                        if (puimTmp->uimCount > 0) {
+                                            puimUse = puimTmp;
+                                        }
+                                    }
+                                    ix++;
+                                    puimTmp = puimTmp->uimNxt;
+                                }
+        
+                                if (ix > 0) {
+                                    puimGet = puimUse;
+                                } 
+                                    
+                                if (puimGet) {
+                                    sprintf_f(rs->logs, "[DV] get puim index: 0x%.2x %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                    print_f(rs->plogs, "P11", rs->logs);
+        
+                                    if ((puimGet->uimIdex & 0x400) == 0) {
+        
+                                        sprintf_f(rs->logs, "[DV]  new puimGet primary 0x%.8x \n", puimGet->uimIdex);
+                                        print_f(rs->plogs, "P11", rs->logs);
+        
+                                        puscur = pushost;
+                                        pinfcur = pinfushost;
+                                        usbCur = puscur->pushring;
+                                        piptx = puscur->pushtx;
+                                        piprx = puscur->pushrx; 
+                                    } else {
+        
+                                        sprintf_f(rs->logs, "[DV]  new puimGet secondary 0x%.8x \n", puimGet->uimIdex);
+                                        print_f(rs->plogs, "P11", rs->logs);
+        
+                                        puscur = pushostd;
+                                        pinfcur = pinfushostd;
+                                        usbCur = puscur->pushring;
+                                        piptx = puscur->pushtx;
+                                        piprx = puscur->pushrx; 
+                                    }
+                                    
+                                    if (!chr) {
+                                        if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                            chr = puimGet->uimIdex & 0x3ff;
+        
+                                            mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                            mindexfo[1] = (chr & 0x1f) | 0x40;
+        
+                                            pipRet = write(piptx[1], mindexfo, 2);
+                                            if (pipRet < 0) {
+                                                sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                continue;
+                                            }
+        
+                                            sprintf_f(rs->logs, "[DV]  new puimGet send req 0x%.8x \n", puimGet->uimIdex);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        } else {
+                                            sprintf_f(rs->logs, "\n[DV] %d:%d wait for new data at begin \n", puimGet->uimGetCnt, puimGet->uimCount);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            chr = 0;
+                                        }
+                                    }
+                                    else {
+                                        sprintf_f(rs->logs, "[DV] should not be here chr: (%d) \n", chr);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+                                }
+                                else {
+                                    sprintf_f(rs->logs, "[DV] wait for more data \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+                            }
+                            
+                            if (puimCur) {
+                                if ((puimCur->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                    puimCur->uimCount += 1;
+                                }
+                                else {
+                                    sprintf_f(rs->logs, "\n[DV] current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x \n\n", puimCur->uimIdex, cindex, chr);
+                                    print_f(rs->plogs, "P11", rs->logs);
+        
+                                    puimTmp= puimCnTH;
+                                    while(puimTmp) {
+                                        puimUse = puimTmp;
+                                        if ((puimUse->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                            puimTmp = puimUse;
+                                            break;
+                                        }
+                                        puimTmp = puimUse->uimNxt;
+                                    }
+        
+                                    if (puimTmp) {
+                                        puimTmp->uimCount += 1;
+                                        puimCur = puimTmp;
+                                    } else {
+                                        puimTmp = malloc(sizeof(struct usbIndex_s));
+                                        if (!puimTmp) {
+                                            sprintf_f(rs->logs, "\n\nError!!! can't get memory for puimTmp -2\n");
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        }
+        
+                                        memset(puimTmp, 0, sizeof(struct usbIndex_s));
+        
+                                        puimTmp->uimIdex = cindex;
+                                        puimTmp->uimCount += 1;
+                                        puimUse->uimNxt = puimTmp;
+        
+                                        puimCur = puimTmp;
+                                    }
+                                }
+                            }
+                            else {
+                                if ((puimCnTH->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                    puimCnTH->uimCount += 1;
+                                    puimCur = puimCnTH;
+                                } else {
+                                    puimTmp= puimCnTH;
+                                    while(puimTmp) {
+                                        puimUse = puimTmp;
+                                        if ((puimUse->uimIdex & 0x3ff) == (cindex  & 0x3ff)) {
+                                            puimTmp = puimUse;
+                                            break;
+                                        }
+                                        puimTmp = puimUse->uimNxt;
+                                    }
+        
+                                    if (puimTmp) {
+                                        puimTmp->uimCount += 1;                            
+                                        puimCur = puimTmp;
+                                    } else {
+                                        puimTmp = malloc(sizeof(struct usbIndex_s));
+                                        if (!puimTmp) {
+                                            sprintf_f(rs->logs, "\n\nError!!! can't get memory for puimTmp\n");
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                        }
+                                        memset(puimTmp, 0, sizeof(struct usbIndex_s));
+                                
+                                        puimTmp->uimIdex = cindex;
+                                        puimTmp->uimCount += 1;
+                                        puimUse->uimNxt = puimTmp;
+        
+                                        puimCur = puimTmp;
+                                    }
+                                }
+                            }  
+                        }
+                        else if ((chq & 0xc0) == 0x80) {
+                            if (!puimGet) {
+                                sprintf_f(rs->logs, "\n[DV] Error!!! puimCur is null \n");
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+                            else {
+        
+                                if (!chr) {
+                                    //sprintf_f(rs->logs, "\n[DV] Warnning !!! chr == 0 not make sense !!!\n");
+                                    //print_f(rs->plogs, "P11", rs->logs);
+                                }
+        
+                                cindexfo[0] = chq;
+                                pipRet = read(piprx[0], &chq, 1);
+                                while (pipRet < 0) {
+                                    pipRet = read(piprx[0], &chq, 1);
+                                }
+                                
+                                if ((chq & 0xc0) == 0x40) {
+                                    cindexfo[1] = chq;
+                                } else {
+                                    sprintf_f(rs->logs, "[DV]  WARNNING get unknown chq: 0x%.2x - 3\n", chq);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    continue;
+                                }
+        
+                                cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
+                                
+                                if ((cindex & 0x400) == 0) {
+                                    #if LOG_P11_EN
+                                    sprintf_f(rs->logs, "[DV]  primary 0x80 0x%.8x \n", cindex);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+        
+                                    puscur = pushost;
+                                    pinfcur = pinfushost;
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                } else {
+                                    #if LOG_P11_EN
+                                    sprintf_f(rs->logs, "[DV]  secondary 0x80 0x%.8x \n", cindex);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+        
+                                    puscur = pushostd;
+                                    pinfcur = pinfushostd;
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                }
+                                
+                                if ((puimGet->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
+                                    puimGet->uimGetCnt += 1;
+                                    
+                                    if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                        chr = puimGet->uimIdex & 0x3ff;
+        
+                                        mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x1f) | 0x40;
+        
+                                        pipRet = write(piptx[1], mindexfo, 2);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    } else {
+                                        chr = 0;
+                                    }
+        
+                                    uimCylcnt = CYCLE_LEN;
+                                    
+                                    break;
+                                }
+                                else {
+                                    sprintf_f(rs->logs, "\n[DV] Error!!! puimCur index is not match!! \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+                            }
+                        }
+                        else {
+                            if (chq == 0x7f) {
+                                puimGet->uimGetCnt += 1;
+        
+                                memset(cinfo, 0, 12);
+                                pipRet = read(piprx[0], cinfo, 9);
+                                while (pipRet < 0) {
+                                    pipRet = read(piprx[0], cinfo, 9);
+                                }
+        
+                                lastCylen |= cinfo[6];
+                                
+                                lastCylen  = lastCylen << 8;
+                                lastCylen |= cinfo[5];
+        
+                                lastCylen  = lastCylen << 8;
+                                lastCylen |= cinfo[4];
+                                
+                                lastCylen  = lastCylen << 8;
+                                lastCylen |= cinfo[3];
+                                
+                                uimCylcnt = (cinfo[0] & 0x7f) | ((cinfo[1] & 0x7f) << 7);
+                                
+                                cmdprisec = cinfo[2];
+        
+                                cswerr = cinfo[7] & 0x7f;
+                                if (cswerr == 0x7f) {
+                                    cswerr = 0;
+                                }
+        
+                                sprintf_f(rs->logs, "[DV] get csw err: 0x%.2x \n", cswerr);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                puimNxt = 0;
+        
+                                pagerst = cinfo[8] & 0x7f;
+                                sprintf_f(rs->logs, "[DV] get page rest: %d \n", pagerst);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                
+                                sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
+                                print_f(rs->plogs, "P11", rs->logs);
+        
+                                bmplen = uimCylcnt * USB_BUF_SIZE;
+                                bmplen += lastCylen;
+        
+                                bmpbufc = 0;
+                                cpylen = 0;
+        
+                                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                                sprintf_f(rs->logs, "[BMP] get file format ret: %d format: 0x%.2x !!!\n", ret, fformat);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                
+                                if (ret) {
+                                    fformat = 0;
+                                }
+                                
+                                #if GHP_EN
+                                //if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && ((opc == 0x0a) || (opc == 0x0f))) {
+                                if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && (opc == 0x0f)) {
+                                    bmpbuff = aspMemalloc(bmplen, 11);
+        
+                                    if (bmpbuff) {
+                                        sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d succeed!!!\n", bmplen);
+                                        print_f(rs->plogs, "P11", rs->logs);
+        
+                                        bmpbufc = bmpbuff;
+                                    } else {
+                                        sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d failed!!!\n", bmplen);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+                                }
+                                #endif // #if GHP_EN
+        
+                                switch (cmdprisec) {
+                                case 1:
+                                    #if LOG_P11_EN
+                                    sprintf_f(rs->logs, "[DV]  primary 0x7f 0x%.3x \n", puimGet->uimIdex);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+        
+                                    puscur = pushost;
+                                    pinfcur = pinfushost;
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                    break;
+                                case 2:
+                                    #if LOG_P11_EN
+                                    sprintf_f(rs->logs, "[DV]  secondary 0x7f 0x%.3x \n", puimGet->uimIdex);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+        
+                                    puscur = pushostd;
+                                    pinfcur = pinfushostd;
+                                    usbCur = puscur->pushring;
+                                    piptx = puscur->pushtx;
+                                    piprx = puscur->pushrx; 
+                                    break;
+                                default:
+                                    sprintf_f(rs->logs, "[DV]  error!!! unknown cmdprisec: %d, at 0x7f index: 0x%.8x \n", cmdprisec, cindex);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    break;
+                                }
+                                
+                                if (puimCur == puimGet) {
+                                    puimCur = 0;
+                                }
+        
+                                puimUse = 0;
+                                
+                                if (puimCnTH == puimGet) {
+                                    puimCnTH = puimGet->uimNxt;
+                                    
+                                    ix=0;
+                                    cindex = 0;
+                                    puimTmp = puimCnTH;
+                                    while (puimTmp) {
+                                        puimUse = puimTmp;
+                                        
+                                        #if 1
+                                        if (cindex == 0) {
+                                            cindex = puimUse->uimIdex & 0x3ff;
+                                            puimNxt = puimUse;
+                                        } else {
+                                            if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                cindex = puimUse->uimIdex & 0x3ff;
+                                                puimNxt = puimUse;
+                                            }
+                                        }
+                                        #else
+                                        if ((puimUse->uimIdex & 0x3ff) == ((puimGet->uimIdex + 1) & 0x3ff)) {
+                                            puimNxt = puimUse;
+                                        }
+                                        #endif
+                                        
+                                        puimTmp = puimUse->uimNxt;
+                                        ix++;
+                                    }
+                                } else {
+                                    ix=0;
+                                    cindex = 0;
+                                    puimTmp = puimCnTH;
+                                    while (puimTmp) {
+                                        puimUse = puimTmp;
+                                        
+                                        #if 1
+                                        if (cindex == 0) {
+                                            cindex = puimUse->uimIdex & 0x3ff;
+                                            puimNxt = puimUse;
+                                        } else {
+                                            if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                cindex = puimUse->uimIdex & 0x3ff;
+                                                puimNxt = puimUse;
+                                            }
+                                        }
+                                        #else
+                                        if ((puimUse->uimIdex & 0x3ff) == ((puimGet->uimIdex + 1) & 0x3ff)) {
+                                            puimNxt = puimUse;
+                                        }
+                                        #endif
+                                        
+                                        puimTmp = puimUse->uimNxt;
+                                        if (puimTmp == puimGet) {
+                                            puimUse->uimNxt = puimGet->uimNxt;
+                                        }                
+                                        puimTmp = puimUse->uimNxt;
+                                        ix++;
+                                    }
+                                }
+        
+                                free(puimGet);
+                                puimGet = 0;
+                                
+                                if (puimNxt) {
+                                
+                                    puimGet = puimNxt;
+                                    
+                                    #if LOG_P11_EN
+                                    sprintf_f(rs->logs, "[DV] puimGet: 0x%.3x %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+                                } else {
+                                    #if LOG_P11_EN
+                                    sprintf_f(rs->logs, "[DV] puimGet is null \n");
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+                                }
+        
+                                ix = 0;
+                                puimTmp = puimCnTH;
+                                while(puimTmp) {
+                                
+                                    #if LOG_P11_EN
+                                    sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+        
+                                    if (puimTmp->uimCount > 0) {
+                                        ix++;
+                                    }
+        
+                                    puimTmp = puimTmp->uimNxt;
+                                }                             
+                                        
+                                waitCylen = ix;
+        
+                                #if LOG_P11_EN
+                                sprintf_f(rs->logs, "[DV] wait page number: %d, wait page rest: %d\n", waitCylen, pagerst);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                #endif
+        
+                                #if 0
+                                if ((waitCylen > 0) || (pagerst > 1)) {
+                                    if (!puimNxt) {
+        
+                                        ix = (puimGet->uimIdex & 0x3ff) + 1;
+                                        memset(puimGet, 0, sizeof(struct usbIndex_s));
+                                        puimGet->uimIdex = ix;
+                                        if (puimUse) {
+                                            puimUse->uimNxt = puimGet;
+                                        } else {
+                                            puimCnTH = puimGet;
+                                        }                                       
+                                
+                                        clock_gettime(CLOCK_REALTIME, &tidleS);
+                                    }
+                                    
+                                } else {
+                                    if (!puimNxt) {
+                                        if (puimGet) {
+                                            free(puimGet);
+                                            puimGet = 0;
+                                        }
+                                    }
+                                }
+                                #endif
+        
+                                chr = 0;
+                                
+                                break;
+                            } 
+                            else {
+                                #if LOG_P11_EN
+                                sprintf_f(rs->logs, "[DV] idle warning!!! chq: 0x%.2x chr: 0x%.2x puimGet: 0x%.8x puimCnTH: 0x%.8x\n", chq, chr, (uint32_t)puimGet, (uint32_t)puimCnTH);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                #endif
+        
+                                if ((!chq) && (!chr) && (puimGet)) {
+                                    if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                        chr = puimGet->uimIdex & 0x3ff;
+                                        mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x1f) | 0x40;
+        
+                                        pipRet = write(piptx[1], mindexfo, 2);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            continue;
+                                        }
+                                    }
+                                } else {
+                                    if ((puimCnTH) && (!puimGet)) {
+                                        ix=0;
+                                        cindex = 0;
+                                        puimNxt = 0;
+                                        puimTmp = puimCnTH;
+                                        while (puimTmp) {
+                                            puimUse = puimTmp;
+                                        
+                                            if (cindex == 0) {
+                                                cindex = puimUse->uimIdex & 0x3ff;
+                                                puimNxt = puimUse;
+                                            } else {
+                                                if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                    cindex = puimUse->uimIdex & 0x3ff;
+                                                    puimNxt = puimUse;
+                                                }
+                                            }
+        
+                                            #if LOG_P11_EN
+                                            sprintf_f(rs->logs, "[DV] idle page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+        
+                                            puimTmp = puimUse->uimNxt;
+                                            ix++;
+                                        }
+        
+                                        if (puimNxt) {
+        
+                                            puimGet = puimNxt;
+        
+                                            #if LOG_P11_EN
+                                            sprintf_f(rs->logs, "[DV] idle get puimGet: 0x%.3x %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+        
+                                            if ((puimGet->uimIdex & 0x400) == 0) {
+                                                #if LOG_P11_EN
+                                                sprintf_f(rs->logs, "[DV] idle primary 0x80 0x%.8x \n", puimGet->uimIdex);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+        
+                                                puscur = pushost;
+                                                pinfcur = pinfushost;
+                                                usbCur = puscur->pushring;
+                                                piptx = puscur->pushtx;
+                                                piprx = puscur->pushrx; 
+                                            } else {
+                                                #if LOG_P11_EN
+                                                sprintf_f(rs->logs, "[DV] idle secondary 0x80 0x%.8x \n", puimGet->uimIdex);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+        
+                                                puscur = pushostd;
+                                                pinfcur = pinfushostd;
+                                                usbCur = puscur->pushring;
+                                                piptx = puscur->pushtx;
+                                                piprx = puscur->pushrx; 
+                                            }
+                                        } else {
+                                            #if LOG_P11_EN
+                                            sprintf_f(rs->logs, "[DV] idle get puimGet is null \n");
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                            #endif
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                        }
+                    }
+        
+                    if (uimCylcnt) {
+                        lens = 0;
+                        lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
+                        while (lens < 0) {
+                            sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            usleep(500);
+                            lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
+                        }
+        
+                        if (lens & 0x40000) {
+                            lastflag = 0x40000;
+                        } else {
+                            lastflag = 0;
+                        }
+                        lens = lens & 0x1ffff;
+        
+                        uimCylcnt = uimCylcnt - 1;
+        
+                        distCylcnt = ring_buf_cons_tag(usbCur);
+                        cntTx++;
+        
+                        msync(pinfcur, sizeof(struct usbHostmem_s), MS_SYNC);
+        
+                        #if GHP_EN
+                        if (bmpbufc) {
+                        
+                            bmpcpy = memcpy(bmpbufc, addrd, lens);
+        
+                            msync(bmpcpy, lens, MS_SYNC);    
+        
+                            //shmem_dump(bmpcpy, 128);
+                            //sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d (0x%.8x:0x%.8x)\n", lens, cpylen, (uint32_t)bmpcpy, (uint32_t)bmpbufc);
+                            //print_f(rs->plogs, "P11", rs->logs);
+        
+                            cpylen += lens;
+                            bmpbufc = bmpcpy + lens;
+                        }
+                        #endif //#if GHP_EN
+                        
+                        upas = pinfcur->ushostpause;
+                        ursm = pinfcur->ushostresume;
+                        
+                        #if USB_AUTO_RESUME
+                        udist = pinfcur->ushostbmax - distCylcnt;
+                        pinfcur->ushostbtrkbuffed = distCylcnt;
+                        //pinfcur->ushostbtrkcms = pinfcur->ushostbtrktot - distCylcnt;
+                        
+                        #if DBG_PAUSE_RESUME
+                        sprintf_f(rs->logs, "resume info distCylcnt: %d, udist: %d, buffered: %d avg: %d thrhld:%d\n", distCylcnt, udist, pinfcur->ushostbtrkbuffed, pinfcur->ushostbtrkpageavg, pinfcur->ushostbthrshold);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        #endif
+        
+                        #if DBG_PAUSE_RESUME
+                        sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udist: %d L1\n", upas, ursm, udist);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        #endif
+        
+                        if ((upas) && (ursm >= 0)) {
+                            //udist = pinfcur->ushostbmax - pinfcur->ushostbtrkbuffed;
+                            
+                            if (pinfcur->ushostbtrkpageavg > pinfcur->ushostbthrshold) {
+                                if (udist > pinfcur->ushostbtrkpageavg) {
+                                    //USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
+                                    #if 0
+                                    pipRet = write(piptx[1], "v", 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe(%d) put resume: %c failed!!! ret: %d \n", piptx[1], "v", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    #endif
+        
+                                    if (pinfcur == pinfushost) {
+                                        pinfcurd= pinfushostd;
+                                    } else {
+                                        pinfcurd= pinfushost;
+                                    }
+                                    
+                                    msync(pinfcurd, sizeof(struct usbHostmem_s), MS_SYNC);
+                                    
+                                    upasd = pinfcurd->ushostpause;
+                                    ursmd = pinfcurd->ushostresume;
+                                    udistd = pinfcurd->ushostbmax - pinfcurd->ushostbtrkbuffed;
+        
+                                    #if DBG_PAUSE_RESUME
+                                    sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udistd: %d buffered: %d L2.\n", upasd, ursmd, udistd, pinfcurd->ushostbtrkbuffed);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+        
+                                    if ((upasd) && (ursmd >= 0)) {
+                                        if (pinfcurd->ushostbtrkpageavg > pinfcurd->ushostbthrshold) {
+                                            if (udistd > pinfcurd->ushostbtrkpageavg) {
+                                            
+                                                msync(pinfushost, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                msync(pinfushostd, sizeof(struct usbHostmem_s), MS_SYNC);
+        
+                                                pinfushost->ushostpause = 0;
+                                                pinfushostd->ushostpause = 0;  
+                                                
+                                                pinfushost->ushostresume = 1;
+                                                pinfushostd->ushostresume = 2;
+                                                
+                                                msync(pinfushost, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                msync(pinfushostd, sizeof(struct usbHostmem_s), MS_SYNC);
+        
+                                                #if 1//DBG_PAUSE_RESUME
+                                                sprintf_f(rs->logs, "RESUME distCylcnt: %d, udist: %d, avg: %d, udistd: %d, avg: %d - 1. \n", distCylcnt, udist, pinfcur->ushostbtrkpageavg, udistd, pinfcurd->ushostbtrkpageavg);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+                                            }
+                                        } 
+                                    }
+                                }
+                            }
+                            else {
+                                uthrhld = pinfcur->ushostbtrkpageavg * 6;
+                                if (uthrhld > (pinfcur->ushostbmax - pinfcur->ushostbthrshold)) {
+                                    uthrhld = pinfcur->ushostbmax - pinfcur->ushostbthrshold;
+                                }
+                                
+                                if ((uthrhld) && (udist > uthrhld)) {
+                                    //USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
+                                    #if 0
+                                    pipRet = write(piptx[1], "v", 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe(%d) put resume: %c failed!!! ret: %d \n", piptx[1], "v", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+                                    #endif
+                                    
+                                    if (pinfcur == pinfushost) {
+                                        pinfcurd= pinfushostd;
+                                    } else {
+                                        pinfcurd= pinfushost;
+                                    }
+                                    
+                                    msync(pinfcurd, sizeof(struct usbHostmem_s), MS_SYNC);
+                                    
+                                    upasd = pinfcurd->ushostpause;
+                                    ursmd = pinfcurd->ushostresume;
+                                    udistd = pinfcurd->ushostbmax - pinfcurd->ushostbtrkbuffed;
+        
+                                    #if DBG_PAUSE_RESUME
+                                    sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udistd: %d L3\n", upasd, ursmd, udistd);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    #endif
+        
+                                    if ((upasd) && (ursmd >= 0)) {
+                                        if (pinfcurd->ushostbtrkpageavg < pinfcurd->ushostbthrshold) {
+                                            uthrhld = pinfcurd->ushostbtrkpageavg * 6;
+        
+                                            if (uthrhld > (pinfcurd->ushostbmax - pinfcurd->ushostbthrshold)) {
+                                                uthrhld = pinfcurd->ushostbmax - pinfcurd->ushostbthrshold;
+                                            }
+        
+                                            if ((uthrhld) && (udistd > uthrhld)) {
+        
+                                                msync(pinfushost, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                msync(pinfushostd, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                
+                                                pinfushost->ushostpause = 0;
+                                                pinfushostd->ushostpause = 0;                                        
+                                            
+                                                pinfushost->ushostresume = 1;
+                                                pinfushostd->ushostresume = 2;
+        
+                                                msync(pinfushost, sizeof(struct usbHostmem_s), MS_SYNC);
+                                                msync(pinfushostd, sizeof(struct usbHostmem_s), MS_SYNC);
+        
+                                                #if 1//DBG_PAUSE_RESUME
+                                                sprintf_f(rs->logs, "RESUME buff1: %d, buff2: %d, udist: %d, udistd: %d, avg1: %d, avg2: %d - 2.\n", distCylcnt, pinfcurd->ushostbtrkbuffed, udist, udistd, pinfcur->ushostbtrkpageavg, pinfcurd->ushostbtrkpageavg);
+                                                print_f(rs->plogs, "P11", rs->logs);
+                                                #endif
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        #endif //#if USB_AUTO_RESUME
+                
+                        if ((uimCylcnt == 1) && (lastCylen > 0)){
+                            lens = lastCylen;
+                            lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                            
+                            shfmeta = lens % 512;
+                            if (shfmeta < lenbs) {
+                                sprintf_f(rs->logs, "Error!!! usb meta len less than expected len: %d expect: %d \n", shfmeta, lenbs);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+        
+                            sprintf_f(rs->logs, "dume usb meta size: %d / %d \n", shfmeta, lens);
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            pshfmeta = addrd + (lens - shfmeta);
+        
+                            #if LOG_P11_EN
+                            shmem_dump(pshfmeta, shfmeta);
+                            #endif
+        
+        
+                            sprintf_f(rs->logs, "usb meta forward to pc \n");
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            /* deal with bmp retate */
+                            memset(ptmetausb, 0, sizeof(struct aspMetaDataviaUSB_s));
+                            memcpy(ptmetausb, pshfmeta, shfmeta);
+                            dbgMetaUsb(ptmetausb);
+                        }
+        
+                        #if LOG_P11_EN
+                        sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d dist: %d lastflag: 0x%.5x count: %d\n", (uint32_t)addrd, lens, uimCylcnt, lastCylen, distCylcnt, lastflag, cntTx);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        #endif
+                        
+                        msync(addrd, lens, MS_SYNC);
+        
+                        #if DBG_DUMP_DAT32
+                        sprintf_f(rs->logs, "[DV] dump 32 - 3\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                        shmem_dump(addrd, 32);
+                        #endif
+                    }
+                    
+                    if ((lens > 0) && (lens < USB_BUF_SIZE) && (!uimCylcnt) && (lastflag)) {
+                        che = 'E';
+                    }
+        
+                    sendsz = 0;
+                    
+                    if (che == 'E') break;
+                }
+        
+                if (cntTx == 1) {
+                    clock_gettime(CLOCK_REALTIME, &tstart);
+                }    
+        
+                //sprintf_f(rs->logs, "meta lens: %d, sendsz: %d - 1\n", lens, sendsz); 
+                //print_f(rs->plogs, "P11", rs->logs);
+                
+                if ((lens < USB_BUF_SIZE) && (che != 'E') && (sendsz == 0)) {
+                    #if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
+                    ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
+                    if (ret) {
+                        fformat = 0;
+                    }
+                    
+                    lrst = lens % 512;
+                    opsz = lens - lrst;
+                    lrst = opsz - JPG_FFD9_RANGE;
+                    
+                    if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
+                    
+                        /* search the offset of 0xffd9 */
+                        ret = findEOF(addrd + lrst, JPG_FFD9_RANGE);
+                        if (ret > 0) {
+                            memset(addrd + lrst + ret + 2, 0xff, JPG_FFD9_RANGE - ret - 2);
+                        } else {
+                            sprintf_f(rs->logs, "[DV] warnning!!! USB file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
+                            print_f(rs->plogs, "P11", rs->logs);    
+                        }
+                    
+                        sprintf_f(rs->logs, "[DV] JPG_FFD9_CUT USB fformat: 0x%x, len: %d ret: %d, range: %d\n", fformat, lens, ret, JPG_FFD9_RANGE);
+                        print_f(rs->plogs, "P11", rs->logs);    
+                    }
+                    #endif
+                }
+        
+                #if GHP_EN
+                if (bmpbufc) {
+                    if (che == 'E') {
+                    
+                        rawlen = cpylen - lastCylen - lens;
+                        
+                        sprintf_f(rs->logs, "[BMP] cpylen: %d, rawlen: %d, lastlen: %d, metaex len: %d \n", cpylen, rawlen, lastCylen, lens);
+                        print_f(rs->plogs, "P11", rs->logs); 
+        
+                        bmpbufc = bmpbuff;
+        
+                        act = aspMetaReleaseviaUsbdlBmp(0, rs, addrd, lens);
+        
+                        val=0;
+                        ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+                        sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        bmph = val;
+        
+                        bhlen = 0;
+                        
+                        if (act || (bmph == 0)) {
+                            sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d \n", act);
+                            print_f(rs->plogs, "P11", rs->logs); 
+                        } else {
+                            sprintf_f(rs->logs, "[BMP] pop usb meta succeed!! \n");
+                            print_f(rs->plogs, "P11", rs->logs); 
+        
+                            ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
+                            switch (val) {
+                            case COLOR_MODE_COLOR:
+                                colr = 24;
+                                break;
+                            case COLOR_MODE_GRAY:
+                            case COLOR_MODE_GRAY_DETAIL:
+                            case COLOR_MODE_BLACKWHITE:
+                                colr = 8;
+                                break;
+                            default:
+                                colr = 24;
+                                break;
+                            }
+                            sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                            sprintf_f(rs->logs, "[BMP] width high: %d, ret:%d\n", val, ret);
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                            tmp = val << 8 | tmp;
+        
+                            val = 0;
+                            ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+                            bmpw = scanWidthConvert(tmp, val);
+                            sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                            switch (tmp) {
+                            case RESOLUTION_1200:
+                                bdpi = 1200;
+                                break;
+                            case RESOLUTION_600:
+                                bdpi = 600;
+                                break;
+                            case RESOLUTION_300:
+                                bdpi = 300;
+                                break;
+                            case RESOLUTION_200:
+                                bdpi = 200;
+                                break;
+                            case RESOLUTION_150:
+                                bdpi = 150;
+                                break;
+                            default:
+                                bdpi = 300;
+                                break;
+                            }
+                            sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            jpgout = 0;
+        
+                            if (fformat == FILE_FORMAT_JPG) {
+                                tmp = ((bmpw * colr + 31) / 32) * 4;
+                                tmp = tmp * bmph;
+                                jpgout = aspMemalloc(tmp, 11);
+        
+                                if (jpgout) {
+                                    sprintf_f(rs->logs, "[BMP] allocate memory for jpeg decode out, size: %d succeed!!!\n", tmp);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                } else {
+                                    sprintf_f(rs->logs, "[BMP] allocate memory for jpeg decode out, size: %d failed!!!\n", tmp);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+        
+                                changeJpgLen(bmpbuff, bmph, bmplen);
+                                
+                                //grapjpg(bmpbuff, bmplen);
+                                
+                                clock_gettime(CLOCK_REALTIME, &jpgS);
+                                err = jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr);
+                                //err = tj_jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr==8 ? TJPF_GRAY:TJPF_RGB);
+                                clock_gettime(CLOCK_REALTIME, &jpgE);
+        
+                                tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                                                            
+                                sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d ms\n", err, jpgetW, jpgetH, tmCost);
+                                print_f(rs->plogs, "P11", rs->logs);
+        
+                                //bmpbuff = jpgout;
+                                bmpw = jpgetW;
+                                bmph = jpgetH;
+                            }
+        
+                            bmpcolrtb = aspMemalloc(1078, 11);
+                            if (!bmpcolrtb) {
+                                sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
+                                print_f(rs->plogs, "P11", rs->logs);                                
+                            }
+        
+                            if (colr == 8) {
+                                blen = 1078;
+                                //blen = 54;
+                                bdpp = 1;
+                            } else if (colr == 24) {
+                                blen = 54;            
+                                bdpp = 3;
+                            } else {
+                                sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
+                                print_f(rs->plogs, "P11", rs->logs);   
+                            }
+        
+                            //oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
+                            
+                            bhlen = blen;
+                            val = ((bmpw * colr + 31) / 32) * 4;
+                            val = val * bmph;
+        
+                            sprintf_f(rs->logs, "[BMP] calcu raw size: %d, recv rawlen: %d \n", val, cpylen - lens);
+                            print_f(rs->plogs, "P11", rs->logs);   
+        
+                            sprintf_f(rs->logs, "[BMP] bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
+        
+                            ph = &rs->pbheader->aspbmpMagic[2];
+                            val = sizeof(struct bitmapHeader_s) - 2;
+                            memcpy(bmpcolrtb, ph, val);
+        
+                            blen -= val;
+                            if (blen > 0) {
+                                bitmapColorTableSetup(bmpcolrtb+val);
+                                blen -= 1024;
+                            }
+        
+                            if (blen) {
+                                sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            } 
+        
+                            //dbgBitmapHeader(bheader, val);
+                        }
+        
+                        #if 1 /* manually rotate the BMP */
+                        if (bhlen) {
+        
+                            if (jpgout) {
+                                bmpbuff = jpgout;
+                            }
+        
+                            exmtaout = addrd;
+        
+                            blen = sqrt(bmpw*bmpw + bmph*bmph);
+                            val = ((blen * colr + 31) / 32) * 4;
+                            val = val * blen;
+                            
+                            bmprot = aspMemalloc(val, 11);
+                            if (!bmprot) {
+                                sprintf_f(rs->logs, "[BMP] Error!!! allocate rot buff size: %d failed!!! \n", val);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            } else {
+                                sprintf_f(rs->logs, "[BMP] allocate rot buff size: %d succeed!!! \n", val);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+                            
+                            #if CROP_TEST_EN
+                            prisec = ptmetausb->PRI_O_SEC;
+                            if (prisec > 1) {
+                                sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
+                                print_f(rs->plogs, "P11", rs->logs);
+        
+                                prisec = 0;
+                            }
+                            
+                            cutcnt =0;
+                            cutnum = msb2lsb16(&metaRx->BKNA_NUM);
+        
+                            cutsides = aspMemalloc(cutnum*sizeof(int)*2, 11);
+                            memset(cutsides, 0, cutnum*sizeof(int)*2);
+                            cutlayers = aspMemalloc(cutnum*sizeof(int)*2, 11);
+                            memset(cutlayers, 0, cutnum*sizeof(int)*2);
+                            ret = 0;
+                            
+                            ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
+                            sprintf_f(rs->logs, "[CUT] get page ret: %d \n", ret);
+                            print_f(rs->plogs, "P11", rs->logs);
+        
+                            #if 0
+                            cutsides[ret*2] = -1;
+                            cutsides[ret*2+1] = -1;
+                            cutlayers[ret*2] = 0;
+                            cutlayers[ret*2+1] = 0;
+                            
+                            ret += 1;
+                            
+                            cutsides[ret*2] = -2;
+                            cutsides[ret*2+1] = -2;
+                            cutlayers[ret*2] = 0;
+                            cutlayers[ret*2+1] = 0;
+                            
+                            ret += 1;
+                            #endif
+        
+                            for (cutnum=0; cutnum < ret; cutnum++) {
+                                sprintf_f(rs->logs, "[CUT] %d. A:%d (%d) B:%d (%d)\n", cutnum, cutsides[cutnum*2], cutlayers[cutnum*2], cutsides[cutnum*2+1], cutlayers[cutnum*2+1]);
+                                print_f(rs->plogs, "P11", rs->logs);
+                            }
+        
+                            mreal[0] = -1;
+                            mreal[1] = -1;
+                            
+                            while (cutcnt < cutnum) {
+                                if (cutcnt > 0) {
+                                    recvsz = 0;
+                                    
+                                    while (recvsz <= 0) {
+                                        recvsz = read(usbfd, ptrecv, 31);
+                                
+                                        usleep(1000);
+                                    }
+                                
+                                    sprintf_f(rs->logs, " get cbw: [%.2x][%.2x][%.2x] recvsz: %d \n", ptrecv[15], ptrecv[16], ptrecv[17], recvsz); 
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                
+                                    shmem_dump(ptrecv, recvsz);
+                                }
+                                #endif //#if CROP_TEST_EN
+                                
+                                //msync(bmpcolrtb, 1078, MS_SYNC);
+                                //memcpy(bmpbuff, bmpcolrtb, bhlen);
+                                //shmem_dump(bmpbuff, bhlen);
+                                
+                                //bdeg = 1350;
+                                //bdeg = 900;
+                                //bdeg = 450;
+                                
+                                addrd = exmtaout;
+                                
+                                #if DUMP_JPG_ROT
+                                for (bdeg = 0; bdeg <= 360000; bdeg += 5000) {
+                                //bdeg = 180000;
+                                #else
+                                bdeg = 0;
+                                #endif
+                                
+                                //bdeg = -915;
+                                
+                                memcpy(ph, bmpcolrtb, 54);
+                                
+                                sprintf_f(rs->logs, "[BMP] %d. pri or sec: %d up or down: %d (%d, %d) \n", cutcnt, prisec, sides[prisec], mreal[0], mreal[1]);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                
+                                clock_gettime(CLOCK_REALTIME, &jpgS);
+                                
+                                //grapbmp(bmpbuff, bheader, bmpcolrtb, bhlen);
+                                ret = rotateBMP(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot, &sides[prisec], mreal, &cutlayers[cutcnt*2]);
+                                //grapbmp(pabuff->dirParseBuff+bheader->aspbhRawoffset, bheader, pabuff->dirParseBuff, bheader->aspbhRawoffset);
+                                
+                                //draw();
+                                //grapbmp();
+                                clock_gettime(CLOCK_REALTIME, &jpgE);
+                                
+                                sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d \n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                
+                                tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                                sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", tmCost);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                
+                                bmpbufc = pabuff->dirParseBuff;   
+                                rotlen = pabuff->dirBuffUsed;
+                                
+                                if (fformat == FILE_FORMAT_JPG) {
+                                    clock_gettime(CLOCK_REALTIME, &jpgS);
+                                    err = rgb2jpg(pabuff->dirParseBuff + bheader->aspbhRawoffset, &jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
+                                    clock_gettime(CLOCK_REALTIME, &jpgE);
+                                    if (err) {
+                                        sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                    }
+                                
+                                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                                    sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    //changeJpgLen(jpgrlt, bheader->aspbiHeight, jpgLen);
+                                    
+                                    //shmem_dump(jpgrlt, 512);
+                                    
+                                    rotlen = 512 - (jpgLen % 512);
+                                    rotlen = rotlen + jpgLen;
+                                    bmpbufc = jpgrlt;
+                                }
+        
+                                if (sides[prisec] > 0) {
+                                    updn = (sides[prisec] - 1) % 2;
+                                } else {
+                                    updn = 0;
+                                }
+                                sprintf_f(rs->logs, "[BMP] updn: %d, side: %d cutcnt: %d\n", updn, sides[prisec], cutcnt);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                
+                                aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1);
+                                sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                
+                                lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                                lrst= lastCylen % 512;
+                                
+                                bmpcpy = bmpbufc + rotlen;
+                                memcpy(bmpcpy, ptmetausb, lrst);
+                                
+                                //shmem_dump(bmpbufc+rotlen-512, 1024);
+                                dbgMetaUsb(ptmetausb);
+                                
+                                sprintf_f(rs->logs, "[BMP] usb meta size check, lstlen: %d : sizeof: %d  \n", lrst, lenbs);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                
+                                //bmpbufc = bmpbuff;
+                                rotlen = rotlen + lrst;
+                                
+                                #if DUMP_JPG_ROT
+                                fsmeta = find_save(ptfilepath, ptfileSavejpg);
+                                if (fsmeta) {
+                                    sprintf_f(rs->logs, "[DV] find save jpg [%s] succeed!!! \n", ptfilepath);
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                }
+                                #endif
+                                
+                                rotlast = rotlen % USB_BUF_SIZE;
+                                rawlen = rotlen - rotlast;
+                                
+                                msync(bmpbufc, rotlen, MS_SYNC);
+                                
+                                //rawlen = rotlen;
+                                
+                                if (rawlen > USB_BUF_SIZE) {
+                                    blen = USB_BUF_SIZE;
+                                } else {
+                                    blen = rawlen;
+                                }
+                                cntsent = 0;
+                                while (rawlen) {                                    
+                                    /*
+                                    if (cntsent == 0) {
+                                        memset(bmpbufc, 0xff, 512);
+                                        msync(bmpbufc, 512, MS_SYNC);
+                                    }
+                                    */
+                                
+                                    #if DUMP_JPG_ROT
+                                    bret = blen;
+                                    #else
+                                    bret = usbc_write(usbfd, bmpbufc, blen);
+                                    #endif
+                                    
+                                
+                                    //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 1\n", blen, bret);
+                                    //print_f(rs->plogs, "P11", rs->logs); 
+                                
+                                    /*
+                                    if (cntsent == 0) {
+                                        shmem_dump(bmpbufc, 512);
+                                    }
+                                    */
+                                
+                                    if (bret > 0) {
+                                        cntsent ++;                                    
+                                        
+                                        rawlen -= bret;
+                                
+                                        #if DUMP_JPG_ROT
+                                        wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
+                                        sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+                                
+                                        bmpbufc += bret;
+                                
+                                        if (rawlen > USB_BUF_SIZE) {
+                                            blen = USB_BUF_SIZE;
+                                        } else {
+                                            blen = rawlen;
+                                        }
+                                    }
+                                }
+                                
+                                
+                                blen = rotlast;
+                                while (blen) {
+                                
+                                    #if DUMP_JPG_ROT
+                                    bret = blen;
+                                    #else
+                                    bret = usbc_write(usbfd, bmpbufc, blen); 
+                                    #endif
+                                    
+                                    //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 2\n", blen, bret);
+                                    //print_f(rs->plogs, "P11", rs->logs); 
+                                
+                                    if (bret > 0) {
+                                        blen -= bret;
+                                
+                                        #if DUMP_JPG_ROT
+                                        wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
+                                        sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+                                
+                                        bmpbufc += bret;
+                                    }
+                                }
+                                
+                                blen = lens;
+                                while (blen) {
+                                    #if DUMP_JPG_ROT
+                                    bret = blen;
+                                    #else
+                                    bret = usbc_write(usbfd, addrd, blen); 
+                                    #endif
+                                    
+                                    //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d -3 \n", blen, bret);
+                                    //print_f(rs->plogs, "P11", rs->logs); 
+                                
+                                    if (bret > 0) {
+                                        blen -= bret;
+                                
+                                        #if DUMP_JPG_ROT
+                                        wrtsz = fwrite((char*)addrd, 1, bret, fsmeta);
+                                        sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+                                
+                                        addrd += bret;
+                                    }
+                                }
+                                
+                                #if DUMP_JPG_ROT
+                                fflush(fsmeta);
+                                fclose(fsmeta);
+                                sync();
+                                #endif
+                                
+                                #if DUMP_JPG_ROT
+                                }
+                                #endif
+                                
+                                #if CROP_TEST_EN
+                                
+                                cutcnt ++;
+                                
+                                if ((cutcnt < cutnum) && (!ret)) { 
+                                    sprintf_f(rs->logs, "[DV] cutcnt: %d, cswerr: 0x%.2x !!!\n", cutcnt, cswerr); 
+                                    print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                    /*
+                                    if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
+                                        if ((waitCylen) || (pagerst)) {
+                                            sprintf_f(rs->logs, "[DV] Warnning!!!waitCylen || pagerst != 0 and cswerr: 0x%.2x, %d : %d !!!\n", cswerr, waitCylen, pagerst); 
+                                            print_f(rs->plogs, "P11", rs->logs);
+                                    
+                                            csw[11] = 0;
+                                            csw[12] = 0;
+                                        } else {
+                                            csw[11] = 0;
+                                            csw[12] = cswerr;
+                                        }
+                                    } else {
+                                    
+                                        csw[11] = 0;
+                                        csw[12] = 0;
+                                    }
+                                    */
+                                    
+                                    csw[11] = 0;
+                                    csw[12] = 0;
+                                    
+                                    wrtsz = 0;
+                                    retry = 0;
+                                    
+                                    while (1) {
+                                        wrtsz = usbc_write(usbfd, csw, 13);
+                                    
+                                        #if DBG_27_DV
+                                        sprintf_f(rs->logs, "[DV] cmd: 0x%.2x usb TX size: %d \n====================\n", cmd, wrtsz);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        #endif
+                                    
+                                        if (wrtsz > 0) {
+                                            break;
+                                        }
+                                        retry++;
+                                        if (retry > 32768) {
+                                            break;
+                                        }
+                                    }
+                                    shmem_dump(csw, wrtsz);
+                                }
+                                else {
+                                    if (ret) {
+                                        break;
+                                    }
+                                }
+                            }
+        
+                            #endif // #if CROP_TEST_EN
+                        }
+                        else {
+                            if (rawlen > USB_BUF_SIZE) {
+                                blen = USB_BUF_SIZE;
+                            } else {
+                                blen = rawlen;
+                            }
+                            
+                            while (rawlen) {                                    
+                                bret = usbc_write(usbfd, bmpbufc, blen);
+                            
+                                if (bret > 0) {
+                                    //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
+                                    //print_f(rs->plogs, "P11", rs->logs); 
+                            
+                                    rawlen -= bret;
+        
+                                    bmpbufc += bret;
+                            
+                                    if (rawlen > USB_BUF_SIZE) {
+                                        blen = USB_BUF_SIZE;
+                                    } else {
+                                        blen = rawlen;
+                                    }
+                                }
+                            }
+                            
+                            blen = lastCylen;
+                            while (blen) {
+                                bret = usbc_write(usbfd, bmpbufc, blen); 
+                            
+                                if (bret > 0) {
+                                    blen -= bret;
+                                    bmpbufc += bret;
+                                }
+                            }
+                            
+                            blen = lens;
+                            while (blen) {
+                                bret = usbc_write(usbfd, addrd, blen); 
+                            
+                                if (bret > 0) {
+                                    blen -= bret;
+                                    addrd += bret;
+                                }
+                            }
+                        }
+        
+                        #else
+                        if (rawlen > USB_BUF_SIZE) {
+                            blen = USB_BUF_SIZE;
+                        } else {
+                            blen = rawlen;
+                        }
+        
+                        while (rawlen) {                                    
+                            bret = usbc_write(usbfd, bmpbufc, blen);
+        
+                            if (bret > 0) {
+                                //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
+                                //print_f(rs->plogs, "P11", rs->logs); 
+        
+                                rawlen -= bret;
+                                bmpbufc += bret;
+        
+                                if (rawlen > USB_BUF_SIZE) {
+                                    blen = USB_BUF_SIZE;
+                                } else {
+                                    blen = rawlen;
+                                }
+                            }
+                        }
+        
+                        blen = lastCylen;
+                        while (blen) {
+                            bret = usbc_write(usbfd, bmpbufc, blen); 
+        
+                            if (bret > 0) {
+                                blen -= bret;
+                                bmpbufc += bret;
+                            }
+                        }
+        
+                        blen = lens;
+                        while (blen) {
+                            bret = usbc_write(usbfd, addrd, blen); 
+        
+                            if (bret > 0) {
+                                blen -= bret;
+                                bmpbufc += bret;
+                            }
+                        }
+                        #endif
+                    }
+                    
+                    sendsz = lens;                            
+                } else 
+                #endif //#if GHP_EN
+                {
+        
+                    #if USB_RECVLEN_ZERO_HANDLE
+                    if (lens == 0) {
+                        sendsz = lens;
+                    } else {
+                        sendsz = usbcphy_write(usbfd, addrd, addrb, lens);
+                    }
+                    #else
+                    sendsz = usbcphy_write(usbfd, addrd, addrb, lens);
+                    #endif
+        
+                }
+                
+                
+                if (sendsz < 0) {
+                
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, (uint32_t)addrd);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+        
+                    #if 0 /* break and let others has cpu time */
+                    usbentsTx = 0;
+                    break;
+                    #else
+                    //usleep(5000);
+        
+                    if ((errcnt & 0x1fff) == 0) {
+                        //sprintf_f(rs->logs, "[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
+                        //print_f(rs->plogs, "P11", rs->logs);
+                        //usleep(50000);
+                    }
+                    errcnt ++;
+                    continue;
+                    #endif
+                    
+                }
+                else {
+                
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d, ret: %d \n", lens, sendsz);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+        
+                    acusz += sendsz;
+                    //errcnt = 0;
+                    
+                    if (lens == sendsz) {
+                        addrd = 0;
+                        lens = 0;
+                        
+                        #if 1
+                        if (che == 'E') {
+                            puscur->pushrmcnt += 1;
+        
+                            sprintf_f(rs->logs, "zebra usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x) lens: %d\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr, lens); 
+                            print_f(rs->plogs, "P11", rs->logs);    
+        
+                            break;
+                        }
+                        #else
+                        if (puscur->pushcnt == 0) break;
+                        #endif
+                        
+                    } else {
+                        lens -= sendsz;
+                        addrd += sendsz;
+                        continue;
+                    }
+                }
+            }
+        
+            if ((che == 'E') && (addrd == 0)) {
+        
+                clock_gettime(CLOCK_REALTIME, &tend);
+        
+                tmCost = time_diff(&tstart, &tend, 1000);
+                sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), tmCost);
+                print_f(rs->plogs, "P11", rs->logs);
+                throughput = acusz*8.0 / tmCost*1.0;
+                sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, tmCost > 1000 ? tmCost / 1000 : 1, throughput);
+                print_f(rs->plogs, "P11", rs->logs);
+        
+                maxCylcnt = cntTx;
+                cntTx = 0;
+                opc = 0;
+                che = 0;
+        
+                continue;
+            }
+        }
     }
 
     p13_end(rs);
@@ -80729,6 +82933,7 @@ int main(int argc, char *argv[])
     char *metaPt=0;
     int *spipeTx, *spipeRx, *spipeTxd, *spipeRxd;
     int *sgateUpTx, *sgateUpRx, *sgateDnTx, *sgateDnRx;
+    int *pipeJpgTx, *pipeJpgRx, *pipeJpgTxd, *pipeJpgRxd;
     struct usbFileidAccess_s *pusbf=0;
     struct bitmapDecodeMfour_s *pdec=0;
     FILE *fpssid=0;
@@ -82122,11 +84327,14 @@ int main(int argc, char *argv[])
         gateTxd->chksz = USB_BUF_SIZE;
         gateTxd->svdist = 8;
     }
-
+    
     spipeTx = (int *)aspSalloc(sizeof(int) * 2); 
     spipeRx = (int *)aspSalloc(sizeof(int) * 2); 
     sgateUpTx = (int *)aspSalloc(sizeof(int) * 2); 
     sgateUpRx = (int *)aspSalloc(sizeof(int) * 2); 
+
+    pipeJpgTx = (int *)aspSalloc(sizeof(int) * 2); 
+    pipeJpgRx = (int *)aspSalloc(sizeof(int) * 2); 
     
     pipe2(spipeTx, O_NONBLOCK);
     sprintf_f(pmrs->log, "[DV]  pipeTx 0:%d 1:%d\n", spipeTx[0], spipeTx[1]);
@@ -82141,6 +84349,13 @@ int main(int argc, char *argv[])
     pipe2(sgateUpRx, O_NONBLOCK);
     sprintf_f(pmrs->log, "[DV]  gateUpRx 0:%d 1:%d\n", sgateUpRx[0], sgateUpRx[1]);
     print_f(pmrs->plog, "USB", pmrs->log);
+
+    pipe2(pipeJpgTx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  jpegTx 0:%d 1:%d\n", pipeJpgTx[0], pipeJpgTx[1]);        
+    print_f(pmrs->plog, "USB", pmrs->log);
+    pipe2(pipeJpgRx, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  jpegRx 0:%d 1:%d\n", pipeJpgRx[0], pipeJpgRx[1]);
+    print_f(pmrs->plog, "USB", pmrs->log);
     
     pushost = (struct usbhost_s *)aspSalloc(sizeof(struct usbhost_s));
     memset(pushost, 0, sizeof(struct usbhost_s));
@@ -82152,6 +84367,8 @@ int main(int argc, char *argv[])
     pushost->pushtx = spipeTx;
     pushost->pgattx = sgateUpTx;
     pushost->pgatrx = sgateUpRx;
+    pushost->pjpgrx = pipeJpgRx;
+    pushost->pjpgtx = pipeJpgTx;
     pushost->pushvaddrtb = tbl0;
     pushost->ushid = 0;
     
@@ -82160,6 +84377,9 @@ int main(int argc, char *argv[])
     sgateDnTx = (int *)aspSalloc(sizeof(int) * 2); 
     sgateDnRx = (int *)aspSalloc(sizeof(int) * 2); 
     
+    pipeJpgTxd = (int *)aspSalloc(sizeof(int) * 2); 
+    pipeJpgRxd = (int *)aspSalloc(sizeof(int) * 2); 
+
     pipe2(spipeTxd, O_NONBLOCK);
     sprintf_f(pmrs->log, "[DV]  pipeTxd 0:%d 1:%d\n", spipeTxd[0], spipeTxd[1]);
     print_f(pmrs->plog, "USB", pmrs->log);
@@ -82173,6 +84393,13 @@ int main(int argc, char *argv[])
     pipe2(sgateDnRx, O_NONBLOCK);
     sprintf_f(pmrs->log, "[DV]  gateDnRx 0:%d 1:%d\n", sgateDnRx[0], sgateDnRx[1]);
     print_f(pmrs->plog, "USB", pmrs->log);
+
+    pipe2(pipeJpgTxd, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  jpegTxd 0:%d 1:%d\n", pipeJpgTxd[0], pipeJpgTxd[1]);        
+    print_f(pmrs->plog, "USB", pmrs->log);
+    pipe2(pipeJpgRxd, O_NONBLOCK);
+    sprintf_f(pmrs->log, "[DV]  jpegRxd 0:%d 1:%d\n", pipeJpgRxd[0], pipeJpgRxd[1]);
+    print_f(pmrs->plog, "USB", pmrs->log);
     
     pushostd = (struct usbhost_s *)aspSalloc(sizeof(struct usbhost_s));
     memset(pushostd, 0, sizeof(struct usbhost_s));
@@ -82184,6 +84411,8 @@ int main(int argc, char *argv[])
     pushostd->pushtx = spipeTxd;
     pushostd->pgattx = sgateDnTx;
     pushostd->pgatrx = sgateDnRx;
+    pushost->pjpgrx = pipeJpgRxd;
+    pushost->pjpgtx = pipeJpgTxd;
     pushostd->pushvaddrtb = tbl1;
     pushostd->ushid = 1;
 
