@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (1)
+#define GHP_EN (0)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -52408,8 +52408,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     int *updvtx=0, *updvrx=0;
     int *dnhstx=0, *dnhsrx=0;
     int *dndvtx=0, *dndvrx=0;
-    int *upjpgtx=0, upjpgrx=0;
-    int *dnjpgtx=0, dnjpgrx=0;
+    int *upjpgtx=0, *upjpgrx=0;
+    int *dnjpgtx=0, *dnjpgrx=0;
     
     int ptret=0, ins=0, evcnt=0, ons=0, gerr=0;
     char chp=0, chq=0, cswinf=0, pllinf=0, chv=0;
@@ -80758,12 +80758,50 @@ static int p13(struct procRes_s *rs)
     uint32_t fformat=0;
     CFLOAT throughput=0.0;
     
+    pinfushost = rs->pusbmh[0];
+    if (!pinfushost) {
+        sprintf_f(rs->logs, "Error!!! usb host 0 info not available !!! \n");
+        print_f(rs->plogs, "P13", rs->logs);
+    } else {
+        sprintf_f(rs->logs, "usb host 0 info name:[%s] vidpid:[0x%.2x:0x%.2x] \n", pinfushost->ushostname, pinfushost->ushostpidvid[0], pinfushost->ushostpidvid[1]);
+        print_f(rs->plogs, "P13", rs->logs);
+    }
+
+    pinfushostd = rs->pusbmh[1];
+    if (!pinfushostd) {
+        sprintf_f(rs->logs, "Error!!! usb host 1 info not available !!! \n");
+        print_f(rs->plogs, "P13", rs->logs);
+    } else {
+        sprintf_f(rs->logs, "usb host 0 info name:[%s] vidpid:[0x%.2x:0x%.2x] \n", pinfushostd->ushostname, pinfushostd->ushostpidvid[0], pinfushostd->ushostpidvid[1]);
+        print_f(rs->plogs, "P13", rs->logs);
+    }
+
+    pabuff = &rs->psFat->parBuf;
+    bheader = rs->pbheader;
+
+    #if 0
+    pct = rs->pcfgTable;
+    pmass = rs->pmetaMass;
+    ptmetausb = rs->pmetausb;
+    ptmetausbduo = rs->pmetausbduo;
+    ptmetain = rs->pmetain;
+    pmassduo = rs->pmetaMassduo;
+    ptmetainduo = rs->pmetainduo;
+    ptmetaout = rs->pmetaout;
+    iubs = &rs->pmch->ubs;
+    vubsBuff = &rs->pmch->mshmem[32];
+    iubsBuff = rs->pmch->mshmem;
+    vcswBuff = vubsBuff + 1024;
+    ucbwopc = (struct usbCBWopc_s *)iubsBuff;
+    ucbwpram = (struct usbCBWpram_s *)iubsBuff;
+    ucbwfile = (struct usbCBWfile_s *)iubsBuff;
+    
     ptfdc[0].fd = pipeRx[0];
     ptfdc[0].events = POLLIN;
 
     ptfdc[1].fd = pipeRxd[0];
     ptfdc[1].events = POLLIN;
-
+    #endif
     sprintf_f(rs->logs, "p13\n");
     print_f(rs->plogs, "P13", rs->logs);
 
@@ -80776,7 +80814,7 @@ static int p13(struct procRes_s *rs)
             while (1) {       
                 #if 0//DBG_27_DV
                 sprintf_f(rs->logs, "[DV] addrd: 0x%.8x cylcnt: %d:%d pipe%d\n", addrd, uimCylcnt, datCylcnt, piprx[0]);
-                print_f(rs->plogs, "P11", rs->logs);
+                print_f(rs->plogs, "P13", rs->logs);
                 #endif
                 
                 while (addrd == 0) {
@@ -80816,30 +80854,30 @@ static int p13(struct procRes_s *rs)
                         clock_gettime(CLOCK_REALTIME, &tidleE);
                         idlet = time_diff(&tidleS, &tidleE, 1000000);
         
-                        #if LOG_P11_EN
+                        #if LOG_P13_EN
                         sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x rx: %d, 0: %d, 1: %d\n", idlet, (uint32_t)puimGet, (uint32_t)puimCnTH, piprx[0], ptfdc[0].fd, ptfdc[1].fd);
-                        print_f(rs->plogs, "P11", rs->logs);
+                        print_f(rs->plogs, "P13", rs->logs);
                         #endif
         
                         //ret = read(pipeusb[0], &ch, 1);
                         //sprintf_f(rs->logs, "[ISO] pipeusb get ch: %c ret: %d\n", ch, ret);
-                        //print_f(rs->plogs, "P11", rs->logs);
+                        //print_f(rs->plogs, "P13", rs->logs);
                         
                         pipRet = poll(ptfdc, 2, 200);
                         if (pipRet <= 0) {
                             clock_gettime(CLOCK_REALTIME, &tidleE);
                             idlet = time_diff(&tidleS, &tidleE, 1000000);
                             
-                            #if LOG_P11_EN
+                            #if LOG_P13_EN
                             sprintf_f(rs->logs, "[DV] wait for %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, (uint32_t)puimGet, (uint32_t)puimCnTH);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
                             #endif
         
                             if (puimGet) {
                                 if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e) || (opc == 0x0f))) {
         
                                     sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex, puimGet->uimCount);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
         
                                     //if (idlet > 60000) {
                                     if (idlet > 60000) {
@@ -80920,7 +80958,7 @@ static int p13(struct procRes_s *rs)
                                         while(puimTmp) {
                                             #if 1
                                             sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d timeout srh\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             #endif
         
                                             if (puimTmp->uimCount > 0) {
@@ -80931,7 +80969,7 @@ static int p13(struct procRes_s *rs)
         
                                         waitCylen = ix;
                                         sprintf_f(rs->logs, "[DV] wait page size: %d timeout\n", waitCylen);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
         
                                         chr = 0;
         
@@ -80951,7 +80989,7 @@ static int p13(struct procRes_s *rs)
                                             }
                                         } else {
                                             sprintf_f(rs->logs, "[DV] puimGet is null timeout break\n");
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
         
                                             memset(ptrecv, 0, 160);
         
@@ -80986,17 +81024,17 @@ static int p13(struct procRes_s *rs)
                                     if (ptfdc[ix].fd == piprx[0]) {
                                         ret = read(ptfdc[ix].fd, &chq, 1);
         
-                                        #if LOG_P11_EN
+                                        #if LOG_P13_EN
                                         sprintf_f(rs->logs, "[DV] chq: 0x%.2x chr: 0x%.2x %d.pipe%d ret=%d \n", chq, chr, ix, ptfdc[ix].fd, ret);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         #endif
         
                                     } else {
                                         ret = read(ptfdc[ix].fd, &chd, 1);
                                         
-                                        #if LOG_P11_EN
+                                        #if LOG_P13_EN
                                         sprintf_f(rs->logs, "[DV] extra chd: 0x%.2x chr: 0x%.2x %d.pipe%d ret=%d \n", chd, chr, ix, ptfdc[ix].fd, ret);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         #endif
                                     }
         
@@ -81007,34 +81045,34 @@ static int p13(struct procRes_s *rs)
                                             pipRet = read(ptfdc[ix].fd, &chd, 1);
                                         }
         
-                                        #if LOG_P11_EN
+                                        #if LOG_P13_EN
                                         sprintf_f(rs->logs, "[DV] extra pre: 0x%.2x nxt: 0x%.2x pipe%d\n", cindexfo[0], chd, ptfdc[ix].fd);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         #endif
         
                                         if ((chd & 0xc0) == 0x40) {
                                             cindexfo[1] = chd;
                                         } else {
                                             sprintf_f(rs->logs, "[DV]  WARNNING get unknown chd: 0x%.2x \n", chd);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             break;
                                         }
         
                                         cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
         
-                                        #if LOG_P11_EN
+                                        #if LOG_P13_EN
                                         sprintf_f(rs->logs, "[DV] get page index extra: 0x%.3x currx: %d \n", cindex, piprx[0]);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         #endif
         
                                         if (!puimCnTH) {
                                             sprintf_f(rs->logs, "extra puimCnTH is null!!! \n");
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
         
                                             puimCnTH = malloc(sizeof(struct usbIndex_s));
                                             if (!puimCnTH) {
                                                 sprintf_f(rs->logs, "Error!!! can't get memory for usbIndex_s\n\n\n");
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                print_f(rs->plogs, "P13", rs->logs);
                                                 break;
                                             }
         
@@ -81049,7 +81087,7 @@ static int p13(struct procRes_s *rs)
                                             while(puimTmp) {
         
                                                 sprintf_f(rs->logs, "[DV] extra page.%d - 0x%.3x %d/%d (addr: 0x%.8x) \n", act, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                print_f(rs->plogs, "P13", rs->logs);
         
                                                 puimTmp = puimTmp->uimNxt;
         
@@ -81065,7 +81103,7 @@ static int p13(struct procRes_s *rs)
                                             else {
         
                                                 sprintf_f(rs->logs, "[DV] extra current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x!!!\n\n", puimCud->uimIdex, cindex, chr);
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                print_f(rs->plogs, "P13", rs->logs);
         
                                                 puimTmp= puimCnTH;
                                                 while(puimTmp) {
@@ -81085,7 +81123,7 @@ static int p13(struct procRes_s *rs)
                                                     puimTmp = malloc(sizeof(struct usbIndex_s));
                                                     if (!puimTmp) {
                                                         sprintf_f(rs->logs, "Error!!! can't get memory for puimTmp -2 !!!\n\n\n");
-                                                        print_f(rs->plogs, "P11", rs->logs);
+                                                        print_f(rs->plogs, "P13", rs->logs);
                                                         break;
                                                     }
         
@@ -81122,7 +81160,7 @@ static int p13(struct procRes_s *rs)
                                                     puimTmp = malloc(sizeof(struct usbIndex_s));
                                                     if (!puimTmp) {
                                                         sprintf_f(rs->logs, "Error!!! can't get memory for puimTmp!!! \n\n\n");
-                                                        print_f(rs->plogs, "P11", rs->logs);
+                                                        print_f(rs->plogs, "P13", rs->logs);
                                                         break;
                                                     }
         
@@ -81152,17 +81190,17 @@ static int p13(struct procRes_s *rs)
                                 pipRet = write(piptx[1], mindexfo, 2);
                                 if (pipRet < 0) {
                                     sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d act 0x80\n", piptx[1], chr, pipRet);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     continue;
                                 }
                             } else {
                                 sprintf_f(rs->logs, "[DV] warnning!!! chr should not be 0 !! \n");
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                             }
                         }
                         else if (chq == 0xbf) {
                             sprintf_f(rs->logs, "[DV] send redundant page size: %d\n", maxsz);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
                             endf = endstr;
                             if (maxsz) {
                                 seqtx = maxsz;
@@ -81197,30 +81235,30 @@ static int p13(struct procRes_s *rs)
                                 pipRet = read(piprx[0], &chq, 1);
                             }
         
-                            #if LOG_P11_EN
+                            #if LOG_P13_EN
                             sprintf_f(rs->logs, "[DV] pre: 0x%.2x nxt: 0x%.2x pipe%d\n", cindexfo[0], chq, piprx[0]);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
                             #endif
         
                             if ((chq & 0xc0) == 0x40) {
                                 cindexfo[1] = chq;
                             } else {
                                 sprintf_f(rs->logs, "[DV]  WARNNING get unknown chq: 0x%.2x \n", chq);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 continue;
                             }
         
                             cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
         
-                            #if LOG_P11_EN
+                            #if LOG_P13_EN
                             sprintf_f(rs->logs, "[DV] get page index: 0x%.3x currx: %d \n", cindex, piprx[0]);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
                             #endif
         
                             if ((cindex & 0x400) == 0) {
-                                #if LOG_P11_EN
+                                #if LOG_P13_EN
                                 sprintf_f(rs->logs, "[DV]  primary 0x%.8x \n", cindex);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 #endif
         
                                 puscur = pushost;
@@ -81229,9 +81267,9 @@ static int p13(struct procRes_s *rs)
                                 piptx = puscur->pushtx;
                                 piprx = puscur->pushrx; 
                             } else {
-                                #if LOG_P11_EN
+                                #if LOG_P13_EN
                                 sprintf_f(rs->logs, "[DV]  secondary 0x%.8x \n", cindex);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 #endif
         
                                 puscur = pushostd;
@@ -81245,7 +81283,7 @@ static int p13(struct procRes_s *rs)
                                 puimCnTH = malloc(sizeof(struct usbIndex_s));
                                 if (!puimCnTH) {
                                     sprintf_f(rs->logs, "\n\nError!!! can't get memory for usbIndex_s\n");
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                 }
                                 
                                 memset(puimCnTH, 0, sizeof(struct usbIndex_s));
@@ -81263,13 +81301,13 @@ static int p13(struct procRes_s *rs)
                                     pipRet = write(piptx[1], mindexfo, 2);
                                     if (pipRet < 0) {
                                         sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         continue;
                                     }
                                     }
                                 } else {
                                     sprintf_f(rs->logs, "[DV] warring!!! puimCnTH == 0, and chr == %d \n", chr);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     if (chr == (cindex & 0x3ff)) {
                                     mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
                                     mindexfo[1] = (chr & 0x1f) | 0x40;
@@ -81277,7 +81315,7 @@ static int p13(struct procRes_s *rs)
                                     pipRet = write(piptx[1], mindexfo, 2);
                                     if (pipRet < 0) {
                                         sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         continue;
                                     }
                                     }
@@ -81291,7 +81329,7 @@ static int p13(struct procRes_s *rs)
                                 while(puimTmp) {
                                 
                                     sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     
                                     puimTmp = puimTmp->uimNxt;
         
@@ -81310,12 +81348,12 @@ static int p13(struct procRes_s *rs)
                                         pipRet = write(piptx[1], mindexfo, 2);
                                         if (pipRet < 0) {
                                             sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             continue;
                                         }
                                     } else {
                                         sprintf_f(rs->logs, "\n[DV] %d:%d wait for new data get begin \n", puimGet->uimGetCnt, puimGet->uimCount);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                     }
                                 } else {
                                     //sprintf_f(rs->logs, "[DV] wait for response (0x%.2x) %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
@@ -81342,12 +81380,12 @@ static int p13(struct procRes_s *rs)
                                     
                                 if (puimGet) {
                                     sprintf_f(rs->logs, "[DV] get puim index: 0x%.2x %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
         
                                     if ((puimGet->uimIdex & 0x400) == 0) {
         
                                         sprintf_f(rs->logs, "[DV]  new puimGet primary 0x%.8x \n", puimGet->uimIdex);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
         
                                         puscur = pushost;
                                         pinfcur = pinfushost;
@@ -81357,7 +81395,7 @@ static int p13(struct procRes_s *rs)
                                     } else {
         
                                         sprintf_f(rs->logs, "[DV]  new puimGet secondary 0x%.8x \n", puimGet->uimIdex);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
         
                                         puscur = pushostd;
                                         pinfcur = pinfushostd;
@@ -81376,26 +81414,26 @@ static int p13(struct procRes_s *rs)
                                             pipRet = write(piptx[1], mindexfo, 2);
                                             if (pipRet < 0) {
                                                 sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                print_f(rs->plogs, "P13", rs->logs);
                                                 continue;
                                             }
         
                                             sprintf_f(rs->logs, "[DV]  new puimGet send req 0x%.8x \n", puimGet->uimIdex);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                         } else {
                                             sprintf_f(rs->logs, "\n[DV] %d:%d wait for new data at begin \n", puimGet->uimGetCnt, puimGet->uimCount);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             chr = 0;
                                         }
                                     }
                                     else {
                                         sprintf_f(rs->logs, "[DV] should not be here chr: (%d) \n", chr);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                     }
                                 }
                                 else {
                                     sprintf_f(rs->logs, "[DV] wait for more data \n");
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                 }
                             }
                             
@@ -81405,7 +81443,7 @@ static int p13(struct procRes_s *rs)
                                 }
                                 else {
                                     sprintf_f(rs->logs, "\n[DV] current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x \n\n", puimCur->uimIdex, cindex, chr);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
         
                                     puimTmp= puimCnTH;
                                     while(puimTmp) {
@@ -81424,7 +81462,7 @@ static int p13(struct procRes_s *rs)
                                         puimTmp = malloc(sizeof(struct usbIndex_s));
                                         if (!puimTmp) {
                                             sprintf_f(rs->logs, "\n\nError!!! can't get memory for puimTmp -2\n");
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                         }
         
                                         memset(puimTmp, 0, sizeof(struct usbIndex_s));
@@ -81459,7 +81497,7 @@ static int p13(struct procRes_s *rs)
                                         puimTmp = malloc(sizeof(struct usbIndex_s));
                                         if (!puimTmp) {
                                             sprintf_f(rs->logs, "\n\nError!!! can't get memory for puimTmp\n");
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                         }
                                         memset(puimTmp, 0, sizeof(struct usbIndex_s));
                                 
@@ -81475,13 +81513,13 @@ static int p13(struct procRes_s *rs)
                         else if ((chq & 0xc0) == 0x80) {
                             if (!puimGet) {
                                 sprintf_f(rs->logs, "\n[DV] Error!!! puimCur is null \n");
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                             }
                             else {
         
                                 if (!chr) {
                                     //sprintf_f(rs->logs, "\n[DV] Warnning !!! chr == 0 not make sense !!!\n");
-                                    //print_f(rs->plogs, "P11", rs->logs);
+                                    //print_f(rs->plogs, "P13", rs->logs);
                                 }
         
                                 cindexfo[0] = chq;
@@ -81494,16 +81532,16 @@ static int p13(struct procRes_s *rs)
                                     cindexfo[1] = chq;
                                 } else {
                                     sprintf_f(rs->logs, "[DV]  WARNNING get unknown chq: 0x%.2x - 3\n", chq);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     continue;
                                 }
         
                                 cindex = ((cindexfo[0] & 0x3f) << 5) | (cindexfo[1] & 0x1f);
                                 
                                 if ((cindex & 0x400) == 0) {
-                                    #if LOG_P11_EN
+                                    #if LOG_P13_EN
                                     sprintf_f(rs->logs, "[DV]  primary 0x80 0x%.8x \n", cindex);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
         
                                     puscur = pushost;
@@ -81512,9 +81550,9 @@ static int p13(struct procRes_s *rs)
                                     piptx = puscur->pushtx;
                                     piprx = puscur->pushrx; 
                                 } else {
-                                    #if LOG_P11_EN
+                                    #if LOG_P13_EN
                                     sprintf_f(rs->logs, "[DV]  secondary 0x80 0x%.8x \n", cindex);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
         
                                     puscur = pushostd;
@@ -81536,7 +81574,7 @@ static int p13(struct procRes_s *rs)
                                         pipRet = write(piptx[1], mindexfo, 2);
                                         if (pipRet < 0) {
                                             sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             continue;
                                         }
                                     } else {
@@ -81549,7 +81587,7 @@ static int p13(struct procRes_s *rs)
                                 }
                                 else {
                                     sprintf_f(rs->logs, "\n[DV] Error!!! puimCur index is not match!! \n");
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                 }
                             }
                         }
@@ -81584,15 +81622,15 @@ static int p13(struct procRes_s *rs)
                                 }
         
                                 sprintf_f(rs->logs, "[DV] get csw err: 0x%.2x \n", cswerr);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 puimNxt = 0;
         
                                 pagerst = cinfo[8] & 0x7f;
                                 sprintf_f(rs->logs, "[DV] get page rest: %d \n", pagerst);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 
                                 sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
         
                                 bmplen = uimCylcnt * USB_BUF_SIZE;
                                 bmplen += lastCylen;
@@ -81602,7 +81640,7 @@ static int p13(struct procRes_s *rs)
         
                                 ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
                                 sprintf_f(rs->logs, "[BMP] get file format ret: %d format: 0x%.2x !!!\n", ret, fformat);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 
                                 if (ret) {
                                     fformat = 0;
@@ -81615,21 +81653,21 @@ static int p13(struct procRes_s *rs)
         
                                     if (bmpbuff) {
                                         sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d succeed!!!\n", bmplen);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
         
                                         bmpbufc = bmpbuff;
                                     } else {
                                         sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d failed!!!\n", bmplen);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                     }
                                 }
                                 #endif // #if GHP_EN
         
                                 switch (cmdprisec) {
                                 case 1:
-                                    #if LOG_P11_EN
+                                    #if LOG_P13_EN
                                     sprintf_f(rs->logs, "[DV]  primary 0x7f 0x%.3x \n", puimGet->uimIdex);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
         
                                     puscur = pushost;
@@ -81639,9 +81677,9 @@ static int p13(struct procRes_s *rs)
                                     piprx = puscur->pushrx; 
                                     break;
                                 case 2:
-                                    #if LOG_P11_EN
+                                    #if LOG_P13_EN
                                     sprintf_f(rs->logs, "[DV]  secondary 0x7f 0x%.3x \n", puimGet->uimIdex);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
         
                                     puscur = pushostd;
@@ -81652,7 +81690,7 @@ static int p13(struct procRes_s *rs)
                                     break;
                                 default:
                                     sprintf_f(rs->logs, "[DV]  error!!! unknown cmdprisec: %d, at 0x7f index: 0x%.8x \n", cmdprisec, cindex);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     break;
                                 }
                                 
@@ -81729,14 +81767,14 @@ static int p13(struct procRes_s *rs)
                                 
                                     puimGet = puimNxt;
                                     
-                                    #if LOG_P11_EN
+                                    #if LOG_P13_EN
                                     sprintf_f(rs->logs, "[DV] puimGet: 0x%.3x %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
                                 } else {
-                                    #if LOG_P11_EN
+                                    #if LOG_P13_EN
                                     sprintf_f(rs->logs, "[DV] puimGet is null \n");
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
                                 }
         
@@ -81744,9 +81782,9 @@ static int p13(struct procRes_s *rs)
                                 puimTmp = puimCnTH;
                                 while(puimTmp) {
                                 
-                                    #if LOG_P11_EN
+                                    #if LOG_P13_EN
                                     sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
         
                                     if (puimTmp->uimCount > 0) {
@@ -81758,9 +81796,9 @@ static int p13(struct procRes_s *rs)
                                         
                                 waitCylen = ix;
         
-                                #if LOG_P11_EN
+                                #if LOG_P13_EN
                                 sprintf_f(rs->logs, "[DV] wait page number: %d, wait page rest: %d\n", waitCylen, pagerst);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 #endif
         
                                 #if 0
@@ -81794,9 +81832,9 @@ static int p13(struct procRes_s *rs)
                                 break;
                             } 
                             else {
-                                #if LOG_P11_EN
+                                #if LOG_P13_EN
                                 sprintf_f(rs->logs, "[DV] idle warning!!! chq: 0x%.2x chr: 0x%.2x puimGet: 0x%.8x puimCnTH: 0x%.8x\n", chq, chr, (uint32_t)puimGet, (uint32_t)puimCnTH);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 #endif
         
                                 if ((!chq) && (!chr) && (puimGet)) {
@@ -81808,7 +81846,7 @@ static int p13(struct procRes_s *rs)
                                         pipRet = write(piptx[1], mindexfo, 2);
                                         if (pipRet < 0) {
                                             sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             continue;
                                         }
                                     }
@@ -81831,9 +81869,9 @@ static int p13(struct procRes_s *rs)
                                                 }
                                             }
         
-                                            #if LOG_P11_EN
+                                            #if LOG_P13_EN
                                             sprintf_f(rs->logs, "[DV] idle page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             #endif
         
                                             puimTmp = puimUse->uimNxt;
@@ -81844,15 +81882,15 @@ static int p13(struct procRes_s *rs)
         
                                             puimGet = puimNxt;
         
-                                            #if LOG_P11_EN
+                                            #if LOG_P13_EN
                                             sprintf_f(rs->logs, "[DV] idle get puimGet: 0x%.3x %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             #endif
         
                                             if ((puimGet->uimIdex & 0x400) == 0) {
-                                                #if LOG_P11_EN
+                                                #if LOG_P13_EN
                                                 sprintf_f(rs->logs, "[DV] idle primary 0x80 0x%.8x \n", puimGet->uimIdex);
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                print_f(rs->plogs, "P13", rs->logs);
                                                 #endif
         
                                                 puscur = pushost;
@@ -81861,9 +81899,9 @@ static int p13(struct procRes_s *rs)
                                                 piptx = puscur->pushtx;
                                                 piprx = puscur->pushrx; 
                                             } else {
-                                                #if LOG_P11_EN
+                                                #if LOG_P13_EN
                                                 sprintf_f(rs->logs, "[DV] idle secondary 0x80 0x%.8x \n", puimGet->uimIdex);
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                print_f(rs->plogs, "P13", rs->logs);
                                                 #endif
         
                                                 puscur = pushostd;
@@ -81873,9 +81911,9 @@ static int p13(struct procRes_s *rs)
                                                 piprx = puscur->pushrx; 
                                             }
                                         } else {
-                                            #if LOG_P11_EN
+                                            #if LOG_P13_EN
                                             sprintf_f(rs->logs, "[DV] idle get puimGet is null \n");
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                             #endif
                                         }
                                     }
@@ -81890,7 +81928,7 @@ static int p13(struct procRes_s *rs)
                         lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
                         while (lens < 0) {
                             sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             usleep(500);
                             lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
@@ -81919,7 +81957,7 @@ static int p13(struct procRes_s *rs)
         
                             //shmem_dump(bmpcpy, 128);
                             //sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d (0x%.8x:0x%.8x)\n", lens, cpylen, (uint32_t)bmpcpy, (uint32_t)bmpbufc);
-                            //print_f(rs->plogs, "P11", rs->logs);
+                            //print_f(rs->plogs, "P13", rs->logs);
         
                             cpylen += lens;
                             bmpbufc = bmpcpy + lens;
@@ -81936,12 +81974,12 @@ static int p13(struct procRes_s *rs)
                         
                         #if DBG_PAUSE_RESUME
                         sprintf_f(rs->logs, "resume info distCylcnt: %d, udist: %d, buffered: %d avg: %d thrhld:%d\n", distCylcnt, udist, pinfcur->ushostbtrkbuffed, pinfcur->ushostbtrkpageavg, pinfcur->ushostbthrshold);
-                        print_f(rs->plogs, "P11", rs->logs);
+                        print_f(rs->plogs, "P13", rs->logs);
                         #endif
         
                         #if DBG_PAUSE_RESUME
                         sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udist: %d L1\n", upas, ursm, udist);
-                        print_f(rs->plogs, "P11", rs->logs);
+                        print_f(rs->plogs, "P13", rs->logs);
                         #endif
         
                         if ((upas) && (ursm >= 0)) {
@@ -81954,7 +81992,7 @@ static int p13(struct procRes_s *rs)
                                     pipRet = write(piptx[1], "v", 1);
                                     if (pipRet < 0) {
                                         sprintf_f(rs->logs, "[DV]  pipe(%d) put resume: %c failed!!! ret: %d \n", piptx[1], "v", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         continue;
                                     }
                                     #endif
@@ -81973,7 +82011,7 @@ static int p13(struct procRes_s *rs)
         
                                     #if DBG_PAUSE_RESUME
                                     sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udistd: %d buffered: %d L2.\n", upasd, ursmd, udistd, pinfcurd->ushostbtrkbuffed);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
         
                                     if ((upasd) && (ursmd >= 0)) {
@@ -81994,7 +82032,7 @@ static int p13(struct procRes_s *rs)
         
                                                 #if 1//DBG_PAUSE_RESUME
                                                 sprintf_f(rs->logs, "RESUME distCylcnt: %d, udist: %d, avg: %d, udistd: %d, avg: %d - 1. \n", distCylcnt, udist, pinfcur->ushostbtrkpageavg, udistd, pinfcurd->ushostbtrkpageavg);
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                print_f(rs->plogs, "P13", rs->logs);
                                                 #endif
                                             }
                                         } 
@@ -82013,7 +82051,7 @@ static int p13(struct procRes_s *rs)
                                     pipRet = write(piptx[1], "v", 1);
                                     if (pipRet < 0) {
                                         sprintf_f(rs->logs, "[DV]  pipe(%d) put resume: %c failed!!! ret: %d \n", piptx[1], "v", pipRet);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         continue;
                                     }
                                     #endif
@@ -82032,7 +82070,7 @@ static int p13(struct procRes_s *rs)
         
                                     #if DBG_PAUSE_RESUME
                                     sprintf_f(rs->logs, "resume flag pause: %d, resume: %d udistd: %d L3\n", upasd, ursmd, udistd);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     #endif
         
                                     if ((upasd) && (ursmd >= 0)) {
@@ -82059,7 +82097,7 @@ static int p13(struct procRes_s *rs)
         
                                                 #if 1//DBG_PAUSE_RESUME
                                                 sprintf_f(rs->logs, "RESUME buff1: %d, buff2: %d, udist: %d, udistd: %d, avg1: %d, avg2: %d - 2.\n", distCylcnt, pinfcurd->ushostbtrkbuffed, udist, udistd, pinfcur->ushostbtrkpageavg, pinfcurd->ushostbtrkpageavg);
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                print_f(rs->plogs, "P13", rs->logs);
                                                 #endif
                                             }
                                         }
@@ -82076,21 +82114,21 @@ static int p13(struct procRes_s *rs)
                             shfmeta = lens % 512;
                             if (shfmeta < lenbs) {
                                 sprintf_f(rs->logs, "Error!!! usb meta len less than expected len: %d expect: %d \n", shfmeta, lenbs);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                             }
         
                             sprintf_f(rs->logs, "dume usb meta size: %d / %d \n", shfmeta, lens);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             pshfmeta = addrd + (lens - shfmeta);
         
-                            #if LOG_P11_EN
+                            #if LOG_P13_EN
                             shmem_dump(pshfmeta, shfmeta);
                             #endif
         
         
                             sprintf_f(rs->logs, "usb meta forward to pc \n");
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             /* deal with bmp retate */
                             memset(ptmetausb, 0, sizeof(struct aspMetaDataviaUSB_s));
@@ -82098,16 +82136,16 @@ static int p13(struct procRes_s *rs)
                             dbgMetaUsb(ptmetausb);
                         }
         
-                        #if LOG_P11_EN
+                        #if LOG_P13_EN
                         sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d dist: %d lastflag: 0x%.5x count: %d\n", (uint32_t)addrd, lens, uimCylcnt, lastCylen, distCylcnt, lastflag, cntTx);
-                        print_f(rs->plogs, "P11", rs->logs);
+                        print_f(rs->plogs, "P13", rs->logs);
                         #endif
                         
                         msync(addrd, lens, MS_SYNC);
         
                         #if DBG_DUMP_DAT32
                         sprintf_f(rs->logs, "[DV] dump 32 - 3\n");
-                        print_f(rs->plogs, "P11", rs->logs);
+                        print_f(rs->plogs, "P13", rs->logs);
                         shmem_dump(addrd, 32);
                         #endif
                     }
@@ -82126,7 +82164,7 @@ static int p13(struct procRes_s *rs)
                 }    
         
                 //sprintf_f(rs->logs, "meta lens: %d, sendsz: %d - 1\n", lens, sendsz); 
-                //print_f(rs->plogs, "P11", rs->logs);
+                //print_f(rs->plogs, "P13", rs->logs);
                 
                 if ((lens < USB_BUF_SIZE) && (che != 'E') && (sendsz == 0)) {
                     #if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
@@ -82147,11 +82185,11 @@ static int p13(struct procRes_s *rs)
                             memset(addrd + lrst + ret + 2, 0xff, JPG_FFD9_RANGE - ret - 2);
                         } else {
                             sprintf_f(rs->logs, "[DV] warnning!!! USB file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
-                            print_f(rs->plogs, "P11", rs->logs);    
+                            print_f(rs->plogs, "P13", rs->logs);    
                         }
                     
                         sprintf_f(rs->logs, "[DV] JPG_FFD9_CUT USB fformat: 0x%x, len: %d ret: %d, range: %d\n", fformat, lens, ret, JPG_FFD9_RANGE);
-                        print_f(rs->plogs, "P11", rs->logs);    
+                        print_f(rs->plogs, "P13", rs->logs);    
                     }
                     #endif
                 }
@@ -82163,7 +82201,7 @@ static int p13(struct procRes_s *rs)
                         rawlen = cpylen - lastCylen - lens;
                         
                         sprintf_f(rs->logs, "[BMP] cpylen: %d, rawlen: %d, lastlen: %d, metaex len: %d \n", cpylen, rawlen, lastCylen, lens);
-                        print_f(rs->plogs, "P11", rs->logs); 
+                        print_f(rs->plogs, "P13", rs->logs); 
         
                         bmpbufc = bmpbuff;
         
@@ -82172,17 +82210,17 @@ static int p13(struct procRes_s *rs)
                         val=0;
                         ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
                         sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
-                        print_f(rs->plogs, "P11", rs->logs);
+                        print_f(rs->plogs, "P13", rs->logs);
                         bmph = val;
         
                         bhlen = 0;
                         
                         if (act || (bmph == 0)) {
                             sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d \n", act);
-                            print_f(rs->plogs, "P11", rs->logs); 
+                            print_f(rs->plogs, "P13", rs->logs); 
                         } else {
                             sprintf_f(rs->logs, "[BMP] pop usb meta succeed!! \n");
-                            print_f(rs->plogs, "P11", rs->logs); 
+                            print_f(rs->plogs, "P13", rs->logs); 
         
                             ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
                             switch (val) {
@@ -82199,11 +82237,11 @@ static int p13(struct procRes_s *rs)
                                 break;
                             }
                             sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
                             sprintf_f(rs->logs, "[BMP] width high: %d, ret:%d\n", val, ret);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                             tmp = val << 8 | tmp;
@@ -82212,7 +82250,7 @@ static int p13(struct procRes_s *rs)
                             ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
                             bmpw = scanWidthConvert(tmp, val);
                             sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
                             switch (tmp) {
@@ -82236,7 +82274,7 @@ static int p13(struct procRes_s *rs)
                                 break;
                             }
                             sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             jpgout = 0;
         
@@ -82247,10 +82285,10 @@ static int p13(struct procRes_s *rs)
         
                                 if (jpgout) {
                                     sprintf_f(rs->logs, "[BMP] allocate memory for jpeg decode out, size: %d succeed!!!\n", tmp);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                 } else {
                                     sprintf_f(rs->logs, "[BMP] allocate memory for jpeg decode out, size: %d failed!!!\n", tmp);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                 }
         
                                 changeJpgLen(bmpbuff, bmph, bmplen);
@@ -82265,7 +82303,7 @@ static int p13(struct procRes_s *rs)
                                 tmCost = time_diff(&jpgS, &jpgE, 1000000);
                                                             
                                 sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d ms\n", err, jpgetW, jpgetH, tmCost);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
         
                                 //bmpbuff = jpgout;
                                 bmpw = jpgetW;
@@ -82275,7 +82313,7 @@ static int p13(struct procRes_s *rs)
                             bmpcolrtb = aspMemalloc(1078, 11);
                             if (!bmpcolrtb) {
                                 sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
-                                print_f(rs->plogs, "P11", rs->logs);                                
+                                print_f(rs->plogs, "P13", rs->logs);                                
                             }
         
                             if (colr == 8) {
@@ -82287,7 +82325,7 @@ static int p13(struct procRes_s *rs)
                                 bdpp = 3;
                             } else {
                                 sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
-                                print_f(rs->plogs, "P11", rs->logs);   
+                                print_f(rs->plogs, "P13", rs->logs);   
                             }
         
                             //oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
@@ -82297,10 +82335,10 @@ static int p13(struct procRes_s *rs)
                             val = val * bmph;
         
                             sprintf_f(rs->logs, "[BMP] calcu raw size: %d, recv rawlen: %d \n", val, cpylen - lens);
-                            print_f(rs->plogs, "P11", rs->logs);   
+                            print_f(rs->plogs, "P13", rs->logs);   
         
                             sprintf_f(rs->logs, "[BMP] bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
         
@@ -82316,7 +82354,7 @@ static int p13(struct procRes_s *rs)
         
                             if (blen) {
                                 sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                             } 
         
                             //dbgBitmapHeader(bheader, val);
@@ -82338,17 +82376,17 @@ static int p13(struct procRes_s *rs)
                             bmprot = aspMemalloc(val, 11);
                             if (!bmprot) {
                                 sprintf_f(rs->logs, "[BMP] Error!!! allocate rot buff size: %d failed!!! \n", val);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                             } else {
                                 sprintf_f(rs->logs, "[BMP] allocate rot buff size: %d succeed!!! \n", val);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                             }
                             
                             #if CROP_TEST_EN
                             prisec = ptmetausb->PRI_O_SEC;
                             if (prisec > 1) {
                                 sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
         
                                 prisec = 0;
                             }
@@ -82364,7 +82402,7 @@ static int p13(struct procRes_s *rs)
                             
                             ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
                             sprintf_f(rs->logs, "[CUT] get page ret: %d \n", ret);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            print_f(rs->plogs, "P13", rs->logs);
         
                             #if 0
                             cutsides[ret*2] = -1;
@@ -82384,7 +82422,7 @@ static int p13(struct procRes_s *rs)
         
                             for (cutnum=0; cutnum < ret; cutnum++) {
                                 sprintf_f(rs->logs, "[CUT] %d. A:%d (%d) B:%d (%d)\n", cutnum, cutsides[cutnum*2], cutlayers[cutnum*2], cutsides[cutnum*2+1], cutlayers[cutnum*2+1]);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                             }
         
                             mreal[0] = -1;
@@ -82401,7 +82439,7 @@ static int p13(struct procRes_s *rs)
                                     }
                                 
                                     sprintf_f(rs->logs, " get cbw: [%.2x][%.2x][%.2x] recvsz: %d \n", ptrecv[15], ptrecv[16], ptrecv[17], recvsz); 
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                 
                                     shmem_dump(ptrecv, recvsz);
                                 }
@@ -82429,7 +82467,7 @@ static int p13(struct procRes_s *rs)
                                 memcpy(ph, bmpcolrtb, 54);
                                 
                                 sprintf_f(rs->logs, "[BMP] %d. pri or sec: %d up or down: %d (%d, %d) \n", cutcnt, prisec, sides[prisec], mreal[0], mreal[1]);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 
                                 clock_gettime(CLOCK_REALTIME, &jpgS);
                                 
@@ -82442,11 +82480,11 @@ static int p13(struct procRes_s *rs)
                                 clock_gettime(CLOCK_REALTIME, &jpgE);
                                 
                                 sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d \n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 
                                 tmCost = time_diff(&jpgS, &jpgE, 1000000);
                                 sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", tmCost);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 
                                 bmpbufc = pabuff->dirParseBuff;   
                                 rotlen = pabuff->dirBuffUsed;
@@ -82457,12 +82495,12 @@ static int p13(struct procRes_s *rs)
                                     clock_gettime(CLOCK_REALTIME, &jpgE);
                                     if (err) {
                                         sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                     }
                                 
                                     tmCost = time_diff(&jpgS, &jpgE, 1000000);
                                     sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     
                                     //changeJpgLen(jpgrlt, bheader->aspbiHeight, jpgLen);
                                     
@@ -82479,11 +82517,11 @@ static int p13(struct procRes_s *rs)
                                     updn = 0;
                                 }
                                 sprintf_f(rs->logs, "[BMP] updn: %d, side: %d cutcnt: %d\n", updn, sides[prisec], cutcnt);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 
                                 aspMetaReleaseviaUsbdlBmpUpd(0, rs, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1);
                                 sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 
                                 lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
                                 lrst= lastCylen % 512;
@@ -82495,7 +82533,7 @@ static int p13(struct procRes_s *rs)
                                 dbgMetaUsb(ptmetausb);
                                 
                                 sprintf_f(rs->logs, "[BMP] usb meta size check, lstlen: %d : sizeof: %d  \n", lrst, lenbs);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                print_f(rs->plogs, "P13", rs->logs);
                                 
                                 //bmpbufc = bmpbuff;
                                 rotlen = rotlen + lrst;
@@ -82504,7 +82542,7 @@ static int p13(struct procRes_s *rs)
                                 fsmeta = find_save(ptfilepath, ptfileSavejpg);
                                 if (fsmeta) {
                                     sprintf_f(rs->logs, "[DV] find save jpg [%s] succeed!!! \n", ptfilepath);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                 }
                                 #endif
                                 
@@ -82537,7 +82575,7 @@ static int p13(struct procRes_s *rs)
                                     
                                 
                                     //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 1\n", blen, bret);
-                                    //print_f(rs->plogs, "P11", rs->logs); 
+                                    //print_f(rs->plogs, "P13", rs->logs); 
                                 
                                     /*
                                     if (cntsent == 0) {
@@ -82553,7 +82591,7 @@ static int p13(struct procRes_s *rs)
                                         #if DUMP_JPG_ROT
                                         wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
                                         sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         #endif
                                 
                                         bmpbufc += bret;
@@ -82577,7 +82615,7 @@ static int p13(struct procRes_s *rs)
                                     #endif
                                     
                                     //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d - 2\n", blen, bret);
-                                    //print_f(rs->plogs, "P11", rs->logs); 
+                                    //print_f(rs->plogs, "P13", rs->logs); 
                                 
                                     if (bret > 0) {
                                         blen -= bret;
@@ -82585,7 +82623,7 @@ static int p13(struct procRes_s *rs)
                                         #if DUMP_JPG_ROT
                                         wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
                                         sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         #endif
                                 
                                         bmpbufc += bret;
@@ -82601,7 +82639,7 @@ static int p13(struct procRes_s *rs)
                                     #endif
                                     
                                     //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d -3 \n", blen, bret);
-                                    //print_f(rs->plogs, "P11", rs->logs); 
+                                    //print_f(rs->plogs, "P13", rs->logs); 
                                 
                                     if (bret > 0) {
                                         blen -= bret;
@@ -82609,7 +82647,7 @@ static int p13(struct procRes_s *rs)
                                         #if DUMP_JPG_ROT
                                         wrtsz = fwrite((char*)addrd, 1, bret, fsmeta);
                                         sprintf_f(rs->logs, "[DV] write [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         #endif
                                 
                                         addrd += bret;
@@ -82632,13 +82670,13 @@ static int p13(struct procRes_s *rs)
                                 
                                 if ((cutcnt < cutnum) && (!ret)) { 
                                     sprintf_f(rs->logs, "[DV] cutcnt: %d, cswerr: 0x%.2x !!!\n", cutcnt, cswerr); 
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    print_f(rs->plogs, "P13", rs->logs);
                                     
                                     /*
                                     if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
                                         if ((waitCylen) || (pagerst)) {
                                             sprintf_f(rs->logs, "[DV] Warnning!!!waitCylen || pagerst != 0 and cswerr: 0x%.2x, %d : %d !!!\n", cswerr, waitCylen, pagerst); 
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            print_f(rs->plogs, "P13", rs->logs);
                                     
                                             csw[11] = 0;
                                             csw[12] = 0;
@@ -82664,7 +82702,7 @@ static int p13(struct procRes_s *rs)
                                     
                                         #if DBG_27_DV
                                         sprintf_f(rs->logs, "[DV] cmd: 0x%.2x usb TX size: %d \n====================\n", cmd, wrtsz);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        print_f(rs->plogs, "P13", rs->logs);
                                         #endif
                                     
                                         if (wrtsz > 0) {
@@ -82698,7 +82736,7 @@ static int p13(struct procRes_s *rs)
                             
                                 if (bret > 0) {
                                     //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
-                                    //print_f(rs->plogs, "P11", rs->logs); 
+                                    //print_f(rs->plogs, "P13", rs->logs); 
                             
                                     rawlen -= bret;
         
@@ -82745,7 +82783,7 @@ static int p13(struct procRes_s *rs)
         
                             if (bret > 0) {
                                 //sprintf_f(rs->logs, "[BMP] usb send %d ret: %d \n", blen, bret);
-                                //print_f(rs->plogs, "P11", rs->logs); 
+                                //print_f(rs->plogs, "P13", rs->logs); 
         
                                 rawlen -= bret;
                                 bmpbufc += bret;
@@ -82802,7 +82840,7 @@ static int p13(struct procRes_s *rs)
                 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, (uint32_t)addrd);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    print_f(rs->plogs, "P13", rs->logs);
                     #endif
         
                     #if 0 /* break and let others has cpu time */
@@ -82813,7 +82851,7 @@ static int p13(struct procRes_s *rs)
         
                     if ((errcnt & 0x1fff) == 0) {
                         //sprintf_f(rs->logs, "[DV] usb send ret: %d [addr: 0x%.8x]!!!\n", sendsz, addrd);
-                        //print_f(rs->plogs, "P11", rs->logs);
+                        //print_f(rs->plogs, "P13", rs->logs);
                         //usleep(50000);
                     }
                     errcnt ++;
@@ -82825,7 +82863,7 @@ static int p13(struct procRes_s *rs)
                 
                     #if DBG_27_DV
                     sprintf_f(rs->logs, "[DV] usb TX size: %d, ret: %d \n", lens, sendsz);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    print_f(rs->plogs, "P13", rs->logs);
                     #endif
         
                     acusz += sendsz;
@@ -82840,7 +82878,7 @@ static int p13(struct procRes_s *rs)
                             puscur->pushrmcnt += 1;
         
                             sprintf_f(rs->logs, "zebra usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x) lens: %d\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr, lens); 
-                            print_f(rs->plogs, "P11", rs->logs);    
+                            print_f(rs->plogs, "P13", rs->logs);    
         
                             break;
                         }
@@ -82862,10 +82900,10 @@ static int p13(struct procRes_s *rs)
         
                 tmCost = time_diff(&tstart, &tend, 1000);
                 sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), tmCost);
-                print_f(rs->plogs, "P11", rs->logs);
+                print_f(rs->plogs, "P13", rs->logs);
                 throughput = acusz*8.0 / tmCost*1.0;
                 sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, tmCost > 1000 ? tmCost / 1000 : 1, throughput);
-                print_f(rs->plogs, "P11", rs->logs);
+                print_f(rs->plogs, "P13", rs->logs);
         
                 maxCylcnt = cntTx;
                 cntTx = 0;
@@ -84482,113 +84520,10 @@ int main(int argc, char *argv[])
         dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
     }
 
-    #if 1
+    #if GHP_EN
     aspBMPdecodeAllocate(pmrs, 0);
     aspBMPdecodeAllocate(pmrs, 1);
     aspBMPdecodeAllocate(pmrs, 2);
-    #else
-    len = (2592 * 1864 * 15) / 100;
-
-    pdec = &pmrs->bmpDecMfour[0];
-
-    pdec->aspDecJpeg.aspDcData = (char *)aspSalloc(len);
-    if (pdec->aspDecJpeg.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 jpeg 01 succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pdec->aspDecJpeg.aspDcData, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for M4 jpeg 01 failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-    pdec->aspDecJpeg.aspDcMax = len;
-
-    len = 2592 * 1864;
-    pdec->aspDecRaw.aspDcData = (char *)aspSalloc(len);
-    if (pdec->aspDecRaw.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 raw 01 succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pdec->aspDecRaw.aspDcData, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for M4 raw 01 failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-    pdec->aspDecRaw.aspDcMax = len;
-    
-    len = 1024 * 100;
-    pdec->aspDecMfPiRaw_01.aspDcData = (char *)aspSalloc(len);
-    if (pdec->aspDecMfPiRaw_01.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pdec->aspDecMfPiRaw_01.aspDcData, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-    pdec->aspDecMfPiRaw_01.aspDcMax = len;
-
-    pdec->aspDecMfPiRaw_02.aspDcData = (char *)aspSalloc(len);
-    if (pdec->aspDecMfPiRaw_02.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 02 succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pdec->aspDecMfPiRaw_02.aspDcData, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 02 failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-    pdec->aspDecMfPiRaw_02.aspDcMax = len;
-
-    pdec->aspDecMfPiRaw_03.aspDcData = (char *)aspSalloc(len);
-    if (pdec->aspDecMfPiRaw_03.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 03 succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pdec->aspDecMfPiRaw_03.aspDcData, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 03 failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-    pdec->aspDecMfPiRaw_03.aspDcMax = len;
-
-    len = 1024 * 20;
-    pdec->aspDecMfPiJpg_01.aspDcData = (char *)aspSalloc(len);
-    if (pdec->aspDecMfPiJpg_01.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 01 succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pdec->aspDecMfPiJpg_01.aspDcData, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece raw 01 failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-    pdec->aspDecMfPiJpg_01.aspDcMax = len;
-
-    pdec->aspDecMfPiJpg_02.aspDcData = (char *)aspSalloc(len);
-    if (pdec->aspDecMfPiJpg_02.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 02 succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pdec->aspDecMfPiJpg_02.aspDcData, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 02 failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-    pdec->aspDecMfPiJpg_02.aspDcMax = len;
-
-    pdec->aspDecMfPiJpg_03.aspDcData = (char *)aspSalloc(len);
-    if (pdec->aspDecMfPiJpg_03.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 03 succeed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-        
-        memset(pdec->aspDecMfPiJpg_03.aspDcData, 0, len);
-    } else {
-        sprintf_f(pmrs->log, "allocate memory for M4 piece jpg 03 failed !! size: %d KB\n", len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
-    }
-    pdec->aspDecMfPiJpg_03.aspDcMax = len;
     #endif
     
     printSysinfo(&minfo);
@@ -84637,11 +84572,13 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipeup[12].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[13].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[14].rt, O_NONBLOCK);
+#if GHP_EN
     pipe2(pmrs->pipeup[15].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[16].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[17].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[18].rt, O_NONBLOCK);
-  
+#endif
+
     res_put_in(&rs[0], pmrs, 0);
     res_put_in(&rs[1], pmrs, 1);
     res_put_in(&rs[2], pmrs, 2);
@@ -84657,10 +84594,12 @@ int main(int argc, char *argv[])
     res_put_in(&rs[12], pmrs, 12);
     res_put_in(&rs[13], pmrs, 13);
     res_put_in(&rs[14], pmrs, 14);
+#if GHP_EN
     res_put_in(&rs[15], pmrs, 15);
     res_put_in(&rs[16], pmrs, 16);
     res_put_in(&rs[17], pmrs, 17);
     res_put_in(&rs[18], pmrs, 18);
+#endif
   
 //  Share memory init
     ring_buf_init(&pmrs->dataRx);
@@ -84760,6 +84699,7 @@ int main(int argc, char *argv[])
                                                 if (!pmrs->sid[11]) {
                                                     p11(&rs[12], &rs[13], &rs[14]);
                                                 } else {
+#if GHP_EN
                                                     len = strlen(argv[0]);
                                                     memset(argv[0], 0, len);
                                                     sprintf(argv[0], "m4");
@@ -84789,6 +84729,13 @@ int main(int argc, char *argv[])
                                                             }                                                    
                                                         }                                                    
                                                     }
+
+#else
+                                                    len = strlen(argv[0]);
+                                                    memset(argv[0], 0, len);
+                                                    sprintf(argv[0], "func");
+                                                    p0(pmrs);
+#endif
                                                 }
                                             }
                                         }
@@ -85189,9 +85136,11 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbheaderDuo = &mrs->bmpheaderDuo;
     rs->pbrotate = &mrs->bmpRotate;
 
+    #if GHP_EN
     rs->pbDecMfour[0] = &mrs->bmpDecMfour[0];
     rs->pbDecMfour[1] = &mrs->bmpDecMfour[1];
     rs->pbDecMfour[2] = &mrs->bmpDecMfour[2];
+    #endif
     
     rs->usbdvid = mrs->usbdv;
     rs->usvdvname = mrs->usbdvname;
