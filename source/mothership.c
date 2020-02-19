@@ -58,7 +58,6 @@ static char gitcommit[] = "2019-12-03 14:08:51 35139c7";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
-
 #define MSP_VERSION mver
 #define MSP_GIT gitcommit
 #define MSP_TIME buildtime
@@ -35945,33 +35944,33 @@ static int p11_end(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s
     return ret;
 }
 
-static int p12_init(struct procRes_s *rs, struct procRes_s *rsd)
+static int p12_init(struct procRes_s *rs)
 {
     int ret=0;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p12_end(struct procRes_s *rs)
+{
+    int ret=0;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p13_init(struct procRes_s *rs, struct procRes_s *rsd)
+{
+    int ret;
     ret = pn_init(rs);
     ret |= pn_init(rsd);
     return ret;
 }
 
-static int p12_end(struct procRes_s *rs, struct procRes_s *rsd)
+static int p13_end(struct procRes_s *rs, struct procRes_s *rsd)
 {
-    int ret=0;
+    int ret;
     ret = pn_end(rs);
     ret |= pn_end(rsd);
-    return ret;
-}
-
-static int p13_init(struct procRes_s *rs)
-{
-    int ret;
-    ret = pn_init(rs);
-    return ret;
-}
-
-static int p13_end(struct procRes_s *rs)
-{
-    int ret;
-    ret = pn_end(rs);
     return ret;
 }
 
@@ -52391,7 +52390,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define DBG_BKN_GATE (0)
+#define DBG_BKN_GATE (1)
 #define MAX_152_EVENT (16)
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -52578,34 +52577,41 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     
     pllfd[0].fd = uphstx[0];
+    //pllfd[0].fd = upjpgtx[0];
     pllfd[0].events = POLLIN;
     outfd[0] = updvtx[1];
     infd[0] = uphsrx[1];
+    //infd[0] = upjpgrx[1];
 
     pllfd[1].fd = updvrx[0];
     pllfd[1].events = POLLIN;
-    outfd[1] = uphsrx[1];
+    //outfd[1] = uphsrx[1];
+    outfd[1] = upjpgrx[1];
     infd[1] = updvtx[1];
     
     pllfd[2].fd = dnhstx[0];
+    //pllfd[2].fd = dnjpgtx[0];
     pllfd[2].events = POLLIN;
     outfd[2] = dndvtx[1];
     infd[2] = dnhsrx[1];
+    //infd[2] = dnjpgrx[1];
     
     pllfd[3].fd = dndvrx[0];
     pllfd[3].events = POLLIN;
-    outfd[3] = dnhsrx[1];
+    //outfd[3] = dnhsrx[1];
+    outfd[3] = dnjpgrx[1];
     infd[3] = dndvtx[1];
 
+    
     pllfd[14].fd = upjpgtx[0];
     pllfd[14].events = POLLIN;
     outfd[14] = updvtx[1];
-    infd[14] = dnhsrx[1];
+    infd[14] = upjpgrx[1];
     
     pllfd[15].fd = dnjpgtx[0];
     pllfd[15].events = POLLIN;
-    outfd[15] = dnhsrx[1];
-    infd[15] = dndvtx[1];
+    outfd[15] = dndvtx[1];
+    infd[15] = dnjpgrx[1];
     
     //mrs_ipc_get(struct mainRes_s * mrs, char * str, int size, int idx)
 
@@ -80669,7 +80675,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     return 0;
 }
 
-static int p12(struct procRes_s *rs, struct procRes_s *rsd)
+static int p12(struct procRes_s *rs)
 {
     char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
     char devstr[] = "/dev/rjob0";
@@ -80679,7 +80685,7 @@ static int p12(struct procRes_s *rs, struct procRes_s *rsd)
     sprintf_f(rs->logs, "p12\n");
     print_f(rs->plogs, "P12", rs->logs);
 
-    p12_init(rs, rsd);
+    p12_init(rs);
 
     prctl(PR_SET_NAME, "msp-p12");
 
@@ -80696,7 +80702,7 @@ static int p12(struct procRes_s *rs, struct procRes_s *rsd)
         }
     }
 
-    p12_end(rs, rsd);
+    p12_end(rs);
     
     return 0;
 }
@@ -80722,11 +80728,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog)
 }
 
 #define LOG_P13_EN (1)
-static int p13(struct procRes_s *rs)
+static int p13(struct procRes_s *rs, struct procRes_s *rsd)
 {
     char chq=0, chd=0, che=0, cindexfo[2], mindexfo[2], cinfo[12], cswerr=0, pagerst=2;
     char *addrd=0, *palloc=0, *endf=0, *endm=0, *ptrecv=0, *bmpbufc=0, *bmpbuff=0, *addrb=0;
-    char *bmpcpy=0, *pshfmeta=0, *jpgout=0, *bmpcolrtb=0, *ph=0, *exmtaout=0, *bmprot=0;
+    char *bmpcpy=0, *pshfmeta=0, *jpgout=0, *bmpcolrtb=0, *ph=0, *exmtaout=0, *bmprot=0, *metaPt=0;
     unsigned char *jpgrlt=0;
     int uimCylcnt=0, seqtx=0, maxsz=0, lens=0, pipRet=0, idlet=0, cindex=0, ix=0, waitCylen=0, chr=0, sendsz=0;
     int usbfd=0, ret=0, act=0, lastCylen=0, cmdprisec=0, bmplen=0, cpylen=0, distCylcnt=0, cntTx=0, lenbs=0, shfmeta=0;
@@ -80779,45 +80785,64 @@ static int p13(struct procRes_s *rs)
     pabuff = &rs->psFat->parBuf;
     bheader = rs->pbheader;
 
-    #if 0
     pct = rs->pcfgTable;
-    pmass = rs->pmetaMass;
     ptmetausb = rs->pmetausb;
     ptmetausbduo = rs->pmetausbduo;
-    ptmetain = rs->pmetain;
-    pmassduo = rs->pmetaMassduo;
-    ptmetainduo = rs->pmetainduo;
-    ptmetaout = rs->pmetaout;
-    iubs = &rs->pmch->ubs;
-    vubsBuff = &rs->pmch->mshmem[32];
-    iubsBuff = rs->pmch->mshmem;
-    vcswBuff = vubsBuff + 1024;
-    ucbwopc = (struct usbCBWopc_s *)iubsBuff;
-    ucbwpram = (struct usbCBWpram_s *)iubsBuff;
-    ucbwfile = (struct usbCBWfile_s *)iubsBuff;
     
+    sprintf_f(rs->logs, "p13\n");
+    print_f(rs->plogs, "P13", rs->logs);
+
+    p13_init(rs, rsd);
+
+    prctl(PR_SET_NAME, "msp-p13");
+
+    pushost = rs->pusbhost;
+    pushostd = rsd->pusbhost;
+    
+    metaPt = pushost->puhsmeta;
+    metaRx = (struct aspMetaData_s *)metaPt;
+
+    pipeRx = pushost->pjpgrx;
+    pipeTx = pushost->pjpgtx;
+
+    pipeRxd = pushostd->pjpgrx;
+    pipeTxd = pushostd->pjpgtx;
+
     ptfdc[0].fd = pipeRx[0];
     ptfdc[0].events = POLLIN;
 
     ptfdc[1].fd = pipeRxd[0];
     ptfdc[1].events = POLLIN;
-    #endif
-    sprintf_f(rs->logs, "p13\n");
-    print_f(rs->plogs, "P13", rs->logs);
 
-    p13_init(rs);
+    cmd = 0x12;
+    opc = 0x0f;
 
-    prctl(PR_SET_NAME, "msp-p13");
-
+    puscur = pushost;
+    pinfcur = pinfushost;
+    usbCur = puscur->pushring;
+    piptx = puscur->pushtx;
+    piprx = puscur->pushrx; 
     while (1) {
         if (cmd) { /* usbentsTx == 1*/
+
+            sprintf_f(rs->logs, "[DV] cmd: 0x%.2x \n", cmd);
+            print_f(rs->plogs, "P13", rs->logs);
+            usleep(100000);
+            
             while (1) {       
                 #if 0//DBG_27_DV
-                sprintf_f(rs->logs, "[DV] addrd: 0x%.8x cylcnt: %d:%d pipe%d\n", addrd, uimCylcnt, datCylcnt, piprx[0]);
+                sprintf_f(rs->logs, "[DV] addrd: 0x%.8x cylcnt: %d pipe%d\n", addrd, uimCylcnt, piprx[0]);
                 print_f(rs->plogs, "P13", rs->logs);
                 #endif
-                
+
+                sprintf_f(rs->logs, "[DV] addrd: 0x%.8x \n", (uint32_t)addrd);
+                print_f(rs->plogs, "P13", rs->logs);
+
                 while (addrd == 0) {
+
+                    sprintf_f(rs->logs, "[DV] uimCylcnt: %d \n", uimCylcnt);
+                    print_f(rs->plogs, "P13", rs->logs);
+
                     //chr = 0;
                     while (1) {
                         if (uimCylcnt > 0) {
@@ -80875,11 +80900,9 @@ static int p13(struct procRes_s *rs)
         
                             if (puimGet) {
                                 if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e) || (opc == 0x0f))) {
-        
                                     sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex, puimGet->uimCount);
                                     print_f(rs->plogs, "P13", rs->logs);
         
-                                    //if (idlet > 60000) {
                                     if (idlet > 60000) {
                                         clock_gettime(CLOCK_REALTIME, &tidleS);
         
@@ -80978,14 +81001,14 @@ static int p13(struct procRes_s *rs)
                                                 puscur = pushost;
                                                 pinfcur = pinfushost;
                                                 usbCur = puscur->pushring;
-                                                piptx = puscur->pushtx;
-                                                piprx = puscur->pushrx; 
+                                                piptx = puscur->pjpgtx;
+                                                piprx = puscur->pjpgrx; 
                                             } else {
                                                 puscur = pushostd;
                                                 pinfcur = pinfushostd;
                                                 usbCur = puscur->pushring;
-                                                piptx = puscur->pushtx;
-                                                piprx = puscur->pushrx; 
+                                                piptx = puscur->pjpgtx;
+                                                piprx = puscur->pjpgrx; 
                                             }
                                         } else {
                                             sprintf_f(rs->logs, "[DV] puimGet is null timeout break\n");
@@ -81264,8 +81287,8 @@ static int p13(struct procRes_s *rs)
                                 puscur = pushost;
                                 pinfcur = pinfushost;
                                 usbCur = puscur->pushring;
-                                piptx = puscur->pushtx;
-                                piprx = puscur->pushrx; 
+                                piptx = puscur->pjpgtx;
+                                piprx = puscur->pjpgrx; 
                             } else {
                                 #if LOG_P13_EN
                                 sprintf_f(rs->logs, "[DV]  secondary 0x%.8x \n", cindex);
@@ -81275,8 +81298,8 @@ static int p13(struct procRes_s *rs)
                                 puscur = pushostd;
                                 pinfcur = pinfushostd;
                                 usbCur = puscur->pushring;
-                                piptx = puscur->pushtx;
-                                piprx = puscur->pushrx; 
+                                piptx = puscur->pjpgtx;
+                                piprx = puscur->pjpgrx; 
                             }
                             
                             if (!puimCnTH) {
@@ -81390,8 +81413,8 @@ static int p13(struct procRes_s *rs)
                                         puscur = pushost;
                                         pinfcur = pinfushost;
                                         usbCur = puscur->pushring;
-                                        piptx = puscur->pushtx;
-                                        piprx = puscur->pushrx; 
+                                        piptx = puscur->pjpgtx;
+                                        piprx = puscur->pjpgrx; 
                                     } else {
         
                                         sprintf_f(rs->logs, "[DV]  new puimGet secondary 0x%.8x \n", puimGet->uimIdex);
@@ -81400,8 +81423,8 @@ static int p13(struct procRes_s *rs)
                                         puscur = pushostd;
                                         pinfcur = pinfushostd;
                                         usbCur = puscur->pushring;
-                                        piptx = puscur->pushtx;
-                                        piprx = puscur->pushrx; 
+                                        piptx = puscur->pjpgtx;
+                                        piprx = puscur->pjpgrx; 
                                     }
                                     
                                     if (!chr) {
@@ -81547,8 +81570,8 @@ static int p13(struct procRes_s *rs)
                                     puscur = pushost;
                                     pinfcur = pinfushost;
                                     usbCur = puscur->pushring;
-                                    piptx = puscur->pushtx;
-                                    piprx = puscur->pushrx; 
+                                    piptx = puscur->pjpgtx;
+                                    piprx = puscur->pjpgrx; 
                                 } else {
                                     #if LOG_P13_EN
                                     sprintf_f(rs->logs, "[DV]  secondary 0x80 0x%.8x \n", cindex);
@@ -81558,8 +81581,8 @@ static int p13(struct procRes_s *rs)
                                     puscur = pushostd;
                                     pinfcur = pinfushostd;
                                     usbCur = puscur->pushring;
-                                    piptx = puscur->pushtx;
-                                    piprx = puscur->pushrx; 
+                                    piptx = puscur->pjpgtx;
+                                    piprx = puscur->pjpgrx; 
                                 }
                                 
                                 if ((puimGet->uimIdex & 0x3ff) == (cindex & 0x3ff)) {
@@ -81673,8 +81696,8 @@ static int p13(struct procRes_s *rs)
                                     puscur = pushost;
                                     pinfcur = pinfushost;
                                     usbCur = puscur->pushring;
-                                    piptx = puscur->pushtx;
-                                    piprx = puscur->pushrx; 
+                                    piptx = puscur->pjpgtx;
+                                    piprx = puscur->pjpgrx; 
                                     break;
                                 case 2:
                                     #if LOG_P13_EN
@@ -81685,8 +81708,8 @@ static int p13(struct procRes_s *rs)
                                     puscur = pushostd;
                                     pinfcur = pinfushostd;
                                     usbCur = puscur->pushring;
-                                    piptx = puscur->pushtx;
-                                    piprx = puscur->pushrx; 
+                                    piptx = puscur->pjpgtx;
+                                    piprx = puscur->pjpgrx; 
                                     break;
                                 default:
                                     sprintf_f(rs->logs, "[DV]  error!!! unknown cmdprisec: %d, at 0x7f index: 0x%.8x \n", cmdprisec, cindex);
@@ -81896,8 +81919,8 @@ static int p13(struct procRes_s *rs)
                                                 puscur = pushost;
                                                 pinfcur = pinfushost;
                                                 usbCur = puscur->pushring;
-                                                piptx = puscur->pushtx;
-                                                piprx = puscur->pushrx; 
+                                                piptx = puscur->pjpgtx;
+                                                piprx = puscur->pjpgrx; 
                                             } else {
                                                 #if LOG_P13_EN
                                                 sprintf_f(rs->logs, "[DV] idle secondary 0x80 0x%.8x \n", puimGet->uimIdex);
@@ -81907,8 +81930,8 @@ static int p13(struct procRes_s *rs)
                                                 puscur = pushostd;
                                                 pinfcur = pinfushostd;
                                                 usbCur = puscur->pushring;
-                                                piptx = puscur->pushtx;
-                                                piprx = puscur->pushrx; 
+                                                piptx = puscur->pjpgtx;
+                                                piprx = puscur->pjpgrx; 
                                             }
                                         } else {
                                             #if LOG_P13_EN
@@ -82915,7 +82938,7 @@ static int p13(struct procRes_s *rs)
         }
     }
 
-    p13_end(rs);
+    p13_end(rs, rsd);
 
     return 0;
 }
@@ -84449,8 +84472,8 @@ int main(int argc, char *argv[])
     pushostd->pushtx = spipeTxd;
     pushostd->pgattx = sgateDnTx;
     pushostd->pgatrx = sgateDnRx;
-    pushost->pjpgrx = pipeJpgRxd;
-    pushost->pjpgtx = pipeJpgTxd;
+    pushostd->pjpgrx = pipeJpgRxd;
+    pushostd->pjpgtx = pipeJpgTxd;
     pushostd->pushvaddrtb = tbl1;
     pushostd->ushid = 1;
 
@@ -84705,14 +84728,14 @@ int main(int argc, char *argv[])
                                                     sprintf(argv[0], "m4");
                                                     pmrs->sid[12] = fork();
                                                     if (!pmrs->sid[12]) {
-                                                        p12(&rs[15], &rs[16]);
+                                                        p12(&rs[15]);
                                                     } else {
                                                         len = strlen(argv[0]);
                                                         memset(argv[0], 0, len);
                                                         sprintf(argv[0], "jpghost0");
                                                         pmrs->sid[13] = fork();
                                                         if (!pmrs->sid[13]) {
-                                                            p13(&rs[17]);
+                                                            p13(&rs[16], &rs[17]);
                                                         } else {
                                                             len = strlen(argv[0]);
                                                             memset(argv[0], 0, len);
@@ -85145,11 +85168,11 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->usbdvid = mrs->usbdv;
     rs->usvdvname = mrs->usbdvname;
 
-    if ((idx == 10) || (idx == 12)) { 
+    if ((idx == 10) || (idx == 12) || (idx == 16)) { 
         rs->pusbhost = mrs->usbhost[0];
         rs->pusbmh[0] = mrs->usbmh[0];
         rs->pusbmh[1] = mrs->usbmh[1];
-    } else if ((idx == 11) || (idx == 13)) {
+    } else if ((idx == 11) || (idx == 13) || (idx == 17)) {
         rs->pusbhost = mrs->usbhost[1];
         rs->pusbmh[0] = mrs->usbmh[0];
         rs->pusbmh[1] = mrs->usbmh[1];
