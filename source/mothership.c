@@ -2934,6 +2934,20 @@ static int aspBMPdecodeBuffSetStatus(struct bitmapDecodeMfour_s *pdec, int statu
     return 0;
 }
 
+static int aspBMPdecodeBuffGetIdx(struct bitmapDecodeMfour_s *pdec, int *pmdex)
+{
+    int imgdex=0;
+    
+    if (!pdec) return -1;
+    if (!pmdex) return -2;
+
+    imgdex = (pdec->aspDecStatus >> 16) & 0xffff;
+    
+    *pmdex = imgdex;
+    
+    return 0;
+}
+
 static int aspBMPdecodeBuffSetIdx(struct bitmapDecodeMfour_s *pdec, int imgdex)
 {
     if (!pdec) return -1;
@@ -80870,7 +80884,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     int udist=0, uthrhld=0, upas=0, ursm=0, upasd=0, ursmd=0, udistd=0, lrst=0, opsz=0, rawlen=0, val=0, bmph=0, bhlen=0;
     int colr=0, tmp=0, bmpw=0, bdpi=0, jpgetW=0, jpgetH=0, err=0, tmCost=0, blen=0, bdpp=0, prisec=0, cutcnt=0, cutnum=0;
     int mreal[2]={0}, recvsz=0, sides[2]={0}, rotlen=0, jpgLen=0, updn=0, rotlast=0, cntsent=0, bret=0, wrtsz=0, retry=0;
-    int acusz=0, maxCylcnt=0, bdeg=0, errcnt=0, lastflag=0, buffidx=0, outmax=0;
+    int acusz=0, maxCylcnt=0, errcnt=0, lastflag=0, buffidx=0, outmax=0, imgdex=0;
     int *cutsides=0, *cutlayers=0;
     int *piptx=0, *piprx=0;
     int *pipeRx, *pipeRxd, *pipeTx, *pipeTxd;
@@ -80883,7 +80897,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     struct shmem_s *usbTx=0, *usbTxd=0, *usbCur=0;
     struct pollfd ptfdc[2];
     struct aspConfig_s *pct=0, *pdt=0;
-    struct aspMetaDataviaUSB_s *ptmetausb=0, *ptmetausbduo=0;
+    struct aspMetaDataviaUSB_s *ptmetausb=0;
     struct timespec jpgS, jpgE;
     struct aspMetaData_s *metaRx = 0;
     struct bitmapHeader_s *bheader = 0;
@@ -80919,7 +80933,6 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
     pct = rs->pcfgTable;
     ptmetausb = rs->pmetausb;
-    ptmetausbduo = rs->pmetausbduo;
     
     sprintf_f(rs->logs, "p13\n");
     print_f(rs->plogs, sp, rs->logs);
@@ -81713,7 +81726,19 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 sprintf_f(rs->logs, "[DV] get decode buff idex: %d \n", buffidx);
                                 print_f(rs->plogs, sp, rs->logs);
 
-                                
+                                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[buffidx], &imgdex);
+                                if (ret) {
+                                    sprintf_f(rs->logs, "[DV] check decode buff idex failed ret: %d \n", ret);
+                                    print_f(rs->plogs, sp, rs->logs);
+                                }
+
+                                if (imgdex != (puimGet->uimIdex & 0x3ff)) {
+                                    sprintf_f(rs->logs, "[DV] check decode buff imgdex: %d error!! should be %d \n", imgdex, puimGet->uimIdex & 0x3ff);
+                                    print_f(rs->plogs, sp, rs->logs);
+                                }
+
+                                sprintf_f(rs->logs, "[DV] check decode buff imgdex: %d (%d) \n", imgdex, puimGet->uimIdex & 0x3ff);
+                                print_f(rs->plogs, sp, rs->logs);
                                 
                                 sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
                                 print_f(rs->plogs, sp, rs->logs);
@@ -82565,18 +82590,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 //memcpy(bmpbuff, bmpcolrtb, bhlen);
                                 //shmem_dump(bmpbuff, bhlen);
                                 
-                                //bdeg = 1350;
-                                //bdeg = 900;
-                                //bdeg = 450;
                                 
                                 addrd = exmtaout;
-                                
-                                #if DUMP_JPG_ROT
-                                for (bdeg = 0; bdeg <= 360000; bdeg += 5000) {
-                                //bdeg = 180000;
-                                #else
-                                bdeg = 0;
-                                #endif
                                 
                                 //bdeg = -915;
                                 
@@ -82654,13 +82669,6 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 //bmpbufc = bmpbuff;
                                 rotlen = rotlen + lrst;
                                 
-                                #if DUMP_JPG_ROT
-                                fsmeta = find_save(ptfilepath, ptfileSavejpg);
-                                if (fsmeta) {
-                                    sprintf_f(rs->logs, "[DV] find save jpg [%s] succeed!!! \n", ptfilepath);
-                                    print_f(rs->plogs, sp, rs->logs);
-                                }
-                                #endif
                                 
                                 rotlast = rotlen % USB_BUF_SIZE;
                                 rawlen = rotlen - rotlast;
@@ -82683,7 +82691,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                     }
                                     */
                                 
-                                    #if 1//DUMP_JPG_ROT // test code
+                                    #if 1// test code
                                     bret = blen;
                                     #else
                                     bret = usbc_write(usbfd, bmpbufc, blen);
@@ -82704,12 +82712,6 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                         
                                         rawlen -= bret;
                                 
-                                        #if DUMP_JPG_ROT
-                                        wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
-                                        sprintf_f(rs->logs, "[DV] fwrite [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
-                                        print_f(rs->plogs, sp, rs->logs);
-                                        #endif
-                                
                                         bmpbufc += bret;
                                 
                                         if (rawlen > USB_BUF_SIZE) {
@@ -82724,7 +82726,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 blen = rotlast;
                                 while (blen) {
                                 
-                                    #if 1//DUMP_JPG_ROT test code
+                                    #if 1// test code
                                     bret = blen;
                                     #else
                                     bret = usbc_write(usbfd, bmpbufc, blen); 
@@ -82736,19 +82738,13 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                     if (bret > 0) {
                                         blen -= bret;
                                 
-                                        #if DUMP_JPG_ROT
-                                        wrtsz = fwrite((char*)bmpbufc, 1, bret, fsmeta);
-                                        sprintf_f(rs->logs, "[DV] fwrite [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
-                                        print_f(rs->plogs, sp, rs->logs);
-                                        #endif
-                                
                                         bmpbufc += bret;
                                     }
                                 }
                                 
                                 blen = lens;
                                 while (blen) {
-                                    #if 1//DUMP_JPG_ROT
+                                    #if 1// test code
                                     bret = blen;
                                     #else
                                     bret = usbc_write(usbfd, addrd, blen); 
@@ -82760,25 +82756,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                     if (bret > 0) {
                                         blen -= bret;
                                 
-                                        #if DUMP_JPG_ROT
-                                        wrtsz = fwrite((char*)addrd, 1, bret, fsmeta);
-                                        sprintf_f(rs->logs, "[DV] fwrite [%s] size: %d / %d !!! \n", ptfilepath, bret, wrtsz);
-                                        print_f(rs->plogs, sp, rs->logs);
-                                        #endif
-                                
                                         addrd += bret;
                                     }
                                 }
-                                
-                                #if DUMP_JPG_ROT
-                                fflush(fsmeta);
-                                fclose(fsmeta);
-                                sync();
-                                #endif
-                                
-                                #if DUMP_JPG_ROT
-                                }
-                                #endif
                                 
                                 #if CROP_TEST_EN
                                 
