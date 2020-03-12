@@ -1431,7 +1431,9 @@ struct bitmapDecodeItem_s {
 };
 
 struct bitmapDecodeMfour_s {
-    uint32_t aspDecStatus;
+    int         aspDecStatus;
+    int         aspDecPagerst;
+    int         aspDecImgidx;
     struct bitmapDecodeItem_s aspDecJpeg;
     struct bitmapDecodeItem_s aspDecMeta;
     struct bitmapDecodeItem_s aspDecMetaex;
@@ -2928,12 +2930,57 @@ static int aspBMPdecodeItemGet(struct bitmapDecodeItem_s *pditm, char **data, in
     return 0;
 }
 
+static int aspBMPdecodeBuffPagerstSet(struct bitmapDecodeMfour_s *pdec, int pagrst)
+{
+    if (!pdec) return -1;
+
+    pdec->aspDecPagerst = pagrst;
+
+    msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
+        
+    return 0;
+}
+
+static int aspBMPdecodeBuffPagerstGet(struct bitmapDecodeMfour_s *pdec, int *pparst)
+{
+    if (!pdec) return -1;
+    if (!pparst) return -2;
+
+    msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
+    
+    *pparst = pdec->aspDecPagerst;
+    
+    return 0;
+}
+
+static int aspBMPdecodeBuffSetIdx(struct bitmapDecodeMfour_s *pdec, int imgidx)
+{
+    if (!pdec) return -1;
+
+    pdec->aspDecImgidx = imgidx;
+
+    msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
+        
+    return 0;
+}
+
+static int aspBMPdecodeBuffGetIdx(struct bitmapDecodeMfour_s *pdec, int *pimgid)
+{
+    if (!pdec) return -1;
+    if (!pimgid) return -2;
+
+    msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
+    
+    *pimgid = pdec->aspDecImgidx;
+    
+    return 0;
+}
+
 static int aspBMPdecodeBuffStatusSet(struct bitmapDecodeMfour_s *pdec, int status)
 {
     if (!pdec) return -1;
 
-    pdec->aspDecStatus &= 0xffff0000;
-    pdec->aspDecStatus |= status & 0xffff;
+    pdec->aspDecStatus = status;
 
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
         
@@ -2942,41 +2989,12 @@ static int aspBMPdecodeBuffStatusSet(struct bitmapDecodeMfour_s *pdec, int statu
 
 static int aspBMPdecodeBuffStatusGet(struct bitmapDecodeMfour_s *pdec, int *pstat)
 {
-    uint32_t stat32=0;
     if (!pdec) return -1;
     if (!pstat) return -2;
 
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
     
-    stat32 = pdec->aspDecStatus;
-    *pstat = stat32 & 0x0000ffff;
-    
-    return 0;
-}
-
-static int aspBMPdecodeBuffSetIdx(struct bitmapDecodeMfour_s *pdec, int imgdex)
-{
-    if (!pdec) return -1;
-
-    pdec->aspDecStatus = imgdex << 16;
-
-    msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
-    
-    return 0;
-}
-
-static int aspBMPdecodeBuffGetIdx(struct bitmapDecodeMfour_s *pdec, int *pmdex)
-{
-    int imgdex=0;
-    
-    if (!pdec) return -1;
-    if (!pmdex) return -2;
-
-    msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
-    
-    imgdex = (pdec->aspDecStatus >> 16) & 0xffff;
-    
-    *pmdex = imgdex;
+    *pstat = pdec->aspDecStatus;
     
     return 0;
 }
@@ -2987,12 +3005,13 @@ static int aspBMPdecodeBuffItemFree(struct bitmapDecodeItem_s *pitm)
     return 0;
 }
 
-static int aspBMPdecodeBuffFree(struct bitmapDecodeMfour_s *pdec)
+static int aspBMPdecodeBuffInit(struct bitmapDecodeMfour_s *pdec)
 {  
     if (!pdec) return -1;
 
-    pdec->aspDecStatus = 0;
-    
+    pdec->aspDecStatus = -1;
+    pdec->aspDecPagerst = 0;
+    pdec->aspDecImgidx = -1;
     
     aspBMPdecodeItemSet(&pdec->aspDecJpeg, 0, 0, 0);
     aspBMPdecodeItemSet(&pdec->aspDecMeta, 0, 0, 0);
@@ -3026,9 +3045,9 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
         pdec = &pdcbuf[idx];
         msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
 
-        printf("[BIDX] search %d. 0x%.8x \n", idx, pdec->aspDecStatus);
+        printf("[BIDX] search %d. %d (0x%.8x) \n", idx, pdec->aspDecStatus, pdec->aspDecStatus);
         
-        if (pdec->aspDecStatus == 0) {
+        if (pdec->aspDecStatus == -1) {
             find = idx;
             break;
         }
@@ -3102,7 +3121,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     }
     pdec->aspDecRaw.aspDcMax = len;
     
-    len = 1024 * 100;
+    //len = 1024 * 100;
+    len = 2592 * 1864;
     for (ix=0; ix < 3; ix++) {
         pdec->aspDecMfPiRaw[ix].aspDcData = (char *)aspSalloc(len);
         if (pdec->aspDecMfPiRaw[ix].aspDcData) {
@@ -3117,7 +3137,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
         pdec->aspDecMfPiRaw[ix].aspDcMax = len;
     }
 
-    len = 1024 * 20;
+    //len = 1024 * 20;
+    len = 1024 * 1024;
     for (ix=0; ix < 3; ix++) {
         pdec->aspDecMfPiJpg[ix].aspDcData = (char *)aspSalloc(len);
         if (pdec->aspDecMfPiJpg[ix].aspDcData) {
@@ -6589,8 +6610,6 @@ static int aspMetaReleaseviaUsbdlBmpUpd(struct aspMetaDataviaUSB_s *pmetausb, in
     if (!pmetausb) {
         return -1;
     }
-    
-    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
 
     pmetausb->IMG_HIGH[0] = updh & 0xff;
     pmetausb->IMG_HIGH[1] = (updh >> 8) & 0xff;
@@ -6600,6 +6619,8 @@ static int aspMetaReleaseviaUsbdlBmpUpd(struct aspMetaDataviaUSB_s *pmetausb, in
 
     pmetausb->BKNote_Slice_idx = sid;
     pmetausb->BKNote_Block_idx = aid;
+
+    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
     
     return 0;
 }
@@ -11672,6 +11693,21 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     }
 
     if ((!ptreal[0]) && (!ptreal[1])) {
+
+        #if 0
+        ix = 0;
+
+        pmreal[0] = ptStart[ix][0];
+        pmreal[1] = ptStart[ix][1];
+
+        *pside = ix + 1;                
+
+        sprintf_f(rs->logs, "tag search failed real: (%d, %d) side: %d !!\n", pmreal[0], pmreal[1], *pside);
+        print_f(rs->plogs, "RECT", rs->logs);       
+
+        return 0;
+        #endif
+    
         *pdeg = 0.0;
 
         sprintf_f(rs->logs, "tag search failed !!\n");
@@ -17632,6 +17668,1375 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
     return (rawCpy + dx * bitset + dy * rowsz);
 }
             
+
+#define LOG_ROTMF_DBG  (0)
+static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff, int *pside, int *pmreal, int *layers, int midx)
+{
+#define UNIT_DEG (1000.0)
+
+    struct sdParseBuff_s *pabuf=0;
+    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
+    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0;
+    int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
+    char ch;
+    struct bitmapHeader_s *bheader;
+    CFLOAT LU[2], RU[2], LD[2], RD[2];
+    CFLOAT LUn[2], RUn[2], LDn[2], RDn[2];
+    int LUt[2], RUt[2], LDt[2], RDt[2], drawCord[4], bmpScale[4], oldScale[4];
+    int sdot[2], ddot[2];
+    CFLOAT rangle[2], thacos=0, thasin=0, theta, piAngle = 180.0;
+    CFLOAT minH=0, minV=0, offsetH=0, offsetV=0;
+    int maxhint=0, maxvint=0, minhint=0, minvint=0, rowsize=0, rawszNew=0;
+    int bpp=0, ix=0, iy=0, dx=0, dy=0, outi[2], id=0, ixd=0, iyn=0, ixn=0, offsetCal=0;
+    CFLOAT ind[4], outd[2], fx=0, fy=0, tx=0, ty=0;
+    CFLOAT *tars, *tarc;
+    char gdat[3];
+    char *dst=0, *src=0;
+
+    int *crsAry, crsASize, expCAsize;
+    CFLOAT linLU[3], linRU[3], linLD[3], linRD[3], linPal[3], linCrs[3];
+    CFLOAT pLU[2], pRU[2], pLD[2], pRD[2], pal[2], par[2], pt[2];
+    CFLOAT plm[2], prm[2], plc[2], prc[2], pn[2];
+    CFLOAT maxhf=0, maxvf=0, minhf=0, minvf=0;
+    CFLOAT imgw=0.0, imgh=0.0, imgdeg=0.0;
+    int ublen=0, ubret=0, ubrst=0;
+    struct aspConfig_s *pct=0;
+    uint32_t val=0;
+    int cxm, cxn;
+    int deg=0;
+    struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0, *pRectroc=0;
+
+    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectroc = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx);
+    
+    pct = rs->pcfgTable;
+
+    pabuf = &rs->psFat->parBuf;
+    srcbuf = bmpsrc;
+
+    /* check header */
+    //shmem_dump(srcbuf, 512);
+
+    /* rotate */
+    bheader = rs->pbheader;
+    ph = &bheader->aspbmpMagic[2];
+    
+    #if LOG_ROTMF_DBG    
+    dbgBitmapHeader(bheader, len);
+    #endif
+    rawsz = bheader->aspbiRawSize;
+    oldWidth = bheader->aspbiWidth;
+    oldHeight = bheader->aspbiHeight;
+    bpp = bheader->aspbiCPP >> 16;
+    oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
+
+    rawCpy = srcbuf;
+        
+    imgw = (CFLOAT)bheader->aspbiWidth;
+    imgh = (CFLOAT)bheader->aspbiHeight;
+
+    ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
+    cxm = (val>>16)&0xffff;
+    cxn = val & 0xffff;
+
+    sprintf_f(rs->logs, "rot meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+    print_f(rs->plogs, "RMF", rs->logs);                     
+
+    LD[0] = (CFLOAT)cxm;
+    LD[1] = (CFLOAT)cxn;
+
+    ret = cfgTableGet(pct, ASPOP_USBCROP_FP02, &val);
+    cxm = (val>>16)&0xffff;
+    cxn = val & 0xffff;
+
+    sprintf_f(rs->logs, "rot meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+    print_f(rs->plogs, "RMF", rs->logs);                     
+
+    RD[0] = (CFLOAT)cxm;
+    RD[1] = (CFLOAT)cxn;
+
+    ret = cfgTableGet(pct, ASPOP_USBCROP_FP03, &val);
+    cxm = (val>>16)&0xffff;
+    cxn = val & 0xffff;
+
+    sprintf_f(rs->logs, "rot meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+    print_f(rs->plogs, "RMF", rs->logs);                     
+
+    RU[0] = (CFLOAT)cxm;
+    RU[1] = (CFLOAT)cxn;
+
+    ret = cfgTableGet(pct, ASPOP_USBCROP_FP04, &val);
+    cxm = (val>>16)&0xffff;
+    cxn = val & 0xffff;
+
+    sprintf_f(rs->logs, "rot meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+    print_f(rs->plogs, "RMF", rs->logs);                     
+
+    LU[0] = (CFLOAT)cxm;
+    LU[1] = (CFLOAT)cxn;    
+    
+    memcpy(pRectin->aspRectLU, LU, sizeof(CFLOAT)*2);
+    memcpy(pRectin->aspRectLD, LD, sizeof(CFLOAT)*2);
+    memcpy(pRectin->aspRectRD, RD, sizeof(CFLOAT)*2);
+    memcpy(pRectin->aspRectRU, RU, sizeof(CFLOAT)*2);
+
+    findRectOrient(pRectinR, pRectin);
+    
+    dbgprintRect(pRectin);
+    //dbgprintRect(pRectinR);
+            
+    ret = getRotRectPoint(rs, pRectinR, page, meta, midx, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp, pside, pmreal);
+    if (ret == 0) {
+        memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
+        memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
+        memcpy(RD, pRectROI->aspRectRD, sizeof(CFLOAT)*2);
+        memcpy(RU, pRectROI->aspRectRU, sizeof(CFLOAT)*2);
+    } else {
+        LU[0] = 0;
+        LU[1] = bheader->aspbiHeight-1;
+
+        RU[0] = bheader->aspbiWidth-1;
+        RU[1] = bheader->aspbiHeight-1;        
+
+        LD[0] = 0;
+        LD[1] = 0;
+
+        RD[0] = bheader->aspbiWidth-1;
+        RD[1] = 0;
+
+        err = ret;
+    }
+
+    #if LOG_ROTMF_DBG    
+    sprintf_f(rs->logs, "getRotRectPoint: LUn: %lf, %lf\n", LU[0], LU[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "getRotRectPoint: LDn: %lf, %lf \n", LD[0], LD[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "getRotRectPoint: RDn: %lf, %lf \n", RD[0], RD[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "getRotRectPoint: RUn: %lf, %lf \n", RU[0], RU[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "getRotRectPoint: degree: %.2lf \n", imgdeg);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+    
+    deg = (int)(imgdeg * UNIT_DEG);
+    deg = 0 - deg;
+
+    theta = (CFLOAT)deg;
+    theta = theta / UNIT_DEG;
+    
+    sprintf_f(rs->logs, "rotate angle = %lf \n", theta);
+    print_f(rs->plogs, "RMF", rs->logs);
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+    
+    calcuRotateCoordinates(LUt, LUn, LU, rangle);
+    calcuRotateCoordinates(RUt, RUn, RU, rangle);
+    calcuRotateCoordinates(LDt, LDn, LD, rangle);
+    calcuRotateCoordinates(RDt, RDn, RD, rangle);
+    
+    #if LOG_ROTMF_DBG
+    sprintf_f(rs->logs, "rotate: LU: %.2lf, %.2lf -> %3d, %3d\n", LU[0], LU[1], LUt[0], LUt[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "rotate: LD: %.2lf, %.2lf -> %3d, %3d \n", LD[0], LD[1], LDt[0], LDt[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "rotate: RD: %.2lf, %.2lf -> %3d, %3d \n", RD[0], RD[1], RDt[0], RDt[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "rotate: RU: %.2lf, %.2lf -> %3d, %3d \n", RU[0], RU[1], RUt[0], RUt[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+    
+    minH = aspMin(LUn[0], RUn[0]);
+    minH = aspMin(minH, LDn[0]);
+    minH = aspMin(minH, RDn[0]);
+
+    minV = aspMin(LUn[1], RUn[1]);
+    minV = aspMin(minV, LDn[1]);
+    minV = aspMin(minV, RDn[1]);
+
+    //sprintf_f(rs->logs, "minH: %lf, minV: %lf \n", minH, minV);
+    //print_f(rs->plogs, "RMF", rs->logs);
+
+    //minH = (minH > 0) ? (minH + 1):(minH-1);
+    //minV = (minV > 0) ? (minV + 1):(minV-1);
+    
+    offsetH = 0 - minH;
+    offsetV = 0 - minV;
+
+    LUn[0] += offsetH;
+    LUn[1] += offsetV;
+
+    RUn[0] += offsetH;
+    RUn[1] += offsetV;
+
+    LDn[0] += offsetH;
+    LDn[1] += offsetV;
+
+    RDn[0] += offsetH;
+    RDn[1] += offsetV;
+
+    LUt[0] = (int)round(LUn[0]);
+    LUt[1] = (int)round(LUn[1]);
+
+    RUt[0] = (int)round(RUn[0]);
+    RUt[1] = (int)round(RUn[1]);
+
+    LDt[0] = (int)round(LDn[0]);
+    LDt[1] = (int)round(LDn[1]);
+
+    RDt[0] = (int)round(RDn[0]);
+    RDt[1] = (int)round(RDn[1]);
+    
+    #if 0
+    sprintf_f(rs->logs, "bound: LUn: %lf, %lf -> %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "bound: RUn: %lf, %lf -> %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "bound: LDn: %lf, %lf -> %d, %d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "bound: RDn: %lf, %lf -> %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+    
+    maxhint= aspMaxInt(LUt[0], RUt[0]);
+    maxhint = aspMaxInt(maxhint, LDt[0]);
+    maxhint = aspMaxInt(maxhint, RDt[0]);
+
+    maxvint = aspMaxInt(LUt[1], RUt[1]);
+    maxvint = aspMaxInt(maxvint, LDt[1]);
+    maxvint = aspMaxInt(maxvint, RDt[1]);
+
+    minhint= aspMinInt(LUt[0], RUt[0]);
+    minhint = aspMinInt(minhint, LDt[0]);
+    minhint = aspMinInt(minhint, RDt[0]);
+
+    minvint = aspMinInt(LUt[1], RUt[1]);
+    minvint = aspMinInt(minvint, LDt[1]);
+    minvint = aspMinInt(minvint, RDt[1]);
+    
+    rowsize = ((bpp * (maxhint + 1) + 31) / 32) * 4;
+    rawszNew = rowsize * (maxvint + 1);
+
+    bheader->aspbhSize = bheader->aspbhRawoffset + rawszNew;
+    bheader->aspbiWidth = maxhint + 1;
+    bheader->aspbiHeight = maxvint + 1;
+    bheader->aspbiRawSize = rawszNew;
+
+    ubrst = 512 - (bheader->aspbhSize % 512);
+    
+    #if LOG_ROTMF_DBG    
+    sprintf_f(rs->logs, "allocate raw dest size: %d!!!\n", rawszNew);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+    
+    rawdest = rotbuff;//aspMemalloc(bheader->aspbhSize + 512 + ubrst, midx);
+    if (rawdest) {
+    
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "allocate raw dest size: %d succeed!!!\n", rawszNew);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+    } else {
+        sprintf_f(rs->logs, "allocate raw dest size: %d failed!!!\n", rawszNew);
+        print_f(rs->plogs, "RMF", rs->logs);
+        return -1;
+    }
+    
+    memcpy(rawdest, bmphd, hdlen);
+    memcpy(rawdest, ph, 54);
+    rawSrc = rawdest + bheader->aspbhRawoffset;
+
+    if (hdlen != bheader->aspbhRawoffset) {
+        sprintf_f(rs->logs, "Error!!! Rawoffset: %d not match head len: %d !!!\n", bheader->aspbhRawoffset, hdlen);
+        print_f(rs->plogs, "RMF", rs->logs);
+    }
+
+    pabuf->dirBuffUsed = bheader->aspbhSize + ubrst;
+    pabuf->dirParseBuff = rawdest;
+
+    #if LOG_ROTMF_DBG    
+    sprintf_f(rs->logs, "maxh: %d, minh: %d, maxv: %d, minv: %d \n", maxhint, minhint, maxvint, minvint);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+
+    pLU[0] = -1;
+    pLU[1] = -1;
+    pRU[0] = -1;
+    pRU[1] = -1;
+    pLD[0] = -1;
+    pLD[1] = -1;
+    pRD[0] = -1;
+    pRD[1] = -1;
+
+    if (minhint == LUt[0]) {
+    
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "LU =  %d, %d match minhint: %d !!!left - 0\n", LUt[0], LUt[1], minhint);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        if (minvint == LUt[1]) {
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "LU =  %d, %d match minvint: %d !!!left - 0\n", LUt[0], LUt[1], minvint);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+        
+            pLD[0] = LUn[0];
+            pLD[1] = LUn[1];
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+        } else {
+            if (maxvint == LUt[1]) {
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "LU =  %d, %d match maxvint: %d !!!left - 0\n", LUt[0], LUt[1], maxvint);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+
+                pLU[0] = LUn[0];
+                pLU[1] = LUn[1];
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+            }
+        }
+        
+        if ((maxvint == RUt[1]) && (pLU[1] == -1)) {
+            if ((minvint == LDt[1]) && (pLD[1] == -1)) {
+                if (RUt[0] >= LDt[0]) {
+                    pLU[0] = LUn[0];
+                    pLU[1] = LUn[1];
+
+                    pLD[0] = LDn[0];
+                    pLD[1] = LDn[1];
+                    
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                } else if (RUt[0] < LDt[0]) {
+                    pLU[0] = RUn[0];
+                    pLU[1] = RUn[1];
+
+                    pLD[0] = LUn[0];
+                    pLD[1] = LUn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!left - 1\n", LUt[0], LUt[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                }
+            } else {
+                sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!! left - 2\n", LUt[0], LUt[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+            }
+        }
+    }
+    
+    if (minhint == RUt[0]) {
+
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "RU =  %d, %d match minhint: %d !!!left - 0\n", RUt[0], RUt[1], minhint);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        if (minvint == RUt[1]) {
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "RU =  %d, %d match minvint: %d !!!left - 0\n", RUt[0], RUt[1], minvint);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+            
+            pLD[0] = RUn[0];
+            pLD[1] = RUn[1];
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+        } else {
+            if (maxvint == RUt[1]) {
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "RU =  %d, %d match maxvint: %d !!!left - 0\n", RUt[0], RUt[1], maxvint);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+                
+                pLU[0] = RUn[0];
+                pLU[1] = RUn[1];
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif               
+            }
+        }
+
+        if ((maxvint == RDt[1]) && (pLU[1] == -1)) {
+            if ((minvint == LUt[1]) && (pLD[1] == -1)) {
+                if (RDt[0] >= LUt[0]) {
+                    pLU[0] = RUn[0];
+                    pLU[1] = RUn[1];
+        
+                    pLD[0] = LUn[0];
+                    pLD[1] = LUn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                    
+                } else if (RDt[0] < LUt[0]) {
+                    pLU[0] = RDn[0];
+                    pLU[1] = RDn[1];
+        
+                    pLD[0] = RUn[0];
+                    pLD[1] = RUn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                    
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!left - 1\n", RUt[0], RUt[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                }
+            } else {
+                sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!left - 2\n", RUt[0], RUt[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+            }
+        }
+    }
+        
+    if (minhint == LDt[0]) {
+
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "LD =  %d, %d match minhint: %d !!!left - 0\n", LDt[0], LDt[1], minhint);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+        
+        if (minvint == LDt[1]) {
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "LD =  %d, %d match minvint: %d !!!left - 0\n", LDt[0], LDt[1], minvint);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+            pLD[0] = LDn[0];
+            pLD[1] = LDn[1];
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+        } else {
+            if (maxvint == LDt[1]) {
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "LD =  %d, %d match maxvint: %d !!!left - 0\n", LDt[0], LDt[1], maxvint);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+
+                pLU[0] = LDn[0];
+                pLU[1] = LDn[1];
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif                                
+            }
+        }
+
+        if ((maxvint == LUt[1]) && (pLU[1] == -1)) {
+            if ((minvint == RDt[1]) && (pLD[1] == -1)) {
+                if (LUt[0] >= RDt[0]) {
+                    pLU[0] = LDn[0];
+                    pLU[1] = LDn[1];
+        
+                    pLD[0] = RDn[0];
+                    pLD[1] = RDn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else if (LUt[0] < RDt[0]) {
+                    pLU[0] = LUn[0];
+                    pLU[1] = LUn[1];
+        
+                    pLD[0] = LDn[0];
+                    pLD[1] = LDn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!left - 1\n", LDt[0], LDt[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                }
+            } else {
+                sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!left - 2\n", LDt[0], LDt[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+            }
+        }
+    }
+        
+    if (minhint == RDt[0]) {
+
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "RD =  %d, %d match minhint: %d !!!left - 0\n", RDt[0], RDt[1], minhint);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        if (minvint == RDt[1]) {
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "RD =  %d, %d match minvint: %d !!!left - 0\n", RDt[0], RDt[1], minvint);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+            pLD[0] = RDn[0];
+            pLD[1] = RDn[1];                    
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+        } else {
+            if (maxvint == RDt[1]) {
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "RD =  %d, %d match maxvint: %d !!!left - 0\n", RDt[0], RDt[1], maxvint);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+
+                pLU[0] = RDn[0];
+                pLU[1] = RDn[1];
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+            }
+        }
+
+        if ((maxvint == LDt[1]) && (pLU[1] == -1)) {
+            if ((minvint == RUt[1]) && (pLD[1] == -1)) {
+                if (LDt[0] >= RUt[0]) {
+                    pLU[0] = RDn[0];
+                    pLU[1] = RDn[1];
+        
+                    pLD[0] = RUn[0];
+                    pLD[1] = RUn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else if (LDt[0] < RUt[0]) {
+                    pLU[0] = LDn[0];
+                    pLU[1] = LDn[1];
+        
+                    pLD[0] = RDn[0];
+                    pLD[1] = RDn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!left - 1\n", RDt[0], RDt[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                }
+            } else {
+                sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!left - 2\n", RDt[0], RDt[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+            }
+        }
+    }
+
+    if (maxhint == LUt[0]) {
+
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "LU =  %d, %d match maxhint: %d !!!right - 0\n", LUt[0], LUt[1], maxhint);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        if (minvint == LUt[1]) {
+        
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "LU =  %d, %d match minvint: %d !!!right - 0\n", LUt[0], LUt[1], minvint);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+            pRD[0] = LUn[0];
+            pRD[1] = LUn[1];
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "set PRD = %lf, %lf\n", pRD[0], pRD[1]);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+        } else {
+            if (maxvint == LUt[1]) {
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "LU =  %d, %d match maxvint: %d !!!right - 0\n", LUt[0], LUt[1], maxvint);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+
+                pRU[0] = LUn[0];
+                pRU[1] = LUn[1];
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+            }
+        }
+        
+        if ((maxvint == LDt[1]) && (pRU[1] == -1)) {
+            if ((minvint == RUt[1]) && (pRD[1] == -1)) {
+                if (RUt[0] <= LDt[0]) {
+                    pRU[0] = LDn[0];
+                    pRU[1] = LDn[1];
+
+                    pRD[0] = LUn[0];
+                    pRD[1] = LUn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                
+                } else if (RUt[0] > LDt[0]) {
+                    pRU[0] = LUn[0];
+                    pRU[1] = LUn[1];
+
+                    pRD[0] = RUn[0];
+                    pRD[1] = RUn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                    
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!right - 1\n", LUt[0], LUt[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                }
+            } else {
+                sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!right - 2\n", LUt[0], LUt[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+            }
+        }
+    }
+    
+    if (maxhint == RUt[0]) {
+    
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "RU =  %d, %d match maxhint: %d !!!right - 0\n", RUt[0], RUt[1], maxhint);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        if (minvint == RUt[1]) {
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "RU =  %d, %d match minvint: %d !!!right - 0\n", RUt[0], RUt[1], minvint);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+            pRD[0] = RUn[0];
+            pRD[1] = RUn[1];
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "set PRD = %lf, %lf\n", pRD[0], pRD[1]);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+        } else {
+            if (maxvint == RUt[1]) {
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "RU =  %d, %d match maxvint: %d !!!right - 0\n", RUt[0], RUt[1], maxvint);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+
+                pRU[0] = RUn[0];
+                pRU[1] = RUn[1];
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+            }
+        }
+        
+        if ((maxvint == LUt[1]) && (pRU[1] == -1)) {
+            if ((minvint == RDt[1]) && (pRD[1] == -1)) {
+                if (RDt[0] <= LUt[0]) {
+                    pRU[0] = LUn[0];
+                    pRU[1] = LUn[1];
+        
+                    pRD[0] = RUn[0];
+                    pRD[1] = RUn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else if (RDt[0] > LUt[0]) {
+                    pRU[0] = RUn[0];
+                    pRU[1] = RUn[1];
+        
+                    pRD[0] = RDn[0];
+                    pRD[1] = RDn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!right - 1\n", RUt[0], RUt[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                }
+            } else {
+                sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!right - 2\n", RUt[0], RUt[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+            }
+        }
+    }
+        
+    if (maxhint == LDt[0]) {
+
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "LD =  %d, %d match maxhint: %d !!!right - 0\n", LDt[0], LDt[1], maxhint);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        if (minvint == LDt[1]) {
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "LD =  %d, %d match minvint: %d !!!right - 0\n", LDt[0], LDt[1], minvint);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+            pRD[0] = LDn[0];
+            pRD[1] = LDn[1];                  
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "set PRD = %lf, %lf\n", pRD[0], pRD[1]);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+        } else {
+            if (maxvint == LDt[1]) {
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "LD =  %d, %d match maxvint: %d !!!right - 0\n", LDt[0], LDt[1], maxvint);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+
+                pRU[0] = LDn[0];
+                pRU[1] = LDn[1];
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+            }
+        }
+
+        if ((maxvint == RDt[1]) && (pRU[1] == -1)) {
+            if ((minvint == LUt[1]) && (pRD[1] == -1)) {
+                if (LUt[0] <= RDt[0]) {
+                    pRU[0] = RDn[0];
+                    pRU[1] = RDn[1];
+        
+                    pRD[0] = LDn[0];
+                    pRD[1] = LDn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else if (LUt[0] > RDt[0]) {
+                    pRU[0] = LDn[0];
+                    pRU[1] = LDn[1];
+        
+                    pRD[0] = LUn[0];
+                    pRD[1] = LUn[1];
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!right - 1\n", LDt[0], LDt[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                }
+            } else {
+                sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!right - 2\n", LDt[0], LDt[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+            }
+        }
+    }
+            
+    if (maxhint == RDt[0]) {
+
+        #if LOG_ROTMF_DBG    
+        sprintf_f(rs->logs, "RD =  %d, %d match maxhint: %d !!!right - 0\n", RDt[0], RDt[1], maxhint);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        if (minvint == RDt[1]) {
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "RD =  %d, %d match minvint: %d !!!right - 0\n", RDt[0], RDt[1], minvint);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+            pRD[0] = RDn[0];
+            pRD[1] = RDn[1];                    
+
+            #if LOG_ROTMF_DBG    
+            sprintf_f(rs->logs, "set PRD = %lf, %lf\n", pRD[0], pRD[1]);
+            print_f(rs->plogs, "RMF", rs->logs);
+            #endif
+
+        } else {
+            if (maxvint == RDt[1]) {
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "RD =  %d, %d match maxvint: %d !!!right - 0\n", RDt[0], RDt[1], maxvint);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+
+                pRU[0] = RDn[0];
+                pRU[1] = RDn[1];
+
+                #if LOG_ROTMF_DBG    
+                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+                #endif
+            }
+        }
+        
+        if ((maxvint == RUt[1]) && (pRU[1] == -1)) {
+            if ((minvint == LDt[1]) && (pRD[1] == -1)) {
+                if (LDt[0] <= RUt[0]) {
+                    pRU[0] = RUn[0];
+                    pRU[1] = RUn[1];
+        
+                    pRD[0] = RDn[0];
+                    pRD[1] = RDn[1];
+                    
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else if (LDt[0] > RUt[0]) {
+                    pRU[0] = RDn[0];
+                    pRU[1] = RDn[1];
+        
+                    pRD[0] = LDn[0];
+                    pRD[1] = LDn[1];
+                    
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+
+                    #if LOG_ROTMF_DBG    
+                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                    #endif
+                } else {
+                    sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 1\n", RDt[0], RDt[1]);
+                    print_f(rs->plogs, "RMF", rs->logs);
+                }
+            }
+            else {
+                sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 2\n", RDt[0], RDt[1]);
+                print_f(rs->plogs, "RMF", rs->logs);
+            }
+        }
+    }
+
+    LUt[0] = (int)round(pLU[0]*100000);
+    LUt[1] = (int)round(pLU[1]*100000);
+
+    RUt[0] = (int)round(pRU[0]*100000);
+    RUt[1] = (int)round(pRU[1]*100000);
+
+    LDt[0] = (int)round(pLD[0]*100000);
+    LDt[1] = (int)round(pLD[1]*100000);
+
+    RDt[0] = (int)round(pRD[0]*100000);
+    RDt[1] = (int)round(pRD[1]*100000);
+
+    pLU[0] = (double)LUt[0];
+    pLU[1] = (double)LUt[1];
+    pRU[0] = (double)RUt[0];
+    pRU[1] = (double)RUt[1];
+    pLD[0] = (double)LDt[0];
+    pLD[1] = (double)LDt[1];
+    pRD[0] = (double)RDt[0];
+    pRD[1] = (double)RDt[1];
+
+    pLU[0] = pLU[0]/100000.0;
+    pLU[1] = pLU[1]/100000.0;
+    pRU[0] = pRU[0]/100000.0;
+    pRU[1] = pRU[1]/100000.0;
+    pLD[0] = pLD[0]/100000.0;
+    pLD[1] = pLD[1]/100000.0;
+    pRD[0] = pRD[0]/100000.0;
+    pRD[1] = pRD[1]/100000.0; 
+    
+    #if LOG_ROTMF_DBG
+    sprintf_f(rs->logs, "align: PLU: %lf, %lf \n", pLU[0], pLU[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "align: PRU: %lf, %lf \n", pRU[0], pRU[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "align: PLD: %lf, %lf \n", pLD[0], pLD[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    sprintf_f(rs->logs, "align: PRD: %lf, %lf \n", pRD[0], pRD[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+
+    if (pLU[1] > pRU[1]) {
+        #if LOG_ROTMF_DBG
+        sprintf_f(rs->logs, "PLU[1]: %lf  > PRU[1]: %lf \n", pLU[1], pRU[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        getVectorFromP(linLU, pLD, pLU);
+        getVectorFromP(linLD, pLD, pRD);
+        getVectorFromP(linRD, pRD, pRU);
+        getVectorFromP(linRU, pRU, pLU);
+
+        #if LOG_ROTMF_DBG
+        sprintf_f(rs->logs, "lineLU:(%lf, %lf, %lf) = pLU:(%lf, %lf) <-> pLD:(%lf, %lf)  \n", linLU[0], linLU[1], linLU[2], pLU[0], pLU[1], pLD[0], pLD[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        
+        sprintf_f(rs->logs, "linLD:(%lf, %lf, %lf) = pLD:(%lf, %lf) <-> pRD:(%lf, %lf)  \n", linLD[0], linLD[1], linLD[2], pLD[0], pLD[1], pRD[0], pRD[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+
+        sprintf_f(rs->logs, "linRD:(%lf, %lf, %lf) = pRD:(%lf, %lf) <-> pRU:(%lf, %lf)  \n", linRD[0], linRD[1], linRD[2], pRD[0], pRD[1], pRU[0], pRU[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        
+        sprintf_f(rs->logs, "linRU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linRU[0], linRU[1], linRU[2], pRU[0], pRU[1], pLU[0], pLU[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        plm[0] = pLD[0];
+        plm[1] = pLD[1];
+        
+        prm[0] = pRU[0];
+        prm[1] = pRU[1];
+    }
+    else {
+        #if LOG_ROTMF_DBG
+        sprintf_f(rs->logs, "PLU[1]: %lf  <= PRU[1]: %lf \n", pLU[1], pRU[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        getVectorFromP(linLU, pRU, pLU);
+        getVectorFromP(linLD, pLU, pLD);
+        getVectorFromP(linRD, pLD, pRD);
+        getVectorFromP(linRU, pRD, pRU);
+
+        #if LOG_ROTMF_DBG
+        sprintf_f(rs->logs, "lineLU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linLU[0], linLU[1], linLU[2], pRU[0], pRU[1], pLU[0], pLU[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        
+        sprintf_f(rs->logs, "linLD:(%lf, %lf, %lf) = pLU:(%lf, %lf) <-> pLD:(%lf, %lf)  \n", linLD[0], linLD[1], linLD[2], pLU[0], pLU[1], pLD[0], pLD[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+
+        sprintf_f(rs->logs, "linRD:(%lf, %lf, %lf) = pLD:(%lf, %lf) <-> pRD:(%lf, %lf)  \n", linRD[0], linRD[1], linRD[2], pLD[0], pLD[1], pRD[0], pRD[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        
+        sprintf_f(rs->logs, "linRU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linRU[0], linRU[1], linRU[2], pRD[0], pRD[1], pRU[0], pRU[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+        
+        plm[0] = pLU[0];
+        plm[1] = pLU[1];
+        
+        prm[0] = pRD[0];
+        prm[1] = pRD[1];
+    }
+    
+    #if LOG_ROTMF_DBG
+    ret = getCross(linLD, linLU, plc);
+    sprintf_f(rs->logs, "test linLD cross linLU.  left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
+    print_f(rs->plogs, "RMF", rs->logs);
+            
+    ret = getCross(linRD, linRU, prc);
+    sprintf_f(rs->logs, "test linRD cross linRU.  right %lf, %lf ret: %d \n", prc[0], prc[1], ret);
+    print_f(rs->plogs, "RMF", rs->logs);
+
+    ret = getCross(linRU, linLU, pt);
+    sprintf_f(rs->logs, "test linRU cross linLU.  top %lf, %lf ret: %d \n", pt[0], pt[1], ret);
+    print_f(rs->plogs, "RMF", rs->logs);
+
+    ret= getCross(linRD, linLD, pn);
+    sprintf_f(rs->logs, "test linRD cross linLD.  down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+
+    pal[0] = 100;
+    pal[1] = 100;
+
+    par[0] = 100;
+    par[1] = 1000;
+    getVectorFromP(linPal, par, pal);        
+
+    #if LOG_ROTMF_DBG
+    sprintf_f(rs->logs, "linPal:(%lf, %lf, %lf) = par:(%lf, %lf) <-> pal:(%lf, %lf)  \n", linPal[0], linPal[1], linPal[2], par[0], par[1], pal[0], pal[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+
+    expCAsize = maxvint-minvint+1;
+    len = 3*sizeof(int);
+    //crsAry = aspMemalloc(expCAsize*len);
+    crsAry = aspMemalloc(expCAsize*len, midx);
+    #if 0
+    crsAry = (int *)rs->pbrotate->aspRotCrossAry;
+    crsASize = rs->pbrotate->aspRotCASize /len;
+    if (expCAsize > crsASize) {
+        expCAsize = crsASize;
+    }
+    #endif
+
+    pt[0] = 200.0;
+    for (iy=minvint, ix=0; ix < expCAsize; iy++, ix++) {
+        pt[1] = (CFLOAT)iy;
+        getRectVectorFromV(linCrs, pt, linPal);
+
+        #if 0//LOG_ROTMF_DBG
+        sprintf_f(rs->logs, "linCrs:(%lf, %lf, %lf) = pt:(%lf, %lf)  \n", linCrs[0], linCrs[1], linCrs[2], pt[0], pt[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+        #endif
+
+        //getCross(linCrs, linPal, pn);
+        //sprintf_f(rs->logs, "pn: %.4lf, %.4lf \n", pn[0], pn[1]);
+        //print_f(rs->plogs, "RMF", rs->logs);
+
+        if (pt[1] > plm[1]) {
+            getCross(linCrs, linLU, plc);
+        } else {
+            getCross(linCrs, linLD, plc);
+        }
+
+        //sprintf_f(rs->logs, "%.4lf %.4lf, left cross (%.4lf, %.4lf) \n", pt[1], plm[1], plc[0], plc[1]);
+        //print_f(rs->plogs, "RMF", rs->logs);
+
+        if (pt[1] > prm[1]) {
+            getCross(linCrs, linRU, prc);
+        } else {
+            getCross(linCrs, linRD, prc);
+        }
+
+        //sprintf_f(rs->logs, "%.4lf %.4lf, right cross (%.4lf, %.4lf) \n", pt[1], prm[1], prc[0], prc[1]);
+        //print_f(rs->plogs, "RMF", rs->logs);
+        
+        crsAry[ix*3+0] = iy;
+        crsAry[ix*3+1] = (int)round(plc[0]);
+        crsAry[ix*3+2] = (int)round(prc[0]);
+    }
+
+    /*
+    for (ix=0; ix < (maxvint-minvint+1); ix++) {
+        sprintf_f(rs->logs, "%d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
+        print_f(rs->plogs, "RMF", rs->logs);
+    }
+    */
+    
+    #if LOG_ROTMF_DBG    
+    sprintf_f(rs->logs, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d, sizeof crsArry: %d\n", maxhint, maxvint, rowsize, rawszNew, totsz, expCAsize);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+
+    //memset(rawSrc, 0, rawszNew);
+    
+    /* retate raw data */
+    //memset(rawSrc, 0xff, rawszNew);
+    oldScale[0] = oldRowsz;
+    oldScale[1] = oldHeight;
+    oldScale[2] = rawsz;
+    oldScale[3] = bpp;        
+
+    bmpScale[0] = rowsize;
+    bmpScale[1] = maxvint;        
+    bmpScale[2] = rawszNew;
+    bmpScale[3] = bpp;
+
+    rawTmp = rawSrc;
+    memset(rawTmp, 0xff, rawszNew);
+    
+    /* reverse to fill the rotate image */
+    
+    theta = (CFLOAT) (360*UNIT_DEG - deg);
+    theta = theta / UNIT_DEG;
+    
+    #if LOG_ROTMF_DBG    
+    sprintf_f(rs->logs, "reverse rotate angle = %lf \n", theta);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+
+    ix = (int)round(0 - offsetH);
+    iy = (int)round(0 - offsetV);
+    
+    if (maxhint > maxvint) {
+        oldTot = (int)round(maxhint - offsetH + 1);
+    } else {
+        oldTot = (int)round(maxvint - offsetV + 1);
+    }
+
+    if (ix < iy) {
+        id = ix - 1;
+    } else {
+        id = iy - 1;
+    }
+
+    offsetCal = 0 - id;
+    len = oldTot - id;
+
+    #if 0 
+    tars = aspMemalloc(sizeof(CFLOAT) * len);
+    tarc = aspMemalloc(sizeof(CFLOAT) * len);
+
+    sprintf_f(rs->logs, "pre-calculating buffer size: %d, max: %d, min: %d, offset: %d, tars: 0x%.8x, tarc: 0x%.8x\n", len, oldTot, id, offsetCal, tars, tarc);
+    print_f(rs->plogs, "RMF", rs->logs);
+    
+    
+    for (ix = id, iy = 0; iy < len; ix++, iy++) {
+
+        fx = (CFLOAT)ix;
+        tars[iy] = fx * thasin;
+        tarc[iy] = fx * thacos;
+
+        sprintf_f(rs->logs, "pre-calculate fx: %lf, sin: %lf, cos: %lf \n", fx, tars[iy], tarc[iy]);
+        print_f(rs->plogs, "RMF", rs->logs);
+
+    }
+    #endif
+
+    #if 0
+    fx = LUn[0] - offsetH;
+    fy = LUn[1] - offsetV;
+    dx = (int) round(fx*thacos - fy*thasin);
+    dy = (int) round(fx*thasin + fy*thacos);
+    sprintf_f(rs->logs, "LU back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", LUt[0], fx, LUt[1], fy,  dx, dy, offsetH, offsetV);
+    print_f(rs->plogs, "RMF", rs->logs);
+    
+    fx = RUn[0] - offsetH;
+    fy = RUn[1] - offsetV;
+    dx = (int) round(fx*thacos - fy*thasin);
+    dy = (int) round(fx*thasin + fy*thacos);
+    sprintf_f(rs->logs, "RU back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", RUt[0], fx, RUt[1], fy,  dx, dy, offsetH, offsetV);
+    print_f(rs->plogs, "RMF", rs->logs);
+
+    fx = RDn[0] - offsetH;
+    fy = RDn[1] - offsetV;
+    dx = (int) round(fx*thacos - fy*thasin);
+    dy = (int) round(fx*thasin + fy*thacos);
+    sprintf_f(rs->logs, "RD back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", RDt[0], fx, RDt[1], fy,  dx, dy, offsetH, offsetV);
+    print_f(rs->plogs, "RMF", rs->logs);
+
+    fx = LDn[0] - offsetH;
+    fy = LDn[1] - offsetV;
+    dx = (int) round(fx*thacos - fy*thasin);
+    dy = (int) round(fx*thasin + fy*thacos);
+    sprintf_f(rs->logs, "LD back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", LDt[0], fx, LDt[1], fy,  dx, dy, offsetH, offsetV);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+
+    lstsz = 0;
+    totsz = bheader->aspbhSize;
+    //ring_buf_init(&mrs->cmdRx);
+
+    msync(crsAry, expCAsize*3*4, MS_SYNC);
+    
+    cnt = 0;
+    for (id=0; id < expCAsize; id++) {
+        iy = crsAry[id*3+0];
+        ix = crsAry[id*3+1];
+        ixd = crsAry[id*3+2]; 
+
+        //fx = (CFLOAT)ix;
+        fy = (CFLOAT)iy;
+        
+        //fx -= offsetH;
+        fy -= offsetV;
+
+        //dx = (int) round(fx*thacos - fy*thasin);
+        //dy = (int) round(fx*thasin + fy*thacos);
+
+        //sprintf_f(rs->logs, "back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", ix, fx, iy, fy,  dx, dy, offsetH, offsetV);
+        //print_f(rs->plogs, "RMF", rs->logs);
+
+        //iyn = (int)round(fy);
+        //iyn += offsetCal;
+        
+        for (;ix <= ixd; ix++) {       
+
+            fx = (CFLOAT)ix;
+
+            fx -= offsetH;
+
+            //ixn = (int)round(fx);
+            //ixn += offsetCal;
+
+            //dx = (int) round(tarc[ixn] - tars[iyn]);
+            //dy = (int) round(tars[ixn] + tarc[iyn]);
+
+            dx = (int) round(fx*thacos - fy*thasin);
+            dy = (int) round(fx*thasin + fy*thacos);
+
+            cnt++;
+
+            if ((dx < 0) || (dy < 0) || (dx >= oldWidth) || (dy >= oldHeight)) {
+                //sprintf(rs->logs, "%d. %d, %d => %d, %d (%d, %d)\n",id, ix, iy,  dx, dy, oldWidth, oldHeight);
+                //print_f(rs->plogs, "RMF", rs->logs);
+                continue;
+            }
+
+            bitset = bpp / 8;
+            //src = rawCpy + (dx*bitset + dy*oldRowsz);
+            src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
+            //dst = rawTmp + (ix*bitset + iy*rowsize);
+            dst = getPixel(rawTmp, ix, iy, rowsize, bitset);
+
+            //sprintf(rs->logs, "%d. %d, %d => %d, %d (0x%.2x)\n",id, ix, iy,  dx, dy, (unsigned int)(*src));
+            //print_f(rs->plogs, "RMF", rs->logs);
+            
+            cnt = 0;
+            while (bitset > 0) {
+                *dst = *src;
+                //gdat[cnt] = *src;
+
+                bitset --;
+                cnt++;
+                src++;
+                dst++;
+
+                if (cnt > 2) break;
+            }
+        }
+    }
+
+    msync(rawdest, totsz, MS_SYNC);
+
+    #if LOG_ROTMF_DBG
+    dbgBitmapHeader(bheader, len);
+    #endif
+    return err; 
+}
 
 #define LOG_ROT_DBG  (0)
 static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff, int *pside, int *pmreal, int *layers, int midx)
@@ -51585,6 +52990,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             ring_buf_init(ringbf[ins+1]);
                             //ring_buf_init(&mrs->cmdTx);
                             ring_buf_init(&mrs->dataRx);
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[0]);
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[1]);
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[2]);
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[3]);
                         }
                         else if (pllcmd[ins] == 'b') {
                             write(outfd[ins], &pllcmd[ins], 1);
@@ -53799,8 +55208,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         } else {
                                             minfo[10] = (char)(bidx & 0x7f); // 8 // 9
                                         }
-
-                                        ret = aspBMPdecodeBuffSetIdx(&mrs->bmpDecMfour[bidx], mindex);
+                                        
+                                        ret = aspBMPdecodeBuffStatusSet(&mrs->bmpDecMfour[bidx], 0);
+                                        ret |= aspBMPdecodeBuffSetIdx(&mrs->bmpDecMfour[bidx], mindex);
                                         sprintf_f(mrs->log, "[GW] decode bmp buff %d set id: %d ret: %d \n", bidx, mindex, ret);
                                         print_f(mrs->plog, "fs152", mrs->log);
                                         
@@ -54044,6 +55454,11 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             ring_buf_init(ringbf[ins+1]);
                             //ring_buf_init(&mrs->cmdTx);
                             ring_buf_init(&mrs->dataRx);
+
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[0]);
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[1]);
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[2]);
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[3]);
                         }
                         else if (pllcmd[ins] == 'b') {
                             write(outfd[ins], &pllcmd[ins], 1);
@@ -71325,6 +72740,7 @@ static int p10(struct procRes_s *rs)
 #define OP_WRITE_FILE (0x0b)
 #define DUMP_JPG_ROT (0)
 #define CROP_TEST_EN (1)
+#define SCAN_BNOTE_EN (1)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -74193,7 +75609,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = 0;
                                     pinfcur = 0;
 
-                                    #if 1 // test code
+                                    #if SCAN_BNOTE_EN // test code
                                     if (strcmp(msgcmd, "usbbknote") != 0) {
                                         sprintf(msgcmd, "usbbknote");
                                         rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
@@ -75510,7 +76926,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             else 
             #endif
             
-            #if 1 // test code
+            #if 1//SCAN_BNOTE_EN // test code
             if ((cmd == 0x12) && (opc == 0x0f)) { /* usbentsTx == 1*/
                 //addrd = 0;
                 while (addrd == 0) {
@@ -75569,14 +76985,15 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                             if ((mbufidx >= 0) && (mbufidx < 4)) {
                                 pmbf = rs->pbDecMfour[mbufidx];
-                                ret = aspBMPdecodeBuffStatusGet(pmbf, &mbstats);
+                                ret = aspBMPdecodeBuffPagerstGet(pmbf, &val);
+                                ret |= aspBMPdecodeBuffStatusGet(pmbf, &mbstats);
                                 if (ret) {
                                     sprintf_f(rs->logs, "[DV] Error!!! buff index == %d get status wrong == 0x%.8x wrong addr: 0x%.8x\n", mbufidx, mbstats, (uint32_t)pmbf);
                                     print_f(rs->plogs, "P11", rs->logs);
                                 } else {
                     
-                                    cswerr = mbstats & 0xff;
-                                    pagerst = (mbstats >> 8) & 0xff;
+                                    cswerr = mbstats;
+                                    pagerst = val;
                     
                                     sprintf_f(rs->logs, "[DV] get csw err and page rest: 0x%.2x, %d \n", cswerr, pagerst);
                                     print_f(rs->plogs, "P11", rs->logs);
@@ -75628,7 +77045,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
 
                 rlen = lens % 512;
-
+                msync(addrd, lens, MS_SYNC);
+                
                 sprintf_f(rs->logs, "[DV] the meta size: %d dump: \n", rlen);
                 print_f(rs->plogs, "P11", rs->logs);
                 shmem_dump(addrd+(lens-rlen), rlen);
@@ -75638,8 +77056,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] WARNING!!! the image size is multiplex of trunk size  !!!size: %d - 1 \n", lens);
                     print_f(rs->plogs, "P11", rs->logs);
                 }
-
-                msync(addrd, lens, MS_SYNC);
 
                 cntTx = 0;
                 errcnt = 0;
@@ -75712,7 +77128,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                 if (lens == 0) {
                     if ((mbufidx >= 0) && (mbufidx < 4) && (pmbf)) {
-                        aspBMPdecodeBuffFree(pmbf);
+                        aspBMPdecodeBuffInit(pmbf);
                     
                         sprintf_f(rs->logs, "[DV] free the buff index: %d \n", mbufidx);
                         print_f(rs->plogs, "P11", rs->logs);
@@ -75791,9 +77207,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
             } 
             else if (((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e))) || (pid == 0)) { /* usbentsTx == 1*/
-            #else
+            #else //SCAN_BNOTE_EN
             if (((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e) || (opc == 0x0f))) || (pid == 0)) { /* usbentsTx == 1*/
-            #endif
+            #endif //SCAN_BNOTE_EN
 
 
                 //ch = 'A';
@@ -77747,7 +79163,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     sprintf_f(rs->logs, "[CUT] get page ret: %d \n", ret);
                                     print_f(rs->plogs, "P11", rs->logs);
 
-                                    #if 0
+                                    #if 1
                                     cutsides[ret*2] = -1;
                                     cutsides[ret*2+1] = -1;
                                     cutlayers[ret*2] = 0;
@@ -81441,11 +82857,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             print_f(rs->plogs, sp, rs->logs);
             #endif
 
-            sprintf_f(rs->logs, "[DV] addrd: 0x%.8x \n", (uint32_t)addrd);
-            print_f(rs->plogs, sp, rs->logs);
-
-            while (addrd == 0) {
-
+            while (1) {
+                aspMemClear(aspMemAsign, asptotMalloc, midx);
+        
                 sprintf_f(rs->logs, "[DV] uimCylcnt: %d \n", uimCylcnt);
                 print_f(rs->plogs, sp, rs->logs);
 
@@ -82787,468 +84201,216 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 if (che == 'E') break;
             }
         
-            if (cntTx == 1) {
-                clock_gettime(CLOCK_REALTIME, &tstart);
-            }    
-        
-            //sprintf_f(rs->logs, "meta lens: %d, sendsz: %d - 1\n", lens, sendsz); 
-            //print_f(rs->plogs, sp, rs->logs);
+            rawlen = cpylen - lens;
             
-            if ((lens < USB_BUF_SIZE) && (che != 'E') && (sendsz == 0)) {
-                #if JPG_FFD9_CUT /* find 0xcffd9 in jpg */
-                ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
-                if (ret) {
-                    fformat = 0;
-                }
-                
-                lrst = lens % 512;
-                opsz = lens - lrst;
-                lrst = opsz - JPG_FFD9_RANGE;
-                
-                if ((fformat == 0) || (fformat == FILE_FORMAT_JPG) || (fformat == FILE_FORMAT_PDF)) {
-                
-                    /* search the offset of 0xffd9 */
-                    ret = findEOF(addrd + lrst, JPG_FFD9_RANGE);
-                    if (ret > 0) {
-                        memset(addrd + lrst + ret + 2, 0xff, JPG_FFD9_RANGE - ret - 2);
-                    } else {
-                        sprintf_f(rs->logs, "[DV] warnning!!! USB file format: 0x%x, ret: %d can't find ffd9\n", fformat, ret);
-                        print_f(rs->plogs, sp, rs->logs);    
-                    }
-                
-                    sprintf_f(rs->logs, "[DV] JPG_FFD9_CUT USB fformat: 0x%x, len: %d ret: %d, range: %d\n", fformat, lens, ret, JPG_FFD9_RANGE);
-                    print_f(rs->plogs, sp, rs->logs);    
-                }
-                #endif
-            }
+            sprintf_f(rs->logs, "[BMP] cpylen: %d, rawlen: %d, lastlen: %d, metaex len: %d \n", cpylen, rawlen, lastCylen, lens);
+            print_f(rs->plogs, sp, rs->logs); 
         
-            #if GHP_EN_JPGH
-            if (bmpbufc) {
-                if (che == 'E') {
+            bmpbufc = bmpbuff;
+        
+            act = aspMetaReleaseviaUsbdlBmp(0, rs, addrd, lens);
+        
+            val=0;
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
+            print_f(rs->plogs, sp, rs->logs);
+            bmph = val;
+        
+            bhlen = 0;
+            
+            if (act || (bmph == 0)) {
+                sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d \n", act);
+                print_f(rs->plogs, sp, rs->logs); 
+            } else {
+                sprintf_f(rs->logs, "[BMP] pop usb meta succeed!! \n");
+                print_f(rs->plogs, sp, rs->logs); 
+        
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
+                switch (val) {
+                case COLOR_MODE_COLOR:
+                    colr = 24;
+                    break;
+                case COLOR_MODE_GRAY:
+                case COLOR_MODE_GRAY_DETAIL:
+                case COLOR_MODE_BLACKWHITE:
+                    colr = 8;
+                    break;
+                default:
+                    colr = 24;
+                    break;
+                }
+                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                print_f(rs->plogs, sp, rs->logs);
+        
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+        
+                ret |= cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                tmp = val << 8 | tmp;
+                sprintf_f(rs->logs, "[BMP] width high: %d, ret:%d\n", tmp, ret);
+                print_f(rs->plogs, sp, rs->logs);
+        
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+                bmpw = scanWidthConvert(tmp, val);
+                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                print_f(rs->plogs, sp, rs->logs);
+        
+                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                switch (tmp) {
+                case RESOLUTION_1200:
+                    bdpi = 1200;
+                    break;
+                case RESOLUTION_600:
+                    bdpi = 600;
+                    break;
+                case RESOLUTION_300:
+                    bdpi = 300;
+                    break;
+                case RESOLUTION_200:
+                    bdpi = 200;
+                    break;
+                case RESOLUTION_150:
+                    bdpi = 150;
+                    break;
+                default:
+                    bdpi = 300;
+                    break;
+                }
+                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                print_f(rs->plogs, sp, rs->logs);
 
-                    rawlen = cpylen - lens;
+                aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, bmph, rawlen);
+                
+                jpgout = 0;
+        
+                if (fformat == FILE_FORMAT_JPG) {
+                    tmp = ((bmpw * colr + 31) / 32) * 4;
+                    tmp = tmp * bmph;
+                    //jpgout = aspMemalloc(tmp, midx);
+                    if (buffidx >= 0) {
+                        ret = aspBMPdecodeItemGet(&rs->pbDecMfour[buffidx]->aspDecRaw, &jpgout, 0);
+                        if (ret < 0) {
+                            jpgout = 0;
+                            outmax = 0;
+                        } else {
+                            outmax = aspBMPdecodeItemMax(&rs->pbDecMfour[buffidx]->aspDecRaw);
+                        }
+                        
+                        sprintf_f(rs->logs, "[BMP] pre allocate aspDecRaw buffer: 0x%.8x max: %dKB req: %dKB ret: %d \n", (uint32_t)jpgout, outmax/1000, tmp/1000, ret);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
                     
-                    sprintf_f(rs->logs, "[BMP] cpylen: %d, rawlen: %d, lastlen: %d, metaex len: %d \n", cpylen, rawlen, lastCylen, lens);
-                    print_f(rs->plogs, sp, rs->logs); 
+                    if (jpgout) {
+                        sprintf_f(rs->logs, "[BMP] to get memory for jpeg decode out, size: %d succeed!!!\n", tmp);
+                        print_f(rs->plogs, sp, rs->logs);
+                    } else {
+                        sprintf_f(rs->logs, "[BMP] to get memory for jpeg decode out, size: %d failed!!!\n", tmp);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
         
-                    bmpbufc = bmpbuff;
+                    changeJpgLen(bmpbuff, bmph, bmplen);
+                    
+                    clock_gettime(CLOCK_REALTIME, &jpgS);
+                    
+                    err = jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr);
+                    
+                    clock_gettime(CLOCK_REALTIME, &jpgE);
         
-                    act = aspMetaReleaseviaUsbdlBmp(0, rs, addrd, lens);
-        
-                    val=0;
-                    ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
-                    sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
+                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                                                
+                    sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d ms\n", err, jpgetW, jpgetH, tmCost);
                     print_f(rs->plogs, sp, rs->logs);
-                    bmph = val;
-        
-                    bhlen = 0;
-                    
-                    if (act || (bmph == 0)) {
-                        sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d \n", act);
-                        print_f(rs->plogs, sp, rs->logs); 
-                    } else {
-                        sprintf_f(rs->logs, "[BMP] pop usb meta succeed!! \n");
-                        print_f(rs->plogs, sp, rs->logs); 
-        
-                        ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
-                        switch (val) {
-                        case COLOR_MODE_COLOR:
-                            colr = 24;
-                            break;
-                        case COLOR_MODE_GRAY:
-                        case COLOR_MODE_GRAY_DETAIL:
-                        case COLOR_MODE_BLACKWHITE:
-                            colr = 8;
-                            break;
-                        default:
-                            colr = 24;
-                            break;
-                        }
-                        sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                        print_f(rs->plogs, sp, rs->logs);
-        
-                        ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
-        
-                        ret |= cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
-                        tmp = val << 8 | tmp;
-                        sprintf_f(rs->logs, "[BMP] width high: %d, ret:%d\n", tmp, ret);
-                        print_f(rs->plogs, sp, rs->logs);
-        
-                        val = 0;
-                        ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
-                        bmpw = scanWidthConvert(tmp, val);
-                        sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
-                        print_f(rs->plogs, sp, rs->logs);
-        
-                        ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                        switch (tmp) {
-                        case RESOLUTION_1200:
-                            bdpi = 1200;
-                            break;
-                        case RESOLUTION_600:
-                            bdpi = 600;
-                            break;
-                        case RESOLUTION_300:
-                            bdpi = 300;
-                            break;
-                        case RESOLUTION_200:
-                            bdpi = 200;
-                            break;
-                        case RESOLUTION_150:
-                            bdpi = 150;
-                            break;
-                        default:
-                            bdpi = 300;
-                            break;
-                        }
-                        sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
-                        print_f(rs->plogs, sp, rs->logs);
+                
+                    bmpw = jpgetW;
+                    bmph = jpgetH;
 
-                        aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, bmph, rawlen);
-                        
-                        jpgout = 0;
+                    aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, bmph, tmp);
+                }
         
-                        if (fformat == FILE_FORMAT_JPG) {
-                            tmp = ((bmpw * colr + 31) / 32) * 4;
-                            tmp = tmp * bmph;
-                            //jpgout = aspMemalloc(tmp, midx);
-                            if (buffidx >= 0) {
-                                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[buffidx]->aspDecRaw, &jpgout, 0);
-                                if (ret < 0) {
-                                    jpgout = 0;
-                                    outmax = 0;
-                                } else {
-                                    outmax = aspBMPdecodeItemMax(&rs->pbDecMfour[buffidx]->aspDecRaw);
-                                }
-                                
-                                sprintf_f(rs->logs, "[BMP] pre allocate aspDecRaw buffer: 0x%.8x max: %dKB req: %dKB ret: %d \n", (uint32_t)jpgout, outmax/1000, tmp/1000, ret);
-                                print_f(rs->plogs, sp, rs->logs);
-                            }
-                            
-                            if (jpgout) {
-                                sprintf_f(rs->logs, "[BMP] to get memory for jpeg decode out, size: %d succeed!!!\n", tmp);
-                                print_f(rs->plogs, sp, rs->logs);
-                            } else {
-                                sprintf_f(rs->logs, "[BMP] to get memory for jpeg decode out, size: %d failed!!!\n", tmp);
-                                print_f(rs->plogs, sp, rs->logs);
-                            }
+                bmpcolrtb = aspMemalloc(1078, midx);
+                if (!bmpcolrtb) {
+                    sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
+                    print_f(rs->plogs, sp, rs->logs);
+                }
         
-                            changeJpgLen(bmpbuff, bmph, bmplen);
-                            
-                            clock_gettime(CLOCK_REALTIME, &jpgS);
-                            
-                            err = jpeg2rgb(bmpbuff, bmplen, jpgout, tmp, &jpgetW, &jpgetH, colr);
-                            
-                            clock_gettime(CLOCK_REALTIME, &jpgE);
-        
-                            tmCost = time_diff(&jpgS, &jpgE, 1000000);
-                                                        
-                            sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d ms\n", err, jpgetW, jpgetH, tmCost);
-                            print_f(rs->plogs, sp, rs->logs);
-                        
-                            bmpw = jpgetW;
-                            bmph = jpgetH;
-
-                            aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, bmph, tmp);
-                        }
-        
-                        bmpcolrtb = aspMemalloc(1078, midx);
-                        if (!bmpcolrtb) {
-                            sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
-                            print_f(rs->plogs, sp, rs->logs);
-                        }
-        
-                        if (colr == 8) {
-                            blen = 1078;
-                            bdpp = 1;
-                        } else if (colr == 24) {
-                            blen = 54;            
-                            bdpp = 3;
-                        } else {
-                            sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
-                            print_f(rs->plogs, sp, rs->logs);   
-                        }
-                        
-                        bhlen = blen;
-                        val = ((bmpw * colr + 31) / 32) * 4;
-                        val = val * bmph;
-        
-                        sprintf_f(rs->logs, "[BMP] bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
-                        print_f(rs->plogs, sp, rs->logs);
-        
-                        bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
-        
-                        ph = &rs->pbheader->aspbmpMagic[2];
-                        val = sizeof(struct bitmapHeader_s) - 2;
-                        memcpy(bmpcolrtb, ph, val);
-        
-                        blen -= val;
-                        if (blen > 0) {
-                            bitmapColorTableSetup(bmpcolrtb+val);
-                            blen -= 1024;
-                        }
-        
-                        if (blen) {
-                            sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
-                            print_f(rs->plogs, sp, rs->logs);
-                        } 
-        
-                        //dbgBitmapHeader(bheader, val);
-                    }
-
-                    
-                    #if 1 //  1:pass to p15
-                    //if (bhlen) {
-
-                        mfourinfo[0] = 'd';
-
-                        if (buffidx == 0) {
-                            mfourinfo[1] = 0x80;
-                        } else {
-                            mfourinfo[1] = buffidx & 0x7f;
-                        }
-
-                        mbstat = 0;
-                        ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[buffidx], &mbstat);
-                        sprintf_f(rs->logs, "[BMP] bmp buff idx %d get status: 0x%.4x ret: %d \n", buffidx, mbstat, ret);
-                        print_f(rs->plogs, sp, rs->logs);
-
-                        //mbstat = (mbstat << 1) | 0x01;
-                        mbstat = pagerst;
-                        mbstat = (mbstat << 8) | cswerr;
-                        
-                        ret = aspBMPdecodeBuffStatusSet(rs->pbDecMfour[buffidx], mbstat);
-                        sprintf_f(rs->logs, "[BMP] bmp buff idx %d set status: 0x%.4x ret: %d \n", buffidx, mbstat, ret);
-                        print_f(rs->plogs, sp, rs->logs);
-
-                        mbstat = 0;
-                        imgdex = 0;
-                        ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[buffidx], &imgdex);
-                        ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[buffidx], &mbstat);
-                        sprintf_f(rs->logs, "[BMP] double check bmp buff idx %d, image index: %d, status: 0x%x ret: %d \n", buffidx, imgdex, mbstat, ret);
-                        print_f(rs->plogs, sp, rs->logs);
-                            
-                        rs_ipc_put(rs, mfourinfo, 2);
-                     //}
-                    #else
-                    #if 1 /* manually rotate the BMP */
-                    if (bhlen) {
-                        
-                        if (jpgout) {
-                            bmpbuff = jpgout;
-                        }
-       
-        
-                        blen = sqrt(bmpw*bmpw + bmph*bmph);
-                        val = ((blen * colr + 31) / 32) * 4;
-                        val = val * blen;
-                        
-                        bmprot = aspMemalloc(val, midx);
-                        if (!bmprot) {
-                            sprintf_f(rs->logs, "[BMP] Error!!! allocate rot buff size: %d failed!!! \n", val);
-                            print_f(rs->plogs, sp, rs->logs);
-                        } else {
-                            sprintf_f(rs->logs, "[BMP] allocate rot buff size: %d succeed!!! \n", val);
-                            print_f(rs->plogs, sp, rs->logs);
-                        }
-                        
-                        prisec = ptmetausb->PRI_O_SEC;
-                        if (prisec > 1) {
-                            sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
-                            print_f(rs->plogs, sp, rs->logs);
-        
-                            prisec = 0;
-                        }
-                        
-                        cutcnt =0;
-                        cutnum = msb2lsb16(&metaRx->BKNA_NUM);
-        
-                        cutsides = aspMemalloc(cutnum*sizeof(int)*2, midx);
-                        memset(cutsides, 0, cutnum*sizeof(int)*2);
-                        cutlayers = aspMemalloc(cutnum*sizeof(int)*2, midx);
-                        memset(cutlayers, 0, cutnum*sizeof(int)*2);
-                        ret = 0;
-                        
-                        ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
-                        sprintf_f(rs->logs, "[CUT] get page ret: %d \n", ret);
-                        print_f(rs->plogs, sp, rs->logs);
-        
-                        #if 0
-                        cutsides[ret*2] = -1;
-                        cutsides[ret*2+1] = -1;
-                        cutlayers[ret*2] = 0;
-                        cutlayers[ret*2+1] = 0;
-                        
-                        ret += 1;
-                        
-                        cutsides[ret*2] = -2;
-                        cutsides[ret*2+1] = -2;
-                        cutlayers[ret*2] = 0;
-                        cutlayers[ret*2+1] = 0;
-                        
-                        ret += 1;
-                        #endif
-        
-                        for (cutnum=0; cutnum < ret; cutnum++) {
-                            sprintf_f(rs->logs, "[CUT] %d. A:%d (%d) B:%d (%d)\n", cutnum, cutsides[cutnum*2], cutlayers[cutnum*2], cutsides[cutnum*2+1], cutlayers[cutnum*2+1]);
-                            print_f(rs->plogs, sp, rs->logs);
-                        }
-        
-                        mreal[0] = -1;
-                        mreal[1] = -1;
-                        
-                        while (cutcnt < cutnum) {
-                            
-                            memcpy(ph, bmpcolrtb, 54);
-                            
-                            sprintf_f(rs->logs, "[BMP] %d. pri or sec: %d up or down: %d (%d, %d) \n", cutcnt, prisec, sides[prisec], mreal[0], mreal[1]);
-                            print_f(rs->plogs, sp, rs->logs);
-                            
-                            clock_gettime(CLOCK_REALTIME, &jpgS);
-                            
-                            ret = rotateBMP(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot, &sides[prisec], mreal, &cutlayers[cutcnt*2], midx);
-
-                            clock_gettime(CLOCK_REALTIME, &jpgE);
-                            
-                            sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d \n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset);
-                            print_f(rs->plogs, sp, rs->logs);
-                            
-                            tmCost = time_diff(&jpgS, &jpgE, 1000000);
-                            sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", tmCost);
-                            print_f(rs->plogs, sp, rs->logs);
-                            
-                            bmpbufc = pabuff->dirParseBuff;   
-                            rotlen = pabuff->dirBuffUsed;
-                            
-                            if (fformat == FILE_FORMAT_JPG) {
-                                jpgrlt = pabuff->dirParseBuff;
-                                clock_gettime(CLOCK_REALTIME, &jpgS);
-                                err = rgb2jpg(pabuff->dirParseBuff + bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
-                                clock_gettime(CLOCK_REALTIME, &jpgE);
-                                if (err) {
-                                    sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
-                                    print_f(rs->plogs, sp, rs->logs);
-                                }
-                            
-                                tmCost = time_diff(&jpgS, &jpgE, 1000000);
-                                sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
-                                print_f(rs->plogs, sp, rs->logs);
-                                
-                                rotlen = 512 - (jpgLen % 512);
-                                rotlen = rotlen + jpgLen;
-                                bmpbufc = jpgrlt;
-                            }
-        
-                            if (sides[prisec] > 0) {
-                                updn = (sides[prisec] - 1) % 2;
-                            } else {
-                                updn = 0;
-                            }
-                            sprintf_f(rs->logs, "[BMP] updn: %d, side: %d cutcnt: %d\n", updn, sides[prisec], cutcnt);
-                            print_f(rs->plogs, sp, rs->logs);
-                            
-                            aspMetaReleaseviaUsbdlBmpUpd(rs->pmetausb, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1);
-                            sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
-                            print_f(rs->plogs, sp, rs->logs);
-                            
-                            lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
-                            lrst= lastCylen % 512;
-                            
-                            bmpcpy = bmpbufc + rotlen;
-                            memcpy(bmpcpy, ptmetausb, lrst);
-                            
-                            //shmem_dump(bmpbufc+rotlen-512, 1024);
-                            dbgMetaUsb(ptmetausb);
-                            
-                            sprintf_f(rs->logs, "[BMP] usb meta size check, lstlen: %d : sizeof: %d  \n", lrst, lenbs);
-                            print_f(rs->plogs, sp, rs->logs);
-                            
-                            //bmpbufc = bmpbuff;
-                            rotlen = rotlen + lrst;
-                            
-                            
-                            rotlast = rotlen % USB_BUF_SIZE;
-                            rawlen = rotlen - rotlast;
-                            
-                            msync(bmpbufc, rotlen, MS_SYNC);
-
-                            
-                            //rawlen = rotlen;
-                            
-                            if (rawlen > USB_BUF_SIZE) {
-                                blen = USB_BUF_SIZE;
-                            } else {
-                                blen = rawlen;
-                            }
-                            cntsent = 0;
-                            while (rawlen) {                                    
-                            }
-                            
-                            
-                            blen = rotlast;
-                            while (blen) {
-
-                            }
-                            
-                            blen = lens;
-                            while (blen) {
-
-                            }
-
-                            cutcnt++;
-                            
-                        }
-                        
-                    }
-                    #endif
-                    #endif // #if 0
+                if (colr == 8) {
+                    blen = 1078;
+                    bdpp = 1;
+                } else if (colr == 24) {
+                    blen = 54;            
+                    bdpp = 3;
+                } else {
+                    sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
+                    print_f(rs->plogs, sp, rs->logs);   
                 }
                 
-                sendsz = lens;                            
+                bhlen = blen;
+                val = ((bmpw * colr + 31) / 32) * 4;
+                val = val * bmph;
+        
+                sprintf_f(rs->logs, "[BMP] bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
+                print_f(rs->plogs, sp, rs->logs);
+        
+                bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
+        
+                ph = &rs->pbheader->aspbmpMagic[2];
+                val = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(bmpcolrtb, ph, val);
+        
+                blen -= val;
+                if (blen > 0) {
+                    bitmapColorTableSetup(bmpcolrtb+val);
+                    blen -= 1024;
+                }
+        
+                if (blen) {
+                    sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
+                    print_f(rs->plogs, sp, rs->logs);
+                } 
+        
+                //dbgBitmapHeader(bheader, val);
             }
-            #endif //#if GHP_EN_JPGH
 
-            #if DBG_BK_DV
-            sprintf_f(rs->logs, "[DV] usb TX size: %d, ret: %d \n", lens, sendsz);
+            mfourinfo[0] = 'd';
+
+            if (buffidx == 0) {
+                mfourinfo[1] = 0x80;
+            } else {
+                mfourinfo[1] = buffidx & 0x7f;
+            }
+
+            mbstat = 0;
+            val = 0;
+            ret = aspBMPdecodeBuffPagerstGet(rs->pbDecMfour[buffidx], &val);
+            ret |= aspBMPdecodeBuffStatusGet(rs->pbDecMfour[buffidx], &mbstat);
+            sprintf_f(rs->logs, "[BMP] bmp buff idx %d get status: 0x%.4x pagerst: %d ret: %d \n", buffidx, mbstat, val, ret);
             print_f(rs->plogs, sp, rs->logs);
-            #endif
-        
-            acusz += sendsz;
-            
-            addrd = 0;
-            lens = 0;
 
-            if (che == 'E') {
-                puscur->pushrmcnt += 1;
-        
-                sprintf_f(rs->logs, "zebra usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x) lens: %d\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr, lens); 
-                print_f(rs->plogs, sp, rs->logs);    
-        
-                break;
-            }
+            //mbstat = (mbstat << 1) | 0x01;
+            val = pagerst;
+            mbstat = cswerr;
+
+            ret = aspBMPdecodeBuffPagerstSet(rs->pbDecMfour[buffidx], val);                        
+            ret |= aspBMPdecodeBuffStatusSet(rs->pbDecMfour[buffidx], mbstat);
+            sprintf_f(rs->logs, "[BMP] bmp buff idx %d set status: 0x%.4x pagerst: %d ret: %d \n", buffidx, mbstat, val, ret);
+            print_f(rs->plogs, sp, rs->logs);
+
+            mbstat = 0;
+            imgdex = 0;
+            val = 0;
+            ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[buffidx], &imgdex);
+            ret |= aspBMPdecodeBuffStatusGet(rs->pbDecMfour[buffidx], &mbstat);
+            ret |= aspBMPdecodeBuffPagerstGet(rs->pbDecMfour[buffidx], &val);
+            sprintf_f(rs->logs, "[BMP] double check bmp buff idx %d, image index: %d, status: 0x%x pagerst: %d ret: %d \n", buffidx, imgdex, mbstat, val, ret);
+            print_f(rs->plogs, sp, rs->logs);
                 
-        }
-        
-        if ((che == 'E') && (addrd == 0)) {
-        
-            clock_gettime(CLOCK_REALTIME, &tend);
-        
-            tmCost = time_diff(&tstart, &tend, 1000);
-            sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), tmCost);
-            print_f(rs->plogs, sp, rs->logs);
-            
-            throughput = acusz*8.0 / tmCost*1.0;
-            sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, tmCost > 1000 ? tmCost / 1000 : 1, throughput);
-            print_f(rs->plogs, sp, rs->logs);
-        
+            rs_ipc_put(rs, mfourinfo, 2);
+
+            che = 0;
             maxCylcnt = cntTx;
             cntTx = 0;
-            //opc = 0;
-            che = 0;
-        
-            continue;
+            
         }
-        
     }
     
     //p13_end(rs);
@@ -83595,9 +84757,9 @@ static int p15(struct procRes_s *rs)
                     prisec = 0;
                 }
 
-                sprintf_f(rs->logs, "[META] dump meta \n");
-                print_f(rs->plogs, "P15", rs->logs);
-                shmem_dump(metaPt, 512);
+                //sprintf_f(rs->logs, "[META] dump meta \n");
+                //print_f(rs->plogs, "P15", rs->logs);
+                //shmem_dump(metaPt, 512);
                 //dbgMeta(msb2lsb32(&metaRx->FUNC_BITS), metaRx);
                 
                 cutcnt =0;
@@ -83682,7 +84844,7 @@ static int p15(struct procRes_s *rs)
                         
                         clock_gettime(CLOCK_REALTIME, &jpgS);
                         
-                        ret = rotateBMP(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot, &sides[prisec], mreal, &cutlayers[cutcnt*2], 15);
+                        ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot, &sides[prisec], mreal, &cutlayers[cutcnt*2], 15);
                         
                         clock_gettime(CLOCK_REALTIME, &jpgE);
                         
@@ -83740,6 +84902,7 @@ static int p15(struct procRes_s *rs)
                     
                     //shmem_dump(bmpbufc+rotlen-512, 1024);
                     dbgMetaUsb(ptmetausb);
+                    dbgMetaUsb((struct aspMetaDataviaUSB_s *)bmpcpy);
 
                     aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[cutcnt], bheader->aspbiWidth, bheader->aspbiHeight, rotlen+bmtlen);
                                         
@@ -83786,7 +84949,7 @@ static int p15(struct procRes_s *rs)
                     
                 }
 
-                //aspBMPdecodeBuffFree(rs->pbDecMfour[mfbidx]);
+                //aspBMPdecodeBuffInit(rs->pbDecMfour[mfbidx]);
                 
                 //rs_ipc_put(rs, "E", 1);
                 //rs_ipc_put(rs, "P", 1);
@@ -85395,6 +86558,10 @@ int main(int argc, char *argv[])
     aspBMPdecodeAllocate(pmrs, 1);
     aspBMPdecodeAllocate(pmrs, 2);
     aspBMPdecodeAllocate(pmrs, 3);
+    aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[0]);
+    aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[1]);
+    aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[2]);
+    aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[3]);
     #endif
     
     printSysinfo(&minfo);
