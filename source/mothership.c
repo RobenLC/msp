@@ -85055,7 +85055,102 @@ static int p15(struct procRes_s *rs)
                 dbgMetaUsb(ptmetausb);
 
                 bmph = (ptmetausb->IMG_HIGH[1] << 8) | ptmetausb->IMG_HIGH[0];
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
+                switch (val) {
+                case COLOR_MODE_COLOR:
+                    colr = 24;
+                    break;
+                case COLOR_MODE_GRAY:
+                case COLOR_MODE_GRAY_DETAIL:
+                case COLOR_MODE_BLACKWHITE:
+                    colr = 8;
+                    break;
+                default:
+                    colr = 24;
+                    break;
+                }
+                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                print_f(rs->plogs, "P15", rs->logs);
+            
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
 
+                ret |= cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                tmp = val << 8 | tmp;
+
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+                
+                bmpw = scanWidthConvert(tmp, val);
+                bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
+                
+                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                print_f(rs->plogs, "P15", rs->logs);
+
+
+                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                switch (tmp) {
+                case RESOLUTION_1200:
+                    bdpi = 1200;
+                    break;
+                case RESOLUTION_600:
+                    bdpi = 600;
+                    break;
+                case RESOLUTION_300:
+                    bdpi = 300;
+                    break;
+                case RESOLUTION_200:
+                    bdpi = 200;
+                    break;
+                case RESOLUTION_150:
+                    bdpi = 150;
+                    break;
+                default:
+                    bdpi = 300;
+                    break;
+                }
+                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                print_f(rs->plogs, "P15", rs->logs);
+                
+                bmpcolrtb = aspMemalloc(1078, 15);
+                if (!bmpcolrtb) {
+                    sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
+                    print_f(rs->plogs, "P15", rs->logs);                                
+                }
+
+                if (colr == 8) {
+                    blen = 1078;
+                    bdpp = 1;
+                } else if (colr == 24) {
+                    blen = 54;            
+                    bdpp = 3;
+                } else {
+                    sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
+                    print_f(rs->plogs, "P15", rs->logs);   
+                }
+                
+                bhlen = blen;
+                val = ((bmpw * colr + 31) / 32) * 4;
+                val = val * bmph; 
+
+                sprintf_f(rs->logs, "[BMP] bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
+                print_f(rs->plogs, "P15", rs->logs);
+
+                bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
+
+                ph = &bheader->aspbmpMagic[2];
+                val = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(bmpcolrtb, ph, val);
+
+                blen -= val;
+                if (blen > 0) {
+                    bitmapColorTableSetup(bmpcolrtb+val);
+                    blen -= 1024;
+                }
+
+                if (blen) {
+                    sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
+                    print_f(rs->plogs, "P15", rs->logs);
+                } 
                 prisec = ptmetausb->PRI_O_SEC;
                 if (prisec > 1) {
                     sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
