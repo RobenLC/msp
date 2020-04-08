@@ -110,6 +110,27 @@ static char genssid[128];
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
 
+#define RJOB_TX_BLOCK_SIZE   (16*1024)
+#define RJOB_TOTAL_TX_BLOCK  (2)
+#define RJOB_RX_BLOCK_SIZE   (16*1024)
+#define IOCNR_RJOB_WCMD     2
+#define IOCNR_RJOB_RCMD     3
+#define IOCTL_RJOB_WCMD     _IOW(0xb5,IOCNR_RJOB_WCMD,mfour_rjob_cmd)
+#define IOCTL_RJOB_RCMD     _IOR(0xb5,IOCNR_RJOB_RCMD,mfour_rjob_cmd)
+#define RJOB_IOCT_WT_CMD(a, b)    ioctl(a, IOCTL_RJOB_WCMD, b)
+#define RJOB_IOCT_RD_CMD(a, b)    ioctl(a, IOCTL_RJOB_RCMD, b)
+
+#define BKCMD_ABORT              0x0030
+#define BKCMD_IMAGE_IN           0x0031
+#define BKCMD_IMAGE_IN_RSP       0x0131
+#define BKCMD_REQUIRE_AREA       0x8032      // bit15=1=rjob1
+#define BKCMD_REQUIRE_AREA_RSP   0x8132      // bit15=1=rjob1
+#define BKCMD_SEND_AREA          0x0033
+#define BKCMD_DONE_AREA          0x8034      // bit15=1=rjob1
+#define BKCMD_DONE_AREA_RSP      0x8134      // bit15=1=rjob1
+#define BKCMD_IMAGE_COMPLETE     0x8035      // bit15=1=rjob1
+#define BKCMD_IMAGE_COMPLETE_RSP 0x8135      // bit15=1=rjob1
+
 #define GADGET_GET_PRINTER_STATUS	_IOR('g', 0x21, unsigned char)
 #define GADGET_SET_OUTPUT_ADDRESS	_IOWR('g', 0x23, unsigned char)
 #define GADGET_SET_CSW_ADDRESS		_IOWR('g', 0x24, unsigned char)
@@ -1422,6 +1443,17 @@ struct bitmapRotate_s {
     int aspRotBuffSize;
 };
 
+typedef struct 
+{
+    long            msgtype;    // for msg , don't modify
+    unsigned long   tag;        // for user
+    unsigned short  cmd;        // for user
+    unsigned short  rsp;        // for user
+    unsigned short  dSize;      // for user, attached data size/buffer size
+    void *          dPtr;       // for user, attached data_ptr
+    void *          mPtr;       // Driver internal use
+}__attribute__((__packed__))   mfour_rjob_cmd;
+
 typedef struct
 {
     unsigned short mfourRectX;
@@ -1438,9 +1470,9 @@ typedef struct
 
 typedef struct
 {
-    unsigned char mfourImgW[2];
-    unsigned char mfourImgH[2];
-    unsigned char mfourIdx[2];
+    unsigned short mfourImgW;
+    unsigned short mfourImgH;
+    unsigned short mfourIdx;
     unsigned char mfourResrvd[2];
     char               mfourFilename[32];
     unsigned char  mfourData[0];
@@ -3115,7 +3147,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec = &pmrs->bmpDecMfour[idx];
 
     len = (2592 * 1864 * 15) / 100;
-    pdec->aspDecJpeg.aspDcData = (mfour_image_param_st *)aspSalloc(len);
+    pdec->aspDecJpeg.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecJpeg.aspDcData) {
         sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
@@ -3128,7 +3160,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec->aspDecJpeg.aspDcMax = len;
 
     len = 1024;
-    pdec->aspDecMeta.aspDcData = (mfour_image_param_st *)aspSalloc(len);
+    pdec->aspDecMeta.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecMeta.aspDcData) {
         sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %dB\n", idx, len); 
         print_f(pmrs->plog, "USB", pmrs->log);
@@ -3141,7 +3173,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec->aspDecMeta.aspDcMax = len;
     
     len = 65536;
-    pdec->aspDecMetaex.aspDcData = (mfour_image_param_st *)aspSalloc(len);
+    pdec->aspDecMetaex.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecMetaex.aspDcData) {
         sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
@@ -3154,7 +3186,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec->aspDecMetaex.aspDcMax = len;
     
     len = 2592 * 1864;
-    pdec->aspDecRaw.aspDcData = (mfour_image_param_st *)aspSalloc(len);
+    pdec->aspDecRaw.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecRaw.aspDcData) {
         sprintf_f(pmrs->log, "allocate memory for M4 raw for id%d succeed !! size: %d KB\n", idx, len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
@@ -3169,7 +3201,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     //len = 1024 * 100;
     len = 2592 * 1864;
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
-        pdec->aspDecMfPiRaw[ix].aspDcData = (mfour_image_param_st *)aspSalloc(len);
+        pdec->aspDecMfPiRaw[ix].aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
         if (pdec->aspDecMfPiRaw[ix].aspDcData) {
             sprintf_f(pmrs->log, "allocate memory for M4 piece raw %.d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
             print_f(pmrs->plog, "USB", pmrs->log);
@@ -3185,7 +3217,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     //len = 1024 * 20;
     len = 1024 * 1024;
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
-        pdec->aspDecMfPiJpg[ix].aspDcData = (mfour_image_param_st *)aspSalloc(len);
+        pdec->aspDecMfPiJpg[ix].aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
         if (pdec->aspDecMfPiJpg[ix].aspDcData) {
             sprintf_f(pmrs->log, "allocate memory for M4 piece jpg %.2d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
             print_f(pmrs->plog, "USB", pmrs->log);
@@ -55652,7 +55684,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                         }
 
                         break;
-                    case 11: // 15
+                    case 11: // rs15
                         sprintf_f(mrs->log, "[GW] m4 get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
                         print_f(mrs->plog, "fs152", mrs->log);
 
@@ -55722,6 +55754,47 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             
                             write(infd[14], pollfo, 2);
                         }
+                        else if (pllcmd[ins] == 'F') {
+                            gerr = -1;
+                            while (gerr <= 0) {
+                                gerr = read(pllfd[ins].fd, &chm, 1);
+                            }
+                                
+                            if (chm == 0x80) {
+                                mfidx = 0;
+                            } else {
+                                mfidx = chm & 0x7f;
+                            }
+                            
+                            sprintf_f(mrs->log, "[GW] m4 get sec chr: %c(0x%.2x) buff idx: %d\n", chm, chm, mfidx);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            
+                            ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            /*
+                            mstatus = (mstatus << 1) | 0x01;
+                            
+                            ret = aspBMPdecodeBuffStatusSet(&mrs->bmpDecMfour[mfidx], mstatus);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d set status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            */
+                            
+                            pollfo[1] = chm;
+
+                            pollfo[0] = 'a';
+                            write(infd[17], pollfo, 2);
+                            
+                            pollfo[0] = 'i';
+                            write(infd[18], pollfo, 2);
+                        }
+                        else {
+                            sprintf_f(mrs->log, "[GW] Error!!! unknown ch !!!m4 get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                            
                         
                         break;
                     case 12:
@@ -55730,7 +55803,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                         print_f(mrs->plog, "fs152", mrs->log);
 
                         #if 1 //m4_test 
-                        pollfo[0] = 's';
+                        pollfo[0] = 'f';
                         #else
                         pollfo[0] = 'r';
                         #endif
@@ -83644,6 +83717,109 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     return 0;
 }
 
+static int read_image_fle( char *filename, void *buf, int buf_size )
+{
+    int fh;
+
+    fh = open( filename, O_RDONLY );
+    if( fh < 0 )
+    {
+        printf( "open file error %s errno=%d\r\n", filename, errno);
+        return 0;
+    }
+
+    struct stat st;
+    fstat(fh, &st);
+    int size = (st.st_size>buf_size) ? buf_size : st.st_size ;
+    size = read( fh, buf, size );
+    close( fh );
+    return size;
+}
+
+static int send_image_in(struct procRes_s *rs, int mbidx)
+{
+    int image_size=0;
+    //mfour_rjob_cmd cmd;
+    char filename[256]={0};
+    char fname[32] = "test%.1d.bmp";
+    char filetest[32] = "/asptest/test%.1d.bmp";
+    int ret=0;
+    FILE *f=0;
+    int size=0;
+    int imgw=0, imgh=0;
+    int *pimgw=0, *pimgh=0;
+    struct bitmapDecodeItem_s *decraw=0;
+    mfour_image_param_st *decimgp=0, *img_param=0;
+    
+    sprintf(filename, filetest, mbidx+1);
+
+    f = fopen(filename, "r");
+    if(!f) {
+        sprintf_f(rs->logs,"open file error %s errno=%d\r\n", filename, errno);
+        print_f(rs->plogs, "fIle", rs->logs);
+        
+        return -1;
+    }
+
+    ret |= fseek(f, 0, SEEK_END);
+
+    size = ftell(f);
+
+    ret |= fseek(f, 0, SEEK_SET);
+
+    if (ret) {
+        return -2;
+    }
+
+    decraw = &rs->pbDecMfour[mbidx]->aspDecRaw; //replace raw
+    decimgp = decraw->aspDcData;
+
+    img_param = decimgp;
+
+    if (size > decraw->aspDcMax) {
+        fclose(f);
+        return -3;
+    }
+
+    image_size = fread(img_param->mfourData, 1, size, f);
+
+    if (image_size < 0) {
+        sprintf_f(rs->logs,"read file error %s errno=%d ret=%d \r\n", filename, errno, image_size);
+        print_f(rs->plogs, "fIle", rs->logs);
+        fclose(f);
+        return -4;
+    }
+    
+    fclose(f);
+
+    pimgw = (int *)(img_param->mfourData+0x12);
+    pimgh = (int *)(img_param->mfourData+0x16);
+
+    imgw = pimgw[0];
+    imgh = pimgh[0];
+        
+    img_param->mfourImgW = imgw;
+    img_param->mfourImgH = imgh;
+
+    sprintf(img_param->mfourFilename, fname, mbidx+1);
+
+    //strncpy(img_param->mfourFilename, file_entry->d_name, sizeof(img_param->mfourFilename));
+
+    sprintf_f(rs->logs,"open image file %s (w=%d h=%d size=%d)\r\n", img_param->mfourFilename, img_param->mfourImgW, img_param->mfourImgH, image_size);
+    print_f(rs->plogs, "fIle", rs->logs);
+
+
+    #if 0
+    cmd.cmd = BKCMD_IMAGE_IN;
+    cmd.tag = idx << 16;
+    cmd.rsp = 0;
+    cmd.dPtr = img_param;
+    cmd.dSize = size;
+    #endif
+
+    return 0;
+}
+
 static int p12(struct procRes_s *rs)
 {
     char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
@@ -83666,7 +83842,7 @@ static int p12(struct procRes_s *rs)
     struct bitmapHeader_s *bheader=0;
     struct aspMetaDataviaUSB_s *ptmetausb=0;
     struct bitmapDecodeItem_s *pdecroi=0, *penroi=0;
-    char pinfo[2];
+    char pinfo[8]={0};
     
     sprintf_f(rs->logs, "p12\n");
     print_f(rs->plogs, "P12", rs->logs);
@@ -83705,6 +83881,56 @@ static int p12(struct procRes_s *rs)
         cmd = ch;
 
         switch (cmd) {
+        case 'f':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+                sprintf_f(rs->logs, "f get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P12", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P12", rs->logs);
+                    break;
+                } else {
+                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    print_f(rs->plogs, "P12", rs->logs);
+                }
+
+                imgidx = 0;
+                mfbstat = 0;
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                if (mfbstat == 0) {
+                    sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x error!!! \n", mfbidx, imgidx, mfbstat);
+                    print_f(rs->plogs, "P12", rs->logs);
+                    //break;
+                } else {
+                    sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                    print_f(rs->plogs, "P12", rs->logs);
+                }
+
+                ret = send_image_in(rs, mfbidx);
+
+                if (!ret) {
+                    pinfo[0] = 'F';
+                    pinfo[1] = ch;
+
+                    rs_ipc_put(rs, pinfo, 2);
+                } else {
+                    sprintf_f(rs->logs, "Error!!! get test image failed!!! ret: %d \n", ret);
+                    print_f(rs->plogs, "P12", rs->logs);                
+                }
+                
+            }
+
+            
+            break;
         case 's':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
@@ -83899,96 +84125,9 @@ static int p12(struct procRes_s *rs)
                 ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
                 sprintf_f(rs->logs, "[CUT] get page ret: %d num: %d\n", ret, cutnum);
                 print_f(rs->plogs, "P12", rs->logs);
-
-                #if 1
-                cutsides[ret*2] = -1;
-                cutsides[ret*2+1] = -1;
-                cutlayers[ret*2] = 0;
-                cutlayers[ret*2+1] = 0;
                 
-                ret += 1;
-                
-                cutsides[ret*2] = -2;
-                cutsides[ret*2+1] = -2;
-                cutlayers[ret*2] = 0;
-                cutlayers[ret*2+1] = 0;
-                
-                ret += 1;
-                #endif
 
-                cutnum = ret;
-
-                for (ix=0; ix < cutnum; ix++) {
-
-                    sprintf_f(rs->logs, "[CUT] clips %d. A:%d (%d) B:%d (%d)\n", ix, cutsides[ix*2], cutlayers[ix*2], cutsides[ix*2+1], cutlayers[ix*2+1]);
-                    print_f(rs->plogs, "P12", rs->logs);
-
-                }
-
-                if (cutnum > BMP_DECODE_PIC_SIZE) {
-                    cutnum = BMP_DECODE_PIC_SIZE;
-                }
-                
-                for (ix=0; ix < cutnum; ix++) {
-
-                    pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
-                    penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
-
-                    ret = aspBMPdecodeItemGet(pdecroi, &rotsrc[ix], 0);
-                    if (ret < 0) {
-                        rotsrc[ix] = 0;
-                        rotsmax[ix] = 0;
-                    } else {
-                        rotsmax[ix] = aspBMPdecodeItemMax(pdecroi);
-                    }
-                    
-                    sprintf_f(rs->logs, "[BUFF] %d. src addr: 0x.8%x (max:%d) rotate dst addr:0x%.8x (max:%d)\n", ix, (uint32_t)bmpbuff, bmpmax, (uint32_t)rotsrc[ix], rotsmax[ix]);
-                    print_f(rs->plogs, "P12", rs->logs);
-
-                }
-
-                mreal[0] = -1;
-                mreal[1] = -1;
-                
-                while (cutcnt < cutnum) {
-
-                    bmprot = rotsrc[cutcnt];
-
-                    jpgLen = 0;
-                    rotlen = 0;
-
-                    if (!bmph) {
-                        break;
-                    }
-
-                    memcpy(ph, bmpcolrtb, 54);
-                    
-                    sprintf_f(rs->logs, "[BMP] doEncode %d. pri or sec: %d up or down: %d (%d, %d) \n", cutcnt, prisec, sides[prisec], mreal[0], mreal[1]);
-                    print_f(rs->plogs, "P12", rs->logs);
-                    
-                    clock_gettime(CLOCK_REALTIME, &jpgS);
-                    
-                    ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmpcolrtb, bhlen, bmprot, &sides[prisec], mreal, &cutlayers[cutcnt*2], 12);
-                    
-                    clock_gettime(CLOCK_REALTIME, &jpgE);
-                    
-                    sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d ret: %d\n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset, ret);
-                    print_f(rs->plogs, "P12", rs->logs);
-                    
-                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
-                    sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", tmCost);
-                    print_f(rs->plogs, "P12", rs->logs);
-                    
-                    bmpbufc = pabuff->dirParseBuff;   
-                    rotlen = pabuff->dirBuffUsed;
-                    
-                    aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[cutcnt], bheader->aspbiWidth, bheader->aspbiHeight, rotlen);
-                    
-                    cutcnt ++;
-                    
-                }
-
-                pinfo[0] = 'R';
+                pinfo[0] = 'S';
                 pinfo[1] = ch;
 
                 rs_ipc_put(rs, pinfo, 2);
@@ -86777,11 +86916,12 @@ static int p15(struct procRes_s *rs)
 #define LOG_P16_EN (1)
 static int p16(struct procRes_s *rs)
 {
-    int ret=0, cmd=0, errcnt=0;
+    int ret=0, tcmd=0, errcnt=0;
     int rj0id=0;
     char ch=0;
     //char m4startcmd[256]="/usr/local/projects/BKJob_1/fw_cortex_m4.sh start";
-    char m4startcmd[256]="/home/root/fw_cortex_m4.sh start";
+    //char m4startcmd[256]="/home/root/fw_cortex_m4.sh start";
+    mfour_rjob_cmd rjcmd;
     
     sprintf_f(rs->logs, "p16\n");
     print_f(rs->plogs, "P16", rs->logs);
@@ -86789,14 +86929,17 @@ static int p16(struct procRes_s *rs)
     p16_init(rs);
 
     prctl(PR_SET_NAME, "msp-p16");
+    
+    memset(&rjcmd, 0, sizeof(mfour_rjob_cmd));
 
-    sprintf(m4startcmd, "ls /dev | grep rjob");
-    ret = doSystemCmd(m4startcmd);
+    //sprintf(m4startcmd, "ls /dev | grep rjob");
+    //ret = doSystemCmd(m4startcmd);
 
     while (rj0id <= 0) {
         usleep(100000);
         rj0id = open("/dev/rjob0", O_RDWR);
-        sprintf_f(rs->logs, "get m4 rjob 0 id: %d - %d\n", rj0id, errcnt);
+        
+        sprintf_f(rs->logs, "get m4 rjob 0 id: %d, sizeof: %d %d \n", rj0id, sizeof(rjcmd), sizeof(mfour_rjob_cmd));
         print_f(rs->plogs, "P16", rs->logs);
 
         errcnt++;
@@ -86815,11 +86958,17 @@ static int p16(struct procRes_s *rs)
             continue;
         }
 
-        cmd = ch;
+        tcmd = ch;
 
-        switch (cmd) {
+        switch (tcmd) {
+        case 'a':
+            RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+            break;
+        case 'b':
+            RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+            break;
         default:
-            sprintf_f(rs->logs, "Error!!! unknown cmd: %d !!!\n", cmd);
+            sprintf_f(rs->logs, "Error!!! unknown cmd: %d !!!\n", tcmd);
             print_f(rs->plogs, "P16", rs->logs);    
             break;
         }
@@ -86833,10 +86982,15 @@ static int p16(struct procRes_s *rs)
 #define LOG_P17_EN (1)
 static int p17(struct procRes_s *rs)
 {
-    int ret=0, cmd=0, errcnt=0;
+    int ret=0, tcmd=0, errcnt=0;
     char ch=0;
     int rj1id=0;
     char m4startcmd[256] = "ls";
+    char *rx_buf=0;
+    mfour_areas_st *pArea=0;
+    mfour_rjob_cmd  outcmd, rspcmd;
+    char minfo[8]={0};
+    
     sprintf_f(rs->logs, "p17\n");
     print_f(rs->plogs, "P17", rs->logs);
 
@@ -86844,6 +86998,14 @@ static int p17(struct procRes_s *rs)
 
     prctl(PR_SET_NAME, "msp-p17");
 
+    memset(&outcmd, 0, sizeof(mfour_rjob_cmd));
+    memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
+    rx_buf = malloc(RJOB_RX_BLOCK_SIZE);
+    
+    sprintf_f(rs->logs, "memory allocate succeed addr: 0x%.8x size: %d \n", (uint32_t)rx_buf, RJOB_RX_BLOCK_SIZE/1024);
+    print_f(rs->plogs, "P17", rs->logs);
+    
+    
     while (rj1id <= 0) {
         usleep(100000);
         rj1id = open("/dev/rjob1", O_RDWR);
@@ -86866,11 +87028,79 @@ static int p17(struct procRes_s *rs)
             continue;
         }
 
-        cmd = ch;
+        tcmd = ch;
 
-        switch (cmd) {
+        switch (tcmd) {
+        case 'i':
+            while (1) {
+
+                outcmd.dSize = RJOB_RX_BLOCK_SIZE;
+                outcmd.dPtr  = rx_buf;
+
+                ret = RJOB_IOCT_RD_CMD(rj1id, (unsigned long)&outcmd);
+                if (ret <0) {
+                    sprintf_f(rs->logs, "Error!!! read rjob command ret: %d !!!\n", ret);
+                    print_f(rs->plogs, "P17", rs->logs);    
+                    continue;
+                }
+
+                sprintf_f(rs->logs, "Read rjob command %.4x !!!\n", outcmd.cmd);
+                print_f(rs->plogs, "P17", rs->logs);    
+
+                switch(outcmd.cmd) {
+                    case BKCMD_IMAGE_IN_RSP:
+                        //minfo[0] = 'P';
+                        rs_ipc_put(rs, "P", 1);
+                        break;
+                    case BKCMD_REQUIRE_AREA:           // M4 -> operator
+                        memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
+                        memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
+                        rspcmd.cmd = BKCMD_REQUIRE_AREA_RSP;
+
+                        RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
+
+                        outcmd.dPtr  = rx_buf;
+                        pArea = (mfour_areas_st *)outcmd.dPtr;
+                        sprintf_f(rs->logs, "req area cnt=%d 0:x=%d,y=%d,w=%d,h=%d \n", pArea->mfourAreaTot, 
+                            pArea->mfourAreas[0].mfourRectX, pArea->mfourAreas[0].mfourRectY, pArea->mfourAreas[0].mfourRectW, pArea->mfourAreas[0].mfourRectH);
+                        print_f(rs->plogs, "P17", rs->logs);    
+
+                        //bkjob_send_cmd( chan->mqOperator, &cmd );
+                        
+                        rx_buf = NULL;
+                        break;
+                    case BKCMD_DONE_AREA:              // M4 -> operator
+                        memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
+                        memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
+                        rspcmd.cmd = BKCMD_DONE_AREA_RSP;
+                        
+                        outcmd.dPtr  = rx_buf;
+                        
+                        //bkjob_send_cmd( chan->mqOperator, &outcmd);
+
+                        RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
+                        
+                        rx_buf = NULL;
+                        break;
+                    case BKCMD_ABORT:                  // M4 -> operator
+                        //bkjob_send_cmd( chan->mqOperator, &cmd );
+                        break;
+                    case BKCMD_IMAGE_COMPLETE:         // M4 -> operator
+                        //bkjob_send_cmd( chan->mqOperator, &cmd );
+                        break;
+                    default:
+                        sprintf_f(rs->logs, "Error!!! unknowned cmd 0x%.2x !!!\n", outcmd.cmd);
+                        print_f(rs->plogs, "P17", rs->logs);    
+                        break;
+                }
+
+                if (outcmd.cmd == BKCMD_IMAGE_COMPLETE) {
+                    break;
+                }
+            }
+            break;
         default:
-            sprintf_f(rs->logs, "Error!!! unknown cmd: %d !!!\n", cmd);
+            sprintf_f(rs->logs, "Error!!! unknown cmd: %d !!!\n", tcmd);
             print_f(rs->plogs, "P17", rs->logs);    
             break;
         }
