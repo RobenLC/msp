@@ -1491,6 +1491,9 @@ struct bitmapDecodeMfour_s {
     int         aspDecStatus;
     int         aspDecPagerst;
     int         aspDecImgidx;
+    int         aspPipeMfourRx[2];
+    int         aspPipeMfourTx[2];
+    int         aspPipeMfourCom[2];
     mfour_rect_st aspDecRect[BMP_DECODE_PIC_SIZE];
     struct bitmapDecodeItem_s aspDecJpeg;
     struct bitmapDecodeItem_s aspDecMeta;
@@ -3146,6 +3149,10 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
 
     pdec = &pmrs->bmpDecMfour[idx];
 
+    pipe2(pdec->aspPipeMfourRx, O_NONBLOCK);
+    pipe2(pdec->aspPipeMfourTx, O_NONBLOCK);
+    pipe2(pdec->aspPipeMfourCom, O_NONBLOCK);
+    
     len = (2592 * 1864 * 15) / 100;
     pdec->aspDecJpeg.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecJpeg.aspDcData) {
@@ -5414,6 +5421,45 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     ph->aspbiResoluV = (int)resV; // dpi x 39.27
     ph->aspbiNumCinCP = numclrp;  // 24bit is 0, 8bit is 256
     ph->aspbiNumImpColor = 0;
+
+    return 0;
+}
+
+static int dbgRjobCmd(mfour_rjob_cmd *rjcmd, int len)
+{
+    char mlog[256];
+
+    msync(rjcmd, sizeof(mfour_rjob_cmd), MS_SYNC);
+    
+    sprintf_f(mlog, "********************************************\n");
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "RJCMD[0x%.8x] len: %d (%d) \n", (uint32_t)rjcmd, len, sizeof(rjcmd));
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "[0x%.8x]MSG_TYPE: [%ld](%d) \n", (uint32_t)&rjcmd->msgtype, rjcmd->msgtype, sizeof(rjcmd->msgtype));
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "[0x%.8x]TAG: [0x%.8x](%d) \n", (uint32_t)&rjcmd->tag, (uint32_t)rjcmd->tag, sizeof(rjcmd->tag));
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "[0x%.8x]COMMAND: [0x%.4x](%d) \n", (uint32_t)&rjcmd->cmd, rjcmd->cmd, sizeof(rjcmd->cmd));
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "[0x%.8x]RESPONSE: [%d](%d) \n", (uint32_t)&rjcmd->rsp, rjcmd->rsp, sizeof(rjcmd->rsp));
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "[0x%.8x]SIZE: [%d](%d) \n", (uint32_t)&rjcmd->dSize, rjcmd->dSize, sizeof(rjcmd->dSize));
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "[0x%.8x]DATA_PT: [0x%.8x](%d) \n", (uint32_t)&rjcmd->dPtr, (uint32_t)rjcmd->dPtr, sizeof(rjcmd->dPtr));
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "[0x%.8x]SHARE_PT: [0x%.8x](%d) \n", (uint32_t)&rjcmd->mPtr, (uint32_t)rjcmd->mPtr, sizeof(rjcmd->mPtr));
+    print_f(mlogPool, "CMD", mlog);
+
+    sprintf_f(mlog, "********************************************\n");
+    print_f(mlogPool, "CMD", mlog);
 
     return 0;
 }
@@ -83801,13 +83847,16 @@ static int send_image_in(struct procRes_s *rs, int mbidx)
     img_param->mfourImgW = imgw;
     img_param->mfourImgH = imgh;
 
+    decraw->aspDcLen = image_size + sizeof(mfour_image_param_st);
+    
+    aspBMPdecodeItemSet(decraw, imgw, imgh, image_size + sizeof(mfour_image_param_st));
+    
     sprintf(img_param->mfourFilename, fname, mbidx+1);
 
     //strncpy(img_param->mfourFilename, file_entry->d_name, sizeof(img_param->mfourFilename));
 
     sprintf_f(rs->logs,"open image file %s (w=%d h=%d size=%d)\r\n", img_param->mfourFilename, img_param->mfourImgW, img_param->mfourImgH, image_size);
     print_f(rs->plogs, "fIle", rs->logs);
-
 
     #if 0
     cmd.cmd = BKCMD_IMAGE_IN;
@@ -83820,17 +83869,94 @@ static int send_image_in(struct procRes_s *rs, int mbidx)
     return 0;
 }
 
+static int handle_cmd_require_area(mfour_rjob_cmd *pcmd, mfour_image_param_st *porgimg)
+{
+    int ix=0;
+    mfour_areas_st *pArea;
+    mfour_rjob_cmd rspcmd;
+
+    if(pcmd->dSize == 0)   return -1;
+
+    pArea = (mfour_areas_st *)malloc(pcmd->dSize);
+    memcpy(pArea, pcmd->dPtr, pcmd->dSize);
+    free(pcmd->dPtr);
+
+    for(ix=0; ix<pArea->mfourAreaTot; ix++) {
+        printf( "  area%d x=%d, y=%d, w=%d, h=%d\r\n",
+                ix,
+                pArea->mfourAreas[ix].mfourRectX,
+                pArea->mfourAreas[ix].mfourRectY,
+                pArea->mfourAreas[ix].mfourRectW,
+                pArea->mfourAreas[ix].mfourRectH);
+    }
+
+
+    for(ix=0; ix<pArea->mfourAreaTot; ix++) {
+        mfour_rjob_cmd cmd;
+        mfour_image_param_st *imgbuf;
+        int abuf_size;
+
+        if((pArea->mfourAreas[ix].mfourRectW & 3) != 0) {
+            printf( "  require area width not 4byte alignment !!! \r\n" );
+        }
+        
+        pArea->mfourAreas[ix].mfourRectW &= 0xFFFC;    // width should be 4byte alignment
+        abuf_size = pArea->mfourAreas[ix].mfourRectW*pArea->mfourAreas[ix].mfourRectH+ sizeof(mfour_image_param_st);
+
+        if(abuf_size > (16 * 1024)){
+           printf("ERROR : require area too large !!! \r\n");
+        }
+
+        imgbuf = malloc(abuf_size);
+        imgbuf->mfourIdx = ix;
+        imgbuf->mfourImgW = pArea->mfourAreas[ix].mfourRectW;
+        imgbuf->mfourImgH= pArea->mfourAreas[ix].mfourRectH;
+
+        for(int y=0; y< imgbuf->mfourImgH; y++)
+        {
+            int pimgY ;
+            pimgY = (pArea->mfourAreas[ix].mfourRectY+y)*porgimg->mfourImgW;
+            memcpy( imgbuf->mfourData + y*imgbuf->mfourImgW,
+                    porgimg->mfourData + 0x436 + pimgY+pArea->mfourAreas[ix].mfourRectX,
+                    imgbuf->mfourImgW);
+        }
+        
+        cmd.cmd = BKCMD_SEND_AREA;
+        cmd.tag = 1234;
+        cmd.rsp = 0;
+        cmd.dSize = abuf_size;
+        cmd.dPtr  = imgbuf;
+        //send_cmd_to_waiter( &cmd );
+
+        //bkjob_send_cmd( chan->mqPostman, &cmd );
+
+        printf( "  area%d x=%d, y=%d, w=%d, h=%d dptr=%p dsize=%d\r\n",
+                ix,
+                pArea->mfourAreas[ix].mfourRectX,
+                pArea->mfourAreas[ix].mfourRectY,
+                pArea->mfourAreas[ix].mfourRectW,
+                pArea->mfourAreas[ix].mfourRectH,
+                imgbuf,
+                cmd.dSize);
+        // free areabuf at remote thread
+    }
+    free( pArea );
+
+    return 0;
+}
+
 static int p12(struct procRes_s *rs)
 {
     char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
     char devstr[] = "/dev/rjob0";
     int *cutsides=0, *cutlayers=0;
     char *bmpcolrtb=0, *ph=0, *bmprot=0, *bmpbuff=0, *bmpbufc=0, *bmpcpy=0, *metaPt=0, *exmeta=0, *buffmeta=0;
-    int ret=0, mfbidx=0, cmd=0, mfbstat=0, colr=0, blen=0, bhlen=0, bdpp=0, val=0, bmpw=0, bmph=0, bdpi=0, tmp=0, err=0;
+    int ret=0, mfbidx=0, tcmd=0, mfbstat=0, colr=0, blen=0, bhlen=0, bdpp=0, val=0, bmpw=0, bmph=0, bdpi=0, tmp=0, err=0;
     int prisec=0, cutcnt=0, cutnum=0, tmCost=0, rotlen=0, jpgLen, sides[2]={0}, mreal[2]={0}, updn=0, lenbs=0, bmpmax=0;
-    int lastCylen=0, lrst=0, ix=0, uselen=0, rstlen=0, exmlen=0, exmax=0, bmtlen=0, bmtmax=0, imgidx=0;
+    int lastCylen=0, lrst=0, ix=0, uselen=0, rstlen=0, exmlen=0, exmax=0, bmtlen=0, bmtmax=0, imgidx=0, pipRet=0, mfcmd=0;
+    int cid=0;
     uint32_t fformat=0;
-    char ch=0;
+    char ch=0, chm=0;
     unsigned char *jpgrlt=0;
     char *rotsrc[8]={0}, *rotdst[8]={0};
     int rotsmax[8]={0}, rotdmax[8]={0};
@@ -83843,6 +83969,8 @@ static int p12(struct procRes_s *rs)
     struct aspMetaDataviaUSB_s *ptmetausb=0;
     struct bitmapDecodeItem_s *pdecroi=0, *penroi=0;
     char pinfo[8]={0};
+    int *pipeMfRx=0, *pipeMfTx=0;
+    struct pollfd pllfd[2]={0};
     
     sprintf_f(rs->logs, "p12\n");
     print_f(rs->plogs, "P12", rs->logs);
@@ -83878,9 +84006,9 @@ static int p12(struct procRes_s *rs)
             continue;
         }
 
-        cmd = ch;
+        tcmd = ch;
 
-        switch (cmd) {
+        switch (tcmd) {
         case 'f':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
@@ -83906,14 +84034,8 @@ static int p12(struct procRes_s *rs)
                 mfbstat = 0;
                 ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
                 ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
-                if (mfbstat == 0) {
-                    sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x error!!! \n", mfbidx, imgidx, mfbstat);
-                    print_f(rs->plogs, "P12", rs->logs);
-                    //break;
-                } else {
-                    sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
-                    print_f(rs->plogs, "P12", rs->logs);
-                }
+                sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P12", rs->logs);
 
                 ret = send_image_in(rs, mfbidx);
 
@@ -83922,6 +84044,66 @@ static int p12(struct procRes_s *rs)
                     pinfo[1] = ch;
 
                     rs_ipc_put(rs, pinfo, 2);
+
+                    pipeMfRx = rs->pbDecMfour[mfbidx]->aspPipeMfourRx;
+                    pipeMfTx = rs->pbDecMfour[mfbidx]->aspPipeMfourTx;
+
+                    pllfd[0].fd = pipeMfRx[0];
+                    pllfd[0].events = POLLIN;
+
+                    while (1) {
+                        pipRet = poll(pllfd, 1, 500);
+                        if (pipRet > 0) {
+                            ret = read(pllfd[0].fd, &chm, 1);
+                            sprintf_f(rs->logs, "get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                            print_f(rs->plogs, "P12", rs->logs);
+                        
+                            mfcmd = chm;
+                        
+                            switch (mfcmd) {
+                            //case BKCMD_IMAGE_IN:            // receive scanner cmd
+                            //    break;
+                            case 'c': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
+                                ret = read(pllfd[0].fd, &chm, 1);
+                                sprintf_f(rs->logs, "get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P12", rs->logs);
+
+                                if (chm == 0x80) {
+                                    cid = 0;
+                                } else {
+                                    cid = chm & 0x7f;
+                                }
+
+                                if (cid > 3) {
+                                    sprintf_f(rs->logs, "get clip index %d error!!! \n", cid);
+                                    print_f(rs->plogs, "P12", rs->logs);
+                                    break;
+                                } else {
+                                    sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    print_f(rs->plogs, "P12", rs->logs);
+                                }
+                
+                                //handle_cmd_require_area( chan, &cmd, image_param );
+                                break;
+                            case 'd': //BKCMD_DONE_AREA:           // receive M4-postman cmd
+                                //save_done_area( image_param, &cmd );
+                                break;
+                            case 'e': //BKCMD_IMAGE_COMPLETE :     // M4 -> operator
+                                //g_done_image_idx++;
+                                //bkjob_send_cmd( chan->mqWaiter, &cmd );
+                                //free(image_param);
+                                break;
+                            default:
+                                break;
+                            }
+                        }
+                        else {
+                            sprintf_f(rs->logs, "wait mfour rx coming...\n");
+                            print_f(rs->plogs, "P12", rs->logs);
+                        }
+                    }
+                    
+                    
                 } else {
                     sprintf_f(rs->logs, "Error!!! get test image failed!!! ret: %d \n", ret);
                     print_f(rs->plogs, "P12", rs->logs);                
@@ -84423,7 +84605,7 @@ static int p12(struct procRes_s *rs)
             }        
             break;
         default:
-            sprintf_f(rs->logs, "Error !!! unknown cmd: 0x%x !!! \n", cmd);
+            sprintf_f(rs->logs, "Error !!! unknown tcmd: 0x%x !!! \n", tcmd);
             print_f(rs->plogs, "P12", rs->logs);
 
             break;
@@ -86213,7 +86395,6 @@ static int p15(struct procRes_s *rs)
     struct aspMetaDataviaUSB_s *ptmetausb=0;
     struct bitmapDecodeItem_s *pdecroi=0, *penroi=0;
     char pinfo[2];
-
     
     sprintf_f(rs->logs, "p15\n");
     print_f(rs->plogs, "P15", rs->logs);
@@ -86916,12 +87097,16 @@ static int p15(struct procRes_s *rs)
 #define LOG_P16_EN (1)
 static int p16(struct procRes_s *rs)
 {
-    int ret=0, tcmd=0, errcnt=0;
-    int rj0id=0;
-    char ch=0;
+    int ret=0, tcmd=0, errcnt=0, pipRet=0, mfcmd=0;
+    int rj0id=0, mfbidx=0, imgidx=0, mfbstat=0;
+    char ch=0, chm=0;
     //char m4startcmd[256]="/usr/local/projects/BKJob_1/fw_cortex_m4.sh start";
     //char m4startcmd[256]="/home/root/fw_cortex_m4.sh start";
+    struct bitmapDecodeItem_s *decraw=0;
+    mfour_image_param_st *img_param=0;
     mfour_rjob_cmd rjcmd;
+    struct pollfd pllfd[2]={0};
+    int *pipeMfCom=0, *pipeMfTx=0;
     
     sprintf_f(rs->logs, "p16\n");
     print_f(rs->plogs, "P16", rs->logs);
@@ -86962,10 +87147,80 @@ static int p16(struct procRes_s *rs)
 
         switch (tcmd) {
         case 'a':
-            RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
-            break;
-        case 'b':
-            RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+                sprintf_f(rs->logs, "rjob0 get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P16", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P16", rs->logs);
+                    break;
+                } else {
+                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    print_f(rs->plogs, "P16", rs->logs);
+                }
+
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P16", rs->logs);
+
+                decraw = &rs->pbDecMfour[mfbidx]->aspDecRaw;
+                img_param = decraw->aspDcData;
+
+                memset((char *)&rjcmd, 0, sizeof(mfour_rjob_cmd));
+                
+                rjcmd.cmd = BKCMD_IMAGE_IN;
+                rjcmd.tag = (mfbidx+1) << 16;
+                rjcmd.rsp = 0;
+                rjcmd.dPtr = img_param;
+                rjcmd.dSize = decraw->aspDcLen;
+
+                sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_IMAGE_IN \n");
+                print_f(rs->plogs, "P16", rs->logs);
+                dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
+
+                RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+
+                pipeMfCom = rs->pbDecMfour[mfbidx]->aspPipeMfourCom;
+                pipeMfTx = rs->pbDecMfour[mfbidx]->aspPipeMfourTx;
+
+                pllfd[0].fd = pipeMfTx[0];
+                pllfd[0].events = POLLIN;
+
+                while (1) {
+                    pipRet = poll(pllfd, 1, 500);
+                    if (pipRet > 0) {
+                        ret = read(pllfd[0].fd, &chm, 1);
+                        sprintf_f(rs->logs, "get chm: %c [0x%.2x] for m4tx\n", chm, chm);
+                        print_f(rs->plogs, "P16", rs->logs);
+
+                        mfcmd = chm;
+
+                        switch (mfcmd) {
+                        case 'b':
+                            RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+                            break;
+                        default:
+                            sprintf_f(rs->logs, "Error m4tx get[0x%.2x] unknown command !!!\n", mfcmd);
+                            print_f(rs->plogs, "P16", rs->logs);
+                            break;
+                        }
+                    }
+                    else {
+                        sprintf_f(rs->logs, "waiting command for tx to m4... \n");
+                        print_f(rs->plogs, "P16", rs->logs);
+                    }
+                }
+                
+            }
             break;
         default:
             sprintf_f(rs->logs, "Error!!! unknown cmd: %d !!!\n", tcmd);
@@ -86982,14 +87237,20 @@ static int p16(struct procRes_s *rs)
 #define LOG_P17_EN (1)
 static int p17(struct procRes_s *rs)
 {
-    int ret=0, tcmd=0, errcnt=0;
+    int ret=0, tcmd=0, errcnt=0, mfbidx=0, imgidx=0, mfbstat=0;
+    int ix=0, ic=0;
     char ch=0;
     int rj1id=0;
     char m4startcmd[256] = "ls";
     char *rx_buf=0;
+    mfour_rect_st *pRect=0, *pArRect=0;
+    struct bitmapDecodeItem_s *decpic=0;
+    mfour_image_param_st *img_param=0;
     mfour_areas_st *pArea=0;
     mfour_rjob_cmd  outcmd, rspcmd;
     char minfo[8]={0};
+    struct pollfd pllfd[2]={0};
+    int *pipeMfCom=0, *pipeMfRx=0;
     
     sprintf_f(rs->logs, "p17\n");
     print_f(rs->plogs, "P17", rs->logs);
@@ -87032,71 +87293,142 @@ static int p17(struct procRes_s *rs)
 
         switch (tcmd) {
         case 'i':
-            while (1) {
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+                sprintf_f(rs->logs, "rjob1 get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P17", rs->logs);
 
-                outcmd.dSize = RJOB_RX_BLOCK_SIZE;
-                outcmd.dPtr  = rx_buf;
-
-                ret = RJOB_IOCT_RD_CMD(rj1id, (unsigned long)&outcmd);
-                if (ret <0) {
-                    sprintf_f(rs->logs, "Error!!! read rjob command ret: %d !!!\n", ret);
-                    print_f(rs->plogs, "P17", rs->logs);    
-                    continue;
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
                 }
 
-                sprintf_f(rs->logs, "Read rjob command %.4x !!!\n", outcmd.cmd);
-                print_f(rs->plogs, "P17", rs->logs);    
-
-                switch(outcmd.cmd) {
-                    case BKCMD_IMAGE_IN_RSP:
-                        //minfo[0] = 'P';
-                        rs_ipc_put(rs, "P", 1);
-                        break;
-                    case BKCMD_REQUIRE_AREA:           // M4 -> operator
-                        memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
-                        memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
-                        rspcmd.cmd = BKCMD_REQUIRE_AREA_RSP;
-
-                        RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
-
-                        outcmd.dPtr  = rx_buf;
-                        pArea = (mfour_areas_st *)outcmd.dPtr;
-                        sprintf_f(rs->logs, "req area cnt=%d 0:x=%d,y=%d,w=%d,h=%d \n", pArea->mfourAreaTot, 
-                            pArea->mfourAreas[0].mfourRectX, pArea->mfourAreas[0].mfourRectY, pArea->mfourAreas[0].mfourRectW, pArea->mfourAreas[0].mfourRectH);
-                        print_f(rs->plogs, "P17", rs->logs);    
-
-                        //bkjob_send_cmd( chan->mqOperator, &cmd );
-                        
-                        rx_buf = NULL;
-                        break;
-                    case BKCMD_DONE_AREA:              // M4 -> operator
-                        memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
-                        memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
-                        rspcmd.cmd = BKCMD_DONE_AREA_RSP;
-                        
-                        outcmd.dPtr  = rx_buf;
-                        
-                        //bkjob_send_cmd( chan->mqOperator, &outcmd);
-
-                        RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
-                        
-                        rx_buf = NULL;
-                        break;
-                    case BKCMD_ABORT:                  // M4 -> operator
-                        //bkjob_send_cmd( chan->mqOperator, &cmd );
-                        break;
-                    case BKCMD_IMAGE_COMPLETE:         // M4 -> operator
-                        //bkjob_send_cmd( chan->mqOperator, &cmd );
-                        break;
-                    default:
-                        sprintf_f(rs->logs, "Error!!! unknowned cmd 0x%.2x !!!\n", outcmd.cmd);
-                        print_f(rs->plogs, "P17", rs->logs);    
-                        break;
-                }
-
-                if (outcmd.cmd == BKCMD_IMAGE_COMPLETE) {
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P17", rs->logs);
                     break;
+                } else {
+                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    print_f(rs->plogs, "P17", rs->logs);
                 }
+
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P17", rs->logs);
+
+                pipeMfCom = rs->pbDecMfour[mfbidx]->aspPipeMfourCom;
+                pipeMfRx = rs->pbDecMfour[mfbidx]->aspPipeMfourRx;
+                
+                while (1) {
+                
+                    outcmd.dSize = RJOB_RX_BLOCK_SIZE;
+                    outcmd.dPtr  = rx_buf;
+                
+                    ret = RJOB_IOCT_RD_CMD(rj1id, (unsigned long)&outcmd);
+                    if (ret <0) {
+                        sprintf_f(rs->logs, "Error!!! read rjob command ret: %d !!!\n", ret);
+                        print_f(rs->plogs, "P17", rs->logs);    
+                        continue;
+                    }
+                    sprintf_f(rs->logs, "print the cmd recv in:\n");
+                    print_f(rs->plogs, "P17", rs->logs);
+                    dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                    
+                    sprintf_f(rs->logs, "Read rjob command %.4x !!!\n", outcmd.cmd);
+                    print_f(rs->plogs, "P17", rs->logs);    
+                
+                    switch(outcmd.cmd) {
+                        case BKCMD_IMAGE_IN_RSP:
+                            //minfo[0] = 'P';
+                            rs_ipc_put(rs, "P", 1);
+                            break;
+                        case BKCMD_REQUIRE_AREA:           // M4 -> operator
+                            memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
+                            memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
+                            
+                            rspcmd.cmd = BKCMD_REQUIRE_AREA_RSP;
+                
+                            sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_REQUIRE_AREA_RSP:\n");
+                            print_f(rs->plogs, "P17", rs->logs);
+                            dbgRjobCmd(&rspcmd, sizeof(mfour_rjob_cmd));
+                            
+                            RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
+                
+                            //outcmd.dPtr  = rx_buf;
+                            
+                            pArea = (mfour_areas_st *)outcmd.dPtr;
+                            sprintf_f(rs->logs, "req area total = %d \n", pArea->mfourAreaTot);
+                            print_f(rs->plogs, "P17", rs->logs);    
+
+                            for (ic=0, ix=0; ic < pArea->mfourAreaTot; ic++) {
+                                pArRect = &pArea->mfourAreas[ic];
+                                sprintf_f(rs->logs, "req area %d: x=%d,y=%d,w=%d,h=%d \n", ic, pArRect->mfourRectX, pArRect->mfourRectY, pArRect->mfourRectW, pArRect->mfourRectH);
+                                print_f(rs->plogs, "P17", rs->logs);    
+                            
+                                for (; ix < BMP_DECODE_PIC_SIZE; ix++) {
+                                    decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                                    if ((decpic->aspDcLen == 0) && (decpic->aspDcWidth == 0)) {
+                                        pRect = &rs->pbDecMfour[mfbidx]->aspDecRect[ix];
+                                        
+                                        memcpy(pRect, pArRect, sizeof(mfour_rect_st));
+
+                                        sprintf_f(rs->logs, "find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
+                                        print_f(rs->plogs, "P17", rs->logs);    
+                                
+                                        aspBMPdecodeItemSet(decpic, pRect->mfourRectW, pRect->mfourRectH, 0);
+
+                                        minfo[0] = 'c';
+
+                                        if (ix == 0) {
+                                            minfo[1] = 0x80;
+                                        } else {
+                                            minfo[1] = ix & 0x7f;
+                                        }
+
+                                        write(pipeMfRx[1], minfo, 2);
+                                    }
+                                }
+                            
+                            }
+
+                
+                            //bkjob_send_cmd( chan->mqOperator, &cmd );
+                            
+                            rx_buf = NULL;
+                            break;
+                        case BKCMD_DONE_AREA:              // M4 -> operator
+                            memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
+                            memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
+                            rspcmd.cmd = BKCMD_DONE_AREA_RSP;
+                            
+                            outcmd.dPtr  = rx_buf;
+                            
+                            //bkjob_send_cmd( chan->mqOperator, &outcmd);
+                            sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_DONE_AREA_RSP:\n");
+                            print_f(rs->plogs, "P17", rs->logs);
+                            RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
+                            
+                            rx_buf = NULL;
+                            break;
+                        case BKCMD_ABORT:                  // M4 -> operator
+                            //bkjob_send_cmd( chan->mqOperator, &cmd );
+                            break;
+                        case BKCMD_IMAGE_COMPLETE:         // M4 -> operator
+                            //bkjob_send_cmd( chan->mqOperator, &cmd );
+                            break;
+                        default:
+                            sprintf_f(rs->logs, "Error!!! unknowned cmd 0x%.2x !!!\n", outcmd.cmd);
+                            print_f(rs->plogs, "P17", rs->logs);    
+                            break;
+                    }
+                
+                    if (outcmd.cmd == BKCMD_IMAGE_COMPLETE) {
+                        break;
+                    }
+                }
+                
             }
             break;
         default:
