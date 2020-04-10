@@ -55848,9 +55848,10 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                         sprintf_f(mrs->log, "[GW] m4 decode get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
                         print_f(mrs->plog, "fs152", mrs->log);
 
-                        #if 1 //m4_test 
+                        #if 0 //m4_test 
                         pollfo[0] = 'f';
                         #else
+                        //pollfo[0] = 's';
                         pollfo[0] = 'r';
                         #endif
                         gerr = -1;
@@ -83869,78 +83870,91 @@ static int send_image_in(struct procRes_s *rs, int mbidx)
     return 0;
 }
 
-static int handle_cmd_require_area(mfour_rjob_cmd *pcmd, mfour_image_param_st *porgimg)
+static int handle_cmd_require_area(struct procRes_s *rs, int clidx, int mfidx)
 {
-    int ix=0;
-    mfour_areas_st *pArea;
-    mfour_rjob_cmd rspcmd;
+    char *dst=0, *src=0, *bmpraw=0;
+    int pimgY=0, iy=0;
+    mfour_rect_st *pDeRect=0;
+    mfour_image_param_st *imgbuf=0;
+    mfour_image_param_st *porgimg=0;
+    struct bitmapDecodeItem_s *decraw=0, *decpic=0;
+    int abuf_size;
 
-    if(pcmd->dSize == 0)   return -1;
+    decraw = &rs->pbDecMfour[mfidx]->aspDecRaw;
+    if (decraw->aspDcLen == 0) return -1;
 
-    pArea = (mfour_areas_st *)malloc(pcmd->dSize);
-    memcpy(pArea, pcmd->dPtr, pcmd->dSize);
-    free(pcmd->dPtr);
+    porgimg = decraw->aspDcData;
+    if (porgimg->mfourImgW == 0) return -2;
 
-    for(ix=0; ix<pArea->mfourAreaTot; ix++) {
-        printf( "  area%d x=%d, y=%d, w=%d, h=%d\r\n",
-                ix,
-                pArea->mfourAreas[ix].mfourRectX,
-                pArea->mfourAreas[ix].mfourRectY,
-                pArea->mfourAreas[ix].mfourRectW,
-                pArea->mfourAreas[ix].mfourRectH);
+    decpic = &rs->pbDecMfour[mfidx]->aspDecMfPiRaw[clidx];
+    pDeRect = &rs->pbDecMfour[mfidx]->aspDecRect[clidx];
+
+    if((pDeRect->mfourRectW & 3) != 0) {
+        sprintf_f(rs->logs,"require area width not 4byte alignment !!! \r\n" );
+        print_f(rs->plogs, "CLIP", rs->logs);
     }
 
+    pDeRect->mfourRectW &= 0xFFFC;    // width should be 4byte alignment
+    abuf_size = pDeRect->mfourRectW * pDeRect->mfourRectH + sizeof(mfour_image_param_st);
 
-    for(ix=0; ix<pArea->mfourAreaTot; ix++) {
-        mfour_rjob_cmd cmd;
-        mfour_image_param_st *imgbuf;
-        int abuf_size;
-
-        if((pArea->mfourAreas[ix].mfourRectW & 3) != 0) {
-            printf( "  require area width not 4byte alignment !!! \r\n" );
-        }
-        
-        pArea->mfourAreas[ix].mfourRectW &= 0xFFFC;    // width should be 4byte alignment
-        abuf_size = pArea->mfourAreas[ix].mfourRectW*pArea->mfourAreas[ix].mfourRectH+ sizeof(mfour_image_param_st);
-
-        if(abuf_size > (16 * 1024)){
-           printf("ERROR : require area too large !!! \r\n");
-        }
-
-        imgbuf = malloc(abuf_size);
-        imgbuf->mfourIdx = ix;
-        imgbuf->mfourImgW = pArea->mfourAreas[ix].mfourRectW;
-        imgbuf->mfourImgH= pArea->mfourAreas[ix].mfourRectH;
-
-        for(int y=0; y< imgbuf->mfourImgH; y++)
-        {
-            int pimgY ;
-            pimgY = (pArea->mfourAreas[ix].mfourRectY+y)*porgimg->mfourImgW;
-            memcpy( imgbuf->mfourData + y*imgbuf->mfourImgW,
-                    porgimg->mfourData + 0x436 + pimgY+pArea->mfourAreas[ix].mfourRectX,
-                    imgbuf->mfourImgW);
-        }
-        
-        cmd.cmd = BKCMD_SEND_AREA;
-        cmd.tag = 1234;
-        cmd.rsp = 0;
-        cmd.dSize = abuf_size;
-        cmd.dPtr  = imgbuf;
-        //send_cmd_to_waiter( &cmd );
-
-        //bkjob_send_cmd( chan->mqPostman, &cmd );
-
-        printf( "  area%d x=%d, y=%d, w=%d, h=%d dptr=%p dsize=%d\r\n",
-                ix,
-                pArea->mfourAreas[ix].mfourRectX,
-                pArea->mfourAreas[ix].mfourRectY,
-                pArea->mfourAreas[ix].mfourRectW,
-                pArea->mfourAreas[ix].mfourRectH,
-                imgbuf,
-                cmd.dSize);
-        // free areabuf at remote thread
+    if(abuf_size > (16 * 1024)){
+        sprintf_f(rs->logs,"ERROR : require area too large !!! \r\n");
+        print_f(rs->plogs, "CLIP", rs->logs);
     }
-    free( pArea );
+
+    imgbuf =  decpic->aspDcData;
+    imgbuf->mfourIdx = clidx;
+    imgbuf->mfourImgW = pDeRect->mfourRectW;
+    imgbuf->mfourImgH= pDeRect->mfourRectH;
+
+    bmpraw = porgimg->mfourData + 0x436;
+    for(iy=0; iy< imgbuf->mfourImgH; iy++)
+    {
+        pimgY = (pDeRect->mfourRectY+iy)*porgimg->mfourImgW;
+
+        dst = imgbuf->mfourData + iy*imgbuf->mfourImgW;
+        src = bmpraw + pimgY + pDeRect->mfourRectX;
+
+        memcpy(dst, src, imgbuf->mfourImgW);
+    }
+
+    sprintf_f(rs->logs, "find and set area %d: x=%d,y=%d,w=%d,h=%d \n", clidx, pDeRect->mfourRectX, pDeRect->mfourRectY, pDeRect->mfourRectW, pDeRect->mfourRectH);
+    print_f(rs->plogs, "CLIP", rs->logs);    
+
+    aspBMPdecodeItemSet(decpic, pDeRect->mfourRectW, pDeRect->mfourRectH, abuf_size);
+
+    return 0;
+}
+
+static int save_done_area(struct procRes_s *rs, int clidx, int mfidx)
+{
+    int ret=0, imgsize=0;
+    FILE *fp=0;
+    char filename[256]={0};
+    char tailname[32] = "_%.3d.bmp";
+    char filesave[32] = "/asptest/out_%.1d_%.1d";
+    char *ptr=0;
+    
+    sprintf(filename, filesave, mfidx+1, clidx+1);
+
+    strcat(filename, tailname);
+
+    sprintf_f(rs->logs, "find save filename[%s] \n", filename);
+    print_f(rs->plogs, "SAVE", rs->logs);   
+    
+    ret = file_save_get(&fp, filename);
+    if (ret) {
+        return -1;
+    }
+
+    imgsize = rs->pbDecMfour[mfidx]->aspDecMfPiRaw[clidx].aspDcLen;
+    ptr = rs->pbDecMfour[mfidx]->aspDecMfPiRaw[clidx].aspDcData->mfourData;
+
+    ret = fwrite(ptr, 1, imgsize, fp);
+
+    fflush(fp);
+
+    fclose(fp);
 
     return 0;
 }
@@ -84055,7 +84069,7 @@ static int p12(struct procRes_s *rs)
                         pipRet = poll(pllfd, 1, 500);
                         if (pipRet > 0) {
                             ret = read(pllfd[0].fd, &chm, 1);
-                            sprintf_f(rs->logs, "get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                            sprintf_f(rs->logs, "m4crop get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
                             print_f(rs->plogs, "P12", rs->logs);
                         
                             mfcmd = chm;
@@ -84063,9 +84077,35 @@ static int p12(struct procRes_s *rs)
                             switch (mfcmd) {
                             //case BKCMD_IMAGE_IN:            // receive scanner cmd
                             //    break;
+                            case 'C': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
+                                ret = read(pllfd[0].fd, &chm, 1);
+                                sprintf_f(rs->logs, "C get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P12", rs->logs);
+
+                                if (chm == 0x80) {
+                                    cid = 0;
+                                } else {
+                                    cid = chm & 0x7f;
+                                }
+
+                                if (cid > 3) {
+                                    sprintf_f(rs->logs, "get clip index %d error!!! \n", cid);
+                                    print_f(rs->plogs, "P12", rs->logs);
+                                    break;
+                                } else {
+                                    sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    print_f(rs->plogs, "P12", rs->logs);
+                                }
+                                
+                                pinfo[0] = 'b';
+                                pinfo[1] = chm;
+
+                                write(pipeMfTx[1], pinfo, 2);
+                                
+                                break;
                             case 'c': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
                                 ret = read(pllfd[0].fd, &chm, 1);
-                                sprintf_f(rs->logs, "get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                sprintf_f(rs->logs, "c get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
                                 print_f(rs->plogs, "P12", rs->logs);
 
                                 if (chm == 0x80) {
@@ -84083,15 +84123,41 @@ static int p12(struct procRes_s *rs)
                                     print_f(rs->plogs, "P12", rs->logs);
                                 }
                 
-                                //handle_cmd_require_area( chan, &cmd, image_param );
+                                handle_cmd_require_area(rs, cid, mfbidx);
                                 break;
                             case 'd': //BKCMD_DONE_AREA:           // receive M4-postman cmd
-                                //save_done_area( image_param, &cmd );
+                                ret = read(pllfd[0].fd, &chm, 1);
+                                sprintf_f(rs->logs, "d get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P12", rs->logs);
+
+                                if (chm == 0x80) {
+                                    cid = 0;
+                                } else {
+                                    cid = chm & 0x7f;
+                                }
+
+                                if (cid > 3) {
+                                    sprintf_f(rs->logs, "get clip index %d error!!! \n", cid);
+                                    print_f(rs->plogs, "P12", rs->logs);
+                                    break;
+                                } else {
+                                    sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    print_f(rs->plogs, "P12", rs->logs);
+                                }
+
+                                save_done_area(rs, cid, mfbidx);
                                 break;
                             case 'e': //BKCMD_IMAGE_COMPLETE :     // M4 -> operator
                                 //g_done_image_idx++;
                                 //bkjob_send_cmd( chan->mqWaiter, &cmd );
                                 //free(image_param);
+                                pinfo[0] = 'e';
+
+                                write(pipeMfTx[1], pinfo, 1);
+                                
+                                sprintf_f(rs->logs, "end image idx: %d \n", mfbidx);
+                                print_f(rs->plogs, "P12", rs->logs);
+                                
                                 break;
                             default:
                                 break;
@@ -84101,10 +84167,17 @@ static int p12(struct procRes_s *rs)
                             sprintf_f(rs->logs, "wait mfour rx coming...\n");
                             print_f(rs->plogs, "P12", rs->logs);
                         }
+
+                        if (mfcmd == 'e') {
+                            break;
+                        }
                     }
-                    
-                    
-                } else {
+
+                    pinfo[0] = 'S';
+                    pinfo[1] = ch;
+                    rs_ipc_put(rs, pinfo, 2);
+                }
+                else {
                     sprintf_f(rs->logs, "Error!!! get test image failed!!! ret: %d \n", ret);
                     print_f(rs->plogs, "P12", rs->logs);                
                 }
@@ -87098,11 +87171,11 @@ static int p15(struct procRes_s *rs)
 static int p16(struct procRes_s *rs)
 {
     int ret=0, tcmd=0, errcnt=0, pipRet=0, mfcmd=0;
-    int rj0id=0, mfbidx=0, imgidx=0, mfbstat=0;
+    int rj0id=0, mfbidx=0, imgidx=0, mfbstat=0, clipidx=0;
     char ch=0, chm=0;
     //char m4startcmd[256]="/usr/local/projects/BKJob_1/fw_cortex_m4.sh start";
     //char m4startcmd[256]="/home/root/fw_cortex_m4.sh start";
-    struct bitmapDecodeItem_s *decraw=0;
+    struct bitmapDecodeItem_s *decraw=0, *decrect=0;
     mfour_image_param_st *img_param=0;
     mfour_rjob_cmd rjcmd;
     struct pollfd pllfd[2]={0};
@@ -87199,14 +87272,46 @@ static int p16(struct procRes_s *rs)
                     pipRet = poll(pllfd, 1, 500);
                     if (pipRet > 0) {
                         ret = read(pllfd[0].fd, &chm, 1);
-                        sprintf_f(rs->logs, "get chm: %c [0x%.2x] for m4tx\n", chm, chm);
+                        sprintf_f(rs->logs, "m4tx get chm: %c [0x%.2x] for m4tx\n", chm, chm);
                         print_f(rs->plogs, "P16", rs->logs);
 
                         mfcmd = chm;
 
                         switch (mfcmd) {
                         case 'b':
+                            ret = read(pllfd[0].fd, &chm, 1);
+                            sprintf_f(rs->logs, "get cont chm: %c [0x%.2x] for m4tx\n", chm, chm);
+                            print_f(rs->plogs, "P16", rs->logs);
+
+                            if (chm == 0x80) {
+                                clipidx = 0;
+                            } else {
+                                clipidx = chm & 0x7f;
+                            }
+
+                            if (clipidx > 3) {
+                                sprintf_f(rs->logs, "get clip index %d error!!! \n", clipidx);
+                                print_f(rs->plogs, "P16", rs->logs);
+                                break;
+                            } else {
+                                sprintf_f(rs->logs, "get clip index %d succed!!! \n", clipidx);
+                                print_f(rs->plogs, "P16", rs->logs);
+                            }
+
+                            decrect = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[clipidx];
+                            img_param = decrect->aspDcData;
+                            
+                            rjcmd.cmd = BKCMD_SEND_AREA;
+                            rjcmd.tag = (mfbidx+1) << 16;
+                            rjcmd.rsp = 0;
+                            rjcmd.dPtr = img_param;
+                            rjcmd.dSize = decrect->aspDcLen;
+                            
                             RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+                            break;
+                        case 'e':
+                            sprintf_f(rs->logs, "complete \n");
+                            print_f(rs->plogs, "P16", rs->logs);
                             break;
                         default:
                             sprintf_f(rs->logs, "Error m4tx get[0x%.2x] unknown command !!!\n", mfcmd);
@@ -87217,6 +87322,10 @@ static int p16(struct procRes_s *rs)
                     else {
                         sprintf_f(rs->logs, "waiting command for tx to m4... \n");
                         print_f(rs->plogs, "P16", rs->logs);
+                    }
+
+                    if (tcmd == 'e') {
+                        break;
                     }
                 }
                 
@@ -87237,21 +87346,26 @@ static int p16(struct procRes_s *rs)
 #define LOG_P17_EN (1)
 static int p17(struct procRes_s *rs)
 {
-    int ret=0, tcmd=0, errcnt=0, mfbidx=0, imgidx=0, mfbstat=0;
-    int ix=0, ic=0;
+#define MFOUR_WAIT_LIST_SIZE (8)
+    int ret=0, tcmd=0, errcnt=0, mfbidx=0, imgidx=0, mfbstat=0, cid=0, imgsize=0;
+    int ix=0, ic=0, mfourCnt=2, mfourwait=0, mfourhead=0, mfourtail=0;
+    char mfourlist[MFOUR_WAIT_LIST_SIZE];
     char ch=0;
     int rj1id=0;
     char m4startcmd[256] = "ls";
     char *rx_buf=0;
     mfour_rect_st *pRect=0, *pArRect=0;
-    struct bitmapDecodeItem_s *decpic=0;
-    mfour_image_param_st *img_param=0;
+    struct bitmapDecodeItem_s *decpic=0, *decraw=0;
+    mfour_image_param_st *img_param=0, *img_out=0, *img_raw=0;
     mfour_areas_st *pArea=0;
     mfour_rjob_cmd  outcmd, rspcmd;
     char minfo[8]={0};
     struct pollfd pllfd[2]={0};
     int *pipeMfCom=0, *pipeMfRx=0;
-    
+    char *cpyDst=0, *cpySrc=0;
+    int *ptrw=0, *ptrh=0;
+    struct bitmapHeader_s *pheader=0;
+
     sprintf_f(rs->logs, "p17\n");
     print_f(rs->plogs, "P17", rs->logs);
 
@@ -87320,6 +87434,11 @@ static int p17(struct procRes_s *rs)
 
                 pipeMfCom = rs->pbDecMfour[mfbidx]->aspPipeMfourCom;
                 pipeMfRx = rs->pbDecMfour[mfbidx]->aspPipeMfourRx;
+
+                mfourCnt=1;
+                mfourwait=0;
+                mfourhead=0;
+                mfourtail=0;
                 
                 while (1) {
                 
@@ -87332,7 +87451,7 @@ static int p17(struct procRes_s *rs)
                         print_f(rs->plogs, "P17", rs->logs);    
                         continue;
                     }
-                    sprintf_f(rs->logs, "print the cmd recv in:\n");
+                    sprintf_f(rs->logs, "m4rx print the cmd recv in:\n");
                     print_f(rs->plogs, "P17", rs->logs);
                     dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
                     
@@ -87341,8 +87460,20 @@ static int p17(struct procRes_s *rs)
                 
                     switch(outcmd.cmd) {
                         case BKCMD_IMAGE_IN_RSP:
-                            //minfo[0] = 'P';
-                            rs_ipc_put(rs, "P", 1);
+                            mfourCnt += 1;
+
+                            if (mfourwait > 0) {
+                                minfo[0] = 'C';
+                                minfo[1] = mfourlist[(mfourhead % MFOUR_WAIT_LIST_SIZE)];
+
+                                mfourCnt -= 1;
+                                
+                                mfourhead += 1;
+                                mfourwait -= 1;
+
+                                write(pipeMfRx[1], minfo, 2);
+                            }
+                            
                             break;
                         case BKCMD_REQUIRE_AREA:           // M4 -> operator
                             memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
@@ -87388,34 +87519,113 @@ static int p17(struct procRes_s *rs)
                                         }
 
                                         write(pipeMfRx[1], minfo, 2);
-                                    }
-                                }
-                            
-                            }
 
-                
-                            //bkjob_send_cmd( chan->mqOperator, &cmd );
+                                        if (mfourCnt > 0) {
+                                            minfo[0] = 'C';
+
+                                            mfourCnt -= 1;
+
+                                            write(pipeMfRx[1], minfo, 2);
+                                        } else {
+                                            mfourlist[(mfourtail % MFOUR_WAIT_LIST_SIZE)] = minfo[1];
+                                            mfourtail += 1;
+                                            mfourwait += 1;
+                                        }
+
+                                        break;
+                                    }
+
+                                }
+                            }
                             
-                            rx_buf = NULL;
                             break;
                         case BKCMD_DONE_AREA:              // M4 -> operator
                             memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
                             memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
                             rspcmd.cmd = BKCMD_DONE_AREA_RSP;
+                            rspcmd.dPtr = 0;
                             
-                            outcmd.dPtr  = rx_buf;
+                            //outcmd.dPtr  = rx_buf;
+                            img_out = outcmd.dPtr;
+                            cid = img_out->mfourIdx;
                             
                             //bkjob_send_cmd( chan->mqOperator, &outcmd);
-                            sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_DONE_AREA_RSP:\n");
+                            sprintf_f(rs->logs, "send cmd BKCMD_DONE_AREA_RSP cid: %d tag: %d idx: %d w: %d h: %d \n", cid, (uint32_t)(outcmd.tag >> 16), img_out->mfourIdx, img_out->mfourImgW, img_out->mfourImgH);
                             print_f(rs->plogs, "P17", rs->logs);
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
+
+                            decraw = &rs->pbDecMfour[mfbidx]->aspDecRaw;
+                            img_raw = decraw->aspDcData;
+                            decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[cid];
+                            img_param = decpic->aspDcData;
+
+                            cpyDst = img_param->mfourData;
+                            cpySrc = img_raw->mfourData;
+
+                            memcpy(cpyDst, cpySrc, 1078);
+
+                            msync(cpyDst, 1078, MS_SYNC);
+
+                            cpyDst = img_param->mfourData + 1078; //offset:0x436
+                            //ptrw = (int *)(img_param->mfourData + 0x12);
+                            //ptrh = (int *)(img_param->mfourData + 0x16);
+
+                            //*ptrw = (int)img_out->mfourImgW;
+                            //*ptrh = (int)img_out->mfourImgH;
                             
-                            rx_buf = NULL;
+                            //msync(cpyDst, 1078, MS_SYNC);
+
+                            pheader = (struct bitmapHeader_s *)(img_param->mfourData - 2);
+                            //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
+                            
+                            cpySrc = img_out->mfourData;
+                            imgsize = img_out->mfourImgW * img_out->mfourImgH;
+
+                            bitmapHeaderSetup(pheader, 8, img_out->mfourImgW, img_out->mfourImgH, 200, imgsize);
+                            
+                            //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
+                            
+                            sprintf_f(rs->logs, "compare the output image size:%d m4:%d \n", imgsize, outcmd.dSize);
+                            print_f(rs->plogs, "P17", rs->logs);
+                            
+                            memcpy(cpyDst, cpySrc, imgsize);
+
+                            imgsize += 1078;
+
+                            aspBMPdecodeItemSet(decpic, img_out->mfourImgW, img_out->mfourImgH, imgsize);
+
+                            minfo[0] = 'd';
+
+                            if (cid == 0) {
+                                minfo[1] = 0x80;
+                            } else {
+                                minfo[1] = cid & 0x7f;
+                            }
+
+                            write(pipeMfRx[1], minfo, 2);
+                            
+                            mfourCnt += 1;
+                            
+                            if (mfourwait > 0) {
+                                minfo[0] = 'C';
+                                minfo[1] = mfourlist[(mfourhead % MFOUR_WAIT_LIST_SIZE)];
+
+                                mfourCnt -= 1;
+                                
+                                mfourhead += 1;
+                                mfourwait -= 1;
+
+                                write(pipeMfRx[1], minfo, 2);
+                            }
+
+                            
                             break;
                         case BKCMD_ABORT:                  // M4 -> operator
                             //bkjob_send_cmd( chan->mqOperator, &cmd );
                             break;
                         case BKCMD_IMAGE_COMPLETE:         // M4 -> operator
+                            minfo[0] = 'e';
+                            write(pipeMfRx[1], minfo, 1);
                             //bkjob_send_cmd( chan->mqOperator, &cmd );
                             break;
                         default:
