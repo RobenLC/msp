@@ -2266,6 +2266,66 @@ static int grapbmp(unsigned char *ptr, struct bitmapHeader_s * bmphead, char *pt
     return 0;
 }
 
+static int rgb2jpgRvs(unsigned char *prgb, unsigned char *ppjpg, int *jlen, int setW, int setH, int bpp)
+{
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+    JSAMPROW row_pointer[1];
+    unsigned int row_stride;
+    unsigned long lLen=0;
+    int clrsp=0;
+    unsigned char *pbuff=0, *pret=0;
+
+    //printf("[JPG] rgb2jpg enter \n"); 
+    
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+
+    jpeg_mem_dest(&cinfo, &pbuff, &lLen);
+
+    cinfo.image_width = setW;      /* image width and height, in pixels */
+    cinfo.image_height = setH;
+    cinfo.input_components = bpp / 8;         /* # of color components per pixel */
+    
+    clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
+    cinfo.in_color_space = clrsp;//JCS_RGB;
+    
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, 90, TRUE);
+
+    jpeg_start_compress(&cinfo, TRUE);
+
+    //oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
+    row_stride = ((cinfo.image_width * bpp + 31) / 32) * 4;
+    printf("[JPG] bpp: %d row: %d \n", bpp, row_stride);
+
+    while (cinfo.next_scanline < cinfo.image_height) 
+    {
+        row_pointer[0] = &prgb[(cinfo.image_height - cinfo.next_scanline - 1) * row_stride];
+        //printf("l: %d \n", cinfo.next_scanline);
+        //row_pointer[0] = &prgb[cinfo.next_scanline * row_stride];
+        (void) jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+
+    jpeg_destroy_compress(&cinfo);
+
+    printf("[JPG] dst: 0x%.8x len: %ld \n", (uint32_t)ppjpg, lLen);
+    
+    if (!ppjpg) {
+        printf("[JPG] Error!!! return memory failed\n");
+    } else {
+        memcpy(ppjpg, pbuff, lLen);
+    }
+    
+    *jlen = (int)lLen;
+    
+    free(pbuff);
+    
+    return 0;
+}
+
 static int rgb2jpg(unsigned char *prgb, unsigned char *ppjpg, int *jlen, int setW, int setH, int bpp)
 {
     struct jpeg_compress_struct cinfo;
@@ -74512,7 +74572,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         shmem_dump((char*)ptmetaout, 512);
                         #endif
                 
-                
                         #if 0 /* save meta */
                         fsmeta = find_save(ptfilepath, ptfileSaveWifiMeta);
                         if (fsmeta) {
@@ -76260,8 +76319,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sprintf_f(rs->logs, "[DV] clean end \n");
                     print_f(rs->plogs, "P11", rs->logs);
 
-                    if (strcmp(msgcmd, "usbbknote") != 0) {
-                        sprintf(msgcmd, "usbbknote");
+                    if (strcmp(msgcmd, "usbscan") != 0) {
+                        sprintf(msgcmd, "usbscan");
                         rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
                     }
 
@@ -76563,7 +76622,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     pagecnt=0;
                                     
                                     #if 1
-                                    if (strcmp(msgcmd, "usbbknote") == 0) {
+                                    if (strcmp(msgcmd, "usbscan") == 0) {
 
                                         //chq = 'x';
                                         msgret[0] = 'x';
@@ -86791,7 +86850,7 @@ static int p15(struct procRes_s *rs)
                     print_f(rs->plogs, "P15", rs->logs);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
-                    err = rgb2jpg(bmpbufc + bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
+                    err = rgb2jpgRvs(bmpbufc + bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
                     clock_gettime(CLOCK_REALTIME, &jpgE);
                     if (err) {
                         sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
@@ -87113,7 +87172,7 @@ static int p15(struct procRes_s *rs)
                     print_f(rs->plogs, "P15", rs->logs);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
-                    err = rgb2jpg(bmpbufc + bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
+                    err = rgb2jpgRvs(bmpbufc + bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
                     clock_gettime(CLOCK_REALTIME, &jpgE);
                     if (err) {
                         sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
