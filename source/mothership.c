@@ -60027,7 +60027,10 @@ static int p3(struct procRes_s *rs)
     struct aspDoCropCalcu *pcrpdo=0;
     CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
     int *result=0, *org=0, *mass=0;
-    int org_len=0, mass_len=0, mbfidx=0, imgidx=0, mfbstat=0;
+    int org_len=0, mass_len=0, mbfidx=0, imgidx=0, mfbstat=0, exlen=0, yllen=0, val=0, mtlen=0;
+    struct bitmapDecodeMfour_s *pdec=0;
+    struct bitmapDecodeItem_s *decjpg=0, *decmeta=0, *decexmt=0;
+    char *pmeta=0, *pexmt=0;
     
     prctl(PR_SET_NAME, "msp-p3");
     //sprintf(argv[0], "msp-p3-spi");
@@ -60653,143 +60656,120 @@ static int p3(struct procRes_s *rs)
                     print_f(rs->plogs, "P3", rs->logs);
                 }
 
+                pdec = rs->pbDecMfour[mbfidx];
+    
                 imgidx = 0;
                 mfbstat = 0;
-                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mbfidx], &imgidx);
-                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mbfidx], &mfbstat);
+                ret = aspBMPdecodeBuffGetIdx(pdec, &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(pdec, &mfbstat);
                 sprintf_f(rs->logs, "crop get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mbfidx, imgidx, mfbstat);
                 print_f(rs->plogs, "P3", rs->logs);
                 
-                
-                sprintf_f(rs->logs, "get info: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
-                print_f(rs->plogs, "P3", rs->logs);
+                decjpg = &pdec->aspDecJpeg; //jpeg
+                decmeta = &pdec->aspDecMeta; //meta
+                decexmt = &pdec->aspDecMetaex; //meta
 
-                //sleep(10);
-                len = ring_buf_cons(rs->pdataRx, &addr);
-                if (len >= 0) {
-                    sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
+                aspBMPdecodeItemGet(decmeta, &pmeta, &mtlen);
+                aspBMPdecodeItemGet(decexmt, &pexmt, &exlen);
+
+                pusbmeta = 0;
+                if ((mtlen > 0) && (exlen > 0)) {
+                    len = sizeof(struct aspMetaDataviaUSB_s) + exlen;
+                    addr = aspMemalloc(len, 3);
+                    if (!addr) {
+                        sprintf_f(rs->logs, "Error!!! failed to allocate memory for meta buff size: %d \n", len);
+                        print_f(rs->plogs, "P3", rs->logs);
+
+                        continue;
+                    }
+                    memset(addr, 0, len);
+
+                    pusbmeta = (struct aspMetaDataviaUSB_s *)addr;
+
+                    sprintf_f(rs->logs, "get meta crop info mtlen: %d, exlen: %d buffsize: %d \n", mtlen, exlen, len);
                     print_f(rs->plogs, "P3", rs->logs);
-                
-                    pusbmeta = aspMemalloc(len, 3);
-                    if (pusbmeta) {
-                        memset(pusbmeta, 0, len);
-                        memcpy(pusbmeta, addr, len);  
-                        
-                        //shmem_dump(addr, 228);
-                        //shmem_dump(addr+228, 32);
-                        
-                        msync(pusbmeta, len, MS_SYNC);
 
-                        if ((pusbmeta->ASP_MAGIC_ASPC[0] == finfo[0]) && 
-                            (pusbmeta->ASP_MAGIC_ASPC[1] == finfo[1])) {
-                            
-                            totsz = sizeof(struct aspMetaDataviaUSB_s);
-                            org_len = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
-                            totsz += pusbmeta->MPIONT_LEN;
+                    val = (pexmt[2] << 8) | pexmt[3];
 
-                            tch = (char *)&pusbmeta->YLines_Recorded;
-                            mass_len = (int) ((tch[0]<<8) | tch[1]);
+                    memcpy(pusbmeta, pmeta, len);
+                    pusbmeta->MPIONT_LEN = val;
+                    memcpy(pusbmeta->EXTRA_POINT, pexmt, exlen);
+                    totsz = sizeof(struct aspMetaDataviaUSB_s);
+                    totsz += pusbmeta->MPIONT_LEN;
+                    
+                    org_len = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
 
-                            //shmem_dump(addr, totsz);
-                            sprintf_f(rs->logs, "get total len: %d parsing len: %d, M_LEN: %d, yLine_rec: %d \n", totsz, org_len, (int)pusbmeta->MPIONT_LEN, mass_len);
+                    tch = (char *)&pusbmeta->YLines_Recorded;
+                    mass_len = (int) ((tch[0]<<8) | tch[1]);
+
+                    sprintf_f(rs->logs, "get meta info total len: %d  masslen: %d, M_LEN: %d, ylrec: %d \n", totsz, org_len, (int)pusbmeta->MPIONT_LEN, mass_len*4+4);
+                    print_f(rs->plogs, "P3", rs->logs);
+
+                    if (pusbmeta->MPIONT_LEN > 4) {
+
+                        org_len = 18*2;
+                        mass_len = mass_len * 4;
+
+                        result = aspMemalloc(sizeof(int)*8, 3);
+                        org = aspMemalloc(sizeof(int)*org_len, 3);
+                        mass = aspMemalloc(sizeof(int)*mass_len, 3);
+                        if ((!mass) || (!result) || (!org)) {
+                            sprintf_f(rs->logs, "crop calcu memory malloc size: %d failed !!! \n", (8+org_len+mass_len)*sizeof(int));
                             print_f(rs->plogs, "P3", rs->logs);
+                            continue;
+                        }
+                        memset(result, 0, sizeof(int)*8);
+                        memset(org, 0, sizeof(int)*org_len);
+                        memset(mass, 0, sizeof(int)*mass_len);
+                        ret = getOrg(org, addr, totsz, rs);
+                        if (ret) {
+                            sprintf_f(rs->logs, "m4 getOrg ret: %d \n", ret);
+                            print_f(rs->plogs, "P3", rs->logs);
+                        }
 
-                            if (pusbmeta->MPIONT_LEN > 4) {
-
-                                org_len = 18*2;
-                                mass_len = mass_len * 4;
-                                
-                                result = aspMemalloc(sizeof(int)*8, 3);
-                                org = aspMemalloc(sizeof(int)*org_len, 3);
-                                mass = aspMemalloc(sizeof(int)*mass_len, 3);
-                                if (!mass) {
-                                    sprintf_f(rs->logs, "malloc size: %d failed !!! \n", sizeof(int)*mass_len);
-                                    print_f(rs->plogs, "P3", rs->logs);
-                                }
-                                
-                                memset(result, 0, sizeof(int)*8);
-                                memset(org, 0, sizeof(int)*org_len);
-                                memset(mass, 0, sizeof(int)*mass_len);
-                                
-                                ret = getOrg(org, addr, totsz, rs);
-                                if (ret) {
-                                    sprintf_f(rs->logs, "getOrg ret: %d \n", ret);
-                                    print_f(rs->plogs, "P3", rs->logs);
-                                }
-                                
-                                ret = getExtra(mass, addr, totsz, rs);
-                                if (ret) {
-                                    sprintf_f(rs->logs, "getExtra ret: %d \n", ret);
-                                    print_f(rs->plogs, "P3", rs->logs);
-                                }
-                                else {
-                                    doCalculate(result, org, org_len, mass, mass_len, rs, 3);
-                                }
-                                
-                                sprintf_f(rs->logs, "get rotateP1 (%4d, %4d) \n", result[0], result[1]);
-                                print_f(rs->plogs, "P3", rs->logs);
-
-                                sprintf_f(rs->logs, "get rotateP2 (%4d, %4d) \n", result[2], result[3]);
-                                print_f(rs->plogs, "P3", rs->logs);
-                                
-                                sprintf_f(rs->logs, "get rotateP3 (%4d, %4d) \n", result[4], result[5]);
-                                print_f(rs->plogs, "P3", rs->logs);
-                                
-                                sprintf_f(rs->logs, "get rotateP4 (%4d, %4d) \n", result[6], result[7]);
-                                print_f(rs->plogs, "P3", rs->logs);
-                                
-                                tmp = (uint32_t)result[0];
-                                cord = (uint32_t)result[1];
-                                cord = cord | (tmp <<16);
-                                lsb2Msb32(&pusbmeta->CROP_POS_F1, cord);
-                                
-                                tmp = (uint32_t)result[2];
-                                cord = (uint32_t)result[3];
-                                cord = cord | (tmp <<16);
-                                lsb2Msb32(&pusbmeta->CROP_POS_F2, cord);
-                                
-                                tmp = (uint32_t)result[4];
-                                cord = (uint32_t)result[5];
-                                cord = cord | (tmp <<16);
-                                lsb2Msb32(&pusbmeta->CROP_POS_F3, cord);
-                                
-                                tmp = (uint32_t)result[6];
-                                cord = (uint32_t)result[7];
-                                cord = cord | (tmp <<16);
-                                lsb2Msb32(&pusbmeta->CROP_POS_F4, cord);
-                                
-                                addr = (char *) &pusbmeta->CROP_POS_F1;
-                            }
-                            else {
-                                sprintf_f(rs->logs, "no crop data, MPIONT_LEN: %d \n", pusbmeta->MPIONT_LEN);
-                                print_f(rs->plogs, "P3", rs->logs);
-
-                                addr = (char *) &pusbmeta->CROP_POS_F1;
-                                memset(addr, 0, 16);
-                            }
+                        ret = getExtra(mass, addr, totsz, rs);
+                        if (ret) {
+                            sprintf_f(rs->logs, "m4 getExtra ret: %d \n", ret);
+                            print_f(rs->plogs, "P3", rs->logs);
                         }
                         else {
-                            sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
-                            print_f(rs->plogs, "P3", rs->logs);
-
-                            //shmem_dump(addr, 512);
-                            //dbgMetaUsb(pusbmeta);
-
-                            memset(addr, 0, 16);
+                            doCalculate(result, org, org_len, mass, mass_len, rs, 3);
                         }
+                                
+                        sprintf_f(rs->logs, "m4 get rotateP1 (%4d, %4d) \n", result[0], result[1]);
+                        print_f(rs->plogs, "P3", rs->logs);
 
-                        //dbgMetaUsb(pusbmeta);
-                    } 
-                    else {
-                        sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
+                        sprintf_f(rs->logs, "m4 get rotateP2 (%4d, %4d) \n", result[2], result[3]);
                         print_f(rs->plogs, "P3", rs->logs);
                         
-                        memset(addr, 0, 16);
+                        sprintf_f(rs->logs, "m4 get rotateP3 (%4d, %4d) \n", result[4], result[5]);
+                        print_f(rs->plogs, "P3", rs->logs);
+                        
+                        sprintf_f(rs->logs, "m4 get rotateP4 (%4d, %4d) \n", result[6], result[7]);
+                        print_f(rs->plogs, "P3", rs->logs);
+                        
+                        tmp = (uint32_t)result[0];
+                        cord = (uint32_t)result[1];
+                        cord = cord | (tmp <<16);
+                        lsb2Msb32(&pusbmeta->CROP_POS_F1, cord);
+                        
+                        tmp = (uint32_t)result[2];
+                        cord = (uint32_t)result[3];
+                        cord = cord | (tmp <<16);
+                        lsb2Msb32(&pusbmeta->CROP_POS_F2, cord);
+                        
+                        tmp = (uint32_t)result[4];
+                        cord = (uint32_t)result[5];
+                        cord = cord | (tmp <<16);
+                        lsb2Msb32(&pusbmeta->CROP_POS_F3, cord);
+                        
+                        tmp = (uint32_t)result[6];
+                        cord = (uint32_t)result[7];
+                        cord = cord | (tmp <<16);
+                        lsb2Msb32(&pusbmeta->CROP_POS_F4, cord);
+                        
+                        addr = (char *) &pusbmeta->CROP_POS_F1;
                     }
-                }
-                else {
-                    addr = aspMemalloc(16, 3);
-                    memset(addr, 0, 16);
                 }
                 
                 memset(uinfo, 0, 32);
@@ -60802,7 +60782,7 @@ static int p3(struct procRes_s *rs)
             }
             #endif //#if MFOUR_SIM_MODE_JPG
             else {
-                sprintf_f(rs->logs, "cmode: %d - 7\n", cmode);
+                sprintf_f(rs->logs, "unknown cmode: %d\n", cmode);
                 print_f(rs->plogs, "P3", rs->logs);
             }
 
@@ -84081,7 +84061,7 @@ static int read_image_fle( char *filename, void *buf, int buf_size )
 
 static int send_image_in_jpg(struct procRes_s *rs, int mbidx)
 {
-    int image_size=0, mul=0, tail=0, shf=0, ix=0, jpglen=0, exlen=0, yllen=0;
+    int image_size=0, mul=0, tail=0, shf=0, ix=0, jpglen=0, exlen=0, yllen=0, val=0, mtlen=0;
     unsigned char *pt=0, *pmeta=0, *pexmt=0;
     //mfour_rjob_cmd cmd;
     char filename[256]={0};
@@ -84156,7 +84136,8 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx)
 
     for (ix=0; ix < mul; ix++) {
         shf = (mul - ix - 1) * 512;
-        pt = &img_param->mfourData[shf];
+        pt = img_param->mfourData + shf;
+        
         if (pt[0] == 'A') {
             if ((pt[1] == 'S') && (pt[2] == 'P') && (pt[3] == 'C')) {
                 pmeta = pt;
@@ -84166,26 +84147,51 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx)
     }
 
     if (!pmeta) return -6;
-
+    
     jpglen = pmeta - img_param->mfourData;
-    exlen = size - jpglen - (sizeof(struct aspMetaDataviaUSB_s) - 8);
 
+    val = size - jpglen;
+
+    tail = val % 16;
+    mul = (val - tail) / 16;
+    
+    for (ix=0; ix < (mul - 1); ix++) {
+        shf = (ix + 1) * 16;
+        pt = pmeta + shf;
+
+        if ((pt[0] == 'Y') && (pt[1] == 'L')) {
+            pexmt = pt;
+        }
+    }
+
+    if (!pexmt) return -7;
+    mtlen = pexmt - pmeta;
+    exlen = size - jpglen - mtlen;
+    
     pusbmeta = (struct aspMetaDataviaUSB_s *)pmeta;
-    pexmt = &pusbmeta->ASP_MAGIC_YL[0];
-    yllen = pusbmeta->MPIONT_LEN + 4;
 
-    if ((pexmt[0] != 'Y') || (pexmt[1] != 'L')) return -7;
-    if (exlen != yllen) {
-        sprintf_f(rs->logs,"Error!!! extra len not match, len: %d should be %d \n", exlen, yllen);
+    pt = (unsigned char *)&(pusbmeta->YLines_Recorded);
+    val = (pt[0] << 8) | pt[1];
+    yllen = (val * 4) + 4;
+
+    val = (pexmt[2] << 8) | pexmt[3];
+    val += 4;
+    
+
+    sprintf_f(rs->logs, "mass len: %d m_len: %d rec_len: %d meta_len: %d jpeg_len: %d\n", exlen, val, yllen, mtlen, jpglen); 
+    print_f(rs->plogs, "fIle", rs->logs);
+
+    if ((exlen != yllen) || (exlen != val)) {
+        sprintf_f(rs->logs,"Error!!! extra len not match, len: %d should be %d or %d \n", exlen, yllen, val);
         print_f(rs->plogs, "fIle", rs->logs);
         return -8;
     }
 
-    memcpy(decmeta->aspDcData->mfourData, pmeta, (sizeof(struct aspMetaDataviaUSB_s) - 8));
-    aspBMPdecodeItemSet(decmeta, 0, 0, (sizeof(struct aspMetaDataviaUSB_s) - 8));
+    memcpy(decmeta->aspDcData->mfourData, pmeta, mtlen);
+    aspBMPdecodeItemSet(decmeta, 0, 0, mtlen);
 
-    memcpy(decexmt->aspDcData->mfourData, pexmt, yllen);
-    aspBMPdecodeItemSet(decexmt, 0, 0, yllen);
+    memcpy(decexmt->aspDcData->mfourData, pexmt, exlen);
+    aspBMPdecodeItemSet(decexmt, 0, 0, exlen);
 
     pimgw = (int *)(img_param->mfourData+0x12);
     pimgh = (int *)(img_param->mfourData+0x16);
@@ -86716,7 +86722,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 print_f(rs->plogs, sp, rs->logs);
 
+                #if MFOUR_SIM_MODE_JPG
+                aspBMPdecodeItemGet(&rs->pbDecMfour[buffidx]->aspDecJpeg, &bmpbuff, &bmplen);
+                #else
                 aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, bmph, rawlen);
+                #endif 
                 
                 jpgout = 0;
         
@@ -86749,7 +86759,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     
-                    err = jpeg2rgb(bmpbuff, bmplen, jpgout - 1078, tmp, &jpgetW, &jpgetH, colr);
+                    err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgE);
         
@@ -87751,7 +87761,7 @@ static int p16(struct procRes_s *rs)
                 rjcmd.tag = (mfbidx+1) << 16;
                 rjcmd.rsp = 0;
                 rjcmd.dPtr = img_param;
-                rjcmd.dSize = decraw->aspDcLen;
+                rjcmd.dSize = (decraw->aspDcLen > 16 * 1024) ? 16*1024:decraw->aspDcLen;
 
                 sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_IMAGE_IN \n");
                 print_f(rs->plogs, "P16", rs->logs);
