@@ -11195,7 +11195,7 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
     return 0;
 }
 
-#define LOG_ROTRECT_MF_EN (0)
+#define LOG_ROTRECT_MF_EN (1)
 static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, int *page, struct aspMetaData_s *meta, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc, char *bmp, int oldRowsz, int bpp, int *pside, int *pmreal) 
 {
     int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0, ic=0;
@@ -11461,11 +11461,10 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
     sprintf_f(rs->logs, " v41: %.2lf o41:(%.2lf, %.2lf) d41: %.2lf \n", v41, o41[0], o41[1], d41);
     print_f(rs->plogs, "RCMF", rs->logs);
     #endif
-    
-    if (vmin == v12) {
 
+    if (vmin == v41) {
         #if LOG_ROTRECT_MF_EN
-        sprintf_f(rs->logs, " v12 + v34 \n");
+        sprintf_f(rs->logs, " v41 \n");
         print_f(rs->plogs, "RCMF", rs->logs);
         #endif
 
@@ -11480,164 +11479,6 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
 
         ptStart[3][0] = pT4[0];
         ptStart[3][1] = pT4[1];
-        
-        memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
-        
-        dgs[0] = d12;
-        dgs[1] = d12;
-        dgs[2] = d34;
-        dgs[3] = d34;
-
-        offsets[0] = o12;
-        offsets[1] = o12;
-        offsets[2] = o34;
-        offsets[3] = o34;
-
-        rgbtga[0] = tagrgba;
-        rgbtga[1] = tagrgbb;
-        rgbtga[2] = tagrgba;
-        rgbtga[3] = tagrgbb;
-
-        rgbdiff[0] = tagrgbdiffa;
-        rgbdiff[1] = tagrgbdiffb;
-        rgbdiff[2] = tagrgbdiffa;
-        rgbdiff[3] = tagrgbdiffb;
-
-        ptreal[0] = 0;
-        ptreal[1] = 0;
-    } 
-    else if (vmin == v23) {
-        #if LOG_ROTRECT_MF_EN
-        sprintf_f(rs->logs, " v23 + v41 \n");
-        print_f(rs->plogs, "RCMF", rs->logs);
-        #endif
- 
-        ptStart[0][0] = pT3[0];
-        ptStart[0][1] = pT3[1];
-
-        ptStart[1][0] = pT4[0];
-        ptStart[1][1] = pT4[1];
-
-        ptStart[2][0] = pT3[0];
-        ptStart[2][1] = pT3[1];
-
-        ptStart[3][0] = pT4[0];
-        ptStart[3][1] = pT4[1];
-        
-        memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
-        
-        dgs[0] = d23;
-        dgs[1] = d23;
-        dgs[2] = d41;
-        dgs[3] = d41;
-
-        offsets[0] = o23;
-        offsets[1] = o23;
-        offsets[2] = o41;
-        offsets[3] = o41;
-
-        rgbtga[0] = tagrgba;
-        rgbtga[1] = tagrgbb;
-        rgbtga[2] = tagrgba;
-        rgbtga[3] = tagrgbb;
-
-        rgbdiff[0] = tagrgbdiffa;
-        rgbdiff[1] = tagrgbdiffb;
-        rgbdiff[2] = tagrgbdiffa;
-        rgbdiff[3] = tagrgbdiffb;
-
-        ptreal[0] = 0;
-        ptreal[1] = 0;
-    }
-    else if (vmin == v34) {
-        #if LOG_ROTRECT_MF_EN
-        sprintf_f(rs->logs, " v34 + v12 \n");
-        print_f(rs->plogs, "RCMF", rs->logs);
-        #endif
-
-        ptStart[0][0] = pT3[0];
-        ptStart[0][1] = pT3[1];
-
-        ptStart[1][0] = pT4[0];
-        ptStart[1][1] = pT4[1];
-
-        ptStart[2][0] = pT3[0];
-        ptStart[2][1] = pT3[1];
-
-        ptStart[3][0] = pT4[0];
-        ptStart[3][1] = pT4[1];
-        
-        memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
-        memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
-        
-        dgs[0] = d34;
-        dgs[1] = d34;
-        dgs[2] = d12;
-        dgs[3] = d12;
-
-        offsets[0] = o34;
-        offsets[1] = o34;
-        offsets[2] = o12;
-        offsets[3] = o12;
-
-        rgbtga[0] = tagrgba;
-        rgbtga[1] = tagrgbb;
-        rgbtga[2] = tagrgba;
-        rgbtga[3] = tagrgbb;
-
-        rgbdiff[0] = tagrgbdiffa;
-        rgbdiff[1] = tagrgbdiffb;
-        rgbdiff[2] = tagrgbdiffa;
-        rgbdiff[3] = tagrgbdiffb;
-
-        ptreal[0] = 0;
-        ptreal[1] = 0;
-
-    }
-    else {
-        #if LOG_ROTRECT_MF_EN
-        sprintf_f(rs->logs, " v41 + v23 \n");
-        print_f(rs->plogs, "RCMF", rs->logs);
-        #endif
-
-        ptStart[0][0] = pT3[0];
-        ptStart[0][1] = pT3[1];
-
-        ptStart[1][0] = pT4[0];
-        ptStart[1][1] = pT4[1];
-
-        ptStart[2][0] = pT3[0];
-        ptStart[2][1] = pT3[1];
-
-        ptStart[3][0] = pT4[0];
-        ptStart[3][1] = pT4[1];
-
-        /*
-        ptEnd[0][0] = pT1[0];
-        ptEnd[0][1] = pT1[1];
-        ptEnd[0][2] = pT1[2];
-        ptEnd[0][3] = pT1[3];
-        ptEnd[1][0] = pT2[0];
-        ptEnd[1][1] = pT2[1];
-        ptEnd[1][2] = pT2[2];
-        ptEnd[1][3] = pT2[3];
-        ptEnd[2][0] = pT1[0];
-        ptEnd[2][1] = pT1[1];
-        ptEnd[2][2] = pT1[2];
-        ptEnd[2][3] = pT1[3];
-        ptEnd[3][0] = pT2[0];
-        ptEnd[3][1] = pT2[1];
-        ptEnd[3][2] = pT2[2];
-        ptEnd[3][3] = pT2[3];
-        */
         
         memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
         memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
@@ -11667,256 +11508,305 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
         ptreal[0] = 0;
         ptreal[1] = 0;
     }
-
-    if (side > 0) {
-
-        ix = side - 1;
-
-        if ((ix < 4) && (pmreal[0] > 0) && (pmreal[1] > 0)) {
-
-            ptShift[ix][0] = pmreal[0];
-            ptShift[ix][1] = pmreal[1];
-            correct[0] = ptShift[ix][0] - ptStart[ix][0];
-            correct[1] = ptShift[ix][1] - ptStart[ix][1];
-            sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) 8bits - %d cont\n", pmreal[0], pmreal[1], correct[0], correct[1], ix);
-            print_f(rs->plogs, "RCMF", rs->logs);       
-
-            ptEnd[ix][0] += correct[0];
-            ptEnd[ix][1] += correct[1];
-
-            setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
-            getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
-
-            *pdeg = dgs[ix];
-
-            return 0;
-        }
-
-
-        sprintf_f(rs->logs, "Error!! the side idx is wrong val: %d \n", ix);
-        print_f(rs->plogs, "RCMF", rs->logs);       
-    }
-
-    srhcntmax[0][0] = srhcntA[0];
-    srhcntmax[0][1] = srhcntA[1];
-    srhcntmax[1][0] = srhcntB[0];
-    srhcntmax[1][1] = srhcntB[1];
-    srhcntmax[2][0] = srhcntA[0];
-    srhcntmax[2][1] = srhcntA[1];
-    srhcntmax[3][0] = srhcntB[0];
-    srhcntmax[3][1] = srhcntB[1];
-
-    srhnum[0][0] = 1.0;
-    srhnum[0][1] = 1.0;
-    srhnum[1][0] = 1.0;
-    srhnum[1][1] = 1.0;
-    srhnum[2][0] = 1.0;
-    srhnum[2][1] = 1.0;
-    srhnum[3][0] = 1.0;
-    srhnum[3][1] = 1.0;
-
-    
-    srhlen[0][0] = crana[0];
-    srhlen[0][1] = crana[1];
-    srhlen[1][0] = cranb[0];
-    srhlen[1][1] = cranb[1];
-    srhlen[2][0] = crana[0];
-    srhlen[2][1] = crana[1];
-    srhlen[3][0] = cranb[0];
-    srhlen[3][1] = cranb[1];
-
-    srhran[0][0] = crana[0];
-    srhran[0][1] = crana[1];
-    srhran[1][0] = cranb[0];
-    srhran[1][1] = cranb[1];
-    srhran[2][0] = crana[0];
-    srhran[2][1] = crana[1];
-    srhran[3][0] = cranb[0];
-    srhran[3][1] = cranb[1];
-
-    memcpy(ptShift, ptStart, sizeof(CFLOAT)*8);
-    
-    if (srhcntA[0] > srhcntA[1]) {
-        srhtotal = srhcntA[0];
-    } else {
-        srhtotal = srhcntA[1];
-    }
-
-    if (srhcntB[0] > srhtotal) {
-        srhtotal = srhcntB[0];
-    }
-    
-    if (srhcntB[1] > srhtotal) {
-        srhtotal = srhcntB[1];
-    }
-    
-    for (ic=0; ic < srhtotal; ic++) {
-        for (ix=0; ix < 4; ix++) {
-            if ((srhnum[ix][0] >= srhcntmax[ix][0]) && (srhnum[ix][0] >= srhcntmax[ix][0])) {
-                continue;
-            }
-        
-            pT5[0] = ptShift[ix][0];
-            pT5[1] = ptShift[ix][1];
-            setRectPoint(pRectTga, srhlen[ix][0], srhlen[ix][1], pT5);
-            #if LOG_ROTRECT_MF_EN
-            dbgprintRect(pRectTga);
-            #endif
-            
-            #if 1
-            if (bpp == 8) {
-                if ((ix % 2) == 0) {
-                    ret = srhRotRect8Bits(rs, ptreal, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
-                    if (ret == 0) {
-
-                        ptShift[ix][0] = ptreal[0];
-                        ptShift[ix][1] = ptreal[1];
-                        correct[0] = ptShift[ix][0] - ptStart[ix][0];
-                        correct[1] = ptShift[ix][1] - ptStart[ix][1];
-                        sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) 8bits - %d\n", ptreal[0], ptreal[1], correct[0], correct[1], ix);
-                        print_f(rs->plogs, "RCMF", rs->logs);       
-        
-                        ptEnd[ix][0] += correct[0];
-                        ptEnd[ix][1] += correct[1];
-                    
-                        setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
-        
-                        getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
-                        *pdeg = dgs[ix];
-                    
-                        break;
-                    }
-                }
-                else {
-                    ret = srhRotRect8BitsDn(rs, ptreal, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
-                    if (ret == 0) {
-
-                        ptShift[ix][0] = ptreal[0];
-                        ptShift[ix][1] = ptreal[1];
-                        correct[0] = ptShift[ix][0] - ptStart[ix][0];
-                        correct[1] = ptShift[ix][1] - ptStart[ix][1];
-                        sprintf_f(rs->logs, "ptreal(%4d, %4d), start(%4.2lf, %4.2lf), page shift: (%4.2lf, %4.2lf) 8bits - %d\n", ptreal[0], ptreal[1], ptStart[ix][0], ptStart[ix][1], correct[0], correct[1], ix);
-                        print_f(rs->plogs, "RCMF", rs->logs);       
-        
-                        ptEnd[ix][0] += correct[0];
-                        ptEnd[ix][1] += correct[1];
-                    
-                        setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
-        
-                        getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
-                        *pdeg = dgs[ix];
-                    
-                        break;
-                    }
-                }
-            } else {
-                ret = srhRotRect(rs, pfound, pRectTga, dgs[ix], offsets[ix], rgbtga[ix], bmp, oldRowsz, bpp, pidx, srhnum[ix][0], srhnum[ix][1]);
-                if (ret == 0) {
-                    err = adjCircleRect(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx);
-                    if (err == 0) {
-        
-                        correct[0] = ptreal[0] - ptStart[ix][0];
-                        correct[1] = ptreal[1] - ptStart[ix][1];
-                        sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) \n", ptreal[0], ptreal[1], correct[0], correct[1]);
-                        print_f(rs->plogs, "RCMF", rs->logs);       
-        
-                        ptEnd[ix][0] += correct[0];
-                        ptEnd[ix][1] += correct[1];
-                    
-                        setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
-        
-                        getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
-                        *pdeg = dgs[ix];
-                    
-                        break;
-                    }
-                }
-            }
-            #else
-            if (ret == 0) {
-                #if 1 /* disable the position adjust */
-                setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
-
-                getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
-                *pdeg = dgs[ix];
-
-                ptreal[0] = 1;
-                ptreal[1] = 1;
-                break;
-                #else
-                err = adjCircleRect(rs, ptreal, pfound, dgs[ix], offsets[ix], rgbdiff[ix], bmp, oldRowsz, bpp, pidx);
-                if (err == 0) {
-        
-                    correct[0] = ptreal[0] - ptStart[ix][0];
-                    correct[1] = ptreal[1] - ptStart[ix][1];
-                    sprintf_f(rs->logs, "ptreal(%4d, %4d), page shift: (%4.2lf, %4.2lf) \n", ptreal[0], ptreal[1], correct[0], correct[1]);
-                    print_f(rs->plogs, "RCMF", rs->logs);       
-        
-                    ptEnd[ix][0] += correct[0];
-                    ptEnd[ix][1] += correct[1];
-                    
-                    setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
-        
-                    getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
-                    *pdeg = dgs[ix];
-                    
-                    break;
-                }
+    else {
+        if (pRectin->aspRectLU[1] > pRectin->aspRectRU[1]) {
+            if (vmin == v12) {
+                #if LOG_ROTRECT_MF_EN
+                sprintf_f(rs->logs, " v12 \n");
+                print_f(rs->plogs, "RCMF", rs->logs);
                 #endif
-            }
-            #endif
-
-            srhnum[ix][0] += 2.0;
-            srhnum[ix][1] += 2.0;
-
-            srhlen[ix][0] += 2.0 * srhran[ix][0];
-            srhlen[ix][1] += 2.0 * srhran[ix][1];
             
-            ptShift[ix][0] -= srhran[ix][0];
-            ptShift[ix][1] -= srhran[ix][1];
+                ptStart[0][0] = pT3[0];
+                ptStart[0][1] = pT3[1];
+            
+                ptStart[1][0] = pT4[0];
+                ptStart[1][1] = pT4[1];
+            
+                ptStart[2][0] = pT3[0];
+                ptStart[2][1] = pT3[1];
+            
+                ptStart[3][0] = pT4[0];
+                ptStart[3][1] = pT4[1];
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d12;
+                dgs[1] = d12;
+                dgs[2] = d34;
+                dgs[3] = d34;
+            
+                offsets[0] = o12;
+                offsets[1] = o12;
+                offsets[2] = o34;
+                offsets[3] = o34;
+            
+                rgbtga[0] = tagrgba;
+                rgbtga[1] = tagrgbb;
+                rgbtga[2] = tagrgba;
+                rgbtga[3] = tagrgbb;
+            
+                rgbdiff[0] = tagrgbdiffa;
+                rgbdiff[1] = tagrgbdiffb;
+                rgbdiff[2] = tagrgbdiffa;
+                rgbdiff[3] = tagrgbdiffb;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            } 
+            else if (vmin == v34) {
+                #if LOG_ROTRECT_MF_EN
+                sprintf_f(rs->logs, " v34 \n");
+                print_f(rs->plogs, "RCMF", rs->logs);
+                #endif
+            
+                ptStart[0][0] = pT3[0];
+                ptStart[0][1] = pT3[1];
+            
+                ptStart[1][0] = pT4[0];
+                ptStart[1][1] = pT4[1];
+            
+                ptStart[2][0] = pT3[0];
+                ptStart[2][1] = pT3[1];
+            
+                ptStart[3][0] = pT4[0];
+                ptStart[3][1] = pT4[1];
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d34;
+                dgs[1] = d34;
+                dgs[2] = d12;
+                dgs[3] = d12;
+            
+                offsets[0] = o34;
+                offsets[1] = o34;
+                offsets[2] = o12;
+                offsets[3] = o12;
+            
+                rgbtga[0] = tagrgba;
+                rgbtga[1] = tagrgbb;
+                rgbtga[2] = tagrgba;
+                rgbtga[3] = tagrgbb;
+            
+                rgbdiff[0] = tagrgbdiffa;
+                rgbdiff[1] = tagrgbdiffb;
+                rgbdiff[2] = tagrgbdiffa;
+                rgbdiff[3] = tagrgbdiffb;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            
+            }
+            else {
+                #if LOG_ROTRECT_MF_EN
+                sprintf_f(rs->logs, " v23 \n");
+                print_f(rs->plogs, "RCMF", rs->logs);
+                #endif
+            
+                ptStart[0][0] = pT3[0];
+                ptStart[0][1] = pT3[1];
+            
+                ptStart[1][0] = pT4[0];
+                ptStart[1][1] = pT4[1];
+            
+                ptStart[2][0] = pT3[0];
+                ptStart[2][1] = pT3[1];
+            
+                ptStart[3][0] = pT4[0];
+                ptStart[3][1] = pT4[1];
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d23;
+                dgs[1] = d23;
+                dgs[2] = d41;
+                dgs[3] = d41;
+            
+                offsets[0] = o23;
+                offsets[1] = o23;
+                offsets[2] = o41;
+                offsets[3] = o41;
+            
+                rgbtga[0] = tagrgba;
+                rgbtga[1] = tagrgbb;
+                rgbtga[2] = tagrgba;
+                rgbtga[3] = tagrgbb;
+            
+                rgbdiff[0] = tagrgbdiffa;
+                rgbdiff[1] = tagrgbdiffb;
+                rgbdiff[2] = tagrgbdiffa;
+                rgbdiff[3] = tagrgbdiffb;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            }
         }
-
-        if ((ret == 0) && (err == 0)) {
-            break;
-        }        
-    
+        else {
+            if (vmin == v34) {
+                #if LOG_ROTRECT_MF_EN
+                sprintf_f(rs->logs, " v34 \n");
+                print_f(rs->plogs, "RCMF", rs->logs);
+                #endif
+            
+                ptStart[0][0] = pT3[0];
+                ptStart[0][1] = pT3[1];
+            
+                ptStart[1][0] = pT4[0];
+                ptStart[1][1] = pT4[1];
+            
+                ptStart[2][0] = pT3[0];
+                ptStart[2][1] = pT3[1];
+            
+                ptStart[3][0] = pT4[0];
+                ptStart[3][1] = pT4[1];
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d34;
+                dgs[1] = d34;
+                dgs[2] = d12;
+                dgs[3] = d12;
+            
+                offsets[0] = o34;
+                offsets[1] = o34;
+                offsets[2] = o12;
+                offsets[3] = o12;
+            
+                rgbtga[0] = tagrgba;
+                rgbtga[1] = tagrgbb;
+                rgbtga[2] = tagrgba;
+                rgbtga[3] = tagrgbb;
+            
+                rgbdiff[0] = tagrgbdiffa;
+                rgbdiff[1] = tagrgbdiffb;
+                rgbdiff[2] = tagrgbdiffa;
+                rgbdiff[3] = tagrgbdiffb;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            
+            }
+            else if (vmin == v12) {
+            
+                #if LOG_ROTRECT_MF_EN
+                sprintf_f(rs->logs, " v12 \n");
+                print_f(rs->plogs, "RCMF", rs->logs);
+                #endif
+            
+                ptStart[0][0] = pT3[0];
+                ptStart[0][1] = pT3[1];
+            
+                ptStart[1][0] = pT4[0];
+                ptStart[1][1] = pT4[1];
+            
+                ptStart[2][0] = pT3[0];
+                ptStart[2][1] = pT3[1];
+            
+                ptStart[3][0] = pT4[0];
+                ptStart[3][1] = pT4[1];
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d12;
+                dgs[1] = d12;
+                dgs[2] = d34;
+                dgs[3] = d34;
+            
+                offsets[0] = o12;
+                offsets[1] = o12;
+                offsets[2] = o34;
+                offsets[3] = o34;
+            
+                rgbtga[0] = tagrgba;
+                rgbtga[1] = tagrgbb;
+                rgbtga[2] = tagrgba;
+                rgbtga[3] = tagrgbb;
+            
+                rgbdiff[0] = tagrgbdiffa;
+                rgbdiff[1] = tagrgbdiffb;
+                rgbdiff[2] = tagrgbdiffa;
+                rgbdiff[3] = tagrgbdiffb;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            } 
+            else {
+                #if LOG_ROTRECT_MF_EN
+                sprintf_f(rs->logs, " v23 \n");
+                print_f(rs->plogs, "RCMF", rs->logs);
+                #endif
+            
+                ptStart[0][0] = pT3[0];
+                ptStart[0][1] = pT3[1];
+            
+                ptStart[1][0] = pT4[0];
+                ptStart[1][1] = pT4[1];
+            
+                ptStart[2][0] = pT3[0];
+                ptStart[2][1] = pT3[1];
+            
+                ptStart[3][0] = pT4[0];
+                ptStart[3][1] = pT4[1];
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d23;
+                dgs[1] = d23;
+                dgs[2] = d41;
+                dgs[3] = d41;
+            
+                offsets[0] = o23;
+                offsets[1] = o23;
+                offsets[2] = o41;
+                offsets[3] = o41;
+            
+                rgbtga[0] = tagrgba;
+                rgbtga[1] = tagrgbb;
+                rgbtga[2] = tagrgba;
+                rgbtga[3] = tagrgbb;
+            
+                rgbdiff[0] = tagrgbdiffa;
+                rgbdiff[1] = tagrgbdiffb;
+                rgbdiff[2] = tagrgbdiffa;
+                rgbdiff[3] = tagrgbdiffb;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            }
+        }
     }
 
-    if ((!ptreal[0]) && (!ptreal[1])) {
 
-        #if 0
-        ix = 0;
+    ix = 0;
 
-        pmreal[0] = ptStart[ix][0];
-        pmreal[1] = ptStart[ix][1];
+    setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
+    getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
 
-        *pside = ix + 1;                
+    *pdeg = dgs[ix];
 
-        sprintf_f(rs->logs, "tag search failed real: (%d, %d) side: %d !!\n", pmreal[0], pmreal[1], *pside);
-        print_f(rs->plogs, "RCMF", rs->logs);       
-
-        return 0;
-        #endif
-    
-        *pdeg = 0.0;
-
-        sprintf_f(rs->logs, "tag search failed !!\n");
-        print_f(rs->plogs, "RCMF", rs->logs);       
-
-        return -9;
-    }
-    
     #if LOG_ROTRECT_MF_EN
     dbgprintRect(pRectroi);
     #endif
 
-    pmreal[0] = ptreal[0];
-    pmreal[1] = ptreal[1];
-
-    *pside = ix + 1;
-
-
-    sprintf_f(rs->logs, "tag search succeed real: (%d, %d) side: %d !!\n", pmreal[0], pmreal[1], *pside);
+    sprintf_f(rs->logs, "tran end ! !\n");
     print_f(rs->plogs, "RCMF", rs->logs);       
     
     return 0;
@@ -18659,7 +18549,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
 }
             
 
-#define LOG_ROTMF_DBG  (0)
+#define LOG_ROTMF_DBG  (1)
 static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff, int *pside, int *pmreal, int *layers, int midx)
 {
 #define UNIT_DEG (1000.0)
@@ -18942,10 +18832,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
         return -1;
     }
     
-    memcpy(rawdest, bmphd, hdlen);
-    memcpy(rawdest, ph, 54);
-    rawSrc = rawdest + bheader->aspbhRawoffset;
-
+    //memcpy(rawdest, bmphd, hdlen);
+    //memcpy(rawdest, ph, 54);
+    //rawSrc = rawdest + bheader->aspbhRawoffset;
+    rawSrc = rawdest;
+    
     if (hdlen != bheader->aspbhRawoffset) {
         sprintf_f(rs->logs, "Error!!! Rawoffset: %d not match head len: %d !!!\n", bheader->aspbhRawoffset, hdlen);
         print_f(rs->plogs, "RMF", rs->logs);
@@ -84072,7 +83963,8 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
     //mfour_rjob_cmd cmd;
     char filename[256]={0};
     char fname[32] = "char_H%.3d.jpg";
-    char filetest[128] = "/home/root/banknote/char_H%.3d.jpg";
+    //char filetest[128] = "/home/root/banknote/char_H%.3d.jpg";
+    char filetest[128] = "/home/root/banknote/full_H%.3d.jpg";
     int ret=0;
     FILE *f=0;
     int size=0;
@@ -84136,12 +84028,15 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
     }
     
     fclose(f);
-
+    
     tail = size % 512;
     mul = (size - tail) / 512;
 
+    sprintf_f(rs->logs,"read file: [%s] size: %d, mul: %d, tail: %d \n", filename, size, mul, tail);
+    print_f(rs->plogs, "fIle", rs->logs);
+
     for (ix=0; ix < mul; ix++) {
-        shf = (mul - ix - 1) * 512;
+        shf = (mul - ix) * 512;
         pt = img_param->mfourData + shf;
         
         if (pt[0] == 'A') {
@@ -84150,9 +84045,19 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
                 break;
             }
         }
+        /*
+        else {
+            sprintf_f(rs->logs,"%d. [0x%.8x]: 0x%.2x \n", ix, shf, pt[0]);
+            print_f(rs->plogs, "fIle", rs->logs);
+        }
+        */
     }
 
-    if (!pmeta) return -6;
+    if (!pmeta) {
+        sprintf_f(rs->logs,"Error!!! can't find meta search count: %d \n", ix);
+        print_f(rs->plogs, "fIle", rs->logs);
+        return -6;
+    }
     
     jpglen = pmeta - img_param->mfourData;
 
@@ -84199,7 +84104,7 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
     }
 
     memcpy(decmeta->aspDcData->mfourData, pmeta, mtlen - 64);
-    aspBMPdecodeItemSet(decmeta, 0, 0, mtlen);
+    aspBMPdecodeItemSet(decmeta, 0, 0, mtlen - 64);
 
     memcpy(decexmt->aspDcData->mfourData, pexmt, exlen);
     aspBMPdecodeItemSet(decexmt, 0, 0, exlen);
@@ -84322,6 +84227,163 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int imgidx)
     return 0;
 }
 
+static int handle_cmd_require_area_rot(struct procRes_s *rs, int clidx, int mfidx, int midx)
+{
+    int ret=0;
+    char *dst=0, *src=0, *bmpraw=0;
+    int pimgY=0, iy=0, ix=0;
+    mfour_rect_st *pDeRect=0;
+    mfour_image_param_st *imgbuf=0;
+    mfour_image_param_st *porgimg=0;
+    struct bitmapDecodeItem_s *decraw=0, *decpic=0;
+    int abuf_size;
+    struct timespec jpgS, jpgE;
+    
+    decraw = &rs->pbDecMfour[mfidx]->aspDecRaw;
+    sprintf_f(rs->logs,"raw info w: %d h: %d len: %d id: %d - %d  !!!\n", decraw->aspDcWidth, decraw->aspDcHeight, decraw->aspDcLen, mfidx, clidx);
+    print_f(rs->plogs, "CLIP", rs->logs);
+
+    if (decraw->aspDcLen == 0) {
+        return -1;
+    }
+
+    porgimg = decraw->aspDcData;
+    sprintf_f(rs->logs,"img param info w: %d h: %d id: %d !!!\n", porgimg->mfourImgW, porgimg->mfourImgH, porgimg->mfourIdx);
+    print_f(rs->plogs, "CLIP", rs->logs);
+
+    //if (porgimg->mfourImgW == 0) return -2;
+
+    decpic = &rs->pbDecMfour[mfidx]->aspDecMfPiRaw[clidx];
+    pDeRect = &rs->pbDecMfour[mfidx]->aspDecRect[clidx];
+
+    if((pDeRect->mfourRectW & 3) != 0) {
+        sprintf_f(rs->logs,"require area width not 4byte alignment !!! \r\n" );
+        print_f(rs->plogs, "CLIP", rs->logs);
+    }
+
+    pDeRect->mfourRectW &= 0xFFFC;    // width should be 4byte alignment
+    abuf_size = pDeRect->mfourRectW * pDeRect->mfourRectH + sizeof(mfour_image_param_st);
+
+    if(abuf_size > (16 * 1024)) {
+        sprintf_f(rs->logs,"ERROR : require area too large !!! \r\n");
+        print_f(rs->plogs, "CLIP", rs->logs);
+    }
+
+    imgbuf =  decpic->aspDcData;
+    imgbuf->mfourIdx = clidx;
+    imgbuf->mfourImgW = pDeRect->mfourRectW;
+    imgbuf->mfourImgH= pDeRect->mfourRectH;
+
+    clock_gettime(CLOCK_REALTIME, &jpgS);
+
+    int *cutsides=0, *cutlayers=0;
+    int cutcnt = 0, rawlen=0, bhlen=0, prisec=0, dstlen=0, cutnum=0;
+    int sides[4]={0}, mreal[4]={0};
+    struct usbhost_s *pushost=0;
+    struct aspMetaData_s *metaRx = 0;
+    struct bitmapHeader_s *bheader=0;
+    char *metaPt=0, *bmpbuff=0, *bmpcolrtb=0, *bmprot=0;
+    char *dstbuff=0, *ph=0;
+
+    bheader = rs->pbheader;
+    ph = &bheader->aspbmpMagic[2];
+    
+    pushost = rs->pusbhost;
+    metaPt = pushost->puhsmeta;
+    metaRx = (struct aspMetaData_s *)metaPt;
+
+    cutcnt =0;
+    cutnum = msb2lsb16(&metaRx->BKNA_NUM);
+
+    cutsides = aspMemalloc(cutnum*sizeof(int)*2, midx);
+    memset(cutsides, 0, cutnum*sizeof(int)*2);
+    cutlayers = aspMemalloc(cutnum*sizeof(int)*2, midx);
+    memset(cutlayers, 0, cutnum*sizeof(int)*2);
+    ret = 0;
+
+    ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
+    sprintf_f(rs->logs, "[CUT] get page ret: %d num: %d\n", ret, cutnum);
+    print_f(rs->plogs, "CLIP", rs->logs);
+
+    #if 0
+    cutsides[ret*2] = -1;
+    cutsides[ret*2+1] = -1;
+    cutlayers[ret*2] = 0;
+    cutlayers[ret*2+1] = 0;
+
+    ret += 1;
+
+    cutsides[ret*2] = -2;
+    cutsides[ret*2+1] = -2;
+    cutlayers[ret*2] = 0;
+    cutlayers[ret*2+1] = 0;
+
+    ret += 1;
+    #endif
+
+    cutnum = ret;
+    for (ix=0; ix < cutnum; ix++) {
+        sprintf_f(rs->logs, "[CUT] clips %d. A:%d (%d) B:%d (%d), cur: %d \n", ix, cutsides[ix*2], cutlayers[ix*2], cutsides[ix*2+1], cutlayers[ix*2+1], clidx);
+        print_f(rs->plogs, "CLIP", rs->logs);
+    }
+
+    cutcnt = clidx;
+                
+    aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
+    bmpraw = bmpbuff + 0x436;
+    bmpcolrtb = aspMemalloc(1078, midx);
+    memcpy(bmpcolrtb, bmpbuff, 1078);
+    memcpy(ph, bmpbuff, sizeof(struct bitmapHeader_s)-2);
+    dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
+    
+    bhlen = 0x436;
+    aspBMPdecodeItemGet(decpic, &dstbuff, &dstlen);
+    bmprot = dstbuff;
+
+    sprintf_f(rs->logs, "raw size: %d, dst size: %d \n", rawlen, dstlen);
+    print_f(rs->plogs, "CLIP", rs->logs);    
+
+    ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpraw, bmpcolrtb, bhlen, bmprot, &sides[prisec], mreal, &cutlayers[cutcnt*2], midx);
+
+    clock_gettime(CLOCK_REALTIME, &jpgE);
+
+    if (ret) {
+        memset(dstbuff, 0, pDeRect->mfourRectW*pDeRect->mfourRectH);
+        aspBMPdecodeItemSet(decpic, pDeRect->mfourRectW, pDeRect->mfourRectH, abuf_size);
+    } else {
+        abuf_size = bheader->aspbiRawSize + sizeof(mfour_image_param_st);
+        aspBMPdecodeItemSet(decpic, bheader->aspbiWidth, bheader->aspbiHeight, abuf_size);
+        pDeRect->mfourRectW = bheader->aspbiWidth;
+        pDeRect->mfourRectH = bheader->aspbiHeight;
+        imgbuf->mfourImgW = pDeRect->mfourRectW;
+        imgbuf->mfourImgH= pDeRect->mfourRectH;
+    }
+
+    sprintf_f(rs->logs, "rotate result w: %d, h: %d size: %d ret: %d\n", bheader->aspbiWidth, bheader->aspbiHeight, abuf_size, ret);
+    print_f(rs->plogs, "CLIP", rs->logs);    
+
+    /*                    
+    bmpraw = porgimg->mfourData + 0x436;
+    for(iy=0; iy< imgbuf->mfourImgH; iy++)
+    {
+        pimgY = (pDeRect->mfourRectY+iy)*porgimg->mfourImgW;
+
+        dst = imgbuf->mfourData + iy*imgbuf->mfourImgW;
+        src = bmpraw + pimgY + pDeRect->mfourRectX;
+
+        memcpy(dst, src, imgbuf->mfourImgW);
+    }
+    sprintf_f(rs->logs, "find and set area %d: x=%d,y=%d,w=%d,h=%d \n", clidx, pDeRect->mfourRectX, pDeRect->mfourRectY, pDeRect->mfourRectW, pDeRect->mfourRectH);
+    print_f(rs->plogs, "CLIP", rs->logs);    
+
+    aspBMPdecodeItemSet(decpic, pDeRect->mfourRectW, pDeRect->mfourRectH, abuf_size);
+    */
+    
+
+
+    return 0;
+}
+
 static int handle_cmd_require_area(struct procRes_s *rs, int clidx, int mfidx)
 {
     char *dst=0, *src=0, *bmpraw=0;
@@ -84357,7 +84419,7 @@ static int handle_cmd_require_area(struct procRes_s *rs, int clidx, int mfidx)
     pDeRect->mfourRectW &= 0xFFFC;    // width should be 4byte alignment
     abuf_size = pDeRect->mfourRectW * pDeRect->mfourRectH + sizeof(mfour_image_param_st);
 
-    if(abuf_size > (16 * 1024)){
+    if(abuf_size > (16 * 1024)) {
         sprintf_f(rs->logs,"ERROR : require area too large !!! \r\n");
         print_f(rs->plogs, "CLIP", rs->logs);
     }
@@ -84593,7 +84655,7 @@ static int p12(struct procRes_s *rs)
                                     print_f(rs->plogs, "P12", rs->logs);
                                 }
                 
-                                ret = handle_cmd_require_area(rs, cid, mfbidx);
+                                ret = handle_cmd_require_area_rot(rs, cid, mfbidx, 12);
                                 if (ret) {
                                     sprintf_f(rs->logs, "Error!!! mfour require area failed ret: %d \n", ret);
                                     print_f(rs->plogs, "P12", rs->logs);
@@ -84652,7 +84714,7 @@ static int p12(struct procRes_s *rs)
                     }
                 }
                 else {
-                    sprintf_f(rs->logs, "Error!!! get test image failed!!! ret: %d \n", ret);
+                    sprintf_f(rs->logs, "bypass m4 image!!! ret: %d, cswerr: 0x%.2x\n", ret, mfbstat);
                     print_f(rs->plogs, "P12", rs->logs);                
                 }
 
@@ -86633,7 +86695,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
             #if MFOUR_SIM_MODE_JPG
             if (cswerr == 0) {
-                send_image_in_jpg(rs, buffidx, midx);
+                ret = send_image_in_jpg(rs, buffidx, midx);
+                if (ret) {
+                    sprintf_f(rs->logs, "[BMP] Error!!! m4 sim get image ret: %d \n", ret);
+                    print_f(rs->plogs, sp, rs->logs); 
+                }
                 
                 ret = aspBMPdecodeItemGet(&rs->pbDecMfour[buffidx]->aspDecMeta, &buffmeta, &mtlen);
                 if (ret < 0) {
@@ -87057,7 +87123,7 @@ static int p15(struct procRes_s *rs)
         case 'c':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
-                sprintf_f(rs->logs, "get cont ch[0x%.2x] \n", ch);
+                sprintf_f(rs->logs, "c get cont ch[0x%.2x] \n", ch);
                 print_f(rs->plogs, "P15", rs->logs);
 
                 if (ch == 0x80) {
@@ -87243,7 +87309,7 @@ static int p15(struct procRes_s *rs)
                 sprintf_f(rs->logs, "[CUT] get page ret: %d num: %d\n", ret, cutnum);
                 print_f(rs->plogs, "P15", rs->logs);
 
-                #if 1
+                #if 0
                 cutsides[ret*2] = -1;
                 cutsides[ret*2+1] = -1;
                 cutlayers[ret*2] = 0;
@@ -87379,7 +87445,7 @@ static int p15(struct procRes_s *rs)
         case 'e':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
-                sprintf_f(rs->logs, "get cont ch[0x%.2x] \n", ch);
+                sprintf_f(rs->logs, "e get cont ch[0x%.2x] \n", ch);
                 print_f(rs->plogs, "P15", rs->logs);
 
                 if (ch == 0x80) {
@@ -87634,12 +87700,14 @@ static int p15(struct procRes_s *rs)
                                             
                     bmpbufc = bmprot;   
                     rotlen = bheader->aspbiRawSize;
+
+                    shmem_dump(bmpbufc, 512);
                     
                     sprintf_f(rs->logs, "[BMP] encode addr: 0x%.8x, raw offset: %d used: %d\n", (uint32_t)bmpbufc, bheader->aspbhRawoffset, rotlen);
                     print_f(rs->plogs, "P15", rs->logs);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
-                    err = rgb2jpgRvs(bmpbufc + bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
+                    err = rgb2jpg(bmpbufc+bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
                     clock_gettime(CLOCK_REALTIME, &jpgE);
                     if (err) {
                         sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
@@ -88053,8 +88121,10 @@ static int p17(struct procRes_s *rs)
                                         memcpy(pRect, pArRect, sizeof(mfour_rect_st));
 
                                         #if 1 // test code
-                                        pRect->mfourRectW = 32;
-                                        pRect->mfourRectH = 40;
+                                        pRect->mfourRectX = 795;
+                                        pRect->mfourRectY = 101;
+                                        pRect->mfourRectW = 48;
+                                        pRect->mfourRectH = 48;
                                         #endif
 
                                         sprintf_f(rs->logs, "find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
