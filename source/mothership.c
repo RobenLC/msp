@@ -11797,7 +11797,7 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
 
     ix = 0;
 
-    setRectPoint(pRectorgk, ptEnd[ix][2], ptEnd[ix][3], &ptEnd[ix][0]);
+    setRectPoint(pRectorgk, ptEnd[ix][2] - 1, ptEnd[ix][3] - 1, &ptEnd[ix][0]);
     getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
 
     *pdeg = dgs[ix];
@@ -18549,7 +18549,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
 }
             
 
-#define LOG_ROTMF_DBG  (1)
+#define LOG_ROTMF_DBG  (0)
 static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff, int *pside, int *pmreal, int *layers, int midx)
 {
 #define UNIT_DEG (1000.0)
@@ -18576,7 +18576,7 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     int *crsAry, crsASize, expCAsize;
     CFLOAT linLU[3], linRU[3], linLD[3], linRD[3], linPal[3], linCrs[3];
     CFLOAT pLU[2], pRU[2], pLD[2], pRD[2], pal[2], par[2], pt[2];
-    CFLOAT plm[2], prm[2], plc[2], prc[2], pn[2];
+    CFLOAT plm[2], prm[2], plc[2], prc[2], pn[2], ptop[2];
     CFLOAT maxhf=0, maxvf=0, minhf=0, minvf=0;
     CFLOAT imgw=0.0, imgh=0.0, imgdeg=0.0;
     int ublen=0, ubret=0, ubrst=0;
@@ -18618,9 +18618,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     imgh = (CFLOAT)bheader->aspbiHeight;
 
     ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
-    cxm = (val>>16)&0xffff;
-    cxn = val & 0xffff;
-
+    //cxm = (val>>16)&0xffff;
+    //cxn = val & 0xffff;
+    cxm = pmreal[0];
+    cxn = pmreal[1];
+    
     sprintf_f(rs->logs, "rot meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
     print_f(rs->plogs, "RMF", rs->logs);                     
 
@@ -18628,8 +18630,10 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     LD[1] = (CFLOAT)cxn;
 
     ret = cfgTableGet(pct, ASPOP_USBCROP_FP02, &val);
-    cxm = (val>>16)&0xffff;
-    cxn = val & 0xffff;
+    //cxm = (val>>16)&0xffff;
+    //cxn = val & 0xffff;
+    cxm = pmreal[2];
+    cxn = pmreal[3];
 
     sprintf_f(rs->logs, "rot meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
     print_f(rs->plogs, "RMF", rs->logs);                     
@@ -18638,8 +18642,10 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     RD[1] = (CFLOAT)cxn;
 
     ret = cfgTableGet(pct, ASPOP_USBCROP_FP03, &val);
-    cxm = (val>>16)&0xffff;
-    cxn = val & 0xffff;
+    //cxm = (val>>16)&0xffff;
+    //cxn = val & 0xffff;
+    cxm = pmreal[4];
+    cxn = pmreal[5];
 
     sprintf_f(rs->logs, "rot meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
     print_f(rs->plogs, "RMF", rs->logs);                     
@@ -18648,8 +18654,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     RU[1] = (CFLOAT)cxn;
 
     ret = cfgTableGet(pct, ASPOP_USBCROP_FP04, &val);
-    cxm = (val>>16)&0xffff;
-    cxn = val & 0xffff;
+    //cxm = (val>>16)&0xffff;
+    //cxn = val & 0xffff;
+    cxm = pmreal[6];
+    cxn = pmreal[7];
+
 
     sprintf_f(rs->logs, "rot meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
     print_f(rs->plogs, "RMF", rs->logs);                     
@@ -18776,7 +18785,7 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     RDt[0] = (int)round(RDn[0]);
     RDt[1] = (int)round(RDn[1]);
     
-    #if 0
+    #if 1
     sprintf_f(rs->logs, "bound: LUn: %lf, %lf -> %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
     print_f(rs->plogs, "RMF", rs->logs);
     sprintf_f(rs->logs, "bound: RUn: %lf, %lf -> %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
@@ -18804,11 +18813,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     minvint = aspMinInt(minvint, RDt[1]);
     
     rowsize = ((bpp * (maxhint + 1) + 31) / 32) * 4;
-    rawszNew = rowsize * (maxvint + 1);
+    rawszNew = rowsize * (maxvint+1);
 
     bheader->aspbhSize = bheader->aspbhRawoffset + rawszNew;
-    bheader->aspbiWidth = maxhint + 1;
-    bheader->aspbiHeight = maxvint + 1;
+    bheader->aspbiWidth = maxhint+1;
+    bheader->aspbiHeight = maxvint+1;
     bheader->aspbiRawSize = rawszNew;
 
     ubrst = 512 - (bheader->aspbhSize % 512);
@@ -19542,17 +19551,19 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
         }
     }
 
-    LUt[0] = (int)round(pLU[0]*100000);
-    LUt[1] = (int)round(pLU[1]*100000);
+#define MIN_P  (100.0)
 
-    RUt[0] = (int)round(pRU[0]*100000);
-    RUt[1] = (int)round(pRU[1]*100000);
+    LUt[0] = (int)round(pLU[0]*MIN_P);
+    LUt[1] = (int)round(pLU[1]*MIN_P);
 
-    LDt[0] = (int)round(pLD[0]*100000);
-    LDt[1] = (int)round(pLD[1]*100000);
+    RUt[0] = (int)round(pRU[0]*MIN_P);
+    RUt[1] = (int)round(pRU[1]*MIN_P);
 
-    RDt[0] = (int)round(pRD[0]*100000);
-    RDt[1] = (int)round(pRD[1]*100000);
+    LDt[0] = (int)round(pLD[0]*MIN_P);
+    LDt[1] = (int)round(pLD[1]*MIN_P);
+
+    RDt[0] = (int)round(pRD[0]*MIN_P);
+    RDt[1] = (int)round(pRD[1]*MIN_P);
 
     pLU[0] = (double)LUt[0];
     pLU[1] = (double)LUt[1];
@@ -19563,14 +19574,14 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     pRD[0] = (double)RDt[0];
     pRD[1] = (double)RDt[1];
 
-    pLU[0] = pLU[0]/100000.0;
-    pLU[1] = pLU[1]/100000.0;
-    pRU[0] = pRU[0]/100000.0;
-    pRU[1] = pRU[1]/100000.0;
-    pLD[0] = pLD[0]/100000.0;
-    pLD[1] = pLD[1]/100000.0;
-    pRD[0] = pRD[0]/100000.0;
-    pRD[1] = pRD[1]/100000.0; 
+    pLU[0] = pLU[0]/MIN_P;
+    pLU[1] = pLU[1]/MIN_P;
+    pRU[0] = pRU[0]/MIN_P;
+    pRU[1] = pRU[1]/MIN_P;
+    pLD[0] = pLD[0]/MIN_P;
+    pLD[1] = pLD[1]/MIN_P;
+    pRD[0] = pRD[0]/MIN_P;
+    pRD[1] = pRD[1]/MIN_P; 
     
     #if LOG_ROTMF_DBG
     sprintf_f(rs->logs, "align: PLU: %lf, %lf \n", pLU[0], pLU[1]);
@@ -19645,21 +19656,30 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
         prm[0] = pRD[0];
         prm[1] = pRD[1];
     }
+
+    ret = getCross(linLD, linLU, plc);
+
+    ret = getCross(linRD, linRU, prc);
+
+    ret = getCross(linRU, linLU, ptop);
+
+    ret= getCross(linRD, linLD, pn);
+
     
     #if LOG_ROTMF_DBG
-    ret = getCross(linLD, linLU, plc);
+    //ret = getCross(linLD, linLU, plc);
     sprintf_f(rs->logs, "test linLD cross linLU.  left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
     print_f(rs->plogs, "RMF", rs->logs);
             
-    ret = getCross(linRD, linRU, prc);
+    //ret = getCross(linRD, linRU, prc);
     sprintf_f(rs->logs, "test linRD cross linRU.  right %lf, %lf ret: %d \n", prc[0], prc[1], ret);
     print_f(rs->plogs, "RMF", rs->logs);
 
-    ret = getCross(linRU, linLU, pt);
-    sprintf_f(rs->logs, "test linRU cross linLU.  top %lf, %lf ret: %d \n", pt[0], pt[1], ret);
+    //ret = getCross(linRU, linLU, ptop);
+    sprintf_f(rs->logs, "test linRU cross linLU.  top %lf, %lf ret: %d \n", ptop[0], ptop[1], ret);
     print_f(rs->plogs, "RMF", rs->logs);
 
-    ret= getCross(linRD, linLD, pn);
+    //ret= getCross(linRD, linLD, pn);
     sprintf_f(rs->logs, "test linRD cross linLD.  down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
     print_f(rs->plogs, "RMF", rs->logs);
     #endif
@@ -19688,12 +19708,43 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     }
     #endif
 
+    #if LOG_ROTMF_DBG
+    sprintf_f(rs->logs, "bf trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+    
     pt[0] = 200.0;
+    fy = ptop[1] - plm[1];
+    if (fy < 1.0) {
+        plm[1] = ptop[1];
+    }
+
+    fy = ptop[1] - prm[1];
+    if (fy < 1.0) {
+        prm[1] = ptop[1];
+    }
+
+    fy = plm[1] - pn[1];
+    if (fy < 1.0) {
+        plm[1] = pn[1];
+    }
+
+    fy = prm[1] - pn[1];
+    if (fy < 1.0) {
+        prm[1] = pn[1];
+    }
+
+    #if LOG_ROTMF_DBG
+    sprintf_f(rs->logs, "after trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
+    print_f(rs->plogs, "RMF", rs->logs);
+    #endif
+    
+
     for (iy=minvint, ix=0; ix < expCAsize; iy++, ix++) {
         pt[1] = (CFLOAT)iy;
         getRectVectorFromV(linCrs, pt, linPal);
 
-        #if 0//LOG_ROTMF_DBG
+        #if 1//LOG_ROTMF_DBG
         sprintf_f(rs->logs, "linCrs:(%lf, %lf, %lf) = pt:(%lf, %lf)  \n", linCrs[0], linCrs[1], linCrs[2], pt[0], pt[1]);
         print_f(rs->plogs, "RMF", rs->logs);
         #endif
@@ -19708,8 +19759,8 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
             getCross(linCrs, linLD, plc);
         }
 
-        //sprintf_f(rs->logs, "%.4lf %.4lf, left cross (%.4lf, %.4lf) \n", pt[1], plm[1], plc[0], plc[1]);
-        //print_f(rs->plogs, "RMF", rs->logs);
+        sprintf_f(rs->logs, "left cross %.4lf %.4lf, (%.4lf, %.4lf) \n", pt[1], plm[1], plc[0], plc[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
 
         if (pt[1] > prm[1]) {
             getCross(linCrs, linRU, prc);
@@ -19717,20 +19768,20 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
             getCross(linCrs, linRD, prc);
         }
 
-        //sprintf_f(rs->logs, "%.4lf %.4lf, right cross (%.4lf, %.4lf) \n", pt[1], prm[1], prc[0], prc[1]);
-        //print_f(rs->plogs, "RMF", rs->logs);
+        sprintf_f(rs->logs, "right cross %.4lf %.4lf, (%.4lf, %.4lf) \n", pt[1], prm[1], prc[0], prc[1]);
+        print_f(rs->plogs, "RMF", rs->logs);
         
         crsAry[ix*3+0] = iy;
         crsAry[ix*3+1] = (int)round(plc[0]);
         crsAry[ix*3+2] = (int)round(prc[0]);
     }
 
-    /*
+    
     for (ix=0; ix < (maxvint-minvint+1); ix++) {
-        sprintf_f(rs->logs, "%d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
+        sprintf_f(rs->logs, "list %d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
         print_f(rs->plogs, "RMF", rs->logs);
     }
-    */
+    
     
     #if LOG_ROTMF_DBG    
     sprintf_f(rs->logs, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d, sizeof crsArry: %d\n", maxhint, maxvint, rowsize, rawszNew, totsz, expCAsize);
@@ -19752,7 +19803,7 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     bmpScale[3] = bpp;
 
     rawTmp = rawSrc;
-    memset(rawTmp, 0xff, rawszNew);
+    memset(rawTmp, 0, rawszNew);
     
     /* reverse to fill the rotate image */
     
@@ -19769,6 +19820,7 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     thacos = cos(theta);
     thasin = sin(theta);
 
+    #if 0 
     ix = (int)round(0 - offsetH);
     iy = (int)round(0 - offsetV);
     
@@ -19784,10 +19836,9 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
         id = iy - 1;
     }
 
-    offsetCal = 0 - id;
-    len = oldTot - id;
+    //offsetCal = 0 - id;
+    //len = oldTot - id;
 
-    #if 0 
     tars = aspMemalloc(sizeof(CFLOAT) * len);
     tarc = aspMemalloc(sizeof(CFLOAT) * len);
 
@@ -19858,8 +19909,8 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
         //dx = (int) round(fx*thacos - fy*thasin);
         //dy = (int) round(fx*thasin + fy*thacos);
 
-        //sprintf_f(rs->logs, "back %d(%f), %d(%f) => %d, %d offset(%f, %f)\n", ix, fx, iy, fy,  dx, dy, offsetH, offsetV);
-        //print_f(rs->plogs, "RMF", rs->logs);
+        sprintf_f(rs->logs, "line %d. (%d %d, %d) \n", id, iy, ix, ixd);
+        print_f(rs->plogs, "RMF", rs->logs);
 
         //iyn = (int)round(fy);
         //iyn += offsetCal;
@@ -19882,8 +19933,8 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
             cnt++;
 
             if ((dx < 0) || (dy < 0) || (dx >= oldWidth) || (dy >= oldHeight)) {
-                //sprintf(rs->logs, "%d. %d, %d => %d, %d (%d, %d)\n",id, ix, iy,  dx, dy, oldWidth, oldHeight);
-                //print_f(rs->plogs, "RMF", rs->logs);
+                sprintf(rs->logs, "Error over boundry!! %d. %d, %d => %d, %d (%d, %d)\n",id, ix, iy,  dx, dy, oldWidth, oldHeight);
+                print_f(rs->plogs, "RMF", rs->logs);
                 continue;
             }
 
@@ -19914,7 +19965,7 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     msync(rawdest, totsz, MS_SYNC);
 
     #if LOG_ROTMF_DBG
-    dbgBitmapHeader(bheader, len);
+    dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     #endif
     return err; 
 }
@@ -59914,7 +59965,7 @@ static int p3(struct procRes_s *rs)
     uint32_t fformat=0, tmp=0, cord=0, dpi=0;
     struct aspMetaData_s *pmetaduo;
     CFLOAT thrput, fltime;
-    struct aspMetaDataviaUSB_s *pusbmeta=0;
+    struct aspMetaDataviaUSB_s *pusbmeta=0, *pusbmetaOrg=0;
     struct aspCrop36_s *pcrp36=0;
     struct aspCropExtra_s *pcrpex=0;
     struct aspDoCropCalcu *pcrpdo=0;
@@ -60578,6 +60629,38 @@ static int p3(struct procRes_s *rs)
                     memset(addr, 0, len);
 
                     pusbmeta = (struct aspMetaDataviaUSB_s *)addr;
+                    
+                    /*
+                    pusbmetaOrg = (struct aspMetaDataviaUSB_s *)pmeta;
+                    
+                    tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F1);
+                    cord = tmp & 0xffff;
+                    tmp = tmp >> 16;
+                    
+                    sprintf_f(rs->logs, "m4 before P1 (%4d, %4d) \n", tmp, cord);
+                    print_f(rs->plogs, "P3", rs->logs);
+
+                    tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F2);
+                    cord = tmp & 0xffff;
+                    tmp = tmp >> 16;
+                    
+                    sprintf_f(rs->logs, "m4 before P2 (%4d, %4d) \n", tmp, cord);
+                    print_f(rs->plogs, "P3", rs->logs);
+                    
+                    tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F3);
+                    cord = tmp & 0xffff;
+                    tmp = tmp >> 16;
+                    
+                    sprintf_f(rs->logs, "m4 before P3 (%4d, %4d) \n", tmp, cord);
+                    print_f(rs->plogs, "P3", rs->logs);
+
+                    tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F4);
+                    cord = tmp & 0xffff;
+                    tmp = tmp >> 16;
+                    
+                    sprintf_f(rs->logs, "m4 before P4 (%4d, %4d) \n", tmp, cord);
+                    print_f(rs->plogs, "P3", rs->logs);
+                    */
 
                     sprintf_f(rs->logs, "get meta crop info mtlen: %d, exlen: %d buffsize: %d \n", mtlen, exlen, len);
                     print_f(rs->plogs, "P3", rs->logs);
@@ -60628,7 +60711,8 @@ static int p3(struct procRes_s *rs)
                         else {
                             doCalculate(result, org, org_len, mass, mass_len, rs, 3);
                         }
-                                
+
+                        /*
                         sprintf_f(rs->logs, "m4 get rotateP1 (%4d, %4d) \n", result[0], result[1]);
                         print_f(rs->plogs, "P3", rs->logs);
 
@@ -60640,28 +60724,40 @@ static int p3(struct procRes_s *rs)
                         
                         sprintf_f(rs->logs, "m4 get rotateP4 (%4d, %4d) \n", result[6], result[7]);
                         print_f(rs->plogs, "P3", rs->logs);
+                        */
+
+                        pusbmetaOrg = (struct aspMetaDataviaUSB_s *)pmeta;
                         
-                        tmp = (uint32_t)result[0];
-                        cord = (uint32_t)result[1];
-                        cord = cord | (tmp <<16);
-                        lsb2Msb32(&pusbmeta->CROP_POS_F1, cord);
+                        tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F1);
+                        cord = tmp & 0xffff;
+                        tmp = tmp >> 16;
                         
-                        tmp = (uint32_t)result[2];
-                        cord = (uint32_t)result[3];
-                        cord = cord | (tmp <<16);
-                        lsb2Msb32(&pusbmeta->CROP_POS_F2, cord);
+                        sprintf_f(rs->logs, "m4 confirm P1 (%4d, %4d) vs (%4d, %4d) \n", result[0], result[1], tmp, cord);
+                        print_f(rs->plogs, "P3", rs->logs);
+
+                        tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F2);
+                        cord = tmp & 0xffff;
+                        tmp = tmp >> 16;
                         
-                        tmp = (uint32_t)result[4];
-                        cord = (uint32_t)result[5];
-                        cord = cord | (tmp <<16);
-                        lsb2Msb32(&pusbmeta->CROP_POS_F3, cord);
+                        sprintf_f(rs->logs, "m4 confirm P2 (%4d, %4d) vs (%4d, %4d) \n", result[2], result[3], tmp, cord);
+                        print_f(rs->plogs, "P3", rs->logs);
                         
-                        tmp = (uint32_t)result[6];
-                        cord = (uint32_t)result[7];
-                        cord = cord | (tmp <<16);
-                        lsb2Msb32(&pusbmeta->CROP_POS_F4, cord);
+                        tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F3);
+                        cord = tmp & 0xffff;
+                        tmp = tmp >> 16;
                         
-                        addr = (char *) &pusbmeta->CROP_POS_F1;
+                        sprintf_f(rs->logs, "m4 confirm P3 (%4d, %4d) vs (%4d, %4d) \n", result[4], result[5], tmp, cord);
+                        print_f(rs->plogs, "P3", rs->logs);
+
+                        tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F4);
+                        cord = tmp & 0xffff;
+                        tmp = tmp >> 16;
+                        
+                        sprintf_f(rs->logs, "m4 confirm P4 (%4d, %4d) vs (%4d, %4d) \n", result[6], result[7], tmp, cord);
+                        print_f(rs->plogs, "P3", rs->logs);
+
+                        //addr = (char *) &pusbmeta->CROP_POS_F1;
+
                     }
                 }
                 
@@ -84227,7 +84323,8 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int imgidx)
     return 0;
 }
 
-static int handle_cmd_require_area_rot(struct procRes_s *rs, int clidx, int mfidx, int midx)
+#define DUMP_ROT_BMP (1)
+static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, int midx)
 {
     int ret=0;
     char *dst=0, *src=0, *bmpraw=0;
@@ -84235,9 +84332,16 @@ static int handle_cmd_require_area_rot(struct procRes_s *rs, int clidx, int mfid
     mfour_rect_st *pDeRect=0;
     mfour_image_param_st *imgbuf=0;
     mfour_image_param_st *porgimg=0;
-    struct bitmapDecodeItem_s *decraw=0, *decpic=0;
+    struct bitmapDecodeItem_s *decraw=0, *decpic=0, *decmeta=0;
+    struct aspMetaDataviaUSB_s *pusbmeta=0;
     int abuf_size;
     struct timespec jpgS, jpgE;
+
+    #if DUMP_ROT_BMP
+    static char ptfileSave[] = "/home/root/rotate/rot_%.3d.bmp";
+    char filepath[256]={0};
+    FILE *fdump=0;
+    #endif
     
     decraw = &rs->pbDecMfour[mfidx]->aspDecRaw;
     sprintf_f(rs->logs,"raw info w: %d h: %d len: %d id: %d - %d  !!!\n", decraw->aspDcWidth, decraw->aspDcHeight, decraw->aspDcLen, mfidx, clidx);
@@ -84253,6 +84357,7 @@ static int handle_cmd_require_area_rot(struct procRes_s *rs, int clidx, int mfid
 
     //if (porgimg->mfourImgW == 0) return -2;
 
+    decmeta = &rs->pbDecMfour[mfidx]->aspDecMeta;
     decpic = &rs->pbDecMfour[mfidx]->aspDecMfPiRaw[clidx];
     pDeRect = &rs->pbDecMfour[mfidx]->aspDecRect[clidx];
 
@@ -84272,18 +84377,20 @@ static int handle_cmd_require_area_rot(struct procRes_s *rs, int clidx, int mfid
     imgbuf =  decpic->aspDcData;
     imgbuf->mfourIdx = clidx;
     imgbuf->mfourImgW = pDeRect->mfourRectW;
-    imgbuf->mfourImgH= pDeRect->mfourRectH;
+    imgbuf->mfourImgH = pDeRect->mfourRectH;
 
     clock_gettime(CLOCK_REALTIME, &jpgS);
 
     int *cutsides=0, *cutlayers=0;
-    int cutcnt = 0, rawlen=0, bhlen=0, prisec=0, dstlen=0, cutnum=0;
-    int sides[4]={0}, mreal[4]={0};
+    int cutcnt = 0, rawlen=0, bhlen=0, prisec=0, dstlen=0, cutnum=0, mtlen=0;
+    int sides[4]={0};
     struct usbhost_s *pushost=0;
     struct aspMetaData_s *metaRx = 0;
     struct bitmapHeader_s *bheader=0;
-    char *metaPt=0, *bmpbuff=0, *bmpcolrtb=0, *bmprot=0;
+    char *metaPt=0, *bmpbuff=0, *bmpcolrtb=0, *bmprot=0, *bmpmeta=0;
     char *dstbuff=0, *ph=0;
+    uint32_t utmp=0, crod=0;
+    int mreal[8]={0};
 
     bheader = rs->pbheader;
     ph = &bheader->aspbmpMagic[2];
@@ -84328,7 +84435,36 @@ static int handle_cmd_require_area_rot(struct procRes_s *rs, int clidx, int mfid
     }
 
     cutcnt = clidx;
-                
+    
+    aspBMPdecodeItemGet(decmeta, &bmpmeta, &mtlen);
+    pusbmeta = (struct aspMetaDataviaUSB_s *)bmpmeta;
+    utmp = msb2lsb32(&pusbmeta->CROP_POS_F1);
+    crod = utmp & 0xffff;
+    utmp = utmp >> 16;
+    mreal[0] = utmp;
+    mreal[1] = crod;
+
+    utmp = msb2lsb32(&pusbmeta->CROP_POS_F2);
+    crod = utmp & 0xffff;
+    utmp = utmp >> 16;
+    mreal[2] = utmp;
+    mreal[3] = crod;
+
+    utmp = msb2lsb32(&pusbmeta->CROP_POS_F3);
+    crod = utmp & 0xffff;
+    utmp = utmp >> 16;
+    mreal[4] = utmp;
+    mreal[5] = crod;
+
+    utmp = msb2lsb32(&pusbmeta->CROP_POS_F4);
+    crod = utmp & 0xffff;
+    utmp = utmp >> 16;
+    mreal[6] = utmp;
+    mreal[7] = crod;
+
+    sprintf_f(rs->logs, "meta size: %d, P1: (%4d, %4d) P2: (%4d, %4d) P3: (%4d, %4d) P4: (%4d, %4d) \n", mtlen, mreal[0], mreal[1], mreal[2], mreal[3], mreal[4], mreal[5], mreal[6], mreal[7]);
+    print_f(rs->plogs, "CLIP", rs->logs);    
+    
     aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
     bmpraw = bmpbuff + 0x436;
     bmpcolrtb = aspMemalloc(1078, midx);
@@ -84359,9 +84495,43 @@ static int handle_cmd_require_area_rot(struct procRes_s *rs, int clidx, int mfid
         imgbuf->mfourImgH= pDeRect->mfourRectH;
     }
 
-    sprintf_f(rs->logs, "rotate result w: %d, h: %d size: %d ret: %d\n", bheader->aspbiWidth, bheader->aspbiHeight, abuf_size, ret);
+    msync(bmprot, abuf_size, MS_SYNC);
+    
+    sprintf_f(rs->logs, "dump 512 bytes cropping result addr: 0x%.8x size: %d \n", (uint32_t)bmprot, abuf_size);
     print_f(rs->plogs, "CLIP", rs->logs);    
 
+    shmem_dump(bmprot, 512);
+
+    sprintf_f(rs->logs, "rotate result w: %d, h: %d size: %d ret: %d\n", pDeRect->mfourRectW, pDeRect->mfourRectH, abuf_size, ret);
+    print_f(rs->plogs, "CLIP", rs->logs);    
+
+    #if DUMP_ROT_BMP
+    sprintf_f(rs->logs, "show result bmp header: \n");
+    print_f(rs->plogs, "CLIP", rs->logs);    
+
+    dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
+    memcpy(bmpcolrtb, ph, sizeof(struct bitmapHeader_s)-2);
+    
+    fdump = find_save(filepath, ptfileSave);
+    if (fdump) {
+        sprintf_f(rs->logs, "find save bmp [%s] succeed!!! \n", filepath);
+        print_f(rs->plogs, "CLIP", rs->logs);
+    }
+
+    ret = fwrite((char*)bmpcolrtb, 1, bhlen, fdump);
+    sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, bhlen);
+    print_f(rs->plogs, "CLIP", rs->logs);
+
+    ret = fwrite((char*)bmprot, 1, abuf_size, fdump);
+    sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, abuf_size);
+    print_f(rs->plogs, "CLIP", rs->logs);
+    
+
+    fflush(fdump);
+    fclose(fdump);
+    sync();
+    #endif
+                                                
     /*                    
     bmpraw = porgimg->mfourData + 0x436;
     for(iy=0; iy< imgbuf->mfourImgH; iy++)
@@ -84507,7 +84677,7 @@ static int p12(struct procRes_s *rs)
     char pinfo[8]={0};
     int *pipeMfRx=0, *pipeMfTx=0;
     struct pollfd pllfd[2]={0};
-    
+
     sprintf_f(rs->logs, "p12\n");
     print_f(rs->plogs, "P12", rs->logs);
 
@@ -84655,11 +84825,12 @@ static int p12(struct procRes_s *rs)
                                     print_f(rs->plogs, "P12", rs->logs);
                                 }
                 
-                                ret = handle_cmd_require_area_rot(rs, cid, mfbidx, 12);
+                                ret = handle_cmd_require_areaR(rs, cid, mfbidx, 12);
                                 if (ret) {
                                     sprintf_f(rs->logs, "Error!!! mfour require area failed ret: %d \n", ret);
                                     print_f(rs->plogs, "P12", rs->logs);
                                 }
+                                
                                 break;
                             case 'd': //BKCMD_DONE_AREA:           // receive M4-postman cmd
                                 ret = read(pllfd[0].fd, &chm, 1);
@@ -87063,7 +87234,7 @@ static int p15(struct procRes_s *rs)
     char ch=0;
     unsigned char *jpgrlt=0;
     char *rotsrc[8]={0}, *rotdst[8]={0};
-    int rotsmax[8]={0}, rotdmax[8]={0};
+    int rotsmax[8]={0}, rotdmax[8]={0}, rotsrclen[8]={0};
     struct sdParseBuff_s *pabuff=0;
     struct timespec jpgS, jpgE;
     struct usbhost_s *pushost=0;
@@ -87657,7 +87828,7 @@ static int p15(struct procRes_s *rs)
                     pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
                     penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
 
-                    ret = aspBMPdecodeItemGet(pdecroi, &rotsrc[ix], 0);
+                    ret = aspBMPdecodeItemGet(pdecroi, &rotsrc[ix], &rotsrclen[ix]);
                     if (ret < 0) {
                         rotsrc[ix] = 0;
                         rotsmax[ix] = 0;
@@ -87695,16 +87866,17 @@ static int p15(struct procRes_s *rs)
                     
                     memcpy(ph, bmprot, 54);
                     
-                    sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d\n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset);
+                    sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d, rawSize: %d\n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset, bheader->aspbiRawSize);
                     print_f(rs->plogs, "P15", rs->logs);
                                             
                     bmpbufc = bmprot;   
-                    rotlen = bheader->aspbiRawSize;
+                    rotlen = rotsrclen[cutcnt];
+
+                    sprintf_f(rs->logs, "[BMP] dump 512 raw image addr: 0x%.8x, total len: %d\n", (uint32_t)bmpbufc, rotlen);
+                    print_f(rs->plogs, "P15", rs->logs);
 
                     shmem_dump(bmpbufc, 512);
                     
-                    sprintf_f(rs->logs, "[BMP] encode addr: 0x%.8x, raw offset: %d used: %d\n", (uint32_t)bmpbufc, bheader->aspbhRawoffset, rotlen);
-                    print_f(rs->plogs, "P15", rs->logs);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     err = rgb2jpg(bmpbufc+bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
