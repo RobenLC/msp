@@ -18575,7 +18575,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
             
 
 #define LOG_ROTMF_DBG  (0)
-static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *rotbuff, int *pmreal, int *layers, int midx)
+static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *rotbuff, int *pmreal, int midx)
 {
 #define UNIT_DEG (1000.0)
 
@@ -55670,8 +55670,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             
                         //chs = pllcmd[ins];
                         if (pllcmd[ins] == 'b') {
+                            /*
                             for (inold = 15; inold <= 16; inold++) {
-                            
+                                
                                 if (latcmd[inold] == 0xff) {
                                     write(infd[inold], &latcmd[inold], 1);
                                     sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) \n", inold, infd[inold], latcmd[inold], latcmd[inold]);            
@@ -55680,6 +55681,35 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     latcmd[inold] = 0;
                                     break;
                                 }
+                            }
+                            */
+
+                            sprintf_f(mrs->log, "[GW] need buff from 15: %d 16: %d \n", latcmd[15], latcmd[16]);            
+                            print_f(mrs->plog, "fs152", mrs->log);
+
+                            if ((latcmd[15]) && (latcmd[16])) {
+                                if (latcmd[15] < latcmd[16]) {
+                                    inold = 15;
+                                } else {
+                                    inold = 16;
+                                }
+                            }
+                            else if (latcmd[15]) {
+                                inold = 15;
+                            }
+                            else if (latcmd[16]) {
+                                inold = 16;
+                            } else {
+                                inold = 0;
+                            }
+
+                            if (inold) {
+                                latcmd[inold] = 0xff;
+                                write(infd[inold], &latcmd[inold], 1);
+                                sprintf_f(mrs->log, "[GW] free buff to in%d id:%d put chr: %c(0x%.2x) \n", inold, infd[inold], latcmd[inold], latcmd[inold]);            
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                latcmd[inold] = 0;
                             }
                         }
                         else if (pllcmd[ins] == 's') {
@@ -56008,11 +56038,12 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if (ret < 0) {
                                     bidx = -1;
 
-                                    latcmd[ins] = 0xff;
+                                    //latcmd[ins] = 0xff;
+                                    latcmd[ins] = mindex;
 
-                                    sprintf_f(mrs->log, "[GW] dump buff info(%d): \n", sizeof(struct bitmapDecodeMfour_s) * 4);
-                                    print_f(mrs->plog, "fs152", mrs->log);
-                                    shmem_dump((char *)mrs->bmpDecMfour, sizeof(struct bitmapDecodeMfour_s) * 4);
+                                    //sprintf_f(mrs->log, "[GW] dump buff info(%d): \n", sizeof(struct bitmapDecodeMfour_s) * 4);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
+                                    //shmem_dump((char *)mrs->bmpDecMfour, sizeof(struct bitmapDecodeMfour_s) * 4);
                                     #if 0
                                     write(infd[ins], &pllcmd[ins], 1);
                                     sprintf_f(mrs->log, "[GW] in%d id:%d put chr: %c(0x%.2x) total:%d\n", ins, infd[ins], pllcmd[ins], pllcmd[ins], evcnt);            
@@ -84003,7 +84034,7 @@ static int read_image_fle( char *filename, void *buf, int buf_size )
     return size;
 }
 
-static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
+static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max)
 {
     int image_size=0, mul=0, tail=0, shf=0, ix=0, jpglen=0, exlen=0, yllen=0, val=0, mtlen=0;
     unsigned char *pt=0, *pmeta=0, *pexmt=0;
@@ -84013,14 +84044,14 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
     //char filetest[128] = "/home/root/banknote/char_H%.3d.jpg";
     char filetest[128] = "/home/root/banknote/full_H%.3d.jpg";
     int ret=0;
-    FILE *f=0;
+    FILE *f=0, *f1=0, *f2=0;
     int size=0;
     int imgw=0, imgh=0;
     int *pimgw=0, *pimgh=0;
     struct bitmapDecodeMfour_s *pdec=0;
     struct bitmapDecodeItem_s *decjpg=0, *decmeta=0, *decexmt=0;
     mfour_image_param_st *decimgp=0, *img_param=0;
-    int imgidx=0;
+    int imgidx=0, simmax=-1, simidx=0;
     struct aspMetaDataviaUSB_s *pusbmeta=0;
 
     if (!rs) return -1;
@@ -84031,16 +84062,45 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
 
     sprintf(filename, filetest, imgidx);
     
-    sprintf_f(rs->logs,"open m4 sample file: [%s] \n", filename);
-    print_f(rs->plogs, "fIle", rs->logs);
+    simmax = *max;
 
-    f = fopen(filename, "r");
-    if(!f) {
+    f1 = fopen(filename, "r");
+    if(f1) {
+        f = f1;    
+    } else {
+        if (simmax < 0) {
+            if (imgidx > 0) {
+                simidx = imgidx - 1;
+
+                sprintf(filename, filetest, simidx);
+                f2 = fopen(filename, "r");
+                if (f2) {
+                    simmax = simidx;
+                    fclose(f2);
+                } else {
+                    simmax = simidx - 1;
+                }
+                *max = simmax;
+                simidx = ((imgidx - 1) % simmax) + 1;
+                sprintf(filename, filetest, simidx);
+                f = fopen(filename, "r");
+            }
+        } else {
+            simidx = ((imgidx - 1) % simmax) + 1;
+            sprintf(filename, filetest, simidx);
+            f = fopen(filename, "r");
+        }
+    }
+
+    if (!f) {
         sprintf_f(rs->logs,"open file error %s errno=%d\r\n", filename, errno);
         print_f(rs->plogs, "fIle", rs->logs);
-        
         return -1;
     }
+
+    sprintf_f(rs->logs,"open m4 sample file: [%s] file: %d, img: %d, max: %d\n", filename, simidx, imgidx, simmax);
+    print_f(rs->plogs, "fIle", rs->logs);
+    
 
     ret |= fseek(f, 0, SEEK_END);
 
@@ -84135,11 +84195,14 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
     val = (pexmt[2] << 8) | pexmt[3];
     val += 4;
 
-    if (midx % 2) {
-        pusbmeta->PRI_O_SEC = 0;
-    } else {
+    if (imgidx % 2) {
         pusbmeta->PRI_O_SEC = 1;
+    } else {
+        pusbmeta->PRI_O_SEC = 0;
     }
+
+    pusbmeta->Scaned_Page[0] = imgidx & 0xff;
+    pusbmeta->Scaned_Page[1] = (imgidx >> 8) & 0xff;
 
     sprintf_f(rs->logs, "mass len: %d m_len: %d rec_len: %d meta_len: %d jpeg_len: %d updn: %d\n", exlen, val, yllen, mtlen, jpglen, pusbmeta->PRI_O_SEC); 
     print_f(rs->plogs, "fIle", rs->logs);
@@ -84156,12 +84219,16 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx)
     memcpy(decexmt->aspDcData->mfourData, pexmt, exlen);
     aspBMPdecodeItemSet(decexmt, 0, 0, exlen);
 
+    /*
     pimgw = (int *)(img_param->mfourData+0x12);
     pimgh = (int *)(img_param->mfourData+0x16);
-
     imgw = pimgw[0];
     imgh = pimgh[0];
-        
+    */
+
+    imgw = (pusbmeta->IMG_WIDTH[1] << 8) | pusbmeta->IMG_WIDTH[0];
+    imgh = pusbmeta->IMG_HIGH[0] | (pusbmeta->IMG_HIGH[1] << 8);
+
     img_param->mfourImgW = imgw;
     img_param->mfourImgH = imgh;
 
@@ -84429,7 +84496,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     sprintf_f(rs->logs, "raw size: %d, dst size: %d \n", rawlen, dstlen);
     print_f(rs->plogs, "CLIP", rs->logs);    
 
-    ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpraw, bmprot, mreal, &cutlayers[cutcnt*2], midx);
+    ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpraw, bmprot, mreal, midx);
 
     clock_gettime(CLOCK_REALTIME, &jpgE);
 
@@ -85315,7 +85382,7 @@ static int p12(struct procRes_s *rs)
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     
-                    ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmprot, mreal, &cutlayers[cutcnt*2], 12);
+                    ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmprot, mreal, 12);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgE);
                     
@@ -85398,6 +85465,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     char csw[16] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff};
     uint32_t fformat=0;
     CFLOAT throughput=0.0;
+    int simMax=-1;
     //struct procRes_s *rsd=0;
     
     pinfushost = rs->pusbmh[0];
@@ -86820,7 +86888,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
             #if MFOUR_SIM_MODE_JPG
             if (cswerr == 0) {
-                ret = send_image_in_jpg(rs, buffidx, midx);
+                ret = send_image_in_jpg(rs, buffidx, midx, &simMax);
                 if (ret) {
                     sprintf_f(rs->logs, "[BMP] Error!!! m4 sim get image ret: %d \n", ret);
                     print_f(rs->plogs, sp, rs->logs); 
@@ -86938,10 +87006,18 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
                 #if MFOUR_SIM_MODE_JPG
                 if (cswerr == 0) {
+                    bmpw = rs->pbDecMfour[buffidx]->aspDecJpeg.aspDcWidth;
+                    bmph = rs->pbDecMfour[buffidx]->aspDecJpeg.aspDcHeight;
                     aspBMPdecodeItemGet(&rs->pbDecMfour[buffidx]->aspDecJpeg, &bmpbuff, &bmplen);
                 } else {
                     aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, bmph, rawlen);
                 }
+
+                val=bmph;
+                ret = cfgTableUpd(pct, ASPOP_IMG_LEN, val);
+                //ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "[BMP] hack image length: %d \n", val);
+                print_f(rs->plogs, sp, rs->logs);                
                 #else
                 aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, bmph, rawlen);
                 #endif 
