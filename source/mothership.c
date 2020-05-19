@@ -111,7 +111,7 @@ static char genssid[128];
 #define AP_CLR_STATUS (1)
 
 #define MFOUR_IMG_SEND_BACK (1)
-#define MFOUR_SIM_MODE_JPG (0)
+#define MFOUR_SIM_MODE_JPG (1)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
@@ -11197,13 +11197,13 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
 }
 
 #define LOG_ROTRECT_MF_EN (0)
-static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, int *page, struct aspMetaData_s *meta, int pidx, struct aspRectObj *pRectroi, CFLOAT *pdeg, struct aspRectObj *pRectroc, char *bmp, int oldRowsz, int bpp, int *pmreal) 
+static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT *pdeg, int oldRowsz, int bpp, struct aspRectObj *pRectin, int pidx) 
 {
     int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0, ic=0;
     int LUt[2], RUt[2], LDt[2], RDt[2];
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
     CFLOAT *pLU, *pLD, *pRU, *pRD;
-    CFLOAT pT1[4], pT2[4], pT3[2], pT4[2], pT5[2];
+    CFLOAT pT1[4], pT2[4], pT5[2];
     CFLOAT *LUn, *RUn, *LDn, *RDn;
     CFLOAT d12, d23, d34, d41;
     CFLOAT v12, v23, v34, v41;
@@ -11224,10 +11224,6 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
     char rgb[4][3];
     char *rgbtga[4];
     char *rgbdiff[4];
-    int ctaga[2], ctagb[2];
-    int crana[2], cranb[2];
-    char tagrgba[3], tagrgbb[3];
-    char tagrgbdiffa[3], tagrgbdiffb[3];
     int srhcntA[2]={0}, srhcntB[2]={0};
     CFLOAT srhcntmax[4][2]={0}, fdiff=0.0, vdiff=0.0;
     int srhtotal=0;
@@ -11265,106 +11261,24 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
 
     pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
-    idxA = page[0];
-    idxB = page[1];
+    pT1[0] = (CFLOAT)cropinfo[0];
+    pT1[1] = (CFLOAT)cropinfo[1];
+    pT1[2] = (CFLOAT)cropinfo[2];
+    pT1[3] = (CFLOAT)cropinfo[3];
+    edwhA[0] = cropinfo[4];
+    edwhA[1] = cropinfo[5];
 
-    /*
-    if ((idxA == 0) && (idxB == 0)) {
-        return -1;
-    }
-    */
-    
-    ret = aspMetaGetTagPosRange(meta, ctaga, crana, 0);
-    if (ret < 0) {
-        sprintf_f(rs->logs, "Errir!!! get A side tag pos and range wrong ret: %d !!! \n", ret);
-        print_f(rs->plogs, "RCMF", rs->logs);
-    }
+    pT2[0] = (CFLOAT)cropinfo[0];
+    pT2[1] = (CFLOAT)cropinfo[1];
+    pT2[2] = (CFLOAT)cropinfo[2];
+    pT2[3] = (CFLOAT)cropinfo[3];
+    edwhB[0] = cropinfo[4];
+    edwhB[1] = cropinfo[5];
 
-    ret = aspMetaGetTagPosRange(meta, ctagb, cranb, 1);
-    if (ret < 0) {
-        sprintf_f(rs->logs, "Errir!!! get B side tag pos and range wrong ret: %d !!! \n", ret);
-        print_f(rs->plogs, "RCMF", rs->logs);
-    }
-
-    ret = aspMetaGetTagRGB(meta, tagrgba, 0);
-    if (ret < 0) {
-        sprintf_f(rs->logs, "Errir!!! get A side tag rgb wrong ret: %d !!! \n", ret);
-        print_f(rs->plogs, "RCMF", rs->logs);
-    }
-
-    ret = aspMetaGetTagRGB(meta, tagrgbb, 1);
-    if (ret < 0) {
-        sprintf_f(rs->logs, "Errir!!! get B side tag rgb wrong ret: %d !!! \n", ret);
-        print_f(rs->plogs, "RCMF", rs->logs);
-    }
-
-    ret = aspMetaGetTagRGBdiff(meta, tagrgbdiffa, 0);
-    if (ret < 0) {
-        sprintf_f(rs->logs, "Errir!!! get A side tag rgb diff wrong ret: %d !!! \n", ret);
-        print_f(rs->plogs, "RCMF", rs->logs);
-    }
-
-    ret = aspMetaGetTagRGBdiff(meta, tagrgbdiffb, 1);
-    if (ret < 0) {
-        sprintf_f(rs->logs, "Errir!!! get B side tag rgb diff wrong ret: %d !!! \n", ret);
-        print_f(rs->plogs, "RCMF", rs->logs);
-
-        memcpy(tagrgbdiffb, tagrgbdiffa, 3);
-    }
-    
-    ret = aspMetaGetWH(meta, edwhA, srhcntA, 0);
-    if (ret < 0) {
-        sprintf_f(rs->logs, "Errir!!! get A side tag wh & search count wrong ret: %d !!! \n", ret);
-        print_f(rs->plogs, "RCMF", rs->logs);
-    }
-
-    ret = aspMetaGetWH(meta, edwhB, srhcntB, 1);
-    if (ret < 0) {
-        sprintf_f(rs->logs, "Errir!!! get B side tag wh & search count wrong ret: %d !!! \n", ret);
-        print_f(rs->plogs, "RCMF", rs->logs);
-    }
-
-    if ((idxA == -1) && (idxB == -1)) {
-        pT1[0] = 1.0;
-        pT1[1] = 1.0;
-        pT1[2] = edwhA[0] - 1;
-        pT1[3] = edwhA[1] - 1;
-
-
-        pT2[0] = 1.0;
-        pT2[1] = 1.0;
-        pT2[2] = edwhB[0] - 1;
-        pT2[3] = edwhB[1] - 1;
-    } else if ((idxA > 0) || (idxB > 0)) {
-        ret = aspMetaGetPagePos(meta, pT1, idxA);
-        if (ret < 0) {
-            sprintf_f(rs->logs, "Errir!!! get A side pos wrong ret: %d !!! \n", ret);
-            print_f(rs->plogs, "RCMF", rs->logs);
-        } else {
-            sprintf_f(rs->logs, "get A side idx: %d pos %.2lf, %.2lf, %.2lf, %.2lf !!! \n", idxA, pT1[0], pT1[1], pT1[2], pT1[3]);
-            print_f(rs->plogs, "RCMF", rs->logs);
-        }
-        
-        ret = aspMetaGetPagePos(meta, pT2, idxB);
-        if (ret < 0) {
-            sprintf_f(rs->logs, "Errir!!! get B side pos wrong ret: %d !!! \n", ret);
-            print_f(rs->plogs, "RCMF", rs->logs);
-        } else {
-            sprintf_f(rs->logs, "get B side idx: %d pos %.2lf, %.2lf, %.2lf, %.2lf !!! \n", idxB, pT2[0], pT2[1], pT2[2], pT2[3]);
-            print_f(rs->plogs, "RCMF", rs->logs);
-        }
-    }
-    else {
-        return -1;
-    }
-
-    pT3[0] = ctaga[0];
-    pT3[1] = ctaga[1];
-    setRectPoint(pRectorgc, 2.0, 2.0, pT3);
-
-    pT4[0] = ctagb[0];
-    pT4[1] = ctagb[1];
-    setRectPoint(pRectorgk, 2.0, 2.0, pT4);
+    #if LOG_ROTRECT_MF_EN
+    printf("get A side pos %.2lf, %.2lf, %.2lf, %.2lf w: %4d h: %4d !!! \n", pT1[0], pT1[1], pT1[2], pT1[3], edwhA[0], edwhA[1]);
+    printf("get B side pos %.2lf, %.2lf, %.2lf, %.2lf w: %4d h: %4d  !!! \n", pT2[0], pT2[1], pT2[2], pT2[3], edwhB[0], edwhB[1]);
+    #endif
     
     pRectorg->aspRectLU[0] = (CFLOAT)1;
     pRectorg->aspRectLU[1] = (CFLOAT)edwhA[1];
@@ -11379,36 +11293,27 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
     pRectorg->aspRectRU[1] = (CFLOAT)edwhA[1];
 
     #if LOG_ROTRECT_MF_EN
-    sprintf_f(rs->logs, "pLU:(%.2lf, %.2lf) pRU:(%.2lf, %.2lf) pLD:(%.2lf, %.2lf) pRD:(%.2lf, %.2lf) w:%d h:%d \n", pLU[0], pLU[1], pRU[0], pRU[1], pLD[0], pLD[1], pRD[0], pRD[1], edwhA[0], edwhA[1]);
-    print_f(rs->plogs, "RCMF", rs->logs);
+    printf("pLU:(%.2lf, %.2lf) pRU:(%.2lf, %.2lf) pLD:(%.2lf, %.2lf) pRD:(%.2lf, %.2lf) w:%d h:%d \n", pLU[0], pLU[1], pRU[0], pRU[1], pLD[0], pLD[1], pRD[0], pRD[1], edwhA[0], edwhA[1]);
     #endif
     
     d12 = getRectAlign(pRectin, pRectin->aspRectLU, pRectin->aspRectLD, pRectout12);
     #if LOG_ROTRECT_MF_EN    
-    sprintf_f(rs->logs, " d12: %.2lf aspRectLU:(%.2lf, %.2lf) aspRectLD:(%.2lf, %.2lf) \n", d12, 
-        pRectin->aspRectLU[0], pRectin->aspRectLU[1], pRectin->aspRectLD[0], pRectin->aspRectLD[1]);
-    print_f(rs->plogs, "RCMF", rs->logs);
+    printf(" d12: %.2lf aspRectLU:(%.2lf, %.2lf) aspRectLD:(%.2lf, %.2lf) \n", d12, pRectin->aspRectLU[0], pRectin->aspRectLU[1], pRectin->aspRectLD[0], pRectin->aspRectLD[1]);
     #endif
     
     d23 = getRectAlign(pRectin, pRectin->aspRectLD, pRectin->aspRectRD, pRectout23);
     #if LOG_ROTRECT_MF_EN
-    sprintf_f(rs->logs, " d23: %.2lf aspRectLD:(%.2lf, %.2lf) aspRectRD:(%.2lf, %.2lf) \n", d23, 
-        pRectin->aspRectLD[0], pRectin->aspRectLD[1], pRectin->aspRectRD[0], pRectin->aspRectRD[1]);
-    print_f(rs->plogs, "RCMF", rs->logs);
+    printf(" d23: %.2lf aspRectLD:(%.2lf, %.2lf) aspRectRD:(%.2lf, %.2lf) \n", d23, pRectin->aspRectLD[0], pRectin->aspRectLD[1], pRectin->aspRectRD[0], pRectin->aspRectRD[1]);
     #endif
     
     d34 = getRectAlign(pRectin, pRectin->aspRectRD, pRectin->aspRectRU, pRectout34);
     #if LOG_ROTRECT_MF_EN
-    sprintf_f(rs->logs, " d34: %.2lf aspRectRD:(%.2lf, %.2lf) aspRectRU:(%.2lf, %.2lf) \n", d34, 
-        pRectin->aspRectRD[0], pRectin->aspRectRD[1], pRectin->aspRectRU[0], pRectin->aspRectRU[1]);
-    print_f(rs->plogs, "RCMF", rs->logs);
+    printf(" d34: %.2lf aspRectRD:(%.2lf, %.2lf) aspRectRU:(%.2lf, %.2lf) \n", d34, pRectin->aspRectRD[0], pRectin->aspRectRD[1], pRectin->aspRectRU[0], pRectin->aspRectRU[1]);
     #endif
     
     d41 = getRectAlign(pRectin, pRectin->aspRectRU, pRectin->aspRectLU, pRectout41);
     #if LOG_ROTRECT_MF_EN
-    sprintf_f(rs->logs, " d41: %.2lf aspRectRU:(%.2lf, %.2lf) aspRectLU:(%.2lf, %.2lf) \n", d41, 
-        pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectin->aspRectLU[0], pRectin->aspRectLU[1]);
-    print_f(rs->plogs, "RCMF", rs->logs);
+    printf(" d41: %.2lf aspRectRU:(%.2lf, %.2lf) aspRectLU:(%.2lf, %.2lf) \n", d41, pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectin->aspRectLU[0], pRectin->aspRectLU[1]);
     #endif
 
     msync(pRectout12, sizeof(struct aspRectObj), MS_SYNC);
@@ -11465,45 +11370,23 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
         }
     }
 
-
-    //findRectOrient(pRectout, pRectin);
-    //vmin = aspMin(v12, v23);
     vmin = aspMin(v12, v23);
     vmin = aspMin(vmin, v34);
     vmin = aspMin(vmin, v41);
 
     #if LOG_ROTRECT_MF_EN
-    sprintf_f(rs->logs, " min: %.4lf v12:%.4lf v23:%.4lf v34:%.4lf v41:%.4lf \n", vmin, v12, v23, v34, v41);
-    print_f(rs->plogs, "RCMF", rs->logs);
-
-    sprintf_f(rs->logs, " v12: %.2lf o12:(%.2lf, %.2lf) d12: %.2lf \n", v12, o12[0], o12[1], d12);
-    print_f(rs->plogs, "RCMF", rs->logs);
-    sprintf_f(rs->logs, " v23: %.2lf o23:(%.2lf, %.2lf) d23: %.2lf \n", v23, o23[0], o23[1], d23);
-    print_f(rs->plogs, "RCMF", rs->logs);
-    sprintf_f(rs->logs, " v34: %.2lf o34:(%.2lf, %.2lf) d34: %.2lf \n", v34, o34[0], o34[1], d34);
-    print_f(rs->plogs, "RCMF", rs->logs);
-    sprintf_f(rs->logs, " v41: %.2lf o41:(%.2lf, %.2lf) d41: %.2lf \n", v41, o41[0], o41[1], d41);
-    print_f(rs->plogs, "RCMF", rs->logs);
+    printf(" min: %.4lf v12:%.4lf v23:%.4lf v34:%.4lf v41:%.4lf \n", vmin, v12, v23, v34, v41);
+    printf(" v12: %.2lf o12:(%.2lf, %.2lf) d12: %.2lf \n", v12, o12[0], o12[1], d12);
+    printf(" v23: %.2lf o23:(%.2lf, %.2lf) d23: %.2lf \n", v23, o23[0], o23[1], d23);
+    printf(" v34: %.2lf o34:(%.2lf, %.2lf) d34: %.2lf \n", v34, o34[0], o34[1], d34);
+    printf(" v41: %.2lf o41:(%.2lf, %.2lf) d41: %.2lf \n", v41, o41[0], o41[1], d41);
     #endif
 
 
     if (vmin == v41) {
         #if LOG_ROTRECT_MF_EN
-        sprintf_f(rs->logs, " v41 \n");
-        print_f(rs->plogs, "RCMF", rs->logs);
+        printf(" v41 \n");
         #endif
-
-        ptStart[0][0] = pT3[0];
-        ptStart[0][1] = pT3[1];
-
-        ptStart[1][0] = pT4[0];
-        ptStart[1][1] = pT4[1];
-
-        ptStart[2][0] = pT3[0];
-        ptStart[2][1] = pT3[1];
-
-        ptStart[3][0] = pT4[0];
-        ptStart[3][1] = pT4[1];
         
         memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
         memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
@@ -11520,16 +11403,6 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
         offsets[2] = o23;
         offsets[3] = o23;
 
-        rgbtga[0] = tagrgba;
-        rgbtga[1] = tagrgbb;
-        rgbtga[2] = tagrgba;
-        rgbtga[3] = tagrgbb;
-
-        rgbdiff[0] = tagrgbdiffa;
-        rgbdiff[1] = tagrgbdiffb;
-        rgbdiff[2] = tagrgbdiffa;
-        rgbdiff[3] = tagrgbdiffb;
-
         ptreal[0] = 0;
         ptreal[1] = 0;
     }
@@ -11537,21 +11410,8 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
         if (pRectin->aspRectLU[1] > pRectin->aspRectRU[1]) {
             if (vmin == v12) {
                 #if LOG_ROTRECT_MF_EN
-                sprintf_f(rs->logs, " v12 \n");
-                print_f(rs->plogs, "RCMF", rs->logs);
+                printf(" v12 \n");
                 #endif
-            
-                ptStart[0][0] = pT3[0];
-                ptStart[0][1] = pT3[1];
-            
-                ptStart[1][0] = pT4[0];
-                ptStart[1][1] = pT4[1];
-            
-                ptStart[2][0] = pT3[0];
-                ptStart[2][1] = pT3[1];
-            
-                ptStart[3][0] = pT4[0];
-                ptStart[3][1] = pT4[1];
                 
                 memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
@@ -11568,37 +11428,14 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
                 offsets[2] = o34;
                 offsets[3] = o34;
             
-                rgbtga[0] = tagrgba;
-                rgbtga[1] = tagrgbb;
-                rgbtga[2] = tagrgba;
-                rgbtga[3] = tagrgbb;
-            
-                rgbdiff[0] = tagrgbdiffa;
-                rgbdiff[1] = tagrgbdiffb;
-                rgbdiff[2] = tagrgbdiffa;
-                rgbdiff[3] = tagrgbdiffb;
-            
                 ptreal[0] = 0;
                 ptreal[1] = 0;
             } 
             else if (vmin == v34) {
                 #if LOG_ROTRECT_MF_EN
-                sprintf_f(rs->logs, " v34 \n");
-                print_f(rs->plogs, "RCMF", rs->logs);
+                printf(" v34 \n");
                 #endif
-            
-                ptStart[0][0] = pT3[0];
-                ptStart[0][1] = pT3[1];
-            
-                ptStart[1][0] = pT4[0];
-                ptStart[1][1] = pT4[1];
-            
-                ptStart[2][0] = pT3[0];
-                ptStart[2][1] = pT3[1];
-            
-                ptStart[3][0] = pT4[0];
-                ptStart[3][1] = pT4[1];
-                
+
                 memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
@@ -11613,38 +11450,15 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
                 offsets[1] = o34;
                 offsets[2] = o12;
                 offsets[3] = o12;
-            
-                rgbtga[0] = tagrgba;
-                rgbtga[1] = tagrgbb;
-                rgbtga[2] = tagrgba;
-                rgbtga[3] = tagrgbb;
-            
-                rgbdiff[0] = tagrgbdiffa;
-                rgbdiff[1] = tagrgbdiffb;
-                rgbdiff[2] = tagrgbdiffa;
-                rgbdiff[3] = tagrgbdiffb;
-            
+
                 ptreal[0] = 0;
                 ptreal[1] = 0;
             
             }
             else {
                 #if LOG_ROTRECT_MF_EN
-                sprintf_f(rs->logs, " v23 \n");
-                print_f(rs->plogs, "RCMF", rs->logs);
+                printf(" v23 \n");
                 #endif
-            
-                ptStart[0][0] = pT3[0];
-                ptStart[0][1] = pT3[1];
-            
-                ptStart[1][0] = pT4[0];
-                ptStart[1][1] = pT4[1];
-            
-                ptStart[2][0] = pT3[0];
-                ptStart[2][1] = pT3[1];
-            
-                ptStart[3][0] = pT4[0];
-                ptStart[3][1] = pT4[1];
                 
                 memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
@@ -11660,16 +11474,6 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
                 offsets[1] = o23;
                 offsets[2] = o41;
                 offsets[3] = o41;
-            
-                rgbtga[0] = tagrgba;
-                rgbtga[1] = tagrgbb;
-                rgbtga[2] = tagrgba;
-                rgbtga[3] = tagrgbb;
-            
-                rgbdiff[0] = tagrgbdiffa;
-                rgbdiff[1] = tagrgbdiffb;
-                rgbdiff[2] = tagrgbdiffa;
-                rgbdiff[3] = tagrgbdiffb;
             
                 ptreal[0] = 0;
                 ptreal[1] = 0;
@@ -11678,22 +11482,9 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
         else {
             if (vmin == v34) {
                 #if LOG_ROTRECT_MF_EN
-                sprintf_f(rs->logs, " v34 \n");
-                print_f(rs->plogs, "RCMF", rs->logs);
+                printf(" v34 \n");
                 #endif
-            
-                ptStart[0][0] = pT3[0];
-                ptStart[0][1] = pT3[1];
-            
-                ptStart[1][0] = pT4[0];
-                ptStart[1][1] = pT4[1];
-            
-                ptStart[2][0] = pT3[0];
-                ptStart[2][1] = pT3[1];
-            
-                ptStart[3][0] = pT4[0];
-                ptStart[3][1] = pT4[1];
-                
+
                 memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
@@ -11709,16 +11500,6 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
                 offsets[2] = o12;
                 offsets[3] = o12;
             
-                rgbtga[0] = tagrgba;
-                rgbtga[1] = tagrgbb;
-                rgbtga[2] = tagrgba;
-                rgbtga[3] = tagrgbb;
-            
-                rgbdiff[0] = tagrgbdiffa;
-                rgbdiff[1] = tagrgbdiffb;
-                rgbdiff[2] = tagrgbdiffa;
-                rgbdiff[3] = tagrgbdiffb;
-            
                 ptreal[0] = 0;
                 ptreal[1] = 0;
             
@@ -11726,22 +11507,9 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
             else if (vmin == v12) {
             
                 #if LOG_ROTRECT_MF_EN
-                sprintf_f(rs->logs, " v12 \n");
-                print_f(rs->plogs, "RCMF", rs->logs);
+                printf(" v12 \n");
                 #endif
-            
-                ptStart[0][0] = pT3[0];
-                ptStart[0][1] = pT3[1];
-            
-                ptStart[1][0] = pT4[0];
-                ptStart[1][1] = pT4[1];
-            
-                ptStart[2][0] = pT3[0];
-                ptStart[2][1] = pT3[1];
-            
-                ptStart[3][0] = pT4[0];
-                ptStart[3][1] = pT4[1];
-                
+
                 memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
@@ -11756,37 +11524,14 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
                 offsets[1] = o12;
                 offsets[2] = o34;
                 offsets[3] = o34;
-            
-                rgbtga[0] = tagrgba;
-                rgbtga[1] = tagrgbb;
-                rgbtga[2] = tagrgba;
-                rgbtga[3] = tagrgbb;
-            
-                rgbdiff[0] = tagrgbdiffa;
-                rgbdiff[1] = tagrgbdiffb;
-                rgbdiff[2] = tagrgbdiffa;
-                rgbdiff[3] = tagrgbdiffb;
-            
+
                 ptreal[0] = 0;
                 ptreal[1] = 0;
             } 
             else {
                 #if LOG_ROTRECT_MF_EN
-                sprintf_f(rs->logs, " v23 \n");
-                print_f(rs->plogs, "RCMF", rs->logs);
+                printf(" v23 \n");
                 #endif
-            
-                ptStart[0][0] = pT3[0];
-                ptStart[0][1] = pT3[1];
-            
-                ptStart[1][0] = pT4[0];
-                ptStart[1][1] = pT4[1];
-            
-                ptStart[2][0] = pT3[0];
-                ptStart[2][1] = pT3[1];
-            
-                ptStart[3][0] = pT4[0];
-                ptStart[3][1] = pT4[1];
                 
                 memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
                 memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
@@ -11802,16 +11547,6 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
                 offsets[1] = o23;
                 offsets[2] = o41;
                 offsets[3] = o41;
-            
-                rgbtga[0] = tagrgba;
-                rgbtga[1] = tagrgbb;
-                rgbtga[2] = tagrgba;
-                rgbtga[3] = tagrgbb;
-            
-                rgbdiff[0] = tagrgbdiffa;
-                rgbdiff[1] = tagrgbdiffb;
-                rgbdiff[2] = tagrgbdiffa;
-                rgbdiff[3] = tagrgbdiffb;
             
                 ptreal[0] = 0;
                 ptreal[1] = 0;
@@ -11831,8 +11566,9 @@ static int getRotRectPointMf(struct procRes_s *rs, struct aspRectObj *pRectin, i
     dbgprintRect(pRectroi);
     #endif
 
-    sprintf_f(rs->logs, "tran end ! !\n");
-    print_f(rs->plogs, "RCMF", rs->logs);       
+    #if LOG_ROTRECT_MF_EN
+    printf("tran end ! !\n");       
+    #endif
     
     return 0;
 }
@@ -18575,11 +18311,11 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
             
 
 #define LOG_ROTMF_DBG  (0)
-static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *rotbuff, int *pmreal, int midx)
+static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx)
 {
 #define UNIT_DEG (1000.0)
+#define MIN_P  (100.0)
 
-    struct sdParseBuff_s *pabuf=0;
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0;
     int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
@@ -18605,28 +18341,26 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     CFLOAT maxhf=0, maxvf=0, minhf=0, minvf=0;
     CFLOAT imgw=0.0, imgh=0.0, imgdeg=0.0;
     int ublen=0, ubret=0, ubrst=0;
-    struct aspConfig_s *pct=0;
     uint32_t val=0;
     int cxm, cxn;
     int deg=0;
-    struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0, *pRectroc=0;
+    struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
 
     pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
     pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx);
-    pRectroc = aspMemalloc(sizeof(struct aspRectObj), midx);
     pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx);
     
-    pct = rs->pcfgTable;
-
-    pabuf = &rs->psFat->parBuf;
     srcbuf = bmpsrc;
 
     /* check header */
     //shmem_dump(srcbuf, 512);
 
     /* rotate */
-    bheader = rs->pbheader;
+    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx);
+    memset(bheader, 0, sizeof(struct bitmapHeader_s));
+
     ph = &bheader->aspbmpMagic[2];
+    memcpy(ph, headbuff, sizeof(struct bitmapHeader_s) - 2);
     
     #if LOG_ROTMF_DBG    
     dbgBitmapHeader(bheader, len);
@@ -18638,55 +18372,50 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
 
     rawCpy = srcbuf;
-        
+
+    #if LOG_ROTMF_DBG    
+    printf("rotate raw offset: %d \n", bheader->aspbhRawoffset); 
+    #endif
+    
     imgw = (CFLOAT)bheader->aspbiWidth;
     imgh = (CFLOAT)bheader->aspbiHeight;
 
-    ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
-    //cxm = (val>>16)&0xffff;
-    //cxn = val & 0xffff;
     cxm = pmreal[0];
     cxn = pmreal[1];
-    
-    sprintf_f(rs->logs, "rot meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-    print_f(rs->plogs, "RMF", rs->logs);                     
+
+    #if LOG_ROTMF_DBG    
+    printf("rot meta get F1: (%d, %d) \n", cxm, cxn); 
+    #endif
 
     LD[0] = (CFLOAT)cxm;
     LD[1] = (CFLOAT)cxn;
 
-    ret = cfgTableGet(pct, ASPOP_USBCROP_FP02, &val);
-    //cxm = (val>>16)&0xffff;
-    //cxn = val & 0xffff;
     cxm = pmreal[2];
     cxn = pmreal[3];
 
-    sprintf_f(rs->logs, "rot meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-    print_f(rs->plogs, "RMF", rs->logs);                     
+    #if LOG_ROTMF_DBG    
+    printf("rot meta get F2: (%d, %d) \n", cxm, cxn); 
+    #endif          
 
     RD[0] = (CFLOAT)cxm;
     RD[1] = (CFLOAT)cxn;
 
-    ret = cfgTableGet(pct, ASPOP_USBCROP_FP03, &val);
-    //cxm = (val>>16)&0xffff;
-    //cxn = val & 0xffff;
     cxm = pmreal[4];
     cxn = pmreal[5];
 
-    sprintf_f(rs->logs, "rot meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-    print_f(rs->plogs, "RMF", rs->logs);                     
+    #if LOG_ROTMF_DBG    
+    printf("rot meta get F3: (%d, %d) \n", cxm, cxn); 
+    #endif
 
     RU[0] = (CFLOAT)cxm;
     RU[1] = (CFLOAT)cxn;
 
-    ret = cfgTableGet(pct, ASPOP_USBCROP_FP04, &val);
-    //cxm = (val>>16)&0xffff;
-    //cxn = val & 0xffff;
     cxm = pmreal[6];
     cxn = pmreal[7];
 
-
-    sprintf_f(rs->logs, "rot meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-    print_f(rs->plogs, "RMF", rs->logs);                     
+    #if LOG_ROTMF_DBG    
+    printf("rot meta get F4: (%d, %d) \n", cxm, cxn); 
+    #endif          
 
     LU[0] = (CFLOAT)cxm;
     LU[1] = (CFLOAT)cxn;    
@@ -18699,9 +18428,8 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     findRectOrient(pRectinR, pRectin);
     
     dbgprintRect(pRectin);
-    //dbgprintRect(pRectinR);
             
-    ret = getRotRectPointMf(rs, pRectinR, page, meta, midx, pRectROI, &imgdeg, pRectroc, rawCpy, oldRowsz, bpp, pmreal);
+    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx);
     if (ret == 0) {
         memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
         memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -18724,16 +18452,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     }
 
     #if LOG_ROTMF_DBG    
-    sprintf_f(rs->logs, "getRotRectPointMf: LUn: %lf, %lf\n", LU[0], LU[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "getRotRectPointMf: LDn: %lf, %lf \n", LD[0], LD[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "getRotRectPointMf: RDn: %lf, %lf \n", RD[0], RD[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "getRotRectPointMf: RUn: %lf, %lf \n", RU[0], RU[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "getRotRectPointMf: degree: %.2lf \n", imgdeg);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("getRotRectPointMf: LUn: %lf, %lf\n", LU[0], LU[1]);
+    printf("getRotRectPointMf: LDn: %lf, %lf \n", LD[0], LD[1]);
+    printf("getRotRectPointMf: RDn: %lf, %lf \n", RD[0], RD[1]);
+    printf("getRotRectPointMf: RUn: %lf, %lf \n", RU[0], RU[1]);
+    printf("getRotRectPointMf: degree: %.2lf \n", imgdeg);
     #endif
     
     deg = (int)(imgdeg * UNIT_DEG);
@@ -18741,9 +18464,6 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
 
     theta = (CFLOAT)deg;
     theta = theta / UNIT_DEG;
-    
-    sprintf_f(rs->logs, "rotate angle = %lf \n", theta);
-    print_f(rs->plogs, "RMF", rs->logs);
 
     theta = theta * M_PI / piAngle;
 
@@ -18759,14 +18479,10 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     calcuRotateCoordinates(RDt, RDn, RD, rangle);
     
     #if LOG_ROTMF_DBG
-    sprintf_f(rs->logs, "rotate: LU: %.2lf, %.2lf -> %3d, %3d\n", LU[0], LU[1], LUt[0], LUt[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "rotate: LD: %.2lf, %.2lf -> %3d, %3d \n", LD[0], LD[1], LDt[0], LDt[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "rotate: RD: %.2lf, %.2lf -> %3d, %3d \n", RD[0], RD[1], RDt[0], RDt[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "rotate: RU: %.2lf, %.2lf -> %3d, %3d \n", RU[0], RU[1], RUt[0], RUt[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("rotate: LU: %.2lf, %.2lf -> %3d, %3d\n", LU[0], LU[1], LUt[0], LUt[1]);
+    printf("rotate: LD: %.2lf, %.2lf -> %3d, %3d \n", LD[0], LD[1], LDt[0], LDt[1]);
+    printf("rotate: RD: %.2lf, %.2lf -> %3d, %3d \n", RD[0], RD[1], RDt[0], RDt[1]);
+    printf("rotate: RU: %.2lf, %.2lf -> %3d, %3d \n", RU[0], RU[1], RUt[0], RUt[1]);
     #endif
     
     minH = aspMin(LUn[0], RUn[0]);
@@ -18776,12 +18492,6 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     minV = aspMin(LUn[1], RUn[1]);
     minV = aspMin(minV, LDn[1]);
     minV = aspMin(minV, RDn[1]);
-
-    //sprintf_f(rs->logs, "minH: %lf, minV: %lf \n", minH, minV);
-    //print_f(rs->plogs, "RMF", rs->logs);
-
-    //minH = (minH > 0) ? (minH + 1):(minH-1);
-    //minV = (minV > 0) ? (minV + 1):(minV-1);
     
     offsetH = 0 - minH;
     offsetV = 0 - minV;
@@ -18810,15 +18520,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     RDt[0] = (int)round(RDn[0]);
     RDt[1] = (int)round(RDn[1]);
     
-    #if 1
-    sprintf_f(rs->logs, "bound: LUn: %lf, %lf -> %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "bound: RUn: %lf, %lf -> %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "bound: LDn: %lf, %lf -> %d, %d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "bound: RDn: %lf, %lf -> %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
+    #if LOG_ROTMF_DBG    
+    printf("bound: LUn: %lf, %lf -> %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+    printf("bound: RUn: %lf, %lf -> %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+    printf("bound: LDn: %lf, %lf -> %d, %d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+    printf("bound: RDn: %lf, %lf -> %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
     #endif
     
     maxhint= aspMaxInt(LUt[0], RUt[0]);
@@ -18848,34 +18554,23 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     ubrst = 512 - (bheader->aspbhSize % 512);
     
     #if LOG_ROTMF_DBG    
-    sprintf_f(rs->logs, "allocate raw dest size: %d!!!\n", rawszNew);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("raw dest size: %d!!!\n", rawszNew);
     #endif
     
-    rawdest = rotbuff;//aspMemalloc(bheader->aspbhSize + 512 + ubrst, midx);
+    rawdest = rotbuff;
     if (rawdest) {
-    
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "allocate raw dest size: %d succeed!!!\n", rawszNew);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("get raw dest size: %d succeed!!!\n", rawszNew);
         #endif
-
     } else {
-        sprintf_f(rs->logs, "allocate raw dest size: %d failed!!!\n", rawszNew);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("allocate raw dest size: %d failed!!!\n", rawszNew);
         return -1;
     }
     
-    //memcpy(rawdest, ph, 54);
-    //rawSrc = rawdest + bheader->aspbhRawoffset;
     rawSrc = rawdest;
 
-    pabuf->dirBuffUsed = bheader->aspbhSize + ubrst;
-    pabuf->dirParseBuff = rawdest;
-
     #if LOG_ROTMF_DBG    
-    sprintf_f(rs->logs, "maxh: %d, minh: %d, maxv: %d, minv: %d \n", maxhint, minhint, maxvint, minvint);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("maxh: %d, minh: %d, maxv: %d, minv: %d \n", maxhint, minhint, maxvint, minvint);
     #endif
 
     pLU[0] = -1;
@@ -18890,39 +18585,34 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     if (minhint == LUt[0]) {
     
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "LU =  %d, %d match minhint: %d !!!left - 0\n", LUt[0], LUt[1], minhint);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("LU =  %d, %d match minhint: %d !!!left - 0\n", LUt[0], LUt[1], minhint);
         #endif
 
         if (minvint == LUt[1]) {
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "LU =  %d, %d match minvint: %d !!!left - 0\n", LUt[0], LUt[1], minvint);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("LU =  %d, %d match minvint: %d !!!left - 0\n", LUt[0], LUt[1], minvint);
             #endif
         
             pLD[0] = LUn[0];
             pLD[1] = LUn[1];
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             #endif
 
         } else {
             if (maxvint == LUt[1]) {
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "LU =  %d, %d match maxvint: %d !!!left - 0\n", LUt[0], LUt[1], maxvint);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("LU =  %d, %d match maxvint: %d !!!left - 0\n", LUt[0], LUt[1], maxvint);
                 #endif
 
                 pLU[0] = LUn[0];
                 pLU[1] = LUn[1];
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 #endif
             }
         }
@@ -18937,13 +18627,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pLD[1] = LDn[1];
                     
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
                     #endif
 
                 } else if (RUt[0] < LDt[0]) {
@@ -18954,22 +18642,18 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pLD[1] = LUn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
                     #endif
 
                 } else {
-                    sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!left - 1\n", LUt[0], LUt[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("WARNING!! LU =  %d, %d not match!!!left - 1\n", LUt[0], LUt[1]);
                 }
             } else {
-                sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!! left - 2\n", LUt[0], LUt[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("WARNING!! LU =  %d, %d not match!!! left - 2\n", LUt[0], LUt[1]);
             }
         }
     }
@@ -18977,38 +18661,33 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     if (minhint == RUt[0]) {
 
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "RU =  %d, %d match minhint: %d !!!left - 0\n", RUt[0], RUt[1], minhint);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("RU =  %d, %d match minhint: %d !!!left - 0\n", RUt[0], RUt[1], minhint);
         #endif
 
         if (minvint == RUt[1]) {
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "RU =  %d, %d match minvint: %d !!!left - 0\n", RUt[0], RUt[1], minvint);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("RU =  %d, %d match minvint: %d !!!left - 0\n", RUt[0], RUt[1], minvint);
             #endif
             
             pLD[0] = RUn[0];
             pLD[1] = RUn[1];
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             #endif
         } else {
             if (maxvint == RUt[1]) {
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "RU =  %d, %d match maxvint: %d !!!left - 0\n", RUt[0], RUt[1], maxvint);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("RU =  %d, %d match maxvint: %d !!!left - 0\n", RUt[0], RUt[1], maxvint);
                 #endif
                 
                 pLU[0] = RUn[0];
                 pLU[1] = RUn[1];
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 #endif               
             }
         }
@@ -19023,13 +18702,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pLD[1] = LUn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
                     #endif
                     
                 } else if (RDt[0] < LUt[0]) {
@@ -19040,22 +18717,18 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pLD[1] = RUn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
                     #endif
                     
                 } else {
-                    sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!left - 1\n", RUt[0], RUt[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("WARNING!! RU =  %d, %d not match!!!left - 1\n", RUt[0], RUt[1]);
                 }
             } else {
-                sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!left - 2\n", RUt[0], RUt[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("WARNING!! RU =  %d, %d not match!!!left - 2\n", RUt[0], RUt[1]);
             }
         }
     }
@@ -19063,37 +18736,32 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     if (minhint == LDt[0]) {
 
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "LD =  %d, %d match minhint: %d !!!left - 0\n", LDt[0], LDt[1], minhint);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("LD =  %d, %d match minhint: %d !!!left - 0\n", LDt[0], LDt[1], minhint);
         #endif
         
         if (minvint == LDt[1]) {
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "LD =  %d, %d match minvint: %d !!!left - 0\n", LDt[0], LDt[1], minvint);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("LD =  %d, %d match minvint: %d !!!left - 0\n", LDt[0], LDt[1], minvint);
             #endif
 
             pLD[0] = LDn[0];
             pLD[1] = LDn[1];
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             #endif
         } else {
             if (maxvint == LDt[1]) {
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "LD =  %d, %d match maxvint: %d !!!left - 0\n", LDt[0], LDt[1], maxvint);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("LD =  %d, %d match maxvint: %d !!!left - 0\n", LDt[0], LDt[1], maxvint);
                 #endif
 
                 pLU[0] = LDn[0];
                 pLU[1] = LDn[1];
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 #endif                                
             }
         }
@@ -19108,13 +18776,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pLD[1] = RDn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
                     #endif
                 } else if (LUt[0] < RDt[0]) {
                     pLU[0] = LUn[0];
@@ -19124,21 +18790,17 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pLD[1] = LDn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
                     #endif
                 } else {
-                    sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!left - 1\n", LDt[0], LDt[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("WARNING!! LD =  %d, %d not match!!!left - 1\n", LDt[0], LDt[1]);
                 }
             } else {
-                sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!left - 2\n", LDt[0], LDt[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("WARNING!! LD =  %d, %d not match!!!left - 2\n", LDt[0], LDt[1]);
             }
         }
     }
@@ -19146,38 +18808,33 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     if (minhint == RDt[0]) {
 
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "RD =  %d, %d match minhint: %d !!!left - 0\n", RDt[0], RDt[1], minhint);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("RD =  %d, %d match minhint: %d !!!left - 0\n", RDt[0], RDt[1], minhint);
         #endif
 
         if (minvint == RDt[1]) {
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "RD =  %d, %d match minvint: %d !!!left - 0\n", RDt[0], RDt[1], minvint);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("RD =  %d, %d match minvint: %d !!!left - 0\n", RDt[0], RDt[1], minvint);
             #endif
 
             pLD[0] = RDn[0];
             pLD[1] = RDn[1];                    
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "set PLD = %lf, %lf\n", pLD[0], pLD[1]);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("set PLD = %lf, %lf\n", pLD[0], pLD[1]);
             #endif
         } else {
             if (maxvint == RDt[1]) {
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "RD =  %d, %d match maxvint: %d !!!left - 0\n", RDt[0], RDt[1], maxvint);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("RD =  %d, %d match maxvint: %d !!!left - 0\n", RDt[0], RDt[1], maxvint);
                 #endif
 
                 pLU[0] = RDn[0];
                 pLU[1] = RDn[1];
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "set PLU = %lf, %lf\n", pLU[0], pLU[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("set PLU = %lf, %lf\n", pLU[0], pLU[1]);
                 #endif
             }
         }
@@ -19192,13 +18849,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pLD[1] = RUn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
                     #endif
                 } else if (LDt[0] < RUt[0]) {
                     pLU[0] = LDn[0];
@@ -19208,21 +18863,17 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pLD[1] = RDn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLU = %lf, %lf - 3\n", pLU[0], pLU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PLD = %lf, %lf - 3 \n", pLD[0], pLD[1]);
                     #endif
                 } else {
-                    sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!left - 1\n", RDt[0], RDt[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("WARNING!! RD =  %d, %d not match!!!left - 1\n", RDt[0], RDt[1]);
                 }
             } else {
-                sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!left - 2\n", RDt[0], RDt[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("WARNING!! RD =  %d, %d not match!!!left - 2\n", RDt[0], RDt[1]);
             }
         }
     }
@@ -19230,39 +18881,34 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     if (maxhint == LUt[0]) {
 
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "LU =  %d, %d match maxhint: %d !!!right - 0\n", LUt[0], LUt[1], maxhint);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("LU =  %d, %d match maxhint: %d !!!right - 0\n", LUt[0], LUt[1], maxhint);
         #endif
 
         if (minvint == LUt[1]) {
         
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "LU =  %d, %d match minvint: %d !!!right - 0\n", LUt[0], LUt[1], minvint);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("LU =  %d, %d match minvint: %d !!!right - 0\n", LUt[0], LUt[1], minvint);
             #endif
 
             pRD[0] = LUn[0];
             pRD[1] = LUn[1];
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "set PRD = %lf, %lf\n", pRD[0], pRD[1]);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("set PRD = %lf, %lf\n", pRD[0], pRD[1]);
             #endif
 
         } else {
             if (maxvint == LUt[1]) {
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "LU =  %d, %d match maxvint: %d !!!right - 0\n", LUt[0], LUt[1], maxvint);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("LU =  %d, %d match maxvint: %d !!!right - 0\n", LUt[0], LUt[1], maxvint);
                 #endif
 
                 pRU[0] = LUn[0];
                 pRU[1] = LUn[1];
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 #endif
             }
         }
@@ -19277,13 +18923,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pRD[1] = LUn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
                     #endif
                 
                 } else if (RUt[0] > LDt[0]) {
@@ -19294,22 +18938,18 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pRD[1] = RUn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
                     #endif
                     
                 } else {
-                    sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!right - 1\n", LUt[0], LUt[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("WARNING!! LU =  %d, %d not match!!!right - 1\n", LUt[0], LUt[1]);
                 }
             } else {
-                sprintf_f(rs->logs, "WARNING!! LU =  %d, %d not match!!!right - 2\n", LUt[0], LUt[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("WARNING!! LU =  %d, %d not match!!!right - 2\n", LUt[0], LUt[1]);
             }
         }
     }
@@ -19317,39 +18957,34 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     if (maxhint == RUt[0]) {
     
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "RU =  %d, %d match maxhint: %d !!!right - 0\n", RUt[0], RUt[1], maxhint);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("RU =  %d, %d match maxhint: %d !!!right - 0\n", RUt[0], RUt[1], maxhint);
         #endif
 
         if (minvint == RUt[1]) {
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "RU =  %d, %d match minvint: %d !!!right - 0\n", RUt[0], RUt[1], minvint);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("RU =  %d, %d match minvint: %d !!!right - 0\n", RUt[0], RUt[1], minvint);
             #endif
 
             pRD[0] = RUn[0];
             pRD[1] = RUn[1];
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "set PRD = %lf, %lf\n", pRD[0], pRD[1]);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("set PRD = %lf, %lf\n", pRD[0], pRD[1]);
             #endif
 
         } else {
             if (maxvint == RUt[1]) {
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "RU =  %d, %d match maxvint: %d !!!right - 0\n", RUt[0], RUt[1], maxvint);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("RU =  %d, %d match maxvint: %d !!!right - 0\n", RUt[0], RUt[1], maxvint);
                 #endif
 
                 pRU[0] = RUn[0];
                 pRU[1] = RUn[1];
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 #endif
             }
         }
@@ -19364,13 +18999,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pRD[1] = RUn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
                     #endif
                 } else if (RDt[0] > LUt[0]) {
                     pRU[0] = RUn[0];
@@ -19380,21 +19013,17 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pRD[1] = RDn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
                     #endif
                 } else {
-                    sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!right - 1\n", RUt[0], RUt[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("WARNING!! RU =  %d, %d not match!!!right - 1\n", RUt[0], RUt[1]);
                 }
             } else {
-                sprintf_f(rs->logs, "WARNING!! RU =  %d, %d not match!!!right - 2\n", RUt[0], RUt[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("WARNING!! RU =  %d, %d not match!!!right - 2\n", RUt[0], RUt[1]);
             }
         }
     }
@@ -19402,39 +19031,34 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     if (maxhint == LDt[0]) {
 
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "LD =  %d, %d match maxhint: %d !!!right - 0\n", LDt[0], LDt[1], maxhint);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("LD =  %d, %d match maxhint: %d !!!right - 0\n", LDt[0], LDt[1], maxhint);
         #endif
 
         if (minvint == LDt[1]) {
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "LD =  %d, %d match minvint: %d !!!right - 0\n", LDt[0], LDt[1], minvint);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("LD =  %d, %d match minvint: %d !!!right - 0\n", LDt[0], LDt[1], minvint);
             #endif
 
             pRD[0] = LDn[0];
             pRD[1] = LDn[1];                  
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "set PRD = %lf, %lf\n", pRD[0], pRD[1]);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("set PRD = %lf, %lf\n", pRD[0], pRD[1]);
             #endif
 
         } else {
             if (maxvint == LDt[1]) {
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "LD =  %d, %d match maxvint: %d !!!right - 0\n", LDt[0], LDt[1], maxvint);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("LD =  %d, %d match maxvint: %d !!!right - 0\n", LDt[0], LDt[1], maxvint);
                 #endif
 
                 pRU[0] = LDn[0];
                 pRU[1] = LDn[1];
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 #endif
             }
         }
@@ -19449,13 +19073,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pRD[1] = LDn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
                     #endif
                 } else if (LUt[0] > RDt[0]) {
                     pRU[0] = LDn[0];
@@ -19465,21 +19087,17 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pRD[1] = LUn[1];
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
                     #endif
                 } else {
-                    sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!right - 1\n", LDt[0], LDt[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("WARNING!! LD =  %d, %d not match!!!right - 1\n", LDt[0], LDt[1]);
                 }
             } else {
-                sprintf_f(rs->logs, "WARNING!! LD =  %d, %d not match!!!right - 2\n", LDt[0], LDt[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("WARNING!! LD =  %d, %d not match!!!right - 2\n", LDt[0], LDt[1]);
             }
         }
     }
@@ -19487,39 +19105,34 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     if (maxhint == RDt[0]) {
 
         #if LOG_ROTMF_DBG    
-        sprintf_f(rs->logs, "RD =  %d, %d match maxhint: %d !!!right - 0\n", RDt[0], RDt[1], maxhint);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("RD =  %d, %d match maxhint: %d !!!right - 0\n", RDt[0], RDt[1], maxhint);
         #endif
 
         if (minvint == RDt[1]) {
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "RD =  %d, %d match minvint: %d !!!right - 0\n", RDt[0], RDt[1], minvint);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("RD =  %d, %d match minvint: %d !!!right - 0\n", RDt[0], RDt[1], minvint);
             #endif
 
             pRD[0] = RDn[0];
             pRD[1] = RDn[1];                    
 
             #if LOG_ROTMF_DBG    
-            sprintf_f(rs->logs, "set PRD = %lf, %lf\n", pRD[0], pRD[1]);
-            print_f(rs->plogs, "RMF", rs->logs);
+            printf("set PRD = %lf, %lf\n", pRD[0], pRD[1]);
             #endif
 
         } else {
             if (maxvint == RDt[1]) {
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "RD =  %d, %d match maxvint: %d !!!right - 0\n", RDt[0], RDt[1], maxvint);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("RD =  %d, %d match maxvint: %d !!!right - 0\n", RDt[0], RDt[1], maxvint);
                 #endif
 
                 pRU[0] = RDn[0];
                 pRU[1] = RDn[1];
 
                 #if LOG_ROTMF_DBG    
-                sprintf_f(rs->logs, "set PRU = %lf, %lf\n", pRU[0], pRU[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("set PRU = %lf, %lf\n", pRU[0], pRU[1]);
                 #endif
             }
         }
@@ -19534,13 +19147,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pRD[1] = RDn[1];
                     
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
                     #endif
                 } else if (LDt[0] > RUt[0]) {
                     pRU[0] = RDn[0];
@@ -19550,27 +19161,21 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
                     pRD[1] = LDn[1];
                     
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRU = %lf, %lf - 3\n", pRU[0], pRU[1]);
                     #endif
 
                     #if LOG_ROTMF_DBG    
-                    sprintf_f(rs->logs, "set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("set PRD = %lf, %lf - 3\n", pRD[0], pRD[1]);
                     #endif
                 } else {
-                    sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 1\n", RDt[0], RDt[1]);
-                    print_f(rs->plogs, "RMF", rs->logs);
+                    printf("WARNING!! RD =  %d, %d not match!!!right - 1\n", RDt[0], RDt[1]);
                 }
             }
             else {
-                sprintf_f(rs->logs, "WARNING!! RD =  %d, %d not match!!!right - 2\n", RDt[0], RDt[1]);
-                print_f(rs->plogs, "RMF", rs->logs);
+                printf("WARNING!! RD =  %d, %d not match!!!right - 2\n", RDt[0], RDt[1]);
             }
         }
     }
-
-#define MIN_P  (100.0)
 
     LUt[0] = (int)round(pLU[0]*MIN_P);
     LUt[1] = (int)round(pLU[1]*MIN_P);
@@ -19603,20 +19208,15 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     pRD[1] = pRD[1]/MIN_P; 
     
     #if LOG_ROTMF_DBG
-    sprintf_f(rs->logs, "align: PLU: %lf, %lf \n", pLU[0], pLU[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "align: PRU: %lf, %lf \n", pRU[0], pRU[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "align: PLD: %lf, %lf \n", pLD[0], pLD[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
-    sprintf_f(rs->logs, "align: PRD: %lf, %lf \n", pRD[0], pRD[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("align: PLU: %lf, %lf \n", pLU[0], pLU[1]);
+    printf("align: PRU: %lf, %lf \n", pRU[0], pRU[1]);
+    printf("align: PLD: %lf, %lf \n", pLD[0], pLD[1]);
+    printf("align: PRD: %lf, %lf \n", pRD[0], pRD[1]);
     #endif
 
     if (pLU[1] > pRU[1]) {
         #if LOG_ROTMF_DBG
-        sprintf_f(rs->logs, "PLU[1]: %lf  > PRU[1]: %lf \n", pLU[1], pRU[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("PLU[1]: %lf  > PRU[1]: %lf \n", pLU[1], pRU[1]);
         #endif
 
         getVectorFromP(linLU, pLD, pLU);
@@ -19625,17 +19225,10 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
         getVectorFromP(linRU, pRU, pLU);
 
         #if LOG_ROTMF_DBG
-        sprintf_f(rs->logs, "lineLU:(%lf, %lf, %lf) = pLU:(%lf, %lf) <-> pLD:(%lf, %lf)  \n", linLU[0], linLU[1], linLU[2], pLU[0], pLU[1], pLD[0], pLD[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
-        
-        sprintf_f(rs->logs, "linLD:(%lf, %lf, %lf) = pLD:(%lf, %lf) <-> pRD:(%lf, %lf)  \n", linLD[0], linLD[1], linLD[2], pLD[0], pLD[1], pRD[0], pRD[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
-
-        sprintf_f(rs->logs, "linRD:(%lf, %lf, %lf) = pRD:(%lf, %lf) <-> pRU:(%lf, %lf)  \n", linRD[0], linRD[1], linRD[2], pRD[0], pRD[1], pRU[0], pRU[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
-        
-        sprintf_f(rs->logs, "linRU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linRU[0], linRU[1], linRU[2], pRU[0], pRU[1], pLU[0], pLU[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("lineLU:(%lf, %lf, %lf) = pLU:(%lf, %lf) <-> pLD:(%lf, %lf)  \n", linLU[0], linLU[1], linLU[2], pLU[0], pLU[1], pLD[0], pLD[1]);
+        printf("linLD:(%lf, %lf, %lf) = pLD:(%lf, %lf) <-> pRD:(%lf, %lf)  \n", linLD[0], linLD[1], linLD[2], pLD[0], pLD[1], pRD[0], pRD[1]);
+        printf("linRD:(%lf, %lf, %lf) = pRD:(%lf, %lf) <-> pRU:(%lf, %lf)  \n", linRD[0], linRD[1], linRD[2], pRD[0], pRD[1], pRU[0], pRU[1]);
+        printf("linRU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linRU[0], linRU[1], linRU[2], pRU[0], pRU[1], pLU[0], pLU[1]);
         #endif
 
         plm[0] = pLD[0];
@@ -19646,8 +19239,7 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     }
     else {
         #if LOG_ROTMF_DBG
-        sprintf_f(rs->logs, "PLU[1]: %lf  <= PRU[1]: %lf \n", pLU[1], pRU[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("PLU[1]: %lf  <= PRU[1]: %lf \n", pLU[1], pRU[1]);
         #endif
 
         getVectorFromP(linLU, pRU, pLU);
@@ -19656,17 +19248,10 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
         getVectorFromP(linRU, pRD, pRU);
 
         #if LOG_ROTMF_DBG
-        sprintf_f(rs->logs, "lineLU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linLU[0], linLU[1], linLU[2], pRU[0], pRU[1], pLU[0], pLU[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
-        
-        sprintf_f(rs->logs, "linLD:(%lf, %lf, %lf) = pLU:(%lf, %lf) <-> pLD:(%lf, %lf)  \n", linLD[0], linLD[1], linLD[2], pLU[0], pLU[1], pLD[0], pLD[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
-
-        sprintf_f(rs->logs, "linRD:(%lf, %lf, %lf) = pLD:(%lf, %lf) <-> pRD:(%lf, %lf)  \n", linRD[0], linRD[1], linRD[2], pLD[0], pLD[1], pRD[0], pRD[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
-        
-        sprintf_f(rs->logs, "linRU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linRU[0], linRU[1], linRU[2], pRD[0], pRD[1], pRU[0], pRU[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("lineLU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linLU[0], linLU[1], linLU[2], pRU[0], pRU[1], pLU[0], pLU[1]);
+        printf("linLD:(%lf, %lf, %lf) = pLU:(%lf, %lf) <-> pLD:(%lf, %lf)  \n", linLD[0], linLD[1], linLD[2], pLU[0], pLU[1], pLD[0], pLD[1]);
+        printf("linRD:(%lf, %lf, %lf) = pLD:(%lf, %lf) <-> pRD:(%lf, %lf)  \n", linRD[0], linRD[1], linRD[2], pLD[0], pLD[1], pRD[0], pRD[1]);
+        printf("linRU:(%lf, %lf, %lf) = pRU:(%lf, %lf) <-> pLU:(%lf, %lf)  \n", linRU[0], linRU[1], linRU[2], pRD[0], pRD[1], pRU[0], pRU[1]);
         #endif
         
         plm[0] = pLU[0];
@@ -19686,21 +19271,10 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
 
     
     #if LOG_ROTMF_DBG
-    //ret = getCross(linLD, linLU, plc);
-    sprintf_f(rs->logs, "test linLD cross linLU.  left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
-    print_f(rs->plogs, "RMF", rs->logs);
-            
-    //ret = getCross(linRD, linRU, prc);
-    sprintf_f(rs->logs, "test linRD cross linRU.  right %lf, %lf ret: %d \n", prc[0], prc[1], ret);
-    print_f(rs->plogs, "RMF", rs->logs);
-
-    //ret = getCross(linRU, linLU, ptop);
-    sprintf_f(rs->logs, "test linRU cross linLU.  top %lf, %lf ret: %d \n", ptop[0], ptop[1], ret);
-    print_f(rs->plogs, "RMF", rs->logs);
-
-    //ret= getCross(linRD, linLD, pn);
-    sprintf_f(rs->logs, "test linRD cross linLD.  down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("test linLD cross linLU.  left %lf, %lf ret: %d \n", plc[0], plc[1], ret);
+    printf("test linRD cross linRU.  right %lf, %lf ret: %d \n", prc[0], prc[1], ret);
+    printf("test linRU cross linLU.  top %lf, %lf ret: %d \n", ptop[0], ptop[1], ret);
+    printf("test linRD cross linLD.  down %lf, %lf ret: %d \n", pn[0], pn[1], ret);
     #endif
 
     pal[0] = 100;
@@ -19711,25 +19285,15 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     getVectorFromP(linPal, par, pal);        
 
     #if LOG_ROTMF_DBG
-    sprintf_f(rs->logs, "linPal:(%lf, %lf, %lf) = par:(%lf, %lf) <-> pal:(%lf, %lf)  \n", linPal[0], linPal[1], linPal[2], par[0], par[1], pal[0], pal[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("linPal:(%lf, %lf, %lf) = par:(%lf, %lf) <-> pal:(%lf, %lf)  \n", linPal[0], linPal[1], linPal[2], par[0], par[1], pal[0], pal[1]);
     #endif
 
     expCAsize = maxvint-minvint+1;
     len = 3*sizeof(int);
-    //crsAry = aspMemalloc(expCAsize*len);
     crsAry = aspMemalloc(expCAsize*len, midx);
-    #if 0
-    crsAry = (int *)rs->pbrotate->aspRotCrossAry;
-    crsASize = rs->pbrotate->aspRotCASize /len;
-    if (expCAsize > crsASize) {
-        expCAsize = crsASize;
-    }
-    #endif
 
     #if LOG_ROTMF_DBG
-    sprintf_f(rs->logs, "bf trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("bf trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
     #endif
     
     pt[0] = 200.0;
@@ -19754,42 +19318,25 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     }
 
     #if LOG_ROTMF_DBG
-    sprintf_f(rs->logs, "after trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("after trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
     #endif
-    
 
     for (iy=minvint, ix=0; ix < expCAsize; iy++, ix++) {
         pt[1] = (CFLOAT)iy;
         getRectVectorFromV(linCrs, pt, linPal);
-
         #if LOG_ROTMF_DBG
-        sprintf_f(rs->logs, "linCrs:(%lf, %lf, %lf) = pt:(%lf, %lf)  \n", linCrs[0], linCrs[1], linCrs[2], pt[0], pt[1]);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("linCrs:(%lf, %lf, %lf) = pt:(%lf, %lf)  \n", linCrs[0], linCrs[1], linCrs[2], pt[0], pt[1]);
         #endif
-
-        //getCross(linCrs, linPal, pn);
-        //sprintf_f(rs->logs, "pn: %.4lf, %.4lf \n", pn[0], pn[1]);
-        //print_f(rs->plogs, "RMF", rs->logs);
-
         if (pt[1] > plm[1]) {
             getCross(linCrs, linLU, plc);
         } else {
             getCross(linCrs, linLD, plc);
         }
-
-        //sprintf_f(rs->logs, "left cross %.4lf %.4lf, (%.4lf, %.4lf) \n", pt[1], plm[1], plc[0], plc[1]);
-        //print_f(rs->plogs, "RMF", rs->logs);
-
         if (pt[1] > prm[1]) {
             getCross(linCrs, linRU, prc);
         } else {
             getCross(linCrs, linRD, prc);
         }
-
-        //sprintf_f(rs->logs, "right cross %.4lf %.4lf, (%.4lf, %.4lf) \n", pt[1], prm[1], prc[0], prc[1]);
-        //print_f(rs->plogs, "RMF", rs->logs);
-        
         crsAry[ix*3+0] = iy;
         crsAry[ix*3+1] = (int)round(plc[0]);
         crsAry[ix*3+2] = (int)round(prc[0]);
@@ -19797,21 +19344,15 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
 
     /*
     for (ix=0; ix < (maxvint-minvint+1); ix++) {
-        sprintf_f(rs->logs, "list %d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
-        print_f(rs->plogs, "RMF", rs->logs);
+        printf("list %d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
     }
     */
     
-    
     #if LOG_ROTMF_DBG    
-    sprintf_f(rs->logs, "new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d, sizeof crsArry: %d\n", maxhint, maxvint, rowsize, rawszNew, totsz, expCAsize);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("new bitmap H/V = %d /%d, rowsize: %d, rawsize: %d, buffused: %d, sizeof crsArry: %d\n", maxhint, maxvint, rowsize, rawszNew, totsz, expCAsize);
     #endif
-
-    //memset(rawSrc, 0, rawszNew);
     
     /* retate raw data */
-    //memset(rawSrc, 0xff, rawszNew);
     oldScale[0] = oldRowsz;
     oldScale[1] = oldHeight;
     oldScale[2] = rawsz;
@@ -19826,13 +19367,11 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     memset(rawTmp, 0, rawszNew);
     
     /* reverse to fill the rotate image */
-    
     theta = (CFLOAT) (360*UNIT_DEG - deg);
     theta = theta / UNIT_DEG;
     
     #if LOG_ROTMF_DBG    
-    sprintf_f(rs->logs, "reverse rotate angle = %lf \n", theta);
-    print_f(rs->plogs, "RMF", rs->logs);
+    printf("reverse rotate angle = %lf \n", theta);
     #endif
 
     theta = theta * M_PI / piAngle;
@@ -19851,20 +19390,8 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
         ix = crsAry[id*3+1];
         ixd = crsAry[id*3+2]; 
 
-        //fx = (CFLOAT)ix;
         fy = (CFLOAT)iy;
-        
-        //fx -= offsetH;
         fy -= offsetV;
-
-        //dx = (int) round(fx*thacos - fy*thasin);
-        //dy = (int) round(fx*thasin + fy*thacos);
-
-        //sprintf_f(rs->logs, "line %d. (%d %d, %d) \n", id, iy, ix, ixd);
-        //print_f(rs->plogs, "RMF", rs->logs);
-
-        //iyn = (int)round(fy);
-        //iyn += offsetCal;
         
         for (;ix <= ixd; ix++) {       
 
@@ -19872,36 +19399,23 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
 
             fx -= offsetH;
 
-            //ixn = (int)round(fx);
-            //ixn += offsetCal;
-
-            //dx = (int) round(tarc[ixn] - tars[iyn]);
-            //dy = (int) round(tars[ixn] + tarc[iyn]);
-
             dx = (int) round(fx*thacos - fy*thasin);
             dy = (int) round(fx*thasin + fy*thacos);
 
             cnt++;
 
             if ((dx < 0) || (dy < 0) || (dx >= oldWidth) || (dy >= oldHeight)) {
-                //sprintf(rs->logs, "Error over boundry!! %d. %d, %d => %d, %d (%d, %d)\n",id, ix, iy,  dx, dy, oldWidth, oldHeight);
-                //print_f(rs->plogs, "RMF", rs->logs);
                 continue;
             }
 
             bitset = bpp / 8;
-            //src = rawCpy + (dx*bitset + dy*oldRowsz);
             src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
-            //dst = rawTmp + (ix*bitset + iy*rowsize);
             dst = getPixel(rawTmp, ix, iy, rowsize, bitset);
 
-            //sprintf(rs->logs, "%d. %d, %d => %d, %d (0x%.2x)\n",id, ix, iy,  dx, dy, (unsigned int)(*src));
-            //print_f(rs->plogs, "RMF", rs->logs);
             
             cnt = 0;
             while (bitset > 0) {
                 *dst = *src;
-                //gdat[cnt] = *src;
 
                 bitset --;
                 cnt++;
@@ -19918,6 +19432,8 @@ static int rotateBMPMf(struct procRes_s *rs, int *page, struct aspMetaData_s *me
     #if LOG_ROTMF_DBG
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     #endif
+    memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
+    
     return err; 
 }
 
@@ -84354,7 +83870,11 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     struct aspMetaDataviaUSB_s *pusbmeta=0;
     int abuf_size;
     struct timespec jpgS, jpgE;
-
+    int edwhA[2]={0}, edwhB[2]={0};
+    int srhcntA[2]={0}, srhcntB[2]={0};
+    int idxA=0, idxB=0, tmCost=0;
+    CFLOAT infoPos[4];
+    
     #if DUMP_ROT_BMP
     static char ptfileSave[] = "/home/root/rotate/rot_%.3d.bmp";
     char filepath[256]={0};
@@ -84403,9 +83923,9 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     int cutcnt = 0, rawlen=0, bhlen=0, prisec=0, dstlen=0, cutnum=0, mtlen=0;
     struct usbhost_s *pushost=0;
     struct aspMetaData_s *metaRx = 0;
-    struct bitmapHeader_s *bheader=0;
+    struct bitmapHeader_s *bheader=0, *rawheader=0;
     char *metaPt=0, *bmpbuff=0, *bmpcolrtb=0, *bmprot=0, *bmpmeta=0;
-    char *dstbuff=0, *ph=0;
+    char *dstbuff=0, *ph=0, *phraw=0;
     uint32_t utmp=0, crod=0;
     int mreal[8]={0};
 
@@ -84426,30 +83946,17 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     ret = 0;
 
     ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
-    sprintf_f(rs->logs, "[CUT] get page ret: %d num: %d\n", ret, cutnum);
-    print_f(rs->plogs, "CLIP", rs->logs);
-
-    #if 0
-    cutsides[ret*2] = -1;
-    cutsides[ret*2+1] = -1;
-    cutlayers[ret*2] = 0;
-    cutlayers[ret*2+1] = 0;
-
-    ret += 1;
-
-    cutsides[ret*2] = -2;
-    cutsides[ret*2+1] = -2;
-    cutlayers[ret*2] = 0;
-    cutlayers[ret*2+1] = 0;
-
-    ret += 1;
-    #endif
+    //sprintf_f(rs->logs, "[CUT] get page ret: %d num: %d\n", ret, cutnum);
+    //print_f(rs->plogs, "CLIP", rs->logs);
 
     cutnum = ret;
+    
+    /*
     for (ix=0; ix < cutnum; ix++) {
         sprintf_f(rs->logs, "[CUT] clips %d. A:%d (%d) B:%d (%d), cur: %d \n", ix, cutsides[ix*2], cutlayers[ix*2], cutsides[ix*2+1], cutlayers[ix*2+1], clidx);
         print_f(rs->plogs, "CLIP", rs->logs);
     }
+    */
 
     cutcnt = clidx;
     
@@ -84479,27 +83986,58 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     mreal[6] = utmp;
     mreal[7] = crod;
 
-    sprintf_f(rs->logs, "meta size: %d, P1: (%4d, %4d) P2: (%4d, %4d) P3: (%4d, %4d) P4: (%4d, %4d) \n", mtlen, mreal[0], mreal[1], mreal[2], mreal[3], mreal[4], mreal[5], mreal[6], mreal[7]);
-    print_f(rs->plogs, "CLIP", rs->logs);    
+    //sprintf_f(rs->logs, "meta size: %d, P1: (%4d, %4d) P2: (%4d, %4d) P3: (%4d, %4d) P4: (%4d, %4d) \n", mtlen, mreal[0], mreal[1], mreal[2], mreal[3], mreal[4], mreal[5], mreal[6], mreal[7]);
+    //print_f(rs->plogs, "CLIP", rs->logs);    
     
     aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
     bmpraw = bmpbuff + 0x436;
     bmpcolrtb = aspMemalloc(1078, midx);
     memcpy(bmpcolrtb, bmpbuff, 1078);
-    memcpy(ph, bmpbuff, sizeof(struct bitmapHeader_s)-2);
+    //memcpy(phraw, bmpbuff, sizeof(struct bitmapHeader_s)-2);
     //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
     
     bhlen = 0x436;
     aspBMPdecodeItemGet(decpic, &dstbuff, &dstlen);
     bmprot = dstbuff;
 
-    sprintf_f(rs->logs, "raw size: %d, dst size: %d \n", rawlen, dstlen);
-    print_f(rs->plogs, "CLIP", rs->logs);    
+    //sprintf_f(rs->logs, "raw size: %d, dst size: %d \n", rawlen, dstlen);
+    //print_f(rs->plogs, "CLIP", rs->logs);    
 
-    ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpraw, bmprot, mreal, midx);
+    int cropinfo[6]; // x, y, w, h, imgW, imgH
+
+    cropinfo[0] = 
+
+    idxA = cutsides[cutcnt*2];
+
+    ret = aspMetaGetPagePos(metaRx, infoPos, idxA);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Error!!! get A side pos wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "CLIP", rs->logs);
+    }
+
+    cropinfo[0] = (int)infoPos[0];
+    cropinfo[1] = (int)infoPos[1];
+    cropinfo[2] = (int)infoPos[2];
+    cropinfo[3] = (int)infoPos[3];
+
+    ret = aspMetaGetWH(metaRx, &cropinfo[4], srhcntA, 0);
+    if (ret < 0) {
+        sprintf_f(rs->logs, "Error!!! get A side tag wh & search count wrong ret: %d !!! \n", ret);
+        print_f(rs->plogs, "CLIP", rs->logs);
+    }
+
+    //sprintf_f(rs->logs, "get A side idx: %d pos (%4d, %4d, %4d, %4d, %4d, %4d) !!! \n", idxA, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3], cropinfo[4], cropinfo[5]);
+    //print_f(rs->plogs, "CLIP", rs->logs);
+        
+    ret = rotateBMPMf(cropinfo, bmpraw, bmprot, mreal, bmpcolrtb, midx);
 
     clock_gettime(CLOCK_REALTIME, &jpgE);
 
+    tmCost = time_diff(&jpgS, &jpgE, 1000000);
+    sprintf_f(rs->logs, "m4 rotate bmp cost: %d ms\n", tmCost);
+    print_f(rs->plogs, "CLIP", rs->logs);
+
+    memcpy(ph, bmpcolrtb, sizeof(struct bitmapHeader_s)-2);
     if (ret) {
         memset(dstbuff, 0, pDeRect->mfourRectW*pDeRect->mfourRectH);
         aspBMPdecodeItemSet(decpic, pDeRect->mfourRectW, pDeRect->mfourRectH, abuf_size);
@@ -84527,7 +84065,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     print_f(rs->plogs, "CLIP", rs->logs);    
 
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
-    memcpy(bmpcolrtb, ph, sizeof(struct bitmapHeader_s)-2);
+    //memcpy(bmpcolrtb, ph, sizeof(struct bitmapHeader_s)-2);
     
     fdump = find_save(filepath, ptfileSave);
     if (fdump) {
@@ -84694,6 +84232,7 @@ static int p12(struct procRes_s *rs)
     char pinfo[8]={0};
     int *pipeMfRx=0, *pipeMfTx=0;
     struct pollfd pllfd[2]={0};
+    int cropinfo[8]={0};
 
     sprintf_f(rs->logs, "p12\n");
     print_f(rs->plogs, "P12", rs->logs);
@@ -85382,7 +84921,7 @@ static int p12(struct procRes_s *rs)
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     
-                    ret = rotateBMPMf(rs, &cutsides[cutcnt*2], metaRx, bmpbuff, bmprot, mreal, 12);
+                    ret = rotateBMPMf(cropinfo, bmpbuff, bmprot, mreal, bmpcolrtb, 12);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgE);
                     
