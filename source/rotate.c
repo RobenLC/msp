@@ -4,8 +4,2091 @@
 #include <string.h>
 #include <unistd.h> 
 #include <math.h>
+#include <sys/mman.h> 
 
 #define CFLOAT double
+
+struct bitmapHeader_s {
+    char aspbmpMagic[4];
+    int    aspbhSize;
+    char aspbhReserve[4];
+    int    aspbhRawoffset;
+    int    aspbiSize;
+    int    aspbiWidth;
+    int    aspbiHeight;
+    int    aspbiCPP;
+    int    aspbiCompMethd;
+    int    aspbiRawSize;
+    int    aspbiResoluH;
+    int    aspbiResoluV;
+    int    aspbiNumCinCP;
+    int    aspbiNumImpColor;
+};
+
+struct aspRectObj{
+    CFLOAT aspRectLU[2];
+    CFLOAT aspRectRU[2];    
+    CFLOAT aspRectLD[2];
+    CFLOAT aspRectRD[2];    
+};
+
+static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset) 
+{
+    return (rawCpy + dx * bitset + dy * rowsz);
+}
+           
+static void* aspMemalloc(int size, int midx) {
+    return malloc(size);
+}
+
+static CFLOAT aspMin(CFLOAT d1, CFLOAT d2) 
+{
+    if (d1 < d2) return d1;
+    else return d2;
+}
+
+static int aspMaxInt(int d1, int d2) 
+{
+    if (d1 > d2) return d1;
+    else return d2;
+}
+
+static int aspMinInt(int d1, int d2) 
+{
+    if (d1 < d2) return d1;
+    else return d2;
+}
+
+
+static int getVectorFromP(CFLOAT *vec, CFLOAT *p1, CFLOAT *p2)
+{
+    CFLOAT a1, b, a2;
+    CFLOAT x1, y1, x2, y2;
+
+    if (vec == 0) return -1;
+    if (p1 == 0) return -2;
+    if (p2 == 0) return -3;
+
+    x1 = p1[0];
+    y1 = p1[1];
+
+    x2 = p2[0];
+    y2 = p2[1];
+
+
+    vec[2] = 0;
+#if CROP_CALCU_DETAIL
+    printf("[vectP] input - p1 = (%lf, %lf), p2 = (%lf, %lf)\n", x1, y1, x2, y2);
+#endif
+    if (x1 == x2) {
+    	if (y1 == y2) {
+    	    return -4;
+    	} else {
+    	    a1 = 1;
+    	    a2 = 1;
+    	    b = -x1;
+    	    vec[2] = 1;
+    	}
+    } else {
+        b = ((x2 * y1) - (x1 * y2)) / (x2 - x1);
+
+        if (x1 == 0) {
+            a1 = 0;
+        } else {
+            a1 = ((x1 * y2) - (x1 * y1)) / ((x1 * x2) - (x1 * x1));
+        }
+
+        if (x2 == 0) {
+            a2 = 0;
+        } else {
+            a2 = ((x2 * y2) - (x2 * y1)) / ((x2 * x2) - (x2 * x1));
+        }
+    }
+#if CROP_CALCU_DETAIL
+    printf("[vectP] output - a = %lf/%lf, b = %lf\n", a1, a2, b);
+#endif
+
+    if (a1 == 0) {
+        vec[0] = a2;
+    } else {
+        vec[0] = a1;
+    }
+
+    vec[1] = b;
+
+    return 0;
+
+}
+
+static int getCross(CFLOAT *v1, CFLOAT *v2, CFLOAT *pt)
+{
+    CFLOAT a1, a2, b1, b2, c1, c2;
+    CFLOAT x, y;
+
+    if (v1 == 0) return -1;
+    if (v2 == 0) return -2;
+    if (pt == 0) return -3;
+
+    a1 = v1[0];
+    b1 = v1[1];
+    c1 = v1[2];
+
+    a2 = v2[0];
+    b2 = v2[1];
+    c2 = v2[2];
+#if CROP_CALCU_DETAIL
+    printf("[Cross] input - v1 = (%lf, %lf, %lf) v2 = (%lf, %lf, %lf)\n", a1, b1, c1, a2, b2, c2);
+#endif
+    if (a1 == a2) return -4;
+
+    if ((c1 == 1) && (c2 == 1)) {
+        return -5;
+    } else if (c1 == 1) {
+        x = -(b1/a1);
+        y = a2 * x + b2;
+    } else if (c2 == 1) {
+        x = -(b2/a2);
+        y = a1 * x + b1;
+    } else {
+        y = ((a1 * b2) - (a2 * b1)) / (a1 - a2);
+        x = (b2 - b1) / (a1 - a2);
+    }
+#if CROP_CALCU_DETAIL
+    printf("[Cross] output - pt = (%lf, %lf)\n", x, y);
+#endif
+    pt[0] = x;
+    pt[1] = y;
+    
+    return 0;
+}
+
+static int calcuRotateCoordinates(int *outi, CFLOAT *out, CFLOAT *in, CFLOAT *angle) 
+{
+    CFLOAT r=0;
+    CFLOAT x1, y1;
+    CFLOAT x2, y2;
+    CFLOAT cosA, sinA;
+
+    if (!out) return -1;
+    if (!in) return -2;
+    if (!outi) return -3;
+    if (!angle) return -4;
+
+    //printf("calcu rotate input :%lf, %lf, cos:%lf sin:%lf\n", in[0], in[1], angle[0], angle[1]);
+
+    x1 = in[0];
+    y1 = in[1];
+
+    cosA = angle[0];
+    sinA = angle[1];
+
+    //r = angle * M_PI / piAngle;
+    //x2 = x1*cos(r) - y1*sin(r);
+    //y2 = x1*sin(r) + y1*cos(r);
+    
+    x2 = x1*cosA - y1*sinA;
+    y2 = x1*sinA + y1*cosA;
+    
+    out[0] = x2;
+    out[1] = y2;
+
+    outi[0] = (int)(x2);
+    outi[1] = (int)(y2);
+
+    //printf("calcu rotate input :%lf, %lf, output: (%d, %d) (%lf, %lf) \n", in[0], in[1], outi[0], outi[1], out[0], out[1]);
+    
+    return 0;
+}
+
+static CFLOAT getAngle(CFLOAT *pSrc, CFLOAT *p1, CFLOAT *p2)
+{
+    CFLOAT angle = 0.0f;
+    
+    if ((p1[0] == p2[0]) && (p1[1] == p2[1])) return -1;
+    if ((p1[0] == pSrc[0]) && (p1[1] == pSrc[1])) return -1;
+    if ((p2[0] == pSrc[0]) && (p2[1] == pSrc[1])) return -1;
+    
+    CFLOAT va_x = p1[0] - pSrc[0];
+    CFLOAT va_y = p1[1] - pSrc[1];
+
+    CFLOAT vb_x = p2[0] - pSrc[0];
+    CFLOAT vb_y = p2[1] - pSrc[1];
+
+    CFLOAT productValue = (va_x * vb_x) + (va_y * vb_y);  
+    CFLOAT va_val = sqrt(va_x * va_x + va_y * va_y);  
+    CFLOAT vb_val = sqrt(vb_x * vb_x + vb_y * vb_y);  
+    CFLOAT cosValue = productValue / (va_val * vb_val);      
+
+    //printf("[AnG] cos: %.2lf \n", cosValue);
+
+    if(cosValue < -1 && cosValue > -2) {
+        cosValue = -1;
+    } else if (cosValue > 1 && cosValue < 2) {
+        cosValue = 1;
+    }
+
+    angle = acos(cosValue) * 180.0 / M_PI; 
+    
+    return angle;
+}
+
+static void dbgprintRect(struct aspRectObj *rect)
+{
+    char mlog[256];
+    
+    printf("[DBG] LU[%.2lf, %.2lf] LD[%.2lf, %.2lf] RD[%.2lf, %.2lf] RU[%.2lf, %.2lf]\n", 
+        rect->aspRectLU[0], rect->aspRectLU[1], 
+        rect->aspRectLD[0], rect->aspRectLD[1], 
+        rect->aspRectRD[0], rect->aspRectRD[1], 
+        rect->aspRectRU[0], rect->aspRectRU[1]);
+}
+
+static int getRectVectorFromV(CFLOAT *vec, CFLOAT *p, CFLOAT *vecIn)
+{
+    CFLOAT a=0, b=0, c=0, aIn=0, cIn=0;
+    CFLOAT x, y;
+
+    if (vec == 0) return -1;
+    if (p == 0) return -2;
+    if (vecIn == 0) return -3;
+
+    aIn = vecIn[0];
+    cIn = vecIn[2];
+    x = p[0];
+    y = p[1];
+
+    if (aIn == 0) {
+        c = 1;
+    } else if (cIn == 1) {
+        a = 0;
+    } else {
+        a = -1 / aIn;
+    }
+    
+    if (c == 1) {
+        a = 1;
+        b = -x;
+    } else {
+        b = y - (a * x);
+    }
+    vec[0] = a;
+    vec[1] = b;
+    vec[2] = c;
+
+#if CROP_CALCU_DETAIL
+    printf("[vectRV] output - a = %f, b = %f, c = %f\n", a, b, c);
+#endif
+
+    return 0;
+}
+
+static void setRectPoint(struct aspRectObj *pRectin, CFLOAT edwidth, CFLOAT edheight, CFLOAT *pst) 
+{
+    pRectin->aspRectLD[0] = pst[0];
+    pRectin->aspRectLD[1] = pst[1];
+    
+    pRectin->aspRectLU[0] = pst[0];
+    pRectin->aspRectLU[1] = pst[1] + edheight;
+
+    pRectin->aspRectRU[0] = pst[0] + edwidth;
+    pRectin->aspRectRU[1] = pst[1] + edheight;
+
+    pRectin->aspRectRD[0] = pst[0] + edwidth;
+    pRectin->aspRectRD[1] = pst[1];
+
+}
+
+static inline int getPtTran(CFLOAT *ptout, CFLOAT *rangle, CFLOAT *offset, CFLOAT *ptin)
+{
+    CFLOAT pLU[2];
+    int ret=0, LUt[2];
+    
+    pLU[0] = ptin[0] + offset[0];
+    pLU[1] = ptin[1] + offset[1];
+    
+    ret = calcuRotateCoordinates(LUt, ptout, pLU, rangle);
+    
+    //printf("[PT] in:(%4.2lf, %4.2lf), out:(%4.2lf, %4.2lf) ret: %d\n", ptin[0], ptin[1], ptout[0], ptout[1], ret);
+
+    return ret;
+}
+
+#define LOG_GETRECTRAN_EN (0)
+static int getRectTran(struct aspRectObj *pRectin, CFLOAT dg, CFLOAT *offset, struct aspRectObj *pRectout)
+{
+    int ret=0;
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT pLU[2], pLD[2], pRU[2], pRD[2];
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2];
+
+    theta = dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    #if LOG_GETRECTRAN_EN
+    printf("[CHR] getRectTran() degree: %4.2lf, offset: (%4.2lf, %4.2lf) \n", dg, offset[0], offset[1]);
+    #endif
+    
+    ret = getPtTran(pRectout->aspRectLU, rangle, offset, pRectin->aspRectLU);
+    #if LOG_GETRECTRAN_EN
+    printf("[CHR] LU: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", 
+        pRectin->aspRectLU[0], pRectin->aspRectLU[1], pRectout->aspRectLU[0], pRectout->aspRectLU[1], ret);
+    #endif
+    
+    ret = getPtTran(pRectout->aspRectLD, rangle, offset, pRectin->aspRectLD);
+    #if LOG_GETRECTRAN_EN
+    printf("[CHR] LD: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", 
+        pRectin->aspRectLD[0], pRectin->aspRectLD[1], pRectout->aspRectLD[0], pRectout->aspRectLD[1], ret);
+    #endif
+        
+    ret = getPtTran(pRectout->aspRectRD, rangle, offset, pRectin->aspRectRD);
+    #if LOG_GETRECTRAN_EN
+    printf("[CHR] RD: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", 
+        pRectin->aspRectRD[0], pRectin->aspRectRD[1], pRectout->aspRectRD[0], pRectout->aspRectRD[1], ret);
+    #endif
+        
+    ret = getPtTran(pRectout->aspRectRU, rangle, offset, pRectin->aspRectRU);
+    #if LOG_GETRECTRAN_EN
+    printf("[CHR] RU: (%4.2lf, %4.2lf) ->  (%4.2lf, %4.2lf) ret: %d\n", 
+        pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectout->aspRectRU[0], pRectout->aspRectRU[1], ret);
+    #endif
+
+    return 0;
+}
+
+#define LOG_ROTORI_DBG  (0)
+static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
+{
+    CFLOAT minH=0, minV=0, offsetH=0, offsetV=0;
+    CFLOAT LUn[2], RUn[2], LDn[2], RDn[2];
+    CFLOAT pLU[2], pRU[2], pLD[2], pRD[2];
+    
+    int LUt[2], RUt[2], LDt[2], RDt[2];
+    int maxhint=0, maxvint=0, minhint=0, minvint=0, rowsize=0, rawszNew=0;
+    
+    if (!pRin) {
+        return -1;
+    }
+
+    if (!pRout) {
+        return -2;
+    }
+
+    memcpy(LUn, pRin->aspRectLU, sizeof(CFLOAT) * 2);
+    memcpy(RUn, pRin->aspRectRU, sizeof(CFLOAT) * 2);
+    memcpy(LDn, pRin->aspRectLD, sizeof(CFLOAT) * 2);
+    memcpy(RDn, pRin->aspRectRD, sizeof(CFLOAT) * 2);
+    
+    minH = aspMin(LUn[0], RUn[0]);
+    minH = aspMin(minH, LDn[0]);
+    minH = aspMin(minH, RDn[0]);
+
+    minV = aspMin(LUn[1], RUn[1]);
+    minV = aspMin(minV, LDn[1]);
+    minV = aspMin(minV, RDn[1]);
+
+    offsetH = 0 - minH;
+    offsetV = 0 - minV;
+
+    #if 0
+    LUn[0] += offsetH;
+    LUn[1] += offsetV;
+
+    RUn[0] += offsetH;
+    RUn[1] += offsetV;
+
+    LDn[0] += offsetH;
+    LDn[1] += offsetV;
+
+    RDn[0] += offsetH;
+    RDn[1] += offsetV;
+    #endif
+
+    LUt[0] = (int)round(LUn[0]);
+    LUt[1] = (int)round(LUn[1]);
+
+    RUt[0] = (int)round(RUn[0]);
+    RUt[1] = (int)round(RUn[1]);
+
+    LDt[0] = (int)round(LDn[0]);
+    LDt[1] = (int)round(LDn[1]);
+
+    RDt[0] = (int)round(RDn[0]);
+    RDt[1] = (int)round(RDn[1]);
+    
+    #if LOG_ROTORI_DBG
+    printf("[ORT] bound: LUn: %lf, %lf -> %d, %d\n", LUn[0], LUn[1], LUt[0], LUt[1]);
+    printf("[ORT] bound: RUn: %lf, %lf -> %d, %d \n", RUn[0], RUn[1], RUt[0], RUt[1]);
+    printf("[ORT] bound: LDn: %lf, %lf -> %d, %d \n", LDn[0], LDn[1], LDt[0], LDt[1]);
+    printf("[ORT] bound: RDn: %lf, %lf -> %d, %d \n", RDn[0], RDn[1], RDt[0], RDt[1]);
+    #endif
+    
+    maxhint= aspMaxInt(LUt[0], RUt[0]);
+    maxhint = aspMaxInt(maxhint, LDt[0]);
+    maxhint = aspMaxInt(maxhint, RDt[0]);
+
+    maxvint = aspMaxInt(LUt[1], RUt[1]);
+    maxvint = aspMaxInt(maxvint, LDt[1]);
+    maxvint = aspMaxInt(maxvint, RDt[1]);
+
+    minhint= aspMinInt(LUt[0], RUt[0]);
+    minhint = aspMinInt(minhint, LDt[0]);
+    minhint = aspMinInt(minhint, RDt[0]);
+
+    minvint = aspMinInt(LUt[1], RUt[1]);
+    minvint = aspMinInt(minvint, LDt[1]);
+    minvint = aspMinInt(minvint, RDt[1]);
+
+    #if LOG_ROTORI_DBG    
+    printf("[ORT] maxh: %d, minh: %d, maxv: %d, minv: %d \n", maxhint, minhint, maxvint, minvint);
+    #endif
+
+    pLU[0] = -1;
+    pLU[1] = -1;
+    pRU[0] = -1;
+    pRU[1] = -1;
+    pLD[0] = -1;
+    pLD[1] = -1;
+    pRD[0] = -1;
+    pRD[1] = -1;
+
+    if (minhint == LUt[0]) {
+    
+        #if LOG_ROTORI_DBG    
+        printf("[ORT] LU =  %d, %d match minhint: %d !!!left - 0\n", LUt[0], LUt[1], minhint);
+        #endif
+
+        if (minvint == LUt[1]) {
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] LU =  %d, %d match minvint: %d !!!left - 0\n", LUt[0], LUt[1], minvint);
+            #endif
+        
+            pLD[0] = LUn[0];
+            pLD[1] = LUn[1];
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] set PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            #endif
+
+        } else {
+            if (maxvint == LUt[1]) {
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] LU =  %d, %d match maxvint: %d !!!left - 0\n", LUt[0], LUt[1], maxvint);
+                #endif
+
+                pLU[0] = LUn[0];
+                pLU[1] = LUn[1];
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] set PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                #endif
+
+            }
+        }
+
+        if ((maxvint == RUt[1]) || (maxvint == LUt[1]) || (minvint == LDt[1]) || (minvint == RDt[1])) {
+                if (RUt[0] >= LDt[0]) {
+                    pLU[0] = LUn[0];
+                    pLU[1] = LUn[1];
+
+                    pLD[0] = LDn[0];
+                    pLD[1] = LDn[1];
+                } else if (RUt[0] < LDt[0]) {
+                    pLU[0] = RUn[0];
+                    pLU[1] = RUn[1];
+
+                    pLD[0] = LUn[0];
+                    pLD[1] = LUn[1];
+                } else {
+                    printf("[ORT] WARNING!! LU =  %d, %d not match!!!left - 1\n", LUt[0], LUt[1]);
+                }
+        }
+
+        
+    }
+    
+    if (minhint == RUt[0]) {
+
+        #if LOG_ROTORI_DBG    
+        printf("[ORT] RU =  %d, %d match minhint: %d !!!left - 0\n", RUt[0], RUt[1], minhint);
+        #endif
+
+        if (minvint == RUt[1]) {
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] RU =  %d, %d match minvint: %d !!!left - 0\n", RUt[0], RUt[1], minvint);
+            #endif
+            
+            pLD[0] = RUn[0];
+            pLD[1] = RUn[1];
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] set PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            #endif
+        } else {
+            if (maxvint == RUt[1]) {
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] RU =  %d, %d match maxvint: %d !!!left - 0\n", RUt[0], RUt[1], maxvint);
+                #endif
+                
+                pLU[0] = RUn[0];
+                pLU[1] = RUn[1];
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] set PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                #endif
+            }
+        }
+
+        if ((maxvint == RDt[1]) || (maxvint == RUt[1]) || (minvint == LUt[1]) || (minvint == LDt[1])) {
+                if (RDt[0] >= LUt[0]) {
+                    pLU[0] = RUn[0];
+                    pLU[1] = RUn[1];
+        
+                    pLD[0] = LUn[0];
+                    pLD[1] = LUn[1];
+                } else if (RDt[0] < LUt[0]) {
+                    pLU[0] = RDn[0];
+                    pLU[1] = RDn[1];
+        
+                    pLD[0] = RUn[0];
+                    pLD[1] = RUn[1];
+                } else {
+                    printf("[ORT] WARNING!! RU =  %d, %d not match!!!left - 1\n", RUt[0], RUt[1]);
+                }
+        }
+    }
+        
+    if (minhint == LDt[0]) {
+
+        #if LOG_ROTORI_DBG    
+        printf("[ORT] LD =  %d, %d match minhint: %d !!!left - 0\n", LDt[0], LDt[1], minhint);
+        #endif
+        
+        if (minvint == LDt[1]) {
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] LD =  %d, %d match minvint: %d !!!left - 0\n", LDt[0], LDt[1], minvint);
+            #endif
+
+            pLD[0] = LDn[0];
+            pLD[1] = LDn[1];
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] set PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            #endif
+        } else {
+            if (maxvint == LDt[1]) {
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] LD =  %d, %d match maxvint: %d !!!left - 0\n", LDt[0], LDt[1], maxvint);
+                #endif
+
+                pLU[0] = LDn[0];
+                pLU[1] = LDn[1];
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] set PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                #endif
+
+            }
+        }
+
+        if ((maxvint == LUt[1]) || (maxvint == LDt[1]) || (minvint == RDt[1]) || (minvint == RUt[1])) {
+                if (LUt[0] >= RDt[0]) {
+                    pLU[0] = LDn[0];
+                    pLU[1] = LDn[1];
+        
+                    pLD[0] = RDn[0];
+                    pLD[1] = RDn[1];
+                } else if (LUt[0] < RDt[0]) {
+                    pLU[0] = LUn[0];
+                    pLU[1] = LUn[1];
+        
+                    pLD[0] = LDn[0];
+                    pLD[1] = LDn[1];
+                } else {
+                    printf("[ORT] WARNING!! LD =  %d, %d not match!!!left - 1\n", LDt[0], LDt[1]);
+                }
+        }
+    }
+        
+    if (minhint == RDt[0]) {
+
+        #if LOG_ROTORI_DBG    
+        printf("[ORT] RD =  %d, %d match minhint: %d !!!left - 0\n", RDt[0], RDt[1], minhint);
+        #endif
+
+        if (minvint == RDt[1]) {
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] RD =  %d, %d match minvint: %d !!!left - 0\n", RDt[0], RDt[1], minvint);
+            #endif
+
+            pLD[0] = RDn[0];
+            pLD[1] = RDn[1];                    
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] set PLD = %lf, %lf\n", pLD[0], pLD[1]);
+            #endif
+        } else {
+            if (maxvint == RDt[1]) {
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] RD =  %d, %d match maxvint: %d !!!left - 0\n", RDt[0], RDt[1], maxvint);
+                #endif
+
+                pLU[0] = RDn[0];
+                pLU[1] = RDn[1];
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] set PLU = %lf, %lf\n", pLU[0], pLU[1]);
+                #endif
+            }
+        }
+
+        if ((maxvint == LDt[1]) || (maxvint == RDt[1]) || (minvint == RUt[1]) || (minvint == LUt[1])) {
+                if (LDt[0] >= RUt[0]) {
+                    pLU[0] = RDn[0];
+                    pLU[1] = RDn[1];
+        
+                    pLD[0] = RUn[0];
+                    pLD[1] = RUn[1];
+                } else if (LDt[0] < RUt[0]) {
+                    pLU[0] = LDn[0];
+                    pLU[1] = LDn[1];
+        
+                    pLD[0] = RDn[0];
+                    pLD[1] = RDn[1];
+                } else {
+                    printf("[ORT] WARNING!! RD =  %d, %d not match!!!left - 1\n", RDt[0], RDt[1]);
+                }
+        }
+    }
+
+    if (maxhint == LUt[0]) {
+
+        #if LOG_ROTORI_DBG    
+        printf("[ORT] LU =  %d, %d match maxhint: %d !!!right - 0\n", LUt[0], LUt[1], maxhint);
+        #endif
+
+        if (minvint == LUt[1]) {
+        
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] LU =  %d, %d match minvint: %d !!!right - 0\n", LUt[0], LUt[1], minvint);
+            #endif
+
+            pRD[0] = LUn[0];
+            pRD[1] = LUn[1];
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] set PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            #endif
+
+        } else {
+            if (maxvint == LUt[1]) {
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] LU =  %d, %d match maxvint: %d !!!right - 0\n", LUt[0], LUt[1], maxvint);
+                #endif
+
+                pRU[0] = LUn[0];
+                pRU[1] = LUn[1];
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] set PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                #endif
+
+            }
+        }
+        
+        if ((maxvint == LDt[1]) || (maxvint == LUt[1]) || (minvint == RUt[1]) || (minvint == RDt[1])) {
+                if (RUt[0] <= LDt[0]) {
+                    pRU[0] = LDn[0];
+                    pRU[1] = LDn[1];
+
+                    pRD[0] = LUn[0];
+                    pRD[1] = LUn[1];
+                } else if (RUt[0] > LDt[0]) {
+                    pRU[0] = LUn[0];
+                    pRU[1] = LUn[1];
+
+                    pRD[0] = RUn[0];
+                    pRD[1] = RUn[1];
+                } else {
+                    printf("[ORT] WARNING!! LU =  %d, %d not match!!!right - 1\n", LUt[0], LUt[1]);
+                }
+        }
+    }
+    
+    if (maxhint == RUt[0]) {
+    
+        #if LOG_ROTORI_DBG    
+        printf("[ORT] RU =  %d, %d match maxhint: %d !!!right - 0\n", RUt[0], RUt[1], maxhint);
+        #endif
+
+        if (minvint == RUt[1]) {
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] RU =  %d, %d match minvint: %d !!!right - 0\n", RUt[0], RUt[1], minvint);
+            #endif
+
+            pRD[0] = RUn[0];
+            pRD[1] = RUn[1];
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] set PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            #endif
+
+        } else {
+            if (maxvint == RUt[1]) {
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] RU =  %d, %d match maxvint: %d !!!right - 0\n", RUt[0], RUt[1], maxvint);
+                #endif
+
+                pRU[0] = RUn[0];
+                pRU[1] = RUn[1];
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] set PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                #endif
+
+            }
+        }
+
+        if ((maxvint == LUt[1]) || (maxvint == RUt[1]) || (minvint == RDt[1]) || (minvint == LDt[1])) {
+                if (RDt[0] <= LUt[0]) {
+                    pRU[0] = LUn[0];
+                    pRU[1] = LUn[1];
+        
+                    pRD[0] = RUn[0];
+                    pRD[1] = RUn[1];
+                } else if (RDt[0] > LUt[0]) {
+                    pRU[0] = RUn[0];
+                    pRU[1] = RUn[1];
+        
+                    pRD[0] = RDn[0];
+                    pRD[1] = RDn[1];
+                } else {
+                    printf("[ORT] WARNING!! RU =  %d, %d not match!!!right - 1\n", RUt[0], RUt[1]);
+                }
+        }
+    }
+        
+    if (maxhint == LDt[0]) {
+
+        #if LOG_ROTORI_DBG    
+        printf("[ORT] LD =  %d, %d match maxhint: %d !!!right - 0\n", LDt[0], LDt[1], maxhint);
+        #endif
+
+        if (minvint == LDt[1]) {
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] LD =  %d, %d match minvint: %d !!!right - 0\n", LDt[0], LDt[1], minvint);
+            #endif
+
+            pRD[0] = LDn[0];
+            pRD[1] = LDn[1];                  
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] set PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            #endif
+
+        } else {
+            if (maxvint == LDt[1]) {
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] LD =  %d, %d match maxvint: %d !!!right - 0\n", LDt[0], LDt[1], maxvint);
+                #endif
+
+                pRU[0] = LDn[0];
+                pRU[1] = LDn[1];
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] set PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                #endif
+
+            }
+        }
+        
+        if ((maxvint == RDt[1]) || (maxvint == LDt[1]) || (minvint == LUt[1]) || (minvint == RUt[1])) {
+                if (LUt[0] <= RDt[0]) {
+                    pRU[0] = RDn[0];
+                    pRU[1] = RDn[1];
+        
+                    pRD[0] = LDn[0];
+                    pRD[1] = LDn[1];
+                } else if (LUt[0] > RDt[0]) {
+                    pRU[0] = LDn[0];
+                    pRU[1] = LDn[1];
+        
+                    pRD[0] = LUn[0];
+                    pRD[1] = LUn[1];
+                } else {
+                    printf("[ORT] WARNING!! LD =  %d, %d not match!!!right - 1\n", LDt[0], LDt[1]);
+                }
+        }
+    }
+            
+    if (maxhint == RDt[0]) {
+
+        #if LOG_ROTORI_DBG    
+        printf("[ORT] RD =  %d, %d match maxhint: %d !!!right - 0\n", RDt[0], RDt[1], maxhint);
+        #endif
+
+        if (minvint == RDt[1]) {
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] RD =  %d, %d match minvint: %d !!!right - 0\n", RDt[0], RDt[1], minvint);
+            #endif
+
+            pRD[0] = RDn[0];
+            pRD[1] = RDn[1];                    
+
+            #if LOG_ROTORI_DBG    
+            printf("[ORT] set PLD = %lf, %lf\n", pRD[0], pRD[1]);
+            #endif
+
+        } else {
+            if (maxvint == RDt[1]) {
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] RD =  %d, %d match maxvint: %d !!!right - 0\n", RDt[0], RDt[1], maxvint);
+                #endif
+
+                pRU[0] = RDn[0];
+                pRU[1] = RDn[1];
+
+                #if LOG_ROTORI_DBG    
+                printf("[ORT] set PRU = %lf, %lf\n", pRU[0], pRU[1]);
+                #endif
+
+            }
+        }
+        
+        if ((maxvint == RUt[1]) || (maxvint == RDt[1]) || (minvint == LDt[1]) || (minvint == LUt[1])) {
+                if (LDt[0] <= RUt[0]) {
+                    pRU[0] = RUn[0];
+                    pRU[1] = RUn[1];
+        
+                    pRD[0] = RDn[0];
+                    pRD[1] = RDn[1];
+                } else if (LDt[0] > RUt[0]) {
+                    pRU[0] = RDn[0];
+                    pRU[1] = RDn[1];
+        
+                    pRD[0] = LDn[0];
+                    pRD[1] = LDn[1];
+                } else {
+                    printf("[ORT] WARNING!! RD =  %d, %d not match!!!right - 1\n", RDt[0], RDt[1]);
+                }
+        }
+    }
+
+    memcpy(pRout->aspRectLU, pLU, sizeof(CFLOAT) * 2);
+    memcpy(pRout->aspRectRU, pRU, sizeof(CFLOAT) * 2);
+    memcpy(pRout->aspRectLD, pLD, sizeof(CFLOAT) * 2);
+    memcpy(pRout->aspRectRD, pRD, sizeof(CFLOAT) * 2);
+    
+    return 0;
+}
+
+
+#define LOG_RECTOFFSET_TP_EN (0)
+static CFLOAT getRectOffsetTP(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+
+    if (pLU [1] > pRU[1]) {
+        offsetH = LUn[0] - pRectorg->aspRectLU[0];
+        offsetV = LUn[1] - pRectorg->aspRectLU[1];
+    } else {
+        offsetH = RUn[0] - pRectorg->aspRectRU[0];
+        offsetV = RUn[1] - pRectorg->aspRectRU[1];
+    }
+
+    #if LOG_RECTOFFSET_TP_EN
+    printf("[offsetTp] select LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    #if LOG_RECTOFFSET_TP_EN
+    printf("[offsetTp] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+#define LOG_RECTOFFSET_DN_EN (0)
+static CFLOAT getRectOffsetDn(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+    
+    offsetH = LDn[0] - pRectorg->aspRectLD[0];
+    offsetV = LDn[1] - pRectorg->aspRectLD[1];
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    #if LOG_RECTOFFSET_DN_EN
+    printf("[offsetDn] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+#define LOG_RECTOFFSET_LF_EN (0)
+static CFLOAT getRectOffsetLf(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+    
+    offsetH = LUn[0] - pRectorg->aspRectLU[0];
+    offsetV = LUn[1] - pRectorg->aspRectLU[1];
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    #if LOG_RECTOFFSET_LF_EN
+    printf("[offsetLf] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+#define LOG_RECTOFFSET_RT_EN (0)
+static CFLOAT getRectOffsetRt(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+    
+    offsetH = RUn[0] - pRectorg->aspRectRU[0];
+    offsetV = RUn[1] - pRectorg->aspRectRU[1];
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    #if LOG_RECTOFFSET_RT_EN
+    printf("[offsetRt] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+#define LOG_RECTALIGN_RT_EN (1)
+static CFLOAT getRectAlignRT(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+{
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
+
+    
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
+
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
+    }
+    
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+    
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+    #endif
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0];
+        plf[1] = p1[1] - 200.0;
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+    }
+
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+    #endif
+
+    theta = 360.0 - dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+    
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
+    printf("[RectAlignRT] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
+    printf("[RectAlignRT] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+    
+    return dg;
+}
+
+#define LOG_RECTALIGN_LF_EN (1)
+static CFLOAT getRectAlignLF(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+{
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
+
+    
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
+
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
+    }
+    
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+    
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+    #endif
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0];
+        plf[1] = p1[1] + 200.0;
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            dg = 360.0 - dg;
+            //dg += 0.0;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            //dg = 360.0 - dg;
+            dg += 0.0;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            //dg = 360.0 - dg;
+            dg += 0.0;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            dg = 360.0 - dg;
+            //dg += 0.0;
+        }
+    }
+
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+    #endif
+
+    theta = 360.0 - dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+    
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
+    printf("[RectAlignLF] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
+    printf("[RectAlignLF] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+    
+    return dg;
+}
+
+#define LOG_RECTALIGN_DN_EN (0)
+static CFLOAT getRectAlignDN(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+{
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
+
+    
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
+
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
+    }
+    
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+    
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+    #endif
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0] - 200.0;
+        plf[1] = p1[1];
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+    }
+
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+    #endif
+
+    theta = 360.0 - dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+    
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
+    printf("[RectAlignDN] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
+    printf("[RectAlignDN] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+    
+    return dg;
+}
+
+#define LOG_RECTALIGN_TP_EN (0)
+static CFLOAT getRectAlignTP(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+{
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
+
+    
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
+
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
+    }
+    
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+    
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+    #endif
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0] + 200.0;
+        plf[1] = p1[1];
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+    }
+
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+    #endif
+
+    theta = 360.0 - dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+    
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
+    printf("[RectAlignTP] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
+    printf("[RectAlignTP] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+    
+    return dg;
+}
+
+#define LOG_ROTRECT_MF_EN (0)
+static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT *pdeg, int oldRowsz, int bpp, struct aspRectObj *pRectin, int pidx) 
+{
+    int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0, ic=0;
+    int LUt[2], RUt[2], LDt[2], RDt[2];
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT pT1[4], pT2[4], pT5[2];
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT d12, d23, d34, d41;
+    CFLOAT v12, v23, v34, v41;
+    CFLOAT o12[2], o23[2], o34[2], o41[2];
+    CFLOAT vmin, vmin1;
+    CFLOAT pfound[2];
+    CFLOAT ptStart[4][2], dgs[4], *offsets[4], ptEnd[4][4], correct[2], ptShift[4][2];
+    CFLOAT srhnum[4][2]={0}, srhlen[4][2]={0}, srhran[4][2]={0};
+    int edwhA[2]={0}, edwhB[2]={0};
+    
+    int ptreal[2];
+    struct aspRectObj *pRectout12=0, *pRectout23=0, *pRectout34=0, *pRectout41=0, *pRectorg=0;
+    struct aspRectObj *pRectorgi=0, *pRectorgv=0, *pRectorgc=0, *pRectorgk=0, *pRectorgcOut=0, *pRectorgkOut=0;
+    struct aspRectObj *pRectout12R=0, *pRectout23R=0, *pRectout34R=0, *pRectout41R=0;
+    struct aspRectObj *pRectout12Ro=0, *pRectout23Ro=0, *pRectout34Ro=0, *pRectout41Ro=0;
+    struct aspRectObj *pRectTga=0;
+    char *src=0;
+    char rgb[4][3];
+    char *rgbtga[4];
+    char *rgbdiff[4];
+    int srhcntA[2]={0}, srhcntB[2]={0};
+    CFLOAT srhcntmax[4][2]={0}, fdiff=0.0, vdiff=0.0;
+    int srhtotal=0;
+    int idxA=0, idxB=0;
+    int side=0;
+    
+    bitset = bpp / 8;
+    
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+    
+    pRectout12 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgi = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgv = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgc = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgk = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgcOut = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgkOut = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    
+    pRectout12R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+
+    pRectout12Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+
+    pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx);
+
+    pT1[0] = (CFLOAT)cropinfo[0];
+    pT1[1] = (CFLOAT)cropinfo[1];
+    pT1[2] = (CFLOAT)cropinfo[2];
+    pT1[3] = (CFLOAT)cropinfo[3];
+    edwhA[0] = cropinfo[4];
+    edwhA[1] = cropinfo[5];
+
+    pT2[0] = (CFLOAT)cropinfo[0];
+    pT2[1] = (CFLOAT)cropinfo[1];
+    pT2[2] = (CFLOAT)cropinfo[2];
+    pT2[3] = (CFLOAT)cropinfo[3];
+    edwhB[0] = cropinfo[4];
+    edwhB[1] = cropinfo[5];
+
+    #if LOG_ROTRECT_MF_EN
+    printf("get A side pos %.2lf, %.2lf, %.2lf, %.2lf w: %4d h: %4d !!! \n", pT1[0], pT1[1], pT1[2], pT1[3], edwhA[0], edwhA[1]);
+    printf("get B side pos %.2lf, %.2lf, %.2lf, %.2lf w: %4d h: %4d  !!! \n", pT2[0], pT2[1], pT2[2], pT2[3], edwhB[0], edwhB[1]);
+    #endif
+    
+    pRectorg->aspRectLU[0] = (CFLOAT)1;
+    pRectorg->aspRectLU[1] = (CFLOAT)edwhA[1];
+
+    pRectorg->aspRectLD[0] = (CFLOAT)1;
+    pRectorg->aspRectLD[1] = (CFLOAT)1;
+    
+    pRectorg->aspRectRD[0] = (CFLOAT)edwhA[0];
+    pRectorg->aspRectRD[1] = (CFLOAT)1;
+
+    pRectorg->aspRectRU[0] = (CFLOAT)edwhA[0];
+    pRectorg->aspRectRU[1] = (CFLOAT)edwhA[1];
+
+    #if LOG_ROTRECT_MF_EN
+    printf("pLU:(%.2lf, %.2lf) pRU:(%.2lf, %.2lf) pLD:(%.2lf, %.2lf) pRD:(%.2lf, %.2lf) w:%d h:%d \n", pLU[0], pLU[1], pRU[0], pRU[1], pLD[0], pLD[1], pRD[0], pRD[1], edwhA[0], edwhA[1]);
+    #endif
+    
+    d12 = getRectAlignTP(pRectin, pRectin->aspRectLD, pRectin->aspRectLU, pRectout12);
+    #if LOG_ROTRECT_MF_EN    
+    printf(" d12: %.2lf aspRectLU:(%.2lf, %.2lf) aspRectLD:(%.2lf, %.2lf) \n", d12, pRectin->aspRectLU[0], pRectin->aspRectLU[1], pRectin->aspRectLD[0], pRectin->aspRectLD[1]);
+    #endif
+    
+    d23 = getRectAlignDN(pRectin, pRectin->aspRectRD, pRectin->aspRectLD, pRectout23);
+    #if LOG_ROTRECT_MF_EN
+    printf(" d23: %.2lf aspRectLD:(%.2lf, %.2lf) aspRectRD:(%.2lf, %.2lf) \n", d23, pRectin->aspRectLD[0], pRectin->aspRectLD[1], pRectin->aspRectRD[0], pRectin->aspRectRD[1]);
+    #endif
+    
+    d34 = getRectAlignTP(pRectin, pRectin->aspRectRU, pRectin->aspRectRD, pRectout34);
+    #if LOG_ROTRECT_MF_EN
+    printf(" d34: %.2lf aspRectRD:(%.2lf, %.2lf) aspRectRU:(%.2lf, %.2lf) \n", d34, pRectin->aspRectRD[0], pRectin->aspRectRD[1], pRectin->aspRectRU[0], pRectin->aspRectRU[1]);
+    #endif
+    
+    d41 = getRectAlignTP(pRectin, pRectin->aspRectLU, pRectin->aspRectRU, pRectout41);
+    #if LOG_ROTRECT_MF_EN
+    printf(" d41: %.2lf aspRectRU:(%.2lf, %.2lf) aspRectLU:(%.2lf, %.2lf) \n", d41, pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectin->aspRectLU[0], pRectin->aspRectLU[1]);
+    #endif
+
+    msync(pRectout12, sizeof(struct aspRectObj), MS_SYNC);
+    msync(pRectout23, sizeof(struct aspRectObj), MS_SYNC);
+    msync(pRectout34, sizeof(struct aspRectObj), MS_SYNC);
+    msync(pRectout41, sizeof(struct aspRectObj), MS_SYNC);
+    
+    findRectOrient(pRectout12R, pRectout12);
+    findRectOrient(pRectout23R, pRectout23);
+    findRectOrient(pRectout34R, pRectout34);
+    findRectOrient(pRectout41R, pRectout41);
+
+    #if LOG_ROTRECT_MF_EN
+    dbgprintRect(pRectout12);
+    dbgprintRect(pRectout12R);
+
+
+    dbgprintRect(pRectout23);
+    dbgprintRect(pRectout23R);
+
+
+    dbgprintRect(pRectout34);
+    dbgprintRect(pRectout34R);
+
+
+    dbgprintRect(pRectout41);
+    dbgprintRect(pRectout41R);
+
+    dbgprintRect(pRectorg);
+    #endif
+
+    memcpy(pRectout12Ro, pRectin, sizeof(struct aspRectObj));
+    memcpy(pRectout23Ro, pRectin, sizeof(struct aspRectObj));
+    memcpy(pRectout34Ro, pRectin, sizeof(struct aspRectObj));
+    memcpy(pRectout41Ro, pRectin, sizeof(struct aspRectObj));
+    
+    v12 = getRectOffsetLf(pRectout12Ro, pRectout12R, pRectorg, o12);
+    v23 = getRectOffsetDn(pRectout23Ro, pRectout23R, pRectorg, o23);
+    v34 = getRectOffsetRt(pRectout34Ro, pRectout34R, pRectorg, o34);
+    v41 = getRectOffsetTP(pRectout41Ro, pRectout41R, pRectorg, o41);
+
+    if (pRectin->aspRectLU[1] > pRectin->aspRectRU[1]) {
+        vmin = aspMin(v41, v12);
+    } else {
+        vmin = aspMin(v41, v34);
+    }
+
+    vdiff = 0;
+    if (vmin < v41) {
+        vdiff = v41 - vmin;
+    }
+
+    if (vdiff < 50.0) {
+        vmin = v41;
+    }
+   
+    #if LOG_ROTRECT_MF_EN
+    printf(" min: %.4lf v12:%.4lf v23:%.4lf v34:%.4lf v41:%.4lf vdiff:%.4lf\n", vmin, v12, v23, v34, v41, vdiff);
+    printf(" v12: %.2lf o12:(%.2lf, %.2lf) d12: %.2lf \n", v12, o12[0], o12[1], d12);
+    printf(" v23: %.2lf o23:(%.2lf, %.2lf) d23: %.2lf \n", v23, o23[0], o23[1], d23);
+    printf(" v34: %.2lf o34:(%.2lf, %.2lf) d34: %.2lf \n", v34, o34[0], o34[1], d34);
+    printf(" v41: %.2lf o41:(%.2lf, %.2lf) d41: %.2lf \n", v41, o41[0], o41[1], d41);
+    #endif
+
+    if (vmin == v41) {
+        #if LOG_ROTRECT_MF_EN
+        printf(" v41 \n");
+        #endif
+        
+        memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+        memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+        memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+        memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+        
+        dgs[0] = d41;
+        dgs[1] = d41;
+        dgs[2] = d23;
+        dgs[3] = d23;
+
+        offsets[0] = o41;
+        offsets[1] = o41;
+        offsets[2] = o23;
+        offsets[3] = o23;
+
+        ptreal[0] = 0;
+        ptreal[1] = 0;
+    }
+    else {
+        if (pRectin->aspRectLU[1] > pRectin->aspRectRU[1]) {
+            if (vmin == v12) {
+                #if LOG_ROTRECT_MF_EN
+                printf(" v12 \n");
+                #endif
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d12;
+                dgs[1] = d12;
+                dgs[2] = d34;
+                dgs[3] = d34;
+            
+                offsets[0] = o12;
+                offsets[1] = o12;
+                offsets[2] = o34;
+                offsets[3] = o34;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            } 
+            else if (vmin == v34) {
+                #if LOG_ROTRECT_MF_EN
+                printf(" v34 \n");
+                #endif
+
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d34;
+                dgs[1] = d34;
+                dgs[2] = d12;
+                dgs[3] = d12;
+            
+                offsets[0] = o34;
+                offsets[1] = o34;
+                offsets[2] = o12;
+                offsets[3] = o12;
+
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            
+            }
+            else {
+                #if LOG_ROTRECT_MF_EN
+                printf(" v23 \n");
+                #endif
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d23;
+                dgs[1] = d23;
+                dgs[2] = d41;
+                dgs[3] = d41;
+            
+                offsets[0] = o23;
+                offsets[1] = o23;
+                offsets[2] = o41;
+                offsets[3] = o41;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            }
+        }
+        else {
+            if (vmin == v34) {
+                #if LOG_ROTRECT_MF_EN
+                printf(" v34 \n");
+                #endif
+
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d34;
+                dgs[1] = d34;
+                dgs[2] = d12;
+                dgs[3] = d12;
+            
+                offsets[0] = o34;
+                offsets[1] = o34;
+                offsets[2] = o12;
+                offsets[3] = o12;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            
+            }
+            else if (vmin == v12) {
+            
+                #if LOG_ROTRECT_MF_EN
+                printf(" v12 \n");
+                #endif
+
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d12;
+                dgs[1] = d12;
+                dgs[2] = d34;
+                dgs[3] = d34;
+            
+                offsets[0] = o12;
+                offsets[1] = o12;
+                offsets[2] = o34;
+                offsets[3] = o34;
+
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            } 
+            else {
+                #if LOG_ROTRECT_MF_EN
+                printf(" v23 \n");
+                #endif
+                
+                memcpy(&ptEnd[0][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[1][0], &pT2[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[2][0], &pT1[0], 4*sizeof(CFLOAT));
+                memcpy(&ptEnd[3][0], &pT2[0], 4*sizeof(CFLOAT));
+                
+                dgs[0] = d23;
+                dgs[1] = d23;
+                dgs[2] = d41;
+                dgs[3] = d41;
+            
+                offsets[0] = o23;
+                offsets[1] = o23;
+                offsets[2] = o41;
+                offsets[3] = o41;
+            
+                ptreal[0] = 0;
+                ptreal[1] = 0;
+            }
+        }
+    }
+
+
+    ix = 0;
+
+    setRectPoint(pRectorgk, ptEnd[ix][2] - 1, ptEnd[ix][3] - 1, &ptEnd[ix][0]);
+    getRectTran(pRectorgk, dgs[ix], offsets[ix], pRectroi);
+
+    *pdeg = dgs[ix];
+
+    #if LOG_ROTRECT_MF_EN
+    dbgprintRect(pRectroi);
+    #endif
+
+    #if LOG_ROTRECT_MF_EN
+    printf("tran end ! !\n");       
+    #endif
+    
+    return 0;
+}
 
 #define LOG_ROTMF_DBG  (0)
 static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx)
