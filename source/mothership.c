@@ -8666,8 +8666,8 @@ static int calcuCrossUpAph(struct aspCrop36_s *pcp36, int midx)
     return 0;
 }
 
-#define LOG_RECTALIGN_EN (0)
-static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+#define LOG_RECTALIGN_RT_EN (1)
+static CFLOAT getRectAlignRT(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
 {
     int fArea=-1, ret=0;
     CFLOAT dh=0, dv=0, dg=-1;
@@ -8701,7 +8701,527 @@ static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, s
         return -1;
     }
     
-    #if LOG_RECTALIGN_EN
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+    #endif
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0];
+        plf[1] = p1[1] - 200.0;
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+    }
+
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+    #endif
+
+    theta = 360.0 - dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+    
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
+    printf("[RectAlignRT] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    #if LOG_RECTALIGN_RT_EN
+    printf("[RectAlignRT] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
+    printf("[RectAlignRT] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+    
+    return dg;
+}
+
+#define LOG_RECTALIGN_LF_EN (1)
+static CFLOAT getRectAlignLF(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+{
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
+
+    
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
+
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
+    }
+    
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+    
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+    #endif
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0];
+        plf[1] = p1[1] + 200.0;
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            dg = 360.0 - dg;
+            //dg += 0.0;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            //dg = 360.0 - dg;
+            dg += 0.0;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            //dg = 360.0 - dg;
+            dg += 0.0;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            dg = 360.0 - dg;
+            //dg += 0.0;
+        }
+    }
+
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+    #endif
+
+    theta = 360.0 - dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+    
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
+    printf("[RectAlignLF] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    #if LOG_RECTALIGN_LF_EN
+    printf("[RectAlignLF] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
+    printf("[RectAlignLF] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+    
+    return dg;
+}
+
+#define LOG_RECTALIGN_DN_EN (1)
+static CFLOAT getRectAlignDN(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+{
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
+
+    
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
+
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
+    }
+    
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+    
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+    #endif
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0] - 200.0;
+        plf[1] = p1[1];
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+    }
+
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+    #endif
+
+    theta = 360.0 - dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+    
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
+    printf("[RectAlignDN] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    #if LOG_RECTALIGN_DN_EN
+    printf("[RectAlignDN] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
+    printf("[RectAlignDN] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+    
+    return dg;
+}
+
+#define LOG_RECTALIGN_TP_EN (1)
+static CFLOAT getRectAlignTP(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+{
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
+
+    
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
+
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
+    }
+    
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+    
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
+    #endif
+
+    if (dh == 0.0) {
+        if (dv > 0.0) {
+            dg = 90.0;
+        } else {
+            dg = 270.0;
+        }
+    }
+    else if (dv == 0.0) {
+        if (dh > 0.0) {
+            dg = 0.0;
+        } else {
+            dg = 180.0;
+        }
+    } 
+    else {
+        plf[0] = p1[0] + 200.0;
+        plf[1] = p1[1];
+        dg = getAngle(p1, plf, p2);
+
+        if ((dh > 0.0) && (dv > 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv > 0.0)) {
+            dg += 0.0;
+            //dg = 360.0 - dg;
+        }
+        else if ((dh < 0.0) && (dv < 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+        else if ((dh > 0.0) && (dv < 0.0)) {
+            //dg += 0.0;
+            dg = 360.0 - dg;
+        }
+    }
+
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
+    #endif
+
+    theta = 360.0 - dg;
+
+    theta = theta * M_PI / piAngle;
+
+    thacos = cos(theta);
+    thasin = sin(theta);
+    
+    rangle[0] = thacos;
+    rangle[1] = thasin;
+
+    pLU = pRectin->aspRectLU;
+    pRU = pRectin->aspRectRU;
+    pLD = pRectin->aspRectLD;
+    pRD = pRectin->aspRectRD;
+
+    LUn = pRectout->aspRectLU;
+    RUn = pRectout->aspRectRU;
+    LDn = pRectout->aspRectLD;
+    RDn = pRectout->aspRectRD;
+    
+    ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
+    #endif
+    
+    ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
+    printf("[RectAlignTP] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+
+    ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
+    #if LOG_RECTALIGN_TP_EN
+    printf("[RectAlignTP] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
+    printf("[RectAlignTP] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
+    #endif
+    
+    return dg;
+}
+
+#define LOG_RECTALIGN_ORG_EN (0)
+static CFLOAT getRectAlignOrg(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
+{
+    int fArea=-1, ret=0;
+    CFLOAT dh=0, dv=0, dg=-1;
+    CFLOAT plf[2]={0};
+    CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
+    CFLOAT *pLU, *pLD, *pRU, *pRD;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    int LUt[2], RUt[2], LDt[2], RDt[2], dht, dvt, p1t[2];
+
+    
+    dh = p2[0] - p1[0];
+    dv = p2[1] - p1[1];
+
+    if ((dh > 0) && (dh < 0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dh < 0) && (dh > -0.01)) {
+        dh = 0.0;
+    }
+
+    if ((dv > 0) && (dv < 0.01)) {
+        dv = 0.0;
+    }
+
+    if ((dv < 0) && (dv > -0.01)) {
+        dv = 0.0;
+    }
+    
+    if ((dh == 0.0) && (dv == 0.0)) {
+        return -1;
+    }
+    
+    #if LOG_RECTALIGN_ORG_EN
     printf("[RectAlign] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) dh: %.2lf dv: %.2lf \n", p1[0], p1[1], p2[0], p2[1], dh, dv);
     #endif
 
@@ -8742,7 +9262,7 @@ static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, s
         }
     }
 
-    #if LOG_RECTALIGN_EN
+    #if LOG_RECTALIGN_ORG_EN
     printf("[RectAlign] p1: (%.2lf, %.2lf) p2: (%.2lf, %.2lf) plf: (%.2lf, %.2lf) angle: %.2lf \n", p1[0], p1[1], p2[0], p2[1], plf[0], plf[1], dg);
     #endif
 
@@ -8767,28 +9287,28 @@ static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, s
     RDn = pRectout->aspRectRD;
     
     ret = calcuRotateCoordinates(LUt, LUn, pLU, rangle);
-    #if LOG_RECTALIGN_EN
+    #if LOG_RECTALIGN_ORG_EN
     printf("[RectAlign] pLU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLU[0], pLU[1], LUn[0], LUn[1], ret);
     #endif
     
     ret = calcuRotateCoordinates(RUt, RUn, pRU, rangle);
-    #if LOG_RECTALIGN_EN
+    #if LOG_RECTALIGN_ORG_EN
     printf("[RectAlign] pRU: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRU[0], pRU[1], RUn[0], RUn[1], ret);
     #endif
     
     ret = calcuRotateCoordinates(LDt, LDn, pLD, rangle);
-    #if LOG_RECTALIGN_EN
+    #if LOG_RECTALIGN_ORG_EN
     printf("[RectAlign] pLD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pLD[0], pLD[1], LDn[0], LDn[1], ret);
     #endif
     
     ret = calcuRotateCoordinates(RDt, RDn, pRD, rangle);
-    #if LOG_RECTALIGN_EN
+    #if LOG_RECTALIGN_ORG_EN
     printf("[RectAlign] pRD: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", pRD[0], pRD[1], RDn[0], RDn[1], ret);
     printf("[RectAlign] LU(%d, %d) LD(%d, %d) RD(%d, %d) RU(%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
     #endif
 
     ret = calcuRotateCoordinates(p1t, plf, p1, rangle);
-    #if LOG_RECTALIGN_EN
+    #if LOG_RECTALIGN_ORG_EN
     printf("[RectAlign] p1: (%4.2lf, %4.2lf) -> (%4.2lf, %4.2lf) ret: %d\n", p1[0], p1[1], plf[0], plf[1], ret);
     printf("[RectAlign] (%d, %d) (%d, %d) (%d, %d) (%d, %d) \n", LUt[0], LUt[1], LDt[0], LDt[1], RDt[0], RDt[1], RUt[0], RUt[1]);
     #endif
@@ -8797,7 +9317,7 @@ static CFLOAT getRectAlign(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, s
 }
 
 #define LOG_RECTOFFSET_EN (0)
-static CFLOAT getRectOffset(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+static CFLOAT getRectOffsetOrg(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
 {
     CFLOAT offsetH, offsetV;
     CFLOAT *pLU, *pLD, *pRD, *pRU;
@@ -8832,6 +9352,300 @@ static CFLOAT getRectOffset(struct aspRectObj *pRectout, struct aspRectObj *pRec
 
     #if LOG_RECTOFFSET_EN
     printf("[offset] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+#define LOG_RECTOFFSET_TP_EN (1)
+static CFLOAT getRectOffsetTP(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+
+    if (pLU [1] > pRU[1]) {
+        offsetH = LUn[0] - pRectorg->aspRectLU[0];
+        offsetV = LUn[1] - pRectorg->aspRectLU[1];
+    } else {
+        offsetH = RUn[0] - pRectorg->aspRectRU[0];
+        offsetV = RUn[1] - pRectorg->aspRectRU[1];
+    }
+
+    #if LOG_RECTOFFSET_TP_EN
+    printf("[offsetTp] select LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    #if LOG_RECTOFFSET_TP_EN
+    printf("[offsetTp] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+#define LOG_RECTOFFSET_DN_EN (1)
+static CFLOAT getRectOffsetDn(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+    
+    offsetH = LDn[0] - pRectorg->aspRectLD[0];
+    offsetV = LDn[1] - pRectorg->aspRectLD[1];
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    #if LOG_RECTOFFSET_DN_EN
+    printf("[offsetDn] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+#define LOG_RECTOFFSET_LF_EN (1)
+static CFLOAT getRectOffsetLf(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+    
+    offsetH = LUn[0] - pRectorg->aspRectLU[0];
+    offsetV = LUn[1] - pRectorg->aspRectLU[1];
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    #if LOG_RECTOFFSET_LF_EN
+    printf("[offsetLf] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
+        pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
+    #endif
+
+    diff = fabs(pLU[0] - pRectorg->aspRectLU[0]);
+    divH += diff;
+
+    diff = fabs(pLD[0] - pRectorg->aspRectLD[0]);
+    divH += diff;
+
+    diff = fabs(pRD[0] - pRectorg->aspRectRD[0]);
+    divH += diff;
+
+    diff = fabs(pRU[0] - pRectorg->aspRectRU[0]);
+    divH += diff;
+
+    diff = fabs(pLU[1] - pRectorg->aspRectLU[1]);
+    divV += diff;
+
+    diff = fabs(pLD[1] - pRectorg->aspRectLD[1]);
+    divV += diff;
+
+    diff = fabs(pRD[1] - pRectorg->aspRectRD[1]);
+    divV += diff;
+
+    diff = fabs(pRU[1] - pRectorg->aspRectRU[1]);
+    divV += diff;
+
+    diff = (divH + divV) / 2.0;
+
+    offset[0] = offsetH;
+    offset[1] = offsetV;
+    
+    return diff;
+}
+
+#define LOG_RECTOFFSET_RT_EN (1)
+static CFLOAT getRectOffsetRt(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
+{
+    CFLOAT offsetH, offsetV;
+    CFLOAT *pLU, *pLD, *pRD, *pRU;
+    CFLOAT *LUn, *RUn, *LDn, *RDn;
+    CFLOAT divH=0, divV=0, diff=0;
+    CFLOAT minH, minV;
+
+    pLU = pRectout->aspRectLU;
+    pRU = pRectout->aspRectRU;
+    pLD = pRectout->aspRectLD;
+    pRD = pRectout->aspRectRD;
+    
+    LUn = pRectin->aspRectLU;
+    RUn = pRectin->aspRectRU;
+    LDn = pRectin->aspRectLD;
+    RDn = pRectin->aspRectRD;
+    
+    offsetH = RUn[0] - pRectorg->aspRectRU[0];
+    offsetV = RUn[1] - pRectorg->aspRectRU[1];
+
+    pLU[0] = LUn[0] - offsetH;
+    pLU[1] = LUn[1] - offsetV;
+
+    pLD[0] = LDn[0] - offsetH;
+    pLD[1] = LDn[1] - offsetV;
+
+    pRD[0] = RDn[0] - offsetH;
+    pRD[1] = RDn[1] - offsetV;
+
+    pRU[0] = RUn[0] - offsetH;
+    pRU[1] = RUn[1] - offsetV;
+
+    #if LOG_RECTOFFSET_RT_EN
+    printf("[offsetRt] simulate LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
         pLU[0], pLU[1], pLD[0], pLD[1], pRD[0], pRD[1], pRU[0], pRU[1], offsetH, offsetV);
     #endif
 
@@ -11196,7 +12010,7 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
     return 0;
 }
 
-#define LOG_ROTRECT_MF_EN (0)
+#define LOG_ROTRECT_MF_EN (1)
 static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT *pdeg, int oldRowsz, int bpp, struct aspRectObj *pRectin, int pidx) 
 {
     int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0, ic=0;
@@ -11296,22 +12110,22 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
     printf("pLU:(%.2lf, %.2lf) pRU:(%.2lf, %.2lf) pLD:(%.2lf, %.2lf) pRD:(%.2lf, %.2lf) w:%d h:%d \n", pLU[0], pLU[1], pRU[0], pRU[1], pLD[0], pLD[1], pRD[0], pRD[1], edwhA[0], edwhA[1]);
     #endif
     
-    d12 = getRectAlign(pRectin, pRectin->aspRectLU, pRectin->aspRectLD, pRectout12);
+    d12 = getRectAlignTP(pRectin, pRectin->aspRectLD, pRectin->aspRectLU, pRectout12);
     #if LOG_ROTRECT_MF_EN    
     printf(" d12: %.2lf aspRectLU:(%.2lf, %.2lf) aspRectLD:(%.2lf, %.2lf) \n", d12, pRectin->aspRectLU[0], pRectin->aspRectLU[1], pRectin->aspRectLD[0], pRectin->aspRectLD[1]);
     #endif
     
-    d23 = getRectAlign(pRectin, pRectin->aspRectLD, pRectin->aspRectRD, pRectout23);
+    d23 = getRectAlignDN(pRectin, pRectin->aspRectRD, pRectin->aspRectLD, pRectout23);
     #if LOG_ROTRECT_MF_EN
     printf(" d23: %.2lf aspRectLD:(%.2lf, %.2lf) aspRectRD:(%.2lf, %.2lf) \n", d23, pRectin->aspRectLD[0], pRectin->aspRectLD[1], pRectin->aspRectRD[0], pRectin->aspRectRD[1]);
     #endif
     
-    d34 = getRectAlign(pRectin, pRectin->aspRectRD, pRectin->aspRectRU, pRectout34);
+    d34 = getRectAlignTP(pRectin, pRectin->aspRectRU, pRectin->aspRectRD, pRectout34);
     #if LOG_ROTRECT_MF_EN
     printf(" d34: %.2lf aspRectRD:(%.2lf, %.2lf) aspRectRU:(%.2lf, %.2lf) \n", d34, pRectin->aspRectRD[0], pRectin->aspRectRD[1], pRectin->aspRectRU[0], pRectin->aspRectRU[1]);
     #endif
     
-    d41 = getRectAlign(pRectin, pRectin->aspRectRU, pRectin->aspRectLU, pRectout41);
+    d41 = getRectAlignTP(pRectin, pRectin->aspRectLU, pRectin->aspRectRU, pRectout41);
     #if LOG_ROTRECT_MF_EN
     printf(" d41: %.2lf aspRectRU:(%.2lf, %.2lf) aspRectLU:(%.2lf, %.2lf) \n", d41, pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectin->aspRectLU[0], pRectin->aspRectLU[1]);
     #endif
@@ -11344,44 +12158,43 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
 
     dbgprintRect(pRectorg);
     #endif
-    
-    v12 = getRectOffset(pRectout12Ro, pRectout12R, pRectorg, o12);
-    v23 = getRectOffset(pRectout23Ro, pRectout23R, pRectorg, o23);
-    v34 = getRectOffset(pRectout34Ro, pRectout34R, pRectorg, o34);
-    v41 = getRectOffset(pRectout41Ro, pRectout41R, pRectorg, o41);
 
-    vmin = aspMin(v12, v23);
-    if (vmin == v12) {
-        vdiff = aspMin(v12, v34);
-        
-        if (pRectin->aspRectLU[1] > pRectin->aspRectRU[1]) {
-            if (vdiff == v34) {
-                 v34 = v12 + 1.0;
-            }
-        } else {
-            if (vdiff == v12) {
-                v12 = v34 + 1.0;
-            }
-        }
+    memcpy(pRectout12Ro, pRectin, sizeof(struct aspRectObj));
+    memcpy(pRectout23Ro, pRectin, sizeof(struct aspRectObj));
+    memcpy(pRectout34Ro, pRectin, sizeof(struct aspRectObj));
+    memcpy(pRectout41Ro, pRectin, sizeof(struct aspRectObj));
+    
+    v12 = getRectOffsetLf(pRectout12Ro, pRectout12R, pRectorg, o12);
+    v23 = getRectOffsetDn(pRectout23Ro, pRectout23R, pRectorg, o23);
+    v34 = getRectOffsetRt(pRectout34Ro, pRectout34R, pRectorg, o34);
+    v41 = getRectOffsetTP(pRectout41Ro, pRectout41R, pRectorg, o41);
+
+    if (pRectin->aspRectLU[1] > pRectin->aspRectRU[1]) {
+        vmin = aspMin(v41, v12);
     } else {
-        fdiff = aspMin(v41, v23);
-        if (fdiff == v23) {
-            v23 = v41 + 1.0;
-        }
+        vmin = aspMin(v41, v34);
     }
 
-    vmin = aspMin(v12, v23);
-    vmin = aspMin(vmin, v34);
-    vmin = aspMin(vmin, v41);
+    vdiff = 0;
+    if (vmin < v41) {
+        vdiff = v41 - vmin;
+    }
+
+    if (vdiff < 50.0) {
+        vmin = v41;
+    }
+   
+    //vmin = aspMin(v12, v23);
+    //vmin = aspMin(vmin, v34);
+    //vmin = aspMin(vmin, v41);
 
     #if LOG_ROTRECT_MF_EN
-    printf(" min: %.4lf v12:%.4lf v23:%.4lf v34:%.4lf v41:%.4lf \n", vmin, v12, v23, v34, v41);
+    printf(" min: %.4lf v12:%.4lf v23:%.4lf v34:%.4lf v41:%.4lf vdiff:%.4lf\n", vmin, v12, v23, v34, v41, vdiff);
     printf(" v12: %.2lf o12:(%.2lf, %.2lf) d12: %.2lf \n", v12, o12[0], o12[1], d12);
     printf(" v23: %.2lf o23:(%.2lf, %.2lf) d23: %.2lf \n", v23, o23[0], o23[1], d23);
     printf(" v34: %.2lf o34:(%.2lf, %.2lf) d34: %.2lf \n", v34, o34[0], o34[1], d34);
     printf(" v41: %.2lf o41:(%.2lf, %.2lf) d41: %.2lf \n", v41, o41[0], o41[1], d41);
     #endif
-
 
     if (vmin == v41) {
         #if LOG_ROTRECT_MF_EN
@@ -11764,28 +12577,28 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     print_f(rs->plogs, "RECT", rs->logs);
     #endif
     
-    d12 = getRectAlign(pRectin, pRectin->aspRectLU, pRectin->aspRectLD, pRectout12);
+    d12 = getRectAlignOrg(pRectin, pRectin->aspRectLU, pRectin->aspRectLD, pRectout12);
     #if LOG_ROTRECT_EN    
     sprintf_f(rs->logs, " d12: %.2lf aspRectLU:(%.2lf, %.2lf) aspRectLD:(%.2lf, %.2lf) \n", d12, 
         pRectin->aspRectLU[0], pRectin->aspRectLU[1], pRectin->aspRectLD[0], pRectin->aspRectLD[1]);
     print_f(rs->plogs, "RECT", rs->logs);
     #endif
     
-    d23 = getRectAlign(pRectin, pRectin->aspRectLD, pRectin->aspRectRD, pRectout23);
+    d23 = getRectAlignOrg(pRectin, pRectin->aspRectLD, pRectin->aspRectRD, pRectout23);
     #if LOG_ROTRECT_EN
     sprintf_f(rs->logs, " d23: %.2lf aspRectLD:(%.2lf, %.2lf) aspRectRD:(%.2lf, %.2lf) \n", d23, 
         pRectin->aspRectLD[0], pRectin->aspRectLD[1], pRectin->aspRectRD[0], pRectin->aspRectRD[1]);
     print_f(rs->plogs, "RECT", rs->logs);
     #endif
     
-    d34 = getRectAlign(pRectin, pRectin->aspRectRD, pRectin->aspRectRU, pRectout34);
+    d34 = getRectAlignOrg(pRectin, pRectin->aspRectRD, pRectin->aspRectRU, pRectout34);
     #if LOG_ROTRECT_EN
     sprintf_f(rs->logs, " d34: %.2lf aspRectRD:(%.2lf, %.2lf) aspRectRU:(%.2lf, %.2lf) \n", d34, 
         pRectin->aspRectRD[0], pRectin->aspRectRD[1], pRectin->aspRectRU[0], pRectin->aspRectRU[1]);
     print_f(rs->plogs, "RECT", rs->logs);
     #endif
     
-    d41 = getRectAlign(pRectin, pRectin->aspRectRU, pRectin->aspRectLU, pRectout41);
+    d41 = getRectAlignOrg(pRectin, pRectin->aspRectRU, pRectin->aspRectLU, pRectout41);
     #if LOG_ROTRECT_EN
     sprintf_f(rs->logs, " d41: %.2lf aspRectRU:(%.2lf, %.2lf) aspRectLU:(%.2lf, %.2lf) \n", d41, 
         pRectin->aspRectRU[0], pRectin->aspRectRU[1], pRectin->aspRectLU[0], pRectin->aspRectLU[1]);
@@ -11821,10 +12634,10 @@ static int getRotRectPoint(struct procRes_s *rs, struct aspRectObj *pRectin, int
     dbgprintRect(pRectorg);
     #endif
     
-    v12 = getRectOffset(pRectout12Ro, pRectout12R, pRectorg, o12);
-    v23 = getRectOffset(pRectout23Ro, pRectout23R, pRectorg, o23);
-    v34 = getRectOffset(pRectout34Ro, pRectout34R, pRectorg, o34);
-    v41 = getRectOffset(pRectout41Ro, pRectout41R, pRectorg, o41);
+    v12 = getRectOffsetOrg(pRectout12Ro, pRectout12R, pRectorg, o12);
+    v23 = getRectOffsetOrg(pRectout23Ro, pRectout23R, pRectorg, o23);
+    v34 = getRectOffsetOrg(pRectout34Ro, pRectout34R, pRectorg, o34);
+    v41 = getRectOffsetOrg(pRectout41Ro, pRectout41R, pRectorg, o41);
 
     //findRectOrient(pRectout, pRectin);
     vmin = aspMin(v12, v23);
@@ -17864,8 +18677,8 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
             }
         }
 
-        if (maxvint == RUt[1]) {
-            if (minvint == LDt[1]) {
+        if ((maxvint == RUt[1]) || (maxvint == LUt[1]) || (minvint == LDt[1]) || (minvint == RDt[1])) {
+            //if ((minvint == LDt[1]) || (minvint == RDt[1])) {
                 if (RUt[0] >= LDt[0]) {
                     pLU[0] = LUn[0];
                     pLU[1] = LUn[1];
@@ -17881,9 +18694,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
                 } else {
                     printf("[ORT] WARNING!! LU =  %d, %d not match!!!left - 1\n", LUt[0], LUt[1]);
                 }
-            } else {
-                printf("[ORT] WARNING!! LU =  %d, %d not match!!! left - 2\n", LUt[0], LUt[1]);
-            }
+            //} else {
+                //printf("[ORT] WARNING!! LU =  %d, %d not match!!! left - 2\n", LUt[0], LUt[1]);
+            //}
         }
 
         
@@ -17923,8 +18736,8 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
             }
         }
 
-        if (maxvint == RDt[1]) {
-            if (minvint == LUt[1]) {
+        if ((maxvint == RDt[1]) || (maxvint == RUt[1]) || (minvint == LUt[1]) || (minvint == LDt[1])) {
+            //if ((minvint == LUt[1]) || (minvint == LDt[1])) {
                 if (RDt[0] >= LUt[0]) {
                     pLU[0] = RUn[0];
                     pLU[1] = RUn[1];
@@ -17940,9 +18753,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
                 } else {
                     printf("[ORT] WARNING!! RU =  %d, %d not match!!!left - 1\n", RUt[0], RUt[1]);
                 }
-            } else {
-                printf("[ORT] WARNING!! RU =  %d, %d not match!!!left - 2\n", RUt[0], RUt[1]);
-            }
+            //} else {
+                //printf("[ORT] WARNING!! RU =  %d, %d not match!!!left - 2\n", RUt[0], RUt[1]);
+            //}
         }
     }
         
@@ -17980,8 +18793,8 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
             }
         }
 
-        if (maxvint == LUt[1]) {
-            if (minvint == RDt[1]) {
+        if ((maxvint == LUt[1]) || (maxvint == LDt[1]) || (minvint == RDt[1]) || (minvint == RUt[1])) {
+            //if ((minvint == RDt[1]) || (minvint == RUt[1])) {
                 if (LUt[0] >= RDt[0]) {
                     pLU[0] = LDn[0];
                     pLU[1] = LDn[1];
@@ -17997,9 +18810,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
                 } else {
                     printf("[ORT] WARNING!! LD =  %d, %d not match!!!left - 1\n", LDt[0], LDt[1]);
                 }
-            } else {
-                printf("[ORT] WARNING!! LD =  %d, %d not match!!!left - 2\n", LDt[0], LDt[1]);
-            }
+            //} else {
+                //printf("[ORT] WARNING!! LD =  %d, %d not match!!!left - 2\n", LDt[0], LDt[1]);
+            //}
         }
     }
         
@@ -18037,8 +18850,8 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
             }
         }
 
-        if (maxvint == LDt[1]) {
-            if (minvint == RUt[1]) {
+        if ((maxvint == LDt[1]) || (maxvint == RDt[1]) || (minvint == RUt[1]) || (minvint == LUt[1])) {
+            //if ((minvint == RUt[1]) || (minvint == LUt[1])) {
                 if (LDt[0] >= RUt[0]) {
                     pLU[0] = RDn[0];
                     pLU[1] = RDn[1];
@@ -18054,9 +18867,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
                 } else {
                     printf("[ORT] WARNING!! RD =  %d, %d not match!!!left - 1\n", RDt[0], RDt[1]);
                 }
-            } else {
-                printf("[ORT] WARNING!! RD =  %d, %d not match!!!left - 2\n", RDt[0], RDt[1]);
-            }
+            //} else {
+                //printf("[ORT] WARNING!! RD =  %d, %d not match!!!left - 2\n", RDt[0], RDt[1]);
+            //}
         }
     }
 
@@ -18096,8 +18909,8 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
             }
         }
         
-        if (maxvint == LDt[1]) {
-            if (minvint == RUt[1]) {
+        if ((maxvint == LDt[1]) || (maxvint == LUt[1]) || (minvint == RUt[1]) || (minvint == RDt[1])) {
+            //if ((minvint == RUt[1]) || (minvint == RDt[1])) {
                 if (RUt[0] <= LDt[0]) {
                     pRU[0] = LDn[0];
                     pRU[1] = LDn[1];
@@ -18113,9 +18926,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
                 } else {
                     printf("[ORT] WARNING!! LU =  %d, %d not match!!!right - 1\n", LUt[0], LUt[1]);
                 }
-            } else {
-                printf("[ORT] WARNING!! LU =  %d, %d not match!!!right - 2\n", LUt[0], LUt[1]);
-            }
+            //} else {
+                //printf("[ORT] WARNING!! LU =  %d, %d not match!!!right - 2\n", LUt[0], LUt[1]);
+            //}
         }
     }
     
@@ -18155,8 +18968,8 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
             }
         }
 
-        if (maxvint == LUt[1]) {
-            if (minvint == RDt[1]) {
+        if ((maxvint == LUt[1]) || (maxvint == RUt[1]) || (minvint == RDt[1]) || (minvint == LDt[1])) {
+            //if ((minvint == RDt[1]) || (minvint == LDt[1])) {
                 if (RDt[0] <= LUt[0]) {
                     pRU[0] = LUn[0];
                     pRU[1] = LUn[1];
@@ -18172,9 +18985,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
                 } else {
                     printf("[ORT] WARNING!! RU =  %d, %d not match!!!right - 1\n", RUt[0], RUt[1]);
                 }
-            } else {
-                printf("[ORT] WARNING!! RU =  %d, %d not match!!!right - 2\n", RUt[0], RUt[1]);
-            }
+            //} else {
+                //printf("[ORT] WARNING!! RU =  %d, %d not match!!!right - 2\n", RUt[0], RUt[1]);
+            //}
         }
     }
         
@@ -18214,8 +19027,8 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
             }
         }
         
-        if (maxvint == RDt[1]) {
-            if (minvint == LUt[1]) {
+        if ((maxvint == RDt[1]) || (maxvint == LDt[1]) || (minvint == LUt[1]) || (minvint == RUt[1])) {
+            //if ((minvint == LUt[1]) || (minvint == RUt[1])) {
                 if (LUt[0] <= RDt[0]) {
                     pRU[0] = RDn[0];
                     pRU[1] = RDn[1];
@@ -18231,9 +19044,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
                 } else {
                     printf("[ORT] WARNING!! LD =  %d, %d not match!!!right - 1\n", LDt[0], LDt[1]);
                 }
-            } else {
-                printf("[ORT] WARNING!! LD =  %d, %d not match!!!right - 2\n", LDt[0], LDt[1]);
-            }
+            //} else {
+                //printf("[ORT] WARNING!! LD =  %d, %d not match!!!right - 2\n", LDt[0], LDt[1]);
+            //}
         }
     }
             
@@ -18273,8 +19086,8 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
             }
         }
         
-        if (maxvint == RUt[1]) {
-            if (minvint == LDt[1]) {
+        if ((maxvint == RUt[1]) || (maxvint == RDt[1]) || (minvint == LDt[1]) || (minvint == LUt[1])) {
+            //if ((minvint == LDt[1]) || (minvint == LUt[1])) {
                 if (LDt[0] <= RUt[0]) {
                     pRU[0] = RUn[0];
                     pRU[1] = RUn[1];
@@ -18290,9 +19103,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
                 } else {
                     printf("[ORT] WARNING!! RD =  %d, %d not match!!!right - 1\n", RDt[0], RDt[1]);
                 }
-            } else {
-                printf("[ORT] WARNING!! RD =  %d, %d not match!!!right - 2\n", RDt[0], RDt[1]);
-            }
+            //} else {
+                //printf("[ORT] WARNING!! RD =  %d, %d not match!!!right - 2\n", RDt[0], RDt[1]);
+            //}
         }
     }
 
@@ -84004,8 +84817,6 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //print_f(rs->plogs, "CLIP", rs->logs);    
 
     int cropinfo[6]; // x, y, w, h, imgW, imgH
-
-    cropinfo[0] = 
 
     idxA = cutsides[cutcnt*2];
 
