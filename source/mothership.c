@@ -111,7 +111,7 @@ static char genssid[128];
 #define AP_CLR_STATUS (1)
 
 #define MFOUR_IMG_SEND_BACK (1)
-#define MFOUR_SIM_MODE_JPG (1)
+#define MFOUR_SIM_MODE_JPG (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
@@ -8926,7 +8926,7 @@ static CFLOAT getRectAlignLF(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2,
     return dg;
 }
 
-#define LOG_RECTALIGN_DN_EN (1)
+#define LOG_RECTALIGN_DN_EN (0)
 static CFLOAT getRectAlignDN(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
 {
     int fArea=-1, ret=0;
@@ -9056,7 +9056,7 @@ static CFLOAT getRectAlignDN(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2,
     return dg;
 }
 
-#define LOG_RECTALIGN_TP_EN (1)
+#define LOG_RECTALIGN_TP_EN (0)
 static CFLOAT getRectAlignTP(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2, struct aspRectObj *pRectout)
 {
     int fArea=-1, ret=0;
@@ -9387,7 +9387,7 @@ static CFLOAT getRectOffsetOrg(struct aspRectObj *pRectout, struct aspRectObj *p
     return diff;
 }
 
-#define LOG_RECTOFFSET_TP_EN (1)
+#define LOG_RECTOFFSET_TP_EN (0)
 static CFLOAT getRectOffsetTP(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
 {
     CFLOAT offsetH, offsetV;
@@ -9468,7 +9468,7 @@ static CFLOAT getRectOffsetTP(struct aspRectObj *pRectout, struct aspRectObj *pR
     return diff;
 }
 
-#define LOG_RECTOFFSET_DN_EN (1)
+#define LOG_RECTOFFSET_DN_EN (0)
 static CFLOAT getRectOffsetDn(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
 {
     CFLOAT offsetH, offsetV;
@@ -9539,7 +9539,7 @@ static CFLOAT getRectOffsetDn(struct aspRectObj *pRectout, struct aspRectObj *pR
     return diff;
 }
 
-#define LOG_RECTOFFSET_LF_EN (1)
+#define LOG_RECTOFFSET_LF_EN (0)
 static CFLOAT getRectOffsetLf(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
 {
     CFLOAT offsetH, offsetV;
@@ -9610,7 +9610,7 @@ static CFLOAT getRectOffsetLf(struct aspRectObj *pRectout, struct aspRectObj *pR
     return diff;
 }
 
-#define LOG_RECTOFFSET_RT_EN (1)
+#define LOG_RECTOFFSET_RT_EN (0)
 static CFLOAT getRectOffsetRt(struct aspRectObj *pRectout, struct aspRectObj *pRectin, struct aspRectObj *pRectorg, CFLOAT *offset)
 {
     CFLOAT offsetH, offsetV;
@@ -12010,7 +12010,7 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
     return 0;
 }
 
-#define LOG_ROTRECT_MF_EN (1)
+#define LOG_ROTRECT_MF_EN (0)
 static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT *pdeg, int oldRowsz, int bpp, struct aspRectObj *pRectin, int pidx) 
 {
     int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0, ic=0;
@@ -12184,10 +12184,6 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
         vmin = v41;
     }
    
-    //vmin = aspMin(v12, v23);
-    //vmin = aspMin(vmin, v34);
-    //vmin = aspMin(vmin, v41);
-
     #if LOG_ROTRECT_MF_EN
     printf(" min: %.4lf v12:%.4lf v23:%.4lf v34:%.4lf v41:%.4lf vdiff:%.4lf\n", vmin, v12, v23, v34, v41, vdiff);
     printf(" v12: %.2lf o12:(%.2lf, %.2lf) d12: %.2lf \n", v12, o12[0], o12[1], d12);
@@ -12379,6 +12375,27 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
     dbgprintRect(pRectroi);
     #endif
 
+    aspFree(pRectout12, pidx);
+    aspFree(pRectout23, pidx);
+    aspFree(pRectout34, pidx);
+    aspFree(pRectout41, pidx);
+    aspFree(pRectorg, pidx);
+    aspFree(pRectorgi, pidx);
+    aspFree(pRectorgv, pidx);
+    aspFree(pRectorgc, pidx);
+    aspFree(pRectorgk, pidx);
+    aspFree(pRectorgcOut, pidx);
+    aspFree(pRectorgkOut, pidx);
+    aspFree(pRectout12R, pidx);
+    aspFree(pRectout23R, pidx);
+    aspFree(pRectout34R, pidx);
+    aspFree(pRectout41R, pidx);
+    aspFree(pRectout12Ro, pidx);
+    aspFree(pRectout23Ro, pidx);
+    aspFree(pRectout34Ro, pidx);
+    aspFree(pRectout41Ro, pidx);
+    aspFree(pRectTga, pidx);
+    
     #if LOG_ROTRECT_MF_EN
     printf("tran end ! !\n");       
     #endif
@@ -19124,6 +19141,58 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
             
 
 #define LOG_ROTMF_DBG  (0)
+/**
+ * rotateBMPMf - get a small rectangle from a big rectangle located in a bmp 
+ * @@input parameter:
+ * @cropinfo: info of target rectangle
+ *    cropinfo[0]: x 
+ *    cropinfo[1]: y
+ *    cropinfo[2]: width
+ *    cropinfo[3]: height
+ *    cropinfo[4]: width of bank note area
+ *    cropinfo[5]: height of bank note area
+ * @bmpsrc: raw image waitting to be processed
+ * @pmreal: four coordinates of scaned image comes from croping algorithm 
+ *    pmreal[0]: x of point 1
+ *    pmreal[1]: y of point 1
+ *    pmreal[2]: x of point 2
+ *    pmreal[3]: y of point 2
+ *    pmreal[4]: x of point 3
+ *    pmreal[5]: y of point 3
+ *    pmreal[6]: x of point 4
+ *    pmreal[7]: y of point 4
+ *    <example>
+ *        int mreal[8], utmp, crod;
+ *        utmp = msb2lsb32(&pusbmeta->CROP_POS_F1);
+ *        crod = utmp & 0xffff;
+ *        utmp = utmp >> 16;
+ *        mreal[0] = utmp;
+ *        mreal[1] = crod;
+ *        
+ *        utmp = msb2lsb32(&pusbmeta->CROP_POS_F2);
+ *        crod = utmp & 0xffff;
+ *        utmp = utmp >> 16;
+ *        mreal[2] = utmp;
+ *        mreal[3] = crod;
+ *        
+ *        utmp = msb2lsb32(&pusbmeta->CROP_POS_F3);
+ *        crod = utmp & 0xffff;
+ *        utmp = utmp >> 16;
+ *        mreal[4] = utmp;
+ *        mreal[5] = crod;
+ *        
+ *        utmp = msb2lsb32(&pusbmeta->CROP_POS_F4);
+ *        crod = utmp & 0xffff;
+ *        utmp = utmp >> 16;
+ *        mreal[6] = utmp;
+ *        mreal[7] = crod;
+ * @headbuff: bmp header of bmpsrc
+ * @midx: default set to 0
+ *
+ * @@output parameter:
+ * @rotbuff: rotate and crop result rectangle raw image
+ *
+ */
 static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx)
 {
 #define UNIT_DEG (1000.0)
@@ -20246,9 +20315,16 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     #endif
     memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
+
+    aspFree(pRectin, midx);
+    aspFree(pRectROI, midx);
+    aspFree(pRectinR, midx);
+    aspFree(bheader, midx);
+    aspFree(crsAry, midx);
     
     return err; 
 }
+
 
 #define LOG_ROT_DBG  (0)
 static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff, int *pside, int *pmreal, int *layers, int midx)
