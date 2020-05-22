@@ -3,6 +3,7 @@
  *
  * Author: Leo Chen <leoc@aspectmicrosystems.com.tw>
  *
+ * License terms: GNU General Public License v2
  */
  
 #include <stdint.h> 
@@ -46,6 +47,12 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
            
 static void* aspMemalloc(int size, int midx) {
     return malloc(size);
+}
+
+static void aspFree(void *p, int pidx)
+{
+    //printf("<<<<<<<<  aspFree 0x%.8x \n", (uint32_t)p);
+    free(p);
 }
 
 static CFLOAT aspMin(CFLOAT d1, CFLOAT d2) 
@@ -2090,26 +2097,26 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
     dbgprintRect(pRectroi);
     #endif
 
-    free(pRectout12);
-    free(pRectout23);
-    free(pRectout34);
-    free(pRectout41);
-    free(pRectorg);
-    free(pRectorgi);
-    free(pRectorgv);
-    free(pRectorgc);
-    free(pRectorgk);
-    free(pRectorgcOut);
-    free(pRectorgkOut);
-    free(pRectout12R);
-    free(pRectout23R);
-    free(pRectout34R);
-    free(pRectout41R);
-    free(pRectout12Ro);
-    free(pRectout23Ro);
-    free(pRectout34Ro);
-    free(pRectout41Ro);
-    free(pRectTga);
+    aspFree(pRectout12, pidx);
+    aspFree(pRectout23, pidx);
+    aspFree(pRectout34, pidx);
+    aspFree(pRectout41, pidx);
+    aspFree(pRectorg, pidx);
+    aspFree(pRectorgi, pidx);
+    aspFree(pRectorgv, pidx);
+    aspFree(pRectorgc, pidx);
+    aspFree(pRectorgk, pidx);
+    aspFree(pRectorgcOut, pidx);
+    aspFree(pRectorgkOut, pidx);
+    aspFree(pRectout12R, pidx);
+    aspFree(pRectout23R, pidx);
+    aspFree(pRectout34R, pidx);
+    aspFree(pRectout41R, pidx);
+    aspFree(pRectout12Ro, pidx);
+    aspFree(pRectout23Ro, pidx);
+    aspFree(pRectout34Ro, pidx);
+    aspFree(pRectout41Ro, pidx);
+    aspFree(pRectTga, pidx);
     
     #if LOG_ROTRECT_MF_EN
     printf("tran end ! !\n");       
@@ -3294,11 +3301,11 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     #endif
     memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
 
-    free(pRectin);
-    free(pRectROI);
-    free(pRectinR);
-    free(bheader);
-    free(crsAry);
+    aspFree(pRectin, midx);
+    aspFree(pRectROI, midx);
+    aspFree(pRectinR, midx);
+    aspFree(bheader, midx);
+    aspFree(crsAry, midx);
     
     return err; 
 }
