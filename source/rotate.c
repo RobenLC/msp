@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2020 Aspect Microsystems, Corp. All rights reserved.
+ *
+ * Author: Leo Chen <leoc@aspectmicrosystems.com.tw>
+ *
+ */
+ 
 #include <stdint.h> 
 #include <stdio.h> 
 #include <stdlib.h> 
@@ -2083,6 +2090,27 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
     dbgprintRect(pRectroi);
     #endif
 
+    free(pRectout12);
+    free(pRectout23);
+    free(pRectout34);
+    free(pRectout41);
+    free(pRectorg);
+    free(pRectorgi);
+    free(pRectorgv);
+    free(pRectorgc);
+    free(pRectorgk);
+    free(pRectorgcOut);
+    free(pRectorgkOut);
+    free(pRectout12R);
+    free(pRectout23R);
+    free(pRectout34R);
+    free(pRectout41R);
+    free(pRectout12Ro);
+    free(pRectout23Ro);
+    free(pRectout34Ro);
+    free(pRectout41Ro);
+    free(pRectTga);
+    
     #if LOG_ROTRECT_MF_EN
     printf("tran end ! !\n");       
     #endif
@@ -2091,6 +2119,58 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
 }
 
 #define LOG_ROTMF_DBG  (0)
+/**
+ * rotateBMPMf - get a small rectangle from a big rectangle located in a bmp 
+ * @@input parameter:
+ * @cropinfo: info of target rectangle
+ *    cropinfo[0]: x 
+ *    cropinfo[1]: y
+ *    cropinfo[2]: width
+ *    cropinfo[3]: height
+ *    cropinfo[4]: width of bank note area
+ *    cropinfo[5]: height of bank note area
+ * @bmpsrc: raw image waitting to be processed
+ * @pmreal: four coordinates of scaned image comes from croping algorithm 
+ *    pmreal[0]: x of point 1
+ *    pmreal[1]: y of point 1
+ *    pmreal[2]: x of point 2
+ *    pmreal[3]: y of point 2
+ *    pmreal[4]: x of point 3
+ *    pmreal[5]: y of point 3
+ *    pmreal[6]: x of point 4
+ *    pmreal[7]: y of point 4
+ *    <example>
+ *        int mreal[8], utmp, crod;
+ *        utmp = msb2lsb32(&pusbmeta->CROP_POS_F1);
+ *        crod = utmp & 0xffff;
+ *        utmp = utmp >> 16;
+ *        mreal[0] = utmp;
+ *        mreal[1] = crod;
+ *        
+ *        utmp = msb2lsb32(&pusbmeta->CROP_POS_F2);
+ *        crod = utmp & 0xffff;
+ *        utmp = utmp >> 16;
+ *        mreal[2] = utmp;
+ *        mreal[3] = crod;
+ *        
+ *        utmp = msb2lsb32(&pusbmeta->CROP_POS_F3);
+ *        crod = utmp & 0xffff;
+ *        utmp = utmp >> 16;
+ *        mreal[4] = utmp;
+ *        mreal[5] = crod;
+ *        
+ *        utmp = msb2lsb32(&pusbmeta->CROP_POS_F4);
+ *        crod = utmp & 0xffff;
+ *        utmp = utmp >> 16;
+ *        mreal[6] = utmp;
+ *        mreal[7] = crod;
+ * @headbuff: bmp header of bmpsrc
+ * @midx: default set to 0
+ *
+ * @@output parameter:
+ * @rotbuff: rotate and crop result rectangle raw image
+ *
+ */
 static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx)
 {
 #define UNIT_DEG (1000.0)
@@ -3213,6 +3293,12 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     #endif
     memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
+
+    free(pRectin);
+    free(pRectROI);
+    free(pRectinR);
+    free(bheader);
+    free(crsAry);
     
     return err; 
 }
