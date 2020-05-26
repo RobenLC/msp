@@ -40,6 +40,211 @@ struct aspRectObj{
     CFLOAT aspRectRD[2];    
 };
 
+struct intMbs32_s{
+    union {
+        uint32_t n;
+        uint8_t d[4];
+    };
+};
+
+struct aspMetaDataviaUSB_s{
+  unsigned char  ASP_MAGIC_ASPC[4];  //byte[4] "ASPC"
+  unsigned char IMG_HIGH[2];                   // byte[6]
+  unsigned char  WIDTH_RESERVE[5];    // byte[11]
+  unsigned char IMG_WIDTH[2];                // byte[13] 
+  unsigned char MINGS_USE[2];                 // byte[15]
+  unsigned char PRI_O_SEC;                 // byte[16]
+  unsigned char Scaned_Page[2];                            //byte[18]
+  unsigned char BKNote_Total_Layers;                    //byte[19]
+  unsigned char MUSE_RESERVE[16];   // byte[35]
+  unsigned char BKNote_Slice_idx;   // current image slice index of this Bank Note                            //byte[36]
+  unsigned char BKNote_Block_idx;   // current image block index of this Bank Note                            //byte[37]
+  unsigned char MCROP_RESERVE[27];   // byte[64]
+  
+  struct intMbs32_s CROP_POS_1;        //byte[68]
+  struct intMbs32_s CROP_POS_2;        //byte[72]
+  struct intMbs32_s CROP_POS_3;        //byte[76]
+  struct intMbs32_s CROP_POS_4;        //byte[80]
+  struct intMbs32_s CROP_POS_5;        //byte[84]
+  struct intMbs32_s CROP_POS_6;        //byte[88]
+  struct intMbs32_s CROP_POS_7;        //byte[92]
+  struct intMbs32_s CROP_POS_8;        //byte[96]
+  struct intMbs32_s CROP_POS_9;        //byte[100]
+  struct intMbs32_s CROP_POS_10;        //byte[104]
+  struct intMbs32_s CROP_POS_11;        //byte[108]
+  struct intMbs32_s CROP_POS_12;        //byte[112]
+  struct intMbs32_s CROP_POS_13;        //byte[116]
+  struct intMbs32_s CROP_POS_14;        //byte[120]
+  struct intMbs32_s CROP_POS_15;        //byte[124]
+  struct intMbs32_s CROP_POS_16;        //byte[128]
+  struct intMbs32_s CROP_POS_17;        //byte[132]
+  struct intMbs32_s CROP_POS_18;        //byte[136]
+  unsigned char  Start_Pos_1st;         //byte[137]
+  unsigned char  Start_Pos_2nd;        //byte[138]
+  unsigned char  End_Pos_All;            //byte[139]
+  unsigned char  Start_Pos_RSV;        //byte[140], not using for now
+  unsigned char  YLine_Gap;               //byte[141]
+  unsigned char  Start_YLine_No;       //byte[142]
+  unsigned short YLines_Recorded;     //byte[144] 16bits
+  struct intMbs32_s CROP_POS_F1;        //byte[148]
+  struct intMbs32_s CROP_POS_F2;        //byte[152]
+  struct intMbs32_s CROP_POS_F3;        //byte[156]
+  struct intMbs32_s CROP_POS_F4;        //byte[160]
+  unsigned char EPOINT_RESERVE1[64];         //byte[224]
+  unsigned char ASP_MAGIC_YL[2];    //byte[226]
+  unsigned short MPIONT_LEN;           //byte[228] 16bits  
+  unsigned char EXTRA_POINT[4];    //byte[232]
+};
+
+uint32_t msb2lsb32(struct intMbs32_s *msb)
+{
+    uint32_t lsb=0;
+    int i=0;
+
+    while (i < 4) {
+        lsb = lsb << 8;
+        
+        lsb |= msb->d[i];
+        
+        //printf("[%d] :0x%.2x <- 0x%.2x \n", i, lsb & 0xff, msb->d[i]);
+        
+        i++;
+    }
+
+    //printf("msb2lsb32() msb:0x%.8x -> lsb:0x%.8x \n", msb->n, lsb);
+    
+    return lsb;
+}
+
+int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb) 
+{
+#define VERB_INFO_USB (0)
+    char *pch=0;
+    uint32_t head=0;
+    int ix=0;
+
+    head = (uint32_t)pmetausb->ASP_MAGIC_ASPC;
+    
+    msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+    
+    printf("[METAU]********************************************\n");
+    
+    printf("[METAU](%.3d) ASP_MAGIC_ASPC: 0x%.2x 0x%.2x 0x%.2x 0x%.2x\n", (uint32_t)pmetausb->ASP_MAGIC_ASPC - head, pmetausb->ASP_MAGIC_ASPC[0], pmetausb->ASP_MAGIC_ASPC[1], 
+                  pmetausb->ASP_MAGIC_ASPC[2], pmetausb->ASP_MAGIC_ASPC[3]);
+
+    printf("[METAU](%.3d) IMG_HIGH: 0x%.2x 0x%.2x (%d)   \n",(uint32_t)&(pmetausb->IMG_HIGH)  - head, pmetausb->IMG_HIGH[0], pmetausb->IMG_HIGH[1], 
+                   pmetausb->IMG_HIGH[0] | (pmetausb->IMG_HIGH[1] << 8)); 
+
+    #if VERB_INFO_USB
+    for (ix=0; ix < 5; ix++) {
+    printf("[METAU](%.3d) WIDTH_RESERVE[%d]: 0x%.2x    \n",(uint32_t)&(pmetausb->WIDTH_RESERVE[ix])  - head, ix, pmetausb->WIDTH_RESERVE[ix]); 
+    }
+    #endif
+
+    printf("[METAU](%.3d) IMG_WIDTH: 0x%.2x 0x%.2x (%d)   \n",(uint32_t)&(pmetausb->IMG_WIDTH)  - head, pmetausb->IMG_WIDTH[0], pmetausb->IMG_WIDTH[1], 
+                   pmetausb->IMG_WIDTH[0] | (pmetausb->IMG_WIDTH[1] << 8)); 
+
+    printf("[METAU](%.3d) MINGS_USE: 0x%.2x 0x%.2x   \n",(uint32_t)&(pmetausb->MINGS_USE) - head, pmetausb->MINGS_USE[0], pmetausb->MINGS_USE[1]); 
+
+    printf("[METAU](%.3d) PRI_O_SEC: 0x%.2x    \n",(uint32_t)&(pmetausb->PRI_O_SEC) - head, pmetausb->PRI_O_SEC); 
+
+    printf("[METAU](%.3d) Scaned_Page: %d    \n",(uint32_t)&(pmetausb->Scaned_Page) - head, (pmetausb->Scaned_Page[0] << 8) | pmetausb->Scaned_Page[1]); 
+
+    printf("[METAU](%.3d) BKNote_Total_Layers: %d    \n",(uint32_t)&(pmetausb->BKNote_Total_Layers) - head, pmetausb->BKNote_Total_Layers); 
+
+    printf("[METAU](%.3d) BKNote_Slice_idx: %d    \n",(uint32_t)&(pmetausb->BKNote_Slice_idx) - head, pmetausb->BKNote_Slice_idx); 
+    
+    printf("[METAU](%.3d) BKNote_Block_idx: %d    \n",(uint32_t)&(pmetausb->BKNote_Block_idx) - head, pmetausb->BKNote_Block_idx); 
+
+    #if VERB_INFO_USB
+    for (ix=0; ix < 27; ix++) {
+    printf("[METAU](%.3d) MCROP_RESERVE[%d]: 0x%.2x    \n",(uint32_t)&(pmetausb->MCROP_RESERVE[ix]) - head, ix, pmetausb->MCROP_RESERVE[ix]); 
+    }
+    #endif
+
+    printf("[METAU](%.3d) CROP_POSX_01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_1) - head, msb2lsb32(&pmetausb->CROP_POS_1) >> 16, msb2lsb32(&pmetausb->CROP_POS_1) & 0xffff);                      //byte[68]
+    printf("[METAU](%.3d) CROP_POSX_02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_2 - head, msb2lsb32(&pmetausb->CROP_POS_2) >> 16, msb2lsb32(&pmetausb->CROP_POS_2) & 0xffff);                      //byte[72]
+    printf("[METAU](%.3d) CROP_POSX_03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_3 - head, msb2lsb32(&pmetausb->CROP_POS_3) >> 16, msb2lsb32(&pmetausb->CROP_POS_3) & 0xffff);                      //byte[76]
+    printf("[METAU](%.3d) CROP_POSX_04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_4 - head, msb2lsb32(&pmetausb->CROP_POS_4) >> 16, msb2lsb32(&pmetausb->CROP_POS_4) & 0xffff);                      //byte[80]
+    printf("[METAU](%.3d) CROP_POSX_05: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_5 - head, msb2lsb32(&pmetausb->CROP_POS_5) >> 16, msb2lsb32(&pmetausb->CROP_POS_5) & 0xffff);                      //byte[84]
+    printf("[METAU](%.3d) CROP_POSX_06: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_6 - head, msb2lsb32(&pmetausb->CROP_POS_6) >> 16, msb2lsb32(&pmetausb->CROP_POS_6) & 0xffff);                      //byte[88]
+    printf("[METAU](%.3d) CROP_POSX_07: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_7 - head, msb2lsb32(&pmetausb->CROP_POS_7) >> 16, msb2lsb32(&pmetausb->CROP_POS_7) & 0xffff);                      //byte[92]
+    printf("[METAU](%.3d) CROP_POSX_08: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_8 - head, msb2lsb32(&pmetausb->CROP_POS_8) >> 16, msb2lsb32(&pmetausb->CROP_POS_8) & 0xffff);                      //byte[96]
+    printf("[METAU](%.3d) CROP_POSX_09: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_9 - head, msb2lsb32(&pmetausb->CROP_POS_9) >> 16, msb2lsb32(&pmetausb->CROP_POS_9) & 0xffff);                      //byte[100]
+    printf("[METAU](%.3d) CROP_POSX_10: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_10 - head, msb2lsb32(&pmetausb->CROP_POS_10) >> 16, msb2lsb32(&pmetausb->CROP_POS_10) & 0xffff);                      //byte[104]
+    printf("[METAU](%.3d) CROP_POSX_11: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_11 - head, msb2lsb32(&pmetausb->CROP_POS_11) >> 16, msb2lsb32(&pmetausb->CROP_POS_11) & 0xffff);                      //byte[108]
+    printf("[METAU](%.3d) CROP_POSX_12: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_12 - head, msb2lsb32(&pmetausb->CROP_POS_12) >> 16, msb2lsb32(&pmetausb->CROP_POS_12) & 0xffff);                      //byte[112]
+    printf("[METAU](%.3d) CROP_POSX_13: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_13 - head, msb2lsb32(&pmetausb->CROP_POS_13) >> 16, msb2lsb32(&pmetausb->CROP_POS_13) & 0xffff);                      //byte[116]
+    printf("[METAU](%.3d) CROP_POSX_14: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_14 - head, msb2lsb32(&pmetausb->CROP_POS_14) >> 16, msb2lsb32(&pmetausb->CROP_POS_14) & 0xffff);                      //byte[120]
+    printf("[METAU](%.3d) CROP_POSX_15: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_15 - head, msb2lsb32(&pmetausb->CROP_POS_15) >> 16, msb2lsb32(&pmetausb->CROP_POS_15) & 0xffff);                      //byte[124]
+    printf("[METAU](%.3d) CROP_POSX_16: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_16 - head, msb2lsb32(&pmetausb->CROP_POS_16) >> 16, msb2lsb32(&pmetausb->CROP_POS_16) & 0xffff);                      //byte[128]
+    printf("[METAU](%.3d) CROP_POSX_17: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_17 - head, msb2lsb32(&pmetausb->CROP_POS_17) >> 16, msb2lsb32(&pmetausb->CROP_POS_17) & 0xffff);                      //byte[132]
+    printf("[METAU](%.3d) CROP_POSX_18: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_18 - head, msb2lsb32(&pmetausb->CROP_POS_18) >> 16, msb2lsb32(&pmetausb->CROP_POS_18) & 0xffff);                      //byte[136]
+    printf("[METAU](%.3d) YLine_Gap: %.d      \n", (uint32_t)&pmetausb->YLine_Gap - head, pmetausb->YLine_Gap); 
+    printf("[METAU](%.3d) Start_YLine_No: %d      \n", (uint32_t)&pmetausb->Start_YLine_No - head, pmetausb->Start_YLine_No); 
+    pch = (char *)&pmetausb->YLines_Recorded;
+    printf("[METAU](%.3d) YLines_Recorded: %d      \n", (uint32_t)&pmetausb->YLines_Recorded - head, (pch[0] << 8) | pch[1]); 
+
+    printf("[METAU](%.3d) CROP_POSX_F01: %d, %d\n", (uint32_t)(&pmetausb->CROP_POS_F1) - head, msb2lsb32(&pmetausb->CROP_POS_F1) >> 16, msb2lsb32(&pmetausb->CROP_POS_F1) & 0xffff);                      //byte[148]
+    printf("[METAU](%.3d) CROP_POSX_F02: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F2 - head, msb2lsb32(&pmetausb->CROP_POS_F2) >> 16, msb2lsb32(&pmetausb->CROP_POS_F2) & 0xffff);                      //byte[152]
+    printf("[METAU](%.3d) CROP_POSX_F03: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F3 - head, msb2lsb32(&pmetausb->CROP_POS_F3) >> 16, msb2lsb32(&pmetausb->CROP_POS_F3) & 0xffff);                      //byte[156]
+    printf("[METAU](%.3d) CROP_POSX_F04: %d, %d\n", (uint32_t)&pmetausb->CROP_POS_F4 - head, msb2lsb32(&pmetausb->CROP_POS_F4) >> 16, msb2lsb32(&pmetausb->CROP_POS_F4) & 0xffff);                      //byte[160]
+    
+    printf("[METAU](%.3d) EPOINT_RESERVE1      \n", (uint32_t)pmetausb->EPOINT_RESERVE1 - head); 
+
+    printf("[METAU](%.3d) ASP_MAGIC_YL: 0x%.2x 0x%.2x\n", (uint32_t)pmetausb->ASP_MAGIC_YL - head, pmetausb->ASP_MAGIC_YL[0], pmetausb->ASP_MAGIC_YL[1]);
+
+    printf("[METAU](%.3d) MPIONT_LEN: %d      \n", (uint32_t)&pmetausb->MPIONT_LEN - head, pmetausb->MPIONT_LEN); 
+
+    printf("[METAU](%.3d) EXTRA_POINT[4]: 0x%.2x, 0x%.2x, 0x%.2x, 0x%.2x  \n", (uint32_t)pmetausb->EXTRA_POINT - head, pmetausb->EXTRA_POINT[0], pmetausb->EXTRA_POINT[1], pmetausb->EXTRA_POINT[2], pmetausb->EXTRA_POINT[3]);
+
+
+    printf("[METAU]********************************************\n");
+    return 0;
+}
+
+int dbgBitmapHeader(struct bitmapHeader_s *ph, int len) 
+{
+
+    msync(ph, sizeof(struct bitmapHeader_s), MS_SYNC);
+
+    printf("[BMP]********************************************\n");
+
+    printf("[BMP]debug print bitmap header length: %d\n", len);
+
+    printf("[BMP]MAGIC NUMBER: [%c] [%c] \n",ph->aspbmpMagic[2], ph->aspbmpMagic[3]);         
+
+    printf("[BMP]FILE TOTAL LENGTH: [%d] \n",ph->aspbhSize);                                                 // mod
+
+    printf("[BMP]HEADER TOTAL LENGTH: [%d] \n",ph->aspbhRawoffset);          
+
+    printf("[BMP]INFO HEADER LENGTH: [%d] \n",ph->aspbiSize);          
+
+    printf("[BMP]WIDTH: [%d] \n",ph->aspbiWidth);                                                          // mod
+
+    printf("[BMP]HEIGHT: [%d] \n",ph->aspbiHeight);                                                        // mod
+    
+    printf("[BMP]NUM OF COLOR PLANES: [%d] \n",ph->aspbiCPP & 0xffff);          
+
+    printf("[BMP]BITS PER PIXEL: [%d] \n",ph->aspbiCPP >> 16);          
+
+    printf("[BMP]COMPRESSION METHOD: [%d] \n",ph->aspbiCompMethd);          
+
+    printf("[BMP]SIZE OF RAW: [%d] \n",ph->aspbiRawSize);                                            // mod
+
+    printf("[BMP]HORIZONTAL RESOLUTION: [%d] \n",ph->aspbiResoluH);          
+
+    printf("[BMP]VERTICAL RESOLUTION: [%d] \n",ph->aspbiResoluV);          
+
+    printf("[BMP]NUM OF COLORS IN CP: [%d] \n",ph->aspbiNumCinCP);          
+
+    printf("[BMP]NUM OF IMPORTANT COLORS: [%d] \n",ph->aspbiNumImpColor);          
+
+    printf("[BMP]********************************************\n");
+
+    return 0;
+}
+
 static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset) 
 {
     return (rawCpy + dx * bitset + dy * rowsz);
@@ -2178,7 +2383,7 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
  * @rotbuff: rotate and crop result rectangle raw image
  *
  */
-static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx)
+int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx)
 {
 #define UNIT_DEG (1000.0)
 #define MIN_P  (100.0)
