@@ -104,12 +104,13 @@ extern int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb);
 extern uint32_t msb2lsb32(struct intMbs32_s *msb);
 
 #define DUMP_ROT_BMP (1)
+#define HANDLE_RVS_HEIGHT (0)
 int main(int argc, char *argv[]) 
 {
     char filepath[256];
     int len=0, ix=0, ret=0, err=0, rvs=0;
     
-    printf("input argc: %d \n", argc);
+    printf("input argc: %d config: rvs(%d) dump(%d)\n", argc, HANDLE_RVS_HEIGHT, DUMP_ROT_BMP);
 
     while (ix < argc) {
         printf("[%d]: %s \n", ix, argv[ix]);
@@ -261,11 +262,14 @@ int main(int argc, char *argv[])
     memcpy(&bheader->aspbmpMagic[2], bmphead, sizeof(struct bitmapHeader_s) - 2);
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
 
+    #if HANDLE_RVS_HEIGHT
     if (bheader->aspbiHeight < 0) {
         bheader->aspbiHeight = 0 - bheader->aspbiHeight;
         memcpy(bmphead, &bheader->aspbmpMagic[2], sizeof(struct bitmapHeader_s) - 2);    
         rvs = 1;
+        dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     }
+    #endif
     
     rotateBMPMf(cropinfo, bmpraw + 1078, rotbuff, mreal, bmphead, 0);
 
@@ -273,20 +277,26 @@ int main(int argc, char *argv[])
     static char ptfileSave[] = "/home/root/rotate/rot_%.3d.bmp";
     char dumpath[256]={0};
     FILE *fdump=0;
-    int abuf_size=0, bhlen=0;
+    int abuf_size=0, bhlen=0, bmph=0;
 
     printf("show result bmp header: \n");
 
     memcpy(&bheader->aspbmpMagic[2], bmphead, sizeof(struct bitmapHeader_s) - 2);
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
 
-    abuf_size = bheader->aspbiWidth * bheader->aspbiHeight;
+    if (bheader->aspbiHeight < 0) {
+        bmph = 0 - bheader->aspbiHeight;
+    }
+    abuf_size = bheader->aspbiWidth * bmph;
     bhlen = bheader->aspbhRawoffset;
 
+    #if HANDLE_RVS_HEIGHT
     if (rvs) {
         bheader->aspbiHeight = 0 - bheader->aspbiHeight;
         memcpy(bmphead, &bheader->aspbmpMagic[2], sizeof(struct bitmapHeader_s) - 2);
+        dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     }
+    #endif
     
     fdump = find_save(dumpath, ptfileSave);
     if (fdump) {
@@ -303,11 +313,8 @@ int main(int argc, char *argv[])
     fflush(fdump);
     fclose(fdump);
     sync();
-
     #endif
 
-    
-    
     end:
 
     printf("end err: %d \n", err);

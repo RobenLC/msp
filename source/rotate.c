@@ -2389,7 +2389,7 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
 #define MIN_P  (100.0)
 
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
-    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0;
+    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0, rvs=0;
     int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
     char ch;
     struct bitmapHeader_s *bheader;
@@ -2439,6 +2439,10 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
     #endif
     rawsz = bheader->aspbiRawSize;
     oldWidth = bheader->aspbiWidth;
+    if (bheader->aspbiHeight < 0) {
+        bheader->aspbiHeight = 0 - bheader->aspbiHeight;
+        rvs = 1;
+    }
     oldHeight = bheader->aspbiHeight;
     bpp = bheader->aspbiCPP >> 16;
     oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
@@ -3501,9 +3505,14 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
 
     msync(rawdest, totsz, MS_SYNC);
 
+    if (rvs) {
+        bheader->aspbiHeight = 0 - bheader->aspbiHeight;;
+    }
+
     #if LOG_ROTMF_DBG
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     #endif
+    
     memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
 
     aspFree(pRectin, midx);
