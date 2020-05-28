@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (1)
+#define GHP_EN (0)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -19199,7 +19199,7 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
 #define MIN_P  (100.0)
 
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
-    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0;
+    int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0, rvs=0;
     int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
     char ch;
     struct bitmapHeader_s *bheader;
@@ -19249,6 +19249,10 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     #endif
     rawsz = bheader->aspbiRawSize;
     oldWidth = bheader->aspbiWidth;
+    if (bheader->aspbiHeight < 0) {
+        bheader->aspbiHeight = 0 - bheader->aspbiHeight;
+        rvs = 1;
+    }
     oldHeight = bheader->aspbiHeight;
     bpp = bheader->aspbiCPP >> 16;
     oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
@@ -20311,9 +20315,14 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
 
     msync(rawdest, totsz, MS_SYNC);
 
+    if (rvs) {
+        bheader->aspbiHeight = 0 - bheader->aspbiHeight;;
+    }
+
     #if LOG_ROTMF_DBG
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     #endif
+    
     memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
 
     aspFree(pRectin, midx);
@@ -20324,7 +20333,6 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     
     return err; 
 }
-
 
 #define LOG_ROT_DBG  (0)
 static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff, int *pside, int *pmreal, int *layers, int midx)
@@ -22280,7 +22288,7 @@ static int pdfTail(char *ppdf, int max, int inSize, int *inData)
 
 static void aspFree(void *p, int pidx)
 {
-    printf("<<<<<<<<  free 0x%.8x \n", (uint32_t)p);
+    //printf("<<<<<<<<  free 0x%.8x \n", (uint32_t)p);
     //free(p);
 }
 
@@ -36502,8 +36510,8 @@ static int stusbscan_119(struct psdata_s *data)
 
     rs = data->rs;
     rlt = abs_result(data->result); 
-    sprintf_f(rs->logs, "op_119 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "USN", rs->logs);  
+    //sprintf_f(rs->logs, "op_119 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "USN", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -36511,8 +36519,8 @@ static int stusbscan_119(struct psdata_s *data)
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            sprintf_f(rs->logs, "op_119: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "USN", rs->logs);  
+            //sprintf_f(rs->logs, "op_119: result: %x, goto %d\n", data->result, ch); 
+            //print_f(rs->plogs, "USN", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -38992,7 +39000,7 @@ end:
     return ret;
 }
 
-#define LOG_FUNC_PROCEDURE (1)
+#define LOG_FUNC_PROCEDURE (0)
 static int cmdfunc_upd2host(struct mainRes_s *mrs, char cmd, char *rsp)
 {
     char ch=0, param=0, *rlt=0;
@@ -42046,8 +42054,8 @@ static int dbg(struct mainRes_s *mrs)
             ui = mrs_ipc_get(mrs, cmd, 256, 14);
             if (ui > 0) {
                 cmd[ui] = '\0';
-                sprintf_f(mrs->log, "p11 usb get [%s] size:%d \n", cmd, ui);
-                print_f(mrs->plog, "DBG", mrs->log);
+                //sprintf_f(mrs->log, "p11 usb get [%s] ret:%d \n", cmd, ui);
+                //print_f(mrs->plog, "DBG", mrs->log);
             } else {
                 if (idle > 100) {
                     idle = 0;
@@ -42100,8 +42108,8 @@ static int dbg(struct mainRes_s *mrs)
         if ((ci > 0) || (ui > 0)) {
             if (pi < CMD_SIZE) {
                 addr[0] = (char *)mrs;
-                sprintf_f(mrs->log, "input [%d]%s\n", pi, cmdtab[pi].str);
-                print_f(mrs->plog, "DBG", mrs->log);
+                //sprintf_f(mrs->log, "input [%d]%s\n", pi, cmdtab[pi].str);
+                //print_f(mrs->plog, "DBG", mrs->log);
                 ret = cmdtab[pi].pfunc(cmdtab[pi].id, addr);
                 wait = 1;
                 memset(plog, 0, 2048);
@@ -53285,13 +53293,13 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                     case 9:
                     case 10:
-                        sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
-                        print_f(mrs->plog, "fs145", mrs->log);
+                        //sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
+                        //print_f(mrs->plog, "fs145", mrs->log);
                         
                         mrs_ipc_get(mrs, minfo, 2, 2);
                         
-                        sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
-                        print_f(mrs->plog, "fs145", mrs->log);
+                        //sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
+                        //print_f(mrs->plog, "fs145", mrs->log);
 
                         mindex = ((minfo[0] & 0x3f) << 5) | (minfo[1] & 0x1f);
                         mindex = mindex & 0x3ff;
@@ -53323,8 +53331,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 print_f(mrs->plog, "fs145", mrs->log);
                             }
 
-                            sprintf_f(mrs->log, "10 dump crop ch result ret: %d \n", ret);
-                            print_f(mrs->plog, "fs145", mrs->log);
+                            //sprintf_f(mrs->log, "10 dump crop ch result ret: %d \n", ret);
+                            //print_f(mrs->plog, "fs145", mrs->log);
 
                             //shmem_dump(addrc, 16);
 
@@ -53342,8 +53350,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             shmem_dump(cordbuf, 16);
                         }
 
-                        sprintf_f(mrs->log, "[GW] pri or sec: %d\n", ptinfomod->PRI_O_SEC);
-                        print_f(mrs->plog, "fs145", mrs->log);
+                        //sprintf_f(mrs->log, "[GW] pri or sec: %d\n", ptinfomod->PRI_O_SEC);
+                        //print_f(mrs->plog, "fs145", mrs->log);
 
                         if (ptinfomod->PRI_O_SEC == 0) {
                             write(outfd[1], minfo, 2);
@@ -53813,7 +53821,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 mindex = ((chindex[0] & 0x3f) << 5) | (chindex[1] & 0x1f);
                                 mindex = mindex & 0x3ff;
                                 
-                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d(0x%.2x:0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, mindex, chindex[0], chindex[1], (uint32_t)pubffo, (uint32_t)pubffh);
+                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d(0x%.2x:0x%.2x) \n", ins, mindex, chindex[0], chindex[1]);
                                 print_f(mrs->plog, "fs145", mrs->log);
                                 
                                 if (!pubffo) {
@@ -53992,8 +54000,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             
                                             pubffo = 0;
                                             
-                                            sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", (uint32_t)pubffh);
-                                            print_f(mrs->plog, "fs145", mrs->log);
+                                            //sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", (uint32_t)pubffh);
+                                            //print_f(mrs->plog, "fs145", mrs->log);
                                             
                                             scnt = scnt + 1;
                                             cycCnt[ins] = 0;
@@ -54100,8 +54108,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 sprintf_f(mrs->log, "[GW] already in multiple id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
                                 print_f(mrs->plog, "fs145", mrs->log);
                             } else if (latcmd[ins] == 'e') {
-                                sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
-                                print_f(mrs->plog, "fs145", mrs->log);
+                                //sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
+                                //print_f(mrs->plog, "fs145", mrs->log);
 
                                 write(outfd[ins], &latcmd[ins], 1);
                             } else if (latcmd[ins] == 'R') {
@@ -54164,8 +54172,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             } else if (pllcmd[ins] == 'k') {
                                 write(outfd[ins], &pllcmd[ins], 1);
                             } else if (latcmd[ins] == 0) {
-                                sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
-                                print_f(mrs->plog, "fs145", mrs->log);
+                                //sprintf_f(mrs->log, "[GW] id:%d lat:0x%.2x pll:0x%.2x \n", ins, latcmd[ins], pllcmd[ins]);
+                                //print_f(mrs->plog, "fs145", mrs->log);
                                 if (ins == 2) {
                                     write(outfd[ins], &pllcmd[ins], 1);
                                 }
@@ -54208,8 +54216,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     resltion = 0;
                                     break;
                                 }
-                                sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
-                                print_f(mrs->plog, "fs145", mrs->log);
+                                //sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
+                                //print_f(mrs->plog, "fs145", mrs->log);
                             }
                             else {
                                 sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
@@ -54584,8 +54592,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                                                             
                                         lens = -1;                                    
                                     } else {
-                                        sprintf_f(mrs->log, "[GW] ring%d meta size: %d \n", ins, lens);
-                                        print_f(mrs->plog, "fs145", mrs->log);
+                                        //sprintf_f(mrs->log, "[GW] ring%d meta size: %d \n", ins, lens);
+                                        //print_f(mrs->plog, "fs145", mrs->log);
                                         pubffcd[ins]->ubmetasize = lens;
                                     }
                                 } else {
@@ -54606,8 +54614,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     print_f(mrs->plog, "fs145", mrs->log);
                                 }
 
-                                sprintf_f(mrs->log, "dump scaninfo size: %d tot: %d \n", mlen, len);
-                                print_f(mrs->plog, "fs145", mrs->log);
+                                //sprintf_f(mrs->log, "dump scaninfo size: %d tot: %d \n", mlen, len);
+                                //print_f(mrs->plog, "fs145", mrs->log);
 
                                 addrd = addrs + (len - mlen);
 
@@ -54662,14 +54670,14 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 #endif
             
                                 if (ins == 1) {
-                                    sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
-                                    print_f(mrs->plog, "fs145", mrs->log);
+                                    //sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
+                                    //print_f(mrs->plog, "fs145", mrs->log);
 
                                     ret = aspMetafs145GetlenviaUsb(mrs);
                                     if (ret > 0) {
                                         dlen = ret;
-                                        sprintf_f(mrs->log, "get scanlength: %d!!\n", dlen); 
-                                        print_f(mrs->plog, "fs145", mrs->log);
+                                        //sprintf_f(mrs->log, "get scanlength: %d!!\n", dlen); 
+                                        //print_f(mrs->plog, "fs145", mrs->log);
                                     }
                                     else {
                                         sprintf_f(mrs->log, "get scaninfo failed!!! ret: %d!!\n", ret); 
@@ -54677,14 +54685,14 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
                                 }
                                 else {          
-                                    sprintf_f(mrs->log, "duo get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
-                                    print_f(mrs->plog, "fs145", mrs->log);
+                                    //sprintf_f(mrs->log, "duo get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
+                                    //print_f(mrs->plog, "fs145", mrs->log);
                                     
                                     ret = aspMetafs145GetlenviaUsbDuo(mrs);
                                     if (ret > 0) {                                    
                                         dlen = ret;
-                                        sprintf_f(mrs->log, "duo get scanlength: %d!!\n", dlen); 
-                                        print_f(mrs->plog, "fs145", mrs->log);                                    
+                                        //sprintf_f(mrs->log, "duo get scanlength: %d!!\n", dlen); 
+                                        //print_f(mrs->plog, "fs145", mrs->log);                                    
                                     }
                                     else {
                                         sprintf_f(mrs->log, "duo get scaninfo failed!!! ret: %d!!\n", ret); 
@@ -54692,7 +54700,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
                                 }
                                 
-                                #if 1//DBG_USB_GATE
+                                #if DBG_USB_GATE
                                 sprintf_f(mrs->log, "[GW] get image length: %d max: %d \n", dlen, maxsz);
                                 print_f(mrs->plog, "fs145", mrs->log);
                                 #endif
@@ -54735,8 +54743,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
                                         
-                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d duo\n", val);                                
-                                        print_f(mrs->plog, "fs145", mrs->log);
+                                        //sprintf_f(mrs->log, "[GW] usb meta copy size: %d duo\n", val);                                
+                                        //print_f(mrs->plog, "fs145", mrs->log);
                                         
                                         memcpy(addrc, ptscaninfoduo, val);
                                         //shmem_dump(addrc, val);
@@ -54761,8 +54769,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         val = ptscaninfo->EXTRA_POINT - ptscaninfo->ASP_MAGIC_ASPC;
 
-                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
-                                        print_f(mrs->plog, "fs145", mrs->log);
+                                        //sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
+                                        //print_f(mrs->plog, "fs145", mrs->log);
 
                                         memcpy(addrc, ptscaninfo, val);
                                         //shmem_dump(addrc, val);
@@ -55583,13 +55591,13 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                     case 9:
                     case 10:
                         if (pllcmd[ins] == 'O') {
-                            sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             mrs_ipc_get(mrs, minfo, 2, 2);
                             
-                            sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             mindex = ((minfo[0] & 0x3f) << 5) | (minfo[1] & 0x1f);
                             mindex = mindex & 0x3ff;
@@ -55621,8 +55629,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     print_f(mrs->plog, "fs152", mrs->log);
                                 }
                             
-                                sprintf_f(mrs->log, "10 dump crop ch result ret: %d \n", ret);
-                                print_f(mrs->plog, "fs152", mrs->log);
+                                //sprintf_f(mrs->log, "10 dump crop ch result ret: %d \n", ret);
+                                //print_f(mrs->plog, "fs152", mrs->log);
                             
                                 //shmem_dump(addrc, 16);
                             
@@ -55640,8 +55648,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 shmem_dump(cordbuf, 16);
                             }
                             
-                            sprintf_f(mrs->log, "[GW] pri or sec: %d\n", ptinfomod->PRI_O_SEC);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] pri or sec: %d\n", ptinfomod->PRI_O_SEC);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             if (ptinfomod->PRI_O_SEC == 0) {
                                 //write(outfd[1], minfo, 2);
@@ -55652,8 +55660,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         }
                         else if (pllcmd[ins] == 'S') {
-                            sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             mrs_ipc_get(mrs, minfo, 2, 2);
 
@@ -56434,7 +56442,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 mindex = ((chindex[0] & 0x3f) << 5) | (chindex[1] & 0x1f);
                                 mindex = mindex & 0x3ff;
                                 
-                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d (0x%.2x:0x%.2x) buffo: 0x%.8x buffh: 0x%.8x\n", ins, mindex, chindex[0], chindex[1], (uint32_t)pubffo, (uint32_t)pubffh);
+                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d (0x%.2x:0x%.2x)\n", ins, mindex, chindex[0], chindex[1]);
                                 print_f(mrs->plog, "fs152", mrs->log);
 
                                 ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
@@ -56636,8 +56644,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             
                                             pubffo = 0;
                                             
-                                            sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", (uint32_t)pubffh);
-                                            print_f(mrs->plog, "fs152", mrs->log);
+                                            //sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", (uint32_t)pubffh);
+                                            //print_f(mrs->plog, "fs152", mrs->log);
                                             
                                             scnt = scnt + 1;
                                             cycCnt[ins] = 0;
@@ -56770,8 +56778,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 sprintf_f(mrs->log, "[GW] already in multiple id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
                                 print_f(mrs->plog, "fs152", mrs->log);
                             } else if (latcmd[ins] == 'e') {
-                                sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
-                                print_f(mrs->plog, "fs152", mrs->log);
+                                //sprintf_f(mrs->log, "[GW] already stop multiple id:%d lat:%c pll:%c\n", ins, latcmd[ins], pllcmd[ins]);
+                                //print_f(mrs->plog, "fs152", mrs->log);
 
                                 write(outfd[ins], &latcmd[ins], 1);
                             } else if (latcmd[ins] == 'R') {
@@ -56878,8 +56886,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     resltion = 0;
                                     break;
                                 }
-                                sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
-                                print_f(mrs->plog, "fs152", mrs->log);
+                                //sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
+                                //print_f(mrs->plog, "fs152", mrs->log);
                             }
                             else {
                                 sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
@@ -57298,8 +57306,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                                                             
                                         lens = -1;                                    
                                     } else {
-                                        sprintf_f(mrs->log, "[GW] ring%d meta size: %d \n", ins, lens);
-                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        //sprintf_f(mrs->log, "[GW] ring%d meta size: %d \n", ins, lens);
+                                        //print_f(mrs->plog, "fs152", mrs->log);
                                         pubffcd[ins]->ubmetasize = lens;
                                     }
                                 } else {
@@ -57320,8 +57328,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     print_f(mrs->plog, "fs152", mrs->log);
                                 }
 
-                                sprintf_f(mrs->log, "dump scaninfo size: %d tot: %d \n", mlen, len);
-                                print_f(mrs->plog, "fs152", mrs->log);
+                                //sprintf_f(mrs->log, "dump scaninfo size: %d tot: %d \n", mlen, len);
+                                //print_f(mrs->plog, "fs152", mrs->log);
 
                                 addrd = addrs + (len - mlen);
 
@@ -57376,14 +57384,14 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 #endif
             
                                 if (ins == 1) {
-                                    sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
-                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    //sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
+                                    //print_f(mrs->plog, "fs152", mrs->log);
 
                                     ret = aspMetafs145GetlenviaUsb(mrs);
                                     if (ret >= 0) {
                                         dlen = ret;
-                                        sprintf_f(mrs->log, "get scanlength: %d!!\n", dlen); 
-                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        //sprintf_f(mrs->log, "get scanlength: %d!!\n", dlen); 
+                                        //print_f(mrs->plog, "fs152", mrs->log);
                                     }
                                     else {
                                         sprintf_f(mrs->log, "get scaninfo failed!!! ret: %d!!\n", ret); 
@@ -57391,14 +57399,14 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
                                 }
                                 else {          
-                                    sprintf_f(mrs->log, "duo get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
-                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    //sprintf_f(mrs->log, "duo get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
+                                    //print_f(mrs->plog, "fs152", mrs->log);
                                     
                                     ret = aspMetafs145GetlenviaUsbDuo(mrs);
                                     if (ret >= 0) {                                    
                                         dlen = ret;
-                                        sprintf_f(mrs->log, "duo get scanlength: %d!!\n", dlen); 
-                                        print_f(mrs->plog, "fs152", mrs->log);                                    
+                                        //sprintf_f(mrs->log, "duo get scanlength: %d!!\n", dlen); 
+                                        //print_f(mrs->plog, "fs152", mrs->log);                                    
                                     }
                                     else {
                                         sprintf_f(mrs->log, "duo get scaninfo failed!!! ret: %d!!\n", ret); 
@@ -57406,7 +57414,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
                                 }
                                 
-                                #if 1//DBG_BKN_GATE
+                                #if DBG_BKN_GATE
                                 sprintf_f(mrs->log, "[GW] get image length: %d max: %d \n", dlen, maxsz);
                                 print_f(mrs->plog, "fs152", mrs->log);
                                 #endif
@@ -57449,8 +57457,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
                                         
-                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d duo\n", val);                                
-                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        //sprintf_f(mrs->log, "[GW] usb meta copy size: %d duo\n", val);                                
+                                        //print_f(mrs->plog, "fs152", mrs->log);
                                         
                                         memcpy(addrc, ptscaninfoduo, val);
                                         //shmem_dump(addrc, val);
@@ -57475,8 +57483,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                         val = ptscaninfo->EXTRA_POINT - ptscaninfo->ASP_MAGIC_ASPC;
 
-                                        sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
-                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        //sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
+                                        //print_f(mrs->plog, "fs152", mrs->log);
 
                                         memcpy(addrc, ptscaninfo, val);
                                         //shmem_dump(addrc, val);
@@ -57917,7 +57925,7 @@ static int fs144(struct mainRes_s *mrs, struct modersp_s *modersp)
 }
 #endif
 
-#define LOG_P0_EN (1)
+#define LOG_P0_EN (0)
 static int p0(struct mainRes_s *mrs)
 {
 #define PS_NUM 155
@@ -58048,9 +58056,8 @@ static int p0(struct mainRes_s *mrs)
 #endif            
             if (mbf != modesw->m) {
                 clock_gettime(CLOCK_REALTIME, &tidle[0]);    
-                sprintf_f(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
-                print_f(mrs->plog, "P0", mrs->log);
-
+                //sprintf_f(mrs->log, "pmode:%d rsp:%d - 1\n", modesw->m, modesw->r);
+                //print_f(mrs->plog, "P0", mrs->log);
             }
             
             ret = (*afselec[modesw->m].pfunc)(mrs, modesw);
@@ -60819,18 +60826,18 @@ static int p3(struct procRes_s *rs)
                 }
             }
             else if (cmode == 8) {
-                sprintf_f(rs->logs, "cmode: %d\n", cmode);
-                print_f(rs->plogs, "P3", rs->logs);
+                //sprintf_f(rs->logs, "cmode: %d\n", cmode);
+                //print_f(rs->plogs, "P3", rs->logs);
 
                 ret = rs_ipc_get(rs, finfo, 2);
                 
-                sprintf_f(rs->logs, "get info: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
-                print_f(rs->plogs, "P3", rs->logs);
+                //sprintf_f(rs->logs, "get info: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
+                //print_f(rs->plogs, "P3", rs->logs);
 
                 //sleep(10);
                 len = ring_buf_cons(rs->pdataRx, &addr);
                 if (len >= 0) {
-                    sprintf_f(rs->logs, "get ring for crop len: %d\n", len);
+                    sprintf_f(rs->logs, "get crop len: %d\n", len);
                     print_f(rs->plogs, "P3", rs->logs);
                 
                     pusbmeta = aspMemalloc(len, 3);
@@ -71374,8 +71381,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             opc = dcbwopc->opcOpcode;
             dat = dcbwopc->opcSubOPCode;
             
-            sprintf_f(rs->logs, "(OP_Multi_DUPLEX) target opc: 0x%.2x 0x%.2x get cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", opc, dat, dcbwopc->opcType, dcbwopc->opcOpcode, dcbwopc->opcSubOPCode);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "(OP_Multi_DUPLEX) target opc: 0x%.2x 0x%.2x get cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", opc, dat, dcbwopc->opcType, dcbwopc->opcOpcode, dcbwopc->opcSubOPCode);
+            //print_f(rs->plogs, sp, rs->logs);
             
             cmdchr = cmdMtx[6][1];
             break;
@@ -71407,8 +71414,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             opc = dcbwopc->opcOpcode;
             dat = dcbwopc->opcSubOPCode;
             
-            sprintf_f(rs->logs, "(OP_Multi_Single) target opc: 0x%.2x 0x%.2x get cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", opc, dat, dcbwopc->opcType, dcbwopc->opcOpcode, dcbwopc->opcSubOPCode);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "(OP_Multi_Single) target opc: 0x%.2x 0x%.2x get cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x \n", opc, dat, dcbwopc->opcType, dcbwopc->opcOpcode, dcbwopc->opcSubOPCode);
+            //print_f(rs->plogs, sp, rs->logs);
 
             cmdchr = cmdMtx[13][1];
             break;
@@ -71838,8 +71845,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             puhs->pushcswerr = -1;
 
             
-            sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
+            //print_f(rs->plogs, sp, rs->logs);
 
             cplls[0] = 'J';
             cplls[1] = pllst;
@@ -73217,11 +73224,13 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                 tcnt ++;
 
+                /*
                 if (tcnt == 1) {
                     clock_gettime(CLOCK_REALTIME, &utstart);
                     //sprintf_f(rs->logs, "start ... \n");
                     //print_f(rs->plogs, sp, rs->logs);
                 }
+                */
                 
                 #if USB_HS_SAVE_RESULT        
                 pcur += recvsz;
@@ -73230,11 +73239,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 acusz += recvsz;
 
                 if (((recvsz > 0) && (recvsz < len)) && (usbrun < 0)) {
-                    clock_gettime(CLOCK_REALTIME, &utend);
+                    //clock_gettime(CLOCK_REALTIME, &utend);
                     
                     ring_buf_set_last(pTx, recvsz);
-                    sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
-                    print_f(rs->plogs, sp, rs->logs);
+                    //sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
+                    //print_f(rs->plogs, sp, rs->logs);
 
                     sprintf_f(rs->logs, "__USB_DEV_ EXTRA_META[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
                     thrimgsize += (CFLOAT)acusz;
@@ -73307,10 +73316,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             wrtsz = fwrite(pImage, 1, acusz, fsave);
             #endif
             
-            usCost = time_diff(&utstart, &utend, 1000);
-            throughput = acusz*8.0 / usCost*1.0;
+            //usCost = time_diff(&utstart, &utend, 1000);
+            //throughput = acusz*8.0 / usCost*1.0;
 
-            sprintf_f(rs->logs, "total read size: %d, write file size: %d throughput: %lf Mbits \n", acusz, wrtsz, throughput);
+            sprintf_f(rs->logs, "last size: %d\n", acusz);
             print_f(rs->plogs, sp, rs->logs);
             
             #if USB_HS_SAVE_RESULT
@@ -73364,12 +73373,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             /* start loop */
             ptret = USB_IOCT_LOOP_RESET(usbid, &bitset);
-            sprintf_f(rs->logs, "conti read reset ret: %d \n", ptret);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "conti read reset ret: %d \n", ptret);
+            //print_f(rs->plogs, sp, rs->logs);
 
             ptret = USB_IOCT_LOOP_START(usbid, pkcbw);
-            sprintf_f(rs->logs, "conti read start ret: %d \n", ptret);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "conti read start ret: %d \n", ptret);
+            //print_f(rs->plogs, sp, rs->logs);
 
             sprintf_f(rs->logs, "__USB_DEV_ SCAN_START[%s][%s]__", sp, puhsinfo->ushostname); 
             ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
@@ -73418,12 +73427,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             /* start loop */
             
             ptret = USB_IOCT_LOOP_RESET(usbid, &bitset);
-            sprintf_f(rs->logs, "conti read reset ret: %d \n", ptret);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "conti read reset ret: %d \n", ptret);
+            //print_f(rs->plogs, sp, rs->logs);
 
             ptret = USB_IOCT_LOOP_ONCE(usbid, pkcbw);
-            sprintf_f(rs->logs, "conti read once ret: %d \n", ptret);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "conti read once ret: %d \n", ptret);
+            //print_f(rs->plogs, sp, rs->logs);
 
             sprintf_f(rs->logs, "__USB_DEV_ START[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
@@ -73855,8 +73864,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     puhsinfo->ushostbtrkpageavg = puhsinfo->ushostbtrkpage / puhsinfo->ushostbpagecnt;
                     
                     ring_buf_set_last(pTx, recvsz);
-                    sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
-                    print_f(rs->plogs, sp, rs->logs);
+                    //sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
+                    //print_f(rs->plogs, sp, rs->logs);
 
                     sprintf_f(rs->logs, "__USB_DEV_ IMG_SIZE[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
                     thrimgsize = acusz;
@@ -73947,7 +73956,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             usCost = time_diff(&utstart, &utend, 1000);
             throughput = acusz*8.0 / usCost*1.0;
 
-            sprintf_f(rs->logs, "total read size: %d, write file size: %d throughput: %lf Mbits \n", acusz, wrtsz, throughput);
+            sprintf_f(rs->logs, "read size: %d, timecost: %d us, throughput: %lf Mbits \n", acusz, usCost, throughput);
             print_f(rs->plogs, sp, rs->logs);
             
             #if USB_HS_SAVE_RESULT
@@ -74506,7 +74515,12 @@ static int p10(struct procRes_s *rs)
 #define OP_WRITE_FILE (0x0b)
 #define DUMP_JPG_ROT (0)
 #define CROP_TEST_EN (1)
+
+#if GHP_EN
 #define SCAN_BNOTE_EN (1)
+#else
+#define SCAN_BNOTE_EN (0)
+#endif
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -75204,8 +75218,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }      
                         #endif
                         
-                        sprintf_f(rs->logs, "[DV] clean start \n");
-                        print_f(rs->plogs, "P11", rs->logs);
+                        //sprintf_f(rs->logs, "[DV] clean start \n");
+                        //print_f(rs->plogs, "P11", rs->logs);
                         
                         #if 1  /* clean msg queue */
                         while (1) {
@@ -75232,8 +75246,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                         }
                     
-                        sprintf_f(rs->logs, "[DV] clean middle - 1 \n");
-                        print_f(rs->plogs, "P11", rs->logs);
+                        //sprintf_f(rs->logs, "[DV] clean middle - 1 \n");
+                        //print_f(rs->plogs, "P11", rs->logs);
 
                         if (puimCnTH) {
                             ix=0;
@@ -75284,8 +75298,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         pagerst = 2;
                         #endif
                     
-                        sprintf_f(rs->logs, "[DV] clean end \n");
-                        print_f(rs->plogs, "P11", rs->logs);
+                        //sprintf_f(rs->logs, "[DV] clean end \n");
+                        //print_f(rs->plogs, "P11", rs->logs);
                         
                         chq = 'n';
                         pipRet = write(pipeTx[1], &chq, 1);
@@ -75376,9 +75390,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         
                         sprintf(msgcmd, "usbidle");
                         
-                        sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                        print_f(rs->plogs, "P11", rs->logs);
-                        
                         ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
                         if (ret > 0) {
                             rcmd->logs[ret] = '\n';
@@ -75387,9 +75398,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);   
 
                             print_f(rcmd->plogs, "C11", rcmd->logs);
-                        } else {
-                            sprintf_f(rs->logs, "[DV] cmd no message \n");
-                            print_f(rs->plogs, "P11", rs->logs);
                         }
                         #endif
 
@@ -76427,9 +76435,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         
                         sprintf(msgcmd, "usbidle");
                         
-                        sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                        print_f(rs->plogs, "P11", rs->logs);
-                        
                         ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                         if (ret > 0) {
                             rcmd->logs[ret] = '\n';
@@ -76438,9 +76443,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);   
 
                             print_f(rcmd->plogs, "C11", rcmd->logs);
-                        } else {
-                            sprintf_f(rs->logs, "[DV] cmd no message \n");
-                            print_f(rs->plogs, "P11", rs->logs);
                         }
                         
                         break;
@@ -76785,8 +76787,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                     
                     pipRet = aspMetaRelease(msb2lsb32(&ptmetain->FUNC_BITS), 0, rs);
-                    sprintf_f(rs->logs, "[DV]  meta release ret: %d \n", pipRet);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    //sprintf_f(rs->logs, "[DV]  meta release ret: %d \n", pipRet);
+                    //print_f(rs->plogs, "P11", rs->logs);
                     
                     #if 0
                     shmem_dump(ptrecv, recvsz);
@@ -76823,8 +76825,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                     #endif
 
-                    sprintf_f(rs->logs, "[DV] clean start \n");
-                    print_f(rs->plogs, "P11", rs->logs);
+                    //sprintf_f(rs->logs, "[DV] clean start \n");
+                    //print_f(rs->plogs, "P11", rs->logs);
 
                     aspMemClear(aspMemAsign, asptotMalloc, 11);
         
@@ -76853,8 +76855,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                     }
                     
-                    sprintf_f(rs->logs, "[DV] clean middle - 1 \n");
-                    print_f(rs->plogs, "P11", rs->logs);
+                    //sprintf_f(rs->logs, "[DV] clean middle - 1 \n");
+                    //print_f(rs->plogs, "P11", rs->logs);
 
                     if (puimCnTH) {
                         ix=0;
@@ -76911,8 +76913,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     sides[1] = 0;
                     #endif
                     
-                    sprintf_f(rs->logs, "[DV] clean end \n");
-                    print_f(rs->plogs, "P11", rs->logs);
+                    //sprintf_f(rs->logs, "[DV] clean end \n");
+                    //print_f(rs->plogs, "P11", rs->logs);
 
                     if (strcmp(msgcmd, "usbscan") != 0) {
                         sprintf(msgcmd, "usbscan");
@@ -77229,9 +77231,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                         sprintf(msgcmd, "usbidle");
 
-                                        sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                                        print_f(rs->plogs, "P11", rs->logs);
-
                                         ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                                         if (ret > 0) {
                                             rcmd->logs[ret] = '\n';
@@ -77240,9 +77239,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             print_f(rs->plogs, "P11", rs->logs);   
 
                                             print_f(rcmd->plogs, "C11", rcmd->logs);
-                                        } else {
-                                            sprintf_f(rs->logs, "[DV] cmd no message \n");
-                                            print_f(rs->plogs, "P11", rs->logs);
                                         }
                                     }
                                     #endif
@@ -77923,8 +77919,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 piprx = puscur->pushrx; 
                                     }
                                 } else {
-                                    sprintf_f(rs->logs, "[DV] puimGet is null get next \n");
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "[DV] puimGet is null get next \n");
+                                    //print_f(rs->plogs, "P11", rs->logs);
                                 }
                                 acusz = 0;
                                 break;
@@ -78691,7 +78687,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             else 
             #endif
             
-            #if 1//SCAN_BNOTE_EN // test code
+            #if 0//SCAN_BNOTE_EN // test code
             if ((cmd == 0x12) && (opc == 0x0f)) { /* usbentsTx == 1*/
                 //addrd = 0;
                 while (addrd == 0) {
@@ -79201,8 +79197,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             #endif
 
                                             if (!puimCnTH) {
-                                                sprintf_f(rs->logs, "extra puimCnTH is null!!! \n");
-                                                print_f(rs->plogs, "P11", rs->logs);
+                                                //sprintf_f(rs->logs, "extra puimCnTH is null!!! \n");
+                                                //print_f(rs->plogs, "P11", rs->logs);
 
                                                 puimCnTH = malloc(sizeof(struct usbIndex_s));
                                                 if (!puimCnTH) {
@@ -79237,8 +79233,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                                 }
                                                 else {
 
-                                                    sprintf_f(rs->logs, "[DV] extra current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x!!!\n\n", puimCud->uimIdex, cindex, chr);
-                                                    print_f(rs->plogs, "P11", rs->logs);
+                                                    //sprintf_f(rs->logs, "[DV] extra current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x!!!\n\n", puimCud->uimIdex, cindex, chr);
+                                                    //print_f(rs->plogs, "P11", rs->logs);
 
                                                     puimTmp= puimCnTH;
                                                     while(puimTmp) {
@@ -79519,8 +79515,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                         if ((puimGet->uimIdex & 0x400) == 0) {
 
-                                            sprintf_f(rs->logs, "[DV]  new puimGet primary 0x%.8x \n", puimGet->uimIdex);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            //sprintf_f(rs->logs, "[DV]  new puimGet primary 0x%.8x \n", puimGet->uimIdex);
+                                            //print_f(rs->plogs, "P11", rs->logs);
 
                                             puscur = pushost;
                                             pinfcur = pinfushost;
@@ -79529,8 +79525,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                             piprx = puscur->pushrx; 
                                         } else {
 
-                                            sprintf_f(rs->logs, "[DV]  new puimGet secondary 0x%.8x \n", puimGet->uimIdex);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            //sprintf_f(rs->logs, "[DV]  new puimGet secondary 0x%.8x \n", puimGet->uimIdex);
+                                            //print_f(rs->plogs, "P11", rs->logs);
 
                                             puscur = pushostd;
                                             pinfcur = pinfushostd;
@@ -79577,8 +79573,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         puimCur->uimCount += 1;
                                     }
                                     else {
-                                        sprintf_f(rs->logs, "\n[DV] current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x \n\n", puimCur->uimIdex, cindex, chr);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        //sprintf_f(rs->logs, "\n[DV] current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x \n\n", puimCur->uimIdex, cindex, chr);
+                                        //print_f(rs->plogs, "P11", rs->logs);
 
                                         puimTmp= puimCnTH;
                                         while(puimTmp) {
@@ -79756,15 +79752,15 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         cswerr = 0;
                                     }
 
-                                    sprintf_f(rs->logs, "[DV] get csw err: 0x%.2x \n", cswerr);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "[DV] get csw err: 0x%.2x \n", cswerr);
+                                    //print_f(rs->plogs, "P11", rs->logs);
                                     puimNxt = 0;
 
                                     pagerst = cinfo[8] & 0x7f;
-                                    sprintf_f(rs->logs, "[DV] get page rest: %d \n", pagerst);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "[DV] get page rest: %d \n", pagerst);
+                                    //print_f(rs->plogs, "P11", rs->logs);
                                     
-                                    sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
+                                    sprintf_f(rs->logs, "[DV] get the last trunk read cycle: %d, lastlen: %d cswerr: 0x%.2x pagerst: %d \n", uimCylcnt, lastCylen, cswerr, pagerst);
                                     print_f(rs->plogs, "P11", rs->logs);
 
                                     if (uimCylcnt < 2) {
@@ -79779,14 +79775,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     cpylen = 0;
 
                                     ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
-                                    sprintf_f(rs->logs, "[BMP] get file format ret: %d format: 0x%.2x !!!\n", ret, fformat);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "[BMP] get file format ret: %d format: 0x%.2x !!!\n", ret, fformat);
+                                    //print_f(rs->plogs, "P11", rs->logs);
                                     
                                     if (ret) {
                                         fformat = 0;
                                     }
                                     
-                                    #if GHP_EN
+                                    #if 0//GHP_EN
                                     //if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && ((opc == 0x0a) || (opc == 0x0f))) {
                                     if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && (opc == 0x0f)) {
                                         bmpbuff = aspMemalloc(bmplen, 11);
@@ -80088,7 +80084,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             msync(pinfcur, sizeof(struct usbHostmem_s), MS_SYNC);
 
-                            #if GHP_EN
+                            #if 0//GHP_EN
                             if (bmpbufc) {
                             
                                 bmpcpy = memcpy(bmpbufc, addrd, lens);
@@ -80257,8 +80253,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rs->plogs, "P11", rs->logs);
                                 }
 
-                                sprintf_f(rs->logs, "dume usb meta size: %d / %d \n", shfmeta, lens);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                //sprintf_f(rs->logs, "dume usb meta size: %d / %d \n", shfmeta, lens);
+                                //print_f(rs->plogs, "P11", rs->logs);
 
                                 pshfmeta = addrd + (lens - shfmeta);
 
@@ -80283,13 +80279,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     
                                     //dbgMetaUsb(ptmetausbduo);
                                 } else {
-                                    sprintf_f(rs->logs, "usb meta forward to pc \n");
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "usb meta forward to pc \n");
+                                    //print_f(rs->plogs, "P11", rs->logs);
 
                                     /* deal with bmp retate */
                                     memset(ptmetausb, 0, sizeof(struct aspMetaDataviaUSB_s));
                                     memcpy(ptmetausb, pshfmeta, shfmeta);
-                                    dbgMetaUsb(ptmetausb);
+                                    //dbgMetaUsb(ptmetausb);
                                 }
                             }
 
@@ -80665,7 +80661,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             #endif
                         }
 
-                        #if GHP_EN
+                        #if 0//GHP_EN
                         if (bmpbufc) {
                             if (che == 'E') {
                             
@@ -81351,8 +81347,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             if (che == 'E') {
                                 puscur->pushrmcnt += 1;
 
-                                sprintf_f(rs->logs, "zebra usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x) lens: %d\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr, lens); 
-                                print_f(rs->plogs, "P11", rs->logs);    
+                                //sprintf_f(rs->logs, "zebra usb scan cnt: %d, rm: %d, cswerr: %d (0x%.2x) lens: %d\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr, lens); 
+                                //print_f(rs->plogs, "P11", rs->logs);    
 
                                 break;
                             }
@@ -81373,10 +81369,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     clock_gettime(CLOCK_REALTIME, &tend);
 
                     tmCost = time_diff(&tstart, &tend, 1000);
-                    sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), tmCost);
-                    print_f(rs->plogs, "P11", rs->logs);
-                    throughput = acusz*8.0 / tmCost*1.0;
-                    sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MBits\n", acusz, tmCost > 1000 ? tmCost / 1000 : 1, throughput);
+                    //sprintf_f(rs->logs, "[DV] end time %llu ms start time %llu ms diff: %d \n", time_get_ms(&tend), time_get_ms(&tstart), tmCost);
+                    //print_f(rs->plogs, "P11", rs->logs);
+                    throughput = acusz / tmCost*1.0;
+                    sprintf_f(rs->logs, "[DV] usb throughput: %d bytes / %d ms = %lf MB\n", acusz, tmCost > 1000 ? tmCost / 1000 : 1, throughput);
                     print_f(rs->plogs, "P11", rs->logs);
 
                     #if USB_HS_SAVE_RESULT_DV
@@ -81531,9 +81527,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 sprintf(msgcmd, "usbidle");
 
-                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
                 ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
@@ -81542,9 +81535,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);   
 
                     print_f(rcmd->plogs, "C11", rcmd->logs);
-                } else {
-                    sprintf_f(rs->logs, "[DV] cmd no message \n");
-                    print_f(rs->plogs, "P11", rs->logs);
                 }
                 
                 cmd = 0;
@@ -81741,9 +81731,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 sprintf(msgcmd, "usbidle");
                 
-                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
                 ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
@@ -81752,9 +81739,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);   
 
                     print_f(rcmd->plogs, "C11", rcmd->logs);
-                } else {
-                    sprintf_f(rs->logs, "[DV] cmd no message \n");
-                    print_f(rs->plogs, "P11", rs->logs);
                 }
 
                 cmd = 0;
@@ -81843,9 +81827,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 sprintf(msgcmd, "usbidle");
 
-                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
                 ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
@@ -81854,9 +81835,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);   
 
                     print_f(rcmd->plogs, "C11", rcmd->logs);
-                } else {
-                    sprintf_f(rs->logs, "[DV] cmd no message \n");
-                    print_f(rs->plogs, "P11", rs->logs);
                 }
                 #endif
                 
@@ -81940,7 +81918,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             }
             else if (cmd == 0x12) { /* usbentsTx == 1*/
 
-                sprintf_f(rs->logs, "[DV] waitCylen, pagerst and cswerr: 0x%.2x, %d : %d !!!\n", cswerr, waitCylen, pagerst); 
+                sprintf_f(rs->logs, "[DV] cswerr: 0x%.2x, waitCylen, pagerst: %d, %d !!!\n", cswerr, waitCylen, pagerst); 
                 print_f(rs->plogs, "P11", rs->logs);
 
                 if ((cswerr) && (cswerr != 0x21) && (cswerr != 0x22) && (cswerr != 0x23)) {
@@ -82152,9 +82130,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                     sprintf(msgcmd, "usbidle");
 
-                    sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                    print_f(rs->plogs, "P11", rs->logs);
-
                     ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                     if (ret > 0) {
                         rcmd->logs[ret] = '\n';
@@ -82163,9 +82138,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         print_f(rs->plogs, "P11", rs->logs);   
 
                         print_f(rcmd->plogs, "C11", rcmd->logs);
-                    } else {
-                        sprintf_f(rs->logs, "[DV] cmd no message \n");
-                        print_f(rs->plogs, "P11", rs->logs);
                     }
                     
                 }
@@ -82878,9 +82850,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 sprintf(msgcmd, "usbidle");
                 
-                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
                 ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
@@ -82889,9 +82858,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);   
 
                     print_f(rcmd->plogs, "C11", rcmd->logs);
-                } else {
-                    sprintf_f(rs->logs, "[DV] cmd no message \n");
-                    print_f(rs->plogs, "P11", rs->logs);
                 }
                 
                 cmd = 0;
@@ -83169,9 +83135,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         sprintf(msgcmd, "usbidle");
 
-                        sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                        print_f(rs->plogs, "P11", rs->logs);
-
                         ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                         if (ret > 0) {
                             rcmd->logs[ret] = '\n';
@@ -83180,9 +83143,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             print_f(rs->plogs, "P11", rs->logs);   
 
                             print_f(rcmd->plogs, "C11", rcmd->logs);
-                        } else {
-                            sprintf_f(rs->logs, "[DV] cmd no message \n");
-                            print_f(rs->plogs, "P11", rs->logs);
                         }
                     }
                     #endif
@@ -84051,9 +84011,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                 sprintf(msgcmd, "usbidle");
 
-                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
                 ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
@@ -84062,7 +84019,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);   
 
                     print_f(rcmd->plogs, "C11", rcmd->logs);
-                } else {
+                }
+                else {
                     sprintf_f(rs->logs, "[DV] cmd no message \n");
                     print_f(rs->plogs, "P11", rs->logs);
                 }
@@ -84247,9 +84205,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     
                 sprintf(msgcmd, "usbidle");
 
-                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
                 ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 500);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
@@ -84258,9 +84213,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);   
 
                     print_f(rcmd->plogs, "C11", rcmd->logs);
-                } else {
-                    sprintf_f(rs->logs, "[DV] cmd no message \n");
-                    print_f(rs->plogs, "P11", rs->logs);
                 }
                 #endif
                 
@@ -84375,9 +84327,6 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 sprintf(msgcmd, "usbidle");
                 
-                sprintf_f(rs->logs, "[DV]  wait usbscan result: \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
                 ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
                 if (ret > 0) {
                     rcmd->logs[ret] = '\n';
@@ -84386,10 +84335,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rs->plogs, "P11", rs->logs);   
 
                     print_f(rcmd->plogs, "C11", rcmd->logs);
-                } else {
-                    sprintf_f(rs->logs, "[DV] cmd no message \n");
-                    print_f(rs->plogs, "P11", rs->logs);
-                }
+                } 
                 
                 opc = 0;
                 
@@ -84557,6 +84503,7 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max
                 break;
             }
         }
+        
         /*
         else {
             sprintf_f(rs->logs,"%d. [0x%.8x]: 0x%.2x \n", ix, shf, pt[0]);
@@ -85855,6 +85802,7 @@ static int p12(struct procRes_s *rs)
 #else
 #define GHP_EN_JPGH (0)
 #endif
+
 static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 {
     char chq=0, chd=0, che=0, cindexfo[2], mindexfo[2], cinfo[12], cswerr=0, pagerst=2, ch=0, mfourinfo[2];
@@ -86205,8 +86153,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                     #endif
         
                                     if (!puimCnTH) {
-                                        sprintf_f(rs->logs, "extra puimCnTH is null!!! \n");
-                                        print_f(rs->plogs, sp, rs->logs);
+                                        //sprintf_f(rs->logs, "extra puimCnTH is null!!! \n");
+                                        //print_f(rs->plogs, sp, rs->logs);
         
                                         puimCnTH = malloc(sizeof(struct usbIndex_s));
                                         if (!puimCnTH) {
@@ -86535,8 +86483,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 puimCur->uimCount += 1;
                             }
                             else {
-                                sprintf_f(rs->logs, "[DV] current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x \n\n", puimCur->uimIdex, cindex, chr);
-                                print_f(rs->plogs, sp, rs->logs);
+                                //sprintf_f(rs->logs, "[DV] current puim index not mach wait:0x%.3x, get:0x%.3x chr: 0x%.3x \n\n", puimCur->uimIdex, cindex, chr);
+                                //print_f(rs->plogs, sp, rs->logs);
         
                                 puimTmp= puimCnTH;
                                 while(puimTmp) {
@@ -86690,19 +86638,20 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 cswerr = 0;
                             }
         
-                            sprintf_f(rs->logs, "[DV] get csw err: 0x%.2x \n", cswerr);
-                            print_f(rs->plogs, sp, rs->logs);
+                            //sprintf_f(rs->logs, "[DV] get csw err: 0x%.2x \n", cswerr);
+                            //print_f(rs->plogs, sp, rs->logs);
                             puimNxt = 0;
         
                             pagerst = cinfo[8] & 0x7f;
-                            sprintf_f(rs->logs, "[DV] get page rest: %d \n", pagerst);
-                            print_f(rs->plogs, sp, rs->logs);
+                            //sprintf_f(rs->logs, "[DV] get page rest: %d \n", pagerst);
+                            //print_f(rs->plogs, sp, rs->logs);
 
                             if (cinfo[9] == 0x80) {
                                 buffidx = 0;
                             } else {
                                 buffidx = cinfo[9] & 0x7f;
                             }
+                            
                             sprintf_f(rs->logs, "[DV] get decode buff idex: %d \n", buffidx);
                             print_f(rs->plogs, sp, rs->logs);
 
@@ -86720,7 +86669,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             sprintf_f(rs->logs, "[DV] check decode buff imgdex: %d (%d) \n", imgdex, puimGet->uimIdex & 0x3ff);
                             print_f(rs->plogs, sp, rs->logs);
                             
-                            sprintf_f(rs->logs, "[DV] get the last trunk read cycle len: %d, next cmd: %c(0x%.2x) lastlen: %d\n", cinfo[0], cinfo[1], cinfo[1], lastCylen);
+                            sprintf_f(rs->logs, "[DV] get the last trunk read cycle: %d, lastlen: %d, cswerr: 0x%.2x pagerst: %d\n", uimCylcnt, lastCylen, cswerr, pagerst);
                             print_f(rs->plogs, sp, rs->logs);
 
                             if (uimCylcnt < 2) {
@@ -86753,8 +86702,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             cpylen = 0;
         
                             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
-                            sprintf_f(rs->logs, "[BMP] get file format ret: %d format: 0x%.2x !!!\n", ret, fformat);
-                            print_f(rs->plogs, sp, rs->logs);
+                            //sprintf_f(rs->logs, "[BMP] get file format ret: %d format: 0x%.2x !!!\n", ret, fformat);
+                            //print_f(rs->plogs, sp, rs->logs);
                             
                             if (ret) {
                                 fformat = 0;
@@ -87245,8 +87194,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             print_f(rs->plogs, sp, rs->logs);
                         }
         
-                        sprintf_f(rs->logs, "dume usb meta size: %d / %d \n", shfmeta, lens);
-                        print_f(rs->plogs, sp, rs->logs);
+                        //sprintf_f(rs->logs, "dume usb meta size: %d / %d \n", shfmeta, lens);
+                        //print_f(rs->plogs, sp, rs->logs);
         
                         pshfmeta = addrd + (lens - shfmeta);
         
@@ -87254,8 +87203,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                         shmem_dump(pshfmeta, shfmeta);
                         #endif
 
-                        sprintf_f(rs->logs, "usb meta forward to pc \n");
-                        print_f(rs->plogs, sp, rs->logs);
+                        //sprintf_f(rs->logs, "usb meta forward to pc \n");
+                        //print_f(rs->plogs, sp, rs->logs);
                         
                         /* deal with bmp retate */
                         memset(ptmetausb, 0, sizeof(struct aspMetaDataviaUSB_s));
@@ -87449,7 +87398,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 #endif 
                 
                 jpgout = 0;
-        
+
+                #if GHP_EN_JPGH
                 if (fformat == FILE_FORMAT_JPG) {
                     tmp = ((bmpw * colr + 31) / 32) * 4;
                     tmp = tmp * bmph + 1078;
@@ -87498,6 +87448,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
                     aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, bmph, tmp);
                 }
+                #endif
         
                 bmpcolrtb = aspMemalloc(1078, midx);
                 if (!bmpcolrtb) {
@@ -88016,7 +87967,8 @@ static int p15(struct procRes_s *rs)
                     
                     sprintf_f(rs->logs, "[BMP] encode addr: 0x%.8x, raw offset: %d used: %d\n", (uint32_t)bmpbufc, bheader->aspbhRawoffset, rotlen);
                     print_f(rs->plogs, "P15", rs->logs);
-                    
+
+                    #if GHP_EN
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     err = rgb2jpgRvs(bmpbufc + bheader->aspbhRawoffset, jpgrlt, &jpgLen, bheader->aspbiWidth, bheader->aspbiHeight, colr);
                     clock_gettime(CLOCK_REALTIME, &jpgE);
@@ -88024,6 +87976,7 @@ static int p15(struct procRes_s *rs)
                         sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
                         print_f(rs->plogs, "P15", rs->logs);
                     }
+                    #endif
                     
                     tmCost = time_diff(&jpgS, &jpgE, 1000000);
                     sprintf_f(rs->logs, "[BMP] raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
@@ -88304,9 +88257,13 @@ static int p15(struct procRes_s *rs)
                     //print_f(rs->plogs, "P15", rs->logs);
 
                     //shmem_dump(bmpbufc, 512);
-                    
+
                     clock_gettime(CLOCK_REALTIME, &jpgS);
+                    
+                    #if GHP_EN
                     err = rgb2jpg(bmpbufc+bheader->aspbhRawoffset, jpgrlt, &jpgLen, pdecroi->aspDcWidth, pdecroi->aspDcHeight, colr);
+                    #endif
+                    
                     clock_gettime(CLOCK_REALTIME, &jpgE);
                     if (err) {
                         sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
