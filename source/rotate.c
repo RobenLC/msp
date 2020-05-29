@@ -1142,13 +1142,8 @@ static CFLOAT getRectOffsetTP(struct aspRectObj *pRectout, struct aspRectObj *pR
     LDn = pRectin->aspRectLD;
     RDn = pRectin->aspRectRD;
 
-    if (pLU [1] > pRU[1]) {
-        offsetH = LUn[0] - pRectorg->aspRectLU[0];
-        offsetV = LUn[1] - pRectorg->aspRectLU[1];
-    } else {
-        offsetH = RUn[0] - pRectorg->aspRectRU[0];
-        offsetV = RUn[1] - pRectorg->aspRectRU[1];
-    }
+    offsetH = LUn[0] - pRectorg->aspRectLU[0];
+    offsetV = LUn[1] - pRectorg->aspRectLU[1];
 
     #if LOG_RECTOFFSET_TP_EN
     printf("[offsetTp] select LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
@@ -2002,19 +1997,19 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
 
     pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
-    pT1[0] = (CFLOAT)cropinfo[0];
-    pT1[1] = (CFLOAT)cropinfo[1];
-    pT1[2] = (CFLOAT)cropinfo[2];
-    pT1[3] = (CFLOAT)cropinfo[3];
     edwhA[0] = cropinfo[4];
     edwhA[1] = cropinfo[5];
+    pT1[0] = (CFLOAT)cropinfo[0];
+    pT1[1] = (CFLOAT)(edwhA[1] - cropinfo[1]);
+    pT1[2] = (CFLOAT)cropinfo[2];
+    pT1[3] = (CFLOAT)cropinfo[3];
 
-    pT2[0] = (CFLOAT)cropinfo[0];
-    pT2[1] = (CFLOAT)cropinfo[1];
-    pT2[2] = (CFLOAT)cropinfo[2];
-    pT2[3] = (CFLOAT)cropinfo[3];
     edwhB[0] = cropinfo[4];
     edwhB[1] = cropinfo[5];
+    pT2[0] = (CFLOAT)cropinfo[0];
+    pT2[1] = (CFLOAT)(edwhB[1] - cropinfo[1]);
+    pT2[2] = (CFLOAT)cropinfo[2];
+    pT2[3] = (CFLOAT)cropinfo[3];
 
     #if LOG_ROTRECT_MF_EN
     printf("get A side pos %.2lf, %.2lf, %.2lf, %.2lf w: %4d h: %4d !!! \n", pT1[0], pT1[1], pT1[2], pT1[3], edwhA[0], edwhA[1]);
