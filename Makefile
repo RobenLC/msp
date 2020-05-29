@@ -1,13 +1,13 @@
 
 #CC = $(PWD)/stgcc
 #LD = $(PWD)/stld
-#PROG = out/st_mothership.bin
+PROG = out/st_mothership.bin
 #PROG = out/st_mslave_test.bin
 #PROG = out/st_master_test.bin
-PROG = out/mainrot.bin
-#SRCS = source/mothership.c
-SRCS = source/mainrot.c
-SRCS += source/rotate.c
+#PROG = out/mainrot.bin
+SRCS = source/mothership.c
+#SRCS = source/mainrot.c
+#SRCS += source/rotate.c
 #SRCS = source/master_spidev_test.c
 #SRCS = source/mslave_spidev_test.c
 

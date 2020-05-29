@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (0)
+#define GHP_EN (1)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -9406,13 +9406,8 @@ static CFLOAT getRectOffsetTP(struct aspRectObj *pRectout, struct aspRectObj *pR
     LDn = pRectin->aspRectLD;
     RDn = pRectin->aspRectRD;
 
-    if (pLU [1] > pRU[1]) {
-        offsetH = LUn[0] - pRectorg->aspRectLU[0];
-        offsetV = LUn[1] - pRectorg->aspRectLU[1];
-    } else {
-        offsetH = RUn[0] - pRectorg->aspRectRU[0];
-        offsetV = RUn[1] - pRectorg->aspRectRU[1];
-    }
+    offsetH = LUn[0] - pRectorg->aspRectLU[0];
+    offsetV = LUn[1] - pRectorg->aspRectLU[1];
 
     #if LOG_RECTOFFSET_TP_EN
     printf("[offsetTp] select LU(%4.2lf, %4.2lf) LD(%4.2lf, %4.2lf) RD(%4.2lf, %4.2lf) RU(%4.2lf, %4.2lf) offH: %.2lf offV: %.2lf \n", 
@@ -12075,19 +12070,19 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
 
     pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
-    pT1[0] = (CFLOAT)cropinfo[0];
-    pT1[1] = (CFLOAT)cropinfo[1];
-    pT1[2] = (CFLOAT)cropinfo[2];
-    pT1[3] = (CFLOAT)cropinfo[3];
     edwhA[0] = cropinfo[4];
     edwhA[1] = cropinfo[5];
+    pT1[0] = (CFLOAT)cropinfo[0];
+    pT1[1] = (CFLOAT)(edwhA[1] - cropinfo[1]);
+    pT1[2] = (CFLOAT)cropinfo[2];
+    pT1[3] = (CFLOAT)cropinfo[3];
 
-    pT2[0] = (CFLOAT)cropinfo[0];
-    pT2[1] = (CFLOAT)cropinfo[1];
-    pT2[2] = (CFLOAT)cropinfo[2];
-    pT2[3] = (CFLOAT)cropinfo[3];
     edwhB[0] = cropinfo[4];
     edwhB[1] = cropinfo[5];
+    pT2[0] = (CFLOAT)cropinfo[0];
+    pT2[1] = (CFLOAT)(edwhB[1] - cropinfo[1]);
+    pT2[2] = (CFLOAT)cropinfo[2];
+    pT2[3] = (CFLOAT)cropinfo[3];
 
     #if LOG_ROTRECT_MF_EN
     printf("get A side pos %.2lf, %.2lf, %.2lf, %.2lf w: %4d h: %4d !!! \n", pT1[0], pT1[1], pT1[2], pT1[3], edwhA[0], edwhA[1]);
@@ -13220,7 +13215,6 @@ static int calcuCrossUpLine(struct aspCrop36_s *pcp36)
     printf( "[csULine] cross Down = (%lf, %lf)\n", round(csUp[0]), round(csUp[1]));
 #endif
     angleCsUp = getAngle(csUp, &pn[1*2], &pn[4*2]);
-
     pcp36->crp36AngleDn = angleCsUp;
     
     ret = getVectorFromP(cslineLU, &pn[1*2], csUp);
@@ -13270,7 +13264,6 @@ static int calcuCrossDnLine(struct aspCrop36_s *pcp36)
     printf( "[csDLine] cross Down = (%lf, %lf) \n", round(csDn[0]), round(csDn[1]));
 #endif    
     angleCsDn = getAngle(csDn, &pn[1*2], &pn[4*2]);
-
     pcp36->crp36AngleDn = angleCsDn;
 
     
@@ -18336,6 +18329,15 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
         result[7] = rotdn[1];
     }
 
+    #if CROP_CALCU_PROCESS
+    sprintf_f(rs->logs, "most left right csup csdn:  lf(%.2lf, %.2lf) rt(%.2lf, %.2lf) up(%.2lf, %.2lf) dn(%.2lf, %.2lf) \n", 
+        pcp36->crp36MsLf[0], pcp36->crp36MsLf[1], pcp36->crp36MsRt[0], pcp36->crp36MsRt[1],
+        pcp36->crp36CsUp[0], pcp36->crp36CsUp[1], pcp36->crp36CsDn[0], pcp36->crp36CsDn[1]);
+    print_f(rs->plogs, "DoC", rs->logs);
+    sprintf_f(rs->logs, "most left right csup csdn angle:  lf(%.2lf) rt(%.2lf) up(%.2lf) dn(%.2lf) \n", pcp36->crp36AngleLf, pcp36->crp36AngleRt, pcp36->crp36AngleUp, pcp36->crp36AngleDn);
+    print_f(rs->plogs, "DoC", rs->logs);
+    #endif
+    
     #if CROP_CALCU_PROCESS
     for (i = 0; i < 8; i++) {
         sprintf_f(rs->logs, "result[%d] = %d\n", i, result[i]);
@@ -78687,7 +78689,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             else 
             #endif
             
-            #if 0//SCAN_BNOTE_EN // test code
+            #if SCAN_BNOTE_EN // test code
             if ((cmd == 0x12) && (opc == 0x0f)) { /* usbentsTx == 1*/
                 //addrd = 0;
                 while (addrd == 0) {
@@ -78914,12 +78916,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 opc = 0;
                 continue;
             } 
-            else if (((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e))) || (pid == 0)) { /* usbentsTx == 1*/
+            else if (((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e))) || (pid == 0))  /* usbentsTx == 1*/
             #else //SCAN_BNOTE_EN
-            if (((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e) || (opc == 0x0f))) || (pid == 0)) { /* usbentsTx == 1*/
+            if (((cmd == 0x12) && ((opc == 0x04) || (opc == 0x05) || (opc == 0x0a) || (opc == 0x09) || (opc == 0x0e) || (opc == 0x0f))) || (pid == 0))  /* usbentsTx == 1*/
             #endif //SCAN_BNOTE_EN
-
-
+            {
                 //ch = 'A';
                 //write(pipepc[1], &ch, 1);
                 //sprintf_f(rs->logs, "[ISO] pipepc send ch: %c \n", ch);
@@ -84862,7 +84863,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
 
     //sprintf_f(rs->logs, "get A side idx: %d pos (%4d, %4d, %4d, %4d, %4d, %4d) !!! \n", idxA, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3], cropinfo[4], cropinfo[5]);
     //print_f(rs->plogs, "CLIP", rs->logs);
-        
+
     ret = rotateBMPMf(cropinfo, bmpraw, bmprot, mreal, bmpcolrtb, midx);
 
     clock_gettime(CLOCK_REALTIME, &jpgE);
