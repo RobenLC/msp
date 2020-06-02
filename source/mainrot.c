@@ -109,14 +109,25 @@ int main(int argc, char *argv[])
 {
     char filepath[256];
     int len=0, ix=0, ret=0, err=0, rvs=0;
+    FILE *f=0;
+    int size=0, tail=0, mul=0, shf=0;
+    char *pt=0, *pmeta=0;
+    struct aspMetaDataviaUSB_s *pusbmeta = 0;
+    int cropinfo[8];
+    char *rotdst=0;
+    char *rotbuff=0;
+    int mreal[8], utmp, crod;
+    char *bmphead=0, *bmpraw=0;
+    struct bitmapHeader_s *bheader=0;
     
     printf("input argc: %d config: rvs(%d) dump(%d)\n", argc, HANDLE_RVS_HEIGHT, DUMP_ROT_BMP);
-
+    /*
     while (ix < argc) {
         printf("[%d]: %s \n", ix, argv[ix]);
 
         ix++;
     }
+    */
 
     if (argc > 1) {
         len = strlen(argv[1]);
@@ -124,13 +135,11 @@ int main(int argc, char *argv[])
         memcpy(filepath, argv[1], len);
         filepath[len] = '\0';
 
-        printf("get filepath: %s \n", filepath);
+        //printf("get filepath: %s \n", filepath);
     } else {
         err = -1;
         goto end;
     }
-
-    FILE *f=0;
 
     f = fopen(filepath, "r");
 
@@ -143,7 +152,7 @@ int main(int argc, char *argv[])
 
     len = ftell(f);
 
-    printf("file [%s] size: %d \n", filepath, len);
+    //printf("file [%s] size: %d \n", filepath, len);
 
     fseek(f, 0, SEEK_SET);
 
@@ -151,9 +160,6 @@ int main(int argc, char *argv[])
         err = -3;
         goto end;
     }
-
-
-    char *bmphead=0, *bmpraw=0;
     
     bmphead = malloc(1080);
     bmpraw = malloc(len);
@@ -164,16 +170,13 @@ int main(int argc, char *argv[])
     }
 
     ret = fread(bmpraw, 1, len, f);
-    printf("read file %d ret: %d \n", len, ret);
+    //printf("read file %d ret: %d \n", len, ret);
 
     memcpy(bmphead, bmpraw, 1078);
 
     fclose(f);
 
-    int size=0, tail=0, mul=0, shf=0;
-    char *pt=0, *pmeta=0;
-    struct aspMetaDataviaUSB_s * pusbmeta = (struct aspMetaDataviaUSB_s *)pmeta;
-    
+    pusbmeta = (struct aspMetaDataviaUSB_s *)pmeta;
     size = len;
 
     tail = size % 512;
@@ -205,19 +208,15 @@ int main(int argc, char *argv[])
     }
 
     pusbmeta = (struct aspMetaDataviaUSB_s *)pmeta;
-    dbgMetaUsb(pusbmeta);
-
-    int cropinfo[8];
-    char *rotdst=0;
-
-    cropinfo[0] = 78;
-    cropinfo[1] = 159;
+    //dbgMetaUsb(pusbmeta);
+    
+    cropinfo[0] = 168;
+    cropinfo[1] = 389;
     cropinfo[2] = 200;
     cropinfo[3] = 50;
-    cropinfo[4] = 1140;
-    cropinfo[5] = 551;
+    cropinfo[4] = 2000;
+    cropinfo[5] = 700;
 
-    int mreal[8], utmp, crod;
     utmp = msb2lsb32(&pusbmeta->CROP_POS_F1);
     crod = utmp & 0xffff;
     utmp = utmp >> 16;
@@ -241,8 +240,6 @@ int main(int argc, char *argv[])
     mreal[6] = utmp;
     mreal[7] = crod;
 
-    char *rotbuff=0;
-
     rotbuff = malloc(200 * 50);
     if (!rotbuff) {
         err = -7;
@@ -252,7 +249,6 @@ int main(int argc, char *argv[])
 
     memset(rotbuff, 0xaa, 200 * 50);
 
-    struct bitmapHeader_s *bheader=0;
     bheader = malloc(sizeof (struct bitmapHeader_s));
     if (!bheader) {
         err = -5;
@@ -260,7 +256,7 @@ int main(int argc, char *argv[])
     }
 
     memcpy(&bheader->aspbmpMagic[2], bmphead, sizeof(struct bitmapHeader_s) - 2);
-    dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
+    //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
 
     #if HANDLE_RVS_HEIGHT
     if (bheader->aspbiHeight < 0) {
@@ -279,10 +275,9 @@ int main(int argc, char *argv[])
     FILE *fdump=0;
     int abuf_size=0, bhlen=0, bmph=0;
 
-    printf("show result bmp header: \n");
-
     memcpy(&bheader->aspbmpMagic[2], bmphead, sizeof(struct bitmapHeader_s) - 2);
-    dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
+    //printf("show result bmp header: \n");
+    //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
 
     if (bheader->aspbiHeight < 0) {
         bmph = 0 - bheader->aspbiHeight;
@@ -319,6 +314,7 @@ int main(int argc, char *argv[])
 
     printf("end err: %d \n", err);
 
+    if (f) fclose(f);
     if (bheader) free(bheader);
     if (bmpraw) free(bmpraw);
     if (bmphead) free(bmphead);

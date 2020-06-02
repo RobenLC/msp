@@ -250,14 +250,21 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
     return (rawCpy + dx * bitset + dy * rowsz);
 }
            
-static void* aspMemalloc(int size, int midx) {
-    return malloc(size);
+static void* aspMemalloc(int size, int midx) 
+{
+    void *pt=0;
+
+    pt = malloc(size);
+    //printf("<<<<<<<<  aspMemalloc [0x%.8x] %d  %d \n", (uint32_t)pt, size, midx);
+    return pt;
 }
 
 static void aspFree(void *p, int pidx)
 {
     //printf("<<<<<<<<  aspFree 0x%.8x \n", (uint32_t)p);
-    free(p);
+    if (p) {
+        free(p);
+    }
 }
 
 static CFLOAT aspMin(CFLOAT d1, CFLOAT d2) 
@@ -453,7 +460,6 @@ static CFLOAT getAngle(CFLOAT *pSrc, CFLOAT *p1, CFLOAT *p2)
 
 static void dbgprintRect(struct aspRectObj *rect)
 {
-    char mlog[256];
     
     printf("[DBG] LU[%.2lf, %.2lf] LD[%.2lf, %.2lf] RD[%.2lf, %.2lf] RU[%.2lf, %.2lf]\n", 
         rect->aspRectLU[0], rect->aspRectLU[1], 
@@ -1973,29 +1979,29 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
     pLD = pRectin->aspRectLD;
     pRD = pRectin->aspRectRD;
     
-    pRectout12 = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout23 = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout34 = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout41 = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectorgi = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectorgv = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectorgc = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectorgk = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectorgcOut = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectorgkOut = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout12 = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout23 = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout34 = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout41 = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectorgi = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectorgv = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectorgc = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectorgk = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectorgcOut = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectorgkOut = aspMemalloc(sizeof(struct aspRectObj), pidx++);
     
-    pRectout12R = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout23R = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout34R = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout41R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout12R = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout23R = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout34R = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout41R = aspMemalloc(sizeof(struct aspRectObj), pidx++);
 
-    pRectout12Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout23Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout34Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
-    pRectout41Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout12Ro = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout23Ro = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout34Ro = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout41Ro = aspMemalloc(sizeof(struct aspRectObj), pidx++);
 
-    pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx++);
 
     edwhA[0] = cropinfo[4];
     edwhA[1] = cropinfo[5];
@@ -2413,9 +2419,9 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
 
-    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
-    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx);
-    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx++);
+    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx++);
+    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx++);
     
     srcbuf = bmpsrc;
 
@@ -2423,7 +2429,7 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
     //shmem_dump(srcbuf, 512);
 
     /* rotate */
-    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx);
+    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx++);
     memset(bheader, 0, sizeof(struct bitmapHeader_s));
 
     ph = &bheader->aspbmpMagic[2];
@@ -2497,10 +2503,12 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
     memcpy(pRectin->aspRectRU, RU, sizeof(CFLOAT)*2);
 
     findRectOrient(pRectinR, pRectin);
-    
+
+    #if LOG_ROTMF_DBG    
     dbgprintRect(pRectin);
-            
-    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx);
+    #endif
+    
+    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx++);
     if (ret == 0) {
         memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
         memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -3361,7 +3369,7 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
 
     expCAsize = maxvint-minvint+1;
     len = 3*sizeof(int);
-    crsAry = aspMemalloc(expCAsize*len, midx);
+    crsAry = aspMemalloc(expCAsize*len, midx++);
 
     #if LOG_ROTMF_DBG
     printf("bf trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
