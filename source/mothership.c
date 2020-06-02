@@ -12008,6 +12008,8 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
 #define LOG_ROTRECT_MF_EN (0)
 static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT *pdeg, int oldRowsz, int bpp, struct aspRectObj *pRectin, int pidx) 
 {
+#define DF_IMG_W (2000)
+#define DF_IMG_H (700)
     int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0, ic=0;
     int LUt[2], RUt[2], LDt[2], RDt[2];
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
@@ -12070,15 +12072,15 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
 
     pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
-    edwhA[0] = cropinfo[4];
-    edwhA[1] = cropinfo[5];
+    edwhA[0] = DF_IMG_W;
+    edwhA[1] = DF_IMG_H;
     pT1[0] = (CFLOAT)cropinfo[0];
     pT1[1] = (CFLOAT)(edwhA[1] - cropinfo[1]);
     pT1[2] = (CFLOAT)cropinfo[2];
     pT1[3] = (CFLOAT)cropinfo[3];
 
-    edwhB[0] = cropinfo[4];
-    edwhB[1] = cropinfo[5];
+    edwhB[0] = DF_IMG_W;
+    edwhB[1] = DF_IMG_H;
     pT2[0] = (CFLOAT)cropinfo[0];
     pT2[1] = (CFLOAT)(edwhB[1] - cropinfo[1]);
     pT2[2] = (CFLOAT)cropinfo[2];
@@ -19151,9 +19153,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
  *    cropinfo[1]: y
  *    cropinfo[2]: width
  *    cropinfo[3]: height
- *    cropinfo[4]: width of bank note area
- *    cropinfo[5]: height of bank note area
- * @bmpsrc: raw image waitting to be processed
+ * @bmpsrc: memory address of BMP image waitting to be processed
  * @pmreal: four coordinates of scaned image comes from croping algorithm 
  *    pmreal[0]: x of point 1
  *    pmreal[1]: y of point 1
@@ -19188,19 +19188,21 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
  *        utmp = utmp >> 16;
  *        mreal[6] = utmp;
  *        mreal[7] = crod;
- * @headbuff: bmp header of bmpsrc
- * @midx: default set to 0
+ * @midx: no matter if outside mothership
  *
  * @@output parameter:
- * @rotbuff: rotate and crop result rectangle raw image
+ * @rotbuff: memory address to save the result of rotate and crop rectangle raw image
+ * @pheadbuff: the address to save the memory address of BMP header of result raw image
  *
  */
-static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx)
+static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmpsrc, int *pmreal, int midx)
 {
 #define UNIT_DEG (1000.0)
 #define MIN_P  (100.0)
+#define BMP_8_BIT_HEAD_SIZE (1078)
 
-    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
+    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0, *srcheader=0;
+    char *headbuff=0;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0, rvs=0;
     int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
     char ch;
@@ -19230,21 +19232,24 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
 
-    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx++);
-    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx++);
-    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx++);
+    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx);
+    headbuff = aspMemalloc(BMP_8_BIT_HEAD_SIZE, midx);
     
-    srcbuf = bmpsrc;
+    srcheader = bmpsrc;
+    srcbuf = bmpsrc + BMP_8_BIT_HEAD_SIZE;
 
     /* check header */
     //shmem_dump(srcbuf, 512);
 
     /* rotate */
-    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx++);
+    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx);
     memset(bheader, 0, sizeof(struct bitmapHeader_s));
 
     ph = &bheader->aspbmpMagic[2];
-    memcpy(ph, headbuff, sizeof(struct bitmapHeader_s) - 2);
+    memcpy(ph, srcheader, sizeof(struct bitmapHeader_s) - 2);
+    memcpy(headbuff, srcheader, BMP_8_BIT_HEAD_SIZE);
     
     #if LOG_ROTMF_DBG    
     dbgBitmapHeader(bheader, len);
@@ -19319,7 +19324,7 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     dbgprintRect(pRectin);
     #endif
     
-    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx++);
+    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx);
     if (ret == 0) {
         memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
         memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -20180,7 +20185,7 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
 
     expCAsize = maxvint-minvint+1;
     len = 3*sizeof(int);
-    crsAry = aspMemalloc(expCAsize*len, midx++);
+    crsAry = aspMemalloc(expCAsize*len, midx);
 
     #if LOG_ROTMF_DBG
     printf("bf trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
@@ -20317,7 +20322,7 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
         }
     }
 
-    msync(rawdest, totsz, MS_SYNC);
+    msync(rawTmp, totsz, MS_SYNC);
 
     if (rvs) {
         bheader->aspbiHeight = 0 - bheader->aspbiHeight;;
@@ -20328,7 +20333,9 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     #endif
     
     memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
-
+    
+    *pheadbuff = headbuff;
+    
     aspFree(pRectin, midx);
     aspFree(pRectROI, midx);
     aspFree(pRectinR, midx);
@@ -84841,9 +84848,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //print_f(rs->plogs, "CLIP", rs->logs);    
     
     aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
-    bmpraw = bmpbuff + 0x436;
-    bmpcolrtb = aspMemalloc(1078, midx);
-    memcpy(bmpcolrtb, bmpbuff, 1078);
+    bmpcolrtb = 0;
     //memcpy(phraw, bmpbuff, sizeof(struct bitmapHeader_s)-2);
     //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
     
@@ -84878,7 +84883,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //sprintf_f(rs->logs, "get A side idx: %d pos (%4d, %4d, %4d, %4d, %4d, %4d) !!! \n", idxA, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3], cropinfo[4], cropinfo[5]);
     //print_f(rs->plogs, "CLIP", rs->logs);
 
-    ret = rotateBMPMf(cropinfo, bmpraw, bmprot, mreal, bmpcolrtb, midx);
+    ret = rotateBMPMf(bmprot, &bmpcolrtb, cropinfo, bmpbuff, mreal, midx);
 
     clock_gettime(CLOCK_REALTIME, &jpgE);
 
@@ -85770,7 +85775,7 @@ static int p12(struct procRes_s *rs)
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     
-                    ret = rotateBMPMf(cropinfo, bmpbuff, bmprot, mreal, bmpcolrtb, 12);
+                    ret = rotateBMPMf(bmprot, &bmpcolrtb, cropinfo, bmpbuff, mreal, 12);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgE);
                     
