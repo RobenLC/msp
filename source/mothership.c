@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (1)
+#define GHP_EN (0)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -19230,9 +19230,9 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
 
-    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
-    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx);
-    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx++);
+    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx++);
+    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx++);
     
     srcbuf = bmpsrc;
 
@@ -19240,7 +19240,7 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     //shmem_dump(srcbuf, 512);
 
     /* rotate */
-    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx);
+    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx++);
     memset(bheader, 0, sizeof(struct bitmapHeader_s));
 
     ph = &bheader->aspbmpMagic[2];
@@ -19314,10 +19314,12 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
     memcpy(pRectin->aspRectRU, RU, sizeof(CFLOAT)*2);
 
     findRectOrient(pRectinR, pRectin);
-    
+
+    #if LOG_ROTMF_DBG    
     dbgprintRect(pRectin);
-            
-    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx);
+    #endif
+    
+    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx++);
     if (ret == 0) {
         memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
         memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -20178,7 +20180,7 @@ static int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, 
 
     expCAsize = maxvint-minvint+1;
     len = 3*sizeof(int);
-    crsAry = aspMemalloc(expCAsize*len, midx);
+    crsAry = aspMemalloc(expCAsize*len, midx++);
 
     #if LOG_ROTMF_DBG
     printf("bf trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
@@ -79008,7 +79010,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 if (puimGet) {
                                     if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e) || (opc == 0x0f))) {
 
-                                        sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex, puimGet->uimCount);
+                                        sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex & 0x3ff, puimGet->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
 
                                         //if (idlet > 60000) {
@@ -79212,7 +79214,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                                 puimCnTH->uimIdex = cindex;
                                             }
-                                            #if DBG_27_DV
+                                            #if LOG_P11_EN
                                             else {
                                                 act = 0;
                                                 puimTmp = puimCnTH;
@@ -79454,7 +79456,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                                 }
 
-                                #if DBG_27_DV
+                                #if LOG_P11_EN
                                 else {
                                     ix = 0;
                                     puimTmp = puimCnTH;
@@ -79761,7 +79763,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     //sprintf_f(rs->logs, "[DV] get page rest: %d \n", pagerst);
                                     //print_f(rs->plogs, "P11", rs->logs);
                                     
-                                    sprintf_f(rs->logs, "[DV] get the last trunk read cycle: %d, lastlen: %d cswerr: 0x%.2x pagerst: %d \n", uimCylcnt, lastCylen, cswerr, pagerst);
+                                    sprintf_f(rs->logs, "[DV] to get the last trunk read cycle: %d, lastlen: %d cswerr: 0x%.2x pagerst: %d \n", uimCylcnt, lastCylen, cswerr, pagerst);
                                     print_f(rs->plogs, "P11", rs->logs);
 
                                     if (uimCylcnt < 2) {
@@ -80071,6 +80073,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
                             }
 
+                            sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
+                            print_f(rs->plogs, "P11", rs->logs);
+
                             if (lens & 0x40000) {
                                 lastflag = 0x40000;
                             } else {
@@ -80085,6 +80090,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                             msync(pinfcur, sizeof(struct usbHostmem_s), MS_SYNC);
 
+                            #if 0 /*debug*/
+                            shmem_dump(addrd, 64);
+                            #endif
+                            
                             #if 0//GHP_EN
                             if (bmpbufc) {
                             
@@ -81335,6 +81344,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         #if DBG_27_DV
                         sprintf_f(rs->logs, "[DV] usb TX size: %d, ret: %d \n", lens, sendsz);
                         print_f(rs->plogs, "P11", rs->logs);
+
+                        #if 0 /*debug*/
+                        shmem_dump(addrd, 64);
+                        #endif
+
                         #endif
 
                         acusz += sendsz;
