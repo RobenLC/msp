@@ -98,13 +98,35 @@ static FILE *find_save(char *dst, char *tmple)
     return f;
 }
 
-extern int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx);
+static int shmem_dump(char *src, int size)
+{
+    char str[128];
+    int inc;
+    if (!src) return -1;
+
+    inc = 0;
+    printf("memdump[0x%.8x] sz%d: \n", (uint32_t)src, size);
+    while (inc < size) {
+        printf("%.2x ", *src);
+
+        if (!((inc+1) % 16)) {
+            printf(" %d \n", inc+1);
+        }
+        inc++;
+        src++;
+    }
+
+    printf("\n");
+
+    return inc;
+}
+
+extern int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmpsrc, int *pmreal, int midx);
 extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
 extern int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb);
 extern uint32_t msb2lsb32(struct intMbs32_s *msb);
 
 #define DUMP_ROT_BMP (1)
-#define HANDLE_RVS_HEIGHT (0)
 int main(int argc, char *argv[]) 
 {
     char filepath[256];
@@ -120,7 +142,7 @@ int main(int argc, char *argv[])
     char *bmphead=0, *bmpraw=0;
     struct bitmapHeader_s *bheader=0;
     
-    printf("input argc: %d config: rvs(%d) dump(%d)\n", argc, HANDLE_RVS_HEIGHT, DUMP_ROT_BMP);
+    printf("input argc: %d config: dump(%d)\n", argc, DUMP_ROT_BMP);
     /*
     while (ix < argc) {
         printf("[%d]: %s \n", ix, argv[ix]);
@@ -161,18 +183,17 @@ int main(int argc, char *argv[])
         goto end;
     }
     
-    bmphead = malloc(1080);
+    bmphead = 0;
+    
     bmpraw = malloc(len);
 
-    if ((!bmphead) || (!bmpraw)) {
+    if (!bmpraw) {
         err = -4;
         goto end;
     }
 
     ret = fread(bmpraw, 1, len, f);
     //printf("read file %d ret: %d \n", len, ret);
-
-    memcpy(bmphead, bmpraw, 1078);
 
     fclose(f);
 
@@ -214,8 +235,6 @@ int main(int argc, char *argv[])
     cropinfo[1] = 389;
     cropinfo[2] = 200;
     cropinfo[3] = 50;
-    cropinfo[4] = 2000;
-    cropinfo[5] = 700;
 
     utmp = msb2lsb32(&pusbmeta->CROP_POS_F1);
     crod = utmp & 0xffff;
@@ -239,35 +258,24 @@ int main(int argc, char *argv[])
     utmp = utmp >> 16;
     mreal[6] = utmp;
     mreal[7] = crod;
-
-    rotbuff = malloc(200 * 50);
+    
+    rotbuff = malloc(cropinfo[2] * cropinfo[3]);
     if (!rotbuff) {
         err = -7;
         goto end;
-
     }
-
-    memset(rotbuff, 0xaa, 200 * 50);
-
+    memset(rotbuff, 0xaa, cropinfo[2] * cropinfo[3]);
+    
     bheader = malloc(sizeof (struct bitmapHeader_s));
     if (!bheader) {
         err = -5;
         goto end;
     }
 
-    memcpy(&bheader->aspbmpMagic[2], bmphead, sizeof(struct bitmapHeader_s) - 2);
-    //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
-
-    #if HANDLE_RVS_HEIGHT
-    if (bheader->aspbiHeight < 0) {
-        bheader->aspbiHeight = 0 - bheader->aspbiHeight;
-        memcpy(bmphead, &bheader->aspbmpMagic[2], sizeof(struct bitmapHeader_s) - 2);    
-        rvs = 1;
-        dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
-    }
-    #endif
+    memcpy(&bheader->aspbmpMagic[2], bmpraw, sizeof(struct bitmapHeader_s) - 2);
+    dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     
-    rotateBMPMf(cropinfo, bmpraw + 1078, rotbuff, mreal, bmphead, 0);
+    rotateBMPMf(rotbuff, &bmphead, cropinfo, bmpraw, mreal, 0);
 
     #if DUMP_ROT_BMP
     static char ptfileSave[] = "/home/root/rotate/rot_%.3d.bmp";
@@ -276,22 +284,14 @@ int main(int argc, char *argv[])
     int abuf_size=0, bhlen=0, bmph=0;
 
     memcpy(&bheader->aspbmpMagic[2], bmphead, sizeof(struct bitmapHeader_s) - 2);
-    //printf("show result bmp header: \n");
-    //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
+    printf("show result bmp header: \n");
+    dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
 
     if (bheader->aspbiHeight < 0) {
         bmph = 0 - bheader->aspbiHeight;
     }
     abuf_size = bheader->aspbiWidth * bmph;
     bhlen = bheader->aspbhRawoffset;
-
-    #if HANDLE_RVS_HEIGHT
-    if (rvs) {
-        bheader->aspbiHeight = 0 - bheader->aspbiHeight;
-        memcpy(bmphead, &bheader->aspbmpMagic[2], sizeof(struct bitmapHeader_s) - 2);
-        dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
-    }
-    #endif
     
     fdump = find_save(dumpath, ptfileSave);
     if (fdump) {
@@ -303,7 +303,8 @@ int main(int argc, char *argv[])
 
     ret = fwrite((char*)rotbuff, 1, abuf_size, fdump);
     printf("write [%s] size: %d / %d !!! \n", dumpath, ret, abuf_size);
-    
+
+    //shmem_dump(rotbuff, 512);
 
     fflush(fdump);
     fclose(fdump);

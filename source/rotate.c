@@ -1941,6 +1941,8 @@ static CFLOAT getRectAlignTP(struct aspRectObj *pRectin, CFLOAT *p1, CFLOAT *p2,
 #define LOG_ROTRECT_MF_EN (0)
 static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT *pdeg, int oldRowsz, int bpp, struct aspRectObj *pRectin, int pidx) 
 {
+#define DF_IMG_W (2000)
+#define DF_IMG_H (700)
     int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0, ic=0;
     int LUt[2], RUt[2], LDt[2], RDt[2];
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
@@ -1979,39 +1981,39 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
     pLD = pRectin->aspRectLD;
     pRD = pRectin->aspRectRD;
     
-    pRectout12 = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout23 = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout34 = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout41 = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectorgi = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectorgv = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectorgc = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectorgk = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectorgcOut = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectorgkOut = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout12 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41 = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorg = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgi = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgv = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgc = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgk = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgcOut = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectorgkOut = aspMemalloc(sizeof(struct aspRectObj), pidx);
     
-    pRectout12R = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout23R = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout34R = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout41R = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout12R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34R = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41R = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
-    pRectout12Ro = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout23Ro = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout34Ro = aspMemalloc(sizeof(struct aspRectObj), pidx++);
-    pRectout41Ro = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectout12Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout23Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout34Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
+    pRectout41Ro = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
-    pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx++);
+    pRectTga = aspMemalloc(sizeof(struct aspRectObj), pidx);
 
-    edwhA[0] = cropinfo[4];
-    edwhA[1] = cropinfo[5];
+    edwhA[0] = DF_IMG_W;
+    edwhA[1] = DF_IMG_H;
     pT1[0] = (CFLOAT)cropinfo[0];
     pT1[1] = (CFLOAT)(edwhA[1] - cropinfo[1]);
     pT1[2] = (CFLOAT)cropinfo[2];
     pT1[3] = (CFLOAT)cropinfo[3];
 
-    edwhB[0] = cropinfo[4];
-    edwhB[1] = cropinfo[5];
+    edwhB[0] = DF_IMG_W;
+    edwhB[1] = DF_IMG_H;
     pT2[0] = (CFLOAT)cropinfo[0];
     pT2[1] = (CFLOAT)(edwhB[1] - cropinfo[1]);
     pT2[2] = (CFLOAT)cropinfo[2];
@@ -2340,9 +2342,7 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
  *    cropinfo[1]: y
  *    cropinfo[2]: width
  *    cropinfo[3]: height
- *    cropinfo[4]: width of bank note area
- *    cropinfo[5]: height of bank note area
- * @bmpsrc: raw image waitting to be processed
+ * @bmpsrc: memory address of BMP image waitting to be processed
  * @pmreal: four coordinates of scaned image comes from croping algorithm 
  *    pmreal[0]: x of point 1
  *    pmreal[1]: y of point 1
@@ -2377,19 +2377,21 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
  *        utmp = utmp >> 16;
  *        mreal[6] = utmp;
  *        mreal[7] = crod;
- * @headbuff: bmp header of bmpsrc
- * @midx: default set to 0
+ * @midx: no matter if outside mothership
  *
  * @@output parameter:
- * @rotbuff: rotate and crop result rectangle raw image
+ * @rotbuff: memory address to save the result of rotate and crop rectangle raw image
+ * @pheadbuff: the address to save the memory address of BMP header of result raw image
  *
  */
-int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *headbuff, int midx)
+int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmpsrc, int *pmreal, int midx)
 {
 #define UNIT_DEG (1000.0)
 #define MIN_P  (100.0)
+#define BMP_8_BIT_HEAD_SIZE (1078)
 
-    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
+    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0, *srcheader=0;
+    char *headbuff=0;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0, rvs=0;
     int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
     char ch;
@@ -2419,21 +2421,24 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
 
-    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx++);
-    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx++);
-    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx++);
+    pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx);
+    pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx);
+    headbuff = aspMemalloc(BMP_8_BIT_HEAD_SIZE, midx);
     
-    srcbuf = bmpsrc;
+    srcheader = bmpsrc;
+    srcbuf = bmpsrc + BMP_8_BIT_HEAD_SIZE;
 
     /* check header */
     //shmem_dump(srcbuf, 512);
 
     /* rotate */
-    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx++);
+    bheader = aspMemalloc(sizeof(struct bitmapHeader_s), midx);
     memset(bheader, 0, sizeof(struct bitmapHeader_s));
 
     ph = &bheader->aspbmpMagic[2];
-    memcpy(ph, headbuff, sizeof(struct bitmapHeader_s) - 2);
+    memcpy(ph, srcheader, sizeof(struct bitmapHeader_s) - 2);
+    memcpy(headbuff, srcheader, BMP_8_BIT_HEAD_SIZE);
     
     #if LOG_ROTMF_DBG    
     dbgBitmapHeader(bheader, len);
@@ -2508,7 +2513,7 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
     dbgprintRect(pRectin);
     #endif
     
-    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx++);
+    ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx);
     if (ret == 0) {
         memcpy(LU, pRectROI->aspRectLU, sizeof(CFLOAT)*2);
         memcpy(LD, pRectROI->aspRectLD, sizeof(CFLOAT)*2);
@@ -3369,7 +3374,7 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
 
     expCAsize = maxvint-minvint+1;
     len = 3*sizeof(int);
-    crsAry = aspMemalloc(expCAsize*len, midx++);
+    crsAry = aspMemalloc(expCAsize*len, midx);
 
     #if LOG_ROTMF_DBG
     printf("bf trim r: %lf, l: %lf, top: %lf down: %lf \n", prm[1], plm[1], ptop[1], pn[1]);
@@ -3506,7 +3511,7 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
         }
     }
 
-    msync(rawdest, totsz, MS_SYNC);
+    msync(rawTmp, totsz, MS_SYNC);
 
     if (rvs) {
         bheader->aspbiHeight = 0 - bheader->aspbiHeight;;
@@ -3517,7 +3522,9 @@ int rotateBMPMf(int *cropinfo, char *bmpsrc, char *rotbuff, int *pmreal, char *h
     #endif
     
     memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
-
+    
+    *pheadbuff = headbuff;
+    
     aspFree(pRectin, midx);
     aspFree(pRectROI, midx);
     aspFree(pRectinR, midx);
