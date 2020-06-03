@@ -79,7 +79,7 @@ struct aspMetaDataviaUSB_s{
   unsigned char EXTRA_POINT[4];    //byte[232]
 };
 
-extern int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int midx);
+extern int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int pattern, int midx);
 extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
 extern int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb);
 extern uint32_t msb2lsb32(struct intMbs32_s *msb);
@@ -144,6 +144,7 @@ static int readBMPmeta(int *pmreal,char **raw, FILE *file, int len)
     ret = fread(bmpraw, 1, len, file);
 
     if (ret != len) {
+        printf("Error!!! read file size not math size: %d ret: %d \n", len, ret);
         err = -2;
         goto ErrEnd;
     }
@@ -211,6 +212,7 @@ static int readBMPmeta(int *pmreal,char **raw, FILE *file, int len)
     ErrEnd:
 
     if (bmpraw) free(bmpraw);
+    *raw = 0;
 
     return err;
 }
@@ -239,13 +241,12 @@ static int readRotFile(int *pmreal,char **raw, FILE *f)
     
     ret = readBMPmeta(pmreal, raw, f, len);
     if (ret) {
+        printf("Error!!! read meta failed!!! ret: %d \n", ret);
         err = -3 + ret*10;
         goto Error;
     }
 
     Error:
-
-    if (f) fclose(f);
 
     return err;
 }
@@ -263,18 +264,19 @@ static int doRot2BMP(char *rotraw, char *rothead, int *cropinfo, FILE *f)
     
     ret = readRotFile(mreal, &bmpraw, f);
     if (ret) {
+        printf("Error!!! read rot file failed ret: %d \n", ret);
         err = -2 + ret*10;
         goto End;
     }
 
-    memset(rotbuf, 0xff, cropinfo[2] * cropinfo[3]);
+    //memset(rotbuf, 0xff, cropinfo[2] * cropinfo[3]);
     
     memcpy(rothead, bmpraw, 1078);
 
     memcpy(&bheader->aspbmpMagic[2], bmpraw, sizeof(struct bitmapHeader_s) - 2);
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     
-    rotateBMPMf(rotbuf, rothead, cropinfo, bmpraw+1078, mreal, 0);
+    rotateBMPMf(rotbuf, rothead, cropinfo, bmpraw+1078, mreal, 0xa5, 0);
 
     free(bmpraw);
 
@@ -282,13 +284,12 @@ static int doRot2BMP(char *rotraw, char *rothead, int *cropinfo, FILE *f)
 
     End:
 
-    if (rotbuf) free(rotbuf);
     if (bmpraw) free(bmpraw);
 
     return err;
 }
 
-static int saveRot2BMP(char *raw, char *head, int *dat, int idx)
+static int saveRot2BMP(char *raw, char *head, int ntd, int *dat, int idx)
 {
     int ret=0, err=0, len=0;
     char ptfileInfo[] = "/home/root/rotate/rot_%d_%d_%d_%.2d";
@@ -299,7 +300,7 @@ static int saveRot2BMP(char *raw, char *head, int *dat, int idx)
     int abuf_size=0, bhlen=0, bmph=0;
     struct bitmapHeader_s *bheader=0;
 
-    sprintf(ptfileSave, ptfileInfo, dat[0], dat[1], dat[2], idx);
+    sprintf(ptfileSave, ptfileInfo, ntd, dat[0], dat[1], idx);
     strcat(ptfileSave, filetail);
 
     //printf("find file [%s] org[%s] \n", ptfileSave, ptfileInfo);
@@ -348,22 +349,21 @@ static int saveRot2BMP(char *raw, char *head, int *dat, int idx)
 int main(int argc, char *argv[]) 
 {
     char filepath[256];
-    char bnotefile[128]="/home/root/banknote/ASP_%d_%.2d.bmp";
+    char bnotefile[128]="/home/root/banknote/ASP_%d_%.2d_%.6d_org.bmp";
     int data[3][5]={{100, 83, 332, 200, 50},{500, 141, 334, 200, 50},{1000, 177, 330, 200, 50}};
-    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0;
+    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0, ix=0;
     FILE *f=0;
     int cropinfo[8];
     char *rotraw=0, *rothead=0;
 
     printf("input argc: %d config: dump(%d)\n", argc, DUMP_ROT_BMP);
-    /*
+
     while (ix < argc) {
         printf("[%d]: %s \n", ix, argv[ix]);
 
         ix++;
     }
-    */
-
+    
     cropinfo[0] = 168;
     cropinfo[1] = 389 - 50;
     cropinfo[2] = 200;
@@ -372,6 +372,56 @@ int main(int argc, char *argv[])
     rothead = malloc(1080);
     if (!rothead) {
         err = -4;
+        goto end;
+    }
+
+    if (argc > 2) {
+        ntd = atoi(argv[1]);
+        cnt = atoi(argv[2]);
+        printf("ntd: %d idx: %d\n", ntd, cnt);
+
+        for (ix=100000; ix < 120000; ix++) {
+            sprintf(filepath, bnotefile, ntd, cnt, ix);
+            f = fopen(filepath, "r");
+            if (f) break;
+        }
+
+        if (!f) {
+            printf("get file [%s] failed!! \n", filepath);
+            err = -2;
+            goto end;
+        } else {
+            len = cropinfo[2]*cropinfo[3];
+            rotraw = malloc(len);
+            if (!rotraw) {
+                err = -5;
+                goto end;
+            }
+            
+            printf("get file [%s] !! \n", filepath);
+            memset(rotraw, 0xff, len);
+
+            ret = doRot2BMP(rotraw, rothead, cropinfo, f);
+            if (ret) {
+                err = -6 + ret*10;
+                goto end;
+            }
+
+            #if DUMP_ROT_BMP
+            ret = saveRot2BMP(rotraw, rothead, ntd, cropinfo, cnt);
+            if (ret) {
+                err = -7 + ret*10;
+                goto end;
+            }
+            #endif
+
+            free(rotraw);
+            rotraw = 0;
+        }
+
+        fclose(f);
+        f = 0;
+
         goto end;
     }
 
@@ -388,11 +438,17 @@ int main(int argc, char *argv[])
             goto end;
         }
         
+        ix=100000;
         
-        for (cnt=1; cnt < 99; cnt++) {
-            sprintf(filepath, bnotefile, ntd, cnt);        
-
-            f = fopen(filepath, "r");
+        for (cnt=1; cnt < 12; cnt++) {
+            //printf("cnt: %d \n", cnt);
+            for (; ix < 120000; ix++) {
+                sprintf(filepath, bnotefile, ntd, cnt, ix);
+                //if ((ix%100000) == 0) printf("[%s] ix: %d \n", filepath, ix);
+                f = fopen(filepath, "r");
+                if (f) break;
+            }
+            
             if (!f) {
                 printf("get file [%s] failed!! \n", filepath);
                 break;
@@ -407,13 +463,16 @@ int main(int argc, char *argv[])
                 }
 
                 #if DUMP_ROT_BMP
-                ret = saveRot2BMP(rotraw, rothead, &data[nt][0], cnt);
+                ret = saveRot2BMP(rotraw, rothead, ntd, cropinfo, cnt);
                 if (ret) {
                     err = -7 + ret*10;
                     goto end;
                 }
                 #endif
             }
+
+            fclose(f);
+            f = 0;
         }
 
         free(rotraw);
@@ -427,6 +486,7 @@ int main(int argc, char *argv[])
 
     if (rotraw) free(rotraw);
     if (rothead) free(rothead);
+    if (f) fclose(f);
     
     return err;
     

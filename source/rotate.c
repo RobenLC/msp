@@ -2384,7 +2384,7 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
  * @headbuff: memory address of BMP header for bmpsrc
  *
  */
-int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int midx)
+int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int pattern, int midx)
 {
 #define UNIT_DEG (1000.0)
 #define MIN_P  (100.0)
@@ -2407,6 +2407,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     CFLOAT *tars, *tarc;
     char gdat[3];
     char *dst=0, *src=0;
+    char *paintcolr=0;
 
     int *crsAry, crsASize, expCAsize;
     CFLOAT linLU[3], linRU[3], linLD[3], linRD[3], linPal[3], linCrs[3];
@@ -2420,9 +2421,12 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
 
+    paintcolr = aspMemalloc(sizeof(char) * 4, midx); 
     pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
     pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx);
     pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx);
+
+    memset(paintcolr, pattern&0xff, sizeof(char) * 4);
     
     srcbuf = bmpsrc;
 
@@ -3461,10 +3465,12 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
 
     lstsz = 0;
     totsz = bheader->aspbhSize;
+    bpp = bpp / 8;
 
     msync(crsAry, expCAsize*3*4, MS_SYNC);
     
     cnt = 0;
+    
     for (id=0; id < expCAsize; id++) {
         iy = crsAry[id*3+0];
         ix = crsAry[id*3+1];
@@ -3483,15 +3489,18 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
             dy = (int) round(fx*thasin + fy*thacos);
 
             cnt++;
-
+            bitset = bpp;
+            
             if ((dx < 0) || (dy < 0) || (dx >= oldWidth) || (dy >= oldHeight)) {
-                continue;
+                src = paintcolr;
+                //printf("ob dx: %d, dy: %d, ix: %d, iy: %d colr: 0x%.2x\n", dx, dy, ix, iy, src[0]);
+                //continue;
+            } else {
+                src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
             }
 
-            bitset = bpp / 8;
-            src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
             dst = getPixel(rawTmp, ix, iy, rowsize, bitset);
-
+            
             
             cnt = 0;
             while (bitset > 0) {
