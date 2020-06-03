@@ -79,6 +79,11 @@ struct aspMetaDataviaUSB_s{
   unsigned char EXTRA_POINT[4];    //byte[232]
 };
 
+extern int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int midx);
+extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
+extern int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb);
+extern uint32_t msb2lsb32(struct intMbs32_s *msb);
+
 static FILE *find_save(char *dst, char *tmple)
 {
     int i;
@@ -121,89 +126,34 @@ static int shmem_dump(char *src, int size)
     return inc;
 }
 
-extern int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmpsrc, int *pmreal, int midx);
-extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
-extern int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb);
-extern uint32_t msb2lsb32(struct intMbs32_s *msb);
-
-#define DUMP_ROT_BMP (1)
-int main(int argc, char *argv[]) 
+static int readBMPmeta(int *pmreal,char **raw, FILE *file, int len)
 {
-    char filepath[256];
-    int len=0, ix=0, ret=0, err=0, rvs=0;
-    FILE *f=0;
+    int err=0, ret=0, ix=0;
+    char *bmpraw=0;
     int size=0, tail=0, mul=0, shf=0;
     char *pt=0, *pmeta=0;
-    struct aspMetaDataviaUSB_s *pusbmeta = 0;
-    int cropinfo[8];
-    char *rotdst=0;
-    char *rotbuff=0;
-    int mreal[8], utmp, crod;
-    char *bmphead=0, *bmpraw=0;
-    struct bitmapHeader_s *bheader=0;
-    
-    printf("input argc: %d config: dump(%d)\n", argc, DUMP_ROT_BMP);
-    /*
-    while (ix < argc) {
-        printf("[%d]: %s \n", ix, argv[ix]);
+    int utmp, crod;
+    struct aspMetaDataviaUSB_s *pusbmeta=0;
 
-        ix++;
-    }
-    */
-
-    if (argc > 1) {
-        len = strlen(argv[1]);
-
-        memcpy(filepath, argv[1], len);
-        filepath[len] = '\0';
-
-        //printf("get filepath: %s \n", filepath);
-    } else {
-        err = -1;
-        goto end;
-    }
-
-    f = fopen(filepath, "r");
-
-    if (!f) {
-        err = -2;
-        goto end;
-    }
-
-    fseek(f, 0, SEEK_END);
-
-    len = ftell(f);
-
-    //printf("file [%s] size: %d \n", filepath, len);
-
-    fseek(f, 0, SEEK_SET);
-
-    if (len <= 0) {
-        err = -3;
-        goto end;
-    }
-    
-    bmphead = 0;
-    
     bmpraw = malloc(len);
-
     if (!bmpraw) {
-        err = -4;
-        goto end;
+        err = -1;
+        goto ErrEnd;
     }
 
-    ret = fread(bmpraw, 1, len, f);
-    //printf("read file %d ret: %d \n", len, ret);
+    ret = fread(bmpraw, 1, len, file);
 
-    fclose(f);
+    if (ret != len) {
+        err = -2;
+        goto ErrEnd;
+    }
 
-    pusbmeta = (struct aspMetaDataviaUSB_s *)pmeta;
     size = len;
 
     tail = size % 512;
     mul = (size - tail) / 512;
 
-    printf("read file: [%s] size: %d, mul: %d, tail: %d \n", filepath, size, mul, tail);
+    printf("read file size: %d, mul: %d, tail: %d \n", size, mul, tail);
 
     for (ix=0; ix < mul; ix++) {
         shf = (mul - ix) * 512;
@@ -224,66 +174,143 @@ int main(int argc, char *argv[])
 
     if (!pmeta) {
         printf("Error!!! can't find meta search count: %d \n", ix);
-        err = -6;
-        goto end;
+        err = -3;
+        goto ErrEnd;
     }
 
     pusbmeta = (struct aspMetaDataviaUSB_s *)pmeta;
     //dbgMetaUsb(pusbmeta);
-    
-    cropinfo[0] = 168;
-    cropinfo[1] = 389;
-    cropinfo[2] = 200;
-    cropinfo[3] = 50;
-
+            
     utmp = msb2lsb32(&pusbmeta->CROP_POS_F1);
     crod = utmp & 0xffff;
     utmp = utmp >> 16;
-    mreal[0] = utmp;
-    mreal[1] = crod;
+    pmreal[0] = utmp;
+    pmreal[1] = crod;
     
     utmp = msb2lsb32(&pusbmeta->CROP_POS_F2);
     crod = utmp & 0xffff;
     utmp = utmp >> 16;
-    mreal[2] = utmp;
-    mreal[3] = crod;       
+    pmreal[2] = utmp;
+    pmreal[3] = crod;       
     utmp = msb2lsb32(&pusbmeta->CROP_POS_F3);
     crod = utmp & 0xffff;
     utmp = utmp >> 16;
-    mreal[4] = utmp;
-    mreal[5] = crod;
+    pmreal[4] = utmp;
+    pmreal[5] = crod;
 
     utmp = msb2lsb32(&pusbmeta->CROP_POS_F4);
     crod = utmp & 0xffff;
     utmp = utmp >> 16;
-    mreal[6] = utmp;
-    mreal[7] = crod;
+    pmreal[6] = utmp;
+    pmreal[7] = crod;
+
+    *raw = bmpraw;
+
+    return 0;
     
-    rotbuff = malloc(cropinfo[2] * cropinfo[3]);
-    if (!rotbuff) {
-        err = -7;
-        goto end;
-    }
-    memset(rotbuff, 0xaa, cropinfo[2] * cropinfo[3]);
+    ErrEnd:
+
+    if (bmpraw) free(bmpraw);
+
+    return err;
+}
+
+static int readRotFile(int *pmreal,char **raw, FILE *f)
+{
+    int err=0, len=0, ret=0;
     
-    bheader = malloc(sizeof (struct bitmapHeader_s));
-    if (!bheader) {
-        err = -5;
-        goto end;
+    if (!f) {
+        err = -1;
+        goto Error;
     }
+
+    fseek(f, 0, SEEK_END);
+
+    len = ftell(f);
+
+    //printf("file [%s] size: %d \n", filepath, len);
+
+    fseek(f, 0, SEEK_SET);
+
+    if (len <= 0) {
+        err = -2;
+        goto Error;
+    }
+    
+    ret = readBMPmeta(pmreal, raw, f, len);
+    if (ret) {
+        err = -3 + ret*10;
+        goto Error;
+    }
+
+    Error:
+
+    if (f) fclose(f);
+
+    return err;
+}
+
+static int doRot2BMP(char *rotraw, char *rothead, int *cropinfo, FILE *f)
+{
+    int err=0, ret=0;
+    char *rotbuf=0, *bmpraw=0;
+    int mreal[8]={0};
+    struct bitmapHeader_s bheader[1]={0};
+    
+    printf("cropinfo[4]: (%d, %d, %d, %d) \n", cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3]);    
+
+    rotbuf = rotraw;
+    
+    ret = readRotFile(mreal, &bmpraw, f);
+    if (ret) {
+        err = -2 + ret*10;
+        goto End;
+    }
+
+    memset(rotbuf, 0xff, cropinfo[2] * cropinfo[3]);
+    
+    memcpy(rothead, bmpraw, 1078);
 
     memcpy(&bheader->aspbmpMagic[2], bmpraw, sizeof(struct bitmapHeader_s) - 2);
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     
-    rotateBMPMf(rotbuff, &bmphead, cropinfo, bmpraw, mreal, 0);
+    rotateBMPMf(rotbuf, rothead, cropinfo, bmpraw+1078, mreal, 0);
 
-    #if DUMP_ROT_BMP
-    static char ptfileSave[] = "/home/root/rotate/rot_%.3d.bmp";
+    free(bmpraw);
+
+    return 0;
+
+    End:
+
+    if (rotbuf) free(rotbuf);
+    if (bmpraw) free(bmpraw);
+
+    return err;
+}
+
+static int saveRot2BMP(char *raw, char *head, int *dat, int idx)
+{
+    int ret=0, err=0, len=0;
+    char ptfileInfo[] = "/home/root/rotate/rot_%d_%d_%d_%.2d";
+    char filetail[] = "_%.3d.bmp";
+    char ptfileSave[256]={0};
     char dumpath[256]={0};
     FILE *fdump=0;
     int abuf_size=0, bhlen=0, bmph=0;
+    struct bitmapHeader_s *bheader=0;
 
-    memcpy(&bheader->aspbmpMagic[2], bmphead, sizeof(struct bitmapHeader_s) - 2);
+    sprintf(ptfileSave, ptfileInfo, dat[0], dat[1], dat[2], idx);
+    strcat(ptfileSave, filetail);
+
+    //printf("find file [%s] org[%s] \n", ptfileSave, ptfileInfo);
+    
+    bheader = malloc(sizeof (struct bitmapHeader_s));
+    if (!bheader) {
+        err = -3;
+        goto end;
+    }
+    
+    memcpy(&bheader->aspbmpMagic[2], head, sizeof(struct bitmapHeader_s) - 2);
     printf("show result bmp header: \n");
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
 
@@ -298,10 +325,10 @@ int main(int argc, char *argv[])
         printf("find save bmp [%s] succeed!!! \n", dumpath);
     }
 
-    ret = fwrite((char*)bmphead, 1, bhlen, fdump);
+    ret = fwrite((char*)head, 1, bhlen, fdump);
     printf("write [%s] size: %d / %d !!! \n", dumpath, ret, bhlen);
 
-    ret = fwrite((char*)rotbuff, 1, abuf_size, fdump);
+    ret = fwrite((char*)raw, 1, abuf_size, fdump);
     printf("write [%s] size: %d / %d !!! \n", dumpath, ret, abuf_size);
 
     //shmem_dump(rotbuff, 512);
@@ -309,18 +336,97 @@ int main(int argc, char *argv[])
     fflush(fdump);
     fclose(fdump);
     sync();
-    #endif
+
+    end:
+
+    if (bheader) free(bheader);
+    
+    return err;
+}
+
+#define DUMP_ROT_BMP (1)
+int main(int argc, char *argv[]) 
+{
+    char filepath[256];
+    char bnotefile[128]="/home/root/banknote/ASP_%d_%.2d.bmp";
+    int data[3][5]={{100, 83, 332, 200, 50},{500, 141, 334, 200, 50},{1000, 177, 330, 200, 50}};
+    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0;
+    FILE *f=0;
+    int cropinfo[8];
+    char *rotraw=0, *rothead=0;
+
+    printf("input argc: %d config: dump(%d)\n", argc, DUMP_ROT_BMP);
+    /*
+    while (ix < argc) {
+        printf("[%d]: %s \n", ix, argv[ix]);
+
+        ix++;
+    }
+    */
+
+    cropinfo[0] = 168;
+    cropinfo[1] = 389 - 50;
+    cropinfo[2] = 200;
+    cropinfo[3] = 50;
+
+    rothead = malloc(1080);
+    if (!rothead) {
+        err = -4;
+        goto end;
+    }
+
+    for (nt=0; nt < 3; nt++) {
+        ntd = data[nt][0];
+        memcpy(cropinfo, &data[nt][1], sizeof(int) * 4);
+        
+        printf("[NTD_%.4d]: %.3d, %.3d, %.3d, %.3d \n", ntd, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3]);
+
+        len = cropinfo[2]*cropinfo[3];
+        rotraw = malloc(len);
+        if (!rotraw) {
+            err = -5;
+            goto end;
+        }
+        
+        
+        for (cnt=1; cnt < 99; cnt++) {
+            sprintf(filepath, bnotefile, ntd, cnt);        
+
+            f = fopen(filepath, "r");
+            if (!f) {
+                printf("get file [%s] failed!! \n", filepath);
+                break;
+            } else {
+                printf("get file [%s] !! \n", filepath);
+                memset(rotraw, 0xff, len);
+
+                ret = doRot2BMP(rotraw, rothead, cropinfo, f);
+                if (ret) {
+                    err = -6 + ret*10;
+                    goto end;
+                }
+
+                #if DUMP_ROT_BMP
+                ret = saveRot2BMP(rotraw, rothead, &data[nt][0], cnt);
+                if (ret) {
+                    err = -7 + ret*10;
+                    goto end;
+                }
+                #endif
+            }
+        }
+
+        free(rotraw);
+        rotraw = 0;
+        
+    }   
 
     end:
 
     printf("end err: %d \n", err);
 
-    if (f) fclose(f);
-    if (bheader) free(bheader);
-    if (bmpraw) free(bmpraw);
-    if (bmphead) free(bmphead);
-    if (rotbuff) free(rotbuff);
-    
+    if (rotraw) free(rotraw);
+    if (rothead) free(rothead);
     
     return err;
     
