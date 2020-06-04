@@ -317,7 +317,10 @@ static int saveRot2BMP(char *raw, char *head, int ntd, int *dat, int idx)
 
     if (bheader->aspbiHeight < 0) {
         bmph = 0 - bheader->aspbiHeight;
+    } else {
+        bmph = bheader->aspbiHeight;
     }
+    
     abuf_size = bheader->aspbiWidth * bmph;
     bhlen = bheader->aspbhRawoffset;
     

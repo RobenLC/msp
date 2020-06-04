@@ -2377,6 +2377,7 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
  *        utmp = utmp >> 16;
  *        mreal[6] = utmp;
  *        mreal[7] = crod;
+ * @pattern: the byte value you want to place in image if the transforming coordinates out of boundary
  * @midx: no matter if outside mothership
  *
  * @@output parameter:
@@ -2389,6 +2390,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
 #define UNIT_DEG (1000.0)
 #define MIN_P  (100.0)
 #define BMP_8_BIT_HEAD_SIZE (1078)
+#define V_FLIP_EN (0)
 
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0, rvs=0;
@@ -3426,6 +3428,8 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
         crsAry[ix*3+2] = (int)round(prc[0]);
     }
 
+
+
     /*
     for (ix=0; ix < (maxvint-minvint+1); ix++) {
         printf("list %d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
@@ -3448,7 +3452,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     bmpScale[3] = bpp;
 
     rawTmp = rawSrc;
-    memset(rawTmp, 0, rawszNew);
+    //memset(rawTmp, 0, rawszNew);
     
     /* reverse to fill the rotate image */
     theta = (CFLOAT) (360*UNIT_DEG - deg);
@@ -3499,8 +3503,17 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
                 src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
             }
 
+            #if V_FLIP_EN
+            if (rvs) {
+                //printf("(%d, %d) \n", ix, expCAsize - iy);
+                dst = getPixel(rawTmp, ix, expCAsize - iy - 1, rowsize, bitset);
+            } else {
+                dst = getPixel(rawTmp, ix, iy, rowsize, bitset);
+            }
+            #else
+            //printf("(%d, %d) %d\n", ix, iy, expCAsize - 1 - iy);
             dst = getPixel(rawTmp, ix, iy, rowsize, bitset);
-            
+            #endif
             
             cnt = 0;
             while (bitset > 0) {
@@ -3516,11 +3529,13 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
         }
     }
 
-    msync(rawTmp, totsz, MS_SYNC);
+    msync(rawTmp, totsz, MS_SYNC); 
 
+    #if !V_FLIP_EN
     if (rvs) {
         bheader->aspbiHeight = 0 - bheader->aspbiHeight;;
     }
+    #endif
 
     #if LOG_ROTMF_DBG
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
