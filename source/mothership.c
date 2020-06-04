@@ -12075,14 +12075,14 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
     edwhA[0] = DF_IMG_W;
     edwhA[1] = DF_IMG_H;
     pT1[0] = (CFLOAT)cropinfo[0];
-    pT1[1] = (CFLOAT)(edwhA[1] - cropinfo[1]);
+    pT1[1] = (CFLOAT)(edwhA[1]  - (cropinfo[1] + cropinfo[3]));
     pT1[2] = (CFLOAT)cropinfo[2];
     pT1[3] = (CFLOAT)cropinfo[3];
 
     edwhB[0] = DF_IMG_W;
     edwhB[1] = DF_IMG_H;
     pT2[0] = (CFLOAT)cropinfo[0];
-    pT2[1] = (CFLOAT)(edwhB[1] - cropinfo[1]);
+    pT2[1] = (CFLOAT)(edwhB[1] - (cropinfo[1] + cropinfo[3]));
     pT2[2] = (CFLOAT)cropinfo[2];
     pT2[3] = (CFLOAT)cropinfo[3];
 
@@ -19153,7 +19153,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
  *    cropinfo[1]: y
  *    cropinfo[2]: width
  *    cropinfo[3]: height
- * @bmpsrc: memory address of BMP image waitting to be processed
+ * @bmpsrc: memory address of raw image for BMP
  * @pmreal: four coordinates of scaned image comes from croping algorithm 
  *    pmreal[0]: x of point 1
  *    pmreal[1]: y of point 1
@@ -19188,21 +19188,22 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
  *        utmp = utmp >> 16;
  *        mreal[6] = utmp;
  *        mreal[7] = crod;
+ * @pattern: the byte value you want to place in image if the transforming coordinates out of boundary
  * @midx: no matter if outside mothership
  *
  * @@output parameter:
- * @rotbuff: memory address to save the result of rotate and crop rectangle raw image
- * @pheadbuff: the address to save the memory address of BMP header of result raw image
+ * @rotbuff: memory address to save raw image which is the result of rotate and crop rectangle
+ * @headbuff: memory address of BMP header for bmpsrc
  *
  */
-static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmpsrc, int *pmreal, int midx)
+int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int pattern, int midx)
 {
 #define UNIT_DEG (1000.0)
 #define MIN_P  (100.0)
 #define BMP_8_BIT_HEAD_SIZE (1078)
+#define V_FLIP_EN (0)
 
-    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0, *srcheader=0;
-    char *headbuff=0;
+    char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0, rvs=0;
     int rawsz=0, oldWidth=0, oldHeight=0, oldRowsz=0, oldTot=0;
     char ch;
@@ -19219,6 +19220,7 @@ static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmp
     CFLOAT *tars, *tarc;
     char gdat[3];
     char *dst=0, *src=0;
+    char *paintcolr=0;
 
     int *crsAry, crsASize, expCAsize;
     CFLOAT linLU[3], linRU[3], linLD[3], linRD[3], linPal[3], linCrs[3];
@@ -19232,13 +19234,14 @@ static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmp
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
 
+    paintcolr = aspMemalloc(sizeof(char) * 4, midx); 
     pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
     pRectROI = aspMemalloc(sizeof(struct aspRectObj), midx);
     pRectinR = aspMemalloc(sizeof(struct aspRectObj), midx);
-    headbuff = aspMemalloc(BMP_8_BIT_HEAD_SIZE, midx);
+
+    memset(paintcolr, pattern&0xff, sizeof(char) * 4);
     
-    srcheader = bmpsrc;
-    srcbuf = bmpsrc + BMP_8_BIT_HEAD_SIZE;
+    srcbuf = bmpsrc;
 
     /* check header */
     //shmem_dump(srcbuf, 512);
@@ -19248,8 +19251,7 @@ static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmp
     memset(bheader, 0, sizeof(struct bitmapHeader_s));
 
     ph = &bheader->aspbmpMagic[2];
-    memcpy(ph, srcheader, sizeof(struct bitmapHeader_s) - 2);
-    memcpy(headbuff, srcheader, BMP_8_BIT_HEAD_SIZE);
+    memcpy(ph, headbuff, sizeof(struct bitmapHeader_s) - 2);
     
     #if LOG_ROTMF_DBG    
     dbgBitmapHeader(bheader, len);
@@ -20237,6 +20239,8 @@ static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmp
         crsAry[ix*3+2] = (int)round(prc[0]);
     }
 
+
+
     /*
     for (ix=0; ix < (maxvint-minvint+1); ix++) {
         printf("list %d. %d, %d, %d (%d)\n", ix, crsAry[ix*3+0], crsAry[ix*3+1], crsAry[ix*3+2], crsAry[ix*3+2] - crsAry[ix*3+1]);
@@ -20259,7 +20263,7 @@ static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmp
     bmpScale[3] = bpp;
 
     rawTmp = rawSrc;
-    memset(rawTmp, 0, rawszNew);
+    //memset(rawTmp, 0, rawszNew);
     
     /* reverse to fill the rotate image */
     theta = (CFLOAT) (360*UNIT_DEG - deg);
@@ -20276,10 +20280,12 @@ static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmp
 
     lstsz = 0;
     totsz = bheader->aspbhSize;
+    bpp = bpp / 8;
 
     msync(crsAry, expCAsize*3*4, MS_SYNC);
     
     cnt = 0;
+    
     for (id=0; id < expCAsize; id++) {
         iy = crsAry[id*3+0];
         ix = crsAry[id*3+1];
@@ -20298,15 +20304,27 @@ static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmp
             dy = (int) round(fx*thasin + fy*thacos);
 
             cnt++;
-
+            bitset = bpp;
+            
             if ((dx < 0) || (dy < 0) || (dx >= oldWidth) || (dy >= oldHeight)) {
-                continue;
+                src = paintcolr;
+                //printf("ob dx: %d, dy: %d, ix: %d, iy: %d colr: 0x%.2x\n", dx, dy, ix, iy, src[0]);
+                //continue;
+            } else {
+                src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
             }
 
-            bitset = bpp / 8;
-            src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
+            #if V_FLIP_EN
+            if (rvs) {
+                //printf("(%d, %d) \n", ix, expCAsize - iy);
+                dst = getPixel(rawTmp, ix, expCAsize - iy - 1, rowsize, bitset);
+            } else {
+                dst = getPixel(rawTmp, ix, iy, rowsize, bitset);
+            }
+            #else
+            //printf("(%d, %d) %d\n", ix, iy, expCAsize - 1 - iy);
             dst = getPixel(rawTmp, ix, iy, rowsize, bitset);
-
+            #endif
             
             cnt = 0;
             while (bitset > 0) {
@@ -20322,19 +20340,19 @@ static int rotateBMPMf(char *rotbuff, char **pheadbuff, int *cropinfo, char *bmp
         }
     }
 
-    msync(rawTmp, totsz, MS_SYNC);
+    msync(rawTmp, totsz, MS_SYNC); 
 
+    #if !V_FLIP_EN
     if (rvs) {
         bheader->aspbiHeight = 0 - bheader->aspbiHeight;;
     }
+    #endif
 
     #if LOG_ROTMF_DBG
     dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
     #endif
     
     memcpy(headbuff, ph, sizeof(struct bitmapHeader_s) - 2);
-    
-    *pheadbuff = headbuff;
     
     aspFree(pRectin, midx);
     aspFree(pRectROI, midx);
@@ -84848,8 +84866,8 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //print_f(rs->plogs, "CLIP", rs->logs);    
     
     aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
-    bmpcolrtb = 0;
-    //memcpy(phraw, bmpbuff, sizeof(struct bitmapHeader_s)-2);
+    bmpcolrtb = aspMemalloc(1080, midx);
+    memcpy(bmpcolrtb, bmpbuff, 1078);
     //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
     
     bhlen = 0x436;
@@ -84883,7 +84901,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //sprintf_f(rs->logs, "get A side idx: %d pos (%4d, %4d, %4d, %4d, %4d, %4d) !!! \n", idxA, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3], cropinfo[4], cropinfo[5]);
     //print_f(rs->plogs, "CLIP", rs->logs);
 
-    ret = rotateBMPMf(bmprot, &bmpcolrtb, cropinfo, bmpbuff, mreal, midx);
+    ret = rotateBMPMf(bmprot, bmpcolrtb, cropinfo, bmpbuff+1078, mreal, 0xa5, midx);
 
     clock_gettime(CLOCK_REALTIME, &jpgE);
 
@@ -85775,7 +85793,7 @@ static int p12(struct procRes_s *rs)
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     
-                    ret = rotateBMPMf(bmprot, &bmpcolrtb, cropinfo, bmpbuff, mreal, 12);
+                    ret = rotateBMPMf(bmprot, bmpcolrtb, cropinfo, bmpbuff, mreal, 0xa5, 12);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgE);
                     
