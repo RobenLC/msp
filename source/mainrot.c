@@ -366,11 +366,6 @@ int main(int argc, char *argv[])
 
         ix++;
     }
-    
-    cropinfo[0] = 168;
-    cropinfo[1] = 389 - 50;
-    cropinfo[2] = 200;
-    cropinfo[3] = 50;
 
     rothead = malloc(1080);
     if (!rothead) {
@@ -381,6 +376,18 @@ int main(int argc, char *argv[])
     if (argc > 2) {
         ntd = atoi(argv[1]);
         cnt = atoi(argv[2]);
+
+        for(nt=0; nt < 3; nt++) {
+            if (data[nt][0] == ntd) break;
+        }
+
+        if (data[nt][0] == ntd) {
+            memcpy(cropinfo, &data[nt][1], sizeof(int) * 4);
+        } else {
+            printf("error input value: %d \n", ntd);
+            goto end;
+        }
+        
         printf("ntd: %d idx: %d\n", ntd, cnt);
 
         for (ix=100000; ix < 120000; ix++) {

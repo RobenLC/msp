@@ -3459,7 +3459,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     theta = theta / UNIT_DEG;
     
     #if LOG_ROTMF_DBG    
-    printf("reverse rotate angle = %lf \n", theta);
+    printf("reverse rotate angle = %lf, deg: %d\n", theta, deg);
     #endif
 
     theta = theta * M_PI / piAngle;
@@ -3530,6 +3530,16 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     }
 
     msync(rawTmp, totsz, MS_SYNC); 
+
+    deg = 0 - deg;
+    if (deg > 180*UNIT_DEG) {
+        deg = deg - 360*UNIT_DEG;
+    }
+    if (deg < -180*UNIT_DEG) {
+        deg = deg + 360*UNIT_DEG;
+    }
+    
+    bheader->aspbiNumImpColor = deg;
 
     #if !V_FLIP_EN
     if (rvs) {
