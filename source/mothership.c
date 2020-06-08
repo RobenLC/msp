@@ -12008,8 +12008,8 @@ static int srhRotRect(struct procRes_s *rs, CFLOAT *pfound, struct aspRectObj *p
 #define LOG_ROTRECT_MF_EN (0)
 static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT *pdeg, int oldRowsz, int bpp, struct aspRectObj *pRectin, int pidx) 
 {
-#define DF_IMG_W (2000)
-#define DF_IMG_H (700)
+#define DF_IMG_W (cropinfo[4])
+#define DF_IMG_H (cropinfo[5])
     int ret=0, err=0, bitset=0, dx=0, dy=0, ix=0, ic=0;
     int LUt[2], RUt[2], LDt[2], RDt[2];
     CFLOAT piAngle = 180.0, thacos=0, thasin=0, rangle[2], theta=0;
@@ -19193,8 +19193,11 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
  *
  * @@output parameter:
  * @rotbuff: memory address to save raw image which is the result of rotate and crop rectangle
- * @headbuff: memory address of BMP header for bmpsrc
- *
+ * @headbuff: memory address of BMP header for bmpsrc, will be overwrite with new header for rotbuff, 
+ *   the last four bytes save the rotating degree with integer
+ * @cropinfo: WH info of target banknote rectangle
+ *    cropinfo[4]: approx width base on pmreal 
+ *    cropinfo[5]: approx heigh base on pmreal 
  */
 int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int pattern, int midx)
 {
@@ -19233,6 +19236,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     int cxm, cxn;
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
+    CFLOAT distH, distW;
 
     paintcolr = aspMemalloc(sizeof(char) * 4, midx); 
     pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
@@ -19325,6 +19329,16 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     #if LOG_ROTMF_DBG    
     dbgprintRect(pRectin);
     #endif
+
+    distH = calcuDistance(pRectin->aspRectLU, pRectin->aspRectLD);
+    distW = calcuDistance(pRectin->aspRectLU, pRectin->aspRectRU);
+
+    cropinfo[4] = (int)round(distW);
+    cropinfo[5] = (int)round(distH);
+    
+    #if LOG_ROTMF_DBG    
+    printf("WH: (%d, %d) \n", cropinfo[4], cropinfo[5]); 
+    #endif          
     
     ret = getRotRectPointMf(cropinfo, pRectROI, &imgdeg, oldRowsz, bpp, pRectinR, midx);
     if (ret == 0) {
@@ -20270,7 +20284,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     theta = theta / UNIT_DEG;
     
     #if LOG_ROTMF_DBG    
-    printf("reverse rotate angle = %lf \n", theta);
+    printf("reverse rotate angle = %lf, deg: %d\n", theta, deg);
     #endif
 
     theta = theta * M_PI / piAngle;
@@ -20341,6 +20355,16 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     }
 
     msync(rawTmp, totsz, MS_SYNC); 
+
+    deg = 0 - deg;
+    if (deg > 180*UNIT_DEG) {
+        deg = deg - 360*UNIT_DEG;
+    }
+    if (deg < -180*UNIT_DEG) {
+        deg = deg + 360*UNIT_DEG;
+    }
+    
+    bheader->aspbiNumImpColor = deg;
 
     #if !V_FLIP_EN
     if (rvs) {
