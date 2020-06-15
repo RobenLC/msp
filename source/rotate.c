@@ -2368,6 +2368,10 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
  *    cropinfo[1]: y
  *    cropinfo[2]: width
  *    cropinfo[3]: height
+ *    cropinfo[4]: width of banknote area, could be estimating value, the value will be overwrited by 
+ *                      algorithm's estimating value if the input value is zero
+ *    cropinfo[5]: height of banknote area, could be estimating value, the value will be overwrited by 
+ *                      algorithm's estimating value if the input value is zero
  * @bmpsrc: memory address of raw image for BMP
  * @pmreal: four coordinates of scaned image comes from croping algorithm 
  *    pmreal[0]: x of point 1
@@ -2411,8 +2415,8 @@ static int getRotRectPointMf(int *cropinfo, struct aspRectObj *pRectroi, CFLOAT 
  * @headbuff: memory address of BMP header for bmpsrc, will be overwrite with new header for rotbuff, 
  *   the last four bytes save the rotating degree with integer
  * @cropinfo: WH info of target banknote rectangle
- *    cropinfo[4]: approx width base on pmreal 
- *    cropinfo[5]: approx heigh base on pmreal 
+ *    cropinfo[4]: approx width base on pmreal, the original value will be overwrited if it is zero otherwise will be keep
+ *    cropinfo[5]: approx heigh base on pmreal, the original value will be overwrited if it is zero otherwise will be keep 
  */
 int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int pattern, int midx)
 {
@@ -2420,6 +2424,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
 #define MIN_P  (100.0)
 #define BMP_8_BIT_HEAD_SIZE (1078)
 #define V_FLIP_EN (0)
+#define VIB_FILTER_EN (0)
 
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
     int ret, bitset, len=0, totsz=0, lstsz=0, cnt=0, acusz=0, err=0, rvs=0;
@@ -2452,6 +2457,10 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     int deg=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
     CFLOAT distH, distW;
+    
+    #if VIB_FILTER_EN
+    int pixcnt=0, pixval=0, pixacu=0, pixvar=0, pixmin=0, pixdiv=0, pixvmin=0;
+    #endif
 
     paintcolr = aspMemalloc(sizeof(char) * 4, midx); 
     pRectin = aspMemalloc(sizeof(struct aspRectObj), midx);
@@ -2542,14 +2551,16 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     findRectOrient(pRectinR, pRectin);
 
     #if LOG_ROTMF_DBG    
-    dbgprintRect(pRectin);
+    dbgprintRect(pRectinR);
     #endif
 
-    distH = calcuDistance(pRectin->aspRectLU, pRectin->aspRectLD);
-    distW = calcuDistance(pRectin->aspRectLU, pRectin->aspRectRU);
+    if ((cropinfo[4] == 0) && (cropinfo[5] == 0)) {
+        distH = calcuDistance(pRectinR->aspRectLU, pRectinR->aspRectLD);
+        distW = calcuDistance(pRectinR->aspRectLU, pRectinR->aspRectRU);
 
-    cropinfo[4] = (int)round(distW);
-    cropinfo[5] = (int)round(distH);
+        cropinfo[4] = (int)round(distW);
+        cropinfo[5] = (int)round(distH);
+    }
     
     #if LOG_ROTMF_DBG    
     printf("WH: (%d, %d) \n", cropinfo[4], cropinfo[5]); 
@@ -3522,9 +3533,15 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
 
         fy = (CFLOAT)iy;
         fy -= offsetV;
+
+        #if VIB_FILTER_EN
+        pixcnt = 0;
+        pixacu = 0;
+        pixvar = 0;
+        #endif
         
         for (;ix <= ixd; ix++) {       
-
+            
             fx = (CFLOAT)ix;
 
             fx -= offsetH;
@@ -3543,6 +3560,32 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
                 src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
             }
 
+            #if VIB_FILTER_EN
+            ch = *src;
+            pixval = ch;
+
+            if (pixmin) {
+                pixdiv = abs(pixval - pixmin);
+                
+                pixvar += pixdiv;
+            }
+            pixacu += pixval;
+            pixcnt ++;
+                        
+            //printf("(%d, %d) %d:%d:%d\n", ix, iy, pixmin, (pixmin - pixvmin*2), pixval);
+
+            if (bitset == 1) {
+                ch = *src;
+
+                pixval = ch;
+                if (pixval > (pixmin - (pixvmin*8)/10)) {
+                    ch = 0xff;
+                }
+
+                *src = ch;
+            }
+            #endif
+            
             #if V_FLIP_EN
             if (rvs) {
                 //printf("(%d, %d) \n", ix, expCAsize - iy);
@@ -3567,6 +3610,18 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
                 if (cnt > 2) break;
             }
         }
+
+        #if VIB_FILTER_EN
+        //printf("(%d, %d) c:%d a:%d m:%d v:%d vm:%d \n", ix, iy, pixcnt, pixacu, pixmin, pixvar, pixvmin);
+        if (pixvar) {
+            pixvmin = pixvar / pixcnt;
+            pixmin = pixacu / pixcnt;
+        } else {
+            pixmin = pixacu / pixcnt;
+        }
+        #endif
+
+        
     }
 
     msync(rawTmp, totsz, MS_SYNC); 

@@ -387,10 +387,17 @@ int main(int argc, char *argv[])
             printf("error input value: %d \n", ntd);
             goto end;
         }
+
+        cropinfo[0] = 83;
+        cropinfo[1] = 332;
+        cropinfo[2] = 200;
+        cropinfo[3] = 50;
+        cropinfo[4] = 0;
+        cropinfo[5] = 0;
         
         printf("ntd: %d idx: %d\n", ntd, cnt);
 
-        for (ix=100000; ix < 120000; ix++) {
+        for (ix=100000; ix < 250000; ix++) {
             sprintf(filepath, bnotefile, ntd, cnt, ix);
             f = fopen(filepath, "r");
             if (f) break;
@@ -438,8 +445,10 @@ int main(int argc, char *argv[])
     for (nt=0; nt < 3; nt++) {
         ntd = data[nt][0];
         memcpy(cropinfo, &data[nt][1], sizeof(int) * 4);
+        cropinfo[4] = 0;
+        cropinfo[5] = 0;
         
-        printf("[NTD_%.4d]: %.3d, %.3d, %.3d, %.3d \n", ntd, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3]);
+        printf("[NTD_%.4d]: %.3d, %.3d, %.3d, %.3d, %.3d, %.3d \n", ntd, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3], cropinfo[4], cropinfo[5]);
 
         len = cropinfo[2]*cropinfo[3];
         rotraw = malloc(len);
@@ -452,7 +461,7 @@ int main(int argc, char *argv[])
         
         for (cnt=1; cnt < 12; cnt++) {
             //printf("cnt: %d \n", cnt);
-            for (; ix < 120000; ix++) {
+            for (; ix < 250000; ix++) {
                 sprintf(filepath, bnotefile, ntd, cnt, ix);
                 //if ((ix%100000) == 0) printf("[%s] ix: %d \n", filepath, ix);
                 f = fopen(filepath, "r");
