@@ -112,7 +112,7 @@ static char genssid[128];
 #define AP_CLR_STATUS (1)
 
 #define MFOUR_IMG_SEND_BACK (1)
-#define MFOUR_SIM_MODE_JPG (0)
+#define MFOUR_SIM_MODE_JPG (1)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
@@ -1475,11 +1475,12 @@ typedef struct
 
 typedef struct
 {
-    unsigned short mfourImgW;
-    unsigned short mfourImgH;
-    unsigned short mfourIdx;
-    unsigned char mfourResrvd[2];
-    char               mfourFilename[32];
+    //unsigned short mfourImgW;
+    //unsigned short mfourImgH;
+    //unsigned short mfourIdx;
+    //unsigned char mfourResrvd[2];
+    //char               mfourFilename[32];
+    t_ImageParam mfourAttb;
     unsigned char  mfourData[0];
 }   mfour_image_param_st;          // used in BKCMD_SEND_AREA , BKCMD_DONE_AREA
 
@@ -84701,18 +84702,17 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max
     imgw = (pusbmeta->IMG_WIDTH[1] << 8) | pusbmeta->IMG_WIDTH[0];
     imgh = pusbmeta->IMG_HIGH[0] | (pusbmeta->IMG_HIGH[1] << 8);
 
-    img_param->mfourImgW = imgw;
-    img_param->mfourImgH = imgh;
+    img_param->mfourAttb.ImageRect.xc = imgw;
+    img_param->mfourAttb.ImageRect.yr = imgh;
 
     decjpg->aspDcLen = image_size + sizeof(mfour_image_param_st);
     
     aspBMPdecodeItemSet(decjpg, imgw, imgh, jpglen+160);
     
-    sprintf(img_param->mfourFilename, fname, imgidx);
-
+    //sprintf(img_param->mfourFilename, fname, imgidx);
     //strncpy(img_param->mfourFilename, file_entry->d_name, sizeof(img_param->mfourFilename));
 
-    sprintf_f(rs->logs,"open image file %s (w=%d h=%d size=%d)\r\n", img_param->mfourFilename, img_param->mfourImgW, img_param->mfourImgH, image_size);
+    sprintf_f(rs->logs,"open image (w=%d h=%d size=%d)\r\n", img_param->mfourAttb.ImageRect.xc, img_param->mfourAttb.ImageRect.yr, image_size);
     print_f(rs->plogs, "fIle", rs->logs);
 
     #if 0
@@ -84788,18 +84788,17 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int imgidx)
     imgw = pimgw[0];
     imgh = pimgh[0];
         
-    img_param->mfourImgW = imgw;
-    img_param->mfourImgH = imgh;
+    img_param->mfourAttb.ImageRect.xc = imgw;
+    img_param->mfourAttb.ImageRect.yr = imgh;
 
     decraw->aspDcLen = image_size + sizeof(mfour_image_param_st);
     
     aspBMPdecodeItemSet(decraw, imgw, imgh, image_size + sizeof(mfour_image_param_st));
     
-    sprintf(img_param->mfourFilename, fname, imgidx);
-
+    //sprintf(img_param->mfourFilename, fname, imgidx);
     //strncpy(img_param->mfourFilename, file_entry->d_name, sizeof(img_param->mfourFilename));
 
-    sprintf_f(rs->logs,"open image file %s (w=%d h=%d size=%d)\r\n", img_param->mfourFilename, img_param->mfourImgW, img_param->mfourImgH, image_size);
+    sprintf_f(rs->logs,"open image file (w=%d h=%d size=%d)\r\n", img_param->mfourAttb.ImageRect.xc, img_param->mfourAttb.ImageRect.yr, image_size);
     print_f(rs->plogs, "fIle", rs->logs);
 
     #if 0
@@ -84871,7 +84870,7 @@ static int AllocateImgParamImgDataR(t_ImageParam	*SrcBKJobImg_Param)
 	
 }
 
-#define DUMP_ROT_BMP (0)
+#define DUMP_ROT_BMP (1)
 static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, int midx)
 {
     int ret=0;
@@ -84904,7 +84903,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     }
 
     porgimg = decraw->aspDcData;
-    sprintf_f(rs->logs,"img param info w: %d h: %d id: %d !!!\n", porgimg->mfourImgW, porgimg->mfourImgH, porgimg->mfourIdx);
+    sprintf_f(rs->logs,"ocr img param info w: %d h: %d !!!\n", porgimg->mfourAttb.ImageRect.xc, porgimg->mfourAttb.ImageRect.yr);
     print_f(rs->plogs, "CLIP", rs->logs);
 
     //if (porgimg->mfourImgW == 0) return -2;
@@ -84927,9 +84926,9 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     }
 
     imgbuf =  decpic->aspDcData;
-    imgbuf->mfourIdx = clidx;
-    imgbuf->mfourImgW = pDeRect->mfourRectW;
-    imgbuf->mfourImgH = pDeRect->mfourRectH;
+    //imgbuf->mfourIdx = clidx;
+    imgbuf->mfourAttb.ImageRect.xc = pDeRect->mfourRectW;
+    imgbuf->mfourAttb.ImageRect.yr = pDeRect->mfourRectH;
 
     clock_gettime(CLOCK_REALTIME, &jpgS);
 
@@ -85017,6 +85016,14 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
 
     int cropinfo[6]; // x, y, w, h, imgW, imgH
 
+    #if 1
+    cropinfo[0] = (int)pDeRect->mfourRectX;
+    cropinfo[1] = (int)pDeRect->mfourRectY;
+    cropinfo[2] = (int)pDeRect->mfourRectW;
+    cropinfo[3] = (int)pDeRect->mfourRectH;
+    cropinfo[4] = 0;
+    cropinfo[5] = 0;
+    #else
     idxA = cutsides[cutcnt*2];
 
     ret = aspMetaGetPagePos(metaRx, infoPos, idxA);
@@ -85038,6 +85045,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
 
     //sprintf_f(rs->logs, "get A side idx: %d pos (%4d, %4d, %4d, %4d, %4d, %4d) !!! \n", idxA, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3], cropinfo[4], cropinfo[5]);
     //print_f(rs->plogs, "CLIP", rs->logs);
+    #endif
 
     ret = rotateBMPMf(bmprot, bmpcolrtb, cropinfo, bmpbuff+1078, mreal, 0xa5, midx);
 
@@ -85056,8 +85064,8 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
         aspBMPdecodeItemSet(decpic, bheader->aspbiWidth, bheader->aspbiHeight, abuf_size);
         pDeRect->mfourRectW = bheader->aspbiWidth;
         pDeRect->mfourRectH = bheader->aspbiHeight;
-        imgbuf->mfourImgW = pDeRect->mfourRectW;
-        imgbuf->mfourImgH= pDeRect->mfourRectH;
+        imgbuf->mfourAttb.ImageRect.xc = pDeRect->mfourRectW;
+        imgbuf->mfourAttb.ImageRect.yr = pDeRect->mfourRectH;
     }
 
     msync(bmprot, abuf_size, MS_SYNC);
@@ -85138,7 +85146,7 @@ static int handle_cmd_require_area(struct procRes_s *rs, int clidx, int mfidx)
     }
 
     porgimg = decraw->aspDcData;
-    sprintf_f(rs->logs,"img param info w: %d h: %d id: %d !!!\n", porgimg->mfourImgW, porgimg->mfourImgH, porgimg->mfourIdx);
+    sprintf_f(rs->logs,"img param info w: %d h: %d  !!!\n", porgimg->mfourAttb.ImageRect.xc, porgimg->mfourAttb.ImageRect.yr);
     print_f(rs->plogs, "CLIP", rs->logs);
 
     //if (porgimg->mfourImgW == 0) return -2;
@@ -85160,19 +85168,19 @@ static int handle_cmd_require_area(struct procRes_s *rs, int clidx, int mfidx)
     }
 
     imgbuf =  decpic->aspDcData;
-    imgbuf->mfourIdx = clidx;
-    imgbuf->mfourImgW = pDeRect->mfourRectW;
-    imgbuf->mfourImgH= pDeRect->mfourRectH;
+    //imgbuf->mfourIdx = clidx;
+    imgbuf->mfourAttb.ImageRect.xc = pDeRect->mfourRectW;
+    imgbuf->mfourAttb.ImageRect.yr = pDeRect->mfourRectH;
 
     bmpraw = porgimg->mfourData + 0x436;
-    for(iy=0; iy< imgbuf->mfourImgH; iy++)
+    for(iy=0; iy< imgbuf->mfourAttb.ImageRect.yr; iy++)
     {
-        pimgY = (pDeRect->mfourRectY+iy)*porgimg->mfourImgW;
+        pimgY = (pDeRect->mfourRectY+iy)*porgimg->mfourAttb.ImageRect.xc;
 
-        dst = imgbuf->mfourData + iy*imgbuf->mfourImgW;
+        dst = imgbuf->mfourData + iy*imgbuf->mfourAttb.ImageRect.xc;
         src = bmpraw + pimgY + pDeRect->mfourRectX;
 
-        memcpy(dst, src, imgbuf->mfourImgW);
+        memcpy(dst, src, imgbuf->mfourAttb.ImageRect.xc);
     }
 
     sprintf_f(rs->logs, "find and set area %d: x=%d,y=%d,w=%d,h=%d \n", clidx, pDeRect->mfourRectX, pDeRect->mfourRectY, pDeRect->mfourRectW, pDeRect->mfourRectH);
@@ -87618,9 +87626,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     bmpw = jpgetW;
                     bmph = jpgetH;
 
-                    pdecraw->aspDcData->mfourImgW = bmpw;
-                    pdecraw->aspDcData->mfourImgH = bmph;
-                    pdecraw->aspDcData->mfourIdx = buffidx;
+                    pdecraw->aspDcData->mfourAttb.ImageRect.xc = bmpw;
+                    pdecraw->aspDcData->mfourAttb.ImageRect.yr = bmph;
+                    //pdecraw->aspDcData->mfourIdx = buffidx;
 
                     aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, bmph, tmp);
                 }
@@ -88691,7 +88699,7 @@ static int p16(struct procRes_s *rs)
                             rjcmd.dPtr = img_param;
                             rjcmd.dSize = decrect->aspDcLen;
 
-                            sprintf_f(rs->logs, "img_param info w: %d h: %d [%s](%d)\n", img_param->mfourImgW, img_param->mfourImgH, img_param->mfourFilename, img_param->mfourIdx);
+                            sprintf_f(rs->logs, "ocr img_param info w: %d h: %d id: %d\n", img_param->mfourAttb.ImageRect.xc, img_param->mfourAttb.ImageRect.yr, img_param->mfourAttb.iJobIdx);
                             print_f(rs->plogs, "P16", rs->logs);
 
                             dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
@@ -88747,6 +88755,7 @@ static int p17(struct procRes_s *rs)
     struct bitmapDecodeItem_s *decpic=0, *decraw=0;
     mfour_image_param_st *img_param=0, *img_out=0, *img_raw=0;
     mfour_areas_st *pArea=0;
+    t_ImageParam *pImgArea=0;
     mfour_rjob_cmd  outcmd, rspcmd;
     char minfo[8]={0};
     struct pollfd pllfd[2]={0};
@@ -88877,7 +88886,50 @@ static int p17(struct procRes_s *rs)
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
                 
                             //outcmd.dPtr  = rx_buf;
+                            #if 1
+                            pImgArea = (t_ImageParam *)outcmd.dPtr;
+                            sprintf_f(rs->logs, "ImgArea area jobid = %d (x:%d, y:%d, w:%d, h:%d) \n", pImgArea->iJobIdx, pImgArea->ImageRect.oxj, pImgArea->ImageRect.oyi, pImgArea->ImageRect.xc, pImgArea->ImageRect.yr);
+                            print_f(rs->plogs, "P17", rs->logs);
+
+                            ix = 0;
+                            decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+
+                            pRect = &rs->pbDecMfour[mfbidx]->aspDecRect[ix];                                        
+
+                            memcpy(pRect, pArRect, sizeof(mfour_rect_st));
                             
+                            #if 1
+                            pRect->mfourRectX = pImgArea->ImageRect.oxj;
+                            pRect->mfourRectY = pImgArea->ImageRect.oyi;
+                            pRect->mfourRectW = pImgArea->ImageRect.xc;
+                            pRect->mfourRectH = pImgArea->ImageRect.yr;
+                            #endif
+
+                            sprintf_f(rs->logs, "imgArea set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
+                            print_f(rs->plogs, "P17", rs->logs);    
+
+                            aspBMPdecodeItemSet(decpic, pRect->mfourRectW, pRect->mfourRectH, 0);
+
+                            minfo[0] = 'c';
+
+                            if (ix == 0) {
+                                minfo[1] = 0x80;
+                            } else {
+                                minfo[1] = ix & 0x7f;
+                            }
+
+                            write(pipeMfRx[1], minfo, 2);
+
+                            if (mfourCnt > 0) {
+                                minfo[0] = 'C';
+                                mfourCnt -= 1;
+                                write(pipeMfRx[1], minfo, 2);
+                            } else {
+                                mfourlist[(mfourtail % MFOUR_WAIT_LIST_SIZE)] = minfo[1];
+                                mfourtail += 1;
+                                mfourwait += 1;
+                            }
+                            #else
                             pArea = (mfour_areas_st *)outcmd.dPtr;
                             sprintf_f(rs->logs, "req area total = %d \n", pArea->mfourAreaTot);
                             print_f(rs->plogs, "P17", rs->logs);    
@@ -88933,6 +88985,7 @@ static int p17(struct procRes_s *rs)
 
                                 }
                             }
+                            #endif
                             
                             break;
                         case BKCMD_DONE_AREA:              // M4 -> operator
@@ -88943,10 +88996,10 @@ static int p17(struct procRes_s *rs)
                             
                             //outcmd.dPtr  = rx_buf;
                             img_out = outcmd.dPtr;
-                            cid = img_out->mfourIdx;
+                            cid = img_out->mfourAttb.iJobIdx;
                             
                             //bkjob_send_cmd( chan->mqOperator, &outcmd);
-                            sprintf_f(rs->logs, "send cmd BKCMD_DONE_AREA_RSP cid: %d tag: %d idx: %d w: %d h: %d \n", cid, (uint32_t)(outcmd.tag >> 16), img_out->mfourIdx, img_out->mfourImgW, img_out->mfourImgH);
+                            sprintf_f(rs->logs, "send cmd BKCMD_DONE_AREA_RSP cJobid: %d tag: %d Jobidx: %d w: %d h: %d \n", cid, (uint32_t)(outcmd.tag >> 16), img_out->mfourAttb.iJobIdx, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr);
                             print_f(rs->plogs, "P17", rs->logs);
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
 
@@ -88975,9 +89028,9 @@ static int p17(struct procRes_s *rs)
                             //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
                             
                             cpySrc = img_out->mfourData;
-                            imgsize = img_out->mfourImgW * img_out->mfourImgH;
+                            imgsize = img_out->mfourAttb.ImageRect.xc * img_out->mfourAttb.ImageRect.yr;
 
-                            bitmapHeaderSetup(pheader, 8, img_out->mfourImgW, img_out->mfourImgH, 200, imgsize);
+                            bitmapHeaderSetup(pheader, 8, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, 200, imgsize);
                             
                             //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
                             
@@ -88988,7 +89041,7 @@ static int p17(struct procRes_s *rs)
 
                             imgsize += 1078;
 
-                            aspBMPdecodeItemSet(decpic, img_out->mfourImgW, img_out->mfourImgH, imgsize);
+                            aspBMPdecodeItemSet(decpic, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, imgsize);
 
                             minfo[0] = 'd';
 
