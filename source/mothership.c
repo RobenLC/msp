@@ -10,7 +10,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (0)
+#define GHP_EN (1)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -49,6 +49,7 @@ int pipe2(int pipefd[2], int flags);
 #include <EGL/eglext.h>
 //#include <GL/glx.h>
 #endif
+#include "BKImage.h"
 
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
@@ -84812,6 +84813,64 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int imgidx)
     return 0;
 }
 
+static int AllocateImgParamImgDataR(t_ImageParam	*SrcBKJobImg_Param)
+{
+		int				Temp2, ipt;
+		int				 yr, xc;
+		unsigned char 	*SrcTemp_ptr, *DstTemp_ptr, *TempPtr;
+		
+		unsigned char 	*NewImageIP_Param;
+		t_ImageParam	*BKJobImg_Param;
+		t_Imgheader 	*DstImgRect;
+		int 			ReqImageSize, JobImgParam_Size, allbuf_size;
+
+		DstImgRect=(t_Imgheader *)&SrcBKJobImg_Param->ImageRect;
+		JobImgParam_Size=sizeof(t_ImageParam);
+		
+		/*
+		log_i( "JobImgParam_Size=%8x\r\n", JobImgParam_Size);
+		
+		yr=DstImgRect->yr;
+		xc=DstImgRect->xc;		
+		//xc must be multiple of 4
+			Temp2 = xc >> 2;
+		if ( xc != (Temp2 << 2))
+			xc = (Temp2 + 1) << 2;
+		DstImgRect->xc=xc;		
+		ReqImageSize=xc*yr;
+		
+		allbuf_size= JobImgParam_Size + ReqImageSize;
+		log_i( "allbuf_size=%8x\r\n", allbuf_size);
+
+		//allocate all memory together
+		NewImageIP_Param = (unsigned char *)malloc(allbuf_size); 
+		log_i( "NewImageIP_Param = %p\r\n", NewImageIP_Param);
+		if (NewImageIP_Param == NULL)
+		{
+			log_i(" NewImageIP_Param allmemory alloc fail ");
+//			getchar();
+			return 0;
+		}
+		
+		BKJobImg_Param = (t_ImageParam	*)NewImageIP_Param;
+		DstTemp_ptr = (unsigned char *)BKJobImg_Param ;
+		SrcTemp_ptr = (unsigned char *)SrcBKJobImg_Param;
+		log_i( "SrcTemp_ptrImgParam = %p\r\n", SrcTemp_ptr);
+		log_i( "DstTemp_ptr = %p\r\n", DstTemp_ptr);
+		for( ipt = 0; ipt < JobImgParam_Size; ipt++)
+		{
+			*DstTemp_ptr = *SrcTemp_ptr;	   
+			SrcTemp_ptr ++;
+			DstTemp_ptr ++;
+		}
+		BKJobImg_Param->IpPAMemorySize=allbuf_size;
+				
+		return (NewImageIP_Param);
+		*/
+		return 0;
+	
+}
+
 #define DUMP_ROT_BMP (0)
 static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, int midx)
 {
@@ -88835,7 +88894,7 @@ static int p17(struct procRes_s *rs)
                                         
                                         memcpy(pRect, pArRect, sizeof(mfour_rect_st));
 
-                                        #if 1 // test code
+                                        #if 0 // test code
                                         pRect->mfourRectX = 795;
                                         pRect->mfourRectY = 101;
                                         pRect->mfourRectW = 48;
