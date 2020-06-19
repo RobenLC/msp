@@ -85424,6 +85424,9 @@ static int p12(struct procRes_s *rs)
                                     sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
                                     print_f(rs->plogs, "P12", rs->logs);
                                 }
+
+                                sprintf_f(rs->logs, "process current buff id: %d cid: %d \n", mfbidx, cid);
+                                print_f(rs->plogs, "P12", rs->logs);
                 
                                 ret = handle_cmd_require_areaR(rs, cid, mfbidx, 12);
                                 if (ret) {
@@ -88750,6 +88753,8 @@ static int p16(struct procRes_s *rs)
                     if (mfcmd == 'e') {
                         break;
                     }
+
+                    mfcmd = 0;
                 }
                 
             }
@@ -88918,6 +88923,9 @@ static int p17(struct procRes_s *rs)
                             dbgRjobCmd(&rspcmd, sizeof(mfour_rjob_cmd));
                             
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
+
+                            sprintf_f(rs->logs, "current buff id: %d \n", mfbidx);
+                            print_f(rs->plogs, "P17", rs->logs);
                 
                             //outcmd.dPtr  = rx_buf;
                             #if 1
@@ -89091,7 +89099,10 @@ static int p17(struct procRes_s *rs)
                             rspcmd.mPtr = 0;
 
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
-                            
+
+                            sprintf_f(rs->logs, "area done current buff id: %d \n", mfbidx);
+                            print_f(rs->plogs, "P17", rs->logs);
+
                             //outcmd.dPtr  = rx_buf;
                             pImgOutArea = outcmd.dPtr;
                             
