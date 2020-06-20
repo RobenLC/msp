@@ -1508,6 +1508,7 @@ struct bitmapDecodeMfour_s {
     int         aspPipeMfourRx[2];
     int         aspPipeMfourTx[2];
     int         aspPipeMfourCom[2];
+    int          aspDecRectSt[BMP_DECODE_PIC_SIZE];
     mfour_rect_st aspDecRect[BMP_DECODE_PIC_SIZE];
     struct bitmapDecodeItem_s aspDecJpeg;
     struct bitmapDecodeItem_s aspDecMeta;
@@ -3200,6 +3201,7 @@ static int aspBMPdecodeBuffInit(struct bitmapDecodeMfour_s *pdec)
         pdec->aspDecRect[ix].mfourRectY = 0;
         pdec->aspDecRect[ix].mfourRectW = 0;
         pdec->aspDecRect[ix].mfourRectH= 0;
+        pdec->aspDecRectSt[ix] = 0;
     }    
     
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
@@ -84894,7 +84896,7 @@ static int AllocateImgParamImgDataR(t_ImageParam	*SrcBKJobImg_Param)
 	
 }
 
-#define DUMP_ROT_BMP (1)
+#define DUMP_ROT_BMP (0)
 static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, int midx)
 {
     int ret=0;
@@ -85108,7 +85110,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     sprintf_f(rs->logs, "show result bmp header: \n");
     print_f(rs->plogs, "CLIP", rs->logs);    
 
-    dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
+    //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
     //memcpy(bmpcolrtb, ph, sizeof(struct bitmapHeader_s)-2);
     
     fdump = find_save(filepath, ptfileSave);
@@ -85250,6 +85252,7 @@ static int save_done_area(struct procRes_s *rs, int clidx, int mfidx)
     return 0;
 }
 
+#define SAVE_DONE_IMG (0)
 static int p12(struct procRes_s *rs)
 {
     char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
@@ -85455,11 +85458,13 @@ static int p12(struct procRes_s *rs)
                                     print_f(rs->plogs, "P12", rs->logs);
                                 }
 
+                                #if SAVE_DONE_IMG
                                 ret = save_done_area(rs, cid, mfbidx);
                                 if (ret) {
                                     sprintf_f(rs->logs, "Error!!! mfour save done area failed ret: %d \n", ret);
                                     print_f(rs->plogs, "P12", rs->logs);
                                 }
+                                #endif
                                 break;
                             case 'e': //BKCMD_IMAGE_COMPLETE :     // M4 -> operator
                                 //g_done_image_idx++;
@@ -87911,6 +87916,352 @@ static int p15(struct procRes_s *rs)
             pinfo[0] = '1';
             rs_ipc_put(rs, pinfo, 1);
             break;
+        case 'e':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+                sprintf_f(rs->logs, "e get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P15", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P15", rs->logs);
+                    break;
+                } else {
+                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    print_f(rs->plogs, "P15", rs->logs);
+                }
+
+                imgidx = 0;
+                mfbstat = 0;
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                sprintf_f(rs->logs, "encode m4 get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P15", rs->logs);
+
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecRaw, &bmpbuff, &uselen);
+                if (ret < 0) {
+                    bmpbuff = 0;
+                    bmpmax = 0;
+                    uselen = 0;
+                } else {
+                    bmpmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecRaw);
+                }
+
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecMeta, &buffmeta, &bmtlen);
+                if (ret < 0) {
+                    buffmeta = 0;
+                    bmtmax = 0;
+                    bmtlen = 0;
+                } else {
+                    bmtmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecMeta);
+                }
+                
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecMetaex, &exmeta, &exmlen);
+                if (ret < 0) {
+                    exmeta = 0;
+                    exmax = 0;
+                    exmlen = 0;
+                } else {
+                    exmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecMetaex);
+                }
+
+                rstlen = uselen % 512;
+                sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
+                print_f(rs->plogs, "P15", rs->logs);
+
+                //shmem_dump(buffmeta, bmtlen);
+                
+                ptmetausb = (struct aspMetaDataviaUSB_s *)buffmeta;
+                //dbgMetaUsb(ptmetausb);
+
+                bmph = (ptmetausb->IMG_HIGH[1] << 8) | ptmetausb->IMG_HIGH[0];
+
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
+                switch (val) {
+                case COLOR_MODE_COLOR:
+                    colr = 24;
+                    break;
+                case COLOR_MODE_GRAY:
+                case COLOR_MODE_GRAY_DETAIL:
+                case COLOR_MODE_BLACKWHITE:
+                    colr = 8;
+                    break;
+                default:
+                    colr = 24;
+                    break;
+                }
+                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                print_f(rs->plogs, "P15", rs->logs);
+            
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+
+                ret |= cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                tmp = val << 8 | tmp;
+
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+                
+                bmpw = scanWidthConvert(tmp, val);
+                bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
+                
+                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                print_f(rs->plogs, "P15", rs->logs);
+
+
+                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                switch (tmp) {
+                case RESOLUTION_1200:
+                    bdpi = 1200;
+                    break;
+                case RESOLUTION_600:
+                    bdpi = 600;
+                    break;
+                case RESOLUTION_300:
+                    bdpi = 300;
+                    break;
+                case RESOLUTION_200:
+                    bdpi = 200;
+                    break;
+                case RESOLUTION_150:
+                    bdpi = 150;
+                    break;
+                default:
+                    bdpi = 300;
+                    break;
+                }
+                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                print_f(rs->plogs, "P15", rs->logs);
+                
+                bmpcolrtb = aspMemalloc(1078, 15);
+                if (!bmpcolrtb) {
+                    sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
+                    print_f(rs->plogs, "P15", rs->logs);                                
+                }
+
+                if (colr == 8) {
+                    blen = 1078;
+                    bdpp = 1;
+                } else if (colr == 24) {
+                    blen = 54;            
+                    bdpp = 3;
+                } else {
+                    sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
+                    print_f(rs->plogs, "P15", rs->logs);   
+                }
+                
+                bhlen = blen;
+                val = ((bmpw * colr + 31) / 32) * 4;
+                val = val * bmph; 
+
+                sprintf_f(rs->logs, "[BMP] e bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
+                print_f(rs->plogs, "P15", rs->logs);
+
+                bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
+
+                ph = &bheader->aspbmpMagic[2];
+                val = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(bmpcolrtb, ph, val);
+
+                blen -= val;
+                if (blen > 0) {
+                    bitmapColorTableSetup(bmpcolrtb+val);
+                    blen -= 1024;
+                }
+
+                if (blen) {
+                    sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
+                    print_f(rs->plogs, "P15", rs->logs);
+                } 
+                
+                prisec = ptmetausb->PRI_O_SEC;
+                if (prisec > 1) {
+                    sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
+                    print_f(rs->plogs, "P15", rs->logs);
+
+                    prisec = 0;
+                }
+
+
+                
+                cutcnt =0;
+
+                for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
+
+                    pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                    penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
+
+                    ret = aspBMPdecodeItemGet(pdecroi, &rotsrc[cutcnt], &rotsrclen[cutcnt]);
+                    if (ret < 0) {
+                        rotsrc[cutcnt] = 0;
+                        rotsmax[cutcnt] = 0;
+                    } else {
+                        rotsmax[cutcnt] = aspBMPdecodeItemMax(pdecroi);
+                    }
+
+                    if (rotsrclen[cutcnt] > 0) {
+                        ret = aspBMPdecodeItemGet(penroi, &rotdst[cutcnt], 0);
+                        if (ret < 0) {
+                            rotdst[cutcnt] = 0;
+                            rotdmax[cutcnt] = 0;
+                        } else {
+                            rotdmax[cutcnt] = aspBMPdecodeItemMax(penroi);
+                        }
+                    
+                        //sprintf_f(rs->logs, "    used buff search %d. size: %d, w: %d h: %d len: %d\n", ix, rotsrclen[cutcnt], pdecroi->aspDcWidth, pdecroi->aspDcHeight, pdecroi->aspDcLen);
+                        //print_f(rs->plogs, "P15", rs->logs);
+
+                        #if 0 /* debug print */
+                        bmprot = rotsrc[cutcnt];
+                        memcpy(ph, bmprot, 54);
+                        dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s) - 2);
+
+                        sprintf_f(rs->logs, "[BMP] search and dump raw image addr: 0x%.8x, len: %d\n", (uint32_t)bmprot, rotsrclen[cutcnt]);
+                        print_f(rs->plogs, "P15", rs->logs);
+                        shmem_dump(bmprot, 128);
+                        #endif
+                        
+                        cutcnt++;
+                    }
+                }
+
+                cutnum = cutcnt;
+                cutcnt = 0;
+                
+                while (cutcnt < cutnum) {
+
+                    pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[cutcnt];
+                    
+                    bmprot = rotsrc[cutcnt];
+                    jpgrlt = rotdst[cutcnt];
+
+                    if (!bmph) {
+                        break;
+                    }
+                    
+                    jpgLen = 0;
+                    rotlen = 0;
+                    
+                    memcpy(ph, bmprot, 54);
+                    
+                    sprintf_f(rs->logs, "[BMP] %d. raw scale w: %d h: %d len: %d, max: %d\n", cutcnt, pdecroi->aspDcWidth, pdecroi->aspDcHeight, pdecroi->aspDcLen, pdecroi->aspDcMax);
+                    print_f(rs->plogs, "P15", rs->logs);
+                                            
+                    bmpbufc = bmprot;   
+                    rotlen = rotsrclen[cutcnt];
+
+                    #if 0 /* debug dump data */
+                    sprintf_f(rs->logs, "[BMP] dump 512 raw image addr: 0x%.8x, total len: %d\n", (uint32_t)bmpbufc, rotlen);
+                    print_f(rs->plogs, "P15", rs->logs);
+
+                    shmem_dump(bmpbufc, 512);
+                    #endif
+
+                    clock_gettime(CLOCK_REALTIME, &jpgS);
+                    
+                    #if GHP_EN
+                    err = rgb2jpg(bmpbufc+bheader->aspbhRawoffset, jpgrlt, &jpgLen, pdecroi->aspDcWidth, pdecroi->aspDcHeight, colr);
+                    #endif
+                    
+                    clock_gettime(CLOCK_REALTIME, &jpgE);
+                    if (err) {
+                        sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
+                        print_f(rs->plogs, "P15", rs->logs);
+                    }
+                    
+                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                    sprintf_f(rs->logs, "[BMP] e raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
+                    print_f(rs->plogs, "P15", rs->logs);
+
+                    rotlen = 512 - (jpgLen % 512);
+                    rotlen = rotlen + jpgLen;
+                    bmpbufc = jpgrlt;
+
+                    //shmem_dump(bmpbufc, 512);
+                    
+                    aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, cutcnt+1);
+                    sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight);
+                    print_f(rs->plogs, "P15", rs->logs);
+                    
+                    lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                    
+                    bmpcpy = bmpbufc + rotlen;
+                    memcpy(bmpcpy, ptmetausb, bmtlen);
+                    
+                    //shmem_dump(bmpbufc+rotlen-512, 1024);
+                    //dbgMetaUsb(ptmetausb);
+                    //dbgMetaUsb((struct aspMetaDataviaUSB_s *)bmpcpy);
+
+                    aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[cutcnt], pdecroi->aspDcWidth, pdecroi->aspDcHeight, rotlen+bmtlen);
+                                        
+                    sprintf_f(rs->logs, "[BMP] usb meta size check, meta size: %d : sizeofmeta: %d jpglen: %d \n", bmtlen, lenbs, rotlen+bmtlen);
+                    print_f(rs->plogs, "P15", rs->logs);
+                    
+                    cutcnt ++;
+                    
+                }
+
+                orglen = 0;
+                for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
+
+                    penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
+
+                    ret = aspBMPdecodeItemGet(penroi, &bufftmp, &tmplen);
+                    
+                    sprintf_f(rs->logs, "[encode] %d. jpeg len: %d ret: %d \n", ix, tmplen, ret);
+                    print_f(rs->plogs, "P15", rs->logs);
+
+                    #if MFOUR_IMG_SEND_BACK
+                    if ((!ret) && (tmplen == 0) && (orglen == 0)) {
+                    //if (!ret) {
+                        pdecroi = &rs->pbDecMfour[mfbidx]->aspDecJpeg;     
+                        //pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[0];     
+                        err = aspBMPdecodeItemGet(pdecroi, &bufforg, &orglen);
+                        if ((!err) && (orglen > 0)) {
+                        
+                            memcpy(bufftmp, bufforg, orglen);
+
+                            sprintf_f(rs->logs, "[encode] dump the jpg size: %d \n", 512);
+                            print_f(rs->plogs, "P15", rs->logs);
+                            
+                            //shmem_dump(bufftmp, 512);
+
+                            aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, ix+1);
+                            sprintf_f(rs->logs, "[BMP] to update w and h: %d, %d len: %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight, orglen);
+                            print_f(rs->plogs, "P15", rs->logs);
+                            
+                            orglen -= 160;                            
+                            
+                            bmpcpy = bufftmp + orglen;                    
+                            memcpy(bmpcpy, ptmetausb, bmtlen);
+                            orglen += bmtlen;
+                            
+                            //shmem_dump(bmpbufc+rotlen-512, 1024);
+                            //dbgMetaUsb(ptmetausb);
+                            //dbgMetaUsb((struct aspMetaDataviaUSB_s *)bmpcpy);
+                            
+                            aspBMPdecodeItemSet(penroi, pdecroi->aspDcWidth, pdecroi->aspDcHeight, orglen);
+
+                            sprintf_f(rs->logs, "[encode] to put org jpeg to id%d len: %d ret: %d \n", ix, orglen, err);
+                            print_f(rs->plogs, "P15", rs->logs);
+
+                            msync(bufftmp, orglen, MS_SYNC);
+                        }
+                    }
+                    #endif
+                }
+                
+                pinfo[0] = 'P';
+                pinfo[1] = ch;
+
+                rs_ipc_put(rs, pinfo, 2);
+            }        
+            break;
         case 'c':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
@@ -88237,340 +88588,6 @@ static int p15(struct procRes_s *rs)
                 rs_ipc_put(rs, pinfo, 2);
             }        
             break;
-        case 'e':
-            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
-            if (ret > 0) {
-                sprintf_f(rs->logs, "e get cont ch[0x%.2x] \n", ch);
-                print_f(rs->plogs, "P15", rs->logs);
-
-                if (ch == 0x80) {
-                    mfbidx = 0;
-                } else {
-                    mfbidx = ch & 0x7f;
-                }
-
-                if (mfbidx > 3) {
-                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
-                    print_f(rs->plogs, "P15", rs->logs);
-                    break;
-                } else {
-                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
-                    print_f(rs->plogs, "P15", rs->logs);
-                }
-
-                imgidx = 0;
-                mfbstat = 0;
-                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
-                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
-                sprintf_f(rs->logs, "encode m4 get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
-                print_f(rs->plogs, "P15", rs->logs);
-
-                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecRaw, &bmpbuff, &uselen);
-                if (ret < 0) {
-                    bmpbuff = 0;
-                    bmpmax = 0;
-                    uselen = 0;
-                } else {
-                    bmpmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecRaw);
-                }
-
-                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecMeta, &buffmeta, &bmtlen);
-                if (ret < 0) {
-                    buffmeta = 0;
-                    bmtmax = 0;
-                    bmtlen = 0;
-                } else {
-                    bmtmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecMeta);
-                }
-                
-                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecMetaex, &exmeta, &exmlen);
-                if (ret < 0) {
-                    exmeta = 0;
-                    exmax = 0;
-                    exmlen = 0;
-                } else {
-                    exmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecMetaex);
-                }
-
-                rstlen = uselen % 512;
-                sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
-                print_f(rs->plogs, "P15", rs->logs);
-
-                //shmem_dump(buffmeta, bmtlen);
-                
-                ptmetausb = (struct aspMetaDataviaUSB_s *)buffmeta;
-                //dbgMetaUsb(ptmetausb);
-
-                bmph = (ptmetausb->IMG_HIGH[1] << 8) | ptmetausb->IMG_HIGH[0];
-
-                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
-                switch (val) {
-                case COLOR_MODE_COLOR:
-                    colr = 24;
-                    break;
-                case COLOR_MODE_GRAY:
-                case COLOR_MODE_GRAY_DETAIL:
-                case COLOR_MODE_BLACKWHITE:
-                    colr = 8;
-                    break;
-                default:
-                    colr = 24;
-                    break;
-                }
-                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                print_f(rs->plogs, "P15", rs->logs);
-            
-                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
-
-                ret |= cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
-                tmp = val << 8 | tmp;
-
-                val = 0;
-                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
-                
-                bmpw = scanWidthConvert(tmp, val);
-                bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
-                
-                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
-                print_f(rs->plogs, "P15", rs->logs);
-
-
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    bdpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    bdpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    bdpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    bdpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    bdpi = 150;
-                    break;
-                default:
-                    bdpi = 300;
-                    break;
-                }
-                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
-                print_f(rs->plogs, "P15", rs->logs);
-                
-                bmpcolrtb = aspMemalloc(1078, 15);
-                if (!bmpcolrtb) {
-                    sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
-                    print_f(rs->plogs, "P15", rs->logs);                                
-                }
-
-                if (colr == 8) {
-                    blen = 1078;
-                    bdpp = 1;
-                } else if (colr == 24) {
-                    blen = 54;            
-                    bdpp = 3;
-                } else {
-                    sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
-                    print_f(rs->plogs, "P15", rs->logs);   
-                }
-                
-                bhlen = blen;
-                val = ((bmpw * colr + 31) / 32) * 4;
-                val = val * bmph; 
-
-                sprintf_f(rs->logs, "[BMP] e bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
-                print_f(rs->plogs, "P15", rs->logs);
-
-                bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
-
-                ph = &bheader->aspbmpMagic[2];
-                val = sizeof(struct bitmapHeader_s) - 2;
-                memcpy(bmpcolrtb, ph, val);
-
-                blen -= val;
-                if (blen > 0) {
-                    bitmapColorTableSetup(bmpcolrtb+val);
-                    blen -= 1024;
-                }
-
-                if (blen) {
-                    sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
-                    print_f(rs->plogs, "P15", rs->logs);
-                } 
-                
-                prisec = ptmetausb->PRI_O_SEC;
-                if (prisec > 1) {
-                    sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
-                    print_f(rs->plogs, "P15", rs->logs);
-
-                    prisec = 0;
-                }
-
-
-                
-                cutcnt =0;
-
-                for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
-
-                    pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
-                    penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
-
-                    ret = aspBMPdecodeItemGet(pdecroi, &rotsrc[cutcnt], &rotsrclen[cutcnt]);
-                    if (ret < 0) {
-                        rotsrc[cutcnt] = 0;
-                        rotsmax[cutcnt] = 0;
-                    } else {
-                        rotsmax[cutcnt] = aspBMPdecodeItemMax(pdecroi);
-                    }
-
-                    if (rotsrclen[cutcnt] > 0) {
-                        ret = aspBMPdecodeItemGet(penroi, &rotdst[cutcnt], 0);
-                        if (ret < 0) {
-                            rotdst[cutcnt] = 0;
-                            rotdmax[cutcnt] = 0;
-                        } else {
-                            rotdmax[cutcnt] = aspBMPdecodeItemMax(penroi);
-                        }
-                    
-                        sprintf_f(rs->logs, "    used buff search %d. size: %d, w: %d h: %d len: %d\n", ix, rotsrclen[cutcnt], pdecroi->aspDcWidth, pdecroi->aspDcHeight, pdecroi->aspDcLen);
-                        print_f(rs->plogs, "P15", rs->logs);
-
-                        cutcnt++;
-                    }
-                }
-
-                cutnum = cutcnt;
-                cutcnt = 0;
-                
-                while (cutcnt < cutnum) {
-
-                    pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[cutcnt];
-                    
-                    bmprot = rotsrc[cutcnt];
-                    jpgrlt = rotdst[cutcnt];
-
-                    if (!bmph) {
-                        break;
-                    }
-                    
-                    jpgLen = 0;
-                    rotlen = 0;
-                    
-                    memcpy(ph, bmprot, 54);
-                    
-                    sprintf_f(rs->logs, "[BMP] %d. raw scale w: %d h: %d len: %d, max: %d\n", cutcnt, pdecroi->aspDcWidth, pdecroi->aspDcHeight, pdecroi->aspDcLen, pdecroi->aspDcMax);
-                    print_f(rs->plogs, "P15", rs->logs);
-                                            
-                    bmpbufc = bmprot;   
-                    rotlen = rotsrclen[cutcnt];
-
-                    sprintf_f(rs->logs, "[BMP] dump 512 raw image addr: 0x%.8x, total len: %d\n", (uint32_t)bmpbufc, rotlen);
-                    print_f(rs->plogs, "P15", rs->logs);
-
-                    shmem_dump(bmpbufc, 512);
-
-                    clock_gettime(CLOCK_REALTIME, &jpgS);
-                    
-                    #if GHP_EN
-                    err = rgb2jpg(bmpbufc+bheader->aspbhRawoffset, jpgrlt, &jpgLen, pdecroi->aspDcWidth, pdecroi->aspDcHeight, colr);
-                    #endif
-                    
-                    clock_gettime(CLOCK_REALTIME, &jpgE);
-                    if (err) {
-                        sprintf_f(rs->logs, "[BMP] raw encode to jpg failed ret: %d  \n", err);
-                        print_f(rs->plogs, "P15", rs->logs);
-                    }
-                    
-                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
-                    sprintf_f(rs->logs, "[BMP] e raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
-                    print_f(rs->plogs, "P15", rs->logs);
-
-                    rotlen = 512 - (jpgLen % 512);
-                    rotlen = rotlen + jpgLen;
-                    bmpbufc = jpgrlt;
-
-                    //shmem_dump(bmpbufc, 512);
-                    
-                    aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, cutcnt+1);
-                    sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight);
-                    print_f(rs->plogs, "P15", rs->logs);
-                    
-                    lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
-                    
-                    bmpcpy = bmpbufc + rotlen;
-                    memcpy(bmpcpy, ptmetausb, bmtlen);
-                    
-                    //shmem_dump(bmpbufc+rotlen-512, 1024);
-                    //dbgMetaUsb(ptmetausb);
-                    //dbgMetaUsb((struct aspMetaDataviaUSB_s *)bmpcpy);
-
-                    aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[cutcnt], pdecroi->aspDcWidth, pdecroi->aspDcHeight, rotlen+bmtlen);
-                                        
-                    sprintf_f(rs->logs, "[BMP] usb meta size check, meta size: %d : sizeofmeta: %d jpglen: %d \n", bmtlen, lenbs, rotlen+bmtlen);
-                    print_f(rs->plogs, "P15", rs->logs);
-                    
-                    cutcnt ++;
-                    
-                }
-
-                orglen = 0;
-                for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
-
-                    penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
-
-                    ret = aspBMPdecodeItemGet(penroi, &bufftmp, &tmplen);
-                    
-                    sprintf_f(rs->logs, "[encode] %d. jpeg len: %d ret: %d \n", ix, tmplen, ret);
-                    print_f(rs->plogs, "P15", rs->logs);
-
-                    #if MFOUR_IMG_SEND_BACK
-                    if ((!ret) && (tmplen == 0) && (orglen == 0)) {
-                    //if (!ret) {
-                        pdecroi = &rs->pbDecMfour[mfbidx]->aspDecJpeg;     
-                        //pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[0];     
-                        err = aspBMPdecodeItemGet(pdecroi, &bufforg, &orglen);
-                        if ((!err) && (orglen > 0)) {
-                        
-                            memcpy(bufftmp, bufforg, orglen);
-
-                            sprintf_f(rs->logs, "[encode] dump the jpg size: %d \n", 512);
-                            print_f(rs->plogs, "P15", rs->logs);
-                            
-                            //shmem_dump(bufftmp, 512);
-
-                            aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, ix+1);
-                            sprintf_f(rs->logs, "[BMP] to update w and h: %d, %d len: %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight, orglen);
-                            print_f(rs->plogs, "P15", rs->logs);
-                            
-                            orglen -= 160;                            
-                            
-                            bmpcpy = bufftmp + orglen;                    
-                            memcpy(bmpcpy, ptmetausb, bmtlen);
-                            orglen += bmtlen;
-                            
-                            //shmem_dump(bmpbufc+rotlen-512, 1024);
-                            //dbgMetaUsb(ptmetausb);
-                            //dbgMetaUsb((struct aspMetaDataviaUSB_s *)bmpcpy);
-                            
-                            aspBMPdecodeItemSet(penroi, pdecroi->aspDcWidth, pdecroi->aspDcHeight, orglen);
-
-                            sprintf_f(rs->logs, "[encode] to put org jpeg to id%d len: %d ret: %d \n", ix, orglen, err);
-                            print_f(rs->plogs, "P15", rs->logs);
-
-                            msync(bufftmp, orglen, MS_SYNC);
-                        }
-                    }
-                    #endif
-                }
-                
-                pinfo[0] = 'P';
-                pinfo[1] = ch;
-
-                rs_ipc_put(rs, pinfo, 2);
-            }        
-            break;
         default:
             break;
         }
@@ -88685,6 +88702,7 @@ static int p16(struct procRes_s *rs)
                 pllfd[0].events = POLLIN;
 
                 while (1) {
+                    mfcmd = 0;
                     pipRet = poll(pllfd, 1, 500);
                     if (pipRet > 0) {
                         ret = read(pllfd[0].fd, &chm, 1);
@@ -88754,7 +88772,6 @@ static int p16(struct procRes_s *rs)
                         break;
                     }
 
-                    mfcmd = 0;
                 }
                 
             }
@@ -88771,12 +88788,13 @@ static int p16(struct procRes_s *rs)
     return 0;
 }
 
+#define DUMP_MFOUR_BMP (0)
 #define LOG_P17_EN (1)
 static int p17(struct procRes_s *rs)
 {
 #define MFOUR_WAIT_LIST_SIZE (8)
-    int ret=0, tcmd=0, errcnt=0, mfbidx=0, imgidx=0, mfbstat=0, cid=0, imgsize=0, jid=0, seqid=0;
-    int ix=0, ic=0, mfourCnt=2, mfourwait=0, mfourhead=0, mfourtail=0;
+    int ret=0, tcmd=0, errcnt=0, mfbidx=0, imgidx=0, mfbstat=0, cid=0, imgsize=0, jid=0, seqid=0, m4id=0;
+    int ix=0, ic=0, mfourCnt=2, mfourwait=0, mfourhead=0, mfourtail=0, m4dst=0;
     char mfourlist[MFOUR_WAIT_LIST_SIZE];
     char ch=0;
     int rj1id=0;
@@ -88795,6 +88813,14 @@ static int p17(struct procRes_s *rs)
     int *ptrw=0, *ptrh=0;
     struct bitmapHeader_s *pheader=0;
 
+    #if DUMP_MFOUR_BMP
+    static char ptfileSave[] = "/home/root/rotate/m4_%.3d.bmp";
+    char filepath[256]={0};
+    FILE *fdump=0;
+    char *dumpsrc=0;
+    int dumpsize=0;
+    #endif
+    
     sprintf_f(rs->logs, "p17\n");
     print_f(rs->plogs, "P17", rs->logs);
 
@@ -88933,7 +88959,7 @@ static int p17(struct procRes_s *rs)
                             sprintf_f(rs->logs, "ImgArea area seqid = %d jobid = %d (x:%d, y:%d, w:%d, h:%d) \n", pImgArea->SeqIdx, pImgArea->iJobIdx, pImgArea->ImageRect.oxj, pImgArea->ImageRect.oyi, pImgArea->ImageRect.xc, pImgArea->ImageRect.yr);
                             print_f(rs->plogs, "P17", rs->logs);
 
-                            #if 0
+                            #if 1
                             for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
                                 decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
                                 if ((decpic->aspDcLen == 0) && (decpic->aspDcWidth == 0)) {
@@ -88951,11 +88977,14 @@ static int p17(struct procRes_s *rs)
                                     pRect->mfourRectH = pImgArea->ImageRect.yr;
                                     #endif
 
-                                    sprintf_f(rs->logs, "find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
+                                    sprintf_f(rs->logs, "    search find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
                                     print_f(rs->plogs, "P17", rs->logs);    
 
                                     aspBMPdecodeItemSet(decpic, pRect->mfourRectW, pRect->mfourRectH, 0);
 
+                                    rs->pbDecMfour[mfbidx]->aspDecRectSt[ix] = BKCMD_REQUIRE_AREA;
+                                    m4id = ix;
+                                                                
                                     minfo[0] = 'c';
 
                                     if (ix == 0) {
@@ -89100,7 +89129,7 @@ static int p17(struct procRes_s *rs)
 
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
 
-                            sprintf_f(rs->logs, "area done current buff id: %d \n", mfbidx);
+                            sprintf_f(rs->logs, "area done current buff id: %d m4id: %d\n", mfbidx, m4id);
                             print_f(rs->plogs, "P17", rs->logs);
 
                             //outcmd.dPtr  = rx_buf;
@@ -89110,23 +89139,25 @@ static int p17(struct procRes_s *rs)
                             jid = img_out->mfourAttb.iJobIdx;
                             seqid = img_out->mfourAttb.SeqIdx;
 
-                            #if 0
+                            #if 1
                             //cid = img_out->mfourIdx;
                             cid = -1;
                             for (ix=0; ix <BMP_DECODE_PIC_SIZE; ix++) {
                                 decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                                m4dst = rs->pbDecMfour[mfbidx]->aspDecRectSt[ix];
                                 img_param = decpic->aspDcData;
 
-                                sprintf_f(rs->logs, "    search match buff info %d. %d, %d (seqid: %d jobid: %d) len: %d \n", ix, img_param->mfourAttb.SeqIdx, img_param->mfourAttb.iJobIdx, seqid, jid, decpic->aspDcLen);
+                                sprintf_f(rs->logs, "    search match buff info %d. %d, %d (seqid: %d jobid: %d) len: %d st: 0x%.4x cid: %d\n", ix, img_param->mfourAttb.SeqIdx, img_param->mfourAttb.iJobIdx, seqid, jid, decpic->aspDcLen, m4dst, cid);
                                 print_f(rs->plogs, "P17", rs->logs);
                                 
-                                if (((img_param->mfourAttb.SeqIdx == seqid) && (img_param->mfourAttb.iJobIdx == jid)) || (decpic->aspDcLen == 0)) {
+                                if ((decpic->aspDcLen > 0) && (cid < 0) && (m4dst == BKCMD_REQUIRE_AREA)) {
                                     cid = ix;
-                                    break;
+                                    rs->pbDecMfour[mfbidx]->aspDecRectSt[ix] = BKCMD_DONE_AREA;
+                                    //break;
                                 }
                             }
                             #else
-                            cid = 0;
+                            cid = m4id;
                             #endif
                             
                             
@@ -89155,34 +89186,44 @@ static int p17(struct procRes_s *rs)
 
                             msync(cpyDst, 1078, MS_SYNC);
 
-                            cpyDst = img_param->mfourData + 1078; //offset:0x436
-                            //ptrw = (int *)(img_param->mfourData + 0x12);
-                            //ptrh = (int *)(img_param->mfourData + 0x16);
-
-                            //*ptrw = (int)img_out->mfourImgW;
-                            //*ptrh = (int)img_out->mfourImgH;
-                            
-                            //msync(cpyDst, 1078, MS_SYNC);
-
                             pheader = (struct bitmapHeader_s *)(img_param->mfourData - 2);
                             //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
-                            
-                            cpySrc = img_out->mfourData;
-                            imgsize = img_out->mfourAttb.ImageRect.xc * img_out->mfourAttb.ImageRect.yr;
 
+                            imgsize = img_out->mfourAttb.ImageRect.xc * img_out->mfourAttb.ImageRect.yr;
                             bitmapHeaderSetup(pheader, 8, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, 200, imgsize);
-                            
                             //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
-                            
-                            sprintf_f(rs->logs, "compare the output image size:%d m4:%d \n", imgsize, outcmd.dSize);
+                                                        
+                            sprintf_f(rs->logs, "m4 bmp size:%d (%d x %d) and size in m4 cmd: %d \n", imgsize, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, outcmd.dSize);
                             print_f(rs->plogs, "P17", rs->logs);
-                            
+
+                            cpyDst = img_param->mfourData + 1078; //offset:0x436
+                            cpySrc = img_out->mfourData;
+
                             memcpy(cpyDst, cpySrc, imgsize);
 
                             imgsize += 1078;
 
                             aspBMPdecodeItemSet(decpic, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, imgsize);
 
+                            #if DUMP_MFOUR_BMP    
+                            fdump = find_save(filepath, ptfileSave);
+                            if (fdump) {
+                                sprintf_f(rs->logs, "find save bmp [%s] succeed!!! \n", filepath);
+                                print_f(rs->plogs, "P17", rs->logs);
+                            }
+
+                            dumpsrc = img_param->mfourData;
+                            dumpsize = imgsize;
+
+                            ret = fwrite((char*)dumpsrc, 1, dumpsize, fdump);
+                            sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, dumpsize);
+                            print_f(rs->plogs, "P17", rs->logs);
+
+                            fflush(fdump);
+                            fclose(fdump);
+                            sync();
+                            #endif
+                            
                             minfo[0] = 'd';
 
                             if (cid == 0) {
