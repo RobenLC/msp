@@ -112,6 +112,7 @@ SRCS = $(MOTHERSHIP_CSOURCES)
 SRCS += $(MAINROT_SRCS)
 SRCS += $(ROTATE_SRCS)
 
+#$(BKOCR_LIB) : FORCE
 $(BKOCR_LIB) :
 	$(MAKE) -C ./ocr -f makefilelib
 	@echo
