@@ -114,7 +114,7 @@ static char genssid[128];
 #define AP_CLR_STATUS (1)
 
 #define MFOUR_IMG_SEND_BACK (1)
-#define MFOUR_SIM_MODE_JPG (1)
+#define MFOUR_SIM_MODE_JPG (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
@@ -1789,6 +1789,11 @@ struct procRes_s{
 };
 
 struct aspMemAsign_s *aspMemAsign=0;
+
+#define	MaxCount_SRN	20
+void *BKOCR_Check( void * img_buf, int img_size, char *out_buf, int buf_size );
+void *BKOCR_Check3( void * img_buf, int img_size, char *out_buf, int buf_size );
+void *BKOCR_Check4( void * img_buf, int img_size, char *out_buf, int buf_size );
 
 #if LOG_ALL_DISABLE
 static int sprintf_f(char *a, char *b, ...);
@@ -88788,7 +88793,7 @@ static int p16(struct procRes_s *rs)
     return 0;
 }
 
-#define DUMP_MFOUR_BMP (0)
+#define DUMP_MFOUR_BMP (1)
 #define LOG_P17_EN (1)
 static int p17(struct procRes_s *rs)
 {
@@ -88819,6 +88824,14 @@ static int p17(struct procRes_s *rs)
     FILE *fdump=0;
     char *dumpsrc=0;
     int dumpsize=0;
+
+    char *ocrpath=0;
+    char filepathOcr[256]={0};
+    char filepathOcrTxt[256]={0};
+    FILE *focrtxt=0;
+    char outchr[3][36]={0};
+    int trimsize=0, modix=0, outstrlen=0;
+    
     #endif
     
     sprintf_f(rs->logs, "p17\n");
@@ -89204,7 +89217,7 @@ static int p17(struct procRes_s *rs)
                             imgsize += 1078;
 
                             aspBMPdecodeItemSet(decpic, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, imgsize);
-
+                            
                             #if DUMP_MFOUR_BMP    
                             fdump = find_save(filepath, ptfileSave);
                             if (fdump) {
@@ -89222,6 +89235,69 @@ static int p17(struct procRes_s *rs)
                             fflush(fdump);
                             fclose(fdump);
                             sync();
+
+                            sprintf_f(rs->logs, "image w: %d h: %d \n", img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr);
+                            print_f(rs->plogs, "P17", rs->logs);
+
+                            if ((img_out->mfourAttb.ImageRect.xc == 240) && (img_out->mfourAttb.ImageRect.yr == 48)) {
+
+                                memset(outchr, 0, 36*3);
+                                
+                                BKOCR_Check(dumpsrc, dumpsize, outchr[0], MaxCount_SRN);
+                                BKOCR_Check3(dumpsrc, dumpsize, outchr[1], MaxCount_SRN);
+                                BKOCR_Check4(dumpsrc, dumpsize, outchr[2], MaxCount_SRN);
+
+                                sprintf_f(rs->logs, "out 0: [%s] out 3: [%s] out 4: [%s] !!! \n", outchr[0], outchr[1], outchr[2]);
+                                print_f(rs->plogs, "P17", rs->logs);
+                                
+                                shmem_dump(outchr[0], 32);
+                                shmem_dump(outchr[1], 32);
+                                shmem_dump(outchr[2], 32);
+
+                                for (modix=0; modix < 3; modix++) {
+
+                                    strcpy(filepathOcr, filepath);
+                                
+                                    outstrlen = strlen(outchr[modix]);
+                                    if (outstrlen > 0) {
+                                        if (outstrlen > 20) {
+                                        
+                                            sprintf_f(rs->logs, "Error !!! the ocr output str len is %d over 20 \n", outstrlen);
+                                            print_f(rs->plogs, "P17", rs->logs);
+                                            continue;
+                                        }
+                                        ocrpath = strchr(filepathOcr, '.');
+                                        *ocrpath = '\0';
+
+                                        //sprintf_f(rs->logs, "debug strchr, p: 0x%.8x ret: 0x%.8x !!! \n", (uint32_t)filepath, (uint32_t)ocrpath);
+                                        //print_f(rs->plogs, "P17", rs->logs);
+                                    
+                                        ocrpath = strcat(filepathOcr, "_%.2d.txt");
+                                        sprintf(filepathOcrTxt, filepathOcr, modix);
+                                        
+                                        focrtxt = fopen(filepathOcrTxt, "w");
+                                        if (focrtxt) {
+                                            sprintf_f(rs->logs, "create ocrtxt file [%s] succeed !!!\n", filepathOcrTxt);
+                                            print_f(rs->plogs, "P17", rs->logs);
+
+                                            fwrite(outchr[modix], 1, outstrlen, focrtxt);
+
+                                            fflush(focrtxt);
+                                            fclose(focrtxt);
+                                            sync();  
+
+                                            focrtxt = 0;
+                                        
+                                        } else {
+                                            sprintf_f(rs->logs, "create ocrtxt file [%s] failed!!! \n", filepathOcrTxt);
+                                            print_f(rs->plogs, "P17", rs->logs);
+                                        }                                    
+                                    }
+                                }
+                                
+                            }
+                            
+                            
                             #endif
                             
                             minfo[0] = 'd';

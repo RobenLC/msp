@@ -1,0 +1,57 @@
+
+
+CFLAGS += -O2 -Wall -g -D_GNU_SOURCE -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+
+#DISTRIBUTION_PATH = ~/stm32/Distribution-Package/openstlinux-20-02-19
+DISTRIBUTION_PATH = ~/ST/STM32MP15-Ecosystem-v1.0.0/Distribution-Package/openstlinux-4.19-thud-mp1-19-02-20
+
+COMPONENT_PATH =  $(DISTRIBUTION_PATH)/build-openstlinuxweston-stm32mp1/tmp-glibc/sysroots-components
+
+
+INCLUDE  = -I $(COMPONENT_PATH)/cortexa7t2hf-neon-vfpv4/opencv/usr/include/opencv
+INCLUDE += -I $(COMPONENT_PATH)/cortexa7t2hf-neon-vfpv4/opencv/usr/include/
+
+OPENCV_LIB  = -L $(COMPONENT_PATH)/cortexa7t2hf-neon-vfpv4/ffmpeg/usr/lib
+OPENCV_LIB += -L $(COMPONENT_PATH)/cortexa7t2hf-neon-vfpv4/libgphoto2/usr/lib
+OPENCV_LIB += -L $(COMPONENT_PATH)/cortexa7t2hf-neon-vfpv4/libexif/usr/lib
+OPENCV_LIB += -L $(COMPONENT_PATH)/cortexa7t2hf-neon-vfpv4/x264/usr/lib
+OPENCV_LIB += -L $(COMPONENT_PATH)/cortexa7t2hf-neon-vfpv4/opencv/usr/lib
+OPENCV_LIB += -L $(COMPONENT_PATH)/cortexa7hf-neon-vfpv4/tbb/usr/lib/
+OPENCV_LIB += -lopencv_stitching -lopencv_superres -lopencv_videostab -lopencv_aruco -lopencv_bgsegm
+OPENCV_LIB += -lopencv_bioinspired -lopencv_ccalib -lopencv_dpm -lopencv_face -lopencv_photo -lopencv_fuzzy
+OPENCV_LIB += -lopencv_hfs -lopencv_img_hash -lopencv_line_descriptor -lopencv_optflow -lopencv_reg
+OPENCV_LIB += -lopencv_rgbd -lopencv_saliency -lopencv_stereo -lopencv_structured_light -lopencv_phase_unwrapping
+OPENCV_LIB += -lopencv_surface_matching -lopencv_tracking -lopencv_datasets -lopencv_plot -lopencv_xfeatures2d
+OPENCV_LIB += -lopencv_shape -lopencv_video -lopencv_ml -lopencv_ximgproc -lopencv_calib3d -lopencv_features2d
+OPENCV_LIB += -lopencv_highgui -lopencv_videoio -lopencv_flann -lopencv_xobjdetect -lopencv_imgcodecs
+OPENCV_LIB += -lopencv_objdetect -lopencv_xphoto -lopencv_imgproc -lopencv_core -lavcodec
+OPENCV_LIB += -lavformat -lavutil -lswscale -lgphoto2 -lgphoto2_port -ltbb -lswresample -lx264 -lexif
+
+
+.PHONY : clean TARGET
+
+
+SOURCES = t1_20200520_ok.cpp linear.cpp tron.cpp daxpy.c ddot.c dnrm2.c dscal.c
+
+OBJECTS = t1_20200520_ok.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
+
+TARGET = ../makemodel
+
+$(TARGET) : $(OBJECTS)
+	$(CXX) -o $(TARGET) $(OBJECTS) $(INCLUDE) $(OPENCV_LIB)
+
+.c.o:
+	$(CXX)  -c $< $(INCLUDE)
+
+.cpp.o:
+	$(CXX)  -c $< $(INCLUDE)
+
+clean:
+	rm -f $(TARGET)
+	rm -f *.o
+
+
+
+
+
+
