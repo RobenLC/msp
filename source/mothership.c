@@ -2319,7 +2319,7 @@ static int rgb2jpgRvs(unsigned char *prgb, unsigned char *ppjpg, int *jlen, int 
 
     //oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
     row_stride = ((cinfo.image_width * bpp + 31) / 32) * 4;
-    printf("[JPG] bpp: %d row: %d \n", bpp, row_stride);
+    //printf("[JPG] bpp: %d row: %d \n", bpp, row_stride);
 
     while (cinfo.next_scanline < cinfo.image_height) 
     {
@@ -2333,7 +2333,7 @@ static int rgb2jpgRvs(unsigned char *prgb, unsigned char *ppjpg, int *jlen, int 
 
     jpeg_destroy_compress(&cinfo);
 
-    printf("[JPG] dst: 0x%.8x len: %ld \n", (uint32_t)ppjpg, lLen);
+    //printf("[JPG] dst: 0x%.8x len: %ld \n", (uint32_t)ppjpg, lLen);
     
     if (!ppjpg) {
         printf("[JPG] Error!!! return memory failed\n");
@@ -2379,7 +2379,7 @@ static int rgb2jpg(unsigned char *prgb, unsigned char *ppjpg, int *jlen, int set
 
     //oldRowsz = ((bpp * oldWidth + 31) / 32) * 4;
     row_stride = ((cinfo.image_width * bpp + 31) / 32) * 4;
-    printf("[JPG] bpp: %d row: %d \n", bpp, row_stride);
+    //printf("[JPG] bpp: %d row: %d \n", bpp, row_stride);
 
     while (cinfo.next_scanline < cinfo.image_height) 
     {
@@ -2393,7 +2393,7 @@ static int rgb2jpg(unsigned char *prgb, unsigned char *ppjpg, int *jlen, int set
 
     jpeg_destroy_compress(&cinfo);
 
-    printf("[JPG] dst: 0x%.8x len: %ld \n", (uint32_t)ppjpg, lLen);
+    //printf("[JPG] dst: 0x%.8x len: %ld \n", (uint32_t)ppjpg, lLen);
     
     if (!ppjpg) {
         printf("[JPG] Error!!! return memory failed\n");
@@ -2442,7 +2442,7 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     //shmem_dump(pjpg, 512);
      
     jpeg_read_header(&cinfo, TRUE);
-    printf("[JPG] jpeg_read_header. bpp: %d output_components: %d \n", bpp, cinfo.output_components); 
+    //printf("[JPG] jpeg_read_header. bpp: %d output_components: %d \n", bpp, cinfo.output_components); 
     cinfo.output_components = bpp / 8;
     
     clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
@@ -2458,7 +2458,7 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     *getW = cinfo.output_width;
     *getH = cinfo.output_height;
     
-    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d\n", cinfo.output_width, cinfo.output_height, row_stride); 
      
     rgb_size = row_stride * cinfo.output_height;
     if (rgbsz < rgb_size) {
@@ -2466,11 +2466,11 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
         return -3;
     }
     
-    printf("[JPG] output buff size: %d, bmp size: %d \n", rgbsz, rgb_size);
+    //printf("[JPG] output buff size: %d, bmp size: %d \n", rgbsz, rgb_size);
     
     samplebuffer = (*cinfo.mem->alloc_sarray)((j_common_ptr) &cinfo, JPOOL_IMAGE, row_stride, 1);
 
-    #if 1
+    #if 0
     printf("[JPG] debug: rgb_size: %d, raw size: %d w: %d h: %d row_stride: %d \n", rgb_size,
                 cinfo.image_width*cinfo.image_height*cinfo.output_components,
                 cinfo.image_width, 
@@ -3231,7 +3231,7 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
         pdec = &pdcbuf[idx];
         msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
 
-        printf("[BIDX] search %d. %d (0x%.8x) \n", idx, pdec->aspDecStatus, pdec->aspDecStatus);
+        //printf("[BIDX] search %d. %d (0x%.8x) \n", idx, pdec->aspDecStatus, pdec->aspDecStatus);
         
         if (pdec->aspDecStatus == -1) {
             find = idx;
@@ -3262,8 +3262,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     len = (2592 * 1864 * 15) / 100;
     pdec->aspDecJpeg.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecJpeg.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
+        //sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        //print_f(pmrs->plog, "USB", pmrs->log);
         
         memset(pdec->aspDecJpeg.aspDcData, 0, len);
     } else {
@@ -3275,8 +3275,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     len = 1024;
     pdec->aspDecMeta.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecMeta.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %dB\n", idx, len); 
-        print_f(pmrs->plog, "USB", pmrs->log);
+        //sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %dB\n", idx, len); 
+        //print_f(pmrs->plog, "USB", pmrs->log);
         
         memset(pdec->aspDecMeta.aspDcData, 0, len);
     } else {
@@ -3288,8 +3288,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     len = 65536;
     pdec->aspDecMetaex.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecMetaex.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
+        //sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        //print_f(pmrs->plog, "USB", pmrs->log);
         
         memset(pdec->aspDecMetaex.aspDcData, 0, len);
     } else {
@@ -3301,8 +3301,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     len = 2592 * 1864;
     pdec->aspDecRaw.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
     if (pdec->aspDecRaw.aspDcData) {
-        sprintf_f(pmrs->log, "allocate memory for M4 raw for id%d succeed !! size: %d KB\n", idx, len / 1024); 
-        print_f(pmrs->plog, "USB", pmrs->log);
+        //sprintf_f(pmrs->log, "allocate memory for M4 raw for id%d succeed !! size: %d KB\n", idx, len / 1024); 
+        //print_f(pmrs->plog, "USB", pmrs->log);
         
         memset(pdec->aspDecRaw.aspDcData, 0, len);
     } else {
@@ -3316,8 +3316,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
         pdec->aspDecMfPiRaw[ix].aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
         if (pdec->aspDecMfPiRaw[ix].aspDcData) {
-            sprintf_f(pmrs->log, "allocate memory for M4 piece raw %.d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
-            print_f(pmrs->plog, "USB", pmrs->log);
+            //sprintf_f(pmrs->log, "allocate memory for M4 piece raw %.d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
+            //print_f(pmrs->plog, "USB", pmrs->log);
         
             memset(pdec->aspDecMfPiRaw[ix].aspDcData, 0, len);
         } else {
@@ -3332,8 +3332,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
         pdec->aspDecMfPiJpg[ix].aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
         if (pdec->aspDecMfPiJpg[ix].aspDcData) {
-            sprintf_f(pmrs->log, "allocate memory for M4 piece jpg %.2d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
-            print_f(pmrs->plog, "USB", pmrs->log);
+            //sprintf_f(pmrs->log, "allocate memory for M4 piece jpg %.2d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
+            //print_f(pmrs->plog, "USB", pmrs->log);
         
             memset(pdec->aspDecMfPiJpg[ix].aspDcData, 0, len);
         } else {
@@ -6521,7 +6521,7 @@ static int aspMetaRelease(unsigned int funcbits, struct mainRes_s *mrs, struct p
                 opSt++;
             }
             else {
-                #if 1//LOG_METABUILD_EN
+                #if LOG_METABUILD_EN
                 printf("[meta] 0x%.2x (!0x%.2x) = 0x%.2x (0x%.2x)\n", pct[idx].opCode, opSt, pct[idx].opValue, pct[idx].opStatus);
                 #endif
             }
@@ -18192,6 +18192,7 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
     result[6] = pcp36->crp36P4[0];
     result[7] = pcp36->crp36P4[1];
 
+    /*
     sprintf_f(rs->logs, "first stage result p1 (%d, %d) \n", result[0], result[1]);
     print_f(rs->plogs, "DoC", rs->logs);
     
@@ -18203,7 +18204,8 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
 
     sprintf_f(rs->logs, "first stage result p4 (%d, %d)\n", result[6], result[7]);
     print_f(rs->plogs, "DoC", rs->logs);
-
+    */
+    
     if (mass_len >= 8) {
         int gap = 0;
         for (i = 0; i < mass_len / 4 - 1; i++) {
@@ -18440,8 +18442,8 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
             dpi = 300;
             break;
     }
-    sprintf_f(rs->logs, "get dpi: %d ret: %d \n", dpi, ret);
-    print_f(rs->plogs, "GetORG", rs->logs);
+    //sprintf_f(rs->logs, "get dpi: %d ret: %d \n", dpi, ret);
+    //print_f(rs->plogs, "GetORG", rs->logs);
 
     pt = &(pscanInfo->CROP_POS_1);
     for (ix = 0; ix < CROP_MAX_NUM_META; ix++) {
@@ -18527,7 +18529,7 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
     masUsed = lnlength;
     masRecd = lnrec;
 
-    #if 1//CROP_CALCU_PROCESS
+    #if CROP_CALCU_PROCESS
     sprintf_f(rs->logs, "meta masspt info (used:%d, start:%d lineRec:%d gap:%d)\n", masUsed, cy, masRecd, gap); 
     print_f(rs->plogs, "GetEXT", rs->logs);
     #endif
@@ -18557,8 +18559,8 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
             break;
     }
     
-    sprintf_f(rs->logs, "get dpi: %d ret: %d \n", dpi, ret);
-    print_f(rs->plogs, "GetEXT", rs->logs);
+    //sprintf_f(rs->logs, "get dpi: %d ret: %d \n", dpi, ret);
+    //print_f(rs->plogs, "GetEXT", rs->logs);
 
     shtbuf = (unsigned short *)&pscanInfo->EXTRA_POINT[4];
 
@@ -36949,8 +36951,8 @@ static int stusbbnote_126(struct psdata_s *data)
 
     rs = data->rs;
     rlt = abs_result(data->result); 
-    sprintf_f(rs->logs, "op_126 rlt:0x%x \n", rlt); 
-    print_f(rs->plogs, "BM4", rs->logs);  
+    //sprintf_f(rs->logs, "op_126 rlt:0x%x \n", rlt); 
+    //print_f(rs->plogs, "BM4", rs->logs);  
 
     switch (rlt) {
         case STINIT:
@@ -36958,8 +36960,8 @@ static int stusbbnote_126(struct psdata_s *data)
 
             rs_ipc_put(data->rs, &ch, 1);
             data->result = emb_result(data->result, WAIT);
-            sprintf_f(rs->logs, "op_126: result: %x, goto %d\n", data->result, ch); 
-            print_f(rs->plogs, "BM4", rs->logs);  
+            //sprintf_f(rs->logs, "op_126: result: %x, goto %d\n", data->result, ch); 
+            //print_f(rs->plogs, "BM4", rs->logs);  
             break;
         case WAIT:
             if (data->ansp0 == 1) {
@@ -48549,7 +48551,7 @@ static int changeJpgLen(uint8_t *data, uint32_t tlen, int max)
                                 
                 len = (imgLen[1] << 8) + imgLen[0];   
 
-                printf("[changeImgLen] Length = %d -> %d\n", len, tlen);
+                //printf("[changeImgLen] Length = %d -> %d\n", len, tlen);
                 
                 data[ix + 4] = tlen >> 8;
                 data[ix + 5] = tlen & 0xff;;
@@ -54448,8 +54450,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             write(outfd[ins], &pllcmd[ins], 1);
                         }
                         else if (pllcmd[ins] == 'x') {
-                            sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            print_f(mrs->plog, "fs145", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            //print_f(mrs->plog, "fs145", mrs->log);
 
                             pllinf = 0;
                             gerr = read(pllfd[ins].fd, &pllinf, 1);
@@ -54462,8 +54464,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             return 1;  
                         }
                         else if (pllcmd[ins] == 'x') {
-                            sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            print_f(mrs->plog, "fs145", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            //print_f(mrs->plog, "fs145", mrs->log);
                             modersp->r = 1;
                             return 1;  
                         }
@@ -54728,8 +54730,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if ((matcmd[ins] == 'Q') ||(matcmd[ins] == 'D')) {
                                     if (pubffcd[ins]->ublastsize == 0) {
                                         pubffcd[ins]->ublastsize = lens;
-                                        sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 1\n", ins, lens, totsz[ins]);                                    
-                                        print_f(mrs->plog, "fs145", mrs->log);
+                                        //sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 1\n", ins, lens, totsz[ins]);                                    
+                                        //print_f(mrs->plog, "fs145", mrs->log);
 
                                         write(infd[ins], &matcmd[ins-1], 1);
                                                                             
@@ -54934,8 +54936,8 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     ring_buf_prod(&mrs->dataRx);
 
-                                    sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
-                                    print_f(mrs->plog, "fs145", mrs->log);
+                                    //sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
+                                    //print_f(mrs->plog, "fs145", mrs->log);
 
                                     mrs_ipc_put(mrs, "o", 1, 2);
                                     mrs_ipc_put(mrs, indexfo, 2, 2);
@@ -55808,8 +55810,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             
                             mrs_ipc_get(mrs, minfo, 2, 2);
 
-                            sprintf_f(mrs->log, "[GW] get forward msg from p3: 0x%.2x + 0x%.2x \n", minfo[0], minfo[1]);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] get forward msg from p3: 0x%.2x + 0x%.2x \n", minfo[0], minfo[1]);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             write(infd[11], minfo, 2);
                         } else {
@@ -56240,8 +56242,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                             */
 
-                            sprintf_f(mrs->log, "[GW] need buff from 15: %d 16: %d \n", latcmd[15], latcmd[16]);            
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] need buff from 15: %d 16: %d \n", latcmd[15], latcmd[16]);            
+                            //print_f(mrs->plog, "fs152", mrs->log);
 
                             if ((latcmd[15]) && (latcmd[16])) {
                                 if (latcmd[15] < latcmd[16]) {
@@ -56288,8 +56290,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                         break;
                     case 11: // rs15 p12
-                        sprintf_f(mrs->log, "[GW] m4 get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
-                        print_f(mrs->plog, "fs152", mrs->log);
+                        //sprintf_f(mrs->log, "[GW] m4 get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                        //print_f(mrs->plog, "fs152", mrs->log);
 
                         if (latcmd[0] == '1') {
                             sprintf_f(mrs->log, "[GW] m4 block till flow stop \n");
@@ -56409,8 +56411,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                     case 12: // p13p14
                     case 13:
                         if (pllcmd[ins] == 'd') {
-                            sprintf_f(mrs->log, "[GW] m4 decode get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] m4 decode get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             gerr = -1;
                             while (gerr <= 0) {
@@ -56423,12 +56425,12 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 mfidx = chm & 0x7f;
                             }
                             
-                            sprintf_f(mrs->log, "[GW] m4 decode get sec chr: (0x%.2x) buff idx: %d\n", chm, mfidx);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] m4 decode get sec chr: (0x%.2x) buff idx: %d\n", chm, mfidx);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
-                            sprintf_f(mrs->log, "[GW] decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             /*
                             mstatus = (mstatus << 1) | 0x01;
@@ -56451,8 +56453,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                         }
                         else if (pllcmd[ins] == 's') {
-                            sprintf_f(mrs->log, "[GW] m4 sample get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] m4 sample get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                            //print_f(mrs->plog, "fs152", mrs->log);
 
                             gerr = -1;
                             while (gerr <= 0) {
@@ -56465,12 +56467,12 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 mfidx = chm & 0x7f;
                             }
 
-                            sprintf_f(mrs->log, "[GW] m4 sample get sec chr: %c(0x%.2x) buff idx: %d\n", chm, chm, mfidx);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] m4 sample get sec chr: %c(0x%.2x) buff idx: %d\n", chm, chm, mfidx);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
-                            sprintf_f(mrs->log, "[GW] sample buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] sample buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             pollfo[0] = 's';
                             pollfo[1] = chm;
@@ -56485,8 +56487,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                         break;
                     case 14: // p15
-                        sprintf_f(mrs->log, "[GW] m4 encode get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
-                        print_f(mrs->plog, "fs152", mrs->log);
+                        //sprintf_f(mrs->log, "[GW] m4 encode get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                        //print_f(mrs->plog, "fs152", mrs->log);
 
                         if (latcmd[0] == '1') {
                             sprintf_f(mrs->log, "[GW] m4 encode block till flow stop \n");
@@ -56509,13 +56511,13 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 mfidx = chm & 0x7f;
                             }
 
-                            sprintf_f(mrs->log, "[GW] to pc get sec chr: %c(0x%.2x) buff idx: %d\n", chm, chm, mfidx);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] to pc get sec chr: %c(0x%.2x) buff idx: %d\n", chm, chm, mfidx);
+                            //print_f(mrs->plog, "fs152", mrs->log);
 
 
                             ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
-                            sprintf_f(mrs->log, "[GW] encode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] encode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             /*
                             mstatus = (mstatus << 1) | 0x01;
@@ -56589,8 +56591,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 print_f(mrs->plog, "fs152", mrs->log);
 
                                 ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
-                                sprintf_f(mrs->log, "[GW] get BMP decode buff id: %d ret: %d \n", bidx, ret);
-                                print_f(mrs->plog, "fs152", mrs->log);
+                                //sprintf_f(mrs->log, "[GW] get BMP decode buff id: %d ret: %d \n", bidx, ret);
+                                //print_f(mrs->plog, "fs152", mrs->log);
                                 if (ret < 0) {
                                     bidx = -1;
 
@@ -56616,8 +56618,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     //print_f(mrs->plog, "fs152", mrs->log);
                                     pubffo = pubffh;
                                     while (pubffo) {
-                                        sprintf_f(mrs->log, "    [GW] 0x%.3x:0x%.3x \n", pubffo->ubindex, mindex);
-                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        //sprintf_f(mrs->log, "    [GW] 0x%.3x:0x%.3x \n", pubffo->ubindex, mindex);
+                                        //print_f(mrs->plog, "fs152", mrs->log);
                                         if ((pubffo->ubindex & 0x3ff) == mindex) {
                                             break;
                                         }
@@ -57128,8 +57130,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             write(outfd[ins], &pllcmd[ins], 1);
                         }
                         else if (pllcmd[ins] == 'x') {
-                            sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
-                            print_f(mrs->plog, "fs152", mrs->log);
+                            //sprintf_f(mrs->log, "[GW] id%d pipe%d get ch: %c(0x%.2x) return stm\n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
+                            //print_f(mrs->plog, "fs152", mrs->log);
                             
                             pllinf = 0;
                             gerr = read(pllfd[ins].fd, &pllinf, 1);
@@ -57442,8 +57444,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if ((matcmd[ins] == 'Q') ||(matcmd[ins] == 'D')) {
                                     if (pubffcd[ins]->ublastsize == 0) {
                                         pubffcd[ins]->ublastsize = lens;
-                                        sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 1\n", ins, lens, totsz[ins]);                                    
-                                        print_f(mrs->plog, "fs152", mrs->log);
+                                        //sprintf_f(mrs->log, "[GW] ring%d the last trunk size: %d total: %d - 1\n", ins, lens, totsz[ins]);                                    
+                                        //print_f(mrs->plog, "fs152", mrs->log);
 
                                         write(infd[ins], &matcmd[ins-1], 1);
                                                                             
@@ -57649,8 +57651,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     ring_buf_prod(&mrs->dataRx);
 
-                                    sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
-                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    //sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
 
                                     #if MFOUR_SIM_MODE_JPG
                                     //mrs_ipc_put(mrs, "s", 1, 2);
@@ -61116,8 +61118,8 @@ static int p3(struct procRes_s *rs)
             }
             #if MFOUR_SIM_MODE_JPG
             else if (cmode == 9) {
-                sprintf_f(rs->logs, "sim cmode: %d\n", cmode);
-                print_f(rs->plogs, "P3", rs->logs);
+                //sprintf_f(rs->logs, "sim cmode: %d\n", cmode);
+                //print_f(rs->plogs, "P3", rs->logs);
 
                 //ret = rs_ipc_get(rs, finfo, 2);
                 ret = rs_ipc_get(rs, &chc, 1);
@@ -61133,8 +61135,8 @@ static int p3(struct procRes_s *rs)
                     print_f(rs->plogs, "P3", rs->logs);
                     break;
                 } else {
-                    sprintf_f(rs->logs, "crop get buff index %d succed!!! \n", mbfidx);
-                    print_f(rs->plogs, "P3", rs->logs);
+                    //sprintf_f(rs->logs, "crop get buff index %d succed!!! \n", mbfidx);
+                    //print_f(rs->plogs, "P3", rs->logs);
                 }
 
                 pdec = rs->pbDecMfour[mbfidx];
@@ -61199,8 +61201,8 @@ static int p3(struct procRes_s *rs)
                     print_f(rs->plogs, "P3", rs->logs);
                     */
 
-                    sprintf_f(rs->logs, "get meta crop info mtlen: %d, exlen: %d buffsize: %d \n", mtlen, exlen, len);
-                    print_f(rs->plogs, "P3", rs->logs);
+                    //sprintf_f(rs->logs, "get meta crop info mtlen: %d, exlen: %d buffsize: %d \n", mtlen, exlen, len);
+                    //print_f(rs->plogs, "P3", rs->logs);
 
                     val = (pexmt[2] << 8) | pexmt[3];
 
@@ -72972,8 +72974,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
-            sprintf_f(rs->logs, "conti read stop ret: %d \n", ptret);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "conti read stop ret: %d \n", ptret);
+            //print_f(rs->plogs, sp, rs->logs);
             
             chq = 'B';
             pieRet = write(pPrx[1], &chq, 1);
@@ -73057,8 +73059,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         }
                         #endif
 
-                        sprintf_f(rs->logs, "get the error status: 0x%.2x (org: 0x%.2x)\n", cswst, csworg & 0x7f);
-                        print_f(rs->plogs, sp, rs->logs);
+                        //sprintf_f(rs->logs, "get the error status: 0x%.2x (org: 0x%.2x)\n", cswst, csworg & 0x7f);
+                        //print_f(rs->plogs, sp, rs->logs);
 
                         #if 0 /* stop scan if get error status */
                         if ((cswst & 0x7f) && (cswst != 0x7f)) {
@@ -73462,8 +73464,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             //usCost = time_diff(&utstart, &utend, 1000);
             //throughput = acusz*8.0 / usCost*1.0;
 
-            sprintf_f(rs->logs, "last size: %d\n", acusz);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "last size: %d\n", acusz);
+            //print_f(rs->plogs, sp, rs->logs);
             
             #if USB_HS_SAVE_RESULT
             sync();
@@ -73473,8 +73475,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
         }
         else if (cmdchr == 0x06) {
-            sprintf_f(rs->logs, "conti already stop !!!! \n");
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "conti already stop !!!! \n");
+            //print_f(rs->plogs, sp, rs->logs);
             chq = 'G';
             pieRet = write(pPrx[1], &chq, 1);
         }
@@ -78854,7 +78856,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     while (1) {
                         pipRet = poll(ptfd, 1, 500);
                     
-                        #if 1//LOG_P11_EN
+                        #if LOG_P11_EN
                         sprintf_f(rs->logs, "[DV] pipeRx get ch: 0x%.2x ret: %d idle: %dms\n", ch, pipRet, idlet);
                         print_f(rs->plogs, "P11", rs->logs);
                         #endif
@@ -78874,8 +78876,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             ret = read(pipeRx[0], &ch, 1);
                             if ((ret > 0) && (ch == 'P')) {
                                 err = read(pipeRx[0], &ch, 1);
-                                sprintf_f(rs->logs, "[DV] get pipeRx sec ch == 0x%.2x ret: %d \n", ch, err);
-                                print_f(rs->plogs, "P11", rs->logs);
+                                //sprintf_f(rs->logs, "[DV] get pipeRx sec ch == 0x%.2x ret: %d \n", ch, err);
+                                //print_f(rs->plogs, "P11", rs->logs);
                     
                                 if (ch == 0x80) {
                                     mbufidx = 0;
@@ -78903,8 +78905,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rs->plogs, "P11", rs->logs);
                     
                                     err = aspBMPdecodeItemGet(&pmbf->aspDecMeta, &bfmt, &mtlen);
-                                    sprintf_f(rs->logs, "[DV] bfmt  addr: 0x%.8x len: %d ret: %d\n", (uint32_t)bfmt, mtlen, err);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "[DV] bfmt  addr: 0x%.8x len: %d ret: %d\n", (uint32_t)bfmt, mtlen, err);
+                                    //print_f(rs->plogs, "P11", rs->logs);
                     
                                     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
                                         bfs[ix] = 0;
@@ -78913,8 +78915,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
                                         err = aspBMPdecodeItemGet(&pmbf->aspDecMfPiJpg[ix], &bfs[ix], &bflens[ix]);
                     
-                                        sprintf_f(rs->logs, "[DV] bfs %d. addr: 0x%.8x len: %d ret: %d - 1\n", ix, (uint32_t)bfs[ix], bflens[ix], err);
-                                        print_f(rs->plogs, "P11", rs->logs);
+                                        //sprintf_f(rs->logs, "[DV] bfs %d. addr: 0x%.8x len: %d ret: %d - 1\n", ix, (uint32_t)bfs[ix], bflens[ix], err);
+                                        //print_f(rs->plogs, "P11", rs->logs);
 
                                         
                                         if ((bflens[ix] == 0) && (cswerr) && (!pagerst)) { // the last page
@@ -78926,8 +78928,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                             pagerst = ix + 1;
                     
-                                            sprintf_f(rs->logs, "[DV] bfs %d. addr: 0x%.8x len: %d ret: %d, cswerr: %d, pagerst: %d - 2\n", ix, (uint32_t)bfs[ix], bflens[ix], err, cswerr, pagerst);
-                                            print_f(rs->plogs, "P11", rs->logs);
+                                            //sprintf_f(rs->logs, "[DV] bfs %d. addr: 0x%.8x len: %d ret: %d, cswerr: %d, pagerst: %d - 2\n", ix, (uint32_t)bfs[ix], bflens[ix], err, cswerr, pagerst);
+                                            //print_f(rs->plogs, "P11", rs->logs);
 
                                             chq = '1';
                                             pipRet = write(pipeTx[1], &chq, 1);
@@ -78942,8 +78944,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }
                     
                                     err = aspBMPdecodeItemGet(&pmbf->aspDecMetaex, &bfex, &exlen);
-                                    sprintf_f(rs->logs, "[DV] bfmtex  addr: 0x%.8x len: %d ret: %d\n", (uint32_t)bfex, exlen, err);
-                                    print_f(rs->plogs, "P11", rs->logs);                                        
+                                    //sprintf_f(rs->logs, "[DV] bfmtex  addr: 0x%.8x len: %d ret: %d\n", (uint32_t)bfex, exlen, err);
+                                    //print_f(rs->plogs, "P11", rs->logs);                                        
                     
                                     break;
                                 }
@@ -78959,9 +78961,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 rlen = lens % 512;
                 msync(addrd, lens, MS_SYNC);
                 
-                sprintf_f(rs->logs, "[DV] the meta size: %d dump: \n", rlen);
-                print_f(rs->plogs, "P11", rs->logs);
-                shmem_dump(addrd+(lens-rlen), 16);
+                //sprintf_f(rs->logs, "[DV] the meta size: %d dump: \n", rlen);
+                //print_f(rs->plogs, "P11", rs->logs);
+                //shmem_dump(addrd+(lens-rlen), 16);
                 //dbgMetaUsb((struct aspMetaDataviaUSB_s *)(addrd+(lens-rlen)));
                 
                 if (!rlen) {
@@ -78983,8 +78985,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
 
-                    sprintf_f(rs->logs, "[DV] usb image send ret: %d size: %d - %d\n", sendsz, lens, cntTx);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    //sprintf_f(rs->logs, "[DV] usb image send ret: %d size: %d - %d\n", sendsz, lens, cntTx);
+                    //print_f(rs->plogs, "P11", rs->logs);
                     
 
                     lens -= sendsz;
@@ -78993,9 +78995,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
 
                 rlen = lastCylen % 512;
-                sprintf_f(rs->logs, "[DV] the extra meta size: %d dump: \n", lastCylen);
-                print_f(rs->plogs, "P11", rs->logs);
-                shmem_dump(addrb, 16);
+                //sprintf_f(rs->logs, "[DV] the extra meta size: %d dump: \n", lastCylen);
+                //print_f(rs->plogs, "P11", rs->logs);
+                //shmem_dump(addrb, 16);
 
                 if (!rlen) {
                     sprintf_f(rs->logs, "[DV] WARNING!!! the image size is multiplex of trunk size  !!!size: %d - 2 \n", lastCylen);
@@ -79018,8 +79020,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
 
-                    sprintf_f(rs->logs, "[DV] usb exmeta send ret: %d size: %d - %d\n", sendsz, lastCylen, cntTx);
-                    print_f(rs->plogs, "P11", rs->logs);
+                    //sprintf_f(rs->logs, "[DV] usb exmeta send ret: %d size: %d - %d\n", sendsz, lastCylen, cntTx);
+                    //print_f(rs->plogs, "P11", rs->logs);
                     
                     lastCylen -= sendsz;
                     addrb += sendsz;
@@ -79044,8 +79046,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         
                         aspBMPdecodeBuffInit(pmbf);
                     
-                        sprintf_f(rs->logs, "[DV] free the buff index: %d \n", mbufidx);
-                        print_f(rs->plogs, "P11", rs->logs);
+                        //sprintf_f(rs->logs, "[DV] free the buff index: %d \n", mbufidx);
+                        //print_f(rs->plogs, "P11", rs->logs);
 
                         rs_ipc_put(rsd, "b", 1);
                     } else {
@@ -85085,8 +85087,8 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
 
     clock_gettime(CLOCK_REALTIME, &jpgE);
 
-    tmCost = time_diff(&jpgS, &jpgE, 1000000);
-    sprintf_f(rs->logs, "m4 rotate bmp cost: %d ms\n", tmCost);
+    tmCost = time_diff(&jpgS, &jpgE, 1000);
+    sprintf_f(rs->logs, "m4 rotate bmp cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
     print_f(rs->plogs, "CLIP", rs->logs);
 
     memcpy(ph, bmpcolrtb, sizeof(struct bitmapHeader_s)-2);
@@ -85104,7 +85106,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
         //imgbuf->mfourAttb.BKNoteImageRect.yr = cropinfo[5];
     }
 
-    sprintf_f(rs->logs, "m4 rotate angle: %.3d.%.2d degree (%d) \n", bheader->aspbiNumImpColor/100, bheader->aspbiNumImpColor%100, bheader->aspbiNumImpColor);
+    sprintf_f(rs->logs, "m4 rotate angle: %.3d.%.2d degree (%d) \n", bheader->aspbiNumImpColor/100, abs(bheader->aspbiNumImpColor%100), bheader->aspbiNumImpColor);
     print_f(rs->plogs, "CLIP", rs->logs);
 
     rotAngle = bheader->aspbiNumImpColor;
@@ -85114,17 +85116,17 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     
     msync(bmprot, abuf_size, MS_SYNC);
     
-    sprintf_f(rs->logs, "dump 512 bytes cropping result addr: 0x%.8x size: %d \n", (uint32_t)bmprot, abuf_size);
-    print_f(rs->plogs, "CLIP", rs->logs);    
+    //sprintf_f(rs->logs, "dump 512 bytes cropping result addr: 0x%.8x size: %d \n", (uint32_t)bmprot, abuf_size);
+    //print_f(rs->plogs, "CLIP", rs->logs);    
 
     //shmem_dump(bmprot, 512);
 
-    sprintf_f(rs->logs, "rotate result w: %d, h: %d size: %d ret: %d\n", pDeRect->mfourRectW, pDeRect->mfourRectH, abuf_size, ret);
-    print_f(rs->plogs, "CLIP", rs->logs);    
+    //sprintf_f(rs->logs, "rotate result w: %d, h: %d size: %d ret: %d\n", pDeRect->mfourRectW, pDeRect->mfourRectH, abuf_size, ret);
+    //print_f(rs->plogs, "CLIP", rs->logs);    
 
     #if DUMP_ROT_BMP
-    sprintf_f(rs->logs, "show result bmp header: \n");
-    print_f(rs->plogs, "CLIP", rs->logs);    
+    //sprintf_f(rs->logs, "show result bmp header: \n");
+    //print_f(rs->plogs, "CLIP", rs->logs);    
 
     //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
     //memcpy(bmpcolrtb, ph, sizeof(struct bitmapHeader_s)-2);
@@ -85136,12 +85138,12 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     }
 
     ret = fwrite((char*)bmpcolrtb, 1, bhlen, fdump);
-    sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, bhlen);
-    print_f(rs->plogs, "CLIP", rs->logs);
+    //sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, bhlen);
+    //print_f(rs->plogs, "CLIP", rs->logs);
 
     ret = fwrite((char*)bmprot, 1, abuf_size, fdump);
-    sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, abuf_size);
-    print_f(rs->plogs, "CLIP", rs->logs);
+    //sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, abuf_size);
+    //print_f(rs->plogs, "CLIP", rs->logs);
     
 
     fflush(fdump);
@@ -85320,13 +85322,13 @@ static int p12(struct procRes_s *rs)
         ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
 
         if (ret > 0) {
-            sprintf_f(rs->logs, "m4 get ch[0x%.2x] \n", ch);
-            print_f(rs->plogs, "P12", rs->logs);
+            //sprintf_f(rs->logs, "m4 get ch[0x%.2x] \n", ch);
+            //print_f(rs->plogs, "P12", rs->logs);
         } else {
             //rs_ipc_put(rs, "h", 1);
         
-            sprintf_f(rs->logs, "host not available !!\n");
-            print_f(rs->plogs, "P12", rs->logs);
+            //sprintf_f(rs->logs, "host not available !!\n");
+            //print_f(rs->plogs, "P12", rs->logs);
 
             continue;
         }
@@ -85344,8 +85346,8 @@ static int p12(struct procRes_s *rs)
         case 'f':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
-                sprintf_f(rs->logs, "f get cont ch[0x%.2x] \n", ch);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "f get cont ch[0x%.2x] \n", ch);
+                //print_f(rs->plogs, "P12", rs->logs);
 
                 if (ch == 0x80) {
                     mfbidx = 0;
@@ -85358,8 +85360,8 @@ static int p12(struct procRes_s *rs)
                     print_f(rs->plogs, "P12", rs->logs);
                     break;
                 } else {
-                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
-                    print_f(rs->plogs, "P12", rs->logs);
+                    //sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    //print_f(rs->plogs, "P12", rs->logs);
                 }
 
                 imgidx = 0;
@@ -85390,8 +85392,8 @@ static int p12(struct procRes_s *rs)
                         pipRet = poll(pllfd, 1, 500);
                         if (pipRet > 0) {
                             ret = read(pllfd[0].fd, &chm, 1);
-                            sprintf_f(rs->logs, "m4crop get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
-                            print_f(rs->plogs, "P12", rs->logs);
+                            //sprintf_f(rs->logs, "m4crop get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                            //print_f(rs->plogs, "P12", rs->logs);
                         
                             mfcmd = chm;
                         
@@ -85400,8 +85402,8 @@ static int p12(struct procRes_s *rs)
                             //    break;
                             case 'C': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
                                 ret = read(pllfd[0].fd, &chm, 1);
-                                sprintf_f(rs->logs, "C get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
-                                print_f(rs->plogs, "P12", rs->logs);
+                                //sprintf_f(rs->logs, "C get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                //print_f(rs->plogs, "P12", rs->logs);
 
                                 if (chm == 0x80) {
                                     cid = 0;
@@ -85414,8 +85416,8 @@ static int p12(struct procRes_s *rs)
                                     print_f(rs->plogs, "P12", rs->logs);
                                     break;
                                 } else {
-                                    sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
-                                    print_f(rs->plogs, "P12", rs->logs);
+                                    //sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    //print_f(rs->plogs, "P12", rs->logs);
                                 }
                                 
                                 pinfo[0] = 'b';
@@ -85426,8 +85428,8 @@ static int p12(struct procRes_s *rs)
                                 break;
                             case 'c': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
                                 ret = read(pllfd[0].fd, &chm, 1);
-                                sprintf_f(rs->logs, "c get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
-                                print_f(rs->plogs, "P12", rs->logs);
+                                //sprintf_f(rs->logs, "c get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                //print_f(rs->plogs, "P12", rs->logs);
 
                                 if (chm == 0x80) {
                                     cid = 0;
@@ -85440,12 +85442,12 @@ static int p12(struct procRes_s *rs)
                                     print_f(rs->plogs, "P12", rs->logs);
                                     break;
                                 } else {
-                                    sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
-                                    print_f(rs->plogs, "P12", rs->logs);
+                                    //sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    //print_f(rs->plogs, "P12", rs->logs);
                                 }
 
-                                sprintf_f(rs->logs, "process current buff id: %d cid: %d \n", mfbidx, cid);
-                                print_f(rs->plogs, "P12", rs->logs);
+                                //sprintf_f(rs->logs, "process current buff id: %d cid: %d \n", mfbidx, cid);
+                                //print_f(rs->plogs, "P12", rs->logs);
                 
                                 ret = handle_cmd_require_areaR(rs, cid, mfbidx, 12);
                                 if (ret) {
@@ -85456,8 +85458,8 @@ static int p12(struct procRes_s *rs)
                                 break;
                             case 'd': //BKCMD_DONE_AREA:           // receive M4-postman cmd
                                 ret = read(pllfd[0].fd, &chm, 1);
-                                sprintf_f(rs->logs, "d get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
-                                print_f(rs->plogs, "P12", rs->logs);
+                                //sprintf_f(rs->logs, "d get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                //print_f(rs->plogs, "P12", rs->logs);
 
                                 if (chm == 0x80) {
                                     cid = 0;
@@ -85470,8 +85472,8 @@ static int p12(struct procRes_s *rs)
                                     print_f(rs->plogs, "P12", rs->logs);
                                     break;
                                 } else {
-                                    sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
-                                    print_f(rs->plogs, "P12", rs->logs);
+                                    //sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    //print_f(rs->plogs, "P12", rs->logs);
                                 }
 
                                 #if SAVE_DONE_IMG
@@ -85490,8 +85492,8 @@ static int p12(struct procRes_s *rs)
 
                                 write(pipeMfTx[1], pinfo, 1);
                                 
-                                sprintf_f(rs->logs, "end image idx: %d \n", mfbidx);
-                                print_f(rs->plogs, "P12", rs->logs);
+                                //sprintf_f(rs->logs, "end image idx: %d \n", mfbidx);
+                                //print_f(rs->plogs, "P12", rs->logs);
                                 
                                 break;
                             default:
@@ -85582,8 +85584,8 @@ static int p12(struct procRes_s *rs)
                 }
 
                 rstlen = uselen % 512;
-                sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
+                //print_f(rs->plogs, "P12", rs->logs);
 
                 //shmem_dump(buffmeta, bmtlen);
                 
@@ -85613,8 +85615,8 @@ static int p12(struct procRes_s *rs)
                     colr = 24;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                //print_f(rs->plogs, "P12", rs->logs);
             
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
 
@@ -85627,8 +85629,8 @@ static int p12(struct procRes_s *rs)
                 bmpw = scanWidthConvert(tmp, val);
                 bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
                 
-                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                //print_f(rs->plogs, "P12", rs->logs);
 
 
                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
@@ -85652,8 +85654,8 @@ static int p12(struct procRes_s *rs)
                     bdpi = 300;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                //print_f(rs->plogs, "P12", rs->logs);
                 
                 bmpcolrtb = aspMemalloc(1078, 12);
                 if (!bmpcolrtb) {
@@ -85786,8 +85788,8 @@ static int p12(struct procRes_s *rs)
                 }
 
                 rstlen = uselen % 512;
-                sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
+                //print_f(rs->plogs, "P12", rs->logs);
 
                 //shmem_dump(buffmeta, bmtlen);
                 
@@ -85817,8 +85819,8 @@ static int p12(struct procRes_s *rs)
                     colr = 24;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                //print_f(rs->plogs, "P12", rs->logs);
             
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
 
@@ -85831,8 +85833,8 @@ static int p12(struct procRes_s *rs)
                 bmpw = scanWidthConvert(tmp, val);
                 bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
                 
-                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                //print_f(rs->plogs, "P12", rs->logs);
 
 
                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
@@ -85856,8 +85858,8 @@ static int p12(struct procRes_s *rs)
                     bdpi = 300;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
-                print_f(rs->plogs, "P12", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                //print_f(rs->plogs, "P12", rs->logs);
                 
                 bmpcolrtb = aspMemalloc(1078, 12);
                 if (!bmpcolrtb) {
@@ -86151,8 +86153,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             while (1) {
                 aspMemClear(aspMemAsign, asptotMalloc, midx);
         
-                sprintf_f(rs->logs, "[DV] uimCylcnt: %d \n", uimCylcnt);
-                print_f(rs->plogs, sp, rs->logs);
+                //sprintf_f(rs->logs, "[DV] uimCylcnt: %d \n", uimCylcnt);
+                //print_f(rs->plogs, sp, rs->logs);
 
                 //chr = 0;
                 while (1) {
@@ -86886,8 +86888,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 buffidx = cinfo[9] & 0x7f;
                             }
                             
-                            sprintf_f(rs->logs, "[DV] get decode buff idex: %d \n", buffidx);
-                            print_f(rs->plogs, sp, rs->logs);
+                            //sprintf_f(rs->logs, "[DV] get decode buff idex: %d \n", buffidx);
+                            //print_f(rs->plogs, sp, rs->logs);
 
                             ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[buffidx], &imgdex);
                             if (ret) {
@@ -86900,7 +86902,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 print_f(rs->plogs, sp, rs->logs);
                             }
 
-                            sprintf_f(rs->logs, "[DV] check decode buff imgdex: %d (%d) \n", imgdex, puimGet->uimIdex & 0x3ff);
+                            sprintf_f(rs->logs, "[DV] buffid: %d check decode imgdex: %d (%d) \n", buffidx, imgdex, puimGet->uimIdex & 0x3ff);
                             print_f(rs->plogs, sp, rs->logs);
                             
                             sprintf_f(rs->logs, "[DV] get the last trunk read cycle: %d, lastlen: %d, cswerr: 0x%.2x pagerst: %d\n", uimCylcnt, lastCylen, cswerr, pagerst);
@@ -86929,8 +86931,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             }
                             #endif
                                 
-                            sprintf_f(rs->logs, "[DV] cycle count: %d lastlen: %d total: %d \n", uimCylcnt, lastCylen, bmplen);
-                            print_f(rs->plogs, sp, rs->logs);
+                            //sprintf_f(rs->logs, "[DV] cycle count: %d lastlen: %d total: %d \n", uimCylcnt, lastCylen, bmplen);
+                            //print_f(rs->plogs, sp, rs->logs);
         
                             bmpbufc = 0;
                             cpylen = 0;
@@ -86963,8 +86965,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                         uselen = aspBMPdecodeItemMax(&rs->pbDecMfour[buffidx]->aspDecMeta);
                                     }
                                     
-                                    sprintf_f(rs->logs, "[BMP] pre allocate aspDecJpeg buffer: 0x%.8x max: %dKB req: %dKB ret: %d \n", (uint32_t)bmpbuff, bmpmax/1000, bmplen/1000, ret);
-                                    print_f(rs->plogs, sp, rs->logs);
+                                    //sprintf_f(rs->logs, "[BMP] pre allocate aspDecJpeg buffer: 0x%.8x max: %dKB req: %dKB ret: %d \n", (uint32_t)bmpbuff, bmpmax/1000, bmplen/1000, ret);
+                                    //print_f(rs->plogs, sp, rs->logs);
 
                                     if (bmplen > bmpmax) {
                                         sprintf_f(rs->logs, "\n\n[BMP] pre allocate aspDecJpeg  max: %dKB  < req: %dKB Error!!!! \n", bmpmax/1000, bmplen/1000);
@@ -86975,8 +86977,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 //bmpbuff = aspMemalloc(bmplen, midx);
         
                                 if (bmpbuff) {
-                                    sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d succeed!!!\n", bmplen);
-                                    print_f(rs->plogs, sp, rs->logs);
+                                    //sprintf_f(rs->logs, "[BMP] allocate bmp buffer size: %d succeed!!!\n", bmplen);
+                                    //print_f(rs->plogs, sp, rs->logs);
         
                                     bmpbufc = bmpbuff;
                                 } else {
@@ -87267,8 +87269,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                         msync(bmpcpy, lens, MS_SYNC);    
         
                         //shmem_dump(bmpcpy, 128);
-                        sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d \n", lens, cpylen);
-                        print_f(rs->plogs, sp, rs->logs);
+                        //sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d \n", lens, cpylen);
+                        //print_f(rs->plogs, sp, rs->logs);
         
                         cpylen += lens;
                         bmpbufc = bmpcpy + lens;
@@ -87475,8 +87477,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                         exmax = aspBMPdecodeItemMax(&rs->pbDecMfour[buffidx]->aspDecMetaex);
                     }
 
-                    sprintf_f(rs->logs, "[BMP] pre allocate aspDecMetaex buffer: 0x%.8x max: %dKB req: %dKB ret: %d \n", (uint32_t)exmtaout, exmax/1000, lens/1000, ret);
-                    print_f(rs->plogs, sp, rs->logs);
+                    //sprintf_f(rs->logs, "[BMP] pre allocate aspDecMetaex buffer: 0x%.8x max: %dKB req: %dKB ret: %d \n", (uint32_t)exmtaout, exmax/1000, lens/1000, ret);
+                    //print_f(rs->plogs, sp, rs->logs);
 
                     if (lens > exmax) {
                         sprintf_f(rs->logs, "\n\n[BMP] pre allocate aspDecMetaex  max: %dKB  < req: %dKB Error!!!! \n", exmax/1000, lens/1000);
@@ -87512,8 +87514,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     uselen = aspBMPdecodeItemMax(&rs->pbDecMfour[buffidx]->aspDecMeta);
                 }
                 
-                sprintf_f(rs->logs, "[BMP] m4 sample get meta size: %d(%d) \n", mtlen, sizeof(struct aspMetaDataviaUSB_s));
-                print_f(rs->plogs, sp, rs->logs); 
+                //sprintf_f(rs->logs, "[BMP] m4 sample get meta size: %d(%d) \n", mtlen, sizeof(struct aspMetaDataviaUSB_s));
+                //print_f(rs->plogs, sp, rs->logs); 
                 
                 memset(ptmetausb, 0, sizeof(struct aspMetaDataviaUSB_s));
                 memcpy(ptmetausb, buffmeta, mtlen);                        
@@ -87527,8 +87529,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     exmax = aspBMPdecodeItemMax(&rs->pbDecMfour[buffidx]->aspDecMetaex);
                 }
                 
-                sprintf_f(rs->logs, "[BMP] m4 sample get extra meta size: %d \n", extlen);
-                print_f(rs->plogs, sp, rs->logs); 
+                //sprintf_f(rs->logs, "[BMP] m4 sample get extra meta size: %d \n", extlen);
+                //print_f(rs->plogs, sp, rs->logs); 
                 
                 addrd = exmtaout;
                 lens = extlen;
@@ -87537,8 +87539,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         
             rawlen = cpylen - lens;
             
-            sprintf_f(rs->logs, "[BMP] cpylen: %d, rawlen: %d, lastlen: %d, metaex len: %d \n", cpylen, rawlen, lastCylen, lens);
-            print_f(rs->plogs, sp, rs->logs); 
+            //sprintf_f(rs->logs, "[BMP] cpylen: %d, rawlen: %d, lastlen: %d, metaex len: %d \n", cpylen, rawlen, lastCylen, lens);
+            //print_f(rs->plogs, sp, rs->logs); 
         
             bmpbufc = bmpbuff;
         
@@ -87546,18 +87548,18 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         
             val=0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
-            sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
+            //print_f(rs->plogs, sp, rs->logs);
             bmph = val;
         
             bhlen = 0;
             
             if (act || (bmph == 0)) {
-                sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d \n", act);
+                sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d bmph: %d\n", act, bmph);
                 print_f(rs->plogs, sp, rs->logs); 
             } else {
-                sprintf_f(rs->logs, "[BMP] pop usb meta succeed!! \n");
-                print_f(rs->plogs, sp, rs->logs); 
+                //sprintf_f(rs->logs, "[BMP] pop usb meta succeed!! \n");
+                //print_f(rs->plogs, sp, rs->logs); 
         
                 ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
                 switch (val) {
@@ -87573,21 +87575,21 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     colr = 24;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                print_f(rs->plogs, sp, rs->logs);
+                //sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                //print_f(rs->plogs, sp, rs->logs);
         
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
         
                 ret |= cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 tmp = val << 8 | tmp;
-                sprintf_f(rs->logs, "[BMP] width high: %d, ret:%d\n", tmp, ret);
-                print_f(rs->plogs, sp, rs->logs);
+                //sprintf_f(rs->logs, "[BMP] width high: %d, ret:%d\n", tmp, ret);
+                //print_f(rs->plogs, sp, rs->logs);
         
                 val = 0;
                 ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
                 bmpw = scanWidthConvert(tmp, val);
-                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
-                print_f(rs->plogs, sp, rs->logs);
+                //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                //print_f(rs->plogs, sp, rs->logs);
         
                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
                 switch (tmp) {
@@ -87610,8 +87612,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     bdpi = 300;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
-                print_f(rs->plogs, sp, rs->logs);
+                //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                //print_f(rs->plogs, sp, rs->logs);
 
                 #if MFOUR_SIM_MODE_JPG
                 if (cswerr == 0) {
@@ -87625,8 +87627,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 val=bmph;
                 ret = cfgTableUpd(pct, ASPOP_IMG_LEN, val);
                 //ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
-                sprintf_f(rs->logs, "[BMP] hack image length: %d \n", val);
-                print_f(rs->plogs, sp, rs->logs);                
+                //sprintf_f(rs->logs, "[BMP] hack image length: %d \n", val);
+                //print_f(rs->plogs, sp, rs->logs);                
                 #else
                 aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, bmph, rawlen);
                 #endif 
@@ -87648,14 +87650,14 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             outmax = aspBMPdecodeItemMax(&rs->pbDecMfour[buffidx]->aspDecRaw);
                         }
                         
-                        sprintf_f(rs->logs, "[BMP] pre allocate aspDecRaw buffer: 0x%.8x max: %dKB req: %dKB ret: %d \n", (uint32_t)jpgout, outmax/1000, tmp/1000, ret);
-                        print_f(rs->plogs, sp, rs->logs);
+                        //sprintf_f(rs->logs, "[BMP] pre allocate aspDecRaw buffer: 0x%.8x max: %dKB req: %dKB ret: %d \n", (uint32_t)jpgout, outmax/1000, tmp/1000, ret);
+                        //print_f(rs->plogs, sp, rs->logs);
                     }
                     
-                    if (jpgout) {
-                        sprintf_f(rs->logs, "[BMP] to get memory for jpeg decode out, size: %d succeed!!!\n", tmp);
-                        print_f(rs->plogs, sp, rs->logs);
-                    } else {
+                    if (!jpgout) {
+                        //sprintf_f(rs->logs, "[BMP] to get memory for jpeg decode out, size: %d succeed!!!\n", tmp);
+                        //print_f(rs->plogs, sp, rs->logs);
+                    //} else {
                         sprintf_f(rs->logs, "[BMP] to get memory for jpeg decode out, size: %d failed!!!\n", tmp);
                         print_f(rs->plogs, sp, rs->logs);
                     }
@@ -87668,9 +87670,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     
                     clock_gettime(CLOCK_REALTIME, &jpgE);
         
-                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                    tmCost = time_diff(&jpgS, &jpgE, 1000);
                                                 
-                    sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d ms\n", err, jpgetW, jpgetH, tmCost);
+                    sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d.%d ms\n", err, jpgetW, jpgetH, tmCost/1000, tmCost%1000);
                     print_f(rs->plogs, sp, rs->logs);
                 
                     bmpw = jpgetW;
@@ -87750,8 +87752,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             val = 0;
             ret = aspBMPdecodeBuffPagerstGet(rs->pbDecMfour[buffidx], &val);
             ret |= aspBMPdecodeBuffStatusGet(rs->pbDecMfour[buffidx], &mbstat);
-            sprintf_f(rs->logs, "[BMP] bmp buff idx %d get status: 0x%.4x pagerst: %d ret: %d \n", buffidx, mbstat, val, ret);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "[BMP] bmp buff idx %d get status: 0x%.4x pagerst: %d ret: %d \n", buffidx, mbstat, val, ret);
+            //print_f(rs->plogs, sp, rs->logs);
 
             //mbstat = (mbstat << 1) | 0x01;
             val = pagerst;
@@ -87759,8 +87761,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
             ret = aspBMPdecodeBuffPagerstSet(rs->pbDecMfour[buffidx], val);                        
             ret |= aspBMPdecodeBuffStatusSet(rs->pbDecMfour[buffidx], mbstat);
-            sprintf_f(rs->logs, "[BMP] bmp buff idx %d set status: 0x%.4x pagerst: %d ret: %d \n", buffidx, mbstat, val, ret);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "[BMP] bmp buff idx %d set status: 0x%.4x pagerst: %d ret: %d \n", buffidx, mbstat, val, ret);
+            //print_f(rs->plogs, sp, rs->logs);
 
             mbstat = 0;
             imgdex = 0;
@@ -87768,8 +87770,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[buffidx], &imgdex);
             ret |= aspBMPdecodeBuffStatusGet(rs->pbDecMfour[buffidx], &mbstat);
             ret |= aspBMPdecodeBuffPagerstGet(rs->pbDecMfour[buffidx], &val);
-            sprintf_f(rs->logs, "[BMP] double check bmp buff idx %d, image index: %d, status: 0x%x pagerst: %d ret: %d \n", buffidx, imgdex, mbstat, val, ret);
-            print_f(rs->plogs, sp, rs->logs);
+            //sprintf_f(rs->logs, "[BMP] double check bmp buff idx %d, image index: %d, status: 0x%x pagerst: %d ret: %d \n", buffidx, imgdex, mbstat, val, ret);
+            //print_f(rs->plogs, sp, rs->logs);
                 
             rs_ipc_put(rs, mfourinfo, 2);
 
@@ -87912,14 +87914,14 @@ static int p15(struct procRes_s *rs)
 
         ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
         if (ret > 0) {
-            sprintf_f(rs->logs, "get ch[0x%.2x] %c\n", ch, ch);
-            print_f(rs->plogs, "P15", rs->logs);
+            //sprintf_f(rs->logs, "get ch[0x%.2x] %c\n", ch, ch);
+            //print_f(rs->plogs, "P15", rs->logs);
             
         } else {
             //rs_ipc_put(rs, "h", 1);
         
-            sprintf_f(rs->logs, "host not available !!\n");
-            print_f(rs->plogs, "P15", rs->logs);
+            //sprintf_f(rs->logs, "host not available !!\n");
+            //print_f(rs->plogs, "P15", rs->logs);
 
             continue;
         }
@@ -87935,8 +87937,8 @@ static int p15(struct procRes_s *rs)
         case 'e':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
-                sprintf_f(rs->logs, "e get cont ch[0x%.2x] \n", ch);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "e get cont ch[0x%.2x] \n", ch);
+                //print_f(rs->plogs, "P15", rs->logs);
 
                 if (ch == 0x80) {
                     mfbidx = 0;
@@ -87949,8 +87951,8 @@ static int p15(struct procRes_s *rs)
                     print_f(rs->plogs, "P15", rs->logs);
                     break;
                 } else {
-                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
-                    print_f(rs->plogs, "P15", rs->logs);
+                    //sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    //print_f(rs->plogs, "P15", rs->logs);
                 }
 
                 imgidx = 0;
@@ -87988,8 +87990,8 @@ static int p15(struct procRes_s *rs)
                 }
 
                 rstlen = uselen % 512;
-                sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
+                //print_f(rs->plogs, "P15", rs->logs);
 
                 //shmem_dump(buffmeta, bmtlen);
                 
@@ -88012,8 +88014,8 @@ static int p15(struct procRes_s *rs)
                     colr = 24;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                //print_f(rs->plogs, "P15", rs->logs);
             
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
 
@@ -88026,8 +88028,8 @@ static int p15(struct procRes_s *rs)
                 bmpw = scanWidthConvert(tmp, val);
                 bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
                 
-                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                //print_f(rs->plogs, "P15", rs->logs);
 
 
                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
@@ -88051,8 +88053,8 @@ static int p15(struct procRes_s *rs)
                     bdpi = 300;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                //print_f(rs->plogs, "P15", rs->logs);
                 
                 bmpcolrtb = aspMemalloc(1078, 15);
                 if (!bmpcolrtb) {
@@ -88075,8 +88077,8 @@ static int p15(struct procRes_s *rs)
                 val = ((bmpw * colr + 31) / 32) * 4;
                 val = val * bmph; 
 
-                sprintf_f(rs->logs, "[BMP] e bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] e bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
+                //print_f(rs->plogs, "P15", rs->logs);
 
                 bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
 
@@ -88190,8 +88192,8 @@ static int p15(struct procRes_s *rs)
                         print_f(rs->plogs, "P15", rs->logs);
                     }
                     
-                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
-                    sprintf_f(rs->logs, "[BMP] e raw encode to jpg len: %d addr: 0x%.8x cost: %d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost);
+                    tmCost = time_diff(&jpgS, &jpgE, 1000);
+                    sprintf_f(rs->logs, "[BMP] e raw encode to jpg len: %d addr: 0x%.8x cost: %d.%d ms\n", jpgLen, (uint32_t)jpgrlt, tmCost/1000, tmCost%1000);
                     print_f(rs->plogs, "P15", rs->logs);
 
                     rotlen = 512 - (jpgLen % 512);
@@ -88201,8 +88203,8 @@ static int p15(struct procRes_s *rs)
                     //shmem_dump(bmpbufc, 512);
                     
                     aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, cutcnt+1);
-                    sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight);
-                    print_f(rs->plogs, "P15", rs->logs);
+                    //sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight);
+                    //print_f(rs->plogs, "P15", rs->logs);
                     
                     lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
                     
@@ -88215,8 +88217,8 @@ static int p15(struct procRes_s *rs)
 
                     aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[cutcnt], pdecroi->aspDcWidth, pdecroi->aspDcHeight, rotlen+bmtlen);
                                         
-                    sprintf_f(rs->logs, "[BMP] usb meta size check, meta size: %d : sizeofmeta: %d jpglen: %d \n", bmtlen, lenbs, rotlen+bmtlen);
-                    print_f(rs->plogs, "P15", rs->logs);
+                    //sprintf_f(rs->logs, "[BMP] usb meta size check, meta size: %d : sizeofmeta: %d jpglen: %d \n", bmtlen, lenbs, rotlen+bmtlen);
+                    //print_f(rs->plogs, "P15", rs->logs);
                     
                     cutcnt ++;
                     
@@ -88229,8 +88231,8 @@ static int p15(struct procRes_s *rs)
 
                     ret = aspBMPdecodeItemGet(penroi, &bufftmp, &tmplen);
                     
-                    sprintf_f(rs->logs, "[encode] %d. jpeg len: %d ret: %d \n", ix, tmplen, ret);
-                    print_f(rs->plogs, "P15", rs->logs);
+                    //sprintf_f(rs->logs, "[encode] %d. jpeg len: %d ret: %d \n", ix, tmplen, ret);
+                    //print_f(rs->plogs, "P15", rs->logs);
 
                     #if MFOUR_IMG_SEND_BACK
                     if ((!ret) && (tmplen == 0) && (orglen == 0)) {
@@ -88242,8 +88244,8 @@ static int p15(struct procRes_s *rs)
                         
                             memcpy(bufftmp, bufforg, orglen);
 
-                            sprintf_f(rs->logs, "[encode] dump the jpg size: %d \n", 512);
-                            print_f(rs->plogs, "P15", rs->logs);
+                            //sprintf_f(rs->logs, "[encode] dump the jpg size: %d \n", 512);
+                            //print_f(rs->plogs, "P15", rs->logs);
                             
                             //shmem_dump(bufftmp, 512);
 
@@ -88263,8 +88265,8 @@ static int p15(struct procRes_s *rs)
                             
                             aspBMPdecodeItemSet(penroi, pdecroi->aspDcWidth, pdecroi->aspDcHeight, orglen);
 
-                            sprintf_f(rs->logs, "[encode] to put org jpeg to id%d len: %d ret: %d \n", ix, orglen, err);
-                            print_f(rs->plogs, "P15", rs->logs);
+                            //sprintf_f(rs->logs, "[encode] to put org jpeg to id%d len: %d ret: %d \n", ix, orglen, err);
+                            //print_f(rs->plogs, "P15", rs->logs);
 
                             msync(bufftmp, orglen, MS_SYNC);
                         }
@@ -88340,8 +88342,8 @@ static int p15(struct procRes_s *rs)
                 }
 
                 rstlen = uselen % 512;
-                sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
+                //print_f(rs->plogs, "P15", rs->logs);
 
                 //shmem_dump(buffmeta, bmtlen);
                 
@@ -88365,8 +88367,8 @@ static int p15(struct procRes_s *rs)
                     colr = 24;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                //print_f(rs->plogs, "P15", rs->logs);
             
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
 
@@ -88379,8 +88381,8 @@ static int p15(struct procRes_s *rs)
                 bmpw = scanWidthConvert(tmp, val);
                 bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
                 
-                sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                //print_f(rs->plogs, "P15", rs->logs);
 
 
                 ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
@@ -88404,8 +88406,8 @@ static int p15(struct procRes_s *rs)
                     bdpi = 300;
                     break;
                 }
-                sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
-                print_f(rs->plogs, "P15", rs->logs);
+                //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                //print_f(rs->plogs, "P15", rs->logs);
                 
                 bmpcolrtb = aspMemalloc(1078, 15);
                 if (!bmpcolrtb) {
@@ -88656,11 +88658,11 @@ static int p16(struct procRes_s *rs)
         ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
 
         if (ret > 0) {
-            sprintf_f(rs->logs, "m4t get ch[0x%.2x] \n", ch);
-            print_f(rs->plogs, "P16", rs->logs);
+            //sprintf_f(rs->logs, "m4t get ch[0x%.2x] \n", ch);
+            //print_f(rs->plogs, "P16", rs->logs);
         } else {
-            sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
-            print_f(rs->plogs, "P16", rs->logs);
+            //sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
+            //print_f(rs->plogs, "P16", rs->logs);
 
             continue;
         }
@@ -88671,8 +88673,8 @@ static int p16(struct procRes_s *rs)
         case 'a':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
-                sprintf_f(rs->logs, "rjob0 get cont ch[0x%.2x] \n", ch);
-                print_f(rs->plogs, "P16", rs->logs);
+                //sprintf_f(rs->logs, "rjob0 get cont ch[0x%.2x] \n", ch);
+                //print_f(rs->plogs, "P16", rs->logs);
 
                 if (ch == 0x80) {
                     mfbidx = 0;
@@ -88685,8 +88687,8 @@ static int p16(struct procRes_s *rs)
                     print_f(rs->plogs, "P16", rs->logs);
                     break;
                 } else {
-                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
-                    print_f(rs->plogs, "P16", rs->logs);
+                    //sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    //print_f(rs->plogs, "P16", rs->logs);
                 }
 
                 ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
@@ -88707,7 +88709,7 @@ static int p16(struct procRes_s *rs)
 
                 sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_IMAGE_IN \n");
                 print_f(rs->plogs, "P16", rs->logs);
-                dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
+                //dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
 
                 RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
 
@@ -88722,16 +88724,16 @@ static int p16(struct procRes_s *rs)
                     pipRet = poll(pllfd, 1, 500);
                     if (pipRet > 0) {
                         ret = read(pllfd[0].fd, &chm, 1);
-                        sprintf_f(rs->logs, "m4tx get chm: %c [0x%.2x] for m4tx\n", chm, chm);
-                        print_f(rs->plogs, "P16", rs->logs);
+                        //sprintf_f(rs->logs, "m4tx get chm: %c [0x%.2x] for m4tx\n", chm, chm);
+                        //print_f(rs->plogs, "P16", rs->logs);
 
                         mfcmd = chm;
 
                         switch (mfcmd) {
                         case 'b':
                             ret = read(pllfd[0].fd, &chm, 1);
-                            sprintf_f(rs->logs, "get cont chm: %c [0x%.2x] for m4tx\n", chm, chm);
-                            print_f(rs->plogs, "P16", rs->logs);
+                            //sprintf_f(rs->logs, "get cont chm: %c [0x%.2x] for m4tx\n", chm, chm);
+                            //print_f(rs->plogs, "P16", rs->logs);
 
                             if (chm == 0x80) {
                                 clipidx = 0;
@@ -88744,15 +88746,15 @@ static int p16(struct procRes_s *rs)
                                 print_f(rs->plogs, "P16", rs->logs);
                                 break;
                             } else {
-                                sprintf_f(rs->logs, "get clip index %d succed!!! \n", clipidx);
-                                print_f(rs->plogs, "P16", rs->logs);
+                                ///sprintf_f(rs->logs, "get clip index %d succed!!! \n", clipidx);
+                                //print_f(rs->plogs, "P16", rs->logs);
                             }
 
                             decrect = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[clipidx];
                             img_param = decrect->aspDcData;
                             
-                            sprintf_f(rs->logs, "aspDecMfPiRaw info id: %d w: %d h: %d len: %d\n", clipidx, decrect->aspDcWidth, decrect->aspDcHeight, decrect->aspDcLen);
-                            print_f(rs->plogs, "P16", rs->logs);
+                            //sprintf_f(rs->logs, "aspDecMfPiRaw info id: %d w: %d h: %d len: %d\n", clipidx, decrect->aspDcWidth, decrect->aspDcHeight, decrect->aspDcLen);
+                            //print_f(rs->plogs, "P16", rs->logs);
 
                             memset((char *)&rjcmd, 0, sizeof(mfour_rjob_cmd));
                             
@@ -88765,13 +88767,16 @@ static int p16(struct procRes_s *rs)
                             sprintf_f(rs->logs, "ocr img_param info w: %d h: %d id: %d\n", img_param->mfourAttb.ImageRect.xc, img_param->mfourAttb.ImageRect.yr, img_param->mfourAttb.iJobIdx);
                             print_f(rs->plogs, "P16", rs->logs);
 
-                            dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
+                            //dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
                             
                             RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                            
                             break;
                         case 'e':
-                            sprintf_f(rs->logs, "complete \n");
-                            print_f(rs->plogs, "P16", rs->logs);
+                            //sprintf_f(rs->logs, "complete \n");
+                            //print_f(rs->plogs, "P16", rs->logs);
                             break;
                         default:
                             sprintf_f(rs->logs, "Error m4tx get[0x%.2x] unknown command !!!\n", mfcmd);
@@ -88832,6 +88837,11 @@ static int p17(struct procRes_s *rs)
     int mtlen=0;
     char *bmpmeta=0;
     char outchr[3][36]={0};
+    struct timespec mfoS, mfoE;
+    int tmCost=0;
+
+    //clock_gettime(CLOCK_REALTIME, &mfoE);
+    //tmCost = time_diff(&mfoS, &mfoE, 1000000);
     
     #if DUMP_MFOUR_BMP
     static char ptfileSave[] = "/home/root/rotate/m4_%.3d_%.1d_%.1d.bmp";
@@ -88879,8 +88889,8 @@ static int p17(struct procRes_s *rs)
             sprintf_f(rs->logs, "m4r get ch[0x%.2x] \n", ch);
             print_f(rs->plogs, "P17", rs->logs);
         } else {
-            sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
-            print_f(rs->plogs, "P17", rs->logs);
+            //sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
+            //print_f(rs->plogs, "P17", rs->logs);
 
             continue;
         }
@@ -88937,14 +88947,15 @@ static int p17(struct procRes_s *rs)
                         print_f(rs->plogs, "P17", rs->logs);    
                         continue;
                     }
-                    sprintf_f(rs->logs, "m4rx print the cmd recv in:\n");
-                    print_f(rs->plogs, "P17", rs->logs);
+                    
+                    //sprintf_f(rs->logs, "m4rx print the cmd recv in:\n");
+                    //print_f(rs->plogs, "P17", rs->logs);
                                         
                     switch(outcmd.cmd) {
                         case BKCMD_IMAGE_IN_RSP:
                             sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_IMAGE_IN_RSP) \n", outcmd.cmd);
                             print_f(rs->plogs, "P17", rs->logs);    
-                            dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
 
                             mfourCnt += 1;
 
@@ -88962,9 +88973,13 @@ static int p17(struct procRes_s *rs)
                             
                             break;
                         case BKCMD_REQUIRE_AREA:           // M4 -> operator
-                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_REQUIRE_AREA) \n", outcmd.cmd);
+
+                            clock_gettime(CLOCK_REALTIME, rs->tm[1]);
+
+                            tmCost = time_diff(rs->tm[0], rs->tm[1], 1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_REQUIRE_AREA) (cost %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
                             print_f(rs->plogs, "P17", rs->logs);    
-                            dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
                             
                             memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
                             memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
@@ -88974,14 +88989,14 @@ static int p17(struct procRes_s *rs)
                             rspcmd.dPtr = 0;
                             rspcmd.mPtr = 0;
                             
-                            sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_REQUIRE_AREA_RSP:\n");
-                            print_f(rs->plogs, "P17", rs->logs);
-                            dbgRjobCmd(&rspcmd, sizeof(mfour_rjob_cmd));
+                            //sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_REQUIRE_AREA_RSP:\n");
+                            //print_f(rs->plogs, "P17", rs->logs);
+                            //dbgRjobCmd(&rspcmd, sizeof(mfour_rjob_cmd));
                             
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
 
-                            sprintf_f(rs->logs, "current buff id: %d \n", mfbidx);
-                            print_f(rs->plogs, "P17", rs->logs);
+                            //sprintf_f(rs->logs, "current buff id: %d \n", mfbidx);
+                            //print_f(rs->plogs, "P17", rs->logs);
                 
                             //outcmd.dPtr  = rx_buf;
                             #if 1
@@ -89007,8 +89022,8 @@ static int p17(struct procRes_s *rs)
                                     pRect->mfourRectH = pImgArea->ImageRect.yr;
                                     #endif
 
-                                    sprintf_f(rs->logs, "    search find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
-                                    print_f(rs->plogs, "P17", rs->logs);    
+                                    //sprintf_f(rs->logs, "    search find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
+                                    //print_f(rs->plogs, "P17", rs->logs);    
 
                                     aspBMPdecodeItemSet(decpic, pRect->mfourRectW, pRect->mfourRectH, 0);
 
@@ -89148,7 +89163,7 @@ static int p17(struct procRes_s *rs)
                         case BKCMD_DONE_AREA:              // M4 -> operator
                             sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_DONE_AREA) \n", outcmd.cmd);
                             print_f(rs->plogs, "P17", rs->logs);    
-                            dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
 
                             memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
                             memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
@@ -89177,8 +89192,8 @@ static int p17(struct procRes_s *rs)
                                 m4dst = rs->pbDecMfour[mfbidx]->aspDecRectSt[ix];
                                 img_param = decpic->aspDcData;
 
-                                sprintf_f(rs->logs, "    search match buff info %d. %d, %d (seqid: %d jobid: %d) len: %d st: 0x%.4x cid: %d\n", ix, img_param->mfourAttb.SeqIdx, img_param->mfourAttb.iJobIdx, seqid, jid, decpic->aspDcLen, m4dst, cid);
-                                print_f(rs->plogs, "P17", rs->logs);
+                                //sprintf_f(rs->logs, "    search match buff info %d. %d, %d (seqid: %d jobid: %d) len: %d st: 0x%.4x cid: %d\n", ix, img_param->mfourAttb.SeqIdx, img_param->mfourAttb.iJobIdx, seqid, jid, decpic->aspDcLen, m4dst, cid);
+                                //print_f(rs->plogs, "P17", rs->logs);
                                 
                                 if ((decpic->aspDcLen > 0) && (cid < 0) && (m4dst == BKCMD_REQUIRE_AREA)) {
                                     cid = ix;
@@ -89270,7 +89285,14 @@ static int p17(struct procRes_s *rs)
 
                                 memset(outchr, 0, 36*3);
                                 if (img_out->mfourAttb.iJobIdx == SRNBox1L) {
+
+                                    clock_gettime(CLOCK_REALTIME, &mfoS);
+
                                     BKOCR_Check6(img_param->mfourData, imgsize, outchr[1], MaxCount_SRN);
+                                    
+                                    clock_gettime(CLOCK_REALTIME, &mfoE);
+                                    tmCost = time_diff(&mfoS, &mfoE, 1000);
+
                                     shmem_dump(outchr[1], 32);
 
                                     pusbmeta->OCR_strlen = strlen(outchr[1]);
@@ -89278,11 +89300,19 @@ static int p17(struct procRes_s *rs)
                                         memcpy(pusbmeta->OCR_chars, outchr[1], pusbmeta->OCR_strlen);
                                     }
 
-                                    sprintf_f(rs->logs, "SRNBox1L OCR result len: %d\n", pusbmeta->OCR_strlen);
+                                    sprintf_f(rs->logs, "SRNBox1L OCR result len: %d cost: %d.%d ms\n", pusbmeta->OCR_strlen, tmCost/1000, tmCost%1000);
                                     print_f(rs->plogs, "P17", rs->logs);
 
-                                } else if (img_out->mfourAttb.iJobIdx == SRNBox1R) {
+                                } 
+                                else if (img_out->mfourAttb.iJobIdx == SRNBox1R) {
+
+                                    clock_gettime(CLOCK_REALTIME, &mfoS);
+                                    
                                     BKOCR_Check7(img_param->mfourData, imgsize, outchr[2], MaxCount_SRN);
+
+                                    clock_gettime(CLOCK_REALTIME, &mfoE);
+                                    tmCost = time_diff(&mfoS, &mfoE, 1000);
+
                                     shmem_dump(outchr[2], 32);
                                     
                                     pusbmeta->OCR_strlen = strlen(outchr[2]);
@@ -89290,7 +89320,7 @@ static int p17(struct procRes_s *rs)
                                         memcpy(pusbmeta->OCR_chars, outchr[2], pusbmeta->OCR_strlen);
                                     }
                                     
-                                    sprintf_f(rs->logs, "SRNBox1R OCR result len: %d\n", pusbmeta->OCR_strlen);
+                                    sprintf_f(rs->logs, "SRNBox1R OCR result len: %d cost: %d.%d ms\n", pusbmeta->OCR_strlen, tmCost/1000, tmCost%1000);
                                     print_f(rs->plogs, "P17", rs->logs);
 
                                 }
@@ -89395,14 +89425,14 @@ static int p17(struct procRes_s *rs)
                         case BKCMD_ABORT:                  // M4 -> operator
                             sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_ABORT) \n", outcmd.cmd);
                             print_f(rs->plogs, "P17", rs->logs);    
-                            dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
                             
                             //bkjob_send_cmd( chan->mqOperator, &cmd );
                             break;
                         case BKCMD_IMAGE_COMPLETE:         // M4 -> operator
                             sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_IMAGE_COMPLETE) \n", outcmd.cmd);
                             print_f(rs->plogs, "P17", rs->logs);    
-                            dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
                             
 
                             minfo[0] = 'e';
@@ -89412,7 +89442,7 @@ static int p17(struct procRes_s *rs)
                         default:
                             sprintf_f(rs->logs, "Read rjob command %.4x (UNKNOWN) \n", outcmd.cmd);
                             print_f(rs->plogs, "P17", rs->logs);    
-                            dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
                             
                             sprintf_f(rs->logs, "Error!!! unknowned cmd 0x%.2x !!!\n", outcmd.cmd);
                             print_f(rs->plogs, "P17", rs->logs);    
