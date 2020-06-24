@@ -114,7 +114,7 @@ static char genssid[128];
 #define AP_CLR_STATUS (1)
 
 #define MFOUR_IMG_SEND_BACK (1)
-#define MFOUR_SIM_MODE_JPG (0)
+#define MFOUR_SIM_MODE_JPG (1)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
@@ -1292,8 +1292,10 @@ struct aspMetaDataviaUSB_s{
   unsigned char MUSE_RESERVE[16];   // byte[35]
   unsigned char BKNote_Slice_idx;   // current image slice index of this Bank Note                            //byte[36]
   unsigned char BKNote_Block_idx;   // current image block index of this Bank Note                            //byte[37]
-  unsigned char MCROP_RESERVE[27];   // byte[64]
-  
+  unsigned char MCROP_RESERVE[9];   // byte[46]
+  unsigned char OCR_rotangle[2];    // byte[48]
+  unsigned char OCR_strlen;            // byte[49]
+  unsigned char OCR_chars[15];      // byte[64]
   struct intMbs32_s CROP_POS_1;        //byte[68]
   struct intMbs32_s CROP_POS_2;        //byte[72]
   struct intMbs32_s CROP_POS_3;        //byte[76]
@@ -1792,8 +1794,8 @@ struct aspMemAsign_s *aspMemAsign=0;
 
 #define	MaxCount_SRN	20
 void *BKOCR_Check( void * img_buf, int img_size, char *out_buf, int buf_size );
-void *BKOCR_Check3( void * img_buf, int img_size, char *out_buf, int buf_size );
-void *BKOCR_Check4( void * img_buf, int img_size, char *out_buf, int buf_size );
+void *BKOCR_Check6( void * img_buf, int img_size, char *out_buf, int buf_size );
+void *BKOCR_Check7( void * img_buf, int img_size, char *out_buf, int buf_size );
 
 #if LOG_ALL_DISABLE
 static int sprintf_f(char *a, char *b, ...);
@@ -88819,7 +88821,7 @@ static int p17(struct procRes_s *rs)
     struct bitmapHeader_s *pheader=0;
 
     #if DUMP_MFOUR_BMP
-    static char ptfileSave[] = "/home/root/rotate/m4_%.3d.bmp";
+    static char ptfileSave[] = "/home/root/rotate/m4_%.3d_%.1d_%.1d.bmp";
     char filepath[256]={0};
     FILE *fdump=0;
     char *dumpsrc=0;
@@ -89217,12 +89219,50 @@ static int p17(struct procRes_s *rs)
                             imgsize += 1078;
 
                             aspBMPdecodeItemSet(decpic, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, imgsize);
+
+
+                            #if 0
+                            char filecharbmp[]="/home/root/charbmp/%c.bmp";
+                            char filecharpath[256]={0};
+                            char listchar[36] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'};
+                            char *charbmp[36] = {0};
+                            FILE *fchar=0;
+                            for (ix=0; ix<36; ix++) {
+                                charbmp[ix] = malloc(22*22);
+                            }
+
+                            for (ix=0; ix<36; ix++) {
+                                sprintf(filecharpath, filecharbmp, listchar[ix]);
+                                fchar = fopen(filecharpath, "r");
+                                if (fchar) {
+                                    sprintf_f(rs->logs, "get char bmp [%s] succeed!!! \n", filecharpath);
+                                    print_f(rs->plogs, "P17", rs->logs);
+                                } else {
+                                    sprintf_f(rs->logs, "find save bmp [%s] FAILED!!! \n", filecharpath);
+                                    print_f(rs->plogs, "P17", rs->logs);
+                                    break;
+                                }
+
+                                fclose(fchar);
+                            }
+
+                            for (ix=0; ix<36; ix++) {
+                                free(charbmp[ix]);
+                            }
+                            #endif
+                            
                             
                             #if DUMP_MFOUR_BMP    
-                            fdump = find_save(filepath, ptfileSave);
+                            sprintf(filepath, ptfileSave, imgidx, mfbidx, cid);
+                            //fdump = find_save(filepath, ptfileSave);
+                            fdump = fopen(filepath, "w");
                             if (fdump) {
                                 sprintf_f(rs->logs, "find save bmp [%s] succeed!!! \n", filepath);
                                 print_f(rs->plogs, "P17", rs->logs);
+                            } else {
+                                sprintf_f(rs->logs, "find save bmp [%s] FAILED!!! \n", filepath);
+                                print_f(rs->plogs, "P17", rs->logs);
+                                break;
                             }
 
                             dumpsrc = img_param->mfourData;
@@ -89244,8 +89284,8 @@ static int p17(struct procRes_s *rs)
                                 memset(outchr, 0, 36*3);
                                 
                                 BKOCR_Check(dumpsrc, dumpsize, outchr[0], MaxCount_SRN);
-                                BKOCR_Check3(dumpsrc, dumpsize, outchr[1], MaxCount_SRN);
-                                BKOCR_Check4(dumpsrc, dumpsize, outchr[2], MaxCount_SRN);
+                                BKOCR_Check6(dumpsrc, dumpsize, outchr[1], MaxCount_SRN);
+                                BKOCR_Check7(dumpsrc, dumpsize, outchr[2], MaxCount_SRN);
 
                                 sprintf_f(rs->logs, "out 0: [%s] out 3: [%s] out 4: [%s] !!! \n", outchr[0], outchr[1], outchr[2]);
                                 print_f(rs->plogs, "P17", rs->logs);
@@ -89272,8 +89312,8 @@ static int p17(struct procRes_s *rs)
                                         //sprintf_f(rs->logs, "debug strchr, p: 0x%.8x ret: 0x%.8x !!! \n", (uint32_t)filepath, (uint32_t)ocrpath);
                                         //print_f(rs->plogs, "P17", rs->logs);
                                     
-                                        ocrpath = strcat(filepathOcr, "_%.2d.txt");
-                                        sprintf(filepathOcrTxt, filepathOcr, modix);
+                                        ocrpath = strcat(filepathOcr, "_mod%.2d_sz%.2d.txt");
+                                        sprintf(filepathOcrTxt, filepathOcr, modix, outstrlen);
                                         
                                         focrtxt = fopen(filepathOcrTxt, "w");
                                         if (focrtxt) {
