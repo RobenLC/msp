@@ -4,6 +4,7 @@ CFLAGS += -O2 -Wall -g -D_GNU_SOURCE -Wno-unused-but-set-variable -Wno-unused-pa
 
 #DISTRIBUTION_PATH = ~/stm32/Distribution-Package/openstlinux-20-02-19
 DISTRIBUTION_PATH = ~/ST/STM32MP15-Ecosystem-v1.0.0/Distribution-Package/openstlinux-4.19-thud-mp1-19-02-20
+#DISTRIBUTION_PATH = /home/leoc/ST/STM32MP15-Ecosystem-v1.0.0/Distribution-Package/openstlinux-20-02-19
 
 COMPONENT_PATH =  $(DISTRIBUTION_PATH)/build-openstlinuxweston-stm32mp1/tmp-glibc/sysroots-components
 
@@ -34,9 +35,9 @@ TARGETFILE = libbkocr.a libmakemodel.a
 
 TARGET : $(TARGETFILE)
 
-SOURCES = dk2_ocr.cpp linear.cpp tron.cpp daxpy.c ddot.c dnrm2.c dscal.c
+SOURCES = dk2_ocr_dw.cpp dk2_ocr_up.cpp linear.cpp tron.cpp daxpy.c ddot.c dnrm2.c dscal.c
 
-OBJECTS_OCR = dk2_ocr.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
+OBJECTS_OCR = dk2_ocr_dw.o dk2_ocr_up.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
 
 OBJECTS_MODEL = t1_20200520_ok.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
 

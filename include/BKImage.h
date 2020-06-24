@@ -7,25 +7,32 @@
 //*****************************************************************************
 #define ImgProc_None             	0
 #define NewImageIn             		1
-#define NewAreaReq             		2
-#define ImageProcDone             	3
-#define ChkBox1             		4
-#define ChkBox2             		5
-#define SRNBox1             		6
-#define SRNBox2             		7
+#define ImageProcDone             	2
+#define NewAreaReq             		3
+#define ChkBox1L             		4
+#define ChkBox1R             		5
+#define SRNBox1L             		6
+#define SRNBox1R             		7
+#define ChkBox2L             		8
+#define ChkBox2R             		9
+#define SRNBox2L             		10
+#define SRNBox2R             		11
 
 
 //*****************************************************************************
-//	Image Job idx Status code
+//	iJobRtnCode: Image Job idx Status code
 // 
-// iJob_idx is attached for the current job or for the chained next job
 //*****************************************************************************
 #define iJobOK						0
 #define iJobImgInquirey				1
 #define iJobImgComplete				2
 #define ImageOverSize				3
 #define ImageZeroSize				4
-
+#define iJobCurDone					5
+#define iJobSaveIntPM				6
+#define iJobImgOCR					7 
+#define iJobImgMatch				8
+#define iJobImgNoMatch				9
 
 typedef struct  
 {
