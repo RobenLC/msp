@@ -114,7 +114,7 @@ static char genssid[128];
 #define AP_CLR_STATUS (1)
 
 #define MFOUR_IMG_SEND_BACK (1)
-#define MFOUR_SIM_MODE_JPG (1)
+#define MFOUR_SIM_MODE_JPG (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
@@ -19240,7 +19240,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
  */
 int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int pattern, int midx)
 {
-#define UNIT_DEG (1000.0)
+#define UNIT_DEG (100.0)
 #define MIN_P  (100.0)
 #define BMP_8_BIT_HEAD_SIZE (1078)
 #define V_FLIP_EN (0)
@@ -20480,7 +20480,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
 #define LOG_ROT_DBG  (0)
 static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta, char *bmpsrc, char *bmphd, int hdlen, char *rotbuff, int *pside, int *pmreal, int *layers, int midx)
 {
-#define UNIT_DEG (1000.0)
+#define UNIT_DEG_BMP (1000.0)
 
     struct sdParseBuff_s *pabuf=0;
     char *addr=0, *srcbuf=0, *ph, *rawCpy, *rawSrc, *rawTmp, *rawdest=0;
@@ -20630,11 +20630,11 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     print_f(rs->plogs, "ROT", rs->logs);
     #endif
     
-    deg = (int)(imgdeg * UNIT_DEG);
+    deg = (int)(imgdeg * UNIT_DEG_BMP);
     deg = 0 - deg;
 
     theta = (CFLOAT)deg;
-    theta = theta / UNIT_DEG;
+    theta = theta / UNIT_DEG_BMP;
     
     sprintf_f(rs->logs, "rotate angle = %lf \n", theta);
     print_f(rs->plogs, "ROT", rs->logs);
@@ -21683,8 +21683,8 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     
     /* reverse to fill the rotate image */
     
-    theta = (CFLOAT) (360*UNIT_DEG - deg);
-    theta = theta / UNIT_DEG;
+    theta = (CFLOAT) (360*UNIT_DEG_BMP - deg);
+    theta = theta / UNIT_DEG_BMP;
     
     #if LOG_ROT_DBG    
     sprintf_f(rs->logs, "reverse rotate angle = %lf \n", theta);
@@ -84920,6 +84920,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     int srhcntA[2]={0}, srhcntB[2]={0};
     int idxA=0, idxB=0, tmCost=0;
     CFLOAT infoPos[4];
+    signed short rotAngle=0;
     
     #if DUMP_ROT_BMP
     static char ptfileSave[] = "/home/root/rotate/rot_%.3d.bmp";
@@ -85103,6 +85104,14 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
         //imgbuf->mfourAttb.BKNoteImageRect.yr = cropinfo[5];
     }
 
+    sprintf_f(rs->logs, "m4 rotate angle: %.3d.%.2d degree (%d) \n", bheader->aspbiNumImpColor/100, bheader->aspbiNumImpColor%100, bheader->aspbiNumImpColor);
+    print_f(rs->plogs, "CLIP", rs->logs);
+
+    rotAngle = bheader->aspbiNumImpColor;
+
+    pusbmeta->OCR_rotangle[0] = rotAngle & 0xff;
+    pusbmeta->OCR_rotangle[1] = (rotAngle >> 8) & 0xff;
+    
     msync(bmprot, abuf_size, MS_SYNC);
     
     sprintf_f(rs->logs, "dump 512 bytes cropping result addr: 0x%.8x size: %d \n", (uint32_t)bmprot, abuf_size);
@@ -88795,7 +88804,7 @@ static int p16(struct procRes_s *rs)
     return 0;
 }
 
-#define DUMP_MFOUR_BMP (1)
+#define DUMP_MFOUR_BMP (0)
 #define LOG_P17_EN (1)
 static int p17(struct procRes_s *rs)
 {
@@ -88808,7 +88817,8 @@ static int p17(struct procRes_s *rs)
     char m4startcmd[256] = "ls";
     char *rx_buf=0;
     mfour_rect_st *pRect=0, *pArRect=0;
-    struct bitmapDecodeItem_s *decpic=0, *decraw=0;
+    struct bitmapDecodeItem_s *decpic=0, *decraw=0, *decmeta=0;
+    struct aspMetaDataviaUSB_s *pusbmeta=0;
     mfour_image_param_st *img_param=0, *img_out=0, *img_raw=0, *img_rxbuf=0;
     mfour_areas_st *pArea=0;
     t_ImageParam *pImgArea=0, *pImgOutArea=0;
@@ -88819,21 +88829,22 @@ static int p17(struct procRes_s *rs)
     char *cpyDst=0, *cpySrc=0;
     int *ptrw=0, *ptrh=0;
     struct bitmapHeader_s *pheader=0;
-
+    int mtlen=0;
+    char *bmpmeta=0;
+    char outchr[3][36]={0};
+    
     #if DUMP_MFOUR_BMP
     static char ptfileSave[] = "/home/root/rotate/m4_%.3d_%.1d_%.1d.bmp";
     char filepath[256]={0};
     FILE *fdump=0;
-    char *dumpsrc=0;
     int dumpsize=0;
+    char *dumpsrc=0;
 
     char *ocrpath=0;
     char filepathOcr[256]={0};
     char filepathOcrTxt[256]={0};
     FILE *focrtxt=0;
-    char outchr[3][36]={0};
     int trimsize=0, modix=0, outstrlen=0;
-    
     #endif
     
     sprintf_f(rs->logs, "p17\n");
@@ -88897,7 +88908,11 @@ static int p17(struct procRes_s *rs)
                     sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
                     print_f(rs->plogs, "P17", rs->logs);
                 }
-
+                
+                decmeta = &rs->pbDecMfour[mfbidx]->aspDecMeta;
+                aspBMPdecodeItemGet(decmeta, &bmpmeta, &mtlen);
+                pusbmeta = (struct aspMetaDataviaUSB_s *)bmpmeta;
+    
                 ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
                 ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
                 sprintf_f(rs->logs, "m4 rx get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
@@ -89251,7 +89266,36 @@ static int p17(struct procRes_s *rs)
                             }
                             #endif
                             
-                            
+                            if (img_out->mfourAttb.iJobRtnCode == iJobImgOCR) {
+
+                                memset(outchr, 0, 36*3);
+                                if (img_out->mfourAttb.iJobIdx == SRNBox1L) {
+                                    BKOCR_Check6(img_param->mfourData, imgsize, outchr[1], MaxCount_SRN);
+                                    shmem_dump(outchr[1], 32);
+
+                                    pusbmeta->OCR_strlen = strlen(outchr[1]);
+                                    if (pusbmeta->OCR_strlen < 16) {
+                                        memcpy(pusbmeta->OCR_chars, outchr[1], pusbmeta->OCR_strlen);
+                                    }
+
+                                    sprintf_f(rs->logs, "SRNBox1L OCR result len: %d\n", pusbmeta->OCR_strlen);
+                                    print_f(rs->plogs, "P17", rs->logs);
+
+                                } else if (img_out->mfourAttb.iJobIdx == SRNBox1R) {
+                                    BKOCR_Check7(img_param->mfourData, imgsize, outchr[2], MaxCount_SRN);
+                                    shmem_dump(outchr[2], 32);
+                                    
+                                    pusbmeta->OCR_strlen = strlen(outchr[2]);
+                                    if (pusbmeta->OCR_strlen < 16) {
+                                        memcpy(pusbmeta->OCR_chars, outchr[2], pusbmeta->OCR_strlen);
+                                    }
+                                    
+                                    sprintf_f(rs->logs, "SRNBox1R OCR result len: %d\n", pusbmeta->OCR_strlen);
+                                    print_f(rs->plogs, "P17", rs->logs);
+
+                                }
+                            }                            
+
                             #if DUMP_MFOUR_BMP    
                             sprintf(filepath, ptfileSave, imgidx, mfbidx, cid);
                             //fdump = find_save(filepath, ptfileSave);
@@ -89276,68 +89320,51 @@ static int p17(struct procRes_s *rs)
                             fclose(fdump);
                             sync();
 
-                            sprintf_f(rs->logs, "image w: %d h: %d \n", img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr);
+                            sprintf_f(rs->logs, "image w: %d h: %d rtnCode: %d\n", img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, img_out->mfourAttb.iJobRtnCode);
                             print_f(rs->plogs, "P17", rs->logs);
 
-                            if ((img_out->mfourAttb.ImageRect.xc == 240) && (img_out->mfourAttb.ImageRect.yr == 48)) {
 
-                                memset(outchr, 0, 36*3);
+                            for (modix=0; modix < 3; modix++) {
                                 
-                                BKOCR_Check(dumpsrc, dumpsize, outchr[0], MaxCount_SRN);
-                                BKOCR_Check6(dumpsrc, dumpsize, outchr[1], MaxCount_SRN);
-                                BKOCR_Check7(dumpsrc, dumpsize, outchr[2], MaxCount_SRN);
-
-                                sprintf_f(rs->logs, "out 0: [%s] out 3: [%s] out 4: [%s] !!! \n", outchr[0], outchr[1], outchr[2]);
-                                print_f(rs->plogs, "P17", rs->logs);
-                                
-                                shmem_dump(outchr[0], 32);
-                                shmem_dump(outchr[1], 32);
-                                shmem_dump(outchr[2], 32);
-
-                                for (modix=0; modix < 3; modix++) {
+                                outstrlen = strlen(outchr[modix]);
+                                if (outstrlen > 0) {
+                                    
+                                    if (outstrlen > 20) {                                        
+                                        sprintf_f(rs->logs, "Error !!! the ocr output str len is %d over 20 \n", outstrlen);
+                                        print_f(rs->plogs, "P17", rs->logs);
+                                        continue;
+                                    }
 
                                     strcpy(filepathOcr, filepath);
-                                
-                                    outstrlen = strlen(outchr[modix]);
-                                    if (outstrlen > 0) {
-                                        if (outstrlen > 20) {
-                                        
-                                            sprintf_f(rs->logs, "Error !!! the ocr output str len is %d over 20 \n", outstrlen);
-                                            print_f(rs->plogs, "P17", rs->logs);
-                                            continue;
-                                        }
-                                        ocrpath = strchr(filepathOcr, '.');
-                                        *ocrpath = '\0';
-
-                                        //sprintf_f(rs->logs, "debug strchr, p: 0x%.8x ret: 0x%.8x !!! \n", (uint32_t)filepath, (uint32_t)ocrpath);
-                                        //print_f(rs->plogs, "P17", rs->logs);
                                     
-                                        ocrpath = strcat(filepathOcr, "_mod%.2d_sz%.2d.txt");
-                                        sprintf(filepathOcrTxt, filepathOcr, modix, outstrlen);
-                                        
-                                        focrtxt = fopen(filepathOcrTxt, "w");
-                                        if (focrtxt) {
-                                            sprintf_f(rs->logs, "create ocrtxt file [%s] succeed !!!\n", filepathOcrTxt);
-                                            print_f(rs->plogs, "P17", rs->logs);
+                                    ocrpath = strchr(filepathOcr, '.');
+                                    *ocrpath = '\0';
 
-                                            fwrite(outchr[modix], 1, outstrlen, focrtxt);
+                                    //sprintf_f(rs->logs, "debug strchr, p: 0x%.8x ret: 0x%.8x !!! \n", (uint32_t)filepath, (uint32_t)ocrpath);
+                                    //print_f(rs->plogs, "P17", rs->logs);
 
-                                            fflush(focrtxt);
-                                            fclose(focrtxt);
-                                            sync();  
+                                    ocrpath = strcat(filepathOcr, "_mod%.2d_sz%.2d.txt");
+                                    sprintf(filepathOcrTxt, filepathOcr, modix, outstrlen);
 
-                                            focrtxt = 0;
-                                        
-                                        } else {
-                                            sprintf_f(rs->logs, "create ocrtxt file [%s] failed!!! \n", filepathOcrTxt);
-                                            print_f(rs->plogs, "P17", rs->logs);
-                                        }                                    
-                                    }
+                                    focrtxt = fopen(filepathOcrTxt, "w");
+                                    if (focrtxt) {
+                                        sprintf_f(rs->logs, "create ocrtxt file [%s] succeed !!!\n", filepathOcrTxt);
+                                        print_f(rs->plogs, "P17", rs->logs);
+
+                                        fwrite(outchr[modix], 1, outstrlen, focrtxt);
+
+                                        fflush(focrtxt);
+                                        fclose(focrtxt);
+                                        sync();  
+                                         focrtxt = 0;
+                                     } else {
+                                        sprintf_f(rs->logs, "create ocrtxt file [%s] failed!!! \n", filepathOcrTxt);
+                                        print_f(rs->plogs, "P17", rs->logs);
+                                    }                                    
                                 }
-                                
                             }
-                            
-                            
+
+                            memset(outchr, 0, 36*3);
                             #endif
                             
                             minfo[0] = 'd';
