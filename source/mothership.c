@@ -2408,12 +2408,295 @@ static int rgb2jpg(unsigned char *prgb, unsigned char *ppjpg, int *jlen, int set
     return 0;
 }
 
+static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp, int offsetWin, int widthWin, int offsetYWin, int heightWin)
+{
+#define MAX_LINE_NUM 1536
+    struct jpeg_decompress_struct cinfo;
+    struct jpeg_error_mgr err;
+ 
+    JSAMPARRAY samplebuffer;
+    unsigned char  *bufferarry[MAX_LINE_NUM];
+    JDIMENSION offsetx, cropW, skipf, skipb;
+    int row_stride=0, row_stride_org=0;
+    unsigned char *tmpbuff = NULL;
+    int rgb_size, clrsp=0, ix=0, lnum=0;;
+
+    //printf("[JPG] jpeg2rgb enter \n"); 
+    
+    if (!pjpg) {
+        printf("[JPG] jpg buffer is null \n");
+        return -1;
+    }
+    
+    if (!prgb)
+    {
+        printf("[JPG] output buff is null \n");
+        return -2;
+    }
+    
+    cinfo.err = jpeg_std_error(&err);
+  
+    jpeg_create_decompress(&cinfo);
+    //printf("[JPG] jpeg_create_decompress. \n"); 
+    
+    jpeg_mem_src(&cinfo, pjpg, jpgsz);
+    //printf("[JPG] jpeg_mem_src size: %d \n", jpgsz); 
+    
+    //shmem_dump(pjpg, 512);
+     
+    jpeg_read_header(&cinfo, TRUE);
+    //printf("[JPG] jpeg_read_header. bpp: %d output_components: %d \n", bpp, cinfo.output_components); 
+    cinfo.output_components = bpp / 8;
+    
+    clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
+    
+    cinfo.out_color_space = clrsp;//JCS_GRAYSCALE;//JCS_RGB;//JCS_GRAYSCALE; //JCS_YCbCr;
+ 
+    jpeg_start_decompress(&cinfo);
+    //printf("[JPG] jpeg_start_decompress. \n"); 
+
+    row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;
+    row_stride_org = row_stride;
+    *getW = cinfo.output_width;
+    *getH = cinfo.output_height;
+
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d \n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    #if 1
+    offsetx = offsetWin;
+    cropW = widthWin;
+    printf("[JPG] jpeg_crop_scanline. %d, %d S\n", offsetx, cropW); 
+    jpeg_crop_scanline(&cinfo, &offsetx, &cropW);
+    printf("[JPG] jpeg_crop_scanline. %d, %d E\n", offsetx, cropW); 
+    #endif
+    
+    //row_stride = cinfo.output_width * cinfo.output_components;
+    row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;
+
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+
+    lnum = cinfo.output_height;
+    if (lnum > MAX_LINE_NUM) {
+        return -3;
+    }
+
+    tmpbuff = prgb + ((offsetx * bpp) / 8);
+    for (ix=0; ix < lnum; ix++) {
+        bufferarry[ix] = tmpbuff;
+        msync(tmpbuff, row_stride_org, MS_SYNC);
+        
+        tmpbuff += row_stride_org;
+    }
+
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    //*getW = cinfo.output_width;
+    //*getH = cinfo.output_height;
+    
+    rgb_size = row_stride * cinfo.output_height;
+    if (rgbsz < rgb_size) {
+        printf("[JPG] width: %d height: %d row_stride: %d \n", cinfo.output_width, cinfo.output_height, row_stride); 
+        printf("[JPG] output buff size %d is wrong should be %d \n", rgbsz, rgb_size);
+        return -4;
+    }
+    
+    //printf("[JPG] output buff size: %d, bmp size: %d \n", rgbsz, rgb_size);
+    
+    samplebuffer = (*cinfo.mem->alloc_sarray)((j_common_ptr) &cinfo, JPOOL_IMAGE, row_stride, 1);
+    if (!samplebuffer) {
+        printf("[JPG] failed to allocate memory size: %d x %d = %d\n", row_stride, cinfo.output_height, row_stride * 1);
+    }
+    
+
+    #if 0
+    printf("[JPG] debug: rgb_size: %d, raw size: %d w: %d h: %d row_stride: %d \n", rgb_size,
+                cinfo.image_width*cinfo.image_height*cinfo.output_components,
+                cinfo.image_width, 
+                cinfo.image_height,
+                row_stride);
+    #endif
+
+    #if 0
+    ix=0;
+    //printf("[JPG] scan begin line: %d output: %d\n", cinfo.output_scanline, cinfo.output_height);
+    while (cinfo.output_scanline < cinfo.output_height) {
+        skipf = cinfo.output_scanline;
+        skipb = cinfo.output_height - cinfo.output_scanline;
+        jpeg_read_scanlines(&cinfo, &samplebuffer[skipf], skipb);
+
+        ix++;
+        //printf("[JPG] scan begin line: %d output: %d - %d \n", cinfo.output_scanline, cinfo.output_height, ix);
+    }
+
+    tmpbuff = prgb + ((offsetx * bpp) / 8);
+    for (ix=0; ix < cinfo.output_height; ix++) {
+        memcpy(tmpbuff, samplebuffer[ix], row_stride);
+        tmpbuff += row_stride_org;
+    }
+    #elif 0
+    //skipf = cinfo.output_height;
+    //jpeg_skip_scanlines(&cinfo, skipf);
+    //tmpbuff = prgb;
+    ix = 0;
+    while (cinfo.output_scanline < cinfo.output_height)
+    {
+        jpeg_read_scanlines(&cinfo, &bufferarry[ix], 1);
+        //jpeg_skip_scanlines(&cinfo, 1);
+        //memcpy(tmpbuff, samplebuffer[0], row_stride);
+        //tmpbuff += row_stride_org;
+        ix++;
+    }
+
+    //printf("[JPG] jpeg_read, cnt: %d line: %d output: %d \n", ix, cinfo.output_scanline, cinfo.output_height); 
+    
+    #else
+    skipf = offsetYWin;
+    skipb = cinfo.output_height - offsetYWin - heightWin;
+    
+    jpeg_skip_scanlines(&cinfo, skipf);
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines - 1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+                
+    tmpbuff = prgb + ((offsetx * bpp) / 8);
+    tmpbuff += row_stride_org * skipf;
+    while (cinfo.output_scanline < (cinfo.output_height - skipb))
+    {
+        jpeg_read_scanlines(&cinfo, samplebuffer, 1);
+        memcpy(tmpbuff, samplebuffer[0], row_stride);
+        tmpbuff += row_stride_org;
+    }
+
+    jpeg_skip_scanlines(&cinfo, skipb);
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines - 2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    #endif
+    
+    jpeg_finish_decompress(&cinfo);
+
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines FINISH\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    jpeg_destroy_decompress(&cinfo);
+    
+    return 0;
+}
+
+static int jpeg2rgbW(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp, int offsetWin, int widthWin)
+{
+    struct jpeg_decompress_struct cinfo;
+    struct jpeg_error_mgr err;
+ 
+    JSAMPARRAY samplebuffer;
+    JDIMENSION offsetx, cropW, skipf, skipb;
+    int row_stride=0, row_stride_org=0;
+    char* tmpbuff = NULL;
+    int rgb_size, clrsp=0;
+
+    //printf("[JPG] jpeg2rgb enter \n"); 
+    
+    if (!pjpg) {
+        printf("[JPG] jpg buffer is null \n");
+        return -1;
+    }
+    
+    if (!prgb)
+    {
+        printf("[JPG] output buff is null \n");
+        return -2;
+    }
+    
+    cinfo.err = jpeg_std_error(&err);
+  
+    jpeg_create_decompress(&cinfo);
+    //printf("[JPG] jpeg_create_decompress. \n"); 
+    
+    jpeg_mem_src(&cinfo, pjpg, jpgsz);
+    //printf("[JPG] jpeg_mem_src size: %d \n", jpgsz); 
+    
+    //shmem_dump(pjpg, 512);
+     
+    jpeg_read_header(&cinfo, TRUE);
+    //printf("[JPG] jpeg_read_header. bpp: %d output_components: %d \n", bpp, cinfo.output_components); 
+    cinfo.output_components = bpp / 8;
+    
+    clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
+    
+    cinfo.out_color_space = clrsp;//JCS_GRAYSCALE;//JCS_RGB;//JCS_GRAYSCALE; //JCS_YCbCr;
+ 
+    jpeg_start_decompress(&cinfo);
+    //printf("[JPG] jpeg_start_decompress. \n"); 
+
+    row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;
+    row_stride_org = row_stride;
+    *getW = cinfo.output_width;
+    *getH = cinfo.output_height;
+
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d before \n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    #if 1
+    offsetx = offsetWin;
+    cropW = widthWin;
+    printf("[JPG] jpeg_crop_scanline. %d, %d S\n", offsetx, cropW); 
+    jpeg_crop_scanline(&cinfo, &offsetx, &cropW);
+    printf("[JPG] jpeg_crop_scanline. %d, %d E\n", offsetx, cropW); 
+    #endif
+    
+    //row_stride = cinfo.output_width * cinfo.output_components;
+    row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;
+    
+    //*getW = cinfo.output_width;
+    //*getH = cinfo.output_height;
+
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after \n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    //skipf = 100;
+    //skipb = 200;
+    //jpeg_skip_scanlines(&cinfo, skipf);
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines E1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    rgb_size = row_stride * cinfo.output_height;
+    if (rgbsz < rgb_size) {
+        printf("[JPG] output buff size %d is wrong should be %d \n", rgbsz, rgb_size);
+        return -3;
+    }
+    
+    //printf("[JPG] output buff size: %d, bmp size: %d \n", rgbsz, rgb_size);
+    
+    samplebuffer = (*cinfo.mem->alloc_sarray)((j_common_ptr) &cinfo, JPOOL_IMAGE, row_stride, 1);
+
+    #if 0
+    printf("[JPG] debug: rgb_size: %d, raw size: %d w: %d h: %d row_stride: %d \n", rgb_size,
+                cinfo.image_width*cinfo.image_height*cinfo.output_components,
+                cinfo.image_width, 
+                cinfo.image_height,
+                row_stride);
+    #endif
+                
+    tmpbuff = prgb + ((offsetx * bpp) / 8);
+    while (cinfo.output_scanline < (cinfo.output_height))
+    {
+        jpeg_read_scanlines(&cinfo, samplebuffer, 1);
+        memcpy(tmpbuff, samplebuffer[0], row_stride);
+        tmpbuff += row_stride_org;
+    }
+
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines S2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //jpeg_skip_scanlines(&cinfo, skipb);
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines E2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    jpeg_finish_decompress(&cinfo);
+
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines FINISH\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    jpeg_destroy_decompress(&cinfo);
+    
+    return 0;
+}
+
 static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp)
 {
     struct jpeg_decompress_struct cinfo;
     struct jpeg_error_mgr err;
  
     JSAMPARRAY samplebuffer;
+    JDIMENSION offsetx, cropW, skipf, skipb;
     int row_stride = 0;
     char* tmpbuff = NULL;
     int rgb_size, clrsp=0;
@@ -2452,13 +2735,25 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     jpeg_start_decompress(&cinfo);
     //printf("[JPG] jpeg_start_decompress. \n"); 
      
+    #if 0
+    offsetx = cinfo.output_width / 4;
+    cropW = cinfo.output_width / 2;
+    printf("[JPG] jpeg_crop_scanline. %d, %d S\n", offsetx, cropW); 
+    jpeg_crop_scanline(&cinfo, &offsetx, &cropW);
+    printf("[JPG] jpeg_crop_scanline. %d, %d E\n", offsetx, cropW); 
+    #endif
+    
     //row_stride = cinfo.output_width * cinfo.output_components;
     row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;;
     
     *getW = cinfo.output_width;
     *getH = cinfo.output_height;
     
-    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines S1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //skipf = 100;
+    //skipb = 200;
+    //jpeg_skip_scanlines(&cinfo, skipf);
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines E1\n", cinfo.output_width, cinfo.output_height, row_stride); 
      
     rgb_size = row_stride * cinfo.output_height;
     if (rgbsz < rgb_size) {
@@ -2479,14 +2774,21 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     #endif
                 
     tmpbuff = prgb;
-    while (cinfo.output_scanline < cinfo.output_height)
+    while (cinfo.output_scanline < (cinfo.output_height))
     {
         jpeg_read_scanlines(&cinfo, samplebuffer, 1);
         memcpy(tmpbuff, samplebuffer[0], row_stride);
         tmpbuff += row_stride;
     }
  
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines S2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //jpeg_skip_scanlines(&cinfo, skipb);
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines E2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
     jpeg_finish_decompress(&cinfo);
+
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines FINISH\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
     jpeg_destroy_decompress(&cinfo);
     
     return 0;
@@ -3200,6 +3502,9 @@ static int aspBMPdecodeBuffInit(struct bitmapDecodeMfour_s *pdec)
     aspBMPdecodeItemInit(&pdec->aspDecMetaex);
     aspBMPdecodeItemInit(&pdec->aspDecRaw);
 
+    //memset(pdec->aspDecRaw.aspDcData->mfourData, 0xff, pdec->aspDecRaw.aspDcMax);
+    //msync(pdec->aspDecRaw.aspDcData->mfourData, pdec->aspDecRaw.aspDcMax, MS_SYNC);
+    
     for (ix=0; ix< BMP_DECODE_PIC_SIZE; ix++) {
         aspBMPdecodeItemInit(&pdec->aspDecMfPiRaw[ix]);
         aspBMPdecodeItemInit(&pdec->aspDecMfPiJpg[ix]);
@@ -3250,7 +3555,7 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
 
 static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
 {
-    int len=0, ix=0;
+    int len=0, ix=0, totsz=0;
     struct bitmapDecodeMfour_s *pdec=0;
 
     pdec = &pmrs->bmpDecMfour[idx];
@@ -3260,7 +3565,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pipe2(pdec->aspPipeMfourCom, O_NONBLOCK);
     
     len = (2592 * 1864 * 15) / 100;
-    pdec->aspDecJpeg.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
+    totsz = len + sizeof(mfour_image_param_st) + 32;
+    pdec->aspDecJpeg.aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
     if (pdec->aspDecJpeg.aspDcData) {
         //sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
         //print_f(pmrs->plog, "USB", pmrs->log);
@@ -3273,7 +3579,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec->aspDecJpeg.aspDcMax = len;
 
     len = 1024;
-    pdec->aspDecMeta.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
+    totsz = len + sizeof(mfour_image_param_st) + 32;
+    pdec->aspDecMeta.aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
     if (pdec->aspDecMeta.aspDcData) {
         //sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %dB\n", idx, len); 
         //print_f(pmrs->plog, "USB", pmrs->log);
@@ -3286,7 +3593,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec->aspDecMeta.aspDcMax = len;
     
     len = 65536;
-    pdec->aspDecMetaex.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
+    totsz = len + sizeof(mfour_image_param_st) + 32;
+    pdec->aspDecMetaex.aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
     if (pdec->aspDecMetaex.aspDcData) {
         //sprintf_f(pmrs->log, "allocate memory for M4 jpeg for id%d succeed !! size: %d KB\n", idx, len / 1024); 
         //print_f(pmrs->plog, "USB", pmrs->log);
@@ -3299,7 +3607,8 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec->aspDecMetaex.aspDcMax = len;
     
     len = 2592 * 1864;
-    pdec->aspDecRaw.aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
+    totsz = len + sizeof(mfour_image_param_st) + 32;
+    pdec->aspDecRaw.aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
     if (pdec->aspDecRaw.aspDcData) {
         //sprintf_f(pmrs->log, "allocate memory for M4 raw for id%d succeed !! size: %d KB\n", idx, len / 1024); 
         //print_f(pmrs->plog, "USB", pmrs->log);
@@ -3313,8 +3622,9 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     
     //len = 1024 * 100;
     len = 2592 * 1864;
+    totsz = len + sizeof(mfour_image_param_st) + 32;
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
-        pdec->aspDecMfPiRaw[ix].aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
+        pdec->aspDecMfPiRaw[ix].aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
         if (pdec->aspDecMfPiRaw[ix].aspDcData) {
             //sprintf_f(pmrs->log, "allocate memory for M4 piece raw %.d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
             //print_f(pmrs->plog, "USB", pmrs->log);
@@ -3329,8 +3639,9 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
 
     //len = 1024 * 20;
     len = 1024 * 1024;
+    totsz = len + sizeof(mfour_image_param_st) + 32;
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
-        pdec->aspDecMfPiJpg[ix].aspDcData = (mfour_image_param_st *)aspSalloc(len+ sizeof(mfour_image_param_st));
+        pdec->aspDecMfPiJpg[ix].aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
         if (pdec->aspDecMfPiJpg[ix].aspDcData) {
             //sprintf_f(pmrs->log, "allocate memory for M4 piece jpg %.2d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
             //print_f(pmrs->plog, "USB", pmrs->log);
@@ -14134,11 +14445,11 @@ static int findLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex, int
     if (!pcp36) return -1;
     if (!pcpex) return -2;
 
-    h = (double)(pcp36->crp36Dn - pcp36->crp36Up);
+    h = (CFLOAT)(pcp36->crp36Dn - pcp36->crp36Up);
     linenum = h / CROP_LINE_MIN_L; 
     lineMin = h / CROP_LINE_MIN_F;
     
-    w = (double)(pcp36->crp36Rt - pcp36->crp36Lf);
+    w = (CFLOAT)(pcp36->crp36Rt - pcp36->crp36Lf);
     wmin = w / CROP_LINE_MIN_W;
 
 #define CROP_LINE_DIST  (wmin)
@@ -16792,7 +17103,7 @@ static int findBestLine(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex,
     }
         
     CFLOAT maxDiv = 10 / 5.0 ;
-    double divGpLU=0, divGpLD=0, divGpRU=0, divGpRD=0;
+    CFLOAT divGpLU=0, divGpLD=0, divGpRU=0, divGpRD=0;
 
     if (width > (high * 1.2)) {
         divGpLU = ((dlu  * 20.0) + (gpLUlen * 32.0 / vLUDiv) * 18.0) / 38.0;
@@ -18045,7 +18356,7 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
     pcp36->crp36Pots[(CROP_MAX_NUM_META + 1) * 2 + 1] = 0;
 
     for (i = 0; i < CROP_MAX_NUM_META * 2; i++) {
-        pcp36->crp36Pots[i + 2] = (double) org[i];
+        pcp36->crp36Pots[i + 2] = (CFLOAT) org[i];
     }
 
     int messpair = new_mass_len / 4;
@@ -18149,8 +18460,8 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
     print_f(rs->plogs, "DoC", rs->logs);
     #endif
     
-    qsort((void *) pcpex->crpexLfPots, (new_mass_len / 4), sizeof(double) * 2, qsort_comp);
-    qsort((void *) pcpex->crpexRtPots, (new_mass_len / 4), sizeof(double) * 2, qsort_comp);
+    qsort((void *) pcpex->crpexLfPots, (new_mass_len / 4), sizeof(CFLOAT) * 2, qsort_comp);
+    qsort((void *) pcpex->crpexRtPots, (new_mass_len / 4), sizeof(CFLOAT) * 2, qsort_comp);
     pcpex->crpexSize = new_mass_len / 2;
 
     #if CROP_CALCU_PROCESS
@@ -18221,11 +18532,11 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
             gap = tempgap;  
         }
         
-        double mostlft[2] = {0.0, 0.0};
-        double mostrgt[2] = {0.0, 0.0};
-        double lftgrp[10][2], rgtgrp[10][2], fhi = 0.0, fwh = 0.0, fwe = 0.0;
-        memset(lftgrp, 0, sizeof(double) * 10 * 2);
-        memset(rgtgrp, 0, sizeof(double) * 10 * 2);
+        CFLOAT mostlft[2] = {0.0, 0.0};
+        CFLOAT mostrgt[2] = {0.0, 0.0};
+        CFLOAT lftgrp[10][2], rgtgrp[10][2], fhi = 0.0, fwh = 0.0, fwe = 0.0;
+        memset(lftgrp, 0, sizeof(CFLOAT) * 10 * 2);
+        memset(rgtgrp, 0, sizeof(CFLOAT) * 10 * 2);
         ret = getRotateP1(pcp36, mostlft);
 
         fwh = mostlft[1] - (gap * 2);
@@ -18256,7 +18567,7 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
             cxm = (int) pcpex->crpexLfPots[i * 2 + 0];
             cxn = (int) pcpex->crpexRtPots[i * 2 + 0];
 
-            fhi = (double) vhi;
+            fhi = (CFLOAT) vhi;
             if (cnt < 4) {
                 if (fhi > fwh) {
                     lftgrp[cnt][0] = cxm;
@@ -18330,7 +18641,7 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
             getRectPoint(pcp36);
         }
 
-        double rotlf[2], rotup[2], rotrt[2], rotdn[2];
+        CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
 
         ret = getRotateP1(pcp36, rotlf);
         if (!ret && CROP_CALCU_PROCESS) {
@@ -20148,14 +20459,14 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     RDt[0] = (int)round(pRD[0]*MIN_P);
     RDt[1] = (int)round(pRD[1]*MIN_P);
 
-    pLU[0] = (double)LUt[0];
-    pLU[1] = (double)LUt[1];
-    pRU[0] = (double)RUt[0];
-    pRU[1] = (double)RUt[1];
-    pLD[0] = (double)LDt[0];
-    pLD[1] = (double)LDt[1];
-    pRD[0] = (double)RDt[0];
-    pRD[1] = (double)RDt[1];
+    pLU[0] = (CFLOAT)LUt[0];
+    pLU[1] = (CFLOAT)LUt[1];
+    pRU[0] = (CFLOAT)RUt[0];
+    pRU[1] = (CFLOAT)RUt[1];
+    pLD[0] = (CFLOAT)LDt[0];
+    pLD[1] = (CFLOAT)LDt[1];
+    pRD[0] = (CFLOAT)RDt[0];
+    pRD[1] = (CFLOAT)RDt[1];
 
     pLU[0] = pLU[0]/MIN_P;
     pLU[1] = pLU[1]/MIN_P;
@@ -21483,14 +21794,14 @@ static int rotateBMP(struct procRes_s *rs, int *page, struct aspMetaData_s *meta
     RDt[0] = (int)round(pRD[0]*100000);
     RDt[1] = (int)round(pRD[1]*100000);
 
-    pLU[0] = (double)LUt[0];
-    pLU[1] = (double)LUt[1];
-    pRU[0] = (double)RUt[0];
-    pRU[1] = (double)RUt[1];
-    pLD[0] = (double)LDt[0];
-    pLD[1] = (double)LDt[1];
-    pRD[0] = (double)RDt[0];
-    pRD[1] = (double)RDt[1];
+    pLU[0] = (CFLOAT)LUt[0];
+    pLU[1] = (CFLOAT)LUt[1];
+    pRU[0] = (CFLOAT)RUt[0];
+    pRU[1] = (CFLOAT)RUt[1];
+    pLD[0] = (CFLOAT)LDt[0];
+    pLD[1] = (CFLOAT)LDt[1];
+    pRD[0] = (CFLOAT)RDt[0];
+    pRD[1] = (CFLOAT)RDt[1];
 
     pLU[0] = pLU[0]/100000.0;
     pLU[1] = pLU[1]/100000.0;
@@ -56638,20 +56949,21 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     pubffm = pubffh;
                                     while (pubffm) {
                                         pageidx += 1;
-                                        #if 0
+                                        #if 1
                                         tmpbf = pubffm->ubbufh;
                                         trunkidx = 0;
                                         while (tmpbf) {
                                             memsz += USB_BUF_SIZE;
                                             trunkidx += 1;
+                                            sprintf_f(mrs->log, "    [GW] %d - 0x%.8x\n", trunkidx, (uint32_t)tmpbf->bpt);
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                            
                                             tmpbf = tmpbf->bn;
-                                            //sprintf_f(mrs->log, "    [GW] %d - %d\n", trunkidx, memsz);
-                                            //print_f(mrs->plog, "fs152", mrs->log);
                                         }
                                         sprintf_f(mrs->log, "[GW] memory used: %d - %d idx: %d \n", memsz, pageidx, pubffm->ubindex);
                                         print_f(mrs->plog, "fs152", mrs->log);
                                         #else
-                                        sprintf_f(mrs->log, "[GW] mem(%d) idx: %d \n", pageidx, pubffm->ubindex);
+                                        sprintf_f(mrs->log, "[GW] mem(%d) idx: 0x%.8x \n", pageidx, pubffm->ubindex);
                                         print_f(mrs->plog, "fs152", mrs->log);
                                         #endif
                                         
@@ -60514,6 +60826,12 @@ static int p3(struct procRes_s *rs)
     struct bitmapDecodeMfour_s *pdec=0;
     struct bitmapDecodeItem_s *decjpg=0, *decmeta=0, *decexmt=0;
     char *pmeta=0, *pexmt=0;
+    struct timespec crpS, crpE;
+    int tmCost=0;
+
+    //clock_gettime(CLOCK_REALTIME, &crpS);
+    //tmCost = time_diff(&crpS, &crpE, 1000000);
+    
     
     prctl(PR_SET_NAME, "msp-p3");
     //sprintf(argv[0], "msp-p3-spi");
@@ -61026,6 +61344,8 @@ static int p3(struct procRes_s *rs)
                                 memset(org, 0, sizeof(int)*org_len);
                                 memset(mass, 0, sizeof(int)*mass_len);
                                 
+                                clock_gettime(CLOCK_REALTIME, &crpS);
+                        
                                 ret = getOrg(org, addr, totsz, rs);
                                 if (ret) {
                                     sprintf_f(rs->logs, "getOrg ret: %d \n", ret);
@@ -61038,8 +61358,22 @@ static int p3(struct procRes_s *rs)
                                     print_f(rs->plogs, "P3", rs->logs);
                                 }
                                 else {
+                                    //clock_gettime(CLOCK_REALTIME, &crpE);
+                                    //tmCost = time_diff(&crpS, &crpE, 1000);
+
+                                    //sprintf_f(rs->logs, "point deal time cost: %d.%d ms !!! \n", tmCost/1000, tmCost%1000);
+                                    //print_f(rs->plogs, "P3", rs->logs);                        
+
+                                    //clock_gettime(CLOCK_REALTIME, &crpS);
+
                                     doCalculate(result, org, org_len, mass, mass_len, rs, 3);
                                 }
+                                
+                                clock_gettime(CLOCK_REALTIME, &crpE);
+                                tmCost = time_diff(&crpS, &crpE, 1000);
+
+                                sprintf_f(rs->logs, "cropping calcu time cost: %d.%d ms !!! \n", tmCost/1000, tmCost%1000);
+                                print_f(rs->plogs, "P3", rs->logs);                        
                                 
                                 sprintf_f(rs->logs, "get rotateP1 (%4d, %4d) \n", result[0], result[1]);
                                 print_f(rs->plogs, "P3", rs->logs);
@@ -61236,6 +61570,9 @@ static int p3(struct procRes_s *rs)
                         memset(result, 0, sizeof(int)*8);
                         memset(org, 0, sizeof(int)*org_len);
                         memset(mass, 0, sizeof(int)*mass_len);
+
+                        clock_gettime(CLOCK_REALTIME, &crpS);
+
                         ret = getOrg(org, addr, totsz, rs);
                         if (ret) {
                             sprintf_f(rs->logs, "m4 getOrg ret: %d \n", ret);
@@ -61251,6 +61588,12 @@ static int p3(struct procRes_s *rs)
                             doCalculate(result, org, org_len, mass, mass_len, rs, 3);
                         }
 
+                        clock_gettime(CLOCK_REALTIME, &crpE);
+                        tmCost = time_diff(&crpS, &crpE, 1000);
+
+                        sprintf_f(rs->logs, "crop calcu time cost: %d.%d ms!!! \n", tmCost/1000, tmCost%1000);
+                        print_f(rs->plogs, "P3", rs->logs);
+                        
                         /*
                         sprintf_f(rs->logs, "m4 get rotateP1 (%4d, %4d) \n", result[0], result[1]);
                         print_f(rs->plogs, "P3", rs->logs);
@@ -74762,7 +75105,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int pipesup[2]={0}, pipesdn[2]={0};
     int mbufidx=-1, mbstats=0;
     struct bitmapDecodeMfour_s *pmbf=0;
-    char *bfs[8]={0}, *bfmt=0, *bfex=0, *pbf=0;;
+    char *bfs[8]={0}, *bfmt=0, *bfex=0, *pbf=0;
     int bflens[8]={0}, mtlen=0, exlen=0;
     
     //pipe2(pipeusb, O_NONBLOCK);
@@ -84906,6 +85249,7 @@ static int AllocateImgParamImgDataR(t_ImageParam	*SrcBKJobImg_Param)
 }
 
 #define DUMP_ROT_BMP (0)
+#define LOG_ROT_EN (1)
 static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, int midx)
 {
     int ret=0;
@@ -84931,16 +85275,22 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     #endif
     
     decraw = &rs->pbDecMfour[mfidx]->aspDecRaw;
+
+    #if LOG_ROT_EN
     sprintf_f(rs->logs,"raw info w: %d h: %d len: %d id: %d - %d  !!!\n", decraw->aspDcWidth, decraw->aspDcHeight, decraw->aspDcLen, mfidx, clidx);
     print_f(rs->plogs, "CLIP", rs->logs);
+    #endif
 
     if (decraw->aspDcLen == 0) {
         return -1;
     }
 
     porgimg = decraw->aspDcData;
+    
+    #if LOG_ROT_EN
     sprintf_f(rs->logs,"ocr img param info w: %d h: %d !!!\n", porgimg->mfourAttb.ImageRect.xc, porgimg->mfourAttb.ImageRect.yr);
     print_f(rs->plogs, "CLIP", rs->logs);
+    #endif
 
     //if (porgimg->mfourImgW == 0) return -2;
 
@@ -85043,6 +85393,24 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     memcpy(bmpcolrtb, bmpbuff, 1078);
     //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
     
+    #if DUMP_ROT_BMP    
+    fdump = find_save(filepath, ptfileSave);
+    if (fdump) {
+        sprintf_f(rs->logs, "find save raw bmp [%s] succeed!!! \n", filepath);
+        print_f(rs->plogs, "CLIP", rs->logs);
+    }
+
+    msync(bmpbuff, rawlen, MS_SYNC);
+    
+    ret = fwrite((char*)bmpbuff, 1, rawlen, fdump);
+    sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, rawlen);
+    print_f(rs->plogs, "CLIP", rs->logs);
+
+    fflush(fdump);
+    fclose(fdump);
+    sync();
+    #endif
+    
     bhlen = 0x436;
     aspBMPdecodeItemGet(decpic, &dstbuff, &dstlen);
     bmprot = dstbuff;
@@ -85102,8 +85470,8 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
         pDeRect->mfourRectH = bheader->aspbiHeight;
         imgbuf->mfourAttb.ImageRect.xc = pDeRect->mfourRectW;
         imgbuf->mfourAttb.ImageRect.yr = pDeRect->mfourRectH;
-        //imgbuf->mfourAttb.BKNoteImageRect.xc = cropinfo[4];
-        //imgbuf->mfourAttb.BKNoteImageRect.yr = cropinfo[5];
+        imgbuf->mfourAttb.BKNoteImageRect.xc = cropinfo[4];
+        imgbuf->mfourAttb.BKNoteImageRect.yr = cropinfo[5];
     }
 
     sprintf_f(rs->logs, "m4 rotate angle: %.3d.%.2d degree (%d) \n", bheader->aspbiNumImpColor/100, abs(bheader->aspbiNumImpColor%100), bheader->aspbiNumImpColor);
@@ -85137,10 +85505,12 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
         print_f(rs->plogs, "CLIP", rs->logs);
     }
 
+    msync(bmpcolrtb, bhlen, MS_SYNC);
     ret = fwrite((char*)bmpcolrtb, 1, bhlen, fdump);
     //sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, bhlen);
     //print_f(rs->plogs, "CLIP", rs->logs);
 
+    msync(bmprot, abuf_size, MS_SYNC);
     ret = fwrite((char*)bmprot, 1, abuf_size, fdump);
     //sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, abuf_size);
     //print_f(rs->plogs, "CLIP", rs->logs);
@@ -86042,7 +86412,7 @@ static int p12(struct procRes_s *rs)
 static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 {
     char chq=0, chd=0, che=0, cindexfo[2], mindexfo[2], cinfo[12], cswerr=0, pagerst=2, ch=0, mfourinfo[2];
-    char *addrd=0, *palloc=0, *endf=0, *endm=0, *ptrecv=0, *bmpbufc=0, *bmpbuff=0, *addrb=0, *buffmeta=0;
+    char *addrd=0, *palloc=0, *endf=0, *endm=0, *bmpbufc=0, *bmpbuff=0, *addrb=0, *buffmeta=0;
     char *bmpcpy=0, *pshfmeta=0, *jpgout=0, *bmpcolrtb=0, *ph=0, *exmtaout=0, *bmprot=0, *metaPt=0;
     unsigned char *jpgrlt=0;
     int uimCylcnt=0, seqtx=0, maxsz=0, lens=0, pipRet=0, idlet=0, cindex=0, ix=0, waitCylen=0, chr=0, sendsz=0;
@@ -86071,11 +86441,14 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     struct bitmapDecodeItem_s *pdecraw=0;
     char emptyLine[4] = {0x59, 0x4c, 0x03, 0x10};
     char emptyLast[4] = {0x41, 0x53, 0x50, 0x43};
-    char endstr[] = "usb_conti_stop";
+    char endstr[128] = "usb_conti_stop";
     char csw[16] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff};
+    char ptrecv[256] = {0};
     uint32_t fformat=0;
     CFLOAT throughput=0.0;
     int simMax=-1;
+    //int coffsetx=0, coffsetw=0, coffsety=0, coffseth=0;
+    //uint32_t upos1=0, upos4=0, upos9=0, upos11=0;
     //struct procRes_s *rsd=0;
     
     pinfushost = rs->pusbmh[0];
@@ -86108,7 +86481,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     p13_init(rs);
 
     prctl(PR_SET_NAME, "msp-p13");
-
+    
     pushost = rs->pusbhost;
     //pushostd = rsd->pusbhost;
     
@@ -87664,9 +88037,34 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         
                     changeJpgLen(bmpbuff, bmph, bmplen);
                     
+                    //dbgMetaUsb(ptmetausb);
+
+                    #if 0
+                    upos1 = msb2lsb32(&ptmetausb->CROP_POS_1);
+                    coffsetx = (upos1 >> 16) & 0xffff;
+                    upos4 = msb2lsb32(&ptmetausb->CROP_POS_4);
+                    coffsetw = (upos4 >> 16) & 0xffff;
+                    coffsetw = coffsetw - coffsetx;
+                    if (bdpi >= 200) {
+                        coffsetx = (coffsetx * bdpi) / 300;
+                        coffsetw = (coffsetw * bdpi) / 300;
+                    }
+
+                    upos9 = msb2lsb32(&ptmetausb->CROP_POS_6);
+                    coffsety = upos9 & 0xffff;
+                    upos11 = msb2lsb32(&ptmetausb->CROP_POS_2);
+                    coffseth = upos11 & 0xffff;
+                    coffseth = coffseth - coffsety;
+                    
+                    sprintf_f(rs->logs, "[JPG] p1: 0x%.8x offsetx: %d, p4: 0x%.8x offsetw: %d\n", upos1, coffsetx, upos4, coffsetw);
+                    print_f(rs->plogs, sp, rs->logs);
+                    #endif
+                    
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     
                     err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
+                    //err = jpeg2rgbW(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw);
+                    //err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgE);
         
@@ -89280,6 +89678,9 @@ static int p17(struct procRes_s *rs)
                                 free(charbmp[ix]);
                             }
                             #endif
+
+                            sprintf_f(rs->logs, "m4attb image w: %d h: %d rtnCode: %d imgidx: %d\n", img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, img_out->mfourAttb.iJobRtnCode, imgidx);
+                            print_f(rs->plogs, "P17", rs->logs);
                             
                             if (img_out->mfourAttb.iJobRtnCode == iJobImgOCR) {
 
@@ -89300,6 +89701,8 @@ static int p17(struct procRes_s *rs)
                                         memcpy(pusbmeta->OCR_chars, outchr[1], pusbmeta->OCR_strlen);
                                     }
 
+                                    msync(&pusbmeta->OCR_strlen, 16, MS_SYNC);
+                                    
                                     sprintf_f(rs->logs, "SRNBox1L OCR result len: %d cost: %d.%d ms\n", pusbmeta->OCR_strlen, tmCost/1000, tmCost%1000);
                                     print_f(rs->plogs, "P17", rs->logs);
 
@@ -89318,12 +89721,34 @@ static int p17(struct procRes_s *rs)
                                     pusbmeta->OCR_strlen = strlen(outchr[2]);
                                     if (pusbmeta->OCR_strlen < 16) {
                                         memcpy(pusbmeta->OCR_chars, outchr[2], pusbmeta->OCR_strlen);
+
                                     }
+
+                                    msync(&pusbmeta->OCR_strlen, 16, MS_SYNC);
                                     
                                     sprintf_f(rs->logs, "SRNBox1R OCR result len: %d cost: %d.%d ms\n", pusbmeta->OCR_strlen, tmCost/1000, tmCost%1000);
                                     print_f(rs->plogs, "P17", rs->logs);
 
                                 }
+
+                                sprintf_f(rs->logs, "OCR RtnCode: [0x%x] iJobIdx: %d\n", img_out->mfourAttb.iJobRtnCode, img_out->mfourAttb.iJobIdx);
+                                print_f(rs->plogs, "P17", rs->logs);
+
+                                #if 1 /* debug show OCR result */
+                                if ((pusbmeta->OCR_strlen > 10) && (pusbmeta->OCR_strlen < 16)) {
+                                    memset(m4startcmd, 0, 256);
+                                    memcpy(m4startcmd, pusbmeta->OCR_chars, pusbmeta->OCR_strlen);
+                                    
+                                    if (pusbmeta->OCR_chars[pusbmeta->OCR_strlen-1] == 0x0a) {
+                                        m4startcmd[pusbmeta->OCR_strlen-1] = '\0';
+                                    }
+                                    sprintf_f(rs->logs, "OCR result chars: [%s] page: %d(%d) - %d\n", m4startcmd, (imgidx+1)/2, imgidx, pusbmeta->PRI_O_SEC);
+                                    print_f(rs->plogs, "P17", rs->logs);
+                                } else {
+                                    sprintf_f(rs->logs, "OCR result chars failed ocrlen: %d page: %d(%d) - %d\n", pusbmeta->OCR_strlen, (imgidx+1)/2, imgidx, pusbmeta->PRI_O_SEC);
+                                    print_f(rs->plogs, "P17", rs->logs);
+                                }
+                                #endif
                             }                            
 
                             #if DUMP_MFOUR_BMP    
@@ -89349,9 +89774,6 @@ static int p17(struct procRes_s *rs)
                             fflush(fdump);
                             fclose(fdump);
                             sync();
-
-                            sprintf_f(rs->logs, "image w: %d h: %d rtnCode: %d\n", img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, img_out->mfourAttb.iJobRtnCode);
-                            print_f(rs->plogs, "P17", rs->logs);
 
 
                             for (modix=0; modix < 3; modix++) {
