@@ -35,11 +35,11 @@ TARGETFILE = libbkocr.a libmakemodel.a
 
 TARGET : $(TARGETFILE)
 
-SOURCES = dk2_ocr_dw.cpp dk2_ocr_up.cpp linear.cpp tron.cpp daxpy.c ddot.c dnrm2.c dscal.c
+#SOURCES = dk2_ocr_dw.cpp dk2_ocr_up.cpp  linear.cpp tron.cpp daxpy.c ddot.c dnrm2.c dscal.c
 
 OBJECTS_OCR = dk2_ocr_dw.o dk2_ocr_up.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
 
-OBJECTS_MODEL = t1_20200520_ok.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
+OBJECTS_MODEL = dk2_mingAdw_bt_model.o dk2_mingAdw_col.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
 
 libbkocr.a : $(OBJECTS_OCR)
 	ar -rcs libbkocr.a $(OBJECTS_OCR)

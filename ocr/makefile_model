@@ -1,4 +1,4 @@
-
+﻿
 
 CFLAGS += -O2 -Wall -g -D_GNU_SOURCE -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 
@@ -31,14 +31,17 @@ OPENCV_LIB += -lavformat -lavutil -lswscale -lgphoto2 -lgphoto2_port -ltbb -lswr
 .PHONY : clean TARGET
 
 
-SOURCES = t1_20200520_ok.cpp linear.cpp tron.cpp daxpy.c ddot.c dnrm2.c dscal.c
+SOURCES = dk2_mingAdw_bt_model.cpp dk2_mingAdw_col.cpp linear.cpp tron.cpp daxpy.c ddot.c dnrm2.c dscal.c
 
-OBJECTS = t1_20200520_ok.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
+#OBJECTS = dk2_mingAdw_bt_model.o dk2_mingAdw_col.o linear.o tron.o daxpy.o ddot.o dnrm2.o dscal.o
+COBJECTS = $(SOURCES:.c=.o)
 
-TARGET = ../makemodel
+CPPOBJECTS = $(SOURCES:.cpp=.o)
 
-$(TARGET) : $(OBJECTS)
-	$(CXX) -o $(TARGET) $(OBJECTS) $(INCLUDE) $(OPENCV_LIB)
+TARGET = ../buildmodel
+
+$(TARGET) : $(COBJECTS) $(CPPOBJECTS)
+	$(CXX) -o $(TARGET) $(COBJECTS) $(CPPOBJECTS) $(INCLUDE) $(OPENCV_LIB)
 
 .c.o:
 	$(CXX)  -c $< $(INCLUDE)
