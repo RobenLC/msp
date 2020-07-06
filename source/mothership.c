@@ -114,6 +114,7 @@ static char genssid[128];
 #define AP_CLR_STATUS (1)
 
 #define MFOUR_IMG_SEND_BACK (1)
+#define MFOUR_BMP_SEND_BACK (1)
 #define MFOUR_SIM_MODE_JPG (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
@@ -1502,7 +1503,7 @@ struct bitmapDecodeItem_s {
     mfour_image_param_st *aspDcData;
 };
 
-#define BMP_DECODE_PIC_SIZE (4)
+#define BMP_DECODE_PIC_SIZE (5)
 struct bitmapDecodeMfour_s {
     int         aspDecStatus;
     int         aspDecPagerst;
@@ -3638,7 +3639,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     }
 
     //len = 1024 * 20;
-    len = 1024 * 1024;
+    len = 2048 * 1024;
     totsz = len + sizeof(mfour_image_param_st) + 32;
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
         pdec->aspDecMfPiJpg[ix].aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
@@ -5770,6 +5771,74 @@ static int bitmapColorTableSetup(char *p)
 
         val++;
     }
+
+    return 0;
+}
+
+static int bitmapHeaderSetupRvs(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen) 
+{
+    int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
+    float resH=0, resV=0, ratio=39.27, fval=0;
+    uint32_t cmpl=0xffffffff;
+
+    if (!w) return -1;
+    if (!h) return -2;
+    if (!dpi) return -3;
+    if (!flen) return -4;
+    memset(ph, 0, sizeof(struct bitmapHeader_s));
+
+    if (clr == 8) {
+        numclrp = 256;
+        rawoffset = 1078;
+        //numclrp = 0;
+        //rawoffset = 54;
+        calcuraw = w * h;
+    }
+    else if (clr == 24) {
+        numclrp = 0;
+        rawoffset = 54;
+        calcuraw = w * h * 3;
+    } else {
+        printf("[BMP] reset header ERROR!!! color bits is %d \n", clr);
+        return -5;
+    }
+
+    if (calcuraw != flen) {
+        //printf("[BMP] WARNNING!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
+        if (flen > calcuraw) {
+            rawsize = calcuraw;
+        } else {
+            rawsize = flen;
+        }
+    } else {
+        rawsize = calcuraw;
+    }
+
+    totsize = rawsize + rawoffset;
+    
+    fval = dpi;
+    resH = fval * ratio;
+    fval = dpi;
+    resV = fval * ratio;
+    
+    ph->aspbmpMagic[2] = 'B';
+    ph->aspbmpMagic[3] = 'M';       
+    ph->aspbhSize = totsize; // file total size
+    ph->aspbhRawoffset = rawoffset; // header size include color table 54 + 1024 = 1078
+    ph->aspbiSize = 40;
+    ph->aspbiWidth = w; // W
+    cmpl = (cmpl - h) + 1;
+    ph->aspbiHeight = cmpl; // H
+    //ph->aspbiHeight = h; // H
+    ph->aspbiCPP = 1;
+    //ph->aspbiCPP = 0;
+    ph->aspbiCPP |= clr << 16;  // 8 or 24
+    ph->aspbiCompMethd = 0;
+    ph->aspbiRawSize = rawsize; // size of raw
+    ph->aspbiResoluH = (int)resH; // dpi x 39.27
+    ph->aspbiResoluV = (int)resV; // dpi x 39.27
+    ph->aspbiNumCinCP = numclrp;  // 24bit is 0, 8bit is 256
+    ph->aspbiNumImpColor = 0;
 
     return 0;
 }
@@ -88271,7 +88340,7 @@ static int p15(struct procRes_s *rs)
     int ret=0, mfbidx=0, mfcmd=0, mfbstat=0, colr=0, blen=0, bhlen=0, bdpp=0, val=0, bmpw=0, bmph=0, bdpi=0, tmp=0, err=0, tmplen=0, orglen=0;
     int prisec=0, cutcnt=0, cutnum=0, tmCost=0, rotlen=0, jpgLen, sides[2]={0}, mreal[2]={0}, updn=0, lenbs=0, bmpmax=0;
     int lastCylen=0, lrst=0, ix=0, uselen=0, rstlen=0, exmlen=0, exmax=0, bmtlen=0, bmtmax=0, imgidx=0;
-    uint32_t fformat=0;
+    uint32_t fformat=0, u32tmp=0;
     char ch=0;
     unsigned char *jpgrlt=0;
     char *rotsrc[8]={0}, *rotdst[8]={0};
@@ -88281,10 +88350,12 @@ static int p15(struct procRes_s *rs)
     struct usbhost_s *pushost=0;
     struct aspMetaData_s *metaRx = 0;
     struct aspConfig_s *pct=0, *pdt=0;
-    struct bitmapHeader_s *bheader=0, bmpheader;
+    struct bitmapHeader_s *bheader=0, bmpheader, *rawheader=0;
     struct aspMetaDataviaUSB_s *ptmetausb=0;
-    struct bitmapDecodeItem_s *pdecroi=0, *penroi=0;
+    struct bitmapDecodeItem_s *pdecroi=0, *penroi=0, *pdecraw=0;
     char pinfo[2];
+    char *buffraw=0;
+    int rawlen=0;
     
     sprintf_f(rs->logs, "p15\n");
     print_f(rs->plogs, "P15", rs->logs);
@@ -88623,6 +88694,7 @@ static int p15(struct procRes_s *rs)
                 }
 
                 orglen = 0;
+                rawlen = 0;
                 for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
 
                     penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
@@ -88631,12 +88703,66 @@ static int p15(struct procRes_s *rs)
                     
                     //sprintf_f(rs->logs, "[encode] %d. jpeg len: %d ret: %d \n", ix, tmplen, ret);
                     //print_f(rs->plogs, "P15", rs->logs);
+                    #if MFOUR_BMP_SEND_BACK
+                    if ((!ret) && (tmplen == 0) && (rawlen == 0)) {
+                        pdecraw = &rs->pbDecMfour[mfbidx]->aspDecRaw;     
+                        err = aspBMPdecodeItemGet(pdecraw, &buffraw, &rawlen);
+                        if ((!err) && (rawlen > 0)) {
+                        
+                            memcpy(bufftmp, buffraw, rawlen);
+
+                            rawheader = (struct bitmapHeader_s *)(bufftmp - 2);
+                            
+                            u32tmp = 0xffffffff;
+                            u32tmp = u32tmp - rawheader->aspbiHeight + 1;
+
+                            sprintf_f(rs->logs, "[BMP] raw height: %d 0x%.8x\n", rawheader->aspbiHeight, u32tmp);
+                            print_f(rs->plogs, "P15", rs->logs);
+                            rawheader->aspbiHeight = u32tmp;
+                            //shmem_dump(bufftmp, 512);
+
+                            aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecraw->aspDcWidth, pdecraw->aspDcHeight, 1, ix+1);
+                            sprintf_f(rs->logs, "[BMP] raw to update w and h: %d, %d len: %d \n", pdecraw->aspDcWidth, pdecraw->aspDcHeight, rawlen);
+                            print_f(rs->plogs, "P15", rs->logs);
+                            
+                            //rawlen -= 160;
+
+                            rawlen = (rawlen + 511)  & 0xfffffe00;
+                            
+                            bmpcpy = bufftmp + rawlen; 
+
+                            //shmem_dump(bmpcpy - 160, 256);
+
+                            //memcpy(bmpcpy, pdecraw, rawlen);
+                            //bmpcpy = bmpcpy + rawlen;
+                            //rawlen += rawlen;
+                            
+                            memcpy(bmpcpy, ptmetausb, bmtlen);
+                            rawlen += bmtlen;
+                            
+                            //shmem_dump(bmpbufc+rotlen-512, 1024);
+                            //dbgMetaUsb(ptmetausb);
+                            //dbgMetaUsb((struct aspMetaDataviaUSB_s *)bmpcpy);
+                            
+                            aspBMPdecodeItemSet(penroi, pdecraw->aspDcWidth, pdecraw->aspDcHeight, rawlen);
+
+                            //sprintf_f(rs->logs, "[encode] to put org jpeg to id%d len: %d ret: %d \n", ix, rawlen, err);
+                            //print_f(rs->plogs, "P15", rs->logs);
+
+                            msync(bufftmp, rawlen, MS_SYNC);
+
+                            continue;
+                        }
+                    }
+                    #endif
 
                     #if MFOUR_IMG_SEND_BACK
                     if ((!ret) && (tmplen == 0) && (orglen == 0)) {
                     //if (!ret) {
-                        pdecroi = &rs->pbDecMfour[mfbidx]->aspDecJpeg;     
+                        pdecroi = &rs->pbDecMfour[mfbidx]->aspDecJpeg;
+                        //pdecroi = &rs->pbDecMfour[mfbidx]->aspDecRaw;     
                         //pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[0];     
+                        //err = aspBMPdecodeItemGet(pdecraw, &buffraw, &rawlen);
                         err = aspBMPdecodeItemGet(pdecroi, &bufforg, &orglen);
                         if ((!err) && (orglen > 0)) {
                         
@@ -88651,9 +88777,18 @@ static int p15(struct procRes_s *rs)
                             sprintf_f(rs->logs, "[BMP] to update w and h: %d, %d len: %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight, orglen);
                             print_f(rs->plogs, "P15", rs->logs);
                             
-                            orglen -= 160;                            
+                            orglen -= 160;
+
+                            //orglen = (orglen + 511)  & 0xfffffe00;
                             
-                            bmpcpy = bufftmp + orglen;                    
+                            bmpcpy = bufftmp + orglen; 
+
+                            //shmem_dump(bmpcpy - 160, 256);
+
+                            //memcpy(bmpcpy, buffraw, rawlen);
+                            //bmpcpy = bmpcpy + rawlen;
+                            //orglen += rawlen;
+                            
                             memcpy(bmpcpy, ptmetausb, bmtlen);
                             orglen += bmtlen;
                             
@@ -88667,6 +88802,8 @@ static int p15(struct procRes_s *rs)
                             //print_f(rs->plogs, "P15", rs->logs);
 
                             msync(bufftmp, orglen, MS_SYNC);
+
+                            continue;
                         }
                     }
                     #endif
