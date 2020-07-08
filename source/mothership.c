@@ -773,6 +773,7 @@ typedef enum {
     RESOLUTION_300, 
     RESOLUTION_200, 
     RESOLUTION_150, 
+    RESOLUTION_100, 
 } resolution_e;
 
 typedef enum {
@@ -2436,10 +2437,20 @@ static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int
     }
     
     cinfo.err = jpeg_std_error(&err);
-  
+    
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+    
     jpeg_create_decompress(&cinfo);
     //printf("[JPG] jpeg_create_decompress. \n"); 
-    
+
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+
     jpeg_mem_src(&cinfo, pjpg, jpgsz);
     //printf("[JPG] jpeg_mem_src size: %d \n", jpgsz); 
     
@@ -2452,7 +2463,12 @@ static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int
     clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
     
     cinfo.out_color_space = clrsp;//JCS_GRAYSCALE;//JCS_RGB;//JCS_GRAYSCALE; //JCS_YCbCr;
- 
+    
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+
     jpeg_start_decompress(&cinfo);
     //printf("[JPG] jpeg_start_decompress. \n"); 
 
@@ -2579,7 +2595,7 @@ static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int
     return 0;
 }
 
-static int jpeg2rgbW(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp, int offsetWin, int widthWin)
+static int jpeg2rgbRvs(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp)
 {
     struct jpeg_decompress_struct cinfo;
     struct jpeg_error_mgr err;
@@ -2604,12 +2620,22 @@ static int jpeg2rgbW(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int 
     }
     
     cinfo.err = jpeg_std_error(&err);
-  
+
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+    
     jpeg_create_decompress(&cinfo);
     //printf("[JPG] jpeg_create_decompress. \n"); 
     
     jpeg_mem_src(&cinfo, pjpg, jpgsz);
     //printf("[JPG] jpeg_mem_src size: %d \n", jpgsz); 
+
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
     
     //shmem_dump(pjpg, 512);
      
@@ -2631,7 +2657,7 @@ static int jpeg2rgbW(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int 
 
     printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d before \n", cinfo.output_width, cinfo.output_height, row_stride); 
     
-    #if 1
+    #if 0
     offsetx = offsetWin;
     cropW = widthWin;
     printf("[JPG] jpeg_crop_scanline. %d, %d S\n", offsetx, cropW); 
@@ -2670,12 +2696,12 @@ static int jpeg2rgbW(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int 
                 row_stride);
     #endif
                 
-    tmpbuff = prgb + ((offsetx * bpp) / 8);
+    tmpbuff = prgb + cinfo.output_height * row_stride_org;
     while (cinfo.output_scanline < (cinfo.output_height))
     {
+        tmpbuff -= row_stride_org;
         jpeg_read_scanlines(&cinfo, samplebuffer, 1);
         memcpy(tmpbuff, samplebuffer[0], row_stride);
-        tmpbuff += row_stride_org;
     }
 
     //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines S2\n", cinfo.output_width, cinfo.output_height, row_stride); 
@@ -2716,10 +2742,20 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     }
     
     cinfo.err = jpeg_std_error(&err);
-  
+    
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+
     jpeg_create_decompress(&cinfo);
     //printf("[JPG] jpeg_create_decompress. \n"); 
-    
+
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+
     jpeg_mem_src(&cinfo, pjpg, jpgsz);
     //printf("[JPG] jpeg_mem_src size: %d \n", jpgsz); 
     
@@ -2732,7 +2768,12 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
     
     cinfo.out_color_space = clrsp;//JCS_GRAYSCALE;//JCS_RGB;//JCS_GRAYSCALE; //JCS_YCbCr;
- 
+
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+
     jpeg_start_decompress(&cinfo);
     //printf("[JPG] jpeg_start_decompress. \n"); 
      
@@ -5771,74 +5812,6 @@ static int bitmapColorTableSetup(char *p)
 
         val++;
     }
-
-    return 0;
-}
-
-static int bitmapHeaderSetupRvs(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen) 
-{
-    int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
-    float resH=0, resV=0, ratio=39.27, fval=0;
-    uint32_t cmpl=0xffffffff;
-
-    if (!w) return -1;
-    if (!h) return -2;
-    if (!dpi) return -3;
-    if (!flen) return -4;
-    memset(ph, 0, sizeof(struct bitmapHeader_s));
-
-    if (clr == 8) {
-        numclrp = 256;
-        rawoffset = 1078;
-        //numclrp = 0;
-        //rawoffset = 54;
-        calcuraw = w * h;
-    }
-    else if (clr == 24) {
-        numclrp = 0;
-        rawoffset = 54;
-        calcuraw = w * h * 3;
-    } else {
-        printf("[BMP] reset header ERROR!!! color bits is %d \n", clr);
-        return -5;
-    }
-
-    if (calcuraw != flen) {
-        //printf("[BMP] WARNNING!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
-        if (flen > calcuraw) {
-            rawsize = calcuraw;
-        } else {
-            rawsize = flen;
-        }
-    } else {
-        rawsize = calcuraw;
-    }
-
-    totsize = rawsize + rawoffset;
-    
-    fval = dpi;
-    resH = fval * ratio;
-    fval = dpi;
-    resV = fval * ratio;
-    
-    ph->aspbmpMagic[2] = 'B';
-    ph->aspbmpMagic[3] = 'M';       
-    ph->aspbhSize = totsize; // file total size
-    ph->aspbhRawoffset = rawoffset; // header size include color table 54 + 1024 = 1078
-    ph->aspbiSize = 40;
-    ph->aspbiWidth = w; // W
-    cmpl = (cmpl - h) + 1;
-    ph->aspbiHeight = cmpl; // H
-    //ph->aspbiHeight = h; // H
-    ph->aspbiCPP = 1;
-    //ph->aspbiCPP = 0;
-    ph->aspbiCPP |= clr << 16;  // 8 or 24
-    ph->aspbiCompMethd = 0;
-    ph->aspbiRawSize = rawsize; // size of raw
-    ph->aspbiResoluH = (int)resH; // dpi x 39.27
-    ph->aspbiResoluV = (int)resV; // dpi x 39.27
-    ph->aspbiNumCinCP = numclrp;  // 24bit is 0, 8bit is 256
-    ph->aspbiNumImpColor = 0;
 
     return 0;
 }
@@ -18818,12 +18791,15 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
         case RESOLUTION_150:
             dpi = 150;
             break;
+        case RESOLUTION_100:
+            dpi = 100;
+            break;
         default:
             dpi = 300;
             break;
     }
-    //sprintf_f(rs->logs, "get dpi: %d ret: %d \n", dpi, ret);
-    //print_f(rs->plogs, "GetORG", rs->logs);
+    sprintf_f(rs->logs, "get dpi: %d flag: %d ret: %d \n", dpi, tmp, ret);
+    print_f(rs->plogs, "GetORG", rs->logs);
 
     pt = &(pscanInfo->CROP_POS_1);
     for (ix = 0; ix < CROP_MAX_NUM_META; ix++) {
@@ -18833,7 +18809,7 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
         
         hval = cord & 0xffff;
 
-        if (dpi == 200) {
+        if (dpi < 300) {
             mlt = dpi * val;
             val = mlt / div;
         }
@@ -18934,13 +18910,16 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
         case RESOLUTION_150:
             dpi = 150;
             break;
+        case RESOLUTION_100:
+            dpi = 100;
+            break;
         default:
             dpi = 300;
             break;
     }
     
-    //sprintf_f(rs->logs, "get dpi: %d ret: %d \n", dpi, ret);
-    //print_f(rs->plogs, "GetEXT", rs->logs);
+    sprintf_f(rs->logs, "get dpi: %d flag: %d ret: %d \n", dpi, tmp, ret);
+    print_f(rs->plogs, "GetEXT", rs->logs);
 
     shtbuf = (unsigned short *)&pscanInfo->EXTRA_POINT[4];
 
@@ -18952,7 +18931,7 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
         cxn = (int)*shtbuf;
         shtbuf++;              
 
-        if (dpi == 200) {
+        if (dpi < 300) {
             mlt = dpi * cxm;
             cxm = mlt / div;
             mlt = dpi * cxn;
@@ -54737,6 +54716,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 case RESOLUTION_150:
                                     resltion = 150;
                                     break;
+                                case RESOLUTION_100:
+                                    resltion = 100;
+                                    break;
                                 default:
                                     resltion = 0;
                                     break;
@@ -56978,7 +56960,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     //latcmd[ins] = 0xff;
                                     latcmd[ins] = mindex;
-
+                                    //pllcmd[ins] = 0xff;
+                                    
                                     //sprintf_f(mrs->log, "[GW] dump buff info(%d): \n", sizeof(struct bitmapDecodeMfour_s) * 4);
                                     //print_f(mrs->plog, "fs152", mrs->log);
                                     //shmem_dump((char *)mrs->bmpDecMfour, sizeof(struct bitmapDecodeMfour_s) * 4);
@@ -57407,6 +57390,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     break;
                                 case RESOLUTION_150:
                                     resltion = 150;
+                                    break;
+                                case RESOLUTION_100:
+                                    resltion = 100;
                                     break;
                                 default:
                                     resltion = 0;
@@ -60745,6 +60731,9 @@ static int p2(struct procRes_s *rs)
                                     break;
                                 case RESOLUTION_150:
                                     pcrpdo->acrpDPI = 150;
+                                    break;
+                                case RESOLUTION_100:
+                                    pcrpdo->acrpDPI = 100;
                                     break;
                                 default:
                                     pcrpdo->acrpDPI = 300;
@@ -64423,6 +64412,9 @@ static int p6(struct procRes_s *rs)
                 case RESOLUTION_150:
                     dpi = 150;
                     break;
+                case RESOLUTION_100:
+                    dpi = 100;
+                    break;
                 default:
                     dpi = 300;
                     break;
@@ -64587,6 +64579,9 @@ static int p6(struct procRes_s *rs)
                     break;
                 case RESOLUTION_150:
                     dpi = 150;
+                    break;
+                case RESOLUTION_100:
+                    dpi = 100;
                     break;
                 default:
                     dpi = 300;
@@ -65121,6 +65116,9 @@ static int p6(struct procRes_s *rs)
                 case RESOLUTION_150:
                     dpi = 150;
                     break;
+                case RESOLUTION_100:
+                    dpi = 100;
+                    break;
                 default:
                     dpi = 300;
                     break;
@@ -65441,6 +65439,9 @@ static int p6(struct procRes_s *rs)
             case RESOLUTION_150:
                 dpi = 150;
                 break;
+            case RESOLUTION_100:
+                dpi = 100;
+                break;
             default:
                 dpi = 300;
                 break;
@@ -65622,6 +65623,9 @@ static int p6(struct procRes_s *rs)
                 case RESOLUTION_150:
                     dpi = 150;
                     break;
+                case RESOLUTION_100:
+                    dpi = 100;
+                    break;
                 default:
                     dpi = 300;
                     break;
@@ -65787,6 +65791,9 @@ static int p6(struct procRes_s *rs)
                     break;
                 case RESOLUTION_150:
                     dpi = 150;
+                    break;
+                case RESOLUTION_100:
+                    dpi = 100;
                     break;
                 default:
                     dpi = 300;
@@ -67546,6 +67553,9 @@ static int p6(struct procRes_s *rs)
                 break;
             case RESOLUTION_150:
                 dpi = 150;
+                break;
+            case RESOLUTION_100:
+                dpi = 100;
                 break;
             default:
                 dpi = 300;
@@ -86089,6 +86099,9 @@ static int p12(struct procRes_s *rs)
                 case RESOLUTION_150:
                     bdpi = 150;
                     break;
+                case RESOLUTION_100:
+                    bdpi = 100;
+                    break;
                 default:
                     bdpi = 300;
                     break;
@@ -86292,6 +86305,9 @@ static int p12(struct procRes_s *rs)
                     break;
                 case RESOLUTION_150:
                     bdpi = 150;
+                    break;
+                case RESOLUTION_100:
+                    bdpi = 100;
                     break;
                 default:
                     bdpi = 300;
@@ -86519,7 +86535,17 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     //int coffsetx=0, coffsetw=0, coffsety=0, coffseth=0;
     //uint32_t upos1=0, upos4=0, upos9=0, upos11=0;
     //struct procRes_s *rsd=0;
-    
+
+    #if 0
+    sprintf_f(rs->logs, "p13\n");
+    print_f(rs->plogs, sp, rs->logs);
+
+    p13_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p13");
+    #endif
+
+    if (midx == 13) {
     pinfushost = rs->pusbmh[0];
     if (!pinfushost) {
         sprintf_f(rs->logs, "Error!!! usb host 0 info not available !!! \n");
@@ -86529,7 +86555,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         print_f(rs->plogs, sp, rs->logs);
     }
 
-    pinfushostd = rs->pusbmh[1];
+    pinfushostd = rs->pusbmh[0];
     if (!pinfushostd) {
         sprintf_f(rs->logs, "Error!!! usb host 1 info not available !!! \n");
         print_f(rs->plogs, sp, rs->logs);
@@ -86537,19 +86563,32 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         sprintf_f(rs->logs, "usb host 0 info name:[%s] vidpid:[0x%.2x:0x%.2x] \n", pinfushostd->ushostname, pinfushostd->ushostpidvid[0], pinfushostd->ushostpidvid[1]);
         print_f(rs->plogs, sp, rs->logs);
     }
+    } else {
+    pinfushost = rs->pusbmh[1];
+    if (!pinfushost) {
+        sprintf_f(rs->logs, "Error!!! usb host 0 info not available !!! \n");
+        print_f(rs->plogs, sp, rs->logs);
+    } else {
+        sprintf_f(rs->logs, "usb host 1 info name:[%s] vidpid:[0x%.2x:0x%.2x] \n", pinfushost->ushostname, pinfushost->ushostpidvid[0], pinfushost->ushostpidvid[1]);
+        print_f(rs->plogs, sp, rs->logs);
+    }
+
+    pinfushostd = rs->pusbmh[1];
+    if (!pinfushostd) {
+        sprintf_f(rs->logs, "Error!!! usb host 1 info not available !!! \n");
+        print_f(rs->plogs, sp, rs->logs);
+    } else {
+        sprintf_f(rs->logs, "usb host 1 info name:[%s] vidpid:[0x%.2x:0x%.2x] \n", pinfushostd->ushostname, pinfushostd->ushostpidvid[0], pinfushostd->ushostpidvid[1]);
+        print_f(rs->plogs, sp, rs->logs);
+    }
+
+    }
 
     pabuff = &rs->psFat->parBuf;
     bheader = rs->pbheader;
 
     pct = rs->pcfgTable;
     ptmetausb = rs->pmetausb;
-    
-    sprintf_f(rs->logs, "p13\n");
-    print_f(rs->plogs, sp, rs->logs);
-
-    p13_init(rs);
-
-    prctl(PR_SET_NAME, "msp-p13");
     
     pushost = rs->pusbhost;
     //pushostd = rsd->pusbhost;
@@ -86603,7 +86642,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     if (uimCylcnt > 0) {
                         break;
                     }
-        
+
+                    #if 0
                     if (endf) {
                         if (!puimCnTH) {
                             if (endm) {
@@ -86625,6 +86665,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             break;
                         }
                     }
+                    #endif
                     
                     chq = 0;
                     chd = 0;
@@ -88050,6 +88091,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 case RESOLUTION_150:
                     bdpi = 150;
                     break;
+                case RESOLUTION_100:
+                    bdpi = 100;
+                    break;
                 default:
                     bdpi = 300;
                     break;
@@ -88108,7 +88152,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     
                     //dbgMetaUsb(ptmetausb);
 
-                    #if 0
+                    #if 0 /* partial decode */
                     upos1 = msb2lsb32(&ptmetausb->CROP_POS_1);
                     coffsetx = (upos1 >> 16) & 0xffff;
                     upos4 = msb2lsb32(&ptmetausb->CROP_POS_4);
@@ -88132,6 +88176,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     clock_gettime(CLOCK_REALTIME, &jpgS);
                     
                     err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
+                    //err = jpeg2rgbRvs(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
                     //err = jpeg2rgbW(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw);
                     //err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
                     
@@ -88518,6 +88563,9 @@ static int p15(struct procRes_s *rs)
                 case RESOLUTION_150:
                     bdpi = 150;
                     break;
+                case RESOLUTION_100:
+                    bdpi = 100;
+                    break;
                 default:
                     bdpi = 300;
                     break;
@@ -88711,15 +88759,17 @@ static int p15(struct procRes_s *rs)
                         
                             memcpy(bufftmp, buffraw, rawlen);
 
+                            #if 1 /* reverse bmp height */
                             rawheader = (struct bitmapHeader_s *)(bufftmp - 2);
                             
                             u32tmp = 0xffffffff;
                             u32tmp = u32tmp - rawheader->aspbiHeight + 1;
 
-                            sprintf_f(rs->logs, "[BMP] raw height: %d 0x%.8x\n", rawheader->aspbiHeight, u32tmp);
-                            print_f(rs->plogs, "P15", rs->logs);
+                            //sprintf_f(rs->logs, "[BMP] raw height: %d 0x%.8x\n", rawheader->aspbiHeight, u32tmp);
+                            //print_f(rs->plogs, "P15", rs->logs);
                             rawheader->aspbiHeight = u32tmp;
                             //shmem_dump(bufftmp, 512);
+                            #endif
 
                             aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecraw->aspDcWidth, pdecraw->aspDcHeight, 1, ix+1);
                             sprintf_f(rs->logs, "[BMP] raw to update w and h: %d, %d len: %d \n", pdecraw->aspDcWidth, pdecraw->aspDcHeight, rawlen);
@@ -88936,6 +88986,9 @@ static int p15(struct procRes_s *rs)
                     break;
                 case RESOLUTION_150:
                     bdpi = 150;
+                    break;
+                case RESOLUTION_100:
+                    bdpi = 100;
                     break;
                 default:
                     bdpi = 300;
@@ -89512,7 +89565,7 @@ static int p17(struct procRes_s *rs)
                             clock_gettime(CLOCK_REALTIME, rs->tm[1]);
 
                             tmCost = time_diff(rs->tm[0], rs->tm[1], 1000);
-                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_REQUIRE_AREA) (cost %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_REQUIRE_AREA) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
                             print_f(rs->plogs, "P17", rs->logs);    
                             //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
                             
