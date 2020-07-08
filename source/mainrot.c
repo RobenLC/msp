@@ -21,6 +21,8 @@
 //#include <GL/glx.h>
 #endif
 
+static int *maintotSalloc=0;
+
 struct bitmapHeader_s {
     char aspbmpMagic[4];
     int    aspbhSize;
@@ -743,6 +745,22 @@ static int mipc_write(int *pipes, int size, char *ptr)
     return ret;
 }
 
+static void* aspSallocm(uint32_t slen)
+{
+    char logbuf[256];
+    uint32_t tot=0;
+    char *p=0;
+    
+    tot = *maintotSalloc;
+    tot += slen;
+    *maintotSalloc = tot;
+    
+    printf("*******************  salloc size: %d / %d\n", slen, tot);
+    
+    p = mmap(NULL, slen, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    return p;
+}
+
 #define DUMP_ROT_BMP (1)
 int main(int argc, char *argv[]) 
 {
@@ -757,6 +775,9 @@ int main(int argc, char *argv[])
 
     printf("input argc: %d config: dump(%d) jpg\n", argc, DUMP_ROT_BMP);
 
+    maintotSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    memset(maintotSalloc, 0, sizeof(int));
+    
     while (ix < argc) {
         printf("[%d]: %s \n", ix, argv[ix]);
 
@@ -794,6 +815,14 @@ int main(int argc, char *argv[])
             err = -2;
             goto end;
         } else {
+            len = cropinfo[2]*cropinfo[3];
+            rotraw = malloc(len);
+            if (!rotraw) {
+                err = -5;
+                goto end;
+            }
+            memset(rotraw, 0xff, len);
+            
             char *buffjpg=0, *buffraw=0, *buffhead=0, *pclortable=0;
             int jpgw=0, jpgh=0, jret=0, rawsz=0, jpgsz=0, decw=0, dech=0;
             int treal[8]={0}, tmCost=0;
@@ -823,7 +852,7 @@ int main(int argc, char *argv[])
                 goto end;
             }
 
-            #define PS_NUM (4)
+            #define PS_NUM (40)
 
             //pid = fork();
             int pipeswt[PS_NUM+1][2];
@@ -871,7 +900,7 @@ int main(int argc, char *argv[])
                     printf("[P%d] %d. get [%s] info from slave infolen: %d \n", pmslf, ix, pinfo, infolen);
                 }
 
-                sleep(5);
+                sleep(2);
             } 
             else if (pmslf > 0) {
                 sprintf(pinfo, "%d", pmslf);
@@ -906,23 +935,13 @@ int main(int argc, char *argv[])
             clock_gettime(CLOCK_REALTIME, &jpgE);
             tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
             printf("[P%d] doing the JPG decoder succeed ret: %d w: %d h: %d cost: %d.%d ms\n", pmslf, err, decw, dech, tmCost/1000, tmCost%1000);
-            
-            len = cropinfo[2]*cropinfo[3];
-            rotraw = malloc(len);
-            if (!rotraw) {
-                err = -5;
-                goto end;
-            }
-            
-            //printf("get file [%s] !! \n", filepath);
-            memset(rotraw, 0xff, len);
 
             ph = (struct bitmapHeader_s *)(buffhead + 2);
             bitmapHeaderSetupRvs(ph, 8, decw, dech, 200, rawsz);
             pclortable = buffhead + 2 + sizeof(struct bitmapHeader_s);
             bitmapColorTableSetupd(pclortable);
 
-            memcpy(rothead, buffhead + 2, 1078);
+            memcpy(rothead, buffhead + 4, 1078);
             
             clock_gettime(CLOCK_REALTIME, &jpgS);
             
@@ -953,11 +972,11 @@ int main(int argc, char *argv[])
             free(buffjpg);
             buffjpg = 0;
 
-            free(buffhead);
-            buffhead = 0;
+            //free(buffhead);
+            //buffhead = 0;
 
-            free(rotraw);
-            rotraw = 0;
+            //free(rotraw);
+            //rotraw = 0;
         }
 
         goto end;
@@ -1024,8 +1043,8 @@ int main(int argc, char *argv[])
 
     printf("end err: %d \n", err);
 
-    if (rotraw) free(rotraw);
-    if (rothead) free(rothead);
+    //if (rotraw) free(rotraw);
+    //if (rothead) free(rothead);
     if (f) fclose(f);
     
     return err;
