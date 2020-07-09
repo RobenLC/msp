@@ -132,7 +132,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (500) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (3200) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -18833,8 +18833,8 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
     tmp = 0;
     ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_CON);    
     dpi = tmp;
-    sprintf_f(rs->logs, "get dpi: %d flag: %d ret: %d \n", dpi, tmp, ret);
-    print_f(rs->plogs, "GetORG", rs->logs);
+    //sprintf_f(rs->logs, "get dpi: %d flag: %d ret: %d \n", dpi, tmp, ret);
+    //print_f(rs->plogs, "GetORG", rs->logs);
 
     pt = &(pscanInfo->CROP_POS_1);
     for (ix = 0; ix < CROP_MAX_NUM_META; ix++) {
@@ -18928,8 +18928,8 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
     tmp = 0;
     ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_CON);    
     dpi = tmp;
-    sprintf_f(rs->logs, "get dpi: %d flag: %d ret: %d \n", dpi, tmp, ret);
-    print_f(rs->plogs, "GetEXT", rs->logs);
+    //sprintf_f(rs->logs, "get dpi: %d flag: %d ret: %d \n", dpi, tmp, ret);
+    //print_f(rs->plogs, "GetEXT", rs->logs);
 
     shtbuf = (unsigned short *)&pscanInfo->EXTRA_POINT[4];
 
@@ -60648,8 +60648,8 @@ static int p2(struct procRes_s *rs)
 
                                 tmp = 0;
                                 ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                                sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
-                                print_f(rs->plogs, "P2", rs->logs);
+                                //sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
+                                //print_f(rs->plogs, "P2", rs->logs);
                                 pcrpdo->acrpDPI = tmp;
 
                                 ret = doCropCalcuPt(pcrpdo, pusbmeta, &pusbmeta->EXTRA_POINT[4], len - sizeof(struct aspMetaDataviaUSB_s), rs, 2);
@@ -64000,8 +64000,12 @@ static int p6(struct procRes_s *rs)
             
             val=0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
+            
             h = val;
             
             sendbuf[3] = 'O';
@@ -64141,8 +64145,8 @@ static int p6(struct procRes_s *rs)
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
             
-            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 'P';
 
@@ -64215,8 +64219,8 @@ static int p6(struct procRes_s *rs)
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE_DUO, &val, ASPOP_STA_UPD);
             
-            sprintf_f(rs->logs, "get duo usb page side: 0x%.2x ret: %d\n", val, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "get duo usb page side: 0x%.2x ret: %d\n", val, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 'p';
 
@@ -64256,13 +64260,18 @@ static int p6(struct procRes_s *rs)
             
             /* send back bmp header */
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
 
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             h = val;
 
             if (tmp == FILE_FORMAT_RAW) {
@@ -64275,8 +64284,10 @@ static int p6(struct procRes_s *rs)
                 
                 /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
                 ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 switch (tmp) {
                     case COLOR_MODE_COLOR:
                         clr = 24;
@@ -64292,8 +64303,10 @@ static int p6(struct procRes_s *rs)
                 }
 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
@@ -64302,13 +64315,17 @@ static int p6(struct procRes_s *rs)
                 ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
 
                 w = scanWidthConvert(t, val);
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
                 tmp = 0;
                 ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 dpi = tmp;
                 
                 hbuff = aspMemalloc(1078, 6);
@@ -64401,8 +64418,10 @@ static int p6(struct procRes_s *rs)
 
             /* send back bmp header */
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             
             if (tmp == FILE_FORMAT_RAW) { /* second page */
                 ph = &rs->pbheaderDuo->aspbmpMagic[2];
@@ -64414,8 +64433,10 @@ static int p6(struct procRes_s *rs)
                 
                 /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
                 ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 switch (tmp) {
                     case COLOR_MODE_COLOR:
                         clr = 24;
@@ -64432,13 +64453,17 @@ static int p6(struct procRes_s *rs)
 
                 val = 0;
                 ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &val, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "duo user defined image length: %d, ret:%d duo\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 hduo = val;
 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
@@ -64447,13 +64472,17 @@ static int p6(struct procRes_s *rs)
                 ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH_DUO, &val, ASPOP_STA_UPD);
 
                 w = scanWidthConvert(t, val);
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
                 tmp = 0;
                 ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 dpi = tmp;
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
@@ -64772,14 +64801,18 @@ static int p6(struct procRes_s *rs)
 
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             h = val;
 
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &val, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "duo user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             hduo = val;
 
             sprintf_f(rs->logs, "param: %c, image len: %d (%d) duo: %d (%d) \n", param, h, pct[ASPOP_IMG_LEN].opValue, hduo, pct[ASPOP_IMG_LEN_DUO].opValue);
@@ -64854,14 +64887,16 @@ static int p6(struct procRes_s *rs)
 
             /* send back bmp header */
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
             
-            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 'P';
 
@@ -64921,8 +64956,10 @@ static int p6(struct procRes_s *rs)
             
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             h = val;
 
             if (tmp == FILE_FORMAT_RAW) {
@@ -64935,8 +64972,11 @@ static int p6(struct procRes_s *rs)
                 
                 /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
                 ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
+                
                 switch (tmp) {
                     case COLOR_MODE_COLOR:
                         clr = 24;
@@ -64952,8 +64992,10 @@ static int p6(struct procRes_s *rs)
                 }
 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
@@ -64962,13 +65004,17 @@ static int p6(struct procRes_s *rs)
                 ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
 
                 w = scanWidthConvert(t, val);
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
                 tmp = 0;
-                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP); 
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 dpi = tmp;
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
@@ -65205,8 +65251,8 @@ static int p6(struct procRes_s *rs)
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
             
-            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 'P';
 
@@ -65265,16 +65311,20 @@ static int p6(struct procRes_s *rs)
             }
             #endif //#if MOVE_MUTX_TO_FRONT_P6
             
-            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
+            ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP); 
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
 
             tmp = 0;
             ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
             dpi = tmp;
-            
+
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined resulution: %d(%d dpi), ret:%d\n", tmp, dpi, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             
             cnt = 0;
             while (1) {
@@ -65382,13 +65432,17 @@ static int p6(struct procRes_s *rs)
 
             /* send back bmp header */
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
 
             val = 0;
-            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             h = val;
                 
             if (tmp == FILE_FORMAT_RAW) {
@@ -65400,9 +65454,12 @@ static int p6(struct procRes_s *rs)
                 //dbgBitmapHeader(bheader, len);
                 
                 /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
-                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
+                
                 switch (tmp) {
                     case COLOR_MODE_COLOR:
                         clr = 24;
@@ -65417,9 +65474,11 @@ static int p6(struct procRes_s *rs)
                         break;
                 }
 
-                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
@@ -65428,13 +65487,17 @@ static int p6(struct procRes_s *rs)
                 ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
 
                 w = scanWidthConvert(t, val);
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
                 tmp = 0;
                 ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 dpi = tmp;
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
@@ -65530,13 +65593,17 @@ static int p6(struct procRes_s *rs)
 
             /* send back bmp header */
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
 
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN_DUO, &val, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined image length: %d, ret:%d duo\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             hduo = val;
 
             if (tmp == FILE_FORMAT_RAW) { /* second page */
@@ -65549,8 +65616,10 @@ static int p6(struct procRes_s *rs)
                 
                 /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
                 ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 switch (tmp) {
                     case COLOR_MODE_COLOR:
                         clr = 24;
@@ -65566,8 +65635,10 @@ static int p6(struct procRes_s *rs)
                 }
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
@@ -65576,13 +65647,17 @@ static int p6(struct procRes_s *rs)
                 ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH_DUO, &val, ASPOP_STA_UPD);
 
                 w = scanWidthConvert(t, val);
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
 
                 tmp = 0;
                 ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 dpi = tmp;
                 
                 hbuff = aspMemalloc(1078, 6);
@@ -65819,8 +65894,8 @@ static int p6(struct procRes_s *rs)
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
             
-            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 'P';
 
@@ -66004,8 +66079,8 @@ static int p6(struct procRes_s *rs)
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE_DUO, &val, ASPOP_STA_UPD);
             
-            sprintf_f(rs->logs, "get duo usb page side: 0x%.2x ret: %d\n", val, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "get duo usb page side: 0x%.2x ret: %d\n", val, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 'p';
 
@@ -66085,12 +66160,12 @@ static int p6(struct procRes_s *rs)
 
             masRecd = pmass->massRecd;
 
-            sprintf_f(rs->logs, "%d \n\r", masRecd); 
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "%d \n\r", masRecd); 
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 'T';
             sprintf(rs->logs, "%d \n\r", masRecd); 
-            print_f(rs->plogs, "P6", rs->logs);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             n = strlen(rs->logs);
             memcpy(&sendbuf[5], rs->logs, n);
@@ -66217,8 +66292,8 @@ static int p6(struct procRes_s *rs)
                 plancnt = (int) selecMax;
                 #endif
 
-                sprintf(rs->logs, "select ratio: %lf, line max: %d\n", selecRatio, plancnt); 
-                print_f(rs->plogs, "P6", rs->logs);
+                //sprintf(rs->logs, "select ratio: %lf, line max: %d\n", selecRatio, plancnt); 
+                //print_f(rs->plogs, "P6", rs->logs);
                 
                 for (i = 0; i < masRecd; i++) {
                     cy += gap;
@@ -66547,32 +66622,32 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotlf[0] = (CFLOAT)cxm;
             rotlf[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP02, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotup[0] = (CFLOAT)cxm;
             rotup[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP03, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotrt[0] = (CFLOAT)cxm;
             rotrt[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP04, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotdn[0] = (CFLOAT)cxm;
             rotdn[1] = (CFLOAT)cxn;
 
@@ -66658,12 +66733,12 @@ static int p6(struct procRes_s *rs)
             msync(pmassduo, sizeof(struct aspMetaMass_s), MS_SYNC);
 
             masRecd = pmassduo->massRecd;
-            sprintf_f(rs->logs, "duo %d \n\r", masRecd); 
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "duo %d \n\r", masRecd); 
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 't';
             sprintf(rs->logs, "%d \n\r", masRecd); 
-            print_f(rs->plogs, "P6", rs->logs);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             n = strlen(rs->logs);
             memcpy(&sendbuf[5], rs->logs, n);
@@ -67122,32 +67197,32 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP01_DUO, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get duo F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get duo F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotlf[0] = (CFLOAT)cxm;
             rotlf[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP02_DUO, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get duo F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get duo F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotup[0] = (CFLOAT)cxm;
             rotup[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP03_DUO, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get duo F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get duo F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotrt[0] = (CFLOAT)cxm;
             rotrt[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP04_DUO, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get duo F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get duo F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotdn[0] = (CFLOAT)cxm;
             rotdn[1] = (CFLOAT)cxn;
 
@@ -67266,9 +67341,9 @@ static int p6(struct procRes_s *rs)
             #endif
 
             if (pmass->massRecd) {
-                sprintf_f(rs->logs, "reset Record line and used buffer size, recd: %d, used: %d, duo recd: %d, used: %d\n", 
-                pmass->massRecd, pmass->massUsed, pmassduo->massRecd, pmassduo->massUsed);
-                print_f(rs->plogs, "P6", rs->logs);    
+                //sprintf_f(rs->logs, "reset Record line and used buffer size, recd: %d, used: %d, duo recd: %d, used: %d\n", 
+                //pmass->massRecd, pmass->massUsed, pmassduo->massRecd, pmassduo->massUsed);
+                //print_f(rs->plogs, "P6", rs->logs);    
             
                 pmass->massRecd = 0;
                 pmass->massUsed = 0;
@@ -67317,14 +67392,18 @@ static int p6(struct procRes_s *rs)
             #endif
             
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
 
             tmp = 0;
             ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);
             dpi = tmp;
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined resulution: %d(dpi: %d), ret:%d\n", tmp, dpi, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             
             cnt = 0;
             while (1) {
@@ -67377,13 +67456,17 @@ static int p6(struct procRes_s *rs)
             /* send back bmp header */
             tmp = 0;
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &tmp, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", tmp, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
                 
             val=0;
             ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+            #if LOG_P6_PARA_EN
             sprintf_f(rs->logs, "user defined image length: %d, ret:%d\n", val, ret);
             print_f(rs->plogs, "P6", rs->logs);
+            #endif
             h = val;
                 
             if (tmp == FILE_FORMAT_RAW) {
@@ -67396,8 +67479,10 @@ static int p6(struct procRes_s *rs)
                 
                 /* bmp header needs 1.width 2.height 3.dpi 4.raw size */
                 ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &tmp, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined color mode: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 switch (tmp) {
                     case COLOR_MODE_COLOR:
                         clr = 24;
@@ -67413,8 +67498,10 @@ static int p6(struct procRes_s *rs)
                 }
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width high: %d, ret:%d\n", val, ret);
                 print_f(rs->plogs, "P6", rs->logs);
+                #endif
                 
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
                 t = val << 8 | tmp;
@@ -67423,8 +67510,10 @@ static int p6(struct procRes_s *rs)
                 ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
 
                 w = scanWidthConvert(t, val);
+                #if LOG_P6_PARA_EN
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);                
+                #endif
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
                 
@@ -67663,8 +67752,8 @@ static int p6(struct procRes_s *rs)
             val = 0;
             ret = cfgTableGetChk(pct, ASPOP_SCAN_SIDE, &val, ASPOP_STA_UPD);
             
-            sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
-            print_f(rs->plogs, "P6", rs->logs);
+            //sprintf_f(rs->logs, "get usb page side: 0x%.2x ret: %d\n", val, ret);
+            //print_f(rs->plogs, "P6", rs->logs);
 
             sendbuf[3] = 'P';
 
@@ -67878,8 +67967,8 @@ static int p6(struct procRes_s *rs)
                 plancnt = (int) selecMax;
                 #endif
 
-                sprintf(rs->logs, "start line:%d, gap: %d, select ratio: %lf, line max: %d\n", cy, gap, selecRatio, plancnt); 
-                print_f(rs->plogs, "P6", rs->logs);
+                //sprintf(rs->logs, "start line:%d, gap: %d, select ratio: %lf, line max: %d\n", cy, gap, selecRatio, plancnt); 
+                //print_f(rs->plogs, "P6", rs->logs);
                     
                 for (i = 0; i < masRecd; i++) {
                     cxm = *ptBuf;
@@ -68211,32 +68300,32 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP01, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get F1: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotlf[0] = (CFLOAT)cxm;
             rotlf[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP02, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get F2: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotup[0] = (CFLOAT)cxm;
             rotup[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP03, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get F3: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotrt[0] = (CFLOAT)cxm;
             rotrt[1] = (CFLOAT)cxn;
 
             ret = cfgTableGet(pct, ASPOP_USBCROP_FP04, &val);
             cxm = (val>>16)&0xffff;
             cxn = val & 0xffff;
-            sprintf_f(rs->logs, "crop meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
-            print_f(rs->plogs, "P6", rs->logs);                     
+            //sprintf_f(rs->logs, "crop meta get F4: (%d, %d) ret: %d\n", cxm, cxn, ret); 
+            //print_f(rs->plogs, "P6", rs->logs);                     
             rotdn[0] = (CFLOAT)cxm;
             rotdn[1] = (CFLOAT)cxn;
 
@@ -68336,9 +68425,9 @@ static int p6(struct procRes_s *rs)
             #endif
             
             if (pmass->massRecd) {
-                sprintf_f(rs->logs, "reset Record line and used buffer size, recd: %d, used: %d\n", 
-                pmass->massRecd, pmass->massUsed);
-                print_f(rs->plogs, "P6", rs->logs);    
+                //sprintf_f(rs->logs, "reset Record line and used buffer size, recd: %d, used: %d\n", 
+                //pmass->massRecd, pmass->massUsed);
+                //print_f(rs->plogs, "P6", rs->logs);    
                     
                 pmass->massRecd = 0;
                 pmass->massUsed = 0;
@@ -69660,8 +69749,8 @@ static int p7(struct procRes_s *rs)
 #endif
 
     while (1) {
-        sprintf_f(rs->logs, ")\n");
-        print_f(rs->plogs, "P7", rs->logs);
+        //sprintf_f(rs->logs, ")\n");
+        //print_f(rs->plogs, "P7", rs->logs);
 #if 1 /* disable for testing */
         len = sizeof(struct sockaddr_in);
         memset(&rs->psocket_n->clint_addr, 0, len);
@@ -80398,8 +80487,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
                             }
 
-                            sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
-                            print_f(rs->plogs, "P11", rs->logs);
+                            //sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
+                            //print_f(rs->plogs, "P11", rs->logs);
 
                             if (lens & 0x40000) {
                                 lastflag = 0x40000;
@@ -80811,8 +80900,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             
                                 }
                                 else {
-                                    sprintf_f(rs->logs, "[DV] get buff ret: %d, wait for tx size: %d!!!\n", lenrs, sendsz);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "[DV] get buff ret: %d, wait for tx size: %d!!!\n", lenrs, sendsz);
+                                    //print_f(rs->plogs, "P11", rs->logs);
                                     usleep(500);
                                 }
                             }
@@ -80878,21 +80967,21 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 #endif
 
                                 err = cfgTableGet(pct, ASPOP_IMG_LEN_DUO, &val);
-                                sprintf_f(rs->logs, "usb meta get duo img len: %d err: %d, cswerr: 0x%.2x\n", val, err, cswerr); 
-                                print_f(rs->plogs, "P11", rs->logs);                     
+                                //sprintf_f(rs->logs, "usb meta get duo img len: %d err: %d, cswerr: 0x%.2x\n", val, err, cswerr); 
+                                //print_f(rs->plogs, "P11", rs->logs);                     
 
                                 cfgTableGet(pct, ASPOP_XCROP_LINREC_DUO, &val);
-                                sprintf_f(rs->logs, "Yline_recorder duo: %d!!\n", val); 
-                                print_f(rs->plogs, "P11", rs->logs);  
+                                //sprintf_f(rs->logs, "Yline_recorder duo: %d!!\n", val); 
+                                //print_f(rs->plogs, "P11", rs->logs);  
 
-                                sprintf_f(rs->logs, "act: %d, metamass duo gap:%d, start:%d, record:%d, used:%d\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd, pmassduo->massUsed); 
-                                print_f(rs->plogs, "P11", rs->logs);  
+                                //sprintf_f(rs->logs, "act: %d, metamass duo gap:%d, start:%d, record:%d, used:%d\n", act, pmassduo->massGap, pmassduo->massStart, pmassduo->massRecd, pmassduo->massUsed); 
+                                //print_f(rs->plogs, "P11", rs->logs);  
                             }
 
                             puscur->pushrmcnt += 1;
 
-                            sprintf_f(rs->logs, "usb duo scan cnt: %d, rm: %d, cswerr: %d (0x%.2x)\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr); 
-                            print_f(rs->plogs, "P11", rs->logs);                     
+                            //sprintf_f(rs->logs, "usb duo scan cnt: %d, rm: %d, cswerr: %d (0x%.2x)\n", puscur->pushcnt, puscur->pushrmcnt, puscur->pushcswerr, puscur->pushcswerr); 
+                            //print_f(rs->plogs, "P11", rs->logs);                     
 
                             cmd = 0;
 
@@ -80957,8 +81046,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     }   
                                 }
                                 else {
-                                    sprintf_f(rs->logs, "[DV] get buff ret: %d, wait for tx size: %d!!!\n", lenrs, sendsz);
-                                    print_f(rs->plogs, "P11", rs->logs);
+                                    //sprintf_f(rs->logs, "[DV] get buff ret: %d, wait for tx size: %d!!!\n", lenrs, sendsz);
+                                    //print_f(rs->plogs, "P11", rs->logs);
                                     usleep(500);
                                 }
                             }
@@ -87423,8 +87512,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     lens = 0;
                     lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
                     while (lens < 0) {
-                        sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
-                        print_f(rs->plogs, sp, rs->logs);
+                        //sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
+                        //print_f(rs->plogs, sp, rs->logs);
         
                         usleep(500);
                         lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
