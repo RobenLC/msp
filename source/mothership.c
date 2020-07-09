@@ -11,7 +11,7 @@ int pipe(int pipefd[2]);
 #define _GNU_SOURCE
 #include <fcntl.h> 
 int pipe2(int pipefd[2], int flags);
-#define GHP_EN (1)
+#define GHP_EN (0)
 #include <sys/ioctl.h> 
 #include <sys/mman.h> 
 #include <sys/epoll.h>
@@ -56,8 +56,8 @@ int pipe2(int pipefd[2], int flags);
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
-static char mver[] = "MSP Version v0.2.2.rc";
-static char gitcommit[] = "2020-07-09 10:18:02 63fb830";
+static char mver[] = "MSP Version v0.2.3.rc";
+static char gitcommit[] = "2020-07-09 11:56:59 3b4cd72";
 static char buildtime[] = __TIMESTAMP__; // 24 
 static char genssid[128];
 
@@ -54740,15 +54740,7 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                         else if ((pllcmd[ins] == 'm') || (pllcmd[ins] == 'n')) {
                             gval = 0;
                             ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &gval, ASPOP_STA_APP);
-                            if (!ret) {
-                                resltion = gval;
-                                //sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
-                                //print_f(mrs->plog, "fs145", mrs->log);
-                            }
-                            else {
-                                sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
-                                print_f(mrs->plog, "fs145", mrs->log);
-                            }
+                            resltion = gval;
                                 
                             /* clean msg queue */
                             for (ix=0; ix<4; ix++) {
@@ -54822,10 +54814,12 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             ring_buf_init(ringbf[ins+1]);
                             //ring_buf_init(&mrs->cmdTx);
                             ring_buf_init(&mrs->dataRx);
+                            #if GHP_EN
                             aspBMPdecodeBuffInit(&mrs->bmpDecMfour[0]);
                             aspBMPdecodeBuffInit(&mrs->bmpDecMfour[1]);
                             aspBMPdecodeBuffInit(&mrs->bmpDecMfour[2]);
                             aspBMPdecodeBuffInit(&mrs->bmpDecMfour[3]);
+                            #endif
                         }
                         else if (pllcmd[ins] == 'b') {
                             write(outfd[ins], &pllcmd[ins], 1);
@@ -57366,17 +57360,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         }
                         else if ((pllcmd[ins] == 'm') || (pllcmd[ins] == 'n')) {
-
+                            gval = 0;
                             ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &gval, ASPOP_STA_APP);
-                            if (!ret) {
-                                resltion = gval;
-                                //sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
-                                //print_f(mrs->plog, "fs152", mrs->log);
-                            }
-                            else {
-                                sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
-                                print_f(mrs->plog, "fs152", mrs->log);
-                            }
+                            resltion = gval;
                                 
                             /* clean msg queue */
                             for (ix=0; ix<4; ix++) {
