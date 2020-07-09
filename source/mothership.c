@@ -50,8 +50,8 @@ int pipe2(int pipefd[2], int flags);
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 //#include <GL/glx.h>
-#endif
 #include "BKImage.h"
+#endif
 
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
@@ -74,6 +74,49 @@ static char genssid[128];
 #define SPIDEV_SWITCH (0)
 #else // spidev switch must be disable
 #define SPIDEV_SWITCH (0)
+#endif
+
+#if !GHP_EN
+#define ImgProc_None             	0
+#define NewImageIn             		1
+#define ImageProcDone             	2
+#define NewAreaReq             		3
+#define ChkBox1L             		4
+#define ChkBox1R             		5
+#define SRNBox1L             		6
+#define SRNBox1R             		7
+#define ChkBox2L             		8
+#define ChkBox2R             		9
+#define SRNBox2L             		10
+#define SRNBox2R             		11
+
+#define iJobOK						0
+#define iJobImgInquirey				1
+#define iJobImgComplete				2
+#define ImageOverSize				3
+#define ImageZeroSize				4
+#define iJobCurDone					5
+#define iJobSaveIntPM				6
+#define iJobImgOCR					7 
+#define iJobImgMatch				8
+#define iJobImgNoMatch				9
+typedef struct  
+{
+	int yr;				//Height,y, 	// Rows and columns in the image 
+	int	xc;             //Width,x
+	int oyi; 			 //y, 		// Origin 
+	int	oxj;             //x, 
+}	t_Imgheader;
+typedef struct		
+{
+	t_Imgheader		BKNoteImageRect;	//the rectangle information of the BKNote, the orginal point (0,0) is the bottom left cornor.
+    int			 	SeqIdx;				//the sequence number during proceesing for the current image file
+    int			 	iJobIdx;			//assigned for the image processing job
+	t_Imgheader		ImageRect;			//the rectagle information for the image using in the assigned iJobIdx, valid if width not equal to zero
+    int			 	iJobRtnCode;		//The return status code for the iJobIdx
+    int			 	IpPAMemorySize;		//The size of the attached memory 
+    unsigned char  	*AttImgData;    	//usually, pointer to the t_imageIP	if there is an image data attached
+}   t_ImageParam;     
 #endif
 
 #define LOG_ALL_DISABLE (0)
@@ -774,6 +817,7 @@ typedef enum {
     RESOLUTION_200, 
     RESOLUTION_150, 
     RESOLUTION_100, 
+    RESOLUTION_75, 
 } resolution_e;
 
 typedef enum {
@@ -1794,11 +1838,6 @@ struct procRes_s{
 
 struct aspMemAsign_s *aspMemAsign=0;
 
-#define	MaxCount_SRN	20
-void *BKOCR_Check( void * img_buf, int img_size, char *out_buf, int buf_size );
-void *BKOCR_Check6( void * img_buf, int img_size, char *out_buf, int buf_size );
-void *BKOCR_Check7( void * img_buf, int img_size, char *out_buf, int buf_size );
-
 #if LOG_ALL_DISABLE
 static int sprintf_f(char *a, char *b, ...);
 static int sprintf_f(char *a, char *b, ...)
@@ -2002,6 +2041,26 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
 static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin);
 static CFLOAT aspMin(CFLOAT d1, CFLOAT d2);
 static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset);
+static int cfgTableGetChkDPI(struct aspConfig_s *table, int idx, uint32_t *rval, uint32_t stat);
+
+#if GHP_EN
+#define	MaxCount_SRN	20
+void *BKOCR_Check( void * img_buf, int img_size, char *out_buf, int buf_size );
+void *BKOCR_Check6( void * img_buf, int img_size, char *out_buf, int buf_size );
+void *BKOCR_Check7( void * img_buf, int img_size, char *out_buf, int buf_size );
+#else
+#define	MaxCount_SRN	20
+static void *BKOCR_NULL( void * img_buf, int img_size, char *out_buf, int buf_size );
+static void *BKOCR_NULL( void * img_buf, int img_size, char *out_buf, int buf_size )
+{
+    return 0l;
+}
+
+#define BKOCR_Check BKOCR_NULL
+#define BKOCR_Check6 BKOCR_NULL
+#define BKOCR_Check7 BKOCR_NULL
+#endif
+
 static int qsort_comp(const void *a, const void *b) {
     CFLOAT *pa = (CFLOAT *) a;
     CFLOAT *pb = (CFLOAT *) b;
@@ -18770,34 +18829,10 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
     if (val > maxs) {
         return -3;
     }
-    
-    ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_CON);    
-    if (ret) {
-       tmp = 0;
-   }
-    switch (tmp) {
-        case RESOLUTION_1200:
-            dpi = 1200;
-            break;
-        case RESOLUTION_600:
-            dpi = 600;
-            break;
-        case RESOLUTION_300:
-            dpi = 300;
-            break;
-        case RESOLUTION_200:
-            dpi = 200;
-            break;
-        case RESOLUTION_150:
-            dpi = 150;
-            break;
-        case RESOLUTION_100:
-            dpi = 100;
-            break;
-        default:
-            dpi = 300;
-            break;
-    }
+
+    tmp = 0;
+    ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_CON);    
+    dpi = tmp;
     sprintf_f(rs->logs, "get dpi: %d flag: %d ret: %d \n", dpi, tmp, ret);
     print_f(rs->plogs, "GetORG", rs->logs);
 
@@ -18889,35 +18924,10 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
     sprintf_f(rs->logs, "meta masspt info (used:%d, start:%d lineRec:%d gap:%d)\n", masUsed, cy, masRecd, gap); 
     print_f(rs->plogs, "GetEXT", rs->logs);
     #endif
-    
-    ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_CON);    
-    if (ret) {
-       tmp = 0;
-   }
-    switch (tmp) {
-        case RESOLUTION_1200:
-            dpi = 1200;
-            break;
-        case RESOLUTION_600:
-            dpi = 600;
-            break;
-        case RESOLUTION_300:
-            dpi = 300;
-            break;
-        case RESOLUTION_200:
-            dpi = 200;
-            break;
-        case RESOLUTION_150:
-            dpi = 150;
-            break;
-        case RESOLUTION_100:
-            dpi = 100;
-            break;
-        default:
-            dpi = 300;
-            break;
-    }
-    
+
+    tmp = 0;
+    ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_CON);    
+    dpi = tmp;
     sprintf_f(rs->logs, "get dpi: %d flag: %d ret: %d \n", dpi, tmp, ret);
     print_f(rs->plogs, "GetEXT", rs->logs);
 
@@ -23164,6 +23174,55 @@ static int cfgTableGetChk(struct aspConfig_s *table, int idx, uint32_t *rval, ui
     if (p->opStatus != stat) return -3;
 
     return 0;
+}
+
+static int cfgTableGetChkDPI(struct aspConfig_s *table, int idx, uint32_t *rval, uint32_t stat)
+{
+    struct aspConfig_s *p=0;
+    int err=0;
+    uint32_t dpi=0, tmp=0;
+
+    if (!rval) return -1;
+    if (!table) return -1;
+    if (idx >= ASPOP_CODE_MAX) return -1;
+
+    p = &table[idx];
+    if (!p) return -2;
+
+    tmp = p->opValue;
+    switch (tmp) {
+    case RESOLUTION_1200:
+        dpi = 1200;
+        break;
+    case RESOLUTION_600:
+        dpi = 600;
+        break;
+    case RESOLUTION_300:
+        dpi = 300;
+        break;
+    case RESOLUTION_200:
+        dpi = 200;
+        break;
+    case RESOLUTION_150:
+        dpi = 150;
+        break;
+    case RESOLUTION_100:
+        dpi = 100;
+        break;
+    case RESOLUTION_75:
+        dpi = 75;
+        break;
+    default:
+        dpi = 300;
+        err = -3;
+        break;
+    }
+                
+    *rval = dpi;
+    
+    if (p->opStatus != stat) return -4;
+
+    return err;
 }
 
 static int asp_idxofch(char *str, char ch, int start, int max) 
@@ -49533,29 +49592,11 @@ static int fs98(struct mainRes_s *mrs, struct modersp_s *modersp)
         sprintf_f(mrs->log, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
         print_f(mrs->plog, "fs98", mrs->log);
 
-        ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+        tmp = 0;
+        ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
         sprintf_f(mrs->log, "user defined resulution: %d, ret:%d\n", tmp, ret);
         print_f(mrs->plog, "fs98", mrs->log);
-        switch (tmp) {
-            case RESOLUTION_1200:
-                dpi = 1200;
-                break;
-            case RESOLUTION_600:
-                dpi = 600;
-                break;
-            case RESOLUTION_300:
-                dpi = 300;
-                break;
-            case RESOLUTION_200:
-                dpi = 200;
-                break;
-            case RESOLUTION_150:
-                dpi = 150;
-                break;
-            default:
-                dpi = 300;
-                break;
-        }
+        dpi = tmp;
         
         //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
 
@@ -54697,32 +54738,10 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         }
                         else if ((pllcmd[ins] == 'm') || (pllcmd[ins] == 'n')) {
-
-                            ret = cfgTableGet(pct, ASPOP_RESOLUTION, &gval);
+                            gval = 0;
+                            ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &gval, ASPOP_STA_APP);
                             if (!ret) {
-                                switch (gval) {
-                                case RESOLUTION_1200:
-                                    resltion = 1200;
-                                    break;
-                                case RESOLUTION_600:
-                                    resltion = 600;
-                                    break;
-                                case RESOLUTION_300:
-                                    resltion = 300;
-                                    break;
-                                case RESOLUTION_200:
-                                    resltion = 200;
-                                    break;
-                                case RESOLUTION_150:
-                                    resltion = 150;
-                                    break;
-                                case RESOLUTION_100:
-                                    resltion = 100;
-                                    break;
-                                default:
-                                    resltion = 0;
-                                    break;
-                                }
+                                resltion = gval;
                                 //sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
                                 //print_f(mrs->plog, "fs145", mrs->log);
                             }
@@ -55146,34 +55165,9 @@ static int fs145(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 maxsz = 0;
 
                                 #if 0 /* disable the skip short image mechanism */
-                                ret = cfgTableGet(pct, ASPOP_RESOLUTION, &gval);
-                                if (!ret) {
-                                    switch (gval) {
-                                    case RESOLUTION_1200:
-                                        maxsz = 1200;
-                                        break;
-                                    case RESOLUTION_600:
-                                        maxsz = 600;
-                                        break;
-                                    case RESOLUTION_300:
-                                        maxsz = 300;
-                                        break;
-                                    case RESOLUTION_200:
-                                        maxsz = 200;
-                                        break;
-                                    case RESOLUTION_150:
-                                        maxsz = 150;
-                                        break;
-                                    default:
-                                        break;
-                                    }
-                                }
-                                else {
-                                    sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
-                                    print_f(mrs->plog, "fs145", mrs->log);
-
-                                    maxsz = 300;
-                                }
+                                gval = 0;
+                                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &gval, ASPOP_STA_APP);
+                                maxsz = gval;
                                 #endif
             
                                 if (ins == 1) {
@@ -57373,31 +57367,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                         }
                         else if ((pllcmd[ins] == 'm') || (pllcmd[ins] == 'n')) {
 
-                            ret = cfgTableGet(pct, ASPOP_RESOLUTION, &gval);
+                            ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &gval, ASPOP_STA_APP);
                             if (!ret) {
-                                switch (gval) {
-                                case RESOLUTION_1200:
-                                    resltion = 1200;
-                                    break;
-                                case RESOLUTION_600:
-                                    resltion = 600;
-                                    break;
-                                case RESOLUTION_300:
-                                    resltion = 300;
-                                    break;
-                                case RESOLUTION_200:
-                                    resltion = 200;
-                                    break;
-                                case RESOLUTION_150:
-                                    resltion = 150;
-                                    break;
-                                case RESOLUTION_100:
-                                    resltion = 100;
-                                    break;
-                                default:
-                                    resltion = 0;
-                                    break;
-                                }
+                                resltion = gval;
                                 //sprintf_f(mrs->log, "set resolution = %d !!!\n", resltion);
                                 //print_f(mrs->plog, "fs152", mrs->log);
                             }
@@ -57865,34 +57837,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 maxsz = 0;
 
                                 #if 0 /* disable the skip short image mechanism */
-                                ret = cfgTableGet(pct, ASPOP_RESOLUTION, &gval);
-                                if (!ret) {
-                                    switch (gval) {
-                                    case RESOLUTION_1200:
-                                        maxsz = 1200;
-                                        break;
-                                    case RESOLUTION_600:
-                                        maxsz = 600;
-                                        break;
-                                    case RESOLUTION_300:
-                                        maxsz = 300;
-                                        break;
-                                    case RESOLUTION_200:
-                                        maxsz = 200;
-                                        break;
-                                    case RESOLUTION_150:
-                                        maxsz = 150;
-                                        break;
-                                    default:
-                                        break;
-                                    }
-                                }
-                                else {
-                                    sprintf_f(mrs->log, "get resolution failed!!! ret: %d\n", ret);
-                                    print_f(mrs->plog, "fs152", mrs->log);
-
-                                    maxsz = 300;
-                                }
+                                gval = 0;
+                                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &gval, ASPOP_STA_APP);
+                                maxsz = gval;
                                 #endif
             
                                 if (ins == 1) {
@@ -60712,33 +60659,12 @@ static int p2(struct procRes_s *rs)
                                 
                                 sprintf_f(rs->logs, "crop memory allocate succeed size: %d \n", sizeof(struct aspDoCropCalcu) + sizeof(struct aspCropExtra_s) + sizeof(struct aspCrop36_s));
                                 print_f(rs->plogs, "P2", rs->logs);
-                                
-                                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+
+                                tmp = 0;
+                                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
                                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                                 print_f(rs->plogs, "P2", rs->logs);
-                                switch (tmp) {
-                                case RESOLUTION_1200:
-                                    pcrpdo->acrpDPI = 1200;
-                                    break;
-                                case RESOLUTION_600:
-                                    pcrpdo->acrpDPI = 600;
-                                    break;
-                                case RESOLUTION_300:
-                                    pcrpdo->acrpDPI = 300;
-                                    break;
-                                case RESOLUTION_200:
-                                    pcrpdo->acrpDPI = 200;
-                                    break;
-                                case RESOLUTION_150:
-                                    pcrpdo->acrpDPI = 150;
-                                    break;
-                                case RESOLUTION_100:
-                                    pcrpdo->acrpDPI = 100;
-                                    break;
-                                default:
-                                    pcrpdo->acrpDPI = 300;
-                                    break;
-                                }
+                                pcrpdo->acrpDPI = tmp;
 
                                 ret = doCropCalcuPt(pcrpdo, pusbmeta, &pusbmeta->EXTRA_POINT[4], len - sizeof(struct aspMetaDataviaUSB_s), rs, 2);
                                 sprintf_f(rs->logs, "do set extra points first ret: %d \n", ret);
@@ -64392,35 +64318,12 @@ static int p6(struct procRes_s *rs)
                 w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
-                
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    dpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    dpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    dpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    dpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    dpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    dpi = 100;
-                    break;
-                default:
-                    dpi = 300;
-                    break;
-                }
-                
-                //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+                dpi = tmp;
                 
                 hbuff = aspMemalloc(1078, 6);
                 if (!hbuff) {
@@ -64560,33 +64463,12 @@ static int p6(struct procRes_s *rs)
                 w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
-                
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    dpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    dpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    dpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    dpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    dpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    dpi = 100;
-                    break;
-                default:
-                    dpi = 300;
-                    break;
-                }
+                dpi = tmp;
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
                 
@@ -65096,33 +64978,12 @@ static int p6(struct procRes_s *rs)
                 w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
-                
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    dpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    dpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    dpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    dpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    dpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    dpi = 100;
-                    break;
-                default:
-                    dpi = 300;
-                    break;
-                }
+                dpi = tmp;
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
                 
@@ -65421,31 +65282,11 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
             print_f(rs->plogs, "P6", rs->logs);
+
+            tmp = 0;
+            ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+            dpi = tmp;
             
-            ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-            switch (tmp) {
-            case RESOLUTION_1200:
-                dpi = 1200;
-                break;
-            case RESOLUTION_600:
-                dpi = 600;
-                break;
-            case RESOLUTION_300:
-                dpi = 300;
-                break;
-            case RESOLUTION_200:
-                dpi = 200;
-                break;
-            case RESOLUTION_150:
-                dpi = 150;
-                break;
-            case RESOLUTION_100:
-                dpi = 100;
-                break;
-            default:
-                dpi = 300;
-                break;
-            }
             sprintf_f(rs->logs, "user defined resulution: %d(%d dpi), ret:%d\n", tmp, dpi, ret);
             print_f(rs->plogs, "P6", rs->logs);
             
@@ -65603,33 +65444,12 @@ static int p6(struct procRes_s *rs)
                 w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
-                
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    dpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    dpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    dpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    dpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    dpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    dpi = 100;
-                    break;
-                default:
-                    dpi = 300;
-                    break;
-                }
+                dpi = tmp;
                 
                 //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
                 
@@ -65772,35 +65592,12 @@ static int p6(struct procRes_s *rs)
                 w = scanWidthConvert(t, val);
                 sprintf_f(rs->logs, "user defined width low: %d, ret:%d, w = %d (tag:%d)\n", tmp, ret, w, t);
                 print_f(rs->plogs, "P6", rs->logs);
-                
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
                 sprintf_f(rs->logs, "user defined resulution: %d, ret:%d\n", tmp, ret);
                 print_f(rs->plogs, "P6", rs->logs);
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    dpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    dpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    dpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    dpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    dpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    dpi = 100;
-                    break;
-                default:
-                    dpi = 300;
-                    break;
-                }
-                
-                //pct[ASPOP_IMG_LEN].opStatus = ASPOP_STA_APP;
+                dpi = tmp;
                 
                 hbuff = aspMemalloc(1078, 6);
                 if (!hbuff) {
@@ -67536,31 +67333,10 @@ static int p6(struct procRes_s *rs)
             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &ffrmt, ASPOP_STA_APP);    
             sprintf_f(rs->logs, "user defined file format: %d, ret:%d\n", ffrmt, ret);
             print_f(rs->plogs, "P6", rs->logs);
-            
-            ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-            switch (tmp) {
-            case RESOLUTION_1200:
-                dpi = 1200;
-                break;
-            case RESOLUTION_600:
-                dpi = 600;
-                break;
-            case RESOLUTION_300:
-                dpi = 300;
-                break;
-            case RESOLUTION_200:
-                dpi = 200;
-                break;
-            case RESOLUTION_150:
-                dpi = 150;
-                break;
-            case RESOLUTION_100:
-                dpi = 100;
-                break;
-            default:
-                dpi = 300;
-                break;
-            }
+
+            tmp = 0;
+            ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);
+            dpi = tmp;
             sprintf_f(rs->logs, "user defined resulution: %d(dpi: %d), ret:%d\n", tmp, dpi, ret);
             print_f(rs->plogs, "P6", rs->logs);
             
@@ -81292,27 +81068,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
                                     print_f(rs->plogs, "P11", rs->logs);
 
-                                    ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                                    switch (tmp) {
-                                    case RESOLUTION_1200:
-                                        bdpi = 1200;
-                                        break;
-                                    case RESOLUTION_600:
-                                        bdpi = 600;
-                                        break;
-                                    case RESOLUTION_300:
-                                        bdpi = 300;
-                                        break;
-                                    case RESOLUTION_200:
-                                        bdpi = 200;
-                                        break;
-                                    case RESOLUTION_150:
-                                        bdpi = 150;
-                                        break;
-                                    default:
-                                        bdpi = 300;
-                                        break;
-                                    }
+                                    tmp = 0;
+                                    ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                                    bdpi = tmp;
                                     sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                                     print_f(rs->plogs, "P11", rs->logs);
 
@@ -86081,31 +85839,9 @@ static int p12(struct procRes_s *rs)
                 //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
                 //print_f(rs->plogs, "P12", rs->logs);
 
-
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    bdpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    bdpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    bdpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    bdpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    bdpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    bdpi = 100;
-                    break;
-                default:
-                    bdpi = 300;
-                    break;
-                }
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);   
+                bdpi = tmp;
                 //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 //print_f(rs->plogs, "P12", rs->logs);
                 
@@ -86288,31 +86024,9 @@ static int p12(struct procRes_s *rs)
                 //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
                 //print_f(rs->plogs, "P12", rs->logs);
 
-
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    bdpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    bdpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    bdpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    bdpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    bdpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    bdpi = 100;
-                    break;
-                default:
-                    bdpi = 300;
-                    break;
-                }
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                bdpi = tmp;
                 //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 //print_f(rs->plogs, "P12", rs->logs);
                 
@@ -88073,31 +87787,10 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 bmpw = scanWidthConvert(tmp, val);
                 //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
                 //print_f(rs->plogs, sp, rs->logs);
-        
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    bdpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    bdpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    bdpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    bdpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    bdpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    bdpi = 100;
-                    break;
-                default:
-                    bdpi = 300;
-                    break;
-                }
+
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                bdpi = tmp;
                 //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 //print_f(rs->plogs, sp, rs->logs);
 
@@ -88545,31 +88238,9 @@ static int p15(struct procRes_s *rs)
                 //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
                 //print_f(rs->plogs, "P15", rs->logs);
 
-
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    bdpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    bdpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    bdpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    bdpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    bdpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    bdpi = 100;
-                    break;
-                default:
-                    bdpi = 300;
-                    break;
-                }
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                bdpi = tmp;
                 //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 //print_f(rs->plogs, "P15", rs->logs);
                 
@@ -88969,31 +88640,9 @@ static int p15(struct procRes_s *rs)
                 //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
                 //print_f(rs->plogs, "P15", rs->logs);
 
-
-                ret = cfgTableGetChk(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
-                switch (tmp) {
-                case RESOLUTION_1200:
-                    bdpi = 1200;
-                    break;
-                case RESOLUTION_600:
-                    bdpi = 600;
-                    break;
-                case RESOLUTION_300:
-                    bdpi = 300;
-                    break;
-                case RESOLUTION_200:
-                    bdpi = 200;
-                    break;
-                case RESOLUTION_150:
-                    bdpi = 150;
-                    break;
-                case RESOLUTION_100:
-                    bdpi = 100;
-                    break;
-                default:
-                    bdpi = 300;
-                    break;
-                }
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                bdpi = tmp;
                 //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 //print_f(rs->plogs, "P15", rs->logs);
                 
