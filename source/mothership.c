@@ -53,6 +53,13 @@ int pipe2(int pipefd[2], int flags);
 #include "BKImage.h"
 #endif
 
+//#include <arch/arm/include/asm/barriers.h>
+//#include <arm/include/asm/barriers.h>
+#include <linux/membarrier.h>
+//#include <asm-generic/barrier.h>
+//#include <linux/compiler-gcc.h>
+//#include <linux/memcontrol.h>
+
 //main()
 // version example: MSP Version v0.0.2, 2019-03-13 13:36:30 f2be242, 2019.12.17 14:48:18
 
@@ -146,6 +153,7 @@ typedef struct
 #define USB_AUTO_PAUSE    (1)
 #define USB_AUTO_RESUME  (1)
 #define DBG_PAUSE_RESUME (0)
+
 #if 1                                                          // notice this 
 #define WIRELESS_INT           "wlan0"
 #define WIRELESS_INT_WPA  "wlan1"
@@ -153,6 +161,7 @@ typedef struct
 #define WIRELESS_INT           "uap0"
 #define WIRELESS_INT_WPA  "mlan0"
 #endif
+
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
 
@@ -237,6 +246,8 @@ typedef struct
 #define USB_IOCT_GET_VID_PID(a, b)          ioctl(a, LPIOC_GET_VID_PID(8), b)
 
 #define PULL_LOW_AFTER_DATA (0)
+
+#define asp_mem_barrier() asm volatile("" ::: "memory")
 
 #define MODULE_NAME "/dev/mem"
 static char usbdevpath[] = "/dev/g_printer";
@@ -1551,6 +1562,7 @@ struct bitmapDecodeItem_s {
 #define BMP_DECODE_PIC_SIZE (5)
 struct bitmapDecodeMfour_s {
     int         aspDecStatus;
+    struct timespec   aspDecPostime[2];
     int         aspDecPagerst;
     int         aspDecImgidx;
     int         aspPipeMfourRx[2];
@@ -1728,6 +1740,9 @@ struct mainRes_s{
     FILE *flog;
     // time measurement
     struct timespec time[2];
+    struct timespec time2[2];
+    struct timespec roundtripgoto[2];
+    struct timespec roundtripback[2];
     // log buffer
     char log[1024];
     struct socket_s socket_r;
@@ -1808,6 +1823,9 @@ struct procRes_s{
     FILE *fdat_s[4];
     // time measurement
     struct timespec *tm[2];
+    struct timespec *tm2[2];
+    struct timespec *rtpTo[2];
+    struct timespec *rtpBk[2];
     struct timespec tdf[2];
     char logs[2048];
     struct socket_s *psocket_r;
@@ -3147,6 +3165,7 @@ static int phy2vir(uint32_t *pvir, uint32_t phy, int physize, int memfd)
 
     //sync();
     
+    #if 1
     ps8_page_start_addr = mmap( 0 ,                                   // Start addr in file
                            u32_page_seek_cur + u32_len , // len
                            PROT_READ | PROT_WRITE , // mode
@@ -3163,6 +3182,10 @@ static int phy2vir(uint32_t *pvir, uint32_t phy, int physize, int memfd)
 
     curAddr = ps8_page_start_addr + u32_page_seek_cur;
     *pvir = (uint32_t)curAddr;
+    #else
+    *pvir = (uint32_t) aspSalloc(physize);
+    #endif
+    
 #if DBG_PHY2VIR
     printf("[MEM] get addr s:0x%.8x c:0x%.8x\n", ps8_page_start_addr, curAddr);
 #endif
@@ -3564,6 +3587,23 @@ static int aspBMPdecodeBuffStatusSet(struct bitmapDecodeMfour_s *pdec, int statu
     return 0;
 }
 
+static int aspBMPdecodeBuffTimeCostGet(struct bitmapDecodeMfour_s *pdec, int *timecost)
+{
+    int tmcost=0;
+    if (!pdec) return -1;
+    if (!timecost) return -2;
+
+    msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
+    
+    clock_gettime(CLOCK_REALTIME, &pdec->aspDecPostime[1]);
+
+    tmcost = time_diff(&pdec->aspDecPostime[0], &pdec->aspDecPostime[1], 1000);
+    
+    *timecost = tmcost;
+    
+    return 0;
+}
+
 static int aspBMPdecodeBuffStatusGet(struct bitmapDecodeMfour_s *pdec, int *pstat)
 {
     int stat=0;
@@ -3640,6 +3680,7 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
         //printf("[BIDX] search %d. %d (0x%.8x) \n", idx, pdec->aspDecStatus, pdec->aspDecStatus);
         
         if (pdec->aspDecStatus == -1) {
+            clock_gettime(CLOCK_REALTIME, &pdec->aspDecPostime[0]);
             find = idx;
             break;
         }
@@ -5837,7 +5878,7 @@ static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *
 
 #if 1
 
-    printf("\n %*s[%s] (%d) ms\n", shift, "", pstring, tdiff / 1000);
+    printf("\n %*s[%s] (%d.%d) ms\n", shift, "", pstring, tdiff / 1000, tdiff % 1000);
 
 #else
     char *wday[]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"}; 
@@ -7684,6 +7725,9 @@ static int aspMemClear(struct aspMemAsign_s *msa, int *memtot, int pidx)
     tot = memtot[pidx];
 
     for (mi = 0; mi < ASP_MEM_SLOT_NUM; mi++) {
+
+        asp_mem_barrier();
+        
         if (ms->aspMemAddr[mi] != 0) {
             asz = ms->aspMemSize[mi];
             ad32 = ms->aspMemAddr[mi];
@@ -7796,6 +7840,9 @@ static void* aspMemalloc(uint32_t asz, int pidx)
 #endif
     }
     
+    //asm volatile("" ::: "memory");
+    asp_mem_barrier();
+    
     tot = asptotMalloc[pidx];
     ms = &aspMemAsign[pidx];
     
@@ -7815,6 +7862,9 @@ static void* aspMemalloc(uint32_t asz, int pidx)
             ms->aspMemAddr[mi] = (uint32_t)addr;
 
             tot += mlen;
+
+            asp_mem_barrier();
+            
             asptotMalloc[pidx] = tot;
 
             msync(ms, sizeof(struct aspMemAsign_s), MS_SYNC);
@@ -38413,6 +38463,8 @@ static int ring_buf_get(struct shmem_s *pp, char **addr)
     int maxn = 0;
     int dist;
 
+    asp_mem_barrier();
+    
     folwn = pp->r->folw.run * pp->slotn + pp->r->folw.seq;
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     maxn = pp->slotn; 
@@ -38450,6 +38502,8 @@ static int ring_buf_set_last_dual(struct shmem_s *pp, int size, int sel)
         size = size + MIN_SECTOR_SIZE - tlen;
     }
 
+    asp_mem_barrier();
+    
     if (sel) {
         pp->dualsz = size;
     } else {
@@ -38472,6 +38526,8 @@ static int ring_buf_prod_tag(struct shmem_s *pp, int usbrn)
     int dist;
     int gdx=0, glp=0, rlp=0, rdx=0, ttn=0;
 
+    asp_mem_barrier();
+    
     ttn = pp->slotn;
 
     gdx = pp->r->usbgettig->seq;
@@ -38491,6 +38547,8 @@ static int ring_buf_prod_tag(struct shmem_s *pp, int usbrn)
     
     rdx = usbrn - (rlp * ttn);
 
+    asp_mem_barrier();
+    
     pp->r->usbrunnig->seq = rdx;
     pp->r->usbrunnig->run = rlp;
 
@@ -38509,6 +38567,8 @@ static int ring_buf_prod_u(struct shmem_s *pp, int csz)
 {
     char str[128];
     int idx=0, nlp=0;
+
+    asp_mem_barrier();
     
     if ((pp->r->lead.seq + 1) < pp->slotn) {
         pp->r->lead.seq += 1;
@@ -38517,6 +38577,8 @@ static int ring_buf_prod_u(struct shmem_s *pp, int csz)
         pp->r->lead.run += 1;
     }
 
+    asp_mem_barrier();
+    
     idx = pp->r->lead.seq;
     nlp = pp->r->lead.run;
     
@@ -38600,6 +38662,9 @@ static int ring_buf_prod_dual(struct shmem_s *pp, int sel)
 {
     char str[128];
     sel = sel % 2;
+
+    asp_mem_barrier();
+    
     if (sel) {
         if ((pp->r->dual.seq + 2) < pp->slotn) {
             pp->r->dual.seq += 2;
@@ -38631,6 +38696,8 @@ static int ring_buf_cons_tag(struct shmem_s *pp)
     int dist;
     int gdx=0, glp=0, rsz=0, rlp=0, rdx=0, sta=0;
 
+    asp_mem_barrier();
+    
     rdx = pp->r->usbrunnig->seq;
     rlp = pp->r->usbrunnig->run;
 
@@ -38639,7 +38706,9 @@ static int ring_buf_cons_tag(struct shmem_s *pp)
 
     gdx = pp->r->folw.seq;
     glp = pp->r->folw.run;
-    
+
+    asp_mem_barrier();
+        
     pp->r->usbgettig->seq = gdx;
     pp->r->usbgettig->run = glp;
 
@@ -38660,6 +38729,8 @@ static int ring_buf_cons_up(struct shmem_s *pp, char **addr, char **phyr)
     int dist;
     int idx=0, nlp=0, rsz=0, rlp=0, sta=0;
 
+    asp_mem_barrier();
+    
     folwn = pp->r->folw.run * pp->slotn + pp->r->folw.seq;
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
@@ -38716,6 +38787,8 @@ static int ring_buf_cons_up(struct shmem_s *pp, char **addr, char **phyr)
     
     #endif
 
+    asp_mem_barrier();
+    
     pp->urun[idx] = 0;
     pp->uget[idx] = sta;
 
@@ -38742,6 +38815,8 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
     int dist;
     int idx=0, nlp=0, rsz=0, rlp=0, sta=0;
 
+    asp_mem_barrier();
+    
     folwn = pp->r->folw.run * pp->slotn + pp->r->folw.seq;
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
@@ -38751,6 +38826,8 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
 
     if (dist < 1)  return -1;
 
+    asp_mem_barrier();
+    
     if ((pp->r->folw.seq + 1) < pp->slotn) {
         //*addr = pp->pp[pp->r->folw.seq + 1];
         //pp->r->folw.seq += 1;
@@ -38798,6 +38875,8 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
     
     #endif
 
+    asp_mem_barrier();
+    
     pp->urun[idx] = 0;
     pp->uget[idx] = sta;
 
@@ -38818,6 +38897,9 @@ static int ring_buf_cons_u(struct shmem_s *pp, char **addr)
 static int ring_buf_prod(struct shmem_s *pp)
 {
     char str[128];
+
+    asp_mem_barrier();
+    
     if ((pp->r->lead.seq + 1) < pp->slotn) {
         pp->r->lead.seq += 1;
     } else {
@@ -38842,6 +38924,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
     int folwn = 0;
     int dist;
 
+    asp_mem_barrier();
+    
     folwn = pp->r->folw.run * pp->slotn + pp->r->folw.seq;
     dualn = pp->r->dual.run * pp->slotn + pp->r->dual.seq;
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
@@ -38857,6 +38941,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
 
+    asp_mem_barrier();
+    
     if ((pp->r->folw.seq + 1) < pp->slotn) {
         *addr = pp->pp[pp->r->folw.seq + 1];
         pp->r->folw.seq += 1;
@@ -38866,6 +38952,8 @@ static int ring_buf_cons_dual(struct shmem_s *pp, char **addr, int sel)
         pp->r->folw.run += 1;
     }
 
+    asp_mem_barrier();
+    
     if ((pp->lastflg) && (dist == 1)) {
         sprintf_f(str, "[clast] f:%d %d, d:%d %d l: %d %d \n", pp->r->folw.run, pp->r->folw.seq, 
             pp->r->dual.run, pp->r->dual.seq, pp->r->lead.run, pp->r->lead.seq);
@@ -38905,6 +38993,8 @@ static int ring_buf_cons_dual_psudo(struct shmem_s *pp, char **addr, int sel)
     int folwn = 0;
     int dist;
 
+    asp_mem_barrier();
+    
     folwn = pp->r->psudo.run * pp->slotn + pp->r->psudo.seq;
     dualn = pp->r->dual.run * pp->slotn + pp->r->dual.seq;
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
@@ -38920,6 +39010,8 @@ static int ring_buf_cons_dual_psudo(struct shmem_s *pp, char **addr, int sel)
     if ((pp->lastflg) && (dist < 1)) return (-1);
     if (dist < 1)  return (-2);
 
+    asp_mem_barrier();
+    
     if ((pp->r->psudo.seq + 1) < pp->slotn) {
         *addr = pp->pp[pp->r->psudo.seq + 1];
         pp->r->psudo.seq += 1;
@@ -38929,6 +39021,8 @@ static int ring_buf_cons_dual_psudo(struct shmem_s *pp, char **addr, int sel)
         pp->r->psudo.run += 1;
     }
 
+    asp_mem_barrier();
+    
     if ((pp->lastflg) && (dist == 1)) {
         sprintf_f(str, "[psudo] f:%d %d, d:%d %d l: %d %d \n", pp->r->psudo.run, pp->r->psudo.seq, 
             pp->r->dual.run, pp->r->dual.seq, pp->r->lead.run, pp->r->lead.seq);
@@ -38965,6 +39059,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
     int folwn = 0;
     int dist;
 
+    asp_mem_barrier();
+
     folwn = pp->r->folw.run * pp->slotn + pp->r->folw.seq;
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
@@ -38974,6 +39070,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
 
     if (dist < 1)  return -1;
 
+    asp_mem_barrier();
+    
     if ((pp->r->folw.seq + 1) < pp->slotn) {
         *addr = pp->pp[pp->r->folw.seq + 1];
         pp->r->folw.seq += 1;
@@ -38983,6 +39081,8 @@ static int ring_buf_cons(struct shmem_s *pp, char **addr)
         pp->r->folw.run += 1;
     }
 
+    asp_mem_barrier();
+    
     if ((pp->lastflg) && (dist == 1)) {
         sprintf_f(str, "last, f: %d %d/l: %d %d\n", pp->r->folw.run, pp->r->folw.seq, pp->r->lead.run, pp->r->lead.seq);
         print_f(mlogPool, "ring", str);
@@ -39005,6 +39105,8 @@ static int ring_buf_cons_psudo(struct shmem_s *pp, char **addr)
     int folwn = 0;
     int dist;
 
+    asp_mem_barrier();
+    
     folwn = pp->r->psudo.run * pp->slotn + pp->r->psudo.seq;
     leadn = pp->r->lead.run * pp->slotn + pp->r->lead.seq;
     dist = leadn - folwn;
@@ -39014,6 +39116,8 @@ static int ring_buf_cons_psudo(struct shmem_s *pp, char **addr)
 
     if (dist < 1)  return -1;
 
+    asp_mem_barrier();
+    
     if ((pp->r->psudo.seq + 1) < pp->slotn) {
         *addr = pp->pp[pp->r->psudo.seq + 1];
         pp->r->psudo.seq += 1;
@@ -39023,6 +39127,8 @@ static int ring_buf_cons_psudo(struct shmem_s *pp, char **addr)
         pp->r->psudo.run += 1;
     }
 
+    asp_mem_barrier();
+    
     if ((pp->lastflg) && (dist == 1)) {
         sprintf_f(str, "psudo last, f: %d %d/l: %d %d\n", pp->r->psudo.run, pp->r->psudo.seq, pp->r->lead.run, pp->r->lead.seq);
         print_f(mlogPool, "ring", str);
@@ -56942,8 +57048,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 print_f(mrs->plog, "fs152", mrs->log);
 
                                 ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
-                                //sprintf_f(mrs->log, "[GW] get BMP decode buff id: %d ret: %d \n", bidx, ret);
-                                //print_f(mrs->plog, "fs152", mrs->log);
+                                sprintf_f(mrs->log, "[GW] get BMP decode buff id: %d ret: %d \n", bidx, ret);
+                                print_f(mrs->plog, "fs152", mrs->log);
                                 if (ret < 0) {
                                     bidx = -1;
 
@@ -59285,7 +59391,7 @@ static int p2(struct procRes_s *rs)
                     msync(addr, len, MS_SYNC);                    
                     //shmem_check(addr, len);
 #if  LOG_TIME_MEASURE_EN
-                    clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                    clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
 #endif
 #if SPI_KTHREAD_USE
                     opsz = msp_spi_conf(rs->spifd, _IOR(SPI_IOC_MAGIC, 15, __u32), addr);  //SPI_IOC_PROBE_THREAD
@@ -59329,13 +59435,13 @@ static int p2(struct procRes_s *rs)
                     sprintf_f(rs->logs, "r %d / %d\n", opsz, len);
                     print_f(rs->plogs, "P2", rs->logs);
 #endif
-                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);                    
+                    msync(rs->tm2, sizeof(struct timespec) * 2, MS_SYNC);                    
 #if LOG_TIME_MEASURE_EN 
                     clock_gettime(CLOCK_REALTIME, &tnow);
 
-                    tdiff = time_diff(rs->tm[0], rs->tm[1], 1000);
+                    tdiff = time_diff(rs->tm2[0], rs->tm2[1], 1000);
                     if (tdiff == -1) {
-                         tdiff = 0 - time_diff(rs->tm[1], rs->tm[0], 1000);
+                         tdiff = 0 - time_diff(rs->tm2[1], rs->tm2[0], 1000);
                     }
 
                     //sprintf_f(rs->logs, "t %d us\n", tdiff);
@@ -60990,7 +61096,7 @@ static int p3(struct procRes_s *rs)
                     sprintf_f(rs->logs, "r %d / %d\n", opsz, len);
                     print_f(rs->plogs, "P3", rs->logs);
 #endif
-                    msync(rs->tm, sizeof(struct timespec) * 2, MS_SYNC);
+                    msync(rs->tm2, sizeof(struct timespec) * 2, MS_SYNC);
 
 #if LOG_TIME_MEASURE_EN
                     clock_gettime(CLOCK_REALTIME, &tnow);
@@ -61001,9 +61107,9 @@ static int p3(struct procRes_s *rs)
                         continue;
                     }
 
-                    tdiff = time_diff(rs->tm[1], rs->tm[0], 1000);
+                    tdiff = time_diff(rs->tm2[1], rs->tm2[0], 1000);
                     if (tdiff == -1) {
-                         tdiff = 0 - time_diff(rs->tm[0], rs->tm[1], 1000);
+                         tdiff = 0 - time_diff(rs->tm2[0], rs->tm2[1], 1000);
                     }
 
                     //sprintf_f(rs->logs, "t %d us\n", tdiff);
@@ -70519,7 +70625,7 @@ static int p8(struct procRes_s *rs)
         sprintf_f(rs->logs, "AP interface = [%s] \n", rs->pnetIntfs);
         print_f(rs->plogs, "P8", rs->logs);
 
-        sprintf_f(rs->logs, "DIRECT MODE CONFIG IF = %s ", rs->pnetIntfs);
+        sprintf(rs->logs, "DIRECT MODE CONFIG IF = %s ", rs->pnetIntfs);
         dbgShowTimeStamp(rs->logs, NULL, rs, 2, NULL);
 
         //shmem_dump(pmrs->netIntfs, 16);
@@ -70534,7 +70640,7 @@ static int p8(struct procRes_s *rs)
             sprintf_f(rs->logs, "launch AP mode ... ssid: %s, psk: %s\n", pwfc ->wfssid, pwfc->wfpsk);
             print_f(rs->plogs, "P8", rs->logs);
 
-            sprintf_f(rs->logs, "AP MODE CONFIG SSID: %s, PSK: %s\n", pwfc ->wfssid, pwfc->wfpsk);
+            sprintf(rs->logs, "AP MODE CONFIG SSID: %s, PSK: %s\n", pwfc ->wfssid, pwfc->wfpsk);
             dbgShowTimeStamp(rs->logs, NULL, rs, 2, NULL);
 
             faptpe = 0;
@@ -70630,7 +70736,7 @@ static int p8(struct procRes_s *rs)
             }
 
             if (!isLaunch) {
-                sprintf_f(rs->logs, "AP MODE CONFIG IF = %s ", rs->pnetIntwpa);
+                sprintf(rs->logs, "AP MODE CONFIG IF = %s ", rs->pnetIntwpa);
                 dbgShowTimeStamp(rs->logs, NULL, rs, 2, NULL);
             }
 
@@ -71265,7 +71371,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             puhsinfo->ushostpidvid[0] = pidvid[0];
                             puhsinfo->ushostpidvid[1] = pidvid[1];
 
-                            sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+                            sprintf(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                             if (puhsinfo->ushostpidvid[1] == 0x0a01) {
@@ -71287,7 +71393,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                     print_f(rs->plogs, sp, rs->logs);
 
-                    sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+                    sprintf(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                     if (puhsinfo->ushostpidvid[1] == 0x0a01) {
@@ -71552,7 +71658,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         puhsinfo->ushostpidvid[0] = pidvid[0];
                         puhsinfo->ushostpidvid[1] = pidvid[1];
 
-                        sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+                        sprintf(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                         dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                         if (puhsinfo->ushostpidvid[1] == 0x0a01) {
@@ -71659,7 +71765,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                 puhsinfo->ushostpidvid[0] = pidvid[0];
                                 puhsinfo->ushostpidvid[1] = pidvid[1];
 
-                                sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+                                sprintf(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                                 if (puhsinfo->ushostid) {
@@ -71679,7 +71785,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                             print_f(rs->plogs, sp, rs->logs);
 
-                            sprintf_f(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+                            sprintf(rs->logs, "__USB_DEV_ VIDPID_[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                         }
                 
@@ -72207,7 +72313,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             if (usbid > 0) {
 
-            sprintf_f(rs->logs, "__USB_DEV_ META_[%s][%s]__", sp, puhsinfo->ushostname); 
+            sprintf(rs->logs, "__USB_DEV_ META_[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, OP_META, OP_META_Sub1);
@@ -72275,7 +72381,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             sprintf_f(rs->logs, "ENT reset to rom vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
             print_f(rs->plogs, sp, rs->logs);
             
-            sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_[%s][%s]__", sp, puhsinfo->ushostname); 
+            sprintf(rs->logs, "__USB_DEV_ ROM_RESET_[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             usleep(1000000);
@@ -72383,7 +72489,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                             print_f(rs->plogs, sp, rs->logs);
 
-                            sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_GETVIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+                            sprintf(rs->logs, "__USB_DEV_ ROM_RESET_GETVIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
                             puhsinfo->ushostpidvid[0] = pidvid[0];
@@ -72412,7 +72518,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                            puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                         print_f(rs->plogs, sp, rs->logs);
 
-                        sprintf_f(rs->logs, "__USB_DEV_ ROM_RESET_GETVIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+                        sprintf(rs->logs, "__USB_DEV_ ROM_RESET_GETVIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                         dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                         
                         puhsinfo->ushostpidvid[0] = pidvid[0];
@@ -73236,7 +73342,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 pllst = dcswBuff[12];
             }
 
-            sprintf_f(rs->logs, "__USB_DEV_ CBW[0x%.2x][0x%.2x]CSW[0x%.2x][0x%.2x][%s][%s]__", cubsBuff[15], cubsBuff[16], ptrecv[11], ptrecv[12], sp, puhsinfo->ushostname); 
+            sprintf(rs->logs, "__USB_DEV_ CBW[0x%.2x][0x%.2x]CSW[0x%.2x][0x%.2x][%s][%s]__", cubsBuff[15], cubsBuff[16], ptrecv[11], ptrecv[12], sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
             
             cplls[0] = 'J';
@@ -73244,7 +73350,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             pieRet = write(pPrx[1], &cplls, 2);
         }
         else if (cmdchr == 0x08) {
-            sprintf_f(rs->logs, "__USB_DEV_ STOPSCAN[%s][%s]__", sp, puhsinfo->ushostname); 
+            sprintf(rs->logs, "__USB_DEV_ STOPSCAN[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ptret = USB_IOCT_LOOP_STOP(usbid, &bitset);
@@ -73290,6 +73396,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 #if USB_CALLBACK_LOOP 
                 recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
+                //smp_mb();
                 #else
                 recvsz = usb_read(addr, usbid, len);
                 #endif
@@ -73326,7 +73433,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         
                             puhs->pushcswerr = cswst;
 
-                            sprintf_f(rs->logs, "__USB_DEV_ STATUS[0x%.2x][%s][%s]__", cswst & 0x7f, sp, puhsinfo->ushostname); 
+                            sprintf(rs->logs, "__USB_DEV_ STATUS[0x%.2x][%s][%s]__", cswst & 0x7f, sp, puhsinfo->ushostname); 
                             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
                             chr = 'R';                        
@@ -73350,7 +73457,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         sprintf_f(rs->logs, "get the end signal 0x20000 \n");
                         print_f(rs->plogs, sp, rs->logs);
 
-                        sprintf_f(rs->logs, "__USB_DEV_ END[0x%.5x][%s][%s]__", 0x20000, sp, puhsinfo->ushostname); 
+                        sprintf(rs->logs, "__USB_DEV_ END[0x%.5x][%s][%s]__", 0x20000, sp, puhsinfo->ushostname); 
                         dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
                         #if USB_CALLBACK_LOOP 
@@ -73664,15 +73771,16 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
                     //print_f(rs->plogs, sp, rs->logs);
 
-                    sprintf_f(rs->logs, "__USB_DEV_ EXTRA_META[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
+                    sprintf(rs->logs, "__USB_DEV_ EXTRA_META[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
                     thrimgsize += (CFLOAT)acusz;
                     ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
+                    /*
                     thrtimecost = (CFLOAT)ret - thrtimecost;
                     throughput = thrimgsize / thrtimecost;
                     sprintf_f(rs->logs, "__USB_DEV_ THROUGHPUT[%.2lf][%s][%s]__", throughput, sp, puhsinfo->ushostname); 
                     ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                     thrtimecost = (CFLOAT)ret;
-
+                    */
                     break;
                 } else {
                     chq = 'D';
@@ -73799,7 +73907,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             //sprintf_f(rs->logs, "conti read start ret: %d \n", ptret);
             //print_f(rs->plogs, sp, rs->logs);
 
-            sprintf_f(rs->logs, "__USB_DEV_ SCAN_START[%s][%s]__", sp, puhsinfo->ushostname); 
+            sprintf(rs->logs, "__USB_DEV_ SCAN_START[%s][%s]__", sp, puhsinfo->ushostname); 
             ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
             thrtimecost = (CFLOAT)ret;
                     
@@ -73853,7 +73961,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             //sprintf_f(rs->logs, "conti read once ret: %d \n", ptret);
             //print_f(rs->plogs, sp, rs->logs);
 
-            sprintf_f(rs->logs, "__USB_DEV_ START[%s][%s]__", sp, puhsinfo->ushostname); 
+            sprintf(rs->logs, "__USB_DEV_ START[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             puhsinfo->ushostbtrktot = 0;
@@ -74286,7 +74394,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
                     //print_f(rs->plogs, sp, rs->logs);
 
-                    sprintf_f(rs->logs, "__USB_DEV_ IMG_SIZE[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
+                    sprintf(rs->logs, "__USB_DEV_ IMG_SIZE[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
                     thrimgsize = acusz;
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                     
@@ -74570,7 +74678,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                                                        puhsinfo->ushostname, pidvid[0], pidvid[1], puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]); 
                         print_f(rs->plogs, sp, rs->logs);
 
-                        sprintf_f(rs->logs, "__USB_DEV_ VIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
+                        sprintf(rs->logs, "__USB_DEV_ VIDPID[0x%.4x][0x%.4x][%s][%s]__", pidvid[0], pidvid[1], sp, puhsinfo->ushostname); 
                         dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                     
                         puhsinfo->ushostpidvid[0] = pidvid[0];
@@ -74823,7 +74931,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             #endif
         }
         else if (cmdchr == 0x13) {
-            sprintf_f(rs->logs, "__USB_DEV_ PAUSE[%s][%s]__", sp, puhsinfo->ushostname); 
+            sprintf(rs->logs, "__USB_DEV_ PAUSE[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ix = puhsinfo->ushostpause;
@@ -74833,7 +74941,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             print_f(rs->plogs, sp, rs->logs);
         }
         else if (cmdchr == 0x14) {
-            sprintf_f(rs->logs, "__USB_DEV_ RESUME[%s][%s]__", sp, puhsinfo->ushostname); 
+            sprintf(rs->logs, "__USB_DEV_ RESUME[%s][%s]__", sp, puhsinfo->ushostname); 
             dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
 
             ix = puhsinfo->ushostresume;
@@ -77505,14 +77613,14 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                     
-                    sprintf_f(rs->logs, "__USB_GET  CBW_[%.2x][%.2x][%.2x]__", ptrecv[15], ptrecv[16], ptrecv[17]); 
+                    sprintf(rs->logs, "__USB_GET  CBW_[%.2x][%.2x][%.2x]__", ptrecv[15], ptrecv[16], ptrecv[17]); 
                     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
-                    thrtimeconsu = tmCost;
-                    thrtimeconsu = thrtimeconsu - thrtimebegin;
-                    throughput = thrdatasize / thrtimeconsu;
-                    sprintf_f(rs->logs, "__USB_TO_PC THROUGHPUT_(%.2lf / %.2lf = %.3lf_MB)__", thrdatasize, thrtimeconsu, throughput); 
-                    dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
+                    //thrtimeconsu = tmCost;
+                    //thrtimeconsu = thrtimeconsu - thrtimebegin;
+                    //throughput = thrdatasize / thrtimeconsu;
+                    //sprintf_f(rs->logs, "__USB_TO_PC THROUGHPUT_(%.2lf / %.2lf = %.3lf_MB)__", thrdatasize, thrtimeconsu, throughput); 
+                    //dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                     
                     thrtimebegin = tmCost;
                     
@@ -81917,7 +82025,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
 
-                    sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                    sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                     
                     sprintf_f(rs->logs, "[DV] 0x11 0x4d 0x4f opc: (0x%.2x) dump \n", opc);
@@ -82090,7 +82198,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
 
-                    sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                    sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                     sprintf_f(rs->logs, "[DV] 0x11 0x4c meat cmd: (0x%.2x) opc: (0x%.2x) dump \n", cmd, opc);
@@ -82317,7 +82425,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                     
 
@@ -82408,7 +82516,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
                 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x](Page_%d_size:%d_bytes)__", csw[10], csw[11], csw[12], pagecnt++, acusz); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x](Page_%d_size:%d_bytes)__", csw[10], csw[11], csw[12], pagecnt++, acusz); 
                 tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                 thrdatasize = acusz;
                 
@@ -82520,7 +82628,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 rwaitCylen = waitCylen;
@@ -82673,7 +82781,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 rwaitCylen = waitCylen;
@@ -82751,7 +82859,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] 0x15 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
@@ -82903,7 +83011,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;
                     }
 
-                    sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                    sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                     sprintf_f(rs->logs, "[DV] 0x0b cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
@@ -83241,7 +83349,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] 0x0b rcmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
@@ -83528,7 +83636,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                     }
 
-                    sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                    sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                     sprintf_f(rs->logs, "[DV] 0x0b rcmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x dump csw: \n", cmd, opc, dat); 
@@ -83590,7 +83698,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] 0x0b clear cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x dump csw: \n", cmd, opc, dat); 
@@ -83829,7 +83937,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] 0x0c cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x dump csw: \n", cmd, opc, dat); 
@@ -84091,7 +84199,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] 0x0c cmd: 0x%.2x opc: 0x%.2x dat: 0x%.2x dump csw: \n", cmd, opc, dat); 
@@ -84193,7 +84301,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] OP_WRITE_FILE get version opc: 0x%.2x dat: 0x%.2x dump csw: \n", opc, dat); 
@@ -84373,7 +84481,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 #else
                 printf("\rdone      \r");
                 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                 #endif
                 
@@ -84567,7 +84675,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 #else
                 printf("\rdone      \r");
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
                 #endif
 
@@ -84722,7 +84830,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     continue;
                 }
 
-                sprintf_f(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] poll cmd: (0x%.2x) opc: (0x%.2x) dat: (0x%.2x) dump: \n", cmd, opc, dat);
@@ -85585,7 +85693,13 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //print_f(rs->plogs, "CLIP", rs->logs);
     #endif
 
+    sprintf(rs->logs, "__ROTATE_START__"); 
+    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
+                
     ret = rotateBMPMf(bmprot, bmpcolrtb, cropinfo, bmpbuff+1078, mreal, 0xa5, midx);
+
+    sprintf(rs->logs, "__ROTATE_END__"); 
+    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
 
     clock_gettime(CLOCK_REALTIME, &jpgE);
 
@@ -87442,6 +87556,10 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             #if GHP_EN_JPGH
                             //if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && (opc == 0x0f)) {
                             if (opc == 0x0f) {
+
+                                sprintf(rs->logs, "__M4_PROCESS_START(%d)__", buffidx); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                                
                                 switch (fformat) {
                                 case FILE_FORMAT_JPG:
                                 if (buffidx >= 0) {
@@ -88262,11 +88380,17 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     #endif
                     
                     clock_gettime(CLOCK_REALTIME, &jpgS);
-                    
+
+                    sprintf(rs->logs, "__JPG_DECODE_START(%d)__", buffidx); 
+                    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
+    
                     err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
                     //err = jpeg2rgbRvs(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
                     //err = jpeg2rgbW(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw);
                     //err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
+
+                    sprintf(rs->logs, "__JPG_DECODE_END(%d)__", buffidx); 
+                    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
                     
                     clock_gettime(CLOCK_REALTIME, &jpgE);
         
@@ -88549,7 +88673,7 @@ static int p15(struct procRes_s *rs)
                     //sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
                     //print_f(rs->plogs, "P15", rs->logs);
                 }
-
+                                
                 imgidx = 0;
                 mfbstat = 0;
                 ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
@@ -88768,7 +88892,13 @@ static int p15(struct procRes_s *rs)
                     switch (fformat) {
                     case FILE_FORMAT_JPG:
                     #if GHP_EN
+                    sprintf(rs->logs, "__JPG_ENCODE_START(%d)__", mfbidx); 
+                    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
+                    
                     err = rgb2jpg(bmpbufc+bheader->aspbhRawoffset, jpgrlt, &jpgLen, pdecroi->aspDcWidth, pdecroi->aspDcHeight, colr);
+                    
+                    sprintf(rs->logs, "__JPG_ENCODE_END(%d)__", mfbidx); 
+                    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
                     #endif
                     break;
                     case FILE_FORMAT_RAW:
@@ -88935,7 +89065,15 @@ static int p15(struct procRes_s *rs)
                     }
                     #endif
                 }
-                
+
+                sprintf(rs->logs, "__M4_PROCESS_END(%d)__", mfbidx); 
+                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+    
+                ret = aspBMPdecodeBuffTimeCostGet(rs->pbDecMfour[mfbidx], &tmCost);
+
+                sprintf_f(rs->logs, "[DV] img buff id %d process end cost: %d.%d ms ret: %d\n", mfbidx, tmCost / 1000, tmCost % 1000, ret);
+                print_f(rs->plogs, "P15", rs->logs);
+
                 pinfo[0] = 'P';
                 pinfo[1] = ch;
 
@@ -89274,6 +89412,7 @@ static int p16(struct procRes_s *rs)
     mfour_rjob_cmd rjcmd;
     struct pollfd pllfd[2]={0};
     int *pipeMfCom=0, *pipeMfTx=0;
+    int tmCost=0;
     
     sprintf_f(rs->logs, "p16\n");
     print_f(rs->plogs, "P16", rs->logs);
@@ -89353,9 +89492,25 @@ static int p16(struct procRes_s *rs)
                 sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_IMAGE_IN \n");
                 print_f(rs->plogs, "P16", rs->logs);
                 //dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
+                clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
 
+                sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_IMAGE_IN)_IN__", mfbidx); 
+                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+                                
                 RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
 
+                sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_IMAGE_IN)_OUT__", mfbidx); 
+                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+
+                clock_gettime(CLOCK_REALTIME, rs->rtpTo[1]);
+                clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
+                msync(rs->tm2[0], sizeof(struct timespec), MS_SYNC);
+
+                tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
+                sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_IMAGE_IN) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                print_f(rs->plogs, "P16", rs->logs);    
+                            
                 pipeMfCom = rs->pbDecMfour[mfbidx]->aspPipeMfourCom;
                 pipeMfTx = rs->pbDecMfour[mfbidx]->aspPipeMfourTx;
 
@@ -89371,7 +89526,14 @@ static int p16(struct procRes_s *rs)
                         //print_f(rs->plogs, "P16", rs->logs);
 
                         mfcmd = chm;
-
+                        
+                        clock_gettime(CLOCK_REALTIME, rs->rtpTo[0]);
+                        msync(rs->rtpTo[0], sizeof(struct timespec), MS_SYNC);
+                        
+                        tmCost = time_diff(rs->rtpBk[1], rs->rtpTo[0], 1000);
+                        sprintf_f(rs->logs, "rjob round trip to (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                        print_f(rs->plogs, "P16", rs->logs);    
+                    
                         switch (mfcmd) {
                         case 'b':
                             ret = read(pllfd[0].fd, &chm, 1);
@@ -89411,10 +89573,21 @@ static int p16(struct procRes_s *rs)
                             print_f(rs->plogs, "P16", rs->logs);
 
                             //dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
-                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_SEND_AREA)_IN__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+                
                             RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_SEND_AREA)_OUT__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
                             
-                            clock_gettime(CLOCK_REALTIME, rs->tm[0]);
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
+                            tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
+                            sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_SEND_AREA) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P16", rs->logs);    
                             
                             break;
                         case 'e':
@@ -89426,6 +89599,14 @@ static int p16(struct procRes_s *rs)
                             print_f(rs->plogs, "P16", rs->logs);
                             break;
                         }
+
+                        clock_gettime(CLOCK_REALTIME, rs->rtpTo[1]);
+                        msync(rs->rtpTo[1], sizeof(struct timespec), MS_SYNC);
+                        
+                        tmCost = time_diff(rs->rtpTo[0], rs->rtpTo[1], 1000);
+                        sprintf_f(rs->logs, "rjob round trip to delay (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                        print_f(rs->plogs, "P16", rs->logs);    
+                        
                     }
                     else {
                         sprintf_f(rs->logs, "waiting command for tx to m4... \n");
@@ -89593,11 +89774,27 @@ static int p17(struct procRes_s *rs)
                     
                     //sprintf_f(rs->logs, "m4rx print the cmd recv in:\n");
                     //print_f(rs->plogs, "P17", rs->logs);
-                                        
+
+
+                    clock_gettime(CLOCK_REALTIME, rs->rtpBk[0]);
+                    msync(rs->rtpBk[0], sizeof(struct timespec), MS_SYNC);
+                    
+                    tmCost = time_diff(rs->rtpTo[1], rs->rtpBk[0], 1000);
+                    sprintf_f(rs->logs, "rjob round trip back (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                    print_f(rs->plogs, "P17", rs->logs);    
+
                     switch(outcmd.cmd) {
                         case BKCMD_IMAGE_IN_RSP:
-                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_IMAGE_IN_RSP) \n", outcmd.cmd);
+                            sprintf(rs->logs, "__M4_CMD_RECV_(%d)(BKCMD_IMAGE_IN_RSP)__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 26, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->rtpTo[1], rs->tm2[1], 1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_IMAGE_IN_RSP) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
                             print_f(rs->plogs, "P17", rs->logs);    
+                            
                             //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
 
                             mfourCnt += 1;
@@ -89616,10 +89813,13 @@ static int p17(struct procRes_s *rs)
                             
                             break;
                         case BKCMD_REQUIRE_AREA:           // M4 -> operator
-
-                            clock_gettime(CLOCK_REALTIME, rs->tm[1]);
-
-                            tmCost = time_diff(rs->tm[0], rs->tm[1], 1000);
+                            sprintf(rs->logs, "__M4_CMD_RECV_(%d)(BKCMD_REQUIRE_AREA)__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 26, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->rtpTo[1], rs->tm2[1], 1000);
                             sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_REQUIRE_AREA) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
                             print_f(rs->plogs, "P17", rs->logs);    
                             //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
@@ -89635,9 +89835,21 @@ static int p17(struct procRes_s *rs)
                             //sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_REQUIRE_AREA_RSP:\n");
                             //print_f(rs->plogs, "P17", rs->logs);
                             //dbgRjobCmd(&rspcmd, sizeof(mfour_rjob_cmd));
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_REQUIRE_AREA_RSP)_IN__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
                             
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
 
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_REQUIRE_AREA_RSP)_OUT__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
+                            msync(rs->tm2[0], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
+                            sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_REQUIRE_AREA_RSP) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P17", rs->logs);    
+                            
                             //sprintf_f(rs->logs, "current buff id: %d \n", mfbidx);
                             //print_f(rs->plogs, "P17", rs->logs);
                 
@@ -89804,8 +90016,16 @@ static int p17(struct procRes_s *rs)
                             
                             break;
                         case BKCMD_DONE_AREA:              // M4 -> operator
-                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_DONE_AREA) \n", outcmd.cmd);
-                            print_f(rs->plogs, "P17", rs->logs);    
+                            sprintf(rs->logs, "__M4_CMD_RECV_(%d)(BKCMD_DONE_AREA)__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 26, rs->logs);
+
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->rtpTo[1], rs->tm2[1], 1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_DONE_AREA) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P17", rs->logs);  
+                            
                             //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
 
                             memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
@@ -89815,8 +90035,21 @@ static int p17(struct procRes_s *rs)
                             rspcmd.dPtr = 0;
                             rspcmd.mPtr = 0;
 
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_DONE_AREA_RSP)_IN__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+
                             RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
 
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_DONE_AREA_RSP)_OUT__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
+                            msync(rs->tm2[0], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
+                            sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_DONE_AREA_RSP) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P17", rs->logs);    
+                            
                             sprintf_f(rs->logs, "area done current buff id: %d m4id: %d\n", mfbidx, m4id);
                             print_f(rs->plogs, "P17", rs->logs);
 
@@ -89928,7 +90161,10 @@ static int p17(struct procRes_s *rs)
                             print_f(rs->plogs, "P17", rs->logs);
                             
                             if (img_out->mfourAttb.iJobRtnCode == iJobImgOCR) {
-
+                            
+                                sprintf(rs->logs, "__OCR_START_(0x%.2x)__", img_out->mfourAttb.iJobIdx); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
+    
                                 memset(outchr, 0, 36*3);
                                 if (img_out->mfourAttb.iJobIdx == SRNBox1L) {
 
@@ -89994,6 +90230,10 @@ static int p17(struct procRes_s *rs)
                                     print_f(rs->plogs, "P17", rs->logs);
                                 }
                                 #endif
+
+                                sprintf(rs->logs, "__OCR_END_(LEN:%d)(%s)__", pusbmeta->OCR_strlen, m4startcmd); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
+
                             }                            
 
                             #if DUMP_MFOUR_BMP    
@@ -90097,8 +90337,16 @@ static int p17(struct procRes_s *rs)
                             //bkjob_send_cmd( chan->mqOperator, &cmd );
                             break;
                         case BKCMD_IMAGE_COMPLETE:         // M4 -> operator
-                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_IMAGE_COMPLETE) \n", outcmd.cmd);
-                            print_f(rs->plogs, "P17", rs->logs);    
+                            sprintf(rs->logs, "__M4_CMD_RECV_(%d)(BKCMD_IMAGE_COMPLETE)__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 26, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->rtpTo[1], rs->tm2[1], 1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_IMAGE_COMPLETE) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P17", rs->logs);  
+                            
                             //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
                             
 
@@ -90115,7 +90363,14 @@ static int p17(struct procRes_s *rs)
                             print_f(rs->plogs, "P17", rs->logs);    
                             break;
                     }
-                
+
+                    clock_gettime(CLOCK_REALTIME, rs->rtpBk[1]);
+                    msync(rs->rtpBk[1], sizeof(struct timespec), MS_SYNC);
+
+                    tmCost = time_diff(rs->rtpBk[0], rs->rtpBk[1], 1000);
+                    sprintf_f(rs->logs, "rjob round trip back delay (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                    print_f(rs->plogs, "P17", rs->logs); 
+                    
                     if (outcmd.cmd == BKCMD_IMAGE_COMPLETE) {
                         break;
                     }
@@ -90636,7 +90891,7 @@ int main(int argc, char *argv[])
         fclose(fssid);
     }
     
-    sprintf_f(pmrs->log, "LAST TIME ACCESS SSID: %s ", pwfc->wfsidLen>0?pwfc->wfssid:" ");
+    sprintf(pmrs->log, "LAST TIME ACCESS SSID: %s ", pwfc->wfsidLen>0?pwfc->wfssid:" ");
     dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
     //printSysinfo(&minfo);
 
@@ -91697,24 +91952,24 @@ int main(int argc, char *argv[])
     pmrs->usbdv = 0;
     #endif
 
-    sprintf_f(pmrs->log, "USB to PC %s", pmrs->usbdvname==0?"FAILED":pmrs->usbdvname);
+    sprintf(pmrs->log, "USB to PC %s", pmrs->usbdvname==0?"FAILED":pmrs->usbdvname);
     dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
 
     tusb = pmrs->usbmh[0];
     if (tusb->ushostid) {
-        sprintf_f(pmrs->log, "USB to ASIC (1)VIDPID: 0x%.4x 0x%.4x BUFFNUM:%d %s ", tusb->ushostpidvid[0], tusb->ushostpidvid[1], tusb->ushostbmax, tusb->ushostname);
+        sprintf(pmrs->log, "USB to ASIC (1)VIDPID: 0x%.4x 0x%.4x BUFFNUM:%d %s ", tusb->ushostpidvid[0], tusb->ushostpidvid[1], tusb->ushostbmax, tusb->ushostname);
         dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
     } else {
-        sprintf_f(pmrs->log, "USB to ASIC (1) FAILED");
+        sprintf(pmrs->log, "USB to ASIC (1) FAILED");
         dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
     }
 
     tusb = pmrs->usbmh[1];
     if (tusb->ushostid) {
-        sprintf_f(pmrs->log, "USB to ASIC (2)VIDPID: 0x%.4x 0x%.4x BUFFNUM:%d %s ", tusb->ushostpidvid[0], tusb->ushostpidvid[1], tusb->ushostbmax, tusb->ushostname);
+        sprintf(pmrs->log, "USB to ASIC (2)VIDPID: 0x%.4x 0x%.4x BUFFNUM:%d %s ", tusb->ushostpidvid[0], tusb->ushostpidvid[1], tusb->ushostbmax, tusb->ushostname);
         dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
     } else {
-        sprintf_f(pmrs->log, "USB to ASIC (2) FAILED");
+        sprintf(pmrs->log, "USB to ASIC (2) FAILED");
         dbgShowTimeStamp(pmrs->log, pmrs, NULL, 2, NULL);
     }
 
@@ -91727,6 +91982,15 @@ int main(int argc, char *argv[])
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[1]);
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[2]);
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[3]);
+
+    sprintf(syscmd, "cat /proc/sys/kernel/printk");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "echo \"1 4 1 7\" > /proc/sys/kernel/printk");
+    ret = doSystemCmd(syscmd);
+
+    sprintf(syscmd, "cat /proc/sys/kernel/printk");
+    ret = doSystemCmd(syscmd);
 
     sprintf(syscmd, "/home/root/fw_cortex_m4.sh start");
     ret = doSystemCmd(syscmd);
@@ -92328,6 +92592,15 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->flog_s = mrs->flog;
     rs->tm[0] = &mrs->time[0];
     rs->tm[1] = &mrs->time[1];
+
+    rs->tm2[0] = &mrs->time2[0];
+    rs->tm2[1] = &mrs->time2[1];
+
+    rs->rtpTo[0] = &mrs->roundtripgoto[0];
+    rs->rtpTo[1] = &mrs->roundtripgoto[1];
+
+    rs->rtpBk[0] = &mrs->roundtripback[0];
+    rs->rtpBk[1] = &mrs->roundtripback[1];
 
     rs->ppipedn = &mrs->pipedn[idx];
     rs->ppipeup = &mrs->pipeup[idx];
