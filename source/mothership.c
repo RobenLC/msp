@@ -58075,7 +58075,11 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     
                                     sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x- end of transmission \n", 
                                                                   ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
-                                    print_f(mrs->plog, "fs152", mrs->log);                            
+                                    print_f(mrs->plog, "fs152", mrs->log);       
+
+                                    //sprintf(mrs->log, "__END__TRANS__");
+                                    //dbgShowTimeStamp(mrs->log, mrs, NULL, 2, mrs->log);
+
                                 }
                                 else {
                                     pubffcd[ins]->ubindex |= 0x800;
@@ -60941,6 +60945,9 @@ static int p3(struct procRes_s *rs)
         //sprintf_f(rs->logs, "/\n");
         //print_f(rs->plogs, "P3", rs->logs);
 
+        //sprintf(rs->logs, "__P3_START__"); 
+        //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                
         ret = rs_ipc_get(rs, &ch, 1);
         if (ret > 0) {
             //sprintf_f(rs->logs, "recv ch: %c\n", ch);
@@ -60948,7 +60955,13 @@ static int p3(struct procRes_s *rs)
 #if LOG_DOT_PROG_EN
             printf("3%c", ch);
 #endif
+            //sprintf(rs->logs, "__P3_START_CLR_IN__"); 
+            //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
             aspMemClear(aspMemAsign, asptotMalloc, 3);
+
+            //sprintf(rs->logs, "__P3_START_CLR_OUT__"); 
+            //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
 
             //dbgShowTimeStamp("P3_BGN", 6);
             
@@ -61369,7 +61382,13 @@ static int p3(struct procRes_s *rs)
                 //sprintf_f(rs->logs, "cmode: %d\n", cmode);
                 //print_f(rs->plogs, "P3", rs->logs);
 
+                //sprintf(rs->logs, "__WAIT_CROP_CALCUL_START_1__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
                 ret = rs_ipc_get(rs, finfo, 2);
+
+                //sprintf(rs->logs, "__WAIT_CROP_CALCUL_START_2__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
                 
                 //sprintf_f(rs->logs, "get info: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
                 //print_f(rs->plogs, "P3", rs->logs);
@@ -61408,7 +61427,10 @@ static int p3(struct procRes_s *rs)
 
                                 org_len = 18*2;
                                 mass_len = mass_len * 4;
-                                
+
+                                sprintf(rs->logs, "__CROP_CALCUL_START__"); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                        
                                 result = aspMemalloc(sizeof(int)*8, 3);
                                 org = aspMemalloc(sizeof(int)*org_len, 3);
                                 mass = aspMemalloc(sizeof(int)*mass_len, 3);
@@ -61446,6 +61468,9 @@ static int p3(struct procRes_s *rs)
                                     doCalculate(result, org, org_len, mass, mass_len, rs, 3);
                                 }
                                 
+                                sprintf(rs->logs, "__CROP_CALCUL_END__"); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
                                 clock_gettime(CLOCK_REALTIME, &crpE);
                                 tmCost = time_diff(&crpS, &crpE, 1000);
 
@@ -61485,6 +61510,28 @@ static int p3(struct procRes_s *rs)
                                 lsb2Msb32(&pusbmeta->CROP_POS_F4, cord);
                                 
                                 addr = (char *) &pusbmeta->CROP_POS_F1;
+
+                                //sprintf(rs->logs, "__CROP_CALCUL_END_OUTLOOP__"); 
+                                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_MEM_FAST__"); 
+                                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                                //memset(uinfo, 0, 32);
+                                uinfo[0] = 'O';
+                                uinfo[1] = finfo[0];
+                                uinfo[2] = finfo[1];
+                                memcpy(&uinfo[3], addr, 16);
+
+                                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_IN_FAST__"); 
+                                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                                rs_ipc_put(rs, uinfo, 19);
+
+                                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_OUT_FAST__"); 
+                                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                
+                                continue; //break the loop quickly
                             }
                             else {
                                 sprintf_f(rs->logs, "no crop data, MPIONT_LEN: %d \n", pusbmeta->MPIONT_LEN);
@@ -61517,14 +61564,23 @@ static int p3(struct procRes_s *rs)
                     addr = aspMemalloc(16, 3);
                     memset(addr, 0, 16);
                 }
-                
-                memset(uinfo, 0, 32);
+
+                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_MEM__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                //memset(uinfo, 0, 32);
                 uinfo[0] = 'O';
                 uinfo[1] = finfo[0];
                 uinfo[2] = finfo[1];
                 memcpy(&uinfo[3], addr, 16);
-
+                
+                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_IN__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                
                 rs_ipc_put(rs, uinfo, 19);
+
+                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_OUT__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
                 
             }
             #if MFOUR_SIM_MODE
@@ -61533,7 +61589,13 @@ static int p3(struct procRes_s *rs)
                 //print_f(rs->plogs, "P3", rs->logs);
 
                 //ret = rs_ipc_get(rs, finfo, 2);
+                //sprintf(rs->logs, "__WAIT_CROP_CALCU_START_1__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                        
                 ret = rs_ipc_get(rs, &chc, 1);
+                
+                //sprintf(rs->logs, "__WAIT_CROP_CALCU_START_2__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
                 
                 if (chc == 0x80) {
                     mbfidx = 0;
@@ -61636,6 +61698,9 @@ static int p3(struct procRes_s *rs)
                         org_len = 18*2;
                         mass_len = mass_len * 4;
 
+                        sprintf(rs->logs, "__CROP_CALCU_START(%d)__", mbfidx); 
+                        tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                                
                         result = aspMemalloc(sizeof(int)*8, 3);
                         org = aspMemalloc(sizeof(int)*org_len, 3);
                         mass = aspMemalloc(sizeof(int)*mass_len, 3);
@@ -61665,6 +61730,9 @@ static int p3(struct procRes_s *rs)
                             doCalculate(result, org, org_len, mass, mass_len, rs, 3);
                         }
 
+                        sprintf(rs->logs, "__CROP_CALCU_END(%d)__", mbfidx); 
+                        tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                        
                         clock_gettime(CLOCK_REALTIME, &crpE);
                         tmCost = time_diff(&crpS, &crpE, 1000);
 
@@ -61736,7 +61804,13 @@ static int p3(struct procRes_s *rs)
 
             //dbgShowTimeStamp("P3_END", 6);
 
+            //sprintf(rs->logs, "__P3_FINISH_CLR_IN__"); 
+            //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
             aspMemClear(aspMemAsign, asptotMalloc, 3);
+
+            //sprintf(rs->logs, "__P3_FINISH_CLR_OUT__"); 
+            //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
 
         }
     }
@@ -74394,7 +74468,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
                     //print_f(rs->plogs, sp, rs->logs);
 
-                    sprintf(rs->logs, "__USB_DEV_ IMG_SIZE[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
+                    sprintf(rs->logs, "__USB_DEV_IMG_SIZE[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
                     thrimgsize = acusz;
                     dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
                     
@@ -85631,6 +85705,8 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //print_f(rs->plogs, "CLIP", rs->logs);    
     
     aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
+    msync(bmpbuff, rawlen, MS_SYNC);
+    
     bmpcolrtb = aspMemalloc(1080, midx);
     memcpy(bmpcolrtb, bmpbuff, 1078);
     //dbgBitmapHeader(bheader, sizeof(struct bitmapHeader_s)-2);
@@ -85641,8 +85717,6 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
         sprintf_f(rs->logs, "find save raw bmp [%s] succeed!!! \n", filepath);
         print_f(rs->plogs, "CLIP", rs->logs);
     }
-
-    msync(bmpbuff, rawlen, MS_SYNC);
     
     ret = fwrite((char*)bmpbuff, 1, rawlen, fdump);
     sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, rawlen);
@@ -85655,6 +85729,10 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     
     bhlen = 0x436;
     aspBMPdecodeItemGet(decpic, &dstbuff, &dstlen);
+
+    dstlen = pDeRect->mfourRectW * pDeRect->mfourRectH;
+    msync(dstbuff, dstlen, MS_SYNC);
+    
     bmprot = dstbuff;
 
     //sprintf_f(rs->logs, "raw size: %d, dst size: %d \n", rawlen, dstlen);
@@ -85693,7 +85771,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //print_f(rs->plogs, "CLIP", rs->logs);
     #endif
 
-    sprintf(rs->logs, "__ROTATE_START__"); 
+    sprintf(rs->logs, "__ROTATE_START__(%dx%d)", cropinfo[2], cropinfo[3]); 
     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
                 
     ret = rotateBMPMf(bmprot, bmpcolrtb, cropinfo, bmpbuff+1078, mreal, 0xa5, midx);
@@ -87644,6 +87722,10 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 print_f(rs->plogs, sp, rs->logs);
                                 break;
                                 }
+
+                                sprintf(rs->logs, "__MEMCOPY_START(%d)__", buffidx); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
+                                
                             }
                             #endif // #if GHP_EN_JPGH
         
@@ -88155,6 +88237,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 
                 if (che == 'E') break;
             }
+
+            sprintf(rs->logs, "__MEMCOPY_END(%d)__", buffidx); 
+            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
 
             #if MFOUR_SIM_MODE
             if (cswerr == 0) {
