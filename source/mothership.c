@@ -170,6 +170,12 @@ typedef struct
 #define MFOUR_SIM_MODE (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
+#if GHP_EN
+#define SMP_EN (1)
+#else
+#define SMP_EN (0)
+#endif
+
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
 #define RJOB_TOTAL_TX_BLOCK  (2)
 #define RJOB_RX_BLOCK_SIZE   (16*1024)
@@ -3473,6 +3479,8 @@ static int aspBMPdecodeItemMax(struct bitmapDecodeItem_s *pditm)
 static int aspBMPdecodeItemInit(struct bitmapDecodeItem_s *pditm)
 {
     if (!pditm) return -1;
+
+    asp_mem_barrier();
     
     pditm->aspDcWidth = 0;
     pditm->aspDcHeight = 0;
@@ -3481,6 +3489,9 @@ static int aspBMPdecodeItemInit(struct bitmapDecodeItem_s *pditm)
     pditm->aspDcData->mfourIdx = -1;
     memset(&pditm->aspDcData->mfourAttb, 0, sizeof(t_ImageParam));
 
+    asp_mem_barrier();
+    
+    msync(&pditm->aspDcData->mfourAttb, sizeof(t_ImageParam), MS_SYNC);
     msync(pditm, sizeof(struct bitmapDecodeItem_s), MS_SYNC);
     
     return 0;
@@ -3489,11 +3500,15 @@ static int aspBMPdecodeItemInit(struct bitmapDecodeItem_s *pditm)
 static int aspBMPdecodeItemSet(struct bitmapDecodeItem_s *pditm, int w, int h, int len)
 {
     if (!pditm) return -1;
+
+    asp_mem_barrier();
     
     pditm->aspDcWidth = w;
     pditm->aspDcHeight = h;
     pditm->aspDcLen = len;
 
+    asp_mem_barrier();
+    
     msync(pditm, sizeof(struct bitmapDecodeItem_s), MS_SYNC);
     
     return 0;
@@ -3507,10 +3522,14 @@ static int aspBMPdecodeItemRectGet(struct bitmapDecodeMfour_s *pdec, mfour_rect_
     if ((idx >= BMP_DECODE_PIC_SIZE) || (idx < 0)) return -4;
 
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
+
+    asp_mem_barrier();
     
     *rect = &pdec->aspDecRect[idx];
     *item = &pdec->aspDecMfPiRaw[idx]; 
 
+    asp_mem_barrier();
+    
     return 0;
 }
 
@@ -3520,12 +3539,16 @@ static int aspBMPdecodeItemGet(struct bitmapDecodeItem_s *pditm, char **data, in
     if (!data) return -2;
 
     msync(pditm->aspDcData, pditm->aspDcMax, MS_SYNC);
+
+    asp_mem_barrier();
     
     *data = pditm->aspDcData->mfourData;
 
     if (uselen) {
         *uselen = pditm->aspDcLen;
     }
+
+    asp_mem_barrier();
     
     return 0;
 }
@@ -3534,8 +3557,12 @@ static int aspBMPdecodeBuffPagerstSet(struct bitmapDecodeMfour_s *pdec, int pagr
 {
     if (!pdec) return -1;
 
+    asp_mem_barrier();
+    
     pdec->aspDecPagerst = pagrst;
 
+    asp_mem_barrier();
+    
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
         
     return 0;
@@ -3547,8 +3574,12 @@ static int aspBMPdecodeBuffPagerstGet(struct bitmapDecodeMfour_s *pdec, int *ppa
     if (!pparst) return -2;
 
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
+
+    asp_mem_barrier();
     
     *pparst = pdec->aspDecPagerst;
+
+    asp_mem_barrier();
     
     return 0;
 }
@@ -3557,8 +3588,12 @@ static int aspBMPdecodeBuffSetIdx(struct bitmapDecodeMfour_s *pdec, int imgidx)
 {
     if (!pdec) return -1;
 
+    asp_mem_barrier();
+    
     pdec->aspDecImgidx = imgidx;
 
+    asp_mem_barrier();
+    
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
         
     return 0;
@@ -3571,7 +3606,11 @@ static int aspBMPdecodeBuffGetIdx(struct bitmapDecodeMfour_s *pdec, int *pimgid)
 
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
     
+    asp_mem_barrier();    
+    
     *pimgid = pdec->aspDecImgidx;
+
+    asp_mem_barrier();
     
     return 0;
 }
@@ -3580,8 +3619,12 @@ static int aspBMPdecodeBuffStatusSet(struct bitmapDecodeMfour_s *pdec, int statu
 {
     if (!pdec) return -1;
 
+    asp_mem_barrier();
+    
     pdec->aspDecStatus = status;
 
+    asp_mem_barrier();
+    
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
         
     return 0;
@@ -3594,12 +3637,16 @@ static int aspBMPdecodeBuffTimeCostGet(struct bitmapDecodeMfour_s *pdec, int *ti
     if (!timecost) return -2;
 
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
+
+    asp_mem_barrier();
     
     clock_gettime(CLOCK_REALTIME, &pdec->aspDecPostime[1]);
 
     tmcost = time_diff(&pdec->aspDecPostime[0], &pdec->aspDecPostime[1], 1000);
     
     *timecost = tmcost;
+
+    asp_mem_barrier();
     
     return 0;
 }
@@ -3612,6 +3659,8 @@ static int aspBMPdecodeBuffStatusGet(struct bitmapDecodeMfour_s *pdec, int *psta
 
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
 
+    asp_mem_barrier();
+    
     stat = pdec->aspDecStatus;
     
     if (pdec->aspDecStatus == -1) {
@@ -3619,7 +3668,9 @@ static int aspBMPdecodeBuffStatusGet(struct bitmapDecodeMfour_s *pdec, int *psta
     }
     
     *pstat = stat;
-    
+
+    asp_mem_barrier();
+
     return 0;
 }
 
@@ -3634,10 +3685,14 @@ static int aspBMPdecodeBuffInit(struct bitmapDecodeMfour_s *pdec)
     int ix=0;
     if (!pdec) return -1;
 
+    asp_mem_barrier();
+    
     pdec->aspDecStatus = -1;
     pdec->aspDecPagerst = 0;
     pdec->aspDecImgidx = -1;
-    
+
+    asp_mem_barrier();
+        
     aspBMPdecodeItemInit(&pdec->aspDecJpeg);
     aspBMPdecodeItemInit(&pdec->aspDecMeta);
     aspBMPdecodeItemInit(&pdec->aspDecMetaex);
@@ -3645,18 +3700,22 @@ static int aspBMPdecodeBuffInit(struct bitmapDecodeMfour_s *pdec)
 
     //memset(pdec->aspDecRaw.aspDcData->mfourData, 0xff, pdec->aspDecRaw.aspDcMax);
     //msync(pdec->aspDecRaw.aspDcData->mfourData, pdec->aspDecRaw.aspDcMax, MS_SYNC);
-    
+
+    asp_mem_barrier();  
+      
     for (ix=0; ix< BMP_DECODE_PIC_SIZE; ix++) {
         aspBMPdecodeItemInit(&pdec->aspDecMfPiRaw[ix]);
         aspBMPdecodeItemInit(&pdec->aspDecMfPiJpg[ix]);
-
+  
         pdec->aspDecRect[ix].mfourRectX = 0;
         pdec->aspDecRect[ix].mfourRectY = 0;
         pdec->aspDecRect[ix].mfourRectW = 0;
         pdec->aspDecRect[ix].mfourRectH= 0;
         pdec->aspDecRectSt[ix] = 0;
     }    
-    
+
+    asp_mem_barrier();
+        
     msync(pdec, sizeof(struct bitmapDecodeMfour_s), MS_SYNC);
 
     //shmem_dump((char *)pdec, sizeof(struct bitmapDecodeMfour_s));
@@ -3672,6 +3731,8 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
     if (!pdcbuf) return -1;
 
     if (!bmax) return -2;
+
+    asp_mem_barrier();
     
     for (idx=0; idx < bmax; idx++) {
         pdec = &pdcbuf[idx];
@@ -3687,6 +3748,8 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
     }
 
     *bidx = find;        
+
+    asp_mem_barrier();
     
     if (find < 0) {
         return -3;
@@ -3697,6 +3760,8 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
 
 static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
 {
+#define SCAN_IMAGE_SIZE (5 * 1024 * 1024)
+
     int len=0, ix=0, totsz=0;
     struct bitmapDecodeMfour_s *pdec=0;
 
@@ -3706,7 +3771,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pipe2(pdec->aspPipeMfourTx, O_NONBLOCK);
     pipe2(pdec->aspPipeMfourCom, O_NONBLOCK);
     
-    len = (2592 * 1864 * 15) / 100;
+    len = (SCAN_IMAGE_SIZE * 20) / 100;
     totsz = len + sizeof(mfour_image_param_st) + 32;
     pdec->aspDecJpeg.aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
     if (pdec->aspDecJpeg.aspDcData) {
@@ -3748,7 +3813,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     }
     pdec->aspDecMetaex.aspDcMax = len;
     
-    len = 2592 * 1864;
+    len = SCAN_IMAGE_SIZE;
     totsz = len + sizeof(mfour_image_param_st) + 32;
     pdec->aspDecRaw.aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
     if (pdec->aspDecRaw.aspDcData) {
@@ -3763,7 +3828,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec->aspDecRaw.aspDcMax = len;
     
     //len = 1024 * 100;
-    len = 2592 * 1864;
+    len = SCAN_IMAGE_SIZE;
     totsz = len + sizeof(mfour_image_param_st) + 32;
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
         pdec->aspDecMfPiRaw[ix].aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
@@ -3780,7 +3845,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     }
 
     //len = 1024 * 20;
-    len = 2048 * 1024;
+    len = SCAN_IMAGE_SIZE;
     totsz = len + sizeof(mfour_image_param_st) + 32;
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
         pdec->aspDecMfPiJpg[ix].aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
@@ -56701,6 +56766,23 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                             //sprintf_f(mrs->log, "[GW] need buff from 15: %d 16: %d \n", latcmd[15], latcmd[16]);            
                             //print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            gerr = -1;
+                            while (gerr <= 0) {
+                                gerr = read(pllfd[ins].fd, &chm, 1);
+                            }
+
+                            if (chm == 0x80) {
+                                mfidx = 0;
+                            } else {
+                                mfidx = chm & 0x7f;
+                            }
+
+                            ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
+                            sprintf_f(mrs->log, "[GW] free buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            aspBMPdecodeBuffInit(&mrs->bmpDecMfour[mfidx]);
 
                             if ((latcmd[15]) && (latcmd[16])) {
                                 if (latcmd[15] < latcmd[16]) {
@@ -56719,12 +56801,13 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
 
                             if (inold) {
-                                latcmd[inold] = 0xff;
-                                write(infd[inold], &latcmd[inold], 1);
-                                sprintf_f(mrs->log, "[GW] free buff to in%d id:%d put chr: %c(0x%.2x) \n", inold, infd[inold], latcmd[inold], latcmd[inold]);            
+                                //latcmd[inold] = 0xff;
+                                chm = 0xff;
+                                write(infd[inold], &chm, 1);
+                                sprintf_f(mrs->log, "[GW] free buff to in%d id:%d put chr: %c(0x%.2x) \n", inold, infd[inold], chm, chm);            
                                 print_f(mrs->plog, "fs152", mrs->log);
 
-                                latcmd[inold] = 0;
+                                //latcmd[inold] = 0;
                             }
                         }
                         else if (pllcmd[ins] == 's') {
@@ -56886,8 +56969,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             //print_f(mrs->plog, "fs152", mrs->log);
                             
                             ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
-                            //sprintf_f(mrs->log, "[GW] decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
-                            //print_f(mrs->plog, "fs152", mrs->log);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
                             
                             /*
                             mstatus = (mstatus << 1) | 0x01;
@@ -57044,12 +57127,21 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 mindex = ((chindex[0] & 0x3f) << 5) | (chindex[1] & 0x1f);
                                 mindex = mindex & 0x3ff;
                                 
-                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d (0x%.2x:0x%.2x)\n", ins, mindex, chindex[0], chindex[1]);
+                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d (%d:%d)\n", ins, mindex, latcmd[15], latcmd[16]);
                                 print_f(mrs->plog, "fs152", mrs->log);
-
-                                ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
-                                sprintf_f(mrs->log, "[GW] get BMP decode buff id: %d ret: %d \n", bidx, ret);
-                                print_f(mrs->plog, "fs152", mrs->log);
+                                
+                                if (((latcmd[15] == 0) && (latcmd[16] == 0)) || (latcmd[ins])) {
+                                    ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
+                                    sprintf_f(mrs->log, "[GW] get BMP decode buff id: %d ret: %d \n", bidx, ret);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                                else {
+                                    sprintf_f(mrs->log, "[GW] %d get BMP decode buff busy (%d, %d) \n", ins, latcmd[15], latcmd[16]);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                    
+                                    ret = -1;
+                                }
+                                
                                 if (ret < 0) {
                                     bidx = -1;
 
@@ -57905,18 +57997,20 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     print_f(mrs->plog, "fs152", mrs->log);
                                 }
 
-                                //sprintf_f(mrs->log, "dump scaninfo size: %d tot: %d \n", mlen, len);
-                                //print_f(mrs->plog, "fs152", mrs->log);
+                                sprintf_f(mrs->log, "dump scaninfo size: %d tot: %d \n", mlen, len);
+                                print_f(mrs->plog, "fs152", mrs->log);
 
                                 addrd = addrs + (len - mlen);
 
+                                //shmem_dump(addrd, 16);
+                                
                                 pubffcd[ins]->ubinfoaddr = addrd;
                                 
                                 if (ins == 1) {
-                                    memset(ptscaninfo, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memset(ptscaninfo, 0xff, sizeof(struct aspMetaDataviaUSB_s));
                                     memcpy(ptscaninfo, addrd, mlen);    
                                 } else {
-                                    memset(ptscaninfoduo, 0, sizeof(struct aspMetaDataviaUSB_s));
+                                    memset(ptscaninfoduo, 0xff, sizeof(struct aspMetaDataviaUSB_s));
                                     memcpy(ptscaninfoduo, addrd, mlen);    
                                 }
 
@@ -57947,7 +58041,10 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
                                     else {
                                         sprintf_f(mrs->log, "get scaninfo failed!!! ret: %d!!\n", ret); 
-                                        print_f(mrs->plog, "fs152", mrs->log);                   
+                                        print_f(mrs->plog, "fs152", mrs->log);
+
+                                        shmem_dump((char *)ptscaninfo, sizeof(struct aspMetaDataviaUSB_s));
+                                        //shmem_dump((char *)pubffcd[ins]->ubinfoaddr, sizeof(struct aspMetaDataviaUSB_s));
                                     }
                                 }
                                 else {          
@@ -57963,6 +58060,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     else {
                                         sprintf_f(mrs->log, "duo get scaninfo failed!!! ret: %d!!\n", ret); 
                                         print_f(mrs->plog, "fs152", mrs->log);
+
+                                        shmem_dump((char *)ptscaninfoduo, sizeof(struct aspMetaDataviaUSB_s));
+                                        //shmem_dump((char *)pubffcd[ins]->ubinfoaddr, sizeof(struct aspMetaDataviaUSB_s));
                                     }
                                 }
                                 
@@ -71227,8 +71327,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
     struct pollfd ptfd[1];
     char ptrecv[32];
-    int ptret=0, recvsz=0, acusz=0, wrtsz=0, usbrun=0;
-    int usbdist=0, usbthrhld=0, usbuffed=0, usbavg=0, usbufmax=0;
+    int ptret=0, recvsz=0, acusz=0, wrtsz=0, usbrun=0, currun=0, mtlen=0;
+    int usbdist=0, usbthrhld=0, usbuffed=0, usbavg=0, usbufmax=0, buffstep=0;
     int upa=0, ufr=0, ure=0, ufo=0;
     uint32_t usbfolw=0;
     int cntRecv=0, usCost=0, bufsize=0;
@@ -71237,7 +71337,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     struct timespec tstart, tend;
     struct aspMetaData_s meta, *pmeta=0;
     int len=0, pieRet=0, ret=0, err=0;
-    char *ptm=0, *pcur=0, *addr=0;
+    char *ptm=0, *pcur=0, *addr=0, *pt=0;
     char chr=0, opc=0, dat=0, chq=0, ch=0;
     char cplls[8];
     char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
@@ -71283,7 +71383,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     struct shmem_s *usbTx=0, *gateTx=0;
     uint32_t *tbl0=0, *phytbl=0;
     char **ppt=0;
-    
+     
+
     uubs = &rs->pmch->ubs;
     dubsBuff = &rs->pmch->mshmem[32];
     cubsBuff = rs->pmch->mshmem;
@@ -71325,9 +71426,19 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         goto end;
     }
 
+    #if SMP_EN
+    virtbl = malloc(RING_BUFF_NUM_USB * sizeof(int));
+    if (!virtbl) {
+        sprintf_f(rs->logs, "allocate memory for virtual mem table failed!!! size: %d \n", RING_BUFF_NUM_USB * sizeof(int));
+        print_f(rs->plogs, sp, rs->logs);
+    }
+
+    memset(virtbl, 0, RING_BUFF_NUM_USB * sizeof(int));
+    #endif
+
     pkcbw = malloc(192);
     if (!pkcbw) {
-        sprintf_f(rs->logs, "allocate memory for kernel cbw failed!!! ");
+        sprintf_f(rs->logs, "allocate memory for kernel cbw failed!!! \n");
         print_f(rs->plogs, sp, rs->logs);
     }
 
@@ -71530,6 +71641,56 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     usbid = 0;
                     //goto end;
                 }
+
+                #if SMP_EN
+                memfd = open(MODULE_NAME , O_RDWR);
+                if(memfd < 0) {
+                    perror("/dev/mem open failed");
+                    //close(usbid);
+                    //goto end;
+                } else {
+                    sprintf_f(rs->logs,  "open [%s] succeed!!!! \n", MODULE_NAME);
+                    print_f(rs->plogs, sp, rs->logs);
+                }
+                
+                sprintf_f(rs->logs,  "[%s] table size: %d, addr0: (begin) \n", puhsinfo->ushostname, RING_BUFF_NUM_USB);
+                print_f(rs->plogs, sp, rs->logs);
+                for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+                    ut32 = puhsinfo->ushostblphy[ix];
+
+                    #if 0//LOG_PHY_MEM
+                    if ((ix % 4) == 0) {
+                        sprintf_f(rs->logs,  "%d: ", ix);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
+                    #endif
+
+                    ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, memfd);
+                    if (ret < 0) {
+                        sprintf_f(rs->logs,  "addr0 phy 2 vir error!!! ret: %d \n", ret);
+                        print_f(rs->plogs, sp, rs->logs);
+                        close(usbid);
+                        goto end;
+                    }
+
+                    //puhsinfo->ushostblvir[ix] = vt32;
+                    virtbl[ix] = vt32;
+                    memset((char *)vt32, 0xaa, USB_BUF_SIZE);
+
+                    #if 0//LOG_PHY_MEM
+                    if ((ix % 4) == 3) {
+                        sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+                        print_f(rs->plogs, sp, rs->logs);
+                    } else {
+                        sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x ", ut32, vt32);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }        
+                    #endif
+                }
+
+                close(memfd);
+                #endif
+                
                 #else
                 ret = USB_IOCT_LOOP_BUFF_PROBE(usbid, puhsinfo->ushostblphy);
                 if (ret < 0) {
@@ -71893,6 +72054,55 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             continue;
                         }
 
+                        #if SMP_EN
+                        memfd = open(MODULE_NAME , O_RDWR);
+                        if(memfd < 0) {
+                            perror("/dev/mem open failed");
+                            //close(usbid);
+                            //goto end;
+                        } else {
+                            sprintf_f(rs->logs,  "open [%s] succeed!!!! \n", MODULE_NAME);
+                            print_f(rs->plogs, sp, rs->logs);
+                        }
+                        
+                        sprintf_f(rs->logs,  "[%s] table size: %d, addr0: (recon) \n", puhsinfo->ushostname, RING_BUFF_NUM_USB);
+                        print_f(rs->plogs, sp, rs->logs);
+                        for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+                            ut32 = puhsinfo->ushostblphy[ix];
+                        
+                            #if 0//LOG_PHY_MEM
+                            if ((ix % 4) == 0) {
+                                sprintf_f(rs->logs,  "%d: ", ix);
+                                print_f(rs->plogs, sp, rs->logs);
+                            }
+                            #endif
+                        
+                            ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, memfd);
+                            if (ret < 0) {
+                                sprintf_f(rs->logs,  "addr0 phy 2 vir error!!! ret: %d \n", ret);
+                                print_f(rs->plogs, sp, rs->logs);
+                                close(usbid);
+                                goto end;
+                            }
+                        
+                            //puhsinfo->ushostblvir[ix] = vt32;
+                            virtbl[ix] = vt32;
+                            memset((char *)vt32, 0xaa, USB_BUF_SIZE);
+                        
+                            #if 0//LOG_PHY_MEM
+                            if ((ix % 4) == 3) {
+                                sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+                                print_f(rs->plogs, sp, rs->logs);
+                            } else {
+                                sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x ", ut32, vt32);
+                                print_f(rs->plogs, sp, rs->logs);
+                            }        
+                            #endif
+                        }
+                        
+                        close(memfd);
+                        #endif
+                
                         /*reconnect suceed here*/
                         sprintf_f(rs->logs,  "setup complete usbid: %d, get vid: 0x%x, pid: 0x%x [%s]\n", puhsinfo->ushostid, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1], puhsinfo->ushostname);
                         print_f(rs->plogs, sp, rs->logs);
@@ -72273,6 +72483,56 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         pllst = CSW_STATUS_USB_FAIL;
                         //continue;
                     }
+
+                    #if SMP_EN
+                    memfd = open(MODULE_NAME , O_RDWR);
+                    if(memfd < 0) {
+                        perror("/dev/mem open failed");
+                        //close(usbid);
+                        //goto end;
+                    } else {
+                        sprintf_f(rs->logs,  "open [%s] succeed!!!! \n", MODULE_NAME);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
+                    
+                    sprintf_f(rs->logs,  "[%s] table size: %d, addr0: (scan) \n", puhsinfo->ushostname, RING_BUFF_NUM_USB);
+                    print_f(rs->plogs, sp, rs->logs);
+                    for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+                        ut32 = puhsinfo->ushostblphy[ix];
+                    
+                        #if 0//LOG_PHY_MEM
+                        if ((ix % 4) == 0) {
+                            sprintf_f(rs->logs,  "%d: ", ix);
+                            print_f(rs->plogs, sp, rs->logs);
+                        }
+                        #endif
+                    
+                        ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, memfd);
+                        if (ret < 0) {
+                            sprintf_f(rs->logs,  "addr0 phy 2 vir error!!! ret: %d \n", ret);
+                            print_f(rs->plogs, sp, rs->logs);
+                            close(usbid);
+                            goto end;
+                        }
+                    
+                        //puhsinfo->ushostblvir[ix] = vt32;
+                        virtbl[ix] = vt32;
+                        memset((char *)vt32, 0xaa, USB_BUF_SIZE);
+                    
+                        #if 0//LOG_PHY_MEM
+                        if ((ix % 4) == 3) {
+                            sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+                            print_f(rs->plogs, sp, rs->logs);
+                        } else {
+                            sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x ", ut32, vt32);
+                            print_f(rs->plogs, sp, rs->logs);
+                        }        
+                        #endif
+                    }
+                    
+                    close(memfd);
+                    #endif
+                
                     #else
                     ret = USB_IOCT_LOOP_BUFF_PROBE(usbid, puhsinfo->ushostblphy);
                     if (ret < 0) {
@@ -72677,6 +72937,55 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
                     //continue;
                 }  
+
+                #if SMP_EN
+                memfd = open(MODULE_NAME , O_RDWR);
+                if(memfd < 0) {
+                    perror("/dev/mem open failed");
+                    //close(usbid);
+                    //goto end;
+                } else {
+                    sprintf_f(rs->logs,  "open [%s] succeed!!!! \n", MODULE_NAME);
+                    print_f(rs->plogs, sp, rs->logs);
+                }
+                
+                sprintf_f(rs->logs,  "[%s] table size: %d, addr0: (reset) \n", puhsinfo->ushostname, RING_BUFF_NUM_USB);
+                print_f(rs->plogs, sp, rs->logs);
+                for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+                    ut32 = puhsinfo->ushostblphy[ix];
+
+                    #if 0//LOG_PHY_MEM
+                    if ((ix % 4) == 0) {
+                        sprintf_f(rs->logs,  "%d: ", ix);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }
+                    #endif
+
+                    ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, memfd);
+                    if (ret < 0) {
+                        sprintf_f(rs->logs,  "addr0 phy 2 vir error!!! ret: %d \n", ret);
+                        print_f(rs->plogs, sp, rs->logs);
+                        close(usbid);
+                        goto end;
+                    }
+
+                    //puhsinfo->ushostblvir[ix] = vt32;
+                    virtbl[ix] = vt32;
+                    memset((char *)vt32, 0xaa, USB_BUF_SIZE);
+
+                    #if 0//LOG_PHY_MEM
+                    if ((ix % 4) == 3) {
+                        sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+                        print_f(rs->plogs, sp, rs->logs);
+                    } else {
+                        sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x ", ut32, vt32);
+                        print_f(rs->plogs, sp, rs->logs);
+                    }        
+                    #endif
+                }
+
+                close(memfd);
+                #endif
             }
             
             memset(ptrecv, 0x0, 13);
@@ -73431,6 +73740,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             //sprintf_f(rs->logs, "conti read stop ret: %d \n", ptret);
             //print_f(rs->plogs, sp, rs->logs);
             
+            buffstep = 0;
+            
             chq = 'B';
             pieRet = write(pPrx[1], &chq, 1);
         }
@@ -73464,16 +73775,23 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             while(1) {
                 usbrun = -1;
                 
-                #if 0 /* test drop line */
-                usleep(5);
+                #if 1 /* test drop line */
+                usleep(100000);
                 #endif
                 
                 #if USB_CALLBACK_LOOP 
+
+                
                 recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
                 //smp_mb();
+
+                
                 #else
                 recvsz = usb_read(addr, usbid, len);
                 #endif
+
+                //sprintf_f(rs->logs, "usb read 0x%.8x : %d - 0x07 \n", recvsz, usbrun);
+                //print_f(rs->plogs, sp, rs->logs);
                 
                 if (recvsz > len) {
                     //sprintf_f(rs->logs, "last trunk size: %d 0x%x\n", recvsz, recvsz);
@@ -73565,10 +73883,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
 
-                        if (dlog) {
-                            sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m1\n", recvsz, usbrun);
-                            print_f(rs->plogs, sp, rs->logs);
-                        }
+                        #if 1//DBG_USB_HS
+                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m1\n", recvsz, usbrun);
+                        print_f(rs->plogs, sp, rs->logs);
+                        #endif
                     }
                 }
                 else {
@@ -73577,7 +73895,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         recvsz = len;
 
 
-                        #if DBG_USB_HS
+                        #if 1//DBG_USB_HS
                         sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m2\n", recvsz, usbrun);
                         print_f(rs->plogs, sp, rs->logs);
                         #endif
@@ -73590,7 +73908,24 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     memcpy(pcur, addr, recvsz);
                     #endif
 
+                    #if SMP_EN
+                    ix = buffstep % RING_BUFF_NUM_USB;
+                    ptm = (char *)virtbl[ix];
+
+                    msync(ptm, USB_BUF_SIZE, MS_SYNC);
+                    asp_mem_barrier();
                     
+                    memcpy(addr, ptm, USB_BUF_SIZE);
+
+                    asp_mem_barrier();
+                    msync(addr, USB_BUF_SIZE, MS_SYNC);
+
+                    sprintf_f(rs->logs, "memcpy out %d - 0x07\n", ix);
+                    print_f(rs->plogs, sp, rs->logs);
+
+                    buffstep += 1;
+                    #endif
+
                     ring_buf_prod_u(pTx, recvsz);      
                     usbfolw = ring_buf_prod_tag(pTx, usbrun);
 
@@ -73701,11 +74036,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     #endif // #if USB_AUTO_PAUSE
                     
                     #if DBG_USB_FLW
-                    if (dlog) {
-                        usbdist = usbrun - usbfolw;
-                        sprintf_f(rs->logs, "[%d] usbfolw: %d, usbrun: %d, usbdist: %d\n", recvsz, usbfolw, usbrun, usbdist);
-                        print_f(rs->plogs, sp, rs->logs);
-                    }
+                    usbdist = usbrun - usbfolw;
+                    sprintf_f(rs->logs, "show index [%d] usbfolw: %d, usbrun: %d, usbdist: %d\n", recvsz, usbfolw, usbrun, usbdist);
+                    print_f(rs->plogs, sp, rs->logs);
                     #endif
                 }
 
@@ -74081,8 +74414,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                 usbrun = -1;
                 
-                #if 0 /* test drop line */
-                usleep(10000);
+                #if 1 /* test drop line */
+                usleep(100000);
                 #endif
                 
                 #if USB_CALLBACK_LOOP 
@@ -74091,7 +74424,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 recvsz = usb_read(addr, usbid, len);
                 //recvsz = len;
                 #endif
-                
+
+                //sprintf_f(rs->logs, "usb read 0x%.8x : %d - 0x02\n", recvsz, usbrun);
+                //print_f(rs->plogs, sp, rs->logs);
                 
                 #if 0                
                 if (tcnt) {
@@ -74151,7 +74486,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
 
-                        #if 1//DBG_USB_HS
+                        #if DBG_USB_HS
                         sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 2\n", recvsz, usbrun);
                         print_f(rs->plogs, sp, rs->logs);
                         #endif
@@ -74164,19 +74499,55 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     memcpy(pcur, addr, recvsz);
                     #endif
                     
+                    if (usbrun > 0) {
+                        puhsinfo->ushostbtrktot = usbrun;
+                        currun = usbrun;
+                    } else {
+                        currun += 1;
+                    }
+                    
+                    #if SMP_EN
+                    ix = buffstep % RING_BUFF_NUM_USB;
+                    ptm = (char *)virtbl[ix];
+
+                    mtlen = (recvsz % 512);
+                    mtlen = recvsz - mtlen;
+
+                    msync(ptm, USB_BUF_SIZE, MS_SYNC);
+                    asp_mem_barrier();
+                    
+                    memcpy(addr, ptm, USB_BUF_SIZE);
+
+                    asp_mem_barrier();
+                    msync(addr, USB_BUF_SIZE, MS_SYNC);
+                    
+                    sprintf_f(rs->logs, "memcpy out %d 0x02\n", ix);
+                    print_f(rs->plogs, sp, rs->logs);
+                    
+                    if (mtlen < recvsz) {
+                        pt = ptm + mtlen;
+                        
+                        if ((pt[0] != 'A') || (pt[1] != 'S') || (pt[2] != 'P') || (pt[3] != 'C')) {
+                            sprintf_f(rs->logs, "memcpy dump for error meta last: %d metaoffset: %d \n", recvsz, mtlen);
+                            print_f(rs->plogs, sp, rs->logs);
+                            
+                            shmem_dump(pt, recvsz-mtlen);                             
+                        }
+                    }
+
+                    buffstep += 1;
+                    #endif
+
                     ring_buf_prod_u(pTx, recvsz);
                     usbfolw = ring_buf_prod_tag(pTx, usbrun);
 
-                    if (usbrun > 0) {
-                        puhsinfo->ushostbtrktot = usbrun;
-                    }
                     puhsinfo->ushostbtrkcms = usbfolw;
                     puhsinfo->ushostbtrkbuffed = puhsinfo->ushostbtrktot - usbfolw;
                     usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
                     
                     #if DBG_USB_FLW
                     usbdist = usbrun - usbfolw;
-                    sprintf_f(rs->logs, "[%d] usbfolw: %d, usbrun: %d, usbdist: %d -3\n", recvsz, usbfolw, usbrun, usbdist);
+                    sprintf_f(rs->logs, "show index [%d-%d] usbfolw: %d, usbrun: %d, usbdist: %d -3\n", recvsz, mtlen, usbfolw, usbrun, usbdist);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                 }
@@ -74410,7 +74781,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     #if USB_RECVLEN_ZERO_HANDLE
                     
                     if (usbrun == 0) {
-                    
+
+                        buffstep += 1;
+                        
                         ring_buf_prod_u(pTx, recvsz);      
                         usbfolw = ring_buf_prod_tag(pTx, usbrun);
 
@@ -74863,6 +75236,55 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             
                             //continue;
                         }
+
+                        #if SMP_EN
+                        memfd = open(MODULE_NAME , O_RDWR);
+                        if(memfd < 0) {
+                            perror("/dev/mem open failed");
+                            //close(usbid);
+                            //goto end;
+                        } else {
+                            sprintf_f(rs->logs,  "open [%s] succeed!!!! \n", MODULE_NAME);
+                            print_f(rs->plogs, sp, rs->logs);
+                        }
+                        
+                        sprintf_f(rs->logs,  "[%s] table size: %d, addr0: (poll) \n", puhsinfo->ushostname, RING_BUFF_NUM_USB);
+                        print_f(rs->plogs, sp, rs->logs);
+                        for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+                            ut32 = puhsinfo->ushostblphy[ix];
+                        
+                            #if 0//LOG_PHY_MEM
+                            if ((ix % 4) == 0) {
+                                sprintf_f(rs->logs,  "%d: ", ix);
+                                print_f(rs->plogs, sp, rs->logs);
+                            }
+                            #endif
+                        
+                            ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, memfd);
+                            if (ret < 0) {
+                                sprintf_f(rs->logs,  "addr0 phy 2 vir error!!! ret: %d \n", ret);
+                                print_f(rs->plogs, sp, rs->logs);
+                                close(usbid);
+                                goto end;
+                            }
+                        
+                            //puhsinfo->ushostblvir[ix] = vt32;
+                            virtbl[ix] = vt32;
+                            memset((char *)vt32, 0xaa, USB_BUF_SIZE);
+                        
+                            #if 0//LOG_PHY_MEM
+                            if ((ix % 4) == 3) {
+                                sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x \n", ut32, vt32);
+                                print_f(rs->plogs, sp, rs->logs);
+                            } else {
+                                sprintf_f(rs->logs,  "p:0x%.8x v:0x%.8x ", ut32, vt32);
+                                print_f(rs->plogs, sp, rs->logs);
+                            }        
+                            #endif
+                        }
+
+                        close(memfd);
+                        #endif
                     }
 
                     if (!pllst) {
@@ -79500,12 +79922,22 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     if ((mbufidx >= 0) && (mbufidx < 4) && (pmbf)) {
                         pagerst = 0;
                         
-                        aspBMPdecodeBuffInit(pmbf);
-                    
+                        //aspBMPdecodeBuffInit(pmbf);
                         //sprintf_f(rs->logs, "[DV] free the buff index: %d \n", mbufidx);
                         //print_f(rs->plogs, "P11", rs->logs);
 
-                        rs_ipc_put(rsd, "b", 1);
+                        aspBMPdecodeBuffStatusSet(pmbf, -2);
+
+                        if (mbufidx == 0) {
+                            ch = 0x80;
+                        } else {
+                            ch = mbufidx & 0x7f;
+                        }
+                                
+                        msgret[0] = 'b';
+                        msgret[1] = ch;
+
+                        rs_ipc_put(rsd, msgret, 2);
                     } else {
                         sprintf_f(rs->logs, "[DV] Error!!! can't free the buff index: %d pmbf: 0x%.8x \n", mbufidx, (uint32_t)pmbf);
                         print_f(rs->plogs, "P11", rs->logs);
@@ -86787,9 +87219,12 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
     }
 
+    rs->pbheader = malloc(sizeof(struct bitmapHeader_s));
+    
     pabuff = &rs->psFat->parBuf;
     bheader = rs->pbheader;
-
+    memset(bheader, 0, sizeof(struct bitmapHeader_s));
+    
     pct = rs->pcfgTable;
     ptmetausb = rs->pmetausb;
     
@@ -88572,8 +89007,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[buffidx], &imgdex);
             ret |= aspBMPdecodeBuffStatusGet(rs->pbDecMfour[buffidx], &mbstat);
             ret |= aspBMPdecodeBuffPagerstGet(rs->pbDecMfour[buffidx], &val);
-            //sprintf_f(rs->logs, "[BMP] double check bmp buff idx %d, image index: %d, status: 0x%x pagerst: %d ret: %d \n", buffidx, imgdex, mbstat, val, ret);
-            //print_f(rs->plogs, sp, rs->logs);
+            sprintf_f(rs->logs, "[BMP] double check bmp buff idx %d, image index: %d, status: 0x%x pagerst: %d ret: %d \n", buffidx, imgdex, mbstat, val, ret);
+            print_f(rs->plogs, sp, rs->logs);
                 
             rs_ipc_put(rs, mfourinfo, 2);
 
@@ -90260,7 +90695,7 @@ static int p17(struct procRes_s *rs)
                                     clock_gettime(CLOCK_REALTIME, &mfoE);
                                     tmCost = time_diff(&mfoS, &mfoE, 1000);
 
-                                    shmem_dump(outchr[1], 32);
+                                    //shmem_dump(outchr[1], 32);
 
                                     pusbmeta->OCR_strlen = strlen(outchr[1]);
                                     if (pusbmeta->OCR_strlen < 16) {
@@ -90282,7 +90717,7 @@ static int p17(struct procRes_s *rs)
                                     clock_gettime(CLOCK_REALTIME, &mfoE);
                                     tmCost = time_diff(&mfoS, &mfoE, 1000);
 
-                                    shmem_dump(outchr[2], 32);
+                                    //shmem_dump(outchr[2], 32);
                                     
                                     pusbmeta->OCR_strlen = strlen(outchr[2]);
                                     if (pusbmeta->OCR_strlen < 16) {
@@ -91571,8 +92006,12 @@ int main(int argc, char *argv[])
                 print_f(pmrs->plog, "USB", pmrs->log);
             }
             #endif
-        
+
+            #if SMP_EN
+            vt32 = (uint32_t)aspSalloc(USB_BUF_SIZE);
+            #else
             ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
+            #endif
             if (ret < 0) {
                 sprintf_f(pmrs->log, "addr0 phy 2 vir error!!! ret: %d \n", ret);
                 print_f(pmrs->plog, "USB", pmrs->log);
@@ -91605,8 +92044,12 @@ int main(int argc, char *argv[])
             #endif
         
             if (chvir[0] != (ix & 0xff)) {
-                printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
+                printf("[DVF] 0e: %d-0x%.2x not match ", ix, chvir[0]);            
             }   
+
+            if (((ix+1) % 4) == 0) {
+                printf("\n\r");
+            }
         }
         
         pmrs->usbmh[0] = usbh[0];
@@ -91694,8 +92137,12 @@ int main(int argc, char *argv[])
                 print_f(pmrs->plog, "USB", pmrs->log);
             }
             #endif
-        
+
+            #if SMP_EN
+            vt32 = (uint32_t)aspSalloc(USB_BUF_SIZE);
+            #else
             ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
+            #endif
             if (ret < 0) {
                 sprintf_f(pmrs->log, "addr0 phy 2 vir error!!! ret: %d \n", ret);
                 print_f(pmrs->plog, "USB", pmrs->log);
@@ -91727,8 +92174,13 @@ int main(int argc, char *argv[])
             #endif
         
             if (chvir[0] != (ix & 0xff)) {
-                printf("[DVF] 0e: %d-0x%.2x ", ix, chvir[0]);            
+                printf("[DVF] 0e: %d-0x%.2x not match ", ix, chvir[0]);            
             }   
+
+            if (((ix+1) % 4) == 0) {
+                printf("\n\r");
+            }
+
         }
         
         pmrs->usbmh[1] = usbh[1];
@@ -92071,7 +92523,7 @@ int main(int argc, char *argv[])
     sprintf(syscmd, "cat /proc/sys/kernel/printk");
     ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "echo \"1 4 1 7\" > /proc/sys/kernel/printk");
+    sprintf(syscmd, "echo \"1 1 1 1\" > /proc/sys/kernel/printk");
     ret = doSystemCmd(syscmd);
 
     sprintf(syscmd, "cat /proc/sys/kernel/printk");
