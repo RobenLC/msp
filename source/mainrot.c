@@ -101,6 +101,190 @@ extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
 extern int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb);
 extern uint32_t msb2lsb32(struct intMbs32_s *msb);
 
+static int jpeg2rgbWHm(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp, int offsetWin, int widthWin, int offsetYWin, int heightWin)
+{
+#define MAX_LINE_NUM 1536
+    struct jpeg_decompress_struct cinfo;
+    struct jpeg_error_mgr err;
+ 
+    JSAMPARRAY samplebuffer;
+    unsigned char  *bufferarry[MAX_LINE_NUM];
+    JDIMENSION offsetx, cropW, skipf, skipb;
+    int row_stride=0, row_stride_org=0;
+    unsigned char *tmpbuff = NULL;
+    int rgb_size, clrsp=0, ix=0, lnum=0;;
+
+    //printf("[JPG] jpeg2rgb enter \n"); 
+    
+    if (!pjpg) {
+        printf("[JPG] jpg buffer is null \n");
+        return -1;
+    }
+    
+    if (!prgb)
+    {
+        printf("[JPG] output buff is null \n");
+        return -2;
+    }
+    
+    cinfo.err = jpeg_std_error(&err);
+    
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+    
+    jpeg_create_decompress(&cinfo);
+    //printf("[JPG] jpeg_create_decompress. \n"); 
+
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+
+    jpeg_mem_src(&cinfo, pjpg, jpgsz);
+    //printf("[JPG] jpeg_mem_src size: %d \n", jpgsz); 
+    
+    //shmem_dump(pjpg, 512);
+     
+    jpeg_read_header(&cinfo, TRUE);
+    //printf("[JPG] jpeg_read_header. bpp: %d output_components: %d \n", bpp, cinfo.output_components); 
+    cinfo.output_components = bpp / 8;
+    
+    clrsp = (bpp==8) ? JCS_GRAYSCALE:JCS_RGB;
+    
+    cinfo.out_color_space = clrsp;//JCS_GRAYSCALE;//JCS_RGB;//JCS_GRAYSCALE; //JCS_YCbCr;
+    
+    #if 1 /* fast decoding */
+    cinfo.do_fancy_upsampling=TRUE;
+    cinfo.dct_method=JDCT_FASTEST;
+    #endif
+
+    jpeg_start_decompress(&cinfo);
+    //printf("[JPG] jpeg_start_decompress. \n"); 
+
+    row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;
+    row_stride_org = row_stride;
+    *getW = cinfo.output_width;
+    *getH = cinfo.output_height;
+
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d \n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    #if 1
+    offsetx = offsetWin;
+    cropW = widthWin;
+    //printf("[JPG] jpeg_crop_scanline. %d, %d S\n", offsetx, cropW); 
+    jpeg_crop_scanline(&cinfo, &offsetx, &cropW);
+    //printf("[JPG] jpeg_crop_scanline. %d, %d E\n", offsetx, cropW); 
+    #endif
+    
+    //row_stride = cinfo.output_width * cinfo.output_components;
+    row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;
+
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+
+    lnum = cinfo.output_height;
+    if (lnum > MAX_LINE_NUM) {
+        return -3;
+    }
+
+    tmpbuff = prgb + ((offsetx * bpp) / 8);
+    for (ix=0; ix < lnum; ix++) {
+        bufferarry[ix] = tmpbuff;
+        msync(tmpbuff, row_stride_org, MS_SYNC);
+        
+        tmpbuff += row_stride_org;
+    }
+
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    //*getW = cinfo.output_width;
+    //*getH = cinfo.output_height;
+    
+    rgb_size = row_stride * cinfo.output_height;
+    if (rgbsz < rgb_size) {
+        printf("[JPG] width: %d height: %d row_stride: %d \n", cinfo.output_width, cinfo.output_height, row_stride); 
+        printf("[JPG] output buff size %d is wrong should be %d \n", rgbsz, rgb_size);
+        return -4;
+    }
+    
+    //printf("[JPG] output buff size: %d, bmp size: %d \n", rgbsz, rgb_size);
+    
+    samplebuffer = (*cinfo.mem->alloc_sarray)((j_common_ptr) &cinfo, JPOOL_IMAGE, row_stride, 1);
+    if (!samplebuffer) {
+        printf("[JPG] failed to allocate memory size: %d x %d = %d\n", row_stride, cinfo.output_height, row_stride * 1);
+    }
+    
+
+    #if 0
+    printf("[JPG] debug: rgb_size: %d, raw size: %d w: %d h: %d row_stride: %d \n", rgb_size,
+                cinfo.image_width*cinfo.image_height*cinfo.output_components,
+                cinfo.image_width, 
+                cinfo.image_height,
+                row_stride);
+    #endif
+
+    #if 0
+    ix=0;
+    //printf("[JPG] scan begin line: %d output: %d\n", cinfo.output_scanline, cinfo.output_height);
+    while (cinfo.output_scanline < cinfo.output_height) {
+        skipf = cinfo.output_scanline;
+        skipb = cinfo.output_height - cinfo.output_scanline;
+        jpeg_read_scanlines(&cinfo, &samplebuffer[skipf], skipb);
+
+        ix++;
+        //printf("[JPG] scan begin line: %d output: %d - %d \n", cinfo.output_scanline, cinfo.output_height, ix);
+    }
+
+    tmpbuff = prgb + ((offsetx * bpp) / 8);
+    for (ix=0; ix < cinfo.output_height; ix++) {
+        memcpy(tmpbuff, samplebuffer[ix], row_stride);
+        tmpbuff += row_stride_org;
+    }
+    #elif 0
+    //skipf = cinfo.output_height;
+    //jpeg_skip_scanlines(&cinfo, skipf);
+    //tmpbuff = prgb;
+    ix = 0;
+    while (cinfo.output_scanline < cinfo.output_height)
+    {
+        jpeg_read_scanlines(&cinfo, &bufferarry[ix], 1);
+        //jpeg_skip_scanlines(&cinfo, 1);
+        //memcpy(tmpbuff, samplebuffer[0], row_stride);
+        //tmpbuff += row_stride_org;
+        ix++;
+    }
+
+    //printf("[JPG] jpeg_read, cnt: %d line: %d output: %d \n", ix, cinfo.output_scanline, cinfo.output_height); 
+    
+    #else
+    skipf = offsetYWin;
+    skipb = cinfo.output_height - offsetYWin - heightWin;
+    
+    jpeg_skip_scanlines(&cinfo, skipf);
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines - 1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+                
+    tmpbuff = prgb + ((offsetx * bpp) / 8);
+    tmpbuff += row_stride_org * skipf;
+    while (cinfo.output_scanline < (cinfo.output_height - skipb))
+    {
+        jpeg_read_scanlines(&cinfo, samplebuffer, 1);
+        memcpy(tmpbuff, samplebuffer[0], row_stride);
+        tmpbuff += row_stride_org;
+    }
+
+    jpeg_skip_scanlines(&cinfo, skipb);
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines - 2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    #endif
+    
+    jpeg_finish_decompress(&cinfo);
+
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines FINISH\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    
+    jpeg_destroy_decompress(&cinfo);
+    
+    return 0;
+}
 
 static int jpeg2rgbm(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp)
 {
@@ -406,6 +590,35 @@ static int doRot2BMP(char *rotraw, char *rothead, int *cropinfo, char *bmpraw, i
     return 0;
 }
 
+static int save2BMP(char *head, int ntd, int w, int h, int size, int idx)
+{
+    int ret=0, err=0, len=0;
+    char ptfileInfo[] = "/home/root/rotate/full_%d_%d_%d_%.2d";
+    char filetail[] = "_%.3d.bmp";
+    char ptfileSave[256]={0};
+    char dumpath[256]={0};
+    FILE *fdump=0;
+
+    sprintf(ptfileSave, ptfileInfo, ntd, w, h, idx);
+    strcat(ptfileSave, filetail);
+    
+    fdump = find_save(dumpath, ptfileSave);
+    if (fdump) {
+        printf("find save bmp [%s] succeed!!! \n", dumpath);
+    }
+
+    ret = fwrite((char*)head, 1, size, fdump);
+    printf("write [%s] size: %d / %d !!! \n", dumpath, ret, size);
+
+    shmem_dump(head, 64);
+
+    fflush(fdump);
+    fclose(fdump);
+    sync();
+    
+    return err;
+}
+
 static int saveRot2BMP(char *raw, char *head, int ntd, int *dat, int idx)
 {
     int ret=0, err=0, len=0;
@@ -465,7 +678,7 @@ static int saveRot2BMP(char *raw, char *head, int ntd, int *dat, int idx)
     return err;
 }
 
-static int get_image_in_jpg(char **retjpg, int *retw, int *reth, int *retsize, int *pmreal, FILE *f)
+static int get_image_in_jpg(char **retjpg, int *retw, int *reth, int *retsize, int *pmreal, FILE *f, char **metapt)
 {
     int image_size=0, mul=0, tail=0, shf=0, ix=0, jpglen=0, exlen=0, yllen=0, val=0, mtlen=0;
     unsigned char *pt=0, *pmeta=0, *pexmt=0, *jpgbuf=0;
@@ -553,9 +766,11 @@ static int get_image_in_jpg(char **retjpg, int *retw, int *reth, int *retsize, i
     
     mtlen = pexmt - pmeta;
     exlen = size - jpglen - mtlen;
+
+    *metapt = pmeta;
     
     pusbmeta = (struct aspMetaDataviaUSB_s *)pmeta;
-    dbgMetaUsb(pusbmeta);
+    //dbgMetaUsb(pusbmeta);
     
     utmp = msb2lsb32(&pusbmeta->CROP_POS_F1);
     crod = utmp & 0xffff;
@@ -761,19 +976,21 @@ static void* aspSallocm(uint32_t slen)
     return p;
 }
 
-#define DUMP_ROT_BMP (1)
+#define DUMP_FULL_BMP (1)
+#define DUMP_ROT_BMP (0)
 int main(int argc, char *argv[]) 
 {
     char filepath[256];
     char bnotefile[128]="/home/root/banknote/ASP_%d_%.2d_%.6d_org.bmp";
     char bnotejpg[128]="/home/root/banknote/full_H%.3d.jpg";
     int data[3][5]={{100, 83, 332, 200, 50},{500, 141, 334, 200, 50},{1000, 177, 330, 200, 50}};
-    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0, ix=0;
+    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0, ix=0, dec=0;
     FILE *f=0;
     int cropinfo[8]={0};
-    char *rotraw=0, *rothead=0;
+    char *rotraw=0, *rothead=0, *jpgmeta=0;
+    struct aspMetaDataviaUSB_s *ptmetausb=0;
 
-    printf("input argc: %d config: dump(%d) jpg\n", argc, DUMP_ROT_BMP);
+    printf("input argc: %d config: dump rot(%d) dump full(%d) jpg\n", argc, DUMP_ROT_BMP, DUMP_FULL_BMP);
 
     maintotSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     memset(maintotSalloc, 0, sizeof(int));
@@ -790,10 +1007,11 @@ int main(int argc, char *argv[])
         goto end;
     }
 
-    if (argc > 2) {
+    if (argc > 3) {
         ntd = atoi(argv[1]);
         cnt = atoi(argv[2]);
-
+        dec = atoi(argv[3]);
+        
         for(nt=0; nt < 3; nt++) {
             if (data[nt][0] == ntd) break;
         }
@@ -824,13 +1042,13 @@ int main(int argc, char *argv[])
             memset(rotraw, 0xff, len);
             
             char *buffjpg=0, *buffraw=0, *buffhead=0, *pclortable=0;
-            int jpgw=0, jpgh=0, jret=0, rawsz=0, jpgsz=0, decw=0, dech=0;
-            int treal[8]={0}, tmCost=0;
+            int jpgw=0, jpgh=0, jret=0, rawsz=0, jpgsz=0, decw=0, dech=0, filesz=0;
+            int treal[8]={0}, tmCost=0, avgCost=0;
             struct bitmapHeader_s *ph=0;
             struct timespec jpgS, jpgE;         
             int pid=0;
             
-            jret = get_image_in_jpg(&buffjpg, &jpgw, &jpgh, &jpgsz, treal, f);
+            jret = get_image_in_jpg(&buffjpg, &jpgw, &jpgh, &jpgsz, treal, f, &jpgmeta);
             if (jret) {
                 if (buffjpg) free(buffjpg);
                 fclose(f);
@@ -842,9 +1060,28 @@ int main(int argc, char *argv[])
             fclose(f);
             f = 0;
             
-            printf("get jpg file w:%d h:%d jpgsz: %d\n", jpgw, jpgh, jpgsz);
+            printf("get jpg file w:%d h:%d jpgsz: %d, meta address: [0x%.8x] \n", jpgw, jpgh, jpgsz, (uint32_t)jpgmeta);
+            ptmetausb = (struct aspMetaDataviaUSB_s *)jpgmeta;
+            if (!ptmetausb) {
+                err = -6;
+                free(buffjpg);
+                goto end;
+            }
+
+            //dbgMetaUsb(ptmetausb);
+            
+            printf("meta usb magic: %s \n", ptmetausb->ASP_MAGIC_ASPC);
+            jret = strncmp(ptmetausb->ASP_MAGIC_ASPC, "ASPC", 4);
+            if (jret) {
+                printf("string compare ret: %d \n", jret);
+                err = -7;
+                free(buffjpg);
+                goto end;
+            }
+            
             rawsz = jpgw * jpgh;
-            buffhead = malloc(rawsz+4+1078); 
+            filesz = rawsz+4+1078;
+            buffhead = malloc(filesz); 
             buffraw = buffhead + 4 + 1078;
             if (!buffraw) {
                 err = -3;
@@ -852,7 +1089,7 @@ int main(int argc, char *argv[])
                 goto end;
             }
 
-            #define PS_NUM (40)
+            #define PS_NUM (10)
 
             //pid = fork();
             int pipeswt[PS_NUM+1][2];
@@ -877,7 +1114,7 @@ int main(int argc, char *argv[])
             }
 
             for (ix=0; ix< PS_NUM; ix++) {
-                printf("%d. %d \n", ix, pids[ix]);
+                //printf("%d. %d \n", ix, pids[ix]);
 
                 if (pids[ix] == 0) {
                     pmslf = ix+1;
@@ -889,7 +1126,7 @@ int main(int argc, char *argv[])
                 pmslf = 0;
             }
 
-            printf("[P%d] init \n", pmslf);
+            //printf("[P%d] init \n", pmslf);
 
             if (pmslf == 0) {
                 for (ix=1; ix < PS_NUM+1; ix++) {
@@ -897,34 +1134,93 @@ int main(int argc, char *argv[])
 
                     infolen = strlen(pinfo);
                     pinfo[infolen] = '\0';
-                    printf("[P%d] %d. get [%s] info from slave infolen: %d \n", pmslf, ix, pinfo, infolen);
+                    //printf("[P%d] %d. get [%s] info from slave infolen: %d \n", pmslf, ix, pinfo, infolen);
                 }
-
-                sleep(2);
             } 
             else if (pmslf > 0) {
                 sprintf(pinfo, "%d", pmslf);
-                mret = mipc_write(pipesrd[pmslf], 1, pinfo);
 
                 infolen = strlen(pinfo);
                 pinfo[infolen] = '\0';
-                printf("[P%d] send [%s] info to master infolen: %d \n", pmslf, pinfo, infolen);
-
+                //printf("[P%d] send [%s] info to master infolen: %d \n", pmslf, pinfo, infolen);
+                
+                mret = mipc_write(pipesrd[pmslf], 1, pinfo);
                 
                 mret = mipc_read(pipeswt[pmslf], 1, pinfo);
 
                 infolen = strlen(pinfo);
                 pinfo[infolen] = '\0';
-                printf("[P%d] get [%s] from master infolen: %d\n", pmslf, pinfo, infolen);
+                //printf("[P%d] get [%s] from master infolen: %d\n", pmslf, pinfo, infolen);
             } 
             else {
                 printf("[P%d] Error!!!  \n", pmslf);
                 goto end;
             }
 
-            clock_gettime(CLOCK_REALTIME, &jpgS);
+            #if 1 /* partial decode */
+            uint32_t upos1=0, coffsetx=0, upos4=0, coffsetw=0;
+            uint32_t upos9=0, coffsety=0, upos11=0, coffseth=0;
+            int bdpi = 200;
+            
+            upos1 = msb2lsb32(&ptmetausb->CROP_POS_1);
+            coffsetx = (upos1 >> 16) & 0xffff;
+            coffsetx += 50;
+            upos4 = msb2lsb32(&ptmetausb->CROP_POS_4);
+            coffsetw = (upos4 >> 16) & 0xffff;
+            coffsetw -= 50;
+            coffsetw = coffsetw - coffsetx;
+            
+            if (bdpi >= 200) {
+                coffsetx = (coffsetx * bdpi) / 300;
+                coffsetw = (coffsetw * bdpi) / 300;
+            }
+
+            upos9 = msb2lsb32(&ptmetausb->CROP_POS_9);
+            coffsety = upos9 & 0xffff;
+            coffsety += 50;
+            
+            upos11 = msb2lsb32(&ptmetausb->CROP_POS_11);
+            coffseth = upos11 & 0xffff;
+            coffseth -= 50;
+            
+            coffseth = coffseth - coffsety;
+
+            if (pmslf == 0) {
+                printf("[JPG] p1: 0x%.8x offsetx: %d, p4: 0x%.8x offsetw: %d\n", upos1, coffsetx, upos4, coffsetw);
+                printf("[JPG] p9: 0x%.8x offsety: %d, p11: 0x%.8x offseth: %d\n", upos1, coffsety, upos4, coffseth);
+                printf("[JPG] partial decode: %d\n", dec);
+            }
+            #endif
+            
+            memset(buffhead, 0x00, rawsz);
+            
+            msync(buffjpg, jpgsz, MS_SYNC);
+            msync(buffhead, rawsz, MS_SYNC);
+
+            if (dec) {
+                
+                clock_gettime(CLOCK_REALTIME, &jpgS);
                                         
-            jret = jpeg2rgbm(buffjpg, jpgsz, buffraw, rawsz, &decw, &dech, 8);
+                jret = jpeg2rgbWHm(buffjpg, jpgsz, buffraw, rawsz, &decw, &dech, 8, coffsetx, coffsetw, coffsety, coffseth);
+            
+                clock_gettime(CLOCK_REALTIME, &jpgE);
+
+                if (pmslf == 0) {
+                    printf("[JPG] jpeg2rgbWHm ret: %d\n", jret);            
+                }
+            } else {
+            
+                clock_gettime(CLOCK_REALTIME, &jpgS);
+                                        
+                jret = jpeg2rgbm(buffjpg, jpgsz, buffraw, rawsz, &decw, &dech, 8);
+            
+                clock_gettime(CLOCK_REALTIME, &jpgE);
+                
+                if (pmslf == 0) {
+                    printf("[JPG] jpeg2rgbm ret: %d\n", jret);            
+                }
+            }
+            
             if (jret) {
                 free(buffjpg);
                 free(buffraw);
@@ -932,16 +1228,71 @@ int main(int argc, char *argv[])
                 goto end;
             }
 
-            clock_gettime(CLOCK_REALTIME, &jpgE);
+
             tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
             printf("[P%d] doing the JPG decoder succeed ret: %d w: %d h: %d cost: %d.%d ms\n", pmslf, err, decw, dech, tmCost/1000, tmCost%1000);
 
+            if (pmslf == 0) {
+
+                usleep(1000000);
+                
+                printf("\n[P%d] %d processes decode START \n", pmslf, PS_NUM);            
+                
+                clock_gettime(CLOCK_REALTIME, &jpgS);
+            
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_write(pipeswt[ix], 1, "s");
+                }
+                
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_read(pipesrd[ix], 1, pinfo);
+
+                    infolen = strlen(pinfo);
+                    pinfo[infolen] = '\0';
+                    //printf("[P%d] %d. get [%s] info from slave infolen: %d \n", pmslf, ix, pinfo, infolen);
+                }
+
+                clock_gettime(CLOCK_REALTIME, &jpgE);
+
+                tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
+                avgCost = tmCost / PS_NUM;
+                printf("[P%d] %d processes decode END cost: %d.%d ms\n\n", pmslf, PS_NUM, tmCost/1000, tmCost%1000); 
+                
+                printf("[P%d] image scale w: %d h: %d avg decode time per image: %d.%dms\n", pmslf, cropinfo[2], cropinfo[3], avgCost/1000, avgCost%1000);
+
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_write(pipeswt[ix], 1, "s");
+                }
+                
+            }
+            else {
+                sprintf(pinfo, "%d", pmslf);
+
+                infolen = strlen(pinfo);
+                pinfo[infolen] = '\0';
+                //printf("[P%d] send [%s] info to master infolen: %d \n", pmslf, pinfo, infolen);
+
+                mret = mipc_write(pipesrd[pmslf], 1, pinfo);
+
+                mret = mipc_read(pipeswt[pmslf], 1, pinfo);
+            }
+            
             ph = (struct bitmapHeader_s *)(buffhead + 2);
             bitmapHeaderSetupRvs(ph, 8, decw, dech, 200, rawsz);
             pclortable = buffhead + 2 + sizeof(struct bitmapHeader_s);
             bitmapColorTableSetupd(pclortable);
 
             memcpy(rothead, buffhead + 4, 1078);
+            
+            #if DUMP_FULL_BMP
+            if (pmslf == 0) {
+                ret = save2BMP(buffhead+4, ntd, decw, dech, ph->aspbhSize, cnt);
+                if (ret) {
+                    err = -8 + ret*10;
+                    goto end;
+                }
+            }
+            #endif
             
             clock_gettime(CLOCK_REALTIME, &jpgS);
             
@@ -952,8 +1303,11 @@ int main(int argc, char *argv[])
             }
             
             clock_gettime(CLOCK_REALTIME, &jpgE);
-            tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
-            printf("[P%d] rotate ret: %d w: %d h: %d cost: %d.%d ms\n", pmslf, ret, cropinfo[2], cropinfo[3], tmCost/1000, tmCost%1000);
+            tmCost = time_diffm(&jpgS, &jpgE, 1000);   
+            
+            if (pmslf == 0) {
+                printf("[P%d] rotate ret: %d w: %d h: %d cost: %d.%d ms\n", pmslf, ret, cropinfo[2], cropinfo[3], tmCost/1000, tmCost%1000);
+            }
             
             #if DUMP_ROT_BMP
             ret = saveRot2BMP(rotraw, rothead, ntd, cropinfo, cnt);
@@ -962,12 +1316,6 @@ int main(int argc, char *argv[])
                 goto end;
             }
             #endif
-
-            if (pmslf == 0) {
-                for (ix=1; ix < PS_NUM+1; ix++) {
-                    mret = mipc_write(pipeswt[ix], 1, "s");
-                }
-            }
             
             free(buffjpg);
             buffjpg = 0;
@@ -979,6 +1327,10 @@ int main(int argc, char *argv[])
             //rotraw = 0;
         }
 
+        goto end;
+    }
+    else {
+        printf("usage example [./mainrot.bin 100 1 0] ");
         goto end;
     }
 
@@ -1041,7 +1393,7 @@ int main(int argc, char *argv[])
 
     end:
 
-    printf("end err: %d \n", err);
+    if (err) printf("end err: %d \n", err);
 
     //if (rotraw) free(rotraw);
     //if (rothead) free(rothead);
