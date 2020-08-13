@@ -96,6 +96,11 @@ struct aspMetaDataviaUSB_s{
   unsigned char EXTRA_POINT[4];    //byte[232]
 };
 
+#define	MaxCount_SRN	20
+void *BKOCR_Check( void * img_buf, int img_size, char *out_buf, int buf_size );
+void *BKOCR_Check6( void * img_buf, int img_size, char *out_buf, int buf_size );
+void *BKOCR_Check7( void * img_buf, int img_size, char *out_buf, int buf_size );
+
 extern int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int *pmreal, int pattern, int midx);
 extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
 extern int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb);
@@ -825,6 +830,74 @@ static int get_image_in_jpg(char **retjpg, int *retw, int *reth, int *retsize, i
     return 0;
 }
 
+static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen) 
+{
+    int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
+    float resH=0, resV=0, ratio=39.27, fval=0;
+    //uint32_t cmpl=0xffffffff;
+
+    if (!w) return -1;
+    if (!h) return -2;
+    if (!dpi) return -3;
+    if (!flen) return -4;
+    memset(ph, 0, sizeof(struct bitmapHeader_s));
+
+    if (clr == 8) {
+        numclrp = 256;
+        rawoffset = 1078;
+        //numclrp = 0;
+        //rawoffset = 54;
+        calcuraw = w * h;
+    }
+    else if (clr == 24) {
+        numclrp = 0;
+        rawoffset = 54;
+        calcuraw = w * h * 3;
+    } else {
+        printf("[BMP] reset header ERROR!!! color bits is %d \n", clr);
+        return -5;
+    }
+
+    if (calcuraw != flen) {
+        //printf("[BMP] WARNNING!!! raw size %d is wrong, should be %d x %d x %d= %d \n", flen, w, h, clr / 8, calcuraw);
+        if (flen > calcuraw) {
+            rawsize = calcuraw;
+        } else {
+            rawsize = flen;
+        }
+    } else {
+        rawsize = calcuraw;
+    }
+
+    totsize = rawsize + rawoffset;
+    
+    fval = dpi;
+    resH = fval * ratio;
+    fval = dpi;
+    resV = fval * ratio;
+    
+    ph->aspbmpMagic[2] = 'B';
+    ph->aspbmpMagic[3] = 'M';       
+    ph->aspbhSize = totsize; // file total size
+    ph->aspbhRawoffset = rawoffset; // header size include color table 54 + 1024 = 1078
+    ph->aspbiSize = 40;
+    ph->aspbiWidth = w; // W
+    //cmpl = (cmpl - h) + 1;
+    //ph->aspbiHeight = cmpl; // H
+    ph->aspbiHeight = h; // H
+    ph->aspbiCPP = 1;
+    //ph->aspbiCPP = 0;
+    ph->aspbiCPP |= clr << 16;  // 8 or 24
+    ph->aspbiCompMethd = 0;
+    ph->aspbiRawSize = rawsize; // size of raw
+    ph->aspbiResoluH = (int)resH; // dpi x 39.27
+    ph->aspbiResoluV = (int)resV; // dpi x 39.27
+    ph->aspbiNumCinCP = numclrp;  // 24bit is 0, 8bit is 256
+    ph->aspbiNumImpColor = 0;
+
+    return 0;
+}
+
 static int bitmapHeaderSetupRvs(struct bitmapHeader_s *ph, int clr, int w, int h, int dpi, int flen) 
 {
     int rawoffset=0, totsize=0, numclrp=0, calcuraw=0, rawsize=0;
@@ -977,18 +1050,19 @@ static void* aspSallocm(uint32_t slen)
 }
 
 #define DUMP_FULL_BMP (1)
-#define DUMP_ROT_BMP (0)
+#define DUMP_ROT_BMP (1)
 int main(int argc, char *argv[]) 
 {
     char filepath[256];
     char bnotefile[128]="/home/root/banknote/ASP_%d_%.2d_%.6d_org.bmp";
     char bnotejpg[128]="/home/root/banknote/full_H%.3d.jpg";
-    int data[3][5]={{100, 83, 332, 200, 50},{500, 141, 334, 200, 50},{1000, 177, 330, 200, 50}};
-    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0, ix=0, dec=0;
+    int data[3][5]={{100, 81, 350, 200, 50},{500, 141, 334, 200, 50},{1000, 177, 330, 200, 50}};
+    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0, ix=0, dec=0, imgsize=0;
     FILE *f=0;
     int cropinfo[8]={0};
     char *rotraw=0, *rothead=0, *jpgmeta=0;
     struct aspMetaDataviaUSB_s *ptmetausb=0;
+    char outchr[32]={0};
 
     printf("input argc: %d config: dump rot(%d) dump full(%d) jpg\n", argc, DUMP_ROT_BMP, DUMP_FULL_BMP);
 
@@ -999,12 +1073,6 @@ int main(int argc, char *argv[])
         printf("[%d]: %s \n", ix, argv[ix]);
 
         ix++;
-    }
-
-    rothead = malloc(1080);
-    if (!rothead) {
-        err = -4;
-        goto end;
     }
 
     if (argc > 3) {
@@ -1034,11 +1102,20 @@ int main(int argc, char *argv[])
             goto end;
         } else {
             len = cropinfo[2]*cropinfo[3];
-            rotraw = malloc(len);
+
+            rothead = malloc(1080+len);
+            if (!rothead) {
+                err = -4;
+                goto end;
+            }
+    
+
+            rotraw = rothead + 1078;
             if (!rotraw) {
                 err = -5;
                 goto end;
             }
+            
             memset(rotraw, 0xff, len);
             
             char *buffjpg=0, *buffraw=0, *buffhead=0, *pclortable=0;
@@ -1089,7 +1166,7 @@ int main(int argc, char *argv[])
                 goto end;
             }
 
-            #define PS_NUM (10)
+            #define PS_NUM (2)
 
             //pid = fork();
             int pipeswt[PS_NUM+1][2];
@@ -1308,6 +1385,29 @@ int main(int argc, char *argv[])
             if (pmslf == 0) {
                 printf("[P%d] rotate ret: %d w: %d h: %d cost: %d.%d ms\n", pmslf, ret, cropinfo[2], cropinfo[3], tmCost/1000, tmCost%1000);
             }
+
+            imgsize = (cropinfo[2]*cropinfo[3]) + 1078;
+            
+            ph = (struct bitmapHeader_s *)(buffhead + 2);
+            bitmapHeaderSetup(ph, 8, cropinfo[2], cropinfo[3], 200, (cropinfo[2]*cropinfo[3]));
+            memcpy(rothead, buffhead + 4, sizeof(struct bitmapHeader_s) - 2);
+            
+            clock_gettime(CLOCK_REALTIME, &jpgS);
+            
+            BKOCR_Check6(rothead, imgsize, outchr, MaxCount_SRN);
+            
+            clock_gettime(CLOCK_REALTIME, &jpgE);
+            
+            tmCost = time_diffm(&jpgS, &jpgE, 1000);   
+            
+            shmem_dump(outchr, 32);
+
+            len = strlen(outchr);
+            if (outchr[len-1] == 0x0a) {
+                outchr[len-1] = '\0';
+            }
+
+            printf("ocr result: [%s] len: %d cost: %d.%d ms \n", outchr, len, tmCost/1000, tmCost%1000);
             
             #if DUMP_ROT_BMP
             ret = saveRot2BMP(rotraw, rothead, ntd, cropinfo, cnt);
