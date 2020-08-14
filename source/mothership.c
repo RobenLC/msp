@@ -2560,20 +2560,20 @@ static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int
     *getW = cinfo.output_width;
     *getH = cinfo.output_height;
 
-    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d \n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d \n", cinfo.output_width, cinfo.output_height, row_stride); 
     
     #if 1
     offsetx = offsetWin;
     cropW = widthWin;
-    printf("[JPG] jpeg_crop_scanline. %d, %d S\n", offsetx, cropW); 
+    //printf("[JPG] jpeg_crop_scanline. %d, %d S\n", offsetx, cropW); 
     jpeg_crop_scanline(&cinfo, &offsetx, &cropW);
-    printf("[JPG] jpeg_crop_scanline. %d, %d E\n", offsetx, cropW); 
+    //printf("[JPG] jpeg_crop_scanline. %d, %d E\n", offsetx, cropW); 
     #endif
     
     //row_stride = cinfo.output_width * cinfo.output_components;
     row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;
 
-    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 1\n", cinfo.output_width, cinfo.output_height, row_stride); 
 
     lnum = cinfo.output_height;
     if (lnum > MAX_LINE_NUM) {
@@ -2588,7 +2588,7 @@ static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int
         tmpbuff += row_stride_org;
     }
 
-    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 2\n", cinfo.output_width, cinfo.output_height, row_stride); 
     
     //*getW = cinfo.output_width;
     //*getH = cinfo.output_height;
@@ -3698,8 +3698,8 @@ static int aspBMPdecodeBuffInit(struct bitmapDecodeMfour_s *pdec)
     aspBMPdecodeItemInit(&pdec->aspDecMetaex);
     aspBMPdecodeItemInit(&pdec->aspDecRaw);
 
-    //memset(pdec->aspDecRaw.aspDcData->mfourData, 0xff, pdec->aspDecRaw.aspDcMax);
-    //msync(pdec->aspDecRaw.aspDcData->mfourData, pdec->aspDecRaw.aspDcMax, MS_SYNC);
+    memset(pdec->aspDecRaw.aspDcData->mfourData, 0, pdec->aspDecRaw.aspDcMax);
+    msync(pdec->aspDecRaw.aspDcData->mfourData, pdec->aspDecRaw.aspDcMax, MS_SYNC);
 
     asp_mem_barrier();  
       
@@ -87226,6 +87226,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     memset(bheader, 0, sizeof(struct bitmapHeader_s));
     
     pct = rs->pcfgTable;
+
+    rs->pmetausb = malloc(sizeof(struct aspMetaDataviaUSB_s));    
     ptmetausb = rs->pmetausb;
     
     pushost = rs->pusbhost;
@@ -88876,26 +88878,36 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         
                     changeJpgLen(bmpbuff, bmph, bmplen);
                     
+                    msync(ptmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
                     //dbgMetaUsb(ptmetausb);
 
-                    #if 0 /* partial decode */
+                    #if 1 /* partial decode */
+                    uint32_t upos1=0, coffsetx=0, upos4=0, coffsetw=0;
+                    uint32_t upos9=0, coffsety=0, upos11=0, coffseth=0;
+
                     upos1 = msb2lsb32(&ptmetausb->CROP_POS_1);
                     coffsetx = (upos1 >> 16) & 0xffff;
+                    coffsetx += 50;
                     upos4 = msb2lsb32(&ptmetausb->CROP_POS_4);
                     coffsetw = (upos4 >> 16) & 0xffff;
+                    coffsetw -= 50;
                     coffsetw = coffsetw - coffsetx;
                     if (bdpi >= 200) {
                         coffsetx = (coffsetx * bdpi) / 300;
                         coffsetw = (coffsetw * bdpi) / 300;
                     }
 
-                    upos9 = msb2lsb32(&ptmetausb->CROP_POS_6);
+                    upos9 = msb2lsb32(&ptmetausb->CROP_POS_9);
                     coffsety = upos9 & 0xffff;
-                    upos11 = msb2lsb32(&ptmetausb->CROP_POS_2);
+                    coffsety += 50;                    
+                    upos11 = msb2lsb32(&ptmetausb->CROP_POS_11);
                     coffseth = upos11 & 0xffff;
+                    coffseth -= 50;
                     coffseth = coffseth - coffsety;
                     
                     sprintf_f(rs->logs, "[JPG] p1: 0x%.8x offsetx: %d, p4: 0x%.8x offsetw: %d\n", upos1, coffsetx, upos4, coffsetw);
+                    print_f(rs->plogs, sp, rs->logs);
+                    sprintf_f(rs->logs, "[JPG] p9: 0x%.8x offsetx: %d, p11: 0x%.8x offsetw: %d\n", upos9, coffsety, upos11, coffseth);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                     
@@ -88904,10 +88916,10 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     sprintf(rs->logs, "__JPG_DECODE_START(%d)__", buffidx); 
                     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
     
-                    err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
+                    //err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
                     //err = jpeg2rgbRvs(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
                     //err = jpeg2rgbW(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw);
-                    //err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
+                    err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
 
                     sprintf(rs->logs, "__JPG_DECODE_END(%d)__", buffidx); 
                     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
