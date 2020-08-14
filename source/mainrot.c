@@ -1057,13 +1057,14 @@ int main(int argc, char *argv[])
     char bnotefile[128]="/home/root/banknote/ASP_%d_%.2d_%.6d_org.bmp";
     char bnotejpg[128]="/home/root/banknote/full_H%.3d.jpg";
     int data[3][5]={{100, 81, 350, 200, 50},{500, 141, 334, 200, 50},{1000, 177, 330, 200, 50}};
-    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0, ix=0, dec=0, imgsize=0;
+    int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0, ix=0, dec=0, imgsize=0, runloop=0;
     FILE *f=0;
     int cropinfo[8]={0};
     char *rotraw=0, *rothead=0, *jpgmeta=0;
     struct aspMetaDataviaUSB_s *ptmetausb=0;
     char outchr[32]={0};
-
+    int pmslf=-1;
+    
     printf("input argc: %d config: dump rot(%d) dump full(%d) jpg\n", argc, DUMP_ROT_BMP, DUMP_FULL_BMP);
 
     maintotSalloc = (int *)mmap(NULL, sizeof(int), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -1073,6 +1074,11 @@ int main(int argc, char *argv[])
         printf("[%d]: %s \n", ix, argv[ix]);
 
         ix++;
+    }
+
+    ret = fork();
+    if (!ret) {
+        exit(0);
     }
 
     if (argc > 3) {
@@ -1172,7 +1178,6 @@ int main(int argc, char *argv[])
             int pipeswt[PS_NUM+1][2];
             int pipesrd[PS_NUM+1][2];
             int pids[PS_NUM];
-            int pmslf=-1;
             int mret=0, infolen=0;
             char pinfo[32]={0};
 
@@ -1273,7 +1278,10 @@ int main(int argc, char *argv[])
             
             msync(buffjpg, jpgsz, MS_SYNC);
             msync(buffhead, rawsz, MS_SYNC);
-
+            
+            runloop = 5;
+            while (runloop) {
+            
             if (dec) {
                 
                 clock_gettime(CLOCK_REALTIME, &jpgS);
@@ -1307,42 +1315,12 @@ int main(int argc, char *argv[])
 
 
             tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
-            printf("[P%d] doing the JPG decoder succeed ret: %d w: %d h: %d cost: %d.%d ms\n", pmslf, err, decw, dech, tmCost/1000, tmCost%1000);
-
-            if (pmslf == 0) {
-
-                usleep(1000000);
-                
-                printf("\n[P%d] %d processes decode START \n", pmslf, PS_NUM);            
-                
-                clock_gettime(CLOCK_REALTIME, &jpgS);
+            printf("[P%d] doing the JPG decoder succeed ret: %d w: %d h: %d cost: %d.%d ms - %d\n", pmslf, err, decw, dech, tmCost/1000, tmCost%1000, runloop);
             
-                for (ix=1; ix < PS_NUM+1; ix++) {
-                    mret = mipc_write(pipeswt[ix], 1, "s");
-                }
-                
-                for (ix=1; ix < PS_NUM+1; ix++) {
-                    mret = mipc_read(pipesrd[ix], 1, pinfo);
-
-                    infolen = strlen(pinfo);
-                    pinfo[infolen] = '\0';
-                    //printf("[P%d] %d. get [%s] info from slave infolen: %d \n", pmslf, ix, pinfo, infolen);
-                }
-
-                clock_gettime(CLOCK_REALTIME, &jpgE);
-
-                tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
-                avgCost = tmCost / PS_NUM;
-                printf("[P%d] %d processes decode END cost: %d.%d ms\n\n", pmslf, PS_NUM, tmCost/1000, tmCost%1000); 
-                
-                printf("[P%d] image scale w: %d h: %d avg decode time per image: %d.%dms\n", pmslf, cropinfo[2], cropinfo[3], avgCost/1000, avgCost%1000);
-
-                for (ix=1; ix < PS_NUM+1; ix++) {
-                    mret = mipc_write(pipeswt[ix], 1, "s");
-                }
-                
+            runloop--;
             }
-            else {
+
+            if (pmslf) {
                 sprintf(pinfo, "%d", pmslf);
 
                 infolen = strlen(pinfo);
@@ -1370,6 +1348,11 @@ int main(int argc, char *argv[])
                 }
             }
             #endif
+
+            runloop = 5;
+            while (runloop) {
+            
+            memcpy(rothead, buffhead + 4, sizeof(struct bitmapHeader_s) - 2);
             
             clock_gettime(CLOCK_REALTIME, &jpgS);
             
@@ -1382,15 +1365,32 @@ int main(int argc, char *argv[])
             clock_gettime(CLOCK_REALTIME, &jpgE);
             tmCost = time_diffm(&jpgS, &jpgE, 1000);   
             
-            if (pmslf == 0) {
-                printf("[P%d] rotate ret: %d w: %d h: %d cost: %d.%d ms\n", pmslf, ret, cropinfo[2], cropinfo[3], tmCost/1000, tmCost%1000);
+            printf("[P%d] rotate ret: %d w: %d h: %d cost: %d.%d ms - %d\n", pmslf, ret, cropinfo[2], cropinfo[3], tmCost/1000, tmCost%1000, runloop);
+            runloop--;
             }
 
+            if (pmslf) {
+                sprintf(pinfo, "%d", pmslf);
+
+                infolen = strlen(pinfo);
+                pinfo[infolen] = '\0';
+                //printf("[P%d] send [%s] info to master infolen: %d \n", pmslf, pinfo, infolen);
+
+                mret = mipc_write(pipesrd[pmslf], 1, pinfo);
+
+                mret = mipc_read(pipeswt[pmslf], 1, pinfo);
+            }
+            
             imgsize = (cropinfo[2]*cropinfo[3]) + 1078;
             
             ph = (struct bitmapHeader_s *)(buffhead + 2);
             bitmapHeaderSetup(ph, 8, cropinfo[2], cropinfo[3], 200, (cropinfo[2]*cropinfo[3]));
             memcpy(rothead, buffhead + 4, sizeof(struct bitmapHeader_s) - 2);
+
+            runloop = 5;
+            while (runloop) {
+
+            memset(outchr, 0, 32);
             
             clock_gettime(CLOCK_REALTIME, &jpgS);
             
@@ -1400,14 +1400,29 @@ int main(int argc, char *argv[])
             
             tmCost = time_diffm(&jpgS, &jpgE, 1000);   
             
-            shmem_dump(outchr, 32);
+            //shmem_dump(outchr, 32);
 
             len = strlen(outchr);
             if (outchr[len-1] == 0x0a) {
                 outchr[len-1] = '\0';
             }
 
-            printf("ocr result: [%s] len: %d cost: %d.%d ms \n", outchr, len, tmCost/1000, tmCost%1000);
+            printf("[P%d] ocr result: [%s] len: %d cost: %d.%d ms - %d \n", pmslf, outchr, len, tmCost/1000, tmCost%1000, runloop);
+
+            runloop--;
+            }
+            
+            if (pmslf) {
+                sprintf(pinfo, "%d", pmslf);
+
+                infolen = strlen(pinfo);
+                pinfo[infolen] = '\0';
+                //printf("[P%d] send [%s] info to master infolen: %d \n", pmslf, pinfo, infolen);
+
+                mret = mipc_write(pipesrd[pmslf], 1, pinfo);
+
+                mret = mipc_read(pipeswt[pmslf], 1, pinfo);
+            }
             
             #if DUMP_ROT_BMP
             ret = saveRot2BMP(rotraw, rothead, ntd, cropinfo, cnt);
@@ -1420,6 +1435,85 @@ int main(int argc, char *argv[])
             free(buffjpg);
             buffjpg = 0;
 
+            if (pmslf == 0) {
+
+                usleep(1000000);
+                
+                printf("\n[P%d] %d jpeg decode START \n", pmslf, PS_NUM);            
+                
+                clock_gettime(CLOCK_REALTIME, &jpgS);
+            
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_write(pipeswt[ix], 1, "s");
+                }
+                
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_read(pipesrd[ix], 1, pinfo);
+
+                    infolen = strlen(pinfo);
+                    pinfo[infolen] = '\0';
+                    //printf("[P%d] %d. get [%s] info from slave infolen: %d \n", pmslf, ix, pinfo, infolen);
+                }
+
+                clock_gettime(CLOCK_REALTIME, &jpgE);
+
+                tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
+                avgCost = tmCost / PS_NUM;
+                printf("[P%d] %d jpeg decode END cost: %d.%d ms\n", pmslf, PS_NUM, tmCost/1000, tmCost%1000); 
+                
+                printf("[P%d] image scale w: %d h: %d avg decode time per image: %d.%dms\n\n", pmslf, cropinfo[2], cropinfo[3], avgCost/1000, avgCost%1000);
+
+                printf("\n[P%d] %d bmp rotate and clip START \n", pmslf, PS_NUM);            
+
+                clock_gettime(CLOCK_REALTIME, &jpgS);
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_write(pipeswt[ix], 1, "s");
+                }
+
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_read(pipesrd[ix], 1, pinfo);
+
+                    //infolen = strlen(pinfo);
+                    //pinfo[infolen] = '\0';
+                    //printf("[P%d] %d. get [%s] info from slave infolen: %d \n", pmslf, ix, pinfo, infolen);
+                }
+
+                clock_gettime(CLOCK_REALTIME, &jpgE);
+
+                tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
+                avgCost = tmCost / PS_NUM;
+                printf("[P%d] %d bmp rotate and clip END cost: %d.%d ms\n", pmslf, PS_NUM, tmCost/1000, tmCost%1000); 
+
+                printf("[P%d] image scale w: %d h: %d avg rotate time per image: %d.%dms\n\n", pmslf, cropinfo[2], cropinfo[3], avgCost/1000, avgCost%1000);
+
+                printf("\n[P%d] %d OCR START \n", pmslf, PS_NUM);            
+
+                clock_gettime(CLOCK_REALTIME, &jpgS);
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_write(pipeswt[ix], 1, "s");
+                }
+
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_read(pipesrd[ix], 1, pinfo);
+
+                    //infolen = strlen(pinfo);
+                    //pinfo[infolen] = '\0';
+                    //printf("[P%d] %d. get [%s] info from slave infolen: %d \n", pmslf, ix, pinfo, infolen);
+                }
+
+                clock_gettime(CLOCK_REALTIME, &jpgE);
+                tmCost = time_diffm(&jpgS, &jpgE, 1000);                                                
+                avgCost = tmCost / PS_NUM;
+                printf("[P%d] %d OCR END cost: %d.%d ms\n", pmslf, PS_NUM, tmCost/1000, tmCost%1000); 
+                printf("[P%d] image scale w: %d h: %d avg rotate time per image: %d.%dms\n\n", pmslf, cropinfo[2], cropinfo[3], avgCost/1000, avgCost%1000);
+
+                
+                for (ix=1; ix < PS_NUM+1; ix++) {
+                    mret = mipc_write(pipeswt[ix], 1, "s");
+                }
+
+            }
+            
             //free(buffhead);
             //buffhead = 0;
 
@@ -1493,7 +1587,7 @@ int main(int argc, char *argv[])
 
     end:
 
-    if (err) printf("end err: %d \n", err);
+    printf("[P%d] end err: %d \n", pmslf, err);
 
     //if (rotraw) free(rotraw);
     //if (rothead) free(rothead);
