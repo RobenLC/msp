@@ -1188,6 +1188,7 @@ int main(int argc, char *argv[])
                 pipe(pipesrd[ix]);
             }
 
+            #if 0
             for (ix=0; ix < PS_NUM; ix++) {
                 pids[ix] = fork();
                 if (pids[ix] == 0) {
@@ -1207,6 +1208,9 @@ int main(int argc, char *argv[])
             if (ix == PS_NUM) {
                 pmslf = 0;
             }
+            #endif
+
+            loop:
 
             //printf("[P%d] init \n", pmslf);
 
@@ -1234,10 +1238,6 @@ int main(int argc, char *argv[])
                 pinfo[infolen] = '\0';
                 //printf("[P%d] get [%s] from master infolen: %d\n", pmslf, pinfo, infolen);
             } 
-            else {
-                printf("[P%d] Error!!!  \n", pmslf);
-                goto end;
-            }
 
             #if 1 /* partial decode */
             uint32_t upos1=0, coffsetx=0, upos4=0, coffsetw=0;
@@ -1320,7 +1320,7 @@ int main(int argc, char *argv[])
             runloop--;
             }
 
-            if (pmslf) {
+            if (pmslf > 0) {
                 sprintf(pinfo, "%d", pmslf);
 
                 infolen = strlen(pinfo);
@@ -1369,7 +1369,7 @@ int main(int argc, char *argv[])
             runloop--;
             }
 
-            if (pmslf) {
+            if (pmslf > 0) {
                 sprintf(pinfo, "%d", pmslf);
 
                 infolen = strlen(pinfo);
@@ -1412,7 +1412,7 @@ int main(int argc, char *argv[])
             runloop--;
             }
             
-            if (pmslf) {
+            if (pmslf > 0) {
                 sprintf(pinfo, "%d", pmslf);
 
                 infolen = strlen(pinfo);
@@ -1432,8 +1432,8 @@ int main(int argc, char *argv[])
             }
             #endif
             
-            free(buffjpg);
-            buffjpg = 0;
+            //free(buffjpg);
+            //buffjpg = 0;
 
             if (pmslf == 0) {
 
@@ -1512,7 +1512,37 @@ int main(int argc, char *argv[])
                     mret = mipc_write(pipeswt[ix], 1, "s");
                 }
 
+                goto end;
             }
+            else if (pmslf > 0) {
+                goto end;
+            } else {
+            
+            for (ix=0; ix < PS_NUM; ix++) {
+                pids[ix] = fork();
+                if (pids[ix] == 0) {
+                    break;
+                }
+            }
+
+            for (ix=0; ix< PS_NUM; ix++) {
+                //printf("%d. %d \n", ix, pids[ix]);
+
+                if (pids[ix] == 0) {
+                    pmslf = ix+1;
+                    break;
+                }
+            }
+
+            if (ix == PS_NUM) {
+                pmslf = 0;
+            }            
+
+            goto loop;
+            
+            }
+
+
             
             //free(buffhead);
             //buffhead = 0;
