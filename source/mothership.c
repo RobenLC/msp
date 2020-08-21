@@ -3771,7 +3771,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pipe2(pdec->aspPipeMfourTx, O_NONBLOCK);
     pipe2(pdec->aspPipeMfourCom, O_NONBLOCK);
     
-    len = (SCAN_IMAGE_SIZE * 20) / 100;
+    len = (SCAN_IMAGE_SIZE * 100) / 100;
     totsz = len + sizeof(mfour_image_param_st) + 32;
     pdec->aspDecJpeg.aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
     if (pdec->aspDecJpeg.aspDcData) {
@@ -57194,12 +57194,13 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         while (tmpbf) {
                                             memsz += USB_BUF_SIZE;
                                             trunkidx += 1;
-                                            sprintf_f(mrs->log, "    [GW] %d - 0x%.8x\n", trunkidx, (uint32_t)tmpbf->bpt);
+                                            add32s = (uint32_t *)(tmpbf->bpt);
+                                            sprintf_f(mrs->log, "    [GW] %d - 0x%.8x\n", trunkidx, (uint32_t)(*add32s));
                                             print_f(mrs->plog, "fs152", mrs->log);
                                             
                                             tmpbf = tmpbf->bn;
                                         }
-                                        sprintf_f(mrs->log, "[GW] memory used: %d - %d idx: %d \n", memsz, pageidx, pubffm->ubindex);
+                                        sprintf_f(mrs->log, "[GW] memory used: %d - %d idx: 0x%x \n", memsz, pageidx, pubffm->ubindex);
                                         print_f(mrs->plog, "fs152", mrs->log);
                                         #else
                                         sprintf_f(mrs->log, "[GW] mem(%d) idx: 0x%.8x \n", pageidx, pubffm->ubindex);
@@ -57280,7 +57281,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         msync(addrs, lens, MS_SYNC);
                                         
                                         #if DBG_DUMP_DAT32
-                                        sprintf_f(mrs->log, "[GW] dump 32 - 2 - 1\n");
+                                        sprintf_f(mrs->log, "[GW] dump 32 - 2 - 1 [0x%.8x] \n", (uint32_t)addrs);
                                         print_f(mrs->plog, "fs152", mrs->log);
                                         shmem_dump(addrs, 32);
                                         #endif
@@ -57300,7 +57301,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         msync(addrd, lens, MS_SYNC);
                                         
                                         #if DBG_DUMP_DAT32
-                                        sprintf_f(mrs->log, "[GW] dump 32 - 2 - 2\n");
+                                        sprintf_f(mrs->log, "[GW] dump 32 - 2 - 2 [0x%.8x]\n", (uint32_t)addrd);
                                         print_f(mrs->plog, "fs152", mrs->log);
                                         shmem_dump(addrd, 32);
                                         #endif
@@ -57954,7 +57955,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             msync(addrs, lens, MS_SYNC);
                             
                             #if DBG_DUMP_DAT32
-                            sprintf_f(mrs->log, "[GW] dump 32 - 1\n");
+                            sprintf_f(mrs->log, "[GW] dump 32 - 1 [0x%.8x] \n", (uint32_t)addrs);
                             print_f(mrs->plog, "fs152", mrs->log);
                             shmem_dump(addrs, 32);
                             #endif
@@ -71323,6 +71324,7 @@ static int p8(struct procRes_s *rs)
 #define DUMP_FLASH (0)
 #define DBG_USB_HS (0)
 #define DBG_USB_FLW (0)
+#define USB_POLLTIME_US (1000)
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
     struct pollfd ptfd[1];
@@ -73775,8 +73777,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             while(1) {
                 usbrun = -1;
                 
-                #if 1 /* test drop line */
-                usleep(100000);
+                #if USB_POLLTIME_MS /* test drop line */
+                usleep(USB_POLLTIME_MS);
                 #endif
                 
                 #if USB_CALLBACK_LOOP 
@@ -73920,8 +73922,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     asp_mem_barrier();
                     msync(addr, USB_BUF_SIZE, MS_SYNC);
 
-                    sprintf_f(rs->logs, "memcpy out %d - 0x07\n", ix);
+                    #if DBG_USB_FLW /* debug dump */
+                    sprintf_f(rs->logs, "memcpy out %d - 0x07 [0x%.8x] \n", ix, (uint32_t)addr);
                     print_f(rs->plogs, sp, rs->logs);
+                    shmem_dump(addr, 16);
+                    #endif
 
                     buffstep += 1;
                     #endif
@@ -74037,7 +74042,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     
                     #if DBG_USB_FLW
                     usbdist = usbrun - usbfolw;
-                    sprintf_f(rs->logs, "show index [%d] usbfolw: %d, usbrun: %d, usbdist: %d\n", recvsz, usbfolw, usbrun, usbdist);
+                    sprintf_f(rs->logs, "show index [%d] usbfolw: %d, usbrun: %d, usbdist: %d [0x%.8x]\n", recvsz, usbfolw, usbrun, usbdist, (uint32_t)addr);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                 }
@@ -74414,8 +74419,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                 usbrun = -1;
                 
-                #if 1 /* test drop line */
-                usleep(100000);
+                #if USB_POLLTIME_US /* test drop line */
+                usleep(USB_POLLTIME_US);
                 #endif
                 
                 #if USB_CALLBACK_LOOP 
@@ -74520,12 +74525,19 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     asp_mem_barrier();
                     msync(addr, USB_BUF_SIZE, MS_SYNC);
-                    
-                    sprintf_f(rs->logs, "memcpy out %d 0x02\n", ix);
+
+                    #if DBG_USB_FLW /* debug dump */
+                    sprintf_f(rs->logs, "memcpy out %d 0x02 [0x%.8x]\n", ix, (uint32_t)addr);
                     print_f(rs->plogs, sp, rs->logs);
+                    shmem_dump(addr, 16);
+                    #endif
                     
                     if (mtlen < recvsz) {
                         pt = ptm + mtlen;
+
+                        #if DBG_USB_FLW /* debug dump */
+                        shmem_dump(pt, 48);
+                        #endif
                         
                         if ((pt[0] != 'A') || (pt[1] != 'S') || (pt[2] != 'P') || (pt[3] != 'C')) {
                             sprintf_f(rs->logs, "memcpy dump for error meta last: %d metaoffset: %d \n", recvsz, mtlen);
@@ -74547,7 +74559,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     
                     #if DBG_USB_FLW
                     usbdist = usbrun - usbfolw;
-                    sprintf_f(rs->logs, "show index [%d-%d] usbfolw: %d, usbrun: %d, usbdist: %d -3\n", recvsz, mtlen, usbfolw, usbrun, usbdist);
+                    sprintf_f(rs->logs, "show index [%d-%d] usbfolw: %d, usbrun: %d, usbdist: %d [0x%.8x] -3\n", recvsz, mtlen, usbfolw, usbrun, usbdist, (uint32_t)addr);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                 }
@@ -80182,6 +80194,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                             else {
 
+                                clock_gettime(CLOCK_REALTIME, &tidleS);
+                                
                                 for (ix=0; ix < 2; ix++) {
                                     if ((ptfdc[ix].revents & POLLIN) == POLLIN) {
                                         if (ptfdc[ix].fd == piprx[0]) {
@@ -81336,7 +81350,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             msync(addrd, lens, MS_SYNC);
 
                             #if DBG_DUMP_DAT32
-                            sprintf_f(rs->logs, "[DV] dump 32 - 3\n");
+                            sprintf_f(rs->logs, "[DV] dump 32 - 3 [0x%.8x]\n", (uint32_t)addrd);
                             print_f(rs->plogs, "P11", rs->logs);
                             shmem_dump(addrd, 32);
                             #endif
@@ -86054,6 +86068,11 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     pDeRect->mfourRectW &= 0xFFFC;    // width should be 4byte alignment
     abuf_size = pDeRect->mfourRectW * pDeRect->mfourRectH + sizeof(mfour_image_param_st);
 
+    #if LOG_ROT_EN        
+    sprintf_f(rs->logs,"require area x: %d y: %d w: %d h: %d  \n", pDeRect->mfourRectX, pDeRect->mfourRectY, pDeRect->mfourRectW, pDeRect->mfourRectH);
+    print_f(rs->plogs, "CLIP", rs->logs);
+    #endif
+    
     if(abuf_size > (16 * 1024)) {
         sprintf_f(rs->logs,"ERROR : require area too large !!! \r\n");
         print_f(rs->plogs, "CLIP", rs->logs);
@@ -87274,55 +87293,21 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             while (1) {
                 aspMemClear(aspMemAsign, asptotMalloc, midx);
         
-                //sprintf_f(rs->logs, "[DV] uimCylcnt: %d \n", uimCylcnt);
-                //print_f(rs->plogs, sp, rs->logs);
-
-                //chr = 0;
                 while (1) {
                     if (uimCylcnt > 0) {
                         break;
                     }
-
-                    #if 0
-                    if (endf) {
-                        if (!puimCnTH) {
-                            if (endm) {
-                                addrd = endm;
-                                if (seqtx < USB_BUF_SIZE) {
-                                    lens = seqtx;
-                                        
-                                    seqtx = maxsz;
-                                    endm = palloc;
-                                } else {
-                                    lens = USB_BUF_SIZE;
-                                    seqtx = seqtx - lens;
-                                    endm += lens;
-                                }
-                            } else {
-                                addrd = endf;
-                                lens = strlen(endf);
-                            }
-                            break;
-                        }
-                    }
-                    #endif
                     
                     chq = 0;
                     chd = 0;
-        
-                    //ptfdc[0].fd = piprx[0];
-                    //ptfdc[0].events = POLLIN;
+
                     clock_gettime(CLOCK_REALTIME, &tidleE);
                     idlet = time_diff(&tidleS, &tidleE, 1000000);
         
                     #if LOG_JPGH_EN
-                    sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x rx: %d, 0: %d \n", idlet, (uint32_t)puimGet, (uint32_t)puimCnTH, piprx[0], ptfdc[0].fd);
+                    sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x rx: %d, 0: %d \n", idlet, (puimGet==0)?0:(uint32_t)puimGet->uimIdex, (puimCnTH==0)?0:(uint32_t)puimCnTH->uimIdex, piprx[0], ptfdc[0].fd);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
-        
-                    //ret = read(pipeusb[0], &ch, 1);
-                    //sprintf_f(rs->logs, "[ISO] pipeusb get ch: %c ret: %d\n", ch, ret);
-                    //print_f(rs->plogs, sp, rs->logs);
                     
                     pipRet = poll(ptfdc, 1, 500);
                     if (pipRet <= 0) {
@@ -87330,7 +87315,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                         idlet = time_diff(&tidleS, &tidleE, 1000000);
                         
                         #if LOG_JPGH_EN
-                        sprintf_f(rs->logs, "[DV] wait for %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, (uint32_t)puimGet, (uint32_t)puimCnTH);
+                        sprintf_f(rs->logs, "[DV] wait for %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x\n", idlet, puimGet==0?0:(uint32_t)puimGet->uimIdex, puimCnTH==0?0:(uint32_t)puimCnTH->uimIdex);
                         print_f(rs->plogs, sp, rs->logs);
                         #endif
         
@@ -87433,37 +87418,18 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                     chr = 0;
         
                                     if (!puimGet) {
-                                        sprintf_f(rs->logs, "[DV] puimGet is null timeout break\n");
+                                        sprintf_f(rs->logs, "[DV] puimGet is null timeout break, usbfd: %d\n", usbfd);
                                         print_f(rs->plogs, sp, rs->logs);
-        
-                                        memset(ptrecv, 0, 160);
-        
-                                        memcpy(ptrecv, emptyLast, 4);
-        
-                                        sendsz = usbc_write(usbfd, ptrecv, 160);
-                                        while (sendsz <= 0) {
-                                            sendsz = usbc_write(usbfd, ptrecv, 160);
-                                        }
-        
-                                        memcpy(ptrecv, emptyLine, 4);
-                                        
-                                        sendsz = usbc_write(usbfd, ptrecv, 4);
-                                        while (sendsz <= 0) {
-                                            sendsz = usbc_write(usbfd, ptrecv, 4);
-                                        }
-        
-                                        che = 'E';
-                                        uimCylcnt = 0;
-                                        lens = 0;
-                                        
-                                        break;
+                                        continue;
                                     }
                                 }
                             }
                         }
                     }
                     else {
-        
+
+                        clock_gettime(CLOCK_REALTIME, &tidleS);
+                        
                         //for (ix=0; ix < 1; ix++) {
                             ix = 0;
                             if ((ptfdc[ix].revents & POLLIN) == POLLIN) {
@@ -88638,7 +88604,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     msync(addrd, lens, MS_SYNC);
         
                     #if DBG_DUMP_DAT32
-                    sprintf_f(rs->logs, "[DV] dump 32 - 3\n");
+                    sprintf_f(rs->logs, "[DV] dump 32 - 3 [0x%.8x] \n", (uint32_t)addrd);
                     print_f(rs->plogs, sp, rs->logs);
                     shmem_dump(addrd, 32);
                     #endif
@@ -88758,8 +88724,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             bhlen = 0;
             
             if (act || (bmph == 0)) {
-                sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d bmph: %d\n", act, bmph);
+                sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d bmph: %d addr: 0x%.8x lens: %d\n", act, bmph, (uint32_t)addrd, lens);
                 print_f(rs->plogs, sp, rs->logs); 
+
+                if (act) continue;
+
             } else {
                 //sprintf_f(rs->logs, "[BMP] pop usb meta succeed!! \n");
                 //print_f(rs->plogs, sp, rs->logs); 
@@ -88899,7 +88868,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
                     upos9 = msb2lsb32(&ptmetausb->CROP_POS_9);
                     coffsety = upos9 & 0xffff;
-                    coffsety += 50;                    
+                    //coffsety += 50;                    
                     upos11 = msb2lsb32(&ptmetausb->CROP_POS_11);
                     coffseth = upos11 & 0xffff;
                     coffseth -= 50;
@@ -90222,7 +90191,7 @@ static int p17(struct procRes_s *rs)
 
     memset(&outcmd, 0, sizeof(mfour_rjob_cmd));
     memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
-    rx_buf = malloc(RJOB_RX_BLOCK_SIZE+32);
+    rx_buf = malloc(RJOB_RX_BLOCK_SIZE+sizeof(mfour_image_param_st));
     img_rxbuf = (mfour_image_param_st *)rx_buf;
     
     sprintf_f(rs->logs, "memory allocate succeed addr: 0x%.8x size: %d \n", (uint32_t)rx_buf, RJOB_RX_BLOCK_SIZE/1024);
@@ -90581,16 +90550,18 @@ static int p17(struct procRes_s *rs)
                             tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
                             sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_DONE_AREA_RSP) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
                             print_f(rs->plogs, "P17", rs->logs);    
-                            
-                            sprintf_f(rs->logs, "area done current buff id: %d m4id: %d\n", mfbidx, m4id);
-                            print_f(rs->plogs, "P17", rs->logs);
 
-                            //outcmd.dPtr  = rx_buf;
                             pImgOutArea = outcmd.dPtr;
                             
                             img_out = container_of(pImgOutArea, mfour_image_param_st, mfourAttb);
                             jid = img_out->mfourAttb.iJobIdx;
                             seqid = img_out->mfourAttb.SeqIdx;
+                            
+                            sprintf_f(rs->logs, "area done current buff id: %d m4id: %d (x:%d y:%d w:%d h:%d) size: %d\n", mfbidx, m4id, img_out->mfourAttb.ImageRect.oxj, 
+                                img_out->mfourAttb.ImageRect.oyi, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, outcmd.dSize);
+                            print_f(rs->plogs, "P17", rs->logs);
+                            
+                            //outcmd.dPtr  = rx_buf;
 
                             #if 1
                             //cid = img_out->mfourIdx;
@@ -90646,8 +90617,6 @@ static int p17(struct procRes_s *rs)
                             bitmapHeaderSetup(pheader, 8, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, 200, imgsize);
                             //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
                                                         
-                            sprintf_f(rs->logs, "m4 bmp size:%d (%d x %d) and size in m4 cmd: %d \n", imgsize, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, outcmd.dSize);
-                            print_f(rs->plogs, "P17", rs->logs);
 
                             cpyDst = img_param->mfourData + 1078; //offset:0x436
                             cpySrc = img_out->mfourData;
