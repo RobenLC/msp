@@ -75,6 +75,9 @@ CFLAGS += -Wno-unused-function
 #LIBS += -Wl,--hash-style=sysv
 #LIBS += --sysroot=$(PWD)/sysroot
 LIBS += -lm
+LIBS += -lwayland-client
+LIBS += -lwayland-server
+LIBS += -lwayland-egl
 LIBS += -lEGL
 LIBS += -lGLESv2
 LIBS += -ljpeg
@@ -83,7 +86,7 @@ LIBS += -ljpeg
 
 .PHONY : clean TARGET FORCE
 
-TARGET_FILE =  out/st_mothership.bin out/mainrot.bin
+TARGET_FILE =  out/st_mothership.bin out/mainrot.bin out/eglex.bin
 
 TARGET : $(TARGET_FILE)
 
@@ -108,6 +111,12 @@ MAINROT_SRCS_PATH_OBJ = $(MAINROT_SRCS_PATH:.c=.o)
 MAINROT_COBJECTS = mainrot.o
 MAINROT_COBJECTS += rotate.o
 
+EGLEX_SRCS = gl_example.c
+EGLEX_SRCS_PATH = source/$(EGLEX_SRCS)
+EGLEX_SRCS_PATH_OBJ = $(EGLEX_SRCS_PATH:.c=.o)
+EGLEX_COBJECTS = $(EGLEX_SRCS:.c=.o)
+
+
 SRCS = $(MOTHERSHIP_CSOURCES)
 SRCS += $(MAINROT_SRCS)
 SRCS += $(ROTATE_SRCS)
@@ -124,7 +133,11 @@ out/st_mothership.bin : $(MOTHERSHIP_COBJECTS_PATH) $(MOTHERSHIP_COBJECTS) $(BKO
 out/mainrot.bin : $(ROTATE_SRCS_PATH_OBJ) $(MAINROT_SRCS_PATH_OBJ) $(MAINROT_COBJECTS) $(BKOCRTEST_CPPOBJECTS) $(BKOCR_LIB)
 	$(CXX) $(CFLAGS) $(LIBS) $(MAINROT_COBJECTS) $(BKOCRTEST_CPPOBJECTS) $(INCLUDE) $(OPENCV_LIB) $(BKOCR_LIB) -o $@
 	@echo
-	
+
+out/eglex.bin : $(EGLEX_SRCS_PATH_OBJ) $(EGLEX_COBJECTS)
+	$(CXX) $(CFLAGS) $(LIBS) $(EGLEX_COBJECTS) $(INCLUDE) -o $@
+	@echo
+
 .c.o :
 	$(CC) $(CFLAGS) $(INCLUDE) -c $<
 	@echo
