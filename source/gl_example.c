@@ -10,7 +10,13 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
+#include <unistd.h>
+#include <time.h>
+#define GL_GLEXT_PROTOTYPES 1
+//#include <GLES/gl.h>
+//#include <GLES/glext.h>
 #include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <EGL/eglplatform.h>
@@ -99,12 +105,15 @@ void CreateNativeWindow(char *title, int width, int height)
 
 EGLBoolean CreateEGLContext ()
 {
-   EGLint numConfigs;
-   EGLint majorVersion;
-   EGLint minorVersion;
-   EGLContext context;
-   EGLSurface surface;
-   EGLConfig config;
+   EGLint ret=0;
+   EGLint numConfigs=0;
+   EGLint majorVersion=0;
+   EGLint minorVersion=0;
+   EGLContext context=0;
+   EGLSurface surface=0;
+   EGLConfig *config=0;
+   EGLint cofigsize=0;
+   #if 1
    EGLint fbAttribs[] =
    {
        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
@@ -114,54 +123,101 @@ EGLBoolean CreateEGLContext ()
        EGL_BLUE_SIZE,       8,
        EGL_NONE
    };
+   #else
+   static const EGLint fbAttribs[] = {
+		EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+		EGL_RED_SIZE, 1,
+		EGL_GREEN_SIZE, 1,
+		EGL_BLUE_SIZE, 1,
+		EGL_ALPHA_SIZE, 0,
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+		EGL_NONE
+    };
+    #endif
+    
+   //EGLConfig fbConfigs[30] = {0};
+   //config = fbConfigs;
    
-   EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE, EGL_NONE };
+   EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
    EGLDisplay display = eglGetDisplay(ESContext.native_display);
    
    if (display == EGL_NO_DISPLAY) {
-      LOG("No EGL Display...\n");
+      LOG("No EGL Display...ret: %d\n", ret);
       return EGL_FALSE;
    }
 
    // Initialize EGL
-   if (!eglInitialize(display, &majorVersion, &minorVersion)) {
-      LOG("No Initialisation...\n");
+   ret = eglInitialize(display, &majorVersion, &minorVersion); 
+   if (!ret) {
+      LOG("eglInitialize failed...ret: %d\n", ret);
       return EGL_FALSE;
-   }
+   } 
 
+   LOG("EGL Version \"%s\"\n", eglQueryString(display, EGL_VERSION));
+   LOG("EGL Vendor \"%s\"\n", eglQueryString(display, EGL_VENDOR));
+   LOG("EGL Extensions \"%s\"\n", eglQueryString(display, EGL_EXTENSIONS));
+
+   ret = eglBindAPI(EGL_OPENGL_ES_API);
+   if (!ret) {
+       LOG("failed to bind api EGL_OPENGL_ES_API ret: %d\n", ret);
+       return EGL_FALSE;
+   }
+	
    // Get configs
-   if ((eglGetConfigs(display, NULL, 0, &numConfigs) != EGL_TRUE) || (numConfigs == 0)) {
-      LOG("No configuration...\n");
+   ret = eglGetConfigs(display, NULL, 0, &numConfigs);
+   if ((ret != EGL_TRUE) || (numConfigs == 0)) {
+      LOG("eglGetConfigs failed...ret: %d\n", ret);
       return EGL_FALSE;
    }
 
+   LOG("eglGetConfigs numConfigs: %d, ret: %d\n", numConfigs, ret);
+   
+   ret = eglChooseConfig(display, fbAttribs, 0, 0, &numConfigs);
+   if ( (ret != EGL_TRUE) || (numConfigs == 0))
+   {
+      LOG("eglChooseConfig get failed...ret: %d, numConfigs: %d, \n", ret, numConfigs);
+      return EGL_FALSE;
+   }
+   
+   LOG("eglChooseConfig get numConfigs: %d, config: 0x%.8x, ret: %d\n", numConfigs, (uint32_t)config, ret);
+   cofigsize = numConfigs;
+   config = malloc(sizeof(EGLConfig) * cofigsize);
    // Choose config
-   if ( (eglChooseConfig(display, fbAttribs, &config, 1, &numConfigs) != EGL_TRUE) || (numConfigs != 1))
+   ret = eglChooseConfig(display, fbAttribs, config, cofigsize, &numConfigs);
+   if ( (ret != EGL_TRUE) || (numConfigs == 0) || (config == 0))
    {
-      LOG("No configuration...\n");
+      LOG("eglChooseConfig set failed...ret: %d, numConfigs: %d, config: 0x%.8x\n", ret, numConfigs, (uint32_t)config);
       return EGL_FALSE;
    }
+   LOG("eglChooseConfig set numConfigs: %d, config: 0x%.8x, ret: %d\n", numConfigs, (uint32_t)config, ret);
 
+   /*
+   for(int ix=0; ix < numConfigs; ix++) {       
+      LOG("[%d] 0x%.8x \n", ix, config[ix]);
+   }
+   */
+   
    // Create a surface
-   surface = eglCreateWindowSurface(display, config, ESContext.native_window, NULL);
-   if ( surface == EGL_NO_SURFACE )
+   surface = eglCreateWindowSurface(display, *config, ESContext.native_window, NULL);
+   if (surface == EGL_NO_SURFACE)
    {
-      LOG("No surface...\n");
+      LOG("eglCreateWindowSurface failed...ret: 0x%x\n", (uint32_t)surface);
       return EGL_FALSE;
    }
 
    // Create a GL context
-   context = eglCreateContext(display, config, EGL_NO_CONTEXT, contextAttribs );
-   if ( context == EGL_NO_CONTEXT )
+   context = eglCreateContext(display, *config, EGL_NO_CONTEXT, contextAttribs);
+   if (context == EGL_NO_CONTEXT)
    {
-      LOG("No context...\n");
+      LOG("eglCreateContext failed...ret: %d\n", ret);
       return EGL_FALSE;
    }
 
    // Make the context current
-   if ( !eglMakeCurrent(display, surface, surface, context) )
+   ret = eglMakeCurrent(display, surface, surface, context);
+   if (!ret)
    {
-      LOG("Could not make the current window current !\n");
+      LOG("Could not make the current window current !ret: %d\n", ret);
       return EGL_FALSE;
    }
 
@@ -381,6 +437,7 @@ static int grapglbmp(unsigned char *ptr, int width, int height, int dpp, int len
     fflush(dumpFile);
     fclose(dumpFile);
 
+    return 0;
 }
 
 static int shmem_dump(char *src, int size)
@@ -410,6 +467,75 @@ static int shmem_dump(char *src, int size)
     return inc;
 }
 
+static int gleGetBmpFile(char **retbuf, FILE *f)
+{
+    int ret=0, size=0, err=0;;
+    char *buff=0;
+    
+    if (!f) {
+        err = -1;
+        goto end;
+    }
+
+    ret |= fseek(f, 0, SEEK_END);
+
+    size = ftell(f);
+
+    ret |= fseek(f, 0, SEEK_SET);
+
+    if (ret) {
+        err = -2;
+        goto end;
+    }
+
+    buff = malloc(size);
+    if (!buff) {
+        err = -3;
+        goto end;
+    }
+    
+    ret = fread(buff, 1, size, f);
+    if ((ret < 0) || (ret != size)) {
+        err = -4;
+        goto end;
+    }
+
+    end:
+
+    if (err) {
+        if (buff) free(buff);
+
+        buff = 0;
+    }
+
+    *retbuf = buff;
+   
+    return err;
+}
+
+static int gleGetImage(char **dat, int idx)
+{
+    FILE *f;
+    char filepath[256];
+    char bnotejpg[128]="/home/root/banknote/full_H%.3d.bmp";
+    int ret=0;
+
+    sprintf(filepath, bnotejpg, idx);
+    f = fopen(filepath, "r");
+
+    if (!f) {
+        printf("get file [%s] failed!! \n", filepath);
+        return -1;
+    }
+
+    ret = gleGetBmpFile(dat, f);
+
+    fclose(f);
+
+    return ret;
+}
+
+#if 0
 int main() {
 
   get_server_references();
@@ -437,41 +563,131 @@ int main() {
   
   exit(0);
 }
+#endif
 
-#if 0
+#if 1 /*ex3  + vec4 (0.0, 0.2, 0.0, 0.0); */
+const GLchar* vertexSource =
+    "attribute vec4 position;    \n"
+    "void main()                  \n"
+    "{                            \n"
+    "   gl_Position = vec4(position.xyz, 1.0) + vec4 (0.0, 0.0, 0.0, 0.0);  \n"
+    "}                            \n";
+const GLchar* fragmentSource =
+    "precision mediump float;\n"
+    "void main()                                  \n"
+    "{                                            \n"
+    "  gl_FragColor = vec4 (0.0, 0.0, 1.0, 1.0 );\n"
+    "}                                            \n";
+#else /*ex1*/
+const GLchar* vertexSource =
+    "attribute vec4 position;    \n"
+    "void main()                  \n"
+    "{                            \n"
+    "   gl_Position = vec4(position.xyz, 1.0);  \n"
+    "}                            \n";
+const GLchar* fragmentSource =
+    "precision mediump float;\n"
+    "void main()                                  \n"
+    "{                                            \n"
+    "  gl_FragColor = vec4 (0.0, 0.0, 1.0, 1.0 );\n"
+    "}                                            \n";
+#endif
+
+float mCubeRotation = 0.0f;
+
+float vertices[] = {
+    -1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+     1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+    -1.0f, -1.0f,  1.0f,
+     1.0f, -1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f
+};
+
+float colors[] = {
+    0.0f,  1.0f,  0.0f,  1.0f,
+    0.0f,  1.0f,  0.0f,  1.0f,
+    1.0f,  0.5f,  0.0f,  1.0f,
+    1.0f,  0.5f,  0.0f,  1.0f,
+    1.0f,  0.0f,  0.0f,  1.0f,
+    1.0f,  0.0f,  0.0f,  1.0f,
+    0.0f,  0.0f,  1.0f,  1.0f,
+    1.0f,  0.0f,  1.0f,  1.0f
+};
+
+char indices[] = {
+    0, 4, 5, 0, 5, 1,
+    1, 5, 6, 1, 6, 2,
+    2, 6, 7, 2, 7, 3,
+    3, 7, 4, 3, 4, 0,
+    4, 7, 6, 4, 6, 5,
+    3, 0, 1, 3, 1, 2
+};
+
+#if 1
 int main(int argc, char *argv[])
 {
     #define CONTEXT_ES20
     EGLBoolean eglret = 0;
+    int screenwidth  = 800, screenheight = 480;
+    int ret=0;
+    char *img=0;
+    
     
     printf("main() \n");
 
-    EGLint ai32ContextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+    ret = gleGetImage(&img, 4);
 
+    if (ret) {
+        printf("main() Error!!! can't load bmp. \n");
+        return -1;
+    }
+
+    shmem_dump(img, 64);
+
+    get_server_references();
+
+    surface = wl_compositor_create_surface(compositor);
+    if (surface == NULL) {
+        LOG("No Compositor surface ! Yay....\n");
+        exit(1);
+    }
+    else LOG("Got a compositor surface !\n");
+
+    shell_surface = wl_shell_get_shell_surface(shell, surface);
+    wl_shell_surface_set_toplevel(shell_surface);
+
+    eglret = CreateWindowWithEGLContext("Nya", screenwidth, screenheight);
+    
+    printf("main() line: %d CreateWindowWithEGLContext ret: 0x%.8x\n", __LINE__, (unsigned int)eglret);
+  
     // Step 1 - Get the default display.
     EGLDisplay eglDisplay =0;
-    eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    //eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    eglDisplay = ESContext.display;
 
     printf("main() line: %d eglDisplay: 0x%.8x\n", __LINE__, (unsigned int)eglDisplay);
 
     // Step 2 - Initialize EGL.
-    EGLint majorVersion=0, minorVersion=0;
-    eglret = eglInitialize(eglDisplay, &majorVersion, &minorVersion);
-    printf("main() line: %d, minorVersion %d, minorVersion %d eglret: %d \n", __LINE__, majorVersion, minorVersion, eglret);
+    //EGLint majorVersion=0, minorVersion=0;
+    //eglret = eglInitialize(eglDisplay, &majorVersion, &minorVersion);
+    //printf("main() line: %d, minorVersion %d, minorVersion %d eglret: %d \n", __LINE__, majorVersion, minorVersion, eglret);
     
     // Step 3 - Make OpenGL ES the current API.
 
-    printf("main() line: %d \n", __LINE__);
+    //printf("main() line: %d \n", __LINE__);
     
     //eglBindAPI(EGL_OPENGL_ES_API);
     //eglInitialize(EGLDisplay dpy, EGLint * major, EGLint * minor)
     
-    EGLenum apiret = 0;
-    apiret = eglQueryAPI ();
-    
-    printf("main() line: %d api: %d \n", __LINE__, apiret);
+    //EGLenum apiret = 0;
+    //apiret = eglQueryAPI ();
+    //printf("main() line: %d api: %d \n", __LINE__, apiret);
     
     // Step 4 - Specify the required configuration attributes.
+    /*
     EGLint pi32ConfigAttribs[5];
     pi32ConfigAttribs[0] = EGL_SURFACE_TYPE;
     pi32ConfigAttribs[1] = EGL_WINDOW_BIT;
@@ -487,21 +703,13 @@ int main(int argc, char *argv[])
         EGL_WINDOW_BIT,
         EGL_NONE
     };
+    */
     
     GLuint fboId = 0;
-    GLuint renderBufferWidth = 1280;
-    GLuint renderBufferHeight = 720;
+    GLuint renderBufferWidth = screenwidth;
+    GLuint renderBufferHeight = screenheight;
     
     // Step 5 - Find a config that matches all requirements.
-    int iConfigs = 0;
-    EGLConfig eglConfig;
-    eglChooseConfig(eglDisplay, pi32ConfigAttribs, &eglConfig, 1, &iConfigs);
-    printf("main() line: %d \n", __LINE__);
-
-    if (iConfigs != 1) {
-        printf("Error: eglChooseConfig(): config not found iConfigs: %d \n", iConfigs);
-        //exit(-1);
-    }
 
     // Step 6 - Create a surface to draw to.
     EGLClientBuffer cbuffer=0;
@@ -510,80 +718,79 @@ int main(int argc, char *argv[])
 
     printf("main() line: %d \n", __LINE__);
     
-    //eglSurface = eglCreateWindowSurface(eglDisplay, eglConfig, (EGLNativeWindowType)NULL, NULL);
-    eglSurface = eglCreatePbufferFromClientBuffer(eglDisplay, EGL_RENDER_BUFFER, cbuffer, eglConfig, 0);
+    eglSurface = ESContext.surface;
     
-    printf("main() line: %d cbuffer: 0x%.8x eglSurface: 0x%.8x \n", __LINE__, cbuffer, (unsigned int)eglSurface);
+    printf("main() line: %d cbuffer: 0x%.8x eglSurface: 0x%.8x \n", __LINE__, (uint32_t)cbuffer, (unsigned int)eglSurface);
     
     // Step 7 - Create a context.
     EGLContext eglContext=0;
-    eglContext = eglCreateContext(eglDisplay, eglConfig, NULL, ai32ContextAttribs);
+    eglContext = ESContext.context;
     
     printf("main() line: %d eglContext: 0x%.8x \n", __LINE__, (unsigned int)eglContext);
     
     // Step 8 - Bind the context to the current thread
-    eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
-
-    printf("main() line: %d \n", __LINE__);
-    
-    // create a framebuffer object
-    glGenFramebuffers(1, &fboId);
-    glBindFramebuffer(GL_FRAMEBUFFER, fboId);
-
-    // create a texture object
-    GLuint textureId=0;
-     glGenTextures(1, &textureId);
-     
-     printf("main() line: %d textureId: %d \n", __LINE__, textureId);
-     
-     glBindTexture(GL_TEXTURE_2D, textureId);
-     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);                             
-     //GL_LINEAR_MIPMAP_LINEAR
-     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-     glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP_HINT, GL_TRUE); // automatic mipmap
-     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, renderBufferWidth, renderBufferHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
-     glBindTexture(GL_TEXTURE_2D, 0);
-     // attach the texture to FBO color attachment point
-     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0);
-     //qDebug() << glGetError();
-     GLuint renderBuffer=0;
-     glGenRenderbuffers(1, &renderBuffer);
-
-     printf("main() line: %d renderBuffer: %d \n", __LINE__, renderBuffer);
-     
-     glBindRenderbuffer(GL_RENDERBUFFER, renderBuffer);
-     //qDebug() << glGetError();
-     glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB, renderBufferWidth, renderBufferHeight);
-     //qDebug() << glGetError();
-     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderBuffer);
-
-      printf("main() line: %d \n", __LINE__);
-      
-      //qDebug() << glGetError();
-      GLuint depthRenderbuffer=0;
-      glGenRenderbuffers(1, &depthRenderbuffer);
-      
-     printf("main() line: %d depthRenderbuffer: %d \n", __LINE__, depthRenderbuffer);
-     
-      glBindRenderbuffer(GL_RENDERBUFFER, depthRenderbuffer);
-      glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,  renderBufferWidth, renderBufferHeight);
-      glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRenderbuffer);
-
-      // check FBO status
-      GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-      if(status != GL_FRAMEBUFFER_COMPLETE) {
-          printf("Problem with OpenGL framebuffer after specifying color render buffer: \n%x\n", status);
-      } else {
-          printf("FBO creation succedded\n");
-      }
+    //eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
 
    printf("main() line: %d \n", __LINE__);
    
-  glClearColor(1.0,0.0,0.0,1.0);
-  glClear(GL_COLOR_BUFFER_BIT);
+   printf("main() line: %d \n", __LINE__);
 
+   #if 1
+    // Create Vertex Array Object
+    GLuint vao;
+    glGenVertexArraysOES(1, &vao);
+    glBindVertexArrayOES(vao);
+
+    // Create a Vertex Buffer Object and copy the vertex data to it
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+
+    GLfloat vertices[] = {0.0f, 0.5f, 0.5f, -0.5f, -0.5f, -0.5f};
+    //GLfloat vertices[] = {-0.5f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, -1.0f, 1.0f, -1.0f};
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // Create and compile the vertex shader
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexSource, NULL);
+    glCompileShader(vertexShader);
+
+    // Create and compile the fragment shader
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentSource, NULL);
+    glCompileShader(fragmentShader);
+
+    // Link the vertex and fragment shader into a shader program
+    GLuint shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    // glBindFragDataLocation(shaderProgram, 0, "outColor");
+    glLinkProgram(shaderProgram);
+    glUseProgram(shaderProgram);
+
+    // Specify the layout of the vertex data
+    GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
+    glEnableVertexAttribArray(posAttrib);
+    glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+    #endif
+
+    while (1) {
+        wl_display_dispatch_pending(ESContext.native_display);
+        //draw();
+        // Clear the screen to black        
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);        
+        glClear(GL_COLOR_BUFFER_BIT);        
+        // Draw a triangle from the 3 vertices        
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        //glDrawArrays(GL_TRIANGLES, 0, 6);
+    
+        RefreshWindow();
+    }
+
+    sleep(2);
+    
   //qDebug() << eglSwapBuffers(   eglDisplay, eglSurface);
   int size = 4 * renderBufferHeight * renderBufferWidth;
   printf("print size");
