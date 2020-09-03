@@ -56,8 +56,8 @@ struct _escontext ESContext = {
 #define TRUE 1
 #define FALSE 0
 
-#define WINDOW_WIDTH 1280
-#define WINDOW_HEIGHT 720
+#define WINDOW_WIDTH (1280 / 2)
+#define WINDOW_HEIGHT (720 / 2)
 
 #define LOG(...) fprintf(stderr, __VA_ARGS__)
 #define LOG_ERRNO(...)  fprintf(stderr, "Error : %s\n", strerror(errno)); fprintf(stderr, __VA_ARGS__)
@@ -78,6 +78,8 @@ struct bitmapHeader_s {
     int    aspbiNumCinCP;
     int    aspbiNumImpColor;
 };
+
+extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
 
 void CreateNativeWindow(char *title, int width, int height) 
 {
@@ -467,10 +469,11 @@ static int shmem_dump(char *src, int size)
     return inc;
 }
 
-static int gleGetBmpFile(char **retbuf, FILE *f)
+static int gleGetBmpFile(char **retbuf, char **retraw, FILE *f)
 {
-    int ret=0, size=0, err=0;;
-    char *buff=0;
+    int ret=0, size=0, err=0, offset=0;
+    char *buff=0, *rawbuf=0;
+    struct bitmapHeader_s *head=0;
     
     if (!f) {
         err = -1;
@@ -488,39 +491,72 @@ static int gleGetBmpFile(char **retbuf, FILE *f)
         goto end;
     }
 
-    buff = malloc(size);
-    if (!buff) {
+    //size = sizeof(struct bitmapHeader_s);
+    head = (struct bitmapHeader_s *)malloc(size + 4); 
+    if (!head) {
         err = -3;
         goto end;
     }
-    
+
+    //size -= 2;
+    buff = &head->aspbmpMagic[2];
     ret = fread(buff, 1, size, f);
     if ((ret < 0) || (ret != size)) {
         err = -4;
         goto end;
     }
 
+    dbgBitmapHeader(head, sizeof(struct bitmapHeader_s) - 2);
+
+    size = head->aspbiRawSize;
+    rawbuf = malloc(size);
+
+    offset = head->aspbhRawoffset;
+
+    #if 1
+    fseek(f, offset, SEEK_SET);
+    #else
+    fseek(f, 0, SEEK_SET);
+
+    ret = fread(rawbuf, 1, offset, f);
+    if ((ret < 0) || (ret != offset)) {
+        err = -5;
+        goto end;
+    }
+    #endif
+    
+    ret = fread(rawbuf, 1, size, f);
+    if ((ret < 0) || (ret != size)) {
+        err = -6;
+        goto end;
+    }
+    
+
     end:
 
     if (err) {
-        if (buff) free(buff);
-
-        buff = 0;
+        if (head) free(head);
+        if (rawbuf) free(rawbuf);
+        
+        head = 0;
+        rawbuf = 0;
     }
 
-    *retbuf = buff;
+    *retbuf = (char *)head;
+    *retraw = rawbuf;
    
     return err;
 }
 
-static int gleGetImage(char **dat, int idx)
+static int gleGetImage(char **dat, char **raw, int idx)
 {
     FILE *f;
     char filepath[256];
-    char bnotejpg[128]="/home/root/banknote/full_H%.3d.bmp";
+    char bnotebmp[128]="/home/root/banknote/full_H%.3d.bmp";
+    //char bnotebmp[128]="/home/root/banknote/char/%d.bmp";
     int ret=0;
 
-    sprintf(filepath, bnotejpg, idx);
+    sprintf(filepath, bnotebmp, idx);
     f = fopen(filepath, "r");
 
     if (!f) {
@@ -528,7 +564,7 @@ static int gleGetImage(char **dat, int idx)
         return -1;
     }
 
-    ret = gleGetBmpFile(dat, f);
+    ret = gleGetBmpFile(dat, raw, f);
 
     fclose(f);
 
@@ -564,8 +600,25 @@ int main() {
   exit(0);
 }
 #endif
+#if 1
+    const GLchar* vertexShaderCode = {
+                "precision mediump float;\n"
+                "attribute vec4 a_position;                  \n"
+                "attribute vec2 a_textureCoordinate;    \n"
+                "varying vec2 v_textureCoordinate;     \n"
+                "void main() {                                      \n"
+                "    v_textureCoordinate = a_textureCoordinate;    \n"
+                "    gl_Position = a_position;           \n"
+                "}                 \n"};
 
-#if 1 /*ex3  + vec4 (0.0, 0.2, 0.0, 0.0); */
+    const GLchar* fragmentShaderCode = {
+                "precision mediump float;\n"
+                "varying vec2 v_textureCoordinate;      \n"
+                "uniform sampler2D u_texture;             \n"
+                "void main() {                                      \n"
+                "    gl_FragColor = texture2D(u_texture, v_textureCoordinate);         \n" // texture2D(u_texture, v_textureCoordinate);\n
+                "}                                \n"};
+#elif 1 /*ex3  + vec4 (0.0, 0.2, 0.0, 0.0); */
 const GLchar* vertexSource =
     "attribute vec4 position;    \n"
     "void main()                  \n"
@@ -576,7 +629,7 @@ const GLchar* fragmentSource =
     "precision mediump float;\n"
     "void main()                                  \n"
     "{                                            \n"
-    "  gl_FragColor = vec4 (0.0, 0.0, 1.0, 1.0 );\n"
+    "  gl_FragColor = vec4 (0.0, 1.0, 0.0, 1.0 );\n"
     "}                                            \n";
 #else /*ex1*/
 const GLchar* vertexSource =
@@ -633,20 +686,28 @@ int main(int argc, char *argv[])
     EGLBoolean eglret = 0;
     int screenwidth  = 800, screenheight = 480;
     int ret=0;
-    char *img=0;
-    
+    char *img=0, *raw=0;
+    struct bitmapHeader_s *header=0;
     
     printf("main() \n");
 
-    ret = gleGetImage(&img, 4);
+    ret = gleGetImage(&img, &raw, 23);
 
     if (ret) {
-        printf("main() Error!!! can't load bmp. \n");
+        printf("main() Error!!! can't load bmp ret: %d\n", ret);
         return -1;
     }
 
-    shmem_dump(img, 64);
+    shmem_dump(img, 32);
+    shmem_dump(raw, 32);
+    
+    //raw = img + 1078;
+    header = (struct bitmapHeader_s *)img;
+    dbgBitmapHeader(header, sizeof(struct bitmapHeader_s) - 2);
 
+    screenwidth = WINDOW_WIDTH;
+    screenheight = WINDOW_HEIGHT;
+    
     get_server_references();
 
     surface = wl_compositor_create_surface(compositor);
@@ -714,13 +775,13 @@ int main(int argc, char *argv[])
     // Step 6 - Create a surface to draw to.
     EGLClientBuffer cbuffer=0;
     EGLSurface eglSurface=0;
-    cbuffer = malloc(renderBufferWidth*renderBufferHeight*3);
+    //cbuffer = malloc(renderBufferWidth*renderBufferHeight*3);
 
     printf("main() line: %d \n", __LINE__);
     
     eglSurface = ESContext.surface;
     
-    printf("main() line: %d cbuffer: 0x%.8x eglSurface: 0x%.8x \n", __LINE__, (uint32_t)cbuffer, (unsigned int)eglSurface);
+    //printf("main() line: %d cbuffer: 0x%.8x eglSurface: 0x%.8x \n", __LINE__, (uint32_t)cbuffer, (unsigned int)eglSurface);
     
     // Step 7 - Create a context.
     EGLContext eglContext=0;
@@ -732,24 +793,113 @@ int main(int argc, char *argv[])
     //eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
 
    printf("main() line: %d \n", __LINE__);
-   
-   printf("main() line: %d \n", __LINE__);
 
-   #if 1
+    #if 1
+    GLfloat vertexData[] = {-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f};
+    GLfloat textureCoordinateData[] = {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f};
+    GLuint shaderProgram = glCreateProgram();
+    GLint   compileStatus;    
+    
+    // Create and compile the vertex shader
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderCode, NULL);
+    glCompileShader(vertexShader);
+
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &compileStatus);
+    printf("main() line: %d compile vertex shader status: %d \n", __LINE__, compileStatus); 
+    if(compileStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(vertexShader, sizeof(messages), 0,messages);
+        printf("main() line: %d compile log: %s \n", __LINE__, messages);
+    }
+   
+    // Create and compile the fragment shader
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderCode, NULL);
+    glCompileShader(fragmentShader);
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &compileStatus);
+    printf("main() line: %d compile fragment shader status: %d \n", __LINE__, compileStatus); 
+    if(compileStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(fragmentShader, sizeof(messages), 0,messages);
+        printf("main() line: %d compile log: %s \n", __LINE__, messages);
+    }
+    
+   printf("main() line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader, fragmentShader, shaderProgram);
+
+    // Link the vertex and fragment shader into a shader program
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    // glBindFragDataLocation(shaderProgram, 0, "outColor");
+    glLinkProgram(shaderProgram);
+
+    GLint linkStatus;
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkStatus);
+    printf("main() line: %d link program status: %d \n", __LINE__, linkStatus); 
+    if (linkStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetProgramInfoLog( shaderProgram, sizeof(messages), 0, messages);
+        printf("main() line: %d link error log: %s \n", __LINE__, messages);
+    }
+            
+    glUseProgram(shaderProgram);
+    
+    // Get the location of a_position in the shader
+    GLint aLocation = glGetAttribLocation(shaderProgram, "position");
+    GLint asLocation = glGetAttribLocation(shaderProgram, "s_position");
+    
+    printf("main() line: %d location vertex test: %d asLocation: %d \n", __LINE__, aLocation, asLocation);
+   
+    GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(aPositionLocation);
+    // Specify the data of a_position
+    glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
+
+    // Get the location of a_textureCoordinate in the shader
+    GLint aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(aTextureCoordinateLocation);
+    // Specify the data of a_textureCoordinate
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
+
+   printf("main() line: %d location vertex: 0x%.8x texturecord: 0x%.8x \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
+   
+    // Create texture
+    GLint textures[0];
+    glGenTextures(1, textures);
+    GLint imageTexture = textures[0];
+
+    // Set texture parameters
+    glBindTexture(GL_TEXTURE_2D, imageTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Decode the image and load it into texture
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, header->aspbiHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+    //GLint uTextureLocation = glGetAttribLocation(shaderProgram, "u_texture");
+    //glActiveTexture(GL_TEXTURE0);
+    //glUniform1i(uTextureLocation, 0);
+
+   //printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
+   
+   #elif 1
     // Create Vertex Array Object
     GLuint vao;
-    glGenVertexArraysOES(1, &vao);
-    glBindVertexArrayOES(vao);
+    //glGenVertexArraysOES(1, &vao);
+    //glBindVertexArrayOES(vao);
 
     // Create a Vertex Buffer Object and copy the vertex data to it
     GLuint vbo;
-    glGenBuffers(1, &vbo);
+    //glGenBuffers(1, &vbo);
 
     GLfloat vertices[] = {0.0f, 0.5f, 0.5f, -0.5f, -0.5f, -0.5f};
     //GLfloat vertices[] = {-0.5f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, -1.0f, 1.0f, -1.0f};
 
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    //glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    //glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     // Create and compile the vertex shader
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -768,25 +918,39 @@ int main(int argc, char *argv[])
     // glBindFragDataLocation(shaderProgram, 0, "outColor");
     glLinkProgram(shaderProgram);
     glUseProgram(shaderProgram);
+    
+    printf("main() line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader, fragmentShader, shaderProgram);
 
     // Specify the layout of the vertex data
     GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
     glEnableVertexAttribArray(posAttrib);
-    glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 0, vertices);
 
+    printf("main() line: %d location vertex: 0x%.8x \n", __LINE__, posAttrib);
+    
     #endif
 
     while (1) {
         wl_display_dispatch_pending(ESContext.native_display);
         //draw();
         // Clear the screen to black        
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);        
-        glClear(GL_COLOR_BUFFER_BIT);        
+        glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
+        glClear(GL_COLOR_BUFFER_BIT);       
+
+        glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+        
         // Draw a triangle from the 3 vertices        
+        #if 1
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        #else
         glDrawArrays(GL_TRIANGLES, 0, 3);
-        //glDrawArrays(GL_TRIANGLES, 0, 6);
+        #endif
     
         RefreshWindow();
+        
+        #if 1
+        break;
+        #endif
     }
 
     sleep(2);
