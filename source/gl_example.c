@@ -442,6 +442,35 @@ static int grapglbmp(unsigned char *ptr, int width, int height, int dpp, int len
     return 0;
 }
 
+static int asgltime_diff(struct timespec *s, struct timespec *e, int unit)
+{
+    unsigned long long cur, tnow, lnow, past, tbef, lpast, gunit;
+    int diff;
+
+    gunit = unit;
+    //clock_gettime(CLOCK_REALTIME, &curtime);
+    cur = s->tv_sec;
+    tnow = s->tv_nsec;
+    lnow = cur * 1000000000+tnow;
+    
+    //clock_gettime(CLOCK_REALTIME, &curtime);
+    past = e->tv_sec;
+    tbef = e->tv_nsec;      
+    lpast = past * 1000000000+tbef; 
+
+    if (lpast < lnow) {
+        diff = -1;
+    } else {
+        diff = (lpast - lnow)/gunit;
+    }
+
+    if (diff == 0) {
+        diff = 1;
+    }
+
+    return diff;
+}
+
 static int shmem_dump(char *src, int size)
 {
     char str[128];
@@ -607,8 +636,6 @@ int main() {
             "attribute vec4 a_position;\n"
             "attribute vec2 a_textureCoordinate;    \n"
             "varying vec2 v_textureCoordinate;     \n"
-            "uniform vec2 u_Translate;\n" 
-            "uniform float u_Scale;\n" 
             "uniform float u_Rotate;\n" 
             "uniform float u_Ratio;\n" 
             "\n" 
@@ -616,19 +643,11 @@ int main() {
             "   v_textureCoordinate = a_textureCoordinate;    \n"
             "   vec4 p = a_position;\n" 
             "   p.y = p.y / u_Ratio;\n" 
-            "   mat4 translateMatrix = mat4(1.0, 0.0, 0.0, 0.0,\n" 
-            "                              0.0, 1.0, 0.0, 0.0,\n" 
-            "                              0.0, 0.0, 1.0, 0.0,\n" 
-            "                              u_Translate.x, u_Translate.y, 0.0, 1.0);\n" 
-            "   mat4 scaleMatrix = mat4(u_Scale, 0.0, 0.0, 0.0,\n" 
-            "                        0.0, u_Scale, 0.0, 0.0,\n" 
-            "                        0.0, 0.0, 1.0, 0.0,\n" 
-            "                        0.0, 0.0, 0.0, 1.0);\n" 
             "   mat4 rotateMatrix = mat4(cos(u_Rotate), sin(u_Rotate), 0.0, 0.0,\n" 
             "                         -sin(u_Rotate), cos(u_Rotate), 0.0, 0.0,\n" 
             "                         0.0, 0.0, 1.0, 0.0,\n" 
             "                         0.0, 0.0, 0.0, 1.0);\n" 
-            "    p = translateMatrix * rotateMatrix * scaleMatrix * p;\n" 
+            "    p = rotateMatrix * p;\n" 
             "    p.y = p.y * u_Ratio;\n" 
             "    gl_Position = p;  \n"
             "}                                \n"};
@@ -639,11 +658,10 @@ int main() {
                 "uniform sampler2D u_texture;             \n"
                 "void main() {                                      \n"
                 "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
-                "    vec4 swap; \n"
-                "    swap.r = color.r; \n"
-                "    swap.g = color.g; \n"
-                "    swap.b = color.b; \n"
-                "    gl_FragColor = swap;        \n" // texture2D(u_texture, v_textureCoordinate);\n
+                "    float swap = color.r; \n"
+                "    color.r = color.b; \n"
+                "    color.b = swap;   \n"
+                "    gl_FragColor = color;        \n" // texture2D(u_texture, v_textureCoordinate);\n
                 "}                                \n"};
 #elif 1 /* draw bmp */
     const GLchar* vertexShaderCode = {
@@ -737,6 +755,8 @@ int main(int argc, char *argv[])
     int ret=0, imgidx=0;
     char *img=0, *raw=0;
     struct bitmapHeader_s *header=0;
+    struct timespec tmS, tmE;
+    int tmCost=0, meacnt=0;
     
     printf("main() argc: %d \n", argc);
 
@@ -920,7 +940,8 @@ int main(int argc, char *argv[])
     glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
     
     printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
-    
+
+    #if 0
     // Get the location of translate in the shader
     GLint uTranslateLocation = glGetUniformLocation(shaderProgram, "u_Translate");
     // Enable the parameter of the location
@@ -934,15 +955,17 @@ int main(int argc, char *argv[])
     glEnableVertexAttribArray(uScaleLocation);
     // Specify the vertex data of u_Scale
     glUniform1f(uScaleLocation, 1.0f);
-
+    
     printf("main() line: %d uTranslateLocation: %d uScaleLocation: %d \n", __LINE__, uTranslateLocation, uScaleLocation);
+    #endif
     
     // Get the location of u_Rotate in the shader
+    GLfloat rtangle=0.0f;
     GLint uRotateLocation = glGetUniformLocation(shaderProgram, "u_Rotate");
     // Enable the parameter of the location
     glEnableVertexAttribArray(uRotateLocation);
     // Specify the vertex data of u_Rotate
-    glUniform1f(uRotateLocation, (10.0f * 3.1415f) / 180.0f);
+    glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
 
     // Get the location of u_Rotate in the shader
     GLint uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
@@ -965,15 +988,23 @@ int main(int argc, char *argv[])
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
+    
+    clock_gettime(CLOCK_REALTIME, &tmS);
+    
     // Decode the image and load it into texture
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
     //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8_ALPHA8_EXT, header->aspbiWidth, header->aspbiHeight, 0, GL_LUMINANCE8_ALPHA8_EXT, GL_UNSIGNED_BYTE, raw);
     //GLint uTextureLocation = glGetAttribLocation(shaderProgram, "u_texture");
     //glActiveTexture(GL_TEXTURE0);
     //glUniform1i(uTextureLocation, 0);
+    glFinish();
+    
+    clock_gettime(CLOCK_REALTIME, &tmE);
     #endif
 
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("texture in cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+            
     //printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
    
     #elif 1
@@ -1021,29 +1052,56 @@ int main(int argc, char *argv[])
     
     #endif
 
+    glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
+    glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+    
+    meacnt = 0;
     while (1) {
         wl_display_dispatch_pending(ESContext.native_display);
         //draw();
-        // Clear the screen to black        
-        glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
-        glClear(GL_COLOR_BUFFER_BIT);       
 
-        glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+        clock_gettime(CLOCK_REALTIME, &tmE);
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("pending delay: %d.%d ms\n", tmCost/1000, tmCost%1000);
         
+        // Clear the screen to black        
+        clock_gettime(CLOCK_REALTIME, &tmS);
+            
+        glClear(GL_COLOR_BUFFER_BIT);       
+    
         // Draw a triangle from the 3 vertices        
         #if 1
         glDrawArrays(GL_TRIANGLES, 0, 6);
         #else
         glDrawArrays(GL_TRIANGLES, 0, 3);
         #endif
-    
+
+        glFinish();
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("display cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+        rtangle += 1.0f;
+        glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
+
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        
         RefreshWindow();
+        //usleep(1000);
+
         
         #if 1
-        break;
+        if (meacnt >= 360) {
+            break;
+        } else {
+            meacnt ++;
+        }
         #endif
     }
 
+    
     sleep(2);
     
   //qDebug() << eglSwapBuffers(   eglDisplay, eglSurface);
@@ -1054,12 +1112,30 @@ int main(int argc, char *argv[])
 
   unsigned char *data2 = (unsigned char *) malloc(size);
 
+  memset(data2, 0, size);
   printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
+  
+  glFinish();
+  
+  clock_gettime(CLOCK_REALTIME, &tmS);
 
-  glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_RGB, GL_UNSIGNED_BYTE, data2);
+  GLint rx=0, ry=0, rw=0, rh=0;
+
+  rx = renderBufferWidth / 4;
+  ry = renderBufferHeight / 4;
+  rw = renderBufferWidth / 2;
+  rh = renderBufferHeight / 2;
+  
+  glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+  glFinish();
+  clock_gettime(CLOCK_REALTIME, &tmE);
+
+  tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+  printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+          
   //glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_LUMINANCE8_ALPHA8_EXT, GL_UNSIGNED_BYTE, data2);
 
-  grapglbmp(data2, renderBufferWidth, renderBufferHeight, 24, 3 * renderBufferHeight * renderBufferWidth);
+  grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
   //grapglbmp(data2, renderBufferWidth, renderBufferHeight, 8, 1 * renderBufferHeight * renderBufferWidth);
   //shmem_dump(data2, size);
 
