@@ -600,7 +600,52 @@ int main() {
   exit(0);
 }
 #endif
+
 #if 1
+    const GLchar* vertexShaderCode = {
+            "precision mediump float;\n"
+            "attribute vec4 a_position;\n"
+            "attribute vec2 a_textureCoordinate;    \n"
+            "varying vec2 v_textureCoordinate;     \n"
+            "uniform vec2 u_Translate;\n" 
+            "uniform float u_Scale;\n" 
+            "uniform float u_Rotate;\n" 
+            "uniform float u_Ratio;\n" 
+            "\n" 
+            "void main() {\n" 
+            "   v_textureCoordinate = a_textureCoordinate;    \n"
+            "   vec4 p = a_position;\n" 
+            "   p.y = p.y / u_Ratio;\n" 
+            "   mat4 translateMatrix = mat4(1.0, 0.0, 0.0, 0.0,\n" 
+            "                              0.0, 1.0, 0.0, 0.0,\n" 
+            "                              0.0, 0.0, 1.0, 0.0,\n" 
+            "                              u_Translate.x, u_Translate.y, 0.0, 1.0);\n" 
+            "   mat4 scaleMatrix = mat4(u_Scale, 0.0, 0.0, 0.0,\n" 
+            "                        0.0, u_Scale, 0.0, 0.0,\n" 
+            "                        0.0, 0.0, 1.0, 0.0,\n" 
+            "                        0.0, 0.0, 0.0, 1.0);\n" 
+            "   mat4 rotateMatrix = mat4(cos(u_Rotate), sin(u_Rotate), 0.0, 0.0,\n" 
+            "                         -sin(u_Rotate), cos(u_Rotate), 0.0, 0.0,\n" 
+            "                         0.0, 0.0, 1.0, 0.0,\n" 
+            "                         0.0, 0.0, 0.0, 1.0);\n" 
+            "    p = translateMatrix * rotateMatrix * scaleMatrix * p;\n" 
+            "    p.y = p.y * u_Ratio;\n" 
+            "    gl_Position = p;  \n"
+            "}                                \n"};
+
+    const GLchar* fragmentShaderCode = {
+                "precision mediump float;\n"
+                "varying vec2 v_textureCoordinate;      \n"
+                "uniform sampler2D u_texture;             \n"
+                "void main() {                                      \n"
+                "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
+                "    vec4 swap; \n"
+                "    swap.r = color.r; \n"
+                "    swap.g = color.g; \n"
+                "    swap.b = color.b; \n"
+                "    gl_FragColor = swap;        \n" // texture2D(u_texture, v_textureCoordinate);\n
+                "}                                \n"};
+#elif 1 /* draw bmp */
     const GLchar* vertexShaderCode = {
                 "precision mediump float;\n"
                 "attribute vec4 a_position;                  \n"
@@ -616,7 +661,11 @@ int main() {
                 "varying vec2 v_textureCoordinate;      \n"
                 "uniform sampler2D u_texture;             \n"
                 "void main() {                                      \n"
-                "    gl_FragColor = texture2D(u_texture, v_textureCoordinate);         \n" // texture2D(u_texture, v_textureCoordinate);\n
+                "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
+                "    vec4 swap = color;    \n"
+                "    swap.r = color.b;       \n"
+                "    swap.b = color.r;       \n"
+                "    gl_FragColor = swap;        \n" // texture2D(u_texture, v_textureCoordinate);\n
                 "}                                \n"};
 #elif 1 /*ex3  + vec4 (0.0, 0.2, 0.0, 0.0); */
 const GLchar* vertexSource =
@@ -685,13 +734,21 @@ int main(int argc, char *argv[])
     #define CONTEXT_ES20
     EGLBoolean eglret = 0;
     int screenwidth  = 800, screenheight = 480;
-    int ret=0;
+    int ret=0, imgidx=0;
     char *img=0, *raw=0;
     struct bitmapHeader_s *header=0;
     
-    printf("main() \n");
+    printf("main() argc: %d \n", argc);
 
-    ret = gleGetImage(&img, &raw, 23);
+    if (argc == 2) {
+        imgidx = atoi(argv[1]);
+        
+        printf("main() argv[1]: %d (%s) \n", imgidx, argv[1]);
+    } else {
+        imgidx = 23;
+    }
+
+    ret = gleGetImage(&img, &raw, imgidx);
 
     if (ret) {
         printf("main() Error!!! can't load bmp ret: %d\n", ret);
@@ -705,8 +762,8 @@ int main(int argc, char *argv[])
     header = (struct bitmapHeader_s *)img;
     dbgBitmapHeader(header, sizeof(struct bitmapHeader_s) - 2);
 
-    screenwidth = WINDOW_WIDTH;
-    screenheight = WINDOW_HEIGHT;
+    screenwidth = header->aspbiWidth / 2;
+    screenheight = abs(header->aspbiHeight) / 2;
     
     get_server_references();
 
@@ -845,10 +902,9 @@ int main(int argc, char *argv[])
     glUseProgram(shaderProgram);
     
     // Get the location of a_position in the shader
-    GLint aLocation = glGetAttribLocation(shaderProgram, "position");
-    GLint asLocation = glGetAttribLocation(shaderProgram, "s_position");
-    
-    printf("main() line: %d location vertex test: %d asLocation: %d \n", __LINE__, aLocation, asLocation);
+    //GLint aLocation = glGetAttribLocation(shaderProgram, "position");
+    //GLint asLocation = glGetAttribLocation(shaderProgram, "s_position");
+    //printf("main() line: %d location vertex test: %d asLocation: %d \n", __LINE__, aLocation, asLocation);
    
     GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
     // Enable the parameter of the location
@@ -862,9 +918,42 @@ int main(int argc, char *argv[])
     glEnableVertexAttribArray(aTextureCoordinateLocation);
     // Specify the data of a_textureCoordinate
     glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
+    
+    printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
+    
+    // Get the location of translate in the shader
+    GLint uTranslateLocation = glGetUniformLocation(shaderProgram, "u_Translate");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(uTranslateLocation);
+    // Specify the vertex data of translate
+    glUniform2f(uTranslateLocation, 0.0f, 0.0f);
 
-   printf("main() line: %d location vertex: 0x%.8x texturecord: 0x%.8x \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
-   
+    // Get the location of u_Scale in the shader
+    GLint uScaleLocation = glGetUniformLocation(shaderProgram, "u_Scale");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(uScaleLocation);
+    // Specify the vertex data of u_Scale
+    glUniform1f(uScaleLocation, 1.0f);
+
+    printf("main() line: %d uTranslateLocation: %d uScaleLocation: %d \n", __LINE__, uTranslateLocation, uScaleLocation);
+    
+    // Get the location of u_Rotate in the shader
+    GLint uRotateLocation = glGetUniformLocation(shaderProgram, "u_Rotate");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(uRotateLocation);
+    // Specify the vertex data of u_Rotate
+    glUniform1f(uRotateLocation, (10.0f * 3.1415f) / 180.0f);
+
+    // Get the location of u_Rotate in the shader
+    GLint uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(uRatioLocation);
+    // Specify the vertex data of u_Ratio
+    glUniform1f(uRatioLocation, screenwidth * 1.0f / screenheight);
+
+    printf("main() line: %d uRotateLocation: %d uRatioLocation: %d \n", __LINE__, uRotateLocation, uRatioLocation);
+
+    #if 1
     // Create texture
     GLint textures[0];
     glGenTextures(1, textures);
@@ -878,14 +967,16 @@ int main(int argc, char *argv[])
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Decode the image and load it into texture
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, header->aspbiHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8_ALPHA8_EXT, header->aspbiWidth, header->aspbiHeight, 0, GL_LUMINANCE8_ALPHA8_EXT, GL_UNSIGNED_BYTE, raw);
     //GLint uTextureLocation = glGetAttribLocation(shaderProgram, "u_texture");
     //glActiveTexture(GL_TEXTURE0);
     //glUniform1i(uTextureLocation, 0);
+    #endif
 
-   //printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
+    //printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
    
-   #elif 1
+    #elif 1
     // Create Vertex Array Object
     GLuint vao;
     //glGenVertexArraysOES(1, &vao);
@@ -966,8 +1057,10 @@ int main(int argc, char *argv[])
   printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
 
   glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_RGB, GL_UNSIGNED_BYTE, data2);
+  //glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_LUMINANCE8_ALPHA8_EXT, GL_UNSIGNED_BYTE, data2);
 
   grapglbmp(data2, renderBufferWidth, renderBufferHeight, 24, 3 * renderBufferHeight * renderBufferWidth);
+  //grapglbmp(data2, renderBufferWidth, renderBufferHeight, 8, 1 * renderBufferHeight * renderBufferWidth);
   //shmem_dump(data2, size);
 
   //QImage image(data2, renderBufferWidth,  renderBufferHeight,renderBufferWidth*2, QImage::Format_RGB16);
