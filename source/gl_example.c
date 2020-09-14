@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
 #define GL_GLEXT_PROTOTYPES 1
 //#include <GLES/gl.h>
 //#include <GLES/glext.h>
@@ -123,7 +124,9 @@ EGLBoolean CreateEGLContext ()
        EGL_RED_SIZE,        8,
        EGL_GREEN_SIZE,      8,
        EGL_BLUE_SIZE,       8,
-       EGL_NONE
+       EGL_ALPHA_SIZE,     8,
+       EGL_DEPTH_SIZE,     16,
+       EGL_NONE,
    };
    #else
    static const EGLint fbAttribs[] = {
@@ -600,6 +603,319 @@ static int gleGetImage(char **dat, char **raw, int idx)
     return ret;
 }
 
+#define I(_i, _j) ((_j)+ 4*(_i))
+
+static void func_multiplyMM(float* r, float* lhs, float* rhs)
+{
+    for (int i=0 ; i<4 ; i++) {
+        const float rhs_i0 = rhs[ I(i,0) ];
+        register float ri0 = lhs[ I(0,0) ] * rhs_i0;
+        register float ri1 = lhs[ I(0,1) ] * rhs_i0;
+        register float ri2 = lhs[ I(0,2) ] * rhs_i0;
+        register float ri3 = lhs[ I(0,3) ] * rhs_i0;
+        for (int j=1 ; j<4 ; j++) {
+            register const float rhs_ij = rhs[ I(i,j) ];
+            ri0 += lhs[ I(j,0) ] * rhs_ij;
+            ri1 += lhs[ I(j,1) ] * rhs_ij;
+            ri2 += lhs[ I(j,2) ] * rhs_ij;
+            ri3 += lhs[ I(j,3) ] * rhs_ij;
+        }
+        r[ I(i,0) ] = ri0;
+        r[ I(i,1) ] = ri1;
+        r[ I(i,2) ] = ri2;
+        r[ I(i,3) ] = ri3;
+    }
+}
+
+static void multiplyMM(float* r, int roffset, float* lhs, int lhoffset, float* rhs, int rhoffset)
+{
+    float *rlt=0, *lhsoff=0, *rhsoff=0;
+
+    rlt = r + roffset;
+    lhsoff = lhs + lhoffset;
+    rhsoff = rhs + rhoffset;
+
+    func_multiplyMM(rlt, lhsoff, rhsoff);
+}
+
+    /**
+     * Computes the length of a vector
+     *
+     * @param x x coordinate of a vector
+     * @param y y coordinate of a vector
+     * @param z z coordinate of a vector
+     * @return the length of a vector
+     */
+    static float length(float x, float y, float z) {
+        return (float) sqrt(x * x + y * y + z * z);
+    }
+    
+    /**
+     * Translates matrix m by x, y, and z in place.
+     * @param m matrix
+     * @param mOffset index into m where the matrix starts
+     * @param x translation factor x
+     * @param y translation factor y
+     * @param z translation factor z
+     */
+    static void translateM(float *m, int mOffset, float x, float y, float z) 
+    {
+        for (int i=0 ; i<4 ; i++) {
+            int mi = mOffset + i;
+            m[12 + mi] += m[mi] * x + m[4 + mi] * y + m[8 + mi] * z;
+        }
+    }
+
+
+    /**
+     * Define a projection matrix in terms of six clip planes
+     * @param m the float array that holds the perspective matrix
+     * @param offset the offset into float array m where the perspective
+     * matrix data is written
+     * @param left
+     * @param right
+     * @param bottom
+     * @param top
+     * @param near
+     * @param far
+     */
+    static int frustumM(float *m, int offset, float left, float right, float bottom, float top, float near, float far) {
+        if (left == right) {
+            return -1;
+        }
+        if (top == bottom) {
+            return -2;
+        }
+        if (near == far) {
+            return -3;
+        }
+        if (near <= 0.0f) {
+            return -4;
+        }
+        if (far <= 0.0f) {
+            return -5;
+        }
+        
+        const float r_width  = 1.0f / (right - left);
+        const float r_height = 1.0f / (top - bottom);
+        const float r_depth  = 1.0f / (near - far);
+        const float x = 2.0f * (near * r_width);
+        const float y = 2.0f * (near * r_height);
+        const float A = 2.0f * ((right + left) * r_width);
+        const float B = (top + bottom) * r_height;
+        const float C = (far + near) * r_depth;
+        const float D = 2.0f * (far * near * r_depth);
+        m[offset + 0] = x;
+        m[offset + 5] = y;
+        m[offset + 8] = A;
+        m[offset +  9] = B;
+        m[offset + 10] = C;
+        m[offset + 14] = D;
+        m[offset + 11] = -1.0f;
+        m[offset +  1] = 0.0f;
+        m[offset +  2] = 0.0f;
+        m[offset +  3] = 0.0f;
+        m[offset +  4] = 0.0f;
+        m[offset +  6] = 0.0f;
+        m[offset +  7] = 0.0f;
+        m[offset + 12] = 0.0f;
+        m[offset + 13] = 0.0f;
+        m[offset + 15] = 0.0f;
+
+        return 0;
+    }
+
+    /**
+     * Define a viewing transformation in terms of an eye point, a center of
+     * view, and an up vector.
+     *
+     * @param rm returns the result
+     * @param rmOffset index into rm where the result matrix starts
+     * @param eyeX eye point X
+     * @param eyeY eye point Y
+     * @param eyeZ eye point Z
+     * @param centerX center of view X
+     * @param centerY center of view Y
+     * @param centerZ center of view Z
+     * @param upX up vector X
+     * @param upY up vector Y
+     * @param upZ up vector Z
+     */
+    static void setLookAtM(float *rm, int rmOffset,
+            float eyeX, float eyeY, float eyeZ,
+            float centerX, float centerY, float centerZ, 
+            float upX, float upY, float upZ) {
+        // See the OpenGL GLUT documentation for gluLookAt for a description
+        // of the algorithm. We implement it in a straightforward way:
+        float fx = centerX - eyeX;
+        float fy = centerY - eyeY;
+        float fz = centerZ - eyeZ;
+        // Normalize f
+        float rlf = 1.0f / length(fx, fy, fz);
+        fx *= rlf;
+        fy *= rlf;
+        fz *= rlf;
+        // compute s = f x up (x means "cross product")
+        float sx = fy * upZ - fz * upY;
+        float sy = fz * upX - fx * upZ;
+        float sz = fx * upY - fy * upX;
+        // and normalize s
+        float rls = 1.0f / length(sx, sy, sz);
+        sx *= rls;
+        sy *= rls;
+        sz *= rls;
+        // compute u = s x f
+        float ux = sy * fz - sz * fy;
+        float uy = sz * fx - sx * fz;
+        float uz = sx * fy - sy * fx;
+        rm[rmOffset + 0] = sx;
+        rm[rmOffset + 1] = ux;
+        rm[rmOffset + 2] = -fx;
+        rm[rmOffset + 3] = 0.0f;
+        rm[rmOffset + 4] = sy;
+        rm[rmOffset + 5] = uy;
+        rm[rmOffset + 6] = -fy;
+        rm[rmOffset + 7] = 0.0f;
+        rm[rmOffset + 8] = sz;
+        rm[rmOffset + 9] = uz;
+        rm[rmOffset + 10] = -fz;
+        rm[rmOffset + 11] = 0.0f;
+        rm[rmOffset + 12] = 0.0f;
+        rm[rmOffset + 13] = 0.0f;
+        rm[rmOffset + 14] = 0.0f;
+        rm[rmOffset + 15] = 1.0f;
+        translateM(rm, rmOffset, -eyeX, -eyeY, -eyeZ);
+    }
+    
+    /**
+     * Rotates matrix m by angle a (in degrees) around the axis (x, y, z)
+     * @param rm returns the result
+     * @param rmOffset index into rm where the result matrix starts
+     * @param a angle to rotate in degrees
+     * @param x scale factor x
+     * @param y scale factor y
+     * @param z scale factor z
+     */
+    static void setRotateM(float *rm, int rmOffset, float a, float x, float y, float z) 
+    {
+        rm[rmOffset + 3] = 0;
+        rm[rmOffset + 7] = 0;
+        rm[rmOffset + 11]= 0;
+        rm[rmOffset + 12]= 0;
+        rm[rmOffset + 13]= 0;
+        rm[rmOffset + 14]= 0;
+        rm[rmOffset + 15]= 1;
+        a *= (float) (M_PI / 180.0f);
+        float s = (float) sin(a);
+        float c = (float) cos(a);
+        if (1.0f == x && 0.0f == y && 0.0f == z) {
+            rm[rmOffset + 5] = c;   rm[rmOffset + 10]= c;
+            rm[rmOffset + 6] = s;   rm[rmOffset + 9] = -s;
+            rm[rmOffset + 1] = 0;   rm[rmOffset + 2] = 0;
+            rm[rmOffset + 4] = 0;   rm[rmOffset + 8] = 0;
+            rm[rmOffset + 0] = 1;
+        } else if (0.0f == x && 1.0f == y && 0.0f == z) {
+            rm[rmOffset + 0] = c;   rm[rmOffset + 10]= c;
+            rm[rmOffset + 8] = s;   rm[rmOffset + 2] = -s;
+            rm[rmOffset + 1] = 0;   rm[rmOffset + 4] = 0;
+            rm[rmOffset + 6] = 0;   rm[rmOffset + 9] = 0;
+            rm[rmOffset + 5] = 1;
+        } else if (0.0f == x && 0.0f == y && 1.0f == z) {
+            rm[rmOffset + 0] = c;   rm[rmOffset + 5] = c;
+            rm[rmOffset + 1] = s;   rm[rmOffset + 4] = -s;
+            rm[rmOffset + 2] = 0;   rm[rmOffset + 6] = 0;
+            rm[rmOffset + 8] = 0;   rm[rmOffset + 9] = 0;
+            rm[rmOffset + 10]= 1;
+        } else {
+            float len = length(x, y, z);
+            if (1.0f != len) {
+                float recipLen = 1.0f / len;
+                x *= recipLen;
+                y *= recipLen;
+                z *= recipLen;
+            }
+            float nc = 1.0f - c;
+            float xy = x * y;
+            float yz = y * z;
+            float zx = z * x;
+            float xs = x * s;
+            float ys = y * s;
+            float zs = z * s;
+            rm[rmOffset +  0] = x*x*nc +  c;
+            rm[rmOffset +  4] =  xy*nc - zs;
+            rm[rmOffset +  8] =  zx*nc + ys;
+            rm[rmOffset +  1] =  xy*nc + zs;
+            rm[rmOffset +  5] = y*y*nc +  c;
+            rm[rmOffset +  9] =  yz*nc - xs;
+            rm[rmOffset +  2] =  zx*nc - ys;
+            rm[rmOffset +  6] =  yz*nc + xs;
+            rm[rmOffset + 10] = z*z*nc +  c;
+        }
+    }
+
+    /**
+     * Scales matrix m in place by sx, sy, and sz
+     * @param m matrix to scale
+     * @param mOffset index into m where the matrix starts
+     * @param x scale factor x
+     * @param y scale factor y
+     * @param z scale factor z
+     */
+    static void scaleM(float *m, int mOffset, float x, float y, float z) {
+        for (int i=0 ; i<4 ; i++) {
+            int mi = mOffset + i;
+            m[     mi] *= x;
+            m[ 4 + mi] *= y;
+            m[ 8 + mi] *= z;
+        }
+    }
+    
+    /**
+     * Rotates matrix m in place by angle a (in degrees)
+     * around the axis (x, y, z)
+     * @param m source matrix
+     * @param mOffset index into m where the matrix starts
+     * @param a angle to rotate in degrees
+     * @param x scale factor x
+     * @param y scale factor y
+     * @param z scale factor z
+     */
+    static void rotateM(float *m, int mOffset, float a, float x, float y, float z) {
+        float temp[32]={0};
+        float *shft=0, *srcshf=0;
+        setRotateM(temp, 0, a, x, y, z);
+        multiplyMM(temp, 16, m, mOffset, temp, 0);
+
+        srcshf = &temp[16];
+        shft= &m[mOffset];
+
+        memcpy(shft, srcshf, sizeof(float) * 16);
+        //System.arraycopy(temp, 16, m, mOffset, 16);
+    }
+    
+    static GLfloat* getIdentity(GLfloat * p) 
+    {
+    #define ID_ARRAY_SIZE  (16)
+        GLfloat *af=0;
+        GLfloat patt[ID_ARRAY_SIZE] = {
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f};
+        
+        if (p) {
+            af = p;
+        } else {
+            af = malloc(sizeof(GLfloat) * ID_ARRAY_SIZE);
+        }
+
+        if (!af) return 0;
+
+        memcpy(af, patt, sizeof(GLfloat) * ID_ARRAY_SIZE);
+
+        return af;
+    }
+    
 #if 0
 int main() {
 
@@ -631,6 +947,34 @@ int main() {
 #endif
 
 #if 1
+    const GLchar* vertexShaderCode = {
+            "precision mediump float;   \n"
+            "attribute vec4 a_position;   \n"
+            "attribute vec2 a_textureCoordinate;  \n"
+            "uniform mat4 u_mvp;  \n"
+            "uniform float u_Ratio;\n" 
+            "varying vec2 v_textureCoordinate;\n"
+            "void main() {  \n"
+            "    v_textureCoordinate = a_textureCoordinate;  \n"
+            "    vec4 p = a_position;\n" 
+            "    p.y = p.y / u_Ratio;\n" 
+            "    p = u_mvp * p;\n" 
+            "    p.y = p.y * u_Ratio;\n" 
+            "    gl_Position = p;  \n"
+            "}        \n"};
+
+    const GLchar* fragmentShaderCode = {
+            "precision mediump float;\n"
+            "uniform sampler2D u_texture;\n"
+            "varying vec2 v_textureCoordinate;\n"
+            "void main() {\n"
+                "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
+                "    float swap = color.r; \n"
+                "    color.r = color.b; \n"
+                "    color.b = swap;   \n"
+                "    gl_FragColor = color;        \n" // texture2D(u_texture, v_textureCoordinate);\n
+            "}      \n"};
+#elif 1 /* rotate bmp */
     const GLchar* vertexShaderCode = {
             "precision mediump float;\n"
             "attribute vec4 a_position;\n"
@@ -715,6 +1059,134 @@ const GLchar* fragmentSource =
 
 float mCubeRotation = 0.0f;
 
+ #define VERTEX_COMPONENT_COUNT  (3)
+ #define VERTEX_NUM (6 * 6)
+ #define VERTEX_SIZE (VERTEX_COMPONENT_COUNT * VERTEX_NUM)
+
+    GLfloat vertexData[VERTEX_SIZE] = {
+            // front face
+            -1.0f, -1.0f, 1.0f,
+            1.0f, -1.0f, 1.0f,
+            1.0f, 1.0f, 1.0f,
+            -1.0f, -1.0f, 1.0f,
+            1.0f, 1.0f, 1.0f,
+            -1.0f, 1.0f, 1.0f,
+            // back face
+            -1.0f, -1.0f, -1.0f,
+            -1.0f, 1.0f, -1.0f,
+            1.0f, 1.0f, -1.0f,
+            -1.0f, -1.0f, -1.0f,
+            1.0f, 1.0f, -1.0f,
+            1.0f, -1.0f, -1.0f,
+            // Top face
+            -1.0f, 1.0f, -1.0f,
+            -1.0f, 1.0f, 1.0f,
+            1.0f, 1.0f, 1.0f,
+            -1.0f, 1.0f, -1.0f,
+            1.0f, 1.0f, 1.0f,
+            1.0f, 1.0f, -1.0f,
+            // Bottom face
+            1.0f, -1.0f, 1.0f,
+            -1.0f, -1.0f, 1.0f,
+            -1.0f, -1.0f, -1.0f,
+            1.0f, -1.0f, 1.0f,
+            -1.0f, -1.0f, -1.0f,
+            1.0f, -1.0f, -1.0f,
+//            // Left face
+            -1.0f, -1.0f, -1.0f,
+            -1.0f, -1.0f, 1.0f,
+            -1.0f, 1.0f, 1.0f,
+            -1.0f, -1.0f, -1.0f,
+            -1.0f, 1.0f, 1.0f,
+            -1.0f, 1.0f, -1.0f,
+            // Right face
+            1.0f, -1.0f, 1.0f,
+            1.0f, -1.0f, -1.0f,
+            1.0f, 1.0f, -1.0f,
+            1.0f, -1.0f, 1.0f,
+            1.0f, 1.0f, -1.0f,
+            1.0f, 1.0f, 1.0f
+    };
+ GLfloat *vertexDataBuffer = vertexData;
+    #define TEXTURE_COORDINATE_COMPONENT_COUNT (2)
+    #define TEXTURE_COORDINATE_SIZE (VERTEX_NUM * TEXTURE_COORDINATE_COMPONENT_COUNT)
+    GLfloat textureCoordinateData[TEXTURE_COORDINATE_SIZE] = {
+            0.0f, 1.0f,
+            0.0f, 0.0f,
+            1.0f, 0.0f,
+            0.0f, 1.0f,
+            1.0f, 0.0f,
+            1.0f, 1.0f,
+            
+            0.0f, 1.0f,
+            0.0f, 0.0f,
+            1.0f, 0.0f,
+            0.0f, 1.0f,
+            1.0f, 0.0f,
+            1.0f, 1.0f,
+            
+            0.0f, 1.0f,
+            0.0f, 0.0f,
+            1.0f, 0.0f,
+            0.0f, 1.0f,
+            1.0f, 0.0f,
+            1.0f, 1.0f,
+            
+            0.0f, 1.0f,
+            1.0f, 1.0f,
+            1.0f, 0.0f,
+            0.0f, 1.0f,
+            1.0f, 0.0f,
+            0.0f, 0.0f,
+            
+            0.0f, 1.0f,
+            0.0f, 0.0f,
+            1.0f, 0.0f,
+            0.0f, 1.0f,
+            1.0f, 0.0f,
+            1.0f, 1.0f,
+            
+            0.0f, 1.0f,
+            0.0f, 0.0f,
+            1.0f, 0.0f,
+            0.0f, 1.0f,
+            1.0f, 0.0f,
+            1.0f, 1.0f
+    };
+    
+    GLfloat *textureCoordinateDataBuffer = textureCoordinateData;
+
+ float cubePositions[] = {
+            -1.0f,1.0f,1.0f,    //正面左上0
+            -1.0f,-1.0f,1.0f,   //正面左下1
+            1.0f,-1.0f,1.0f,    //正面右下2
+            1.0f,1.0f,1.0f,     //正面右上3
+            -1.0f,1.0f,-1.0f,    //反面左上4
+            -1.0f,-1.0f,-1.0f,   //反面左下5
+            1.0f,-1.0f,-1.0f,    //反面右下6
+            1.0f,1.0f,-1.0f,     //反面右上7
+    };
+
+ float cubeCoods[] = {
+            0.0f,0.0f,    //正面左上0
+            0.0f,1.0f,   //正面左下1
+            1.0f,1.0f,    //正面右下2
+            1.0f,0.0f,     //正面右上3
+            0.0f,0.0f,    //反面左上4
+            0.0f,1.0f,   //反面左下5
+            1.0f,1.0f,    //反面右下6
+            1.0f,0.0f,     //反面右上7
+    };
+
+ short indexs[]={
+            0,3,2,0,2,1,    //正面
+            0,1,5,0,5,4,    //左面
+            0,7,3,0,4,7,    //上面
+            6,7,4,6,4,5,    //后面
+            6,3,7,6,2,3,    //右面
+            6,5,1,6,1,2     //下面
+    };
+    
 float vertices[] = {
     -1.0f, -1.0f, -1.0f,
      1.0f, -1.0f, -1.0f,
@@ -749,6 +1221,11 @@ char indices[] = {
 #if 1
 int main(int argc, char *argv[])
 {
+    #define LOCATION_ATTRIBUTE_POSITION 0
+    #define LOCATION_ATTRIBUTE_TEXTURE_COORDINATE 1
+    #define LOCATION_UNIFORM_MVP 2
+    #define LOCATION_UNIFORM_TEXTURE 0
+    
     #define CONTEXT_ES20
     EGLBoolean eglret = 0;
     int screenwidth  = 800, screenheight = 480;
@@ -756,16 +1233,30 @@ int main(int argc, char *argv[])
     char *img=0, *raw=0;
     struct bitmapHeader_s *header=0;
     struct timespec tmS, tmE;
-    int tmCost=0, meacnt=0;
+    int tmCost=0, meacnt=0, selectPage=0, rotArix=0;
     
     printf("main() argc: %d \n", argc);
 
-    if (argc == 2) {
+    if (argc == 4) {
         imgidx = atoi(argv[1]);
+        selectPage = atoi(argv[2]);
+        rotArix = atoi(argv[3]);
+        
+        printf("main() argv[1]: %d (%s) \n", imgidx, argv[1]);
+    } else if (argc == 3) {
+        imgidx = atoi(argv[1]);
+        selectPage = atoi(argv[2]);
+        rotArix = 0;
+        
+        printf("main() argv[1]: %d (%s) \n", imgidx, argv[1]);
+    } else if (argc == 2) {
+        imgidx = atoi(argv[1]);
+        selectPage = 0;
+        rotArix = 0;
         
         printf("main() argv[1]: %d (%s) \n", imgidx, argv[1]);
     } else {
-        imgidx = 23;
+        imgidx = 24;
     }
 
     ret = gleGetImage(&img, &raw, imgidx);
@@ -871,9 +1362,6 @@ int main(int argc, char *argv[])
 
    printf("main() line: %d \n", __LINE__);
 
-    #if 1
-    GLfloat vertexData[] = {-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f};
-    GLfloat textureCoordinateData[] = {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f};
     GLuint shaderProgram = glCreateProgram();
     GLint   compileStatus;    
     
@@ -920,12 +1408,281 @@ int main(int argc, char *argv[])
     }
             
     glUseProgram(shaderProgram);
+
+
+    #if 1    
+    GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(aPositionLocation);
+    // Specify the data of a_position
+    glVertexAttribPointer(aPositionLocation, VERTEX_COMPONENT_COUNT, GL_FLOAT, false,0, vertexData);
+    //glVertexAttribPointer(aPositionLocation, VERTEX_COMPONENT_COUNT, GL_FLOAT, false,0, vertices);
+
+    // Get the location of a_textureCoordinate in the shader
+    GLint aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(aTextureCoordinateLocation);
+    // Specify the data of a_textureCoordinate
+    glVertexAttribPointer(aTextureCoordinateLocation, TEXTURE_COORDINATE_COMPONENT_COUNT, GL_FLOAT, false,0, textureCoordinateData);
+    //glVertexAttribPointer(aTextureCoordinateLocation, TEXTURE_COORDINATE_COMPONENT_COUNT, GL_FLOAT, false,0, cubeCoods);
     
+
+    // Get the location of u_Rotate in the shader
+    GLint uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(uRatioLocation);
+    // Specify the vertex data of u_Ratio
+    glUniform1f(uRatioLocation, screenwidth * 1.0f / screenheight);
+
+    printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d uRatioLocation: %d\n", __LINE__, aPositionLocation, aTextureCoordinateLocation, uRatioLocation);
+
+    // Create texture
+    GLint textures[0];
+    glGenTextures(1, textures);
+    GLint imageTexture = textures[0];
+
+    // Set texture parameters
+    glBindTexture(GL_TEXTURE_2D, imageTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    clock_gettime(CLOCK_REALTIME, &tmS);
+    
+    // Decode the image and load it into texture
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8_ALPHA8_EXT, header->aspbiWidth, header->aspbiHeight, 0, GL_LUMINANCE8_ALPHA8_EXT, GL_UNSIGNED_BYTE, raw);
+
+    GLint uMVPLocation = glGetUniformLocation(shaderProgram, "u_mvp");
+    
+    GLint uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(uTextureLocation, 0);
+    
+    printf("main() line: %d textureid: %d, texturelocation: %d, uMVPLocation: %d \n", __LINE__, imageTexture, uTextureLocation, uMVPLocation);    
+
+    glFinish();
+    
+    clock_gettime(CLOCK_REALTIME, &tmE);
+
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("texture in cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+    GLfloat translateX = 0.0f;
+    GLfloat translateY = 0.0f;
+    GLfloat translateZ = 0.0f;
+    GLfloat rotateX = 0.0f;
+    GLfloat rotateY = 0.0f;
+    GLfloat rotateZ = 0.0f;
+    GLfloat scaleX = 1.0f;
+    GLfloat scaleY = 1.0f;
+    GLfloat scaleZ = 1.0f;
+    GLfloat cameraPositionX = 0.0f;
+    GLfloat cameraPositionY = 0.0f;
+    GLfloat cameraPositionZ = 5.0f;
+    GLfloat lookAtX = 0.0f;
+    GLfloat lookAtY = 0.0f;
+    GLfloat lookAtZ = 0.0f;
+    GLfloat cameraUpX = 0.0f;
+    GLfloat cameraUpY = 1.0f;
+    GLfloat cameraUpZ = 0.0f;
+    GLfloat nearPlaneLeft = -1.0f;
+    GLfloat nearPlaneRight = 1.0f;
+    #if 1
+    GLfloat nearPlaneBottom = (-1.0f * (GLfloat)screenheight )/(GLfloat) screenwidth;
+    GLfloat nearPlaneTop = (1.0f * (GLfloat)screenheight) /(GLfloat) screenwidth;;
+    #else
+    GLfloat nearPlaneBottom = -1.0f;
+    GLfloat nearPlaneTop = 1.0f;
+    #endif
+    GLfloat nearPlane = 1.0f;
+    GLfloat farPlane = 1000.0f;
+
+    GLfloat *mvpMatrix = getIdentity(0);
+    GLfloat *translateMatrix = getIdentity(0);
+    GLfloat *rotateMatrix = getIdentity(0);
+    GLfloat *scaleMatrix = getIdentity(0);
+    GLfloat *modelMatrix = getIdentity(0);
+    GLfloat *viewMatrix = getIdentity(0);
+    GLfloat *projectMatrix = getIdentity(0);
+
+    // Calculate the Model matrix
+    translateM(translateMatrix, 0, translateX, translateY, translateZ);
+    rotateM(rotateMatrix, 0, rotateX, 1.0f, 0.0f, 0.0f);
+    rotateM(rotateMatrix, 0, rotateY, 0.0f, 1.0f, 0.0f);
+    rotateM(rotateMatrix, 0, rotateZ, 0.0f, 0.0f, 1.0f);
+    scaleM(scaleMatrix, 0, scaleX, scaleY, scaleZ);
+    multiplyMM(modelMatrix, 0, rotateMatrix, 0, scaleMatrix, 0);
+    multiplyMM(modelMatrix, 0, modelMatrix, 0, translateMatrix, 0);
+
+    // Calculate the View matrix
+    setLookAtM(viewMatrix, 0,
+        cameraPositionX, cameraPositionY, cameraPositionZ,
+        lookAtX, lookAtY, lookAtZ,
+        cameraUpX, cameraUpY, cameraUpZ);
+
+    // Calculate the Project matrix
+    frustumM(projectMatrix, 0,
+        nearPlaneLeft, nearPlaneRight, nearPlaneBottom, nearPlaneTop,
+        nearPlane, farPlane);
+
+    // Calculate the MVP matrix
+    multiplyMM(mvpMatrix, 0, viewMatrix, 0, modelMatrix, 0);
+    multiplyMM(mvpMatrix, 0, projectMatrix, 0, mvpMatrix, 0);
+
+    glUniformMatrix4fv(uMVPLocation, 1, false, mvpMatrix);
+
+    GLenum func = GL_LEQUAL;
+    GLint v1=0, v2=0;
+    GLclampf  near_val=0, far_val=1, bfrest=0.0f;;
+    //glDepthFunc(GL_NEVER);
+    glEnable(GL_DEPTH_TEST);
+    //glEnable(GL_DEPTH_FUNC);
+    //glEnable(GL_CULL_FACE);
+    glDepthFunc(func);
+    glDepthMask(TRUE);
+
+    glGetIntegerv(GL_DEPTH_BITS, &v1);
+    glGetIntegerv(GL_DEPTH_FUNC, &v2);
+    //glDepthRangef(near_val, far_val);
+    //glClearDepthf(bfrest);
+    
+    
+    printf("is depth test enable: %d BIT: %d func: 0x%.4x\n", glIsEnabled(GL_DEPTH_TEST), v1, v2);
+
+    glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
+    glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+    
+    meacnt = 0;
+    GLint vtexpage[6] = {0, 6, 12, 18, 24, 30};
+    while (1) {
+        wl_display_dispatch_pending(ESContext.native_display);
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        
+        //printf("pending delay: %d.%d ms\n", tmCost/1000, tmCost%1000);
+        
+        // Clear the screen to black        
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        
+        //glEnable(GL_DEPTH_TEST);
+        //glDepthMask(TRUE);
+        
+        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        //glDepthFunc(GL_LEQUAL);
+        //glCullFace(GL_FRONT);
+        
+        // Call the draw method with GL_TRIANGLES to render 3 vertices
+        //glDrawArrays(GL_TRIANGLES, 0, VERTEX_NUM);
+
+        #if 0
+        glDrawElements(GL_TRIANGLES,VERTEX_NUM, GL_UNSIGNED_SHORT, indexs);
+        #else
+        if (selectPage == 6) {
+            glDrawArrays(GL_TRIANGLES, 0, VERTEX_NUM);
+        } else {
+            glDrawArrays(GL_TRIANGLES, vtexpage[selectPage], 6);
+        }
+        #endif
+
+        //glFinish();
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);     
+        
+        //printf("display cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+        // Set the status before rendering
+        /*
+        glEnableVertexAttribArray(uRatioLocation);
+        glVertexAttribPointer(aPositionLocation, VERTEX_COMPONENT_COUNT, GL_FLOAT, false,0, vertexDataBuffer);
+        glEnableVertexAttribArray(aTextureCoordinateLocation);
+        glVertexAttribPointer(aTextureCoordinateLocation, TEXTURE_COORDINATE_COMPONENT_COUNT, GL_FLOAT, false,0, textureCoordinateDataBuffer);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, imageTexture);
+        */
+        mvpMatrix = getIdentity(mvpMatrix);
+        translateMatrix = getIdentity(translateMatrix);
+        rotateMatrix = getIdentity(rotateMatrix);
+        scaleMatrix = getIdentity(scaleMatrix);
+        modelMatrix = getIdentity(modelMatrix);
+        viewMatrix = getIdentity(viewMatrix);
+        projectMatrix = getIdentity(projectMatrix);
+
+        switch (rotArix) {
+        case 0:
+            rotateX += 1.0f;        
+            break;
+        case 1:
+            rotateY += 1.0f;
+            break;
+        default:
+            rotateY += 1.0f;
+            rotateZ += 1.0f;
+            break;
+        }
+        
+        //translateX += 0.01f;
+
+        //scaleX = scaleX * 0.99f;
+        //scaleY = scaleY * 0.99f;
+        //scaleZ = scaleZ * 0.99f;
+        
+        // Calculate the Model matrix
+        translateM(translateMatrix, 0, translateX, translateY, translateZ);
+        rotateM(rotateMatrix, 0, rotateX, 1.0f, 0.0f, 0.0f);
+        rotateM(rotateMatrix, 0, rotateY, 0.0f, 1.0f, 0.0f);
+        rotateM(rotateMatrix, 0, rotateZ, 0.0f, 0.0f, 1.0f);
+        scaleM(scaleMatrix, 0, scaleX, scaleY, scaleZ);
+        multiplyMM(modelMatrix, 0, rotateMatrix, 0, scaleMatrix, 0);
+        multiplyMM(modelMatrix, 0, modelMatrix, 0, translateMatrix, 0);
+
+        // Calculate the View matrix
+        setLookAtM(viewMatrix, 0,
+            cameraPositionX, cameraPositionY, cameraPositionZ,
+            lookAtX, lookAtY, lookAtZ,
+            cameraUpX, cameraUpY, cameraUpZ);
+
+        // Calculate the Project matrix
+        frustumM(projectMatrix, 0,
+            nearPlaneLeft, nearPlaneRight, nearPlaneBottom, nearPlaneTop,
+            nearPlane, farPlane);
+
+        // Calculate the MVP matrix
+        multiplyMM(mvpMatrix, 0, viewMatrix, 0, modelMatrix, 0);
+        multiplyMM(mvpMatrix, 0, projectMatrix, 0, mvpMatrix, 0);
+
+        glUniformMatrix4fv(uMVPLocation, 1, false, mvpMatrix);
+                
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        
+        RefreshWindow();
+        
+        //usleep(10000);
+        
+        #if 0
+        if (meacnt >= 360) {
+            break;
+        } else {
+            meacnt++;
+        }
+        #endif
+    }
+
+        
+    #elif 1 /* rotate */
     // Get the location of a_position in the shader
     //GLint aLocation = glGetAttribLocation(shaderProgram, "position");
     //GLint asLocation = glGetAttribLocation(shaderProgram, "s_position");
     //printf("main() line: %d location vertex test: %d asLocation: %d \n", __LINE__, aLocation, asLocation);
-   
+    GLfloat vertexData[] = {-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f};
+    GLfloat textureCoordinateData[] = {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f};
+
     GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
     // Enable the parameter of the location
     glEnableVertexAttribArray(aPositionLocation);
@@ -976,7 +1733,6 @@ int main(int argc, char *argv[])
 
     printf("main() line: %d uRotateLocation: %d uRatioLocation: %d \n", __LINE__, uRotateLocation, uRatioLocation);
 
-    #if 1
     // Create texture
     GLint textures[0];
     glGenTextures(1, textures);
@@ -1000,58 +1756,12 @@ int main(int argc, char *argv[])
     glFinish();
     
     clock_gettime(CLOCK_REALTIME, &tmE);
-    #endif
 
     tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
     printf("texture in cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
             
     //printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
    
-    #elif 1
-    // Create Vertex Array Object
-    GLuint vao;
-    //glGenVertexArraysOES(1, &vao);
-    //glBindVertexArrayOES(vao);
-
-    // Create a Vertex Buffer Object and copy the vertex data to it
-    GLuint vbo;
-    //glGenBuffers(1, &vbo);
-
-    GLfloat vertices[] = {0.0f, 0.5f, 0.5f, -0.5f, -0.5f, -0.5f};
-    //GLfloat vertices[] = {-0.5f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, -1.0f, 1.0f, -1.0f};
-
-    //glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    //glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    // Create and compile the vertex shader
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexSource, NULL);
-    glCompileShader(vertexShader);
-
-    // Create and compile the fragment shader
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentSource, NULL);
-    glCompileShader(fragmentShader);
-
-    // Link the vertex and fragment shader into a shader program
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    // glBindFragDataLocation(shaderProgram, 0, "outColor");
-    glLinkProgram(shaderProgram);
-    glUseProgram(shaderProgram);
-    
-    printf("main() line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader, fragmentShader, shaderProgram);
-
-    // Specify the layout of the vertex data
-    GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
-    glEnableVertexAttribArray(posAttrib);
-    glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 0, vertices);
-
-    printf("main() line: %d location vertex: 0x%.8x \n", __LINE__, posAttrib);
-    
-    #endif
-
     glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
     glViewport(0, 0, renderBufferWidth, renderBufferHeight);
     
@@ -1143,6 +1853,50 @@ int main(int argc, char *argv[])
   //image.save("result.png");
   //qDebug() << "done";
   //QCoreApplication a(argc, argv);
+    #elif 1
+    // Create Vertex Array Object
+    GLuint vao;
+    //glGenVertexArraysOES(1, &vao);
+    //glBindVertexArrayOES(vao);
+
+    // Create a Vertex Buffer Object and copy the vertex data to it
+    GLuint vbo;
+    //glGenBuffers(1, &vbo);
+
+    GLfloat vertices[] = {0.0f, 0.5f, 0.5f, -0.5f, -0.5f, -0.5f};
+    //GLfloat vertices[] = {-0.5f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, -1.0f, 1.0f, -1.0f};
+
+    //glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    //glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // Create and compile the vertex shader
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexSource, NULL);
+    glCompileShader(vertexShader);
+
+    // Create and compile the fragment shader
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentSource, NULL);
+    glCompileShader(fragmentShader);
+
+    // Link the vertex and fragment shader into a shader program
+    GLuint shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    // glBindFragDataLocation(shaderProgram, 0, "outColor");
+    glLinkProgram(shaderProgram);
+    glUseProgram(shaderProgram);
+    
+    printf("main() line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader, fragmentShader, shaderProgram);
+
+    // Specify the layout of the vertex data
+    GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
+    glEnableVertexAttribArray(posAttrib);
+    glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 0, vertices);
+
+    printf("main() line: %d location vertex: 0x%.8x \n", __LINE__, posAttrib);
+    
+    #endif
 
   return 0;
 }
