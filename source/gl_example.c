@@ -946,7 +946,7 @@ int main() {
 }
 #endif
 
-#if 1
+#if 0
     const GLchar* vertexShaderCode = {
             "precision mediump float;   \n"
             "attribute vec4 a_position;   \n"
@@ -1410,7 +1410,7 @@ int main(int argc, char *argv[])
     glUseProgram(shaderProgram);
 
 
-    #if 1    
+    #if 0
     GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
     // Enable the parameter of the location
     glEnableVertexAttribArray(aPositionLocation);
@@ -1452,7 +1452,7 @@ int main(int argc, char *argv[])
     
     // Decode the image and load it into texture
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8_ALPHA8_EXT, header->aspbiWidth, header->aspbiHeight, 0, GL_LUMINANCE8_ALPHA8_EXT, GL_UNSIGNED_BYTE, raw);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE_ALPHA, header->aspbiWidth, header->aspbiHeight, 0, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, raw);
 
     GLint uMVPLocation = glGetUniformLocation(shaderProgram, "u_mvp");
     
@@ -1744,12 +1744,13 @@ int main(int argc, char *argv[])
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
     
     clock_gettime(CLOCK_REALTIME, &tmS);
     
     // Decode the image and load it into texture
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8_ALPHA8_EXT, header->aspbiWidth, header->aspbiHeight, 0, GL_LUMINANCE8_ALPHA8_EXT, GL_UNSIGNED_BYTE, raw);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, header->aspbiWidth, header->aspbiHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw);
     //GLint uTextureLocation = glGetAttribLocation(shaderProgram, "u_texture");
     //glActiveTexture(GL_TEXTURE0);
     //glUniform1i(uTextureLocation, 0);
@@ -1837,16 +1838,18 @@ int main(int argc, char *argv[])
   rh = renderBufferHeight / 2;
   
   glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+  
   glFinish();
   clock_gettime(CLOCK_REALTIME, &tmE);
 
   tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
   printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
           
-  //glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_LUMINANCE8_ALPHA8_EXT, GL_UNSIGNED_BYTE, data2);
+  //glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, data2);
 
   grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
   //grapglbmp(data2, renderBufferWidth, renderBufferHeight, 8, 1 * renderBufferHeight * renderBufferWidth);
+  
   //shmem_dump(data2, size);
 
   //QImage image(data2, renderBufferWidth,  renderBufferHeight,renderBufferWidth*2, QImage::Format_RGB16);
