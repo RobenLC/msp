@@ -122,10 +122,10 @@ EGLBoolean CreateEGLContext ()
        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
        EGL_RED_SIZE,        8,
-       EGL_GREEN_SIZE,      8,
-       EGL_BLUE_SIZE,       8,
-       EGL_ALPHA_SIZE,     8,
-       EGL_DEPTH_SIZE,     16,
+       //EGL_GREEN_SIZE,      8,
+       //EGL_BLUE_SIZE,       8,
+       //EGL_ALPHA_SIZE,     8,
+       //EGL_DEPTH_SIZE,     16,
        EGL_NONE,
    };
    #else
@@ -946,7 +946,52 @@ int main() {
 }
 #endif
 
-#if 0
+#if 0/* franebuffer rotating */
+    const GLchar* vertexShaderCode = {
+            "precision mediump float;\n"
+            "attribute vec4 a_position;\n"
+            "attribute vec2 a_textureCoordinate;    \n"
+            "varying vec2 v_textureCoordinate;     \n"
+            "uniform float u_Rotate;\n" 
+            "uniform float u_Ratio;\n" 
+            "\n" 
+            "void main() {\n" 
+            "   v_textureCoordinate = a_textureCoordinate;    \n"
+            "   vec4 p = a_position;\n" 
+            "   p.y = p.y / u_Ratio;\n" 
+            "   mat4 rotateMatrix = mat4(cos(u_Rotate), sin(u_Rotate), 0.0, 0.0,\n" 
+            "                         -sin(u_Rotate), cos(u_Rotate), 0.0, 0.0,\n" 
+            "                         0.0, 0.0, 1.0, 0.0,\n" 
+            "                         0.0, 0.0, 0.0, 1.0);\n" 
+            "    p = rotateMatrix * p;\n" 
+            "    p.y = p.y * u_Ratio;\n" 
+            "    gl_Position = p;  \n"
+            "}                                \n"};
+
+    const GLchar* fragmentShaderCode = {
+            "precision mediump float;\n"
+            "uniform sampler2D u_texture;\n"
+            "varying vec2 v_textureCoordinate;\n"
+            "void main() {\n"
+                "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
+                "    float swap = color.r; \n"
+                "    color.r = color.b; \n"
+                "    color.b = swap;   \n"
+                "    gl_FragColor = color;        \n" // texture2D(u_texture, v_textureCoordinate);\n
+            "}      \n"};
+
+    const GLchar* fragmentShaderBackCode = {
+            "precision mediump float;\n"
+            "uniform sampler2D u_texture;\n"
+            "varying vec2 v_textureCoordinate;\n"
+            "void main() {\n"
+                "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
+                "    float swap = color.r; \n"
+                "    color.r = color.b; \n"
+                "    color.b = swap;   \n"
+                "    gl_FragColor = color;        \n" // texture2D(u_texture, v_textureCoordinate);\n
+            "}      \n"};
+#elif 0 /* rotate bmp */
     const GLchar* vertexShaderCode = {
             "precision mediump float;   \n"
             "attribute vec4 a_position;   \n"
@@ -1027,6 +1072,7 @@ int main() {
                 "    vec4 swap = color;    \n"
                 "    swap.r = color.b;       \n"
                 "    swap.b = color.r;       \n"
+                "    swap.a = color.r;       \n"
                 "    gl_FragColor = swap;        \n" // texture2D(u_texture, v_textureCoordinate);\n
                 "}                                \n"};
 #elif 1 /*ex3  + vec4 (0.0, 0.2, 0.0, 0.0); */
@@ -1410,7 +1456,230 @@ int main(int argc, char *argv[])
     glUseProgram(shaderProgram);
 
 
+    #if 0 /* framebuff rotating */
+    
+    GLfloat vertexData[] = {-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f};
+    GLfloat textureCoordinateData[] = {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f};
+
+    GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
+    glEnableVertexAttribArray(aPositionLocation);
+    glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
+
+    GLint aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
+    glEnableVertexAttribArray(aTextureCoordinateLocation);
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
+    
+    printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
+    
+    GLfloat rtangle=0.0f;
+    GLint uRotateLocation = glGetUniformLocation(shaderProgram, "u_Rotate");
+    glEnableVertexAttribArray(uRotateLocation);
+    glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
+
+    // Get the location of u_Rotate in the shader
+    GLint uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
+    // Enable the parameter of the location
+    glEnableVertexAttribArray(uRatioLocation);
+    // Specify the vertex data of u_Ratio
+    glUniform1f(uRatioLocation, screenwidth * 1.0f / screenheight);
+
+    printf("main() line: %d uRotateLocation: %d uRatioLocation: %d \n", __LINE__, uRotateLocation, uRatioLocation);
+
+    #if 1
+    GLint fbTextures[0];
+    glGenTextures(1, fbTextures);
+    GLint fbImageTexture = fbTextures[0];
+
+    // Create frame buffer
+    GLint frameBuffers[0];
+    glGenFramebuffers(1, frameBuffers);
+    GLint frameBuffer = frameBuffers[0];
+
+    // Bind the texture to frame buffer
+    glBindTexture(GL_TEXTURE_2D, fbImageTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbImageTexture, 0);
+    #endif
+        
+    // Create texture
+    GLint textures[0];
+    glGenTextures(1, textures);
+    GLint imageTexture = textures[0];
+
+    // Set texture parameters
+    glBindTexture(GL_TEXTURE_2D, imageTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    clock_gettime(CLOCK_REALTIME, &tmS);
+    
+    // Decode the image and load it into texture
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+
+    GLint uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(uTextureLocation, 0);
+    
+    glFinish();
+    
+    clock_gettime(CLOCK_REALTIME, &tmE);
+
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("texture in cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+            
+    //printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
+   
+    glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
+    glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+
+    rtangle = 90.0f;
+    glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
+        
+    meacnt = 0;
+    while (1) {
+        wl_display_dispatch_pending(ESContext.native_display);
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("pending delay: %d.%d ms\n", tmCost/1000, tmCost%1000);
+        
+        // Clear the screen to black        
+        clock_gettime(CLOCK_REALTIME, &tmS);
+            
+        glClear(GL_COLOR_BUFFER_BIT);    
+
+        #if 0
+        if (meacnt % 2) {
+            glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+        } else {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+        #endif
+    
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        //glFinish();
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("display cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+        RefreshWindow();
+        
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        
+        #if 1
+        break;
+        #else
+        if (meacnt >= 179) {
+            break;
+        } else {
+            meacnt ++;
+        }
+        #endif
+    }
+
+    /*
+    while (1) {
+        wl_display_dispatch_pending(ESContext.native_display);
+    
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    
+        glClear(GL_COLOR_BUFFER_BIT); 
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("loop cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+        rtangle += 1.0f;
+        glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
+        
+        RefreshWindow();
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        
+    }
+    */
+
+    //wl_display_dispatch_pending(ESContext.native_display);
+    
+    //glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    
+    //glClear(GL_COLOR_BUFFER_BIT); 
+
+    //glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    //RefreshWindow();
+
+    //wl_display_dispatch_pending(ESContext.native_display);
+    
+    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    //glClear(GL_COLOR_BUFFER_BIT); 
+
+    //glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    //RefreshWindow();
+
+    //wl_display_dispatch_pending(ESContext.native_display);
+
+    //glClear(GL_COLOR_BUFFER_BIT); 
+    
+    //RefreshWindow();
+    
+    sleep(2);
+    
+    int size = 4 * renderBufferHeight * renderBufferWidth;
+    printf("print size");
+    printf("size %d", size);
+
+    unsigned char *data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
+  
+    glFinish();
+  
+    clock_gettime(CLOCK_REALTIME, &tmS);
+
+    GLint rx=0, ry=0, rw=0, rh=0;
+
     #if 0
+    rx = renderBufferWidth / 4;
+    ry = renderBufferHeight / 4;
+    rw = renderBufferWidth / 2;
+    rh = renderBufferHeight / 2;
+    #else
+    rx = 0;
+    ry = 0;
+    rw = renderBufferWidth;
+    rh = renderBufferHeight;
+    #endif
+  
+    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+  
+    //glFinish();
+    clock_gettime(CLOCK_REALTIME, &tmE);
+
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+          
+
+    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+  
+    #elif 0
     GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
     // Enable the parameter of the location
     glEnableVertexAttribArray(aPositionLocation);
@@ -1749,11 +2018,12 @@ int main(int argc, char *argv[])
     clock_gettime(CLOCK_REALTIME, &tmS);
     
     // Decode the image and load it into texture
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, header->aspbiWidth, header->aspbiHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw);
-    //GLint uTextureLocation = glGetAttribLocation(shaderProgram, "u_texture");
-    //glActiveTexture(GL_TEXTURE0);
-    //glUniform1i(uTextureLocation, 0);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw);
+    GLint uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(uTextureLocation, 0);
+    
     glFinish();
     
     clock_gettime(CLOCK_REALTIME, &tmE);
@@ -1803,7 +2073,9 @@ int main(int argc, char *argv[])
         //usleep(1000);
 
         
-        #if 1
+        #if 0
+        break;
+        #else
         if (meacnt >= 360) {
             break;
         } else {
@@ -1817,8 +2089,8 @@ int main(int argc, char *argv[])
     
   //qDebug() << eglSwapBuffers(   eglDisplay, eglSurface);
   int size = 4 * renderBufferHeight * renderBufferWidth;
-  printf("print size");
-  printf("size %d", size);
+  printf("print size \n");
+  printf("size %d \n", size);
   //qDebug() << size;
 
   unsigned char *data2 = (unsigned char *) malloc(size);
@@ -1832,20 +2104,24 @@ int main(int argc, char *argv[])
 
   GLint rx=0, ry=0, rw=0, rh=0;
 
-  rx = renderBufferWidth / 4;
-  ry = renderBufferHeight / 4;
-  rw = renderBufferWidth / 2;
-  rh = renderBufferHeight / 2;
+  //rx = renderBufferWidth / 4;
+  //ry = renderBufferHeight / 4;
+  //rw = renderBufferWidth / 2;
+  //rh = renderBufferHeight / 2;
+
+  rx = 0;
+  ry = 0;
+  rw = renderBufferWidth;
+  rh = renderBufferHeight;
   
-  glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
-  
-  glFinish();
+  //glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+  glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_RGB, GL_UNSIGNED_BYTE, data2);
+    
+  //glFinish();
   clock_gettime(CLOCK_REALTIME, &tmE);
 
   tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-  printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
-          
-  //glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, data2);
+  printf("readPixels x: %d, y: %d, w: %d, h: %d, screen: %d, %d, cost: %d.%d ms\n", rx, ry, rw, rh, renderBufferWidth, renderBufferHeight, tmCost/1000, tmCost%1000);
 
   grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
   //grapglbmp(data2, renderBufferWidth, renderBufferHeight, 8, 1 * renderBufferHeight * renderBufferWidth);
