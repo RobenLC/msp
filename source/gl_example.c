@@ -34,7 +34,6 @@ struct _escontext
   EGLContext  context;
   /// EGL surface
   EGLSurface  surface;
-
 };
 
 struct wl_compositor *compositor = NULL;
@@ -57,8 +56,8 @@ struct _escontext ESContext = {
 #define TRUE 1
 #define FALSE 0
 
-#define WINDOW_WIDTH (1280 / 2)
-#define WINDOW_HEIGHT (720 / 2)
+#define WINDOW_WIDTH (1280)
+#define WINDOW_HEIGHT (720)
 
 #define LOG(...) fprintf(stderr, __VA_ARGS__)
 #define LOG_ERRNO(...)  fprintf(stderr, "Error : %s\n", strerror(errno)); fprintf(stderr, __VA_ARGS__)
@@ -122,8 +121,8 @@ EGLBoolean CreateEGLContext ()
        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
        EGL_RED_SIZE,        8,
-       //EGL_GREEN_SIZE,      8,
-       //EGL_BLUE_SIZE,       8,
+       EGL_GREEN_SIZE,      8,
+       EGL_BLUE_SIZE,       8,
        //EGL_ALPHA_SIZE,     8,
        //EGL_DEPTH_SIZE,     16,
        EGL_NONE,
@@ -946,7 +945,7 @@ int main() {
 }
 #endif
 
-#if 0/* franebuffer rotating */
+#if 1/* franebuffer rotating */
     const GLchar* vertexShaderCode = {
             "precision mediump float;\n"
             "attribute vec4 a_position;\n"
@@ -1048,8 +1047,9 @@ int main() {
                 "void main() {                                      \n"
                 "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
                 "    float swap = color.r; \n"
-                "    color.r = color.b; \n"
-                "    color.b = swap;   \n"
+                "    color.r = 0.0; \n"
+                "    color.b = 0.0;   \n"
+                "    color.a = 0.0;   \n"
                 "    gl_FragColor = color;        \n" // texture2D(u_texture, v_textureCoordinate);\n
                 "}                                \n"};
 #elif 1 /* draw bmp */
@@ -1280,7 +1280,10 @@ int main(int argc, char *argv[])
     struct bitmapHeader_s *header=0;
     struct timespec tmS, tmE;
     int tmCost=0, meacnt=0, selectPage=0, rotArix=0;
-    
+    GLenum glerr=0;
+    GLint glrformat=0, glrdtype=0;
+    GLint rx=0, ry=0, rw=0, rh=0;
+    GLint size=0;
     printf("main() argc: %d \n", argc);
 
     if (argc == 4) {
@@ -1456,18 +1459,21 @@ int main(int argc, char *argv[])
     glUseProgram(shaderProgram);
 
 
-    #if 0 /* framebuff rotating */
+    #if 1 /* framebuff rotating */
     
     GLfloat vertexData[] = {-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f};
     GLfloat textureCoordinateData[] = {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f};
-
+    GLfloat textureCoordinateData1[] = {1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+    GLfloat textureCoordinateData2[] = {1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+    GLfloat textureCoordinateData3[] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
+    
     GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
     glEnableVertexAttribArray(aPositionLocation);
     glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
 
     GLint aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
     glEnableVertexAttribArray(aTextureCoordinateLocation);
-    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData1);
     
     printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
     
@@ -1486,6 +1492,23 @@ int main(int argc, char *argv[])
     printf("main() line: %d uRotateLocation: %d uRatioLocation: %d \n", __LINE__, uRotateLocation, uRatioLocation);
 
     #if 1
+
+    GLuint color_renderbuffer;
+    glGenRenderbuffers(1, &color_renderbuffer);
+    glBindRenderbuffer( GL_RENDERBUFFER, (GLuint)color_renderbuffer );
+    glRenderbufferStorage( GL_RENDERBUFFER, GL_R8_EXT, screenwidth, screenheight );
+    glBindRenderbuffer( GL_RENDERBUFFER, 0 );
+
+    // Build the framebuffer.
+    GLuint framebufferR8;
+    glGenFramebuffers(1, &framebufferR8);
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)framebufferR8);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color_renderbuffer);
+
+    GLenum statusR8 = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+
+    printf("main() line: %d color_renderbuffer: %d framebufferR8: %d statusR8: 0x%x\n", __LINE__, color_renderbuffer, framebufferR8, statusR8);
+    
     GLint fbTextures[0];
     glGenTextures(1, fbTextures);
     GLint fbImageTexture = fbTextures[0];
@@ -1501,7 +1524,7 @@ int main(int argc, char *argv[])
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screenwidth, screenheight, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
     
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbImageTexture, 0);
@@ -1520,9 +1543,17 @@ int main(int argc, char *argv[])
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     
     clock_gettime(CLOCK_REALTIME, &tmS);
-    
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
     // Decode the image and load it into texture
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RED_EXT, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RED_EXT, GL_UNSIGNED_BYTE, raw);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
 
     GLint uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
     glActiveTexture(GL_TEXTURE0);
@@ -1541,7 +1572,7 @@ int main(int argc, char *argv[])
     glViewport(0, 0, renderBufferWidth, renderBufferHeight);
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
 
-    rtangle = 90.0f;
+    rtangle = 0.0f;
     glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
         
     meacnt = 0;
@@ -1589,29 +1620,74 @@ int main(int argc, char *argv[])
         #endif
     }
 
-    /*
+    size = 4 * renderBufferHeight * renderBufferWidth;
+    printf("print size");
+    printf("size %d", size);
+
+    unsigned char *data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
+  
+    glFinish();
+  
+    clock_gettime(CLOCK_REALTIME, &tmS);
+
+    rx = 0;
+    ry = 0;
+    rw = renderBufferWidth;
+    rh = renderBufferHeight;
+  
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
+
+    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+  
+    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    //glFinish();
+    clock_gettime(CLOCK_REALTIME, &tmE);
+
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+          
+
+    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+    
+    glBindTexture(GL_TEXTURE_2D, fbImageTexture);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(uTextureLocation, 0);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    rtangle = 10.0f;
+    glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData2);
+    
+    clock_gettime(CLOCK_REALTIME, &tmS);
     while (1) {
         wl_display_dispatch_pending(ESContext.native_display);
-    
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     
         glClear(GL_COLOR_BUFFER_BIT); 
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
-
-        clock_gettime(CLOCK_REALTIME, &tmE);
-
-        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-        printf("loop cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
-
-        rtangle += 1.0f;
-        glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
         
         RefreshWindow();
-        clock_gettime(CLOCK_REALTIME, &tmS);
-        
+
+        break;        
     }
-    */
+
+    glFinish();
+    
+    clock_gettime(CLOCK_REALTIME, &tmE);
+
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("loop cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+    
 
     //wl_display_dispatch_pending(ESContext.native_display);
     
@@ -1641,11 +1717,11 @@ int main(int argc, char *argv[])
     
     sleep(2);
     
-    int size = 4 * renderBufferHeight * renderBufferWidth;
+    size = 4 * renderBufferHeight * renderBufferWidth;
     printf("print size");
     printf("size %d", size);
 
-    unsigned char *data2 = (unsigned char *) malloc(size);
+    data2 = (unsigned char *) malloc(size);
 
     memset(data2, 0, size);
     printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
@@ -1654,22 +1730,23 @@ int main(int argc, char *argv[])
   
     clock_gettime(CLOCK_REALTIME, &tmS);
 
-    GLint rx=0, ry=0, rw=0, rh=0;
-
-    #if 0
-    rx = renderBufferWidth / 4;
-    ry = renderBufferHeight / 4;
-    rw = renderBufferWidth / 2;
-    rh = renderBufferHeight / 2;
-    #else
     rx = 0;
     ry = 0;
     rw = renderBufferWidth;
     rh = renderBufferHeight;
-    #endif
+  
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
+
+    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
   
     glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
-  
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
     //glFinish();
     clock_gettime(CLOCK_REALTIME, &tmE);
 
@@ -2016,10 +2093,17 @@ int main(int argc, char *argv[])
 
     
     clock_gettime(CLOCK_REALTIME, &tmS);
-    
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+  
     // Decode the image and load it into texture
     //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_ALPHA, GL_UNSIGNED_BYTE, raw);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+  
     GLint uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(uTextureLocation, 0);
@@ -2043,7 +2127,7 @@ int main(int argc, char *argv[])
 
         clock_gettime(CLOCK_REALTIME, &tmE);
         tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-        printf("pending delay: %d.%d ms\n", tmCost/1000, tmCost%1000);
+        //printf("pending delay: %d.%d ms\n", tmCost/1000, tmCost%1000);
         
         // Clear the screen to black        
         clock_gettime(CLOCK_REALTIME, &tmS);
@@ -2057,12 +2141,12 @@ int main(int argc, char *argv[])
         glDrawArrays(GL_TRIANGLES, 0, 3);
         #endif
 
-        glFinish();
+        //glFinish();
 
         clock_gettime(CLOCK_REALTIME, &tmE);
 
         tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-        printf("display cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+        //printf("display cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
 
         rtangle += 1.0f;
         glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
@@ -2100,6 +2184,9 @@ int main(int argc, char *argv[])
   
   glFinish();
   
+  glerr = glGetError();
+  LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+  
   clock_gettime(CLOCK_REALTIME, &tmS);
 
   GLint rx=0, ry=0, rw=0, rh=0;
@@ -2114,14 +2201,25 @@ int main(int argc, char *argv[])
   rw = renderBufferWidth;
   rh = renderBufferHeight;
   
+  glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
+  glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
+
+  LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
+  
   //glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
   glReadPixels(0,0,renderBufferWidth,renderBufferHeight,GL_RGB, GL_UNSIGNED_BYTE, data2);
-    
+  
+  glerr = glGetError();
+  LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
+  ret = eglGetError();    
   //glFinish();
   clock_gettime(CLOCK_REALTIME, &tmE);
 
   tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-  printf("readPixels x: %d, y: %d, w: %d, h: %d, screen: %d, %d, cost: %d.%d ms\n", rx, ry, rw, rh, renderBufferWidth, renderBufferHeight, tmCost/1000, tmCost%1000);
+  printf("readPixels x: %d, y: %d, w: %d, h: %d, screen: %d, %d, cost: %d.%d ms ret: %d \n", rx, ry, rw, rh, renderBufferWidth, renderBufferHeight, tmCost/1000, tmCost%1000, ret);
+
+
 
   grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
   //grapglbmp(data2, renderBufferWidth, renderBufferHeight, 8, 1 * renderBufferHeight * renderBufferWidth);
@@ -2132,6 +2230,35 @@ int main(int argc, char *argv[])
   //image.save("result.png");
   //qDebug() << "done";
   //QCoreApplication a(argc, argv);
+
+  const GLubyte *glstr=0;
+
+  glstr = glGetString(GL_VENDOR);
+
+  if (glstr)
+      LOG("GL_VENDOR: [%s] \n", glstr);
+  else
+      LOG("GL_VENDOR Error \n");
+      
+  glstr = glGetString(GL_RENDERER);
+  if (glstr)
+      LOG("GL_RENDERER: [%s] \n", glstr);
+  else 
+      LOG("GL_RENDERER Error \n");
+      
+  glstr = glGetString(GL_VERSION);
+  if (glstr)
+    LOG("GL_VERSION: [%s] \n", glstr);
+
+  glstr = glGetString(GL_SHADING_LANGUAGE_VERSION);
+  if (glstr)
+    LOG("GL_SHADING_LANGUAGE_VERSION: [%s] \n", glstr);
+
+  glstr = glGetString(GL_EXTENSIONS);
+  if (glstr)
+    LOG("GL_EXTENSIONS: [%s] \n", glstr);
+
+  
     #elif 1
     // Create Vertex Array Object
     GLuint vao;
