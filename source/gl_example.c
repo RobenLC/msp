@@ -1274,7 +1274,7 @@ int main(int argc, char *argv[])
     
     #define CONTEXT_ES20
     EGLBoolean eglret = 0;
-    int screenwidth  = 800, screenheight = 480;
+    int screenwidth  = 800, screenheight = 480, clrbits=0;
     int ret=0, imgidx=0;
     char *img=0, *raw=0;
     struct bitmapHeader_s *header=0;
@@ -1284,6 +1284,9 @@ int main(int argc, char *argv[])
     GLint glrformat=0, glrdtype=0;
     GLint rx=0, ry=0, rw=0, rh=0;
     GLint size=0;
+    unsigned char *data2=0;
+    GLenum statusR8=0;
+    
     printf("main() argc: %d \n", argc);
 
     if (argc == 4) {
@@ -1324,6 +1327,7 @@ int main(int argc, char *argv[])
 
     screenwidth = header->aspbiWidth / 2;
     screenheight = abs(header->aspbiHeight) / 2;
+    clrbits = header->aspbiCPP >> 16;
     
     get_server_references();
 
@@ -1473,8 +1477,11 @@ int main(int argc, char *argv[])
 
     GLint aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
     glEnableVertexAttribArray(aTextureCoordinateLocation);
-    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData1);
-    
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
     printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
     
     GLfloat rtangle=0.0f;
@@ -1489,14 +1496,17 @@ int main(int argc, char *argv[])
     // Specify the vertex data of u_Ratio
     glUniform1f(uRatioLocation, screenwidth * 1.0f / screenheight);
 
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
     printf("main() line: %d uRotateLocation: %d uRatioLocation: %d \n", __LINE__, uRotateLocation, uRatioLocation);
 
-    #if 1
-
+    #if 0
     GLuint color_renderbuffer;
     glGenRenderbuffers(1, &color_renderbuffer);
     glBindRenderbuffer( GL_RENDERBUFFER, (GLuint)color_renderbuffer );
     glRenderbufferStorage( GL_RENDERBUFFER, GL_R8_EXT, screenwidth, screenheight );
+    //glRenderbufferStorage( GL_RENDERBUFFER, GL_RGB, screenwidth, screenheight );
     glBindRenderbuffer( GL_RENDERBUFFER, 0 );
 
     // Build the framebuffer.
@@ -1505,29 +1515,78 @@ int main(int argc, char *argv[])
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)framebufferR8);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color_renderbuffer);
 
-    GLenum statusR8 = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    statusR8 = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (statusR8 != GL_FRAMEBUFFER_COMPLETE) {
+        LOG("frame buffer error code: 0x%x line %d\n", statusR8, __LINE__);
+        return -2;
+    }
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
 
     printf("main() line: %d color_renderbuffer: %d framebufferR8: %d statusR8: 0x%x\n", __LINE__, color_renderbuffer, framebufferR8, statusR8);
+    #endif
     
-    GLint fbTextures[0];
-    glGenTextures(1, fbTextures);
+    #if 1
+    GLint fbTextures[2];
+    glGenTextures(2, fbTextures);
     GLint fbImageTexture = fbTextures[0];
-
+    GLint fbImageTexture_1 = fbTextures[1];
+    
     // Create frame buffer
-    GLint frameBuffers[0];
-    glGenFramebuffers(1, frameBuffers);
+    GLint frameBuffers[2];
+    glGenFramebuffers(2, frameBuffers);
     GLint frameBuffer = frameBuffers[0];
+    GLint frameBuffer_1 = frameBuffers[1];
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
 
+    //glActiveTexture(GL_TEXTURE0);
     // Bind the texture to frame buffer
     glBindTexture(GL_TEXTURE_2D, fbImageTexture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screenwidth, screenheight, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
     
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbImageTexture, 0);
+
+    statusR8 = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (statusR8 != GL_FRAMEBUFFER_COMPLETE) {
+        LOG("frame buffer error code: 0x%x line %d\n", statusR8, __LINE__);
+        return -2;
+    }
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
+    printf("main() line: %d fbImageTexture: %d frameBuffer: %d status: 0x%x\n", __LINE__, fbImageTexture, frameBuffer, statusR8);
+
+    //glActiveTexture(GL_TEXTURE1);
+    // Bind the texture to frame buffer
+    glBindTexture(GL_TEXTURE_2D, fbImageTexture_1);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer_1);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbImageTexture_1, 0);
+
+    statusR8 = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (statusR8 != GL_FRAMEBUFFER_COMPLETE) {
+        LOG("frame buffer error code: 0x%x line %d\n", statusR8, __LINE__);
+        return -2;
+    }
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
+    printf("main() line: %d fbImageTexture_1: %d frameBuffer_1: %d status: 0x%x\n", __LINE__, fbImageTexture_1, frameBuffer_1, statusR8);
     #endif
         
     // Create texture
@@ -1535,6 +1594,7 @@ int main(int argc, char *argv[])
     glGenTextures(1, textures);
     GLint imageTexture = textures[0];
 
+    glActiveTexture(GL_TEXTURE0);
     // Set texture parameters
     glBindTexture(GL_TEXTURE_2D, imageTexture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -1547,16 +1607,35 @@ int main(int argc, char *argv[])
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
 
+    switch (clrbits) {
+    case 24:
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+        break;
+    case 8:
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw);
+        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RED_EXT, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RED_EXT, GL_UNSIGNED_BYTE, raw);
+        break;
+    default:
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
+        break;
+    }
+
     // Decode the image and load it into texture
     //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, raw);
     //glTexImage2D(GL_TEXTURE_2D, 0, GL_RED_EXT, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RED_EXT, GL_UNSIGNED_BYTE, raw);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw);
 
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
 
-    GLint uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
+    if (glerr) {
+        LOG("texture2d input bmp failed ret: %d  !!! line %d\n", glerr, __LINE__);
+        return -1;
+    }
+
     glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, imageTexture);
+    GLint uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
     glUniform1i(uTextureLocation, 0);
     
     glFinish();
@@ -1566,15 +1645,26 @@ int main(int argc, char *argv[])
     tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
     printf("texture in cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
             
-    //printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
-   
-    glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
-    glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+    printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
+    
+    clock_gettime(CLOCK_REALTIME, &tmS);   
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    rtangle = 0.0f;
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
+    rtangle = -10.0f;
     glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
-        
+
+    glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
+    glViewport(0, 0, header->aspbiWidth, abs(header->aspbiHeight));
+
     meacnt = 0;
     while (1) {
         wl_display_dispatch_pending(ESContext.native_display);
@@ -1595,24 +1685,32 @@ int main(int argc, char *argv[])
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
         #endif
+
+        rtangle += 0.4f;
+        glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
     
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        //glFinish();
+        glFinish();
 
         clock_gettime(CLOCK_REALTIME, &tmE);
 
         tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-        printf("display cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+        printf("draw cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
 
+        clock_gettime(CLOCK_REALTIME, &tmS);
         RefreshWindow();
-        
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("refresh cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
         clock_gettime(CLOCK_REALTIME, &tmS);
         
-        #if 1
+        #if 0
         break;
         #else
-        if (meacnt >= 179) {
+        if (meacnt >= 10) {
             break;
         } else {
             meacnt ++;
@@ -1620,103 +1718,8 @@ int main(int argc, char *argv[])
         #endif
     }
 
-    size = 4 * renderBufferHeight * renderBufferWidth;
-    printf("print size");
-    printf("size %d", size);
 
-    unsigned char *data2 = (unsigned char *) malloc(size);
-
-    memset(data2, 0, size);
-    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
-  
-    glFinish();
-  
-    clock_gettime(CLOCK_REALTIME, &tmS);
-
-    rx = 0;
-    ry = 0;
-    rw = renderBufferWidth;
-    rh = renderBufferHeight;
-  
-    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
-    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
-
-    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
-    
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-  
-    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
-    
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-    //glFinish();
-    clock_gettime(CLOCK_REALTIME, &tmE);
-
-    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-    printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
-          
-
-    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
-    
-    glBindTexture(GL_TEXTURE_2D, fbImageTexture);
-    glActiveTexture(GL_TEXTURE0);
-    glUniform1i(uTextureLocation, 0);
-    
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    rtangle = 10.0f;
-    glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
-    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData2);
-    
-    clock_gettime(CLOCK_REALTIME, &tmS);
-    while (1) {
-        wl_display_dispatch_pending(ESContext.native_display);
-    
-        glClear(GL_COLOR_BUFFER_BIT); 
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        
-        RefreshWindow();
-
-        break;        
-    }
-
-    glFinish();
-    
-    clock_gettime(CLOCK_REALTIME, &tmE);
-
-    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-    printf("loop cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
-    
-
-    //wl_display_dispatch_pending(ESContext.native_display);
-    
-    //glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
-    
-    //glClear(GL_COLOR_BUFFER_BIT); 
-
-    //glDrawArrays(GL_TRIANGLES, 0, 6);
-
-    //RefreshWindow();
-
-    //wl_display_dispatch_pending(ESContext.native_display);
-    
-    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    //glClear(GL_COLOR_BUFFER_BIT); 
-
-    //glDrawArrays(GL_TRIANGLES, 0, 6);
-
-    //RefreshWindow();
-
-    //wl_display_dispatch_pending(ESContext.native_display);
-
-    //glClear(GL_COLOR_BUFFER_BIT); 
-    
-    //RefreshWindow();
-    
-    sleep(2);
-    
+    #if 1
     size = 4 * renderBufferHeight * renderBufferWidth;
     printf("print size");
     printf("size %d", size);
@@ -1730,6 +1733,234 @@ int main(int argc, char *argv[])
   
     clock_gettime(CLOCK_REALTIME, &tmS);
 
+    //header->aspbiWidth, abs(header->aspbiHeight)
+    
+    rx = 400;
+    ry = 436;
+    rw = 200;
+    rh = 50;
+  
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
+
+    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+  
+    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    //glFinish();
+    clock_gettime(CLOCK_REALTIME, &tmE);
+
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+          
+
+    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+
+    free(data2);
+    #endif
+        
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    //glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    //glBindFramebuffer(GL_FRAMEBUFFER, framebufferR8);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
+    //glActiveTexture(GL_TEXTURE0);
+    //glBindTexture(GL_TEXTURE_2D, color_renderbuffer);
+    //glBindTexture(GL_TEXTURE_2D, fbImageTexture);
+    //glUniform1i(uTextureLocation, 1);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
+    rtangle = -10.0f;
+    glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
+    
+    //glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData3);
+
+    //glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+    
+    clock_gettime(CLOCK_REALTIME, &tmS);
+    meacnt = 0;
+    while (1) {
+        wl_display_dispatch_pending(ESContext.native_display);
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("pending delay: %d.%d ms\n", tmCost/1000, tmCost%1000);
+        
+        // Clear the screen to black        
+        clock_gettime(CLOCK_REALTIME, &tmS);
+            
+        glClear(GL_COLOR_BUFFER_BIT); 
+
+        rtangle += 0.4f;
+        glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
+    
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glFinish();
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("draw cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        RefreshWindow();
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("refresh cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        
+        #if 0
+        break;
+        #else
+        if (meacnt >= 10) {
+            break;
+        } else {
+            meacnt ++;
+        }
+        #endif
+    }
+        
+    glFinish();
+    
+    //sleep(2);
+    
+    size = 4 * renderBufferHeight * renderBufferWidth;
+    printf("print size");
+    printf("size %d", size);
+
+    data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
+  
+   //glFinish();
+  
+    clock_gettime(CLOCK_REALTIME, &tmS);
+
+    rx = 0;
+    ry = 0;
+    rw = header->aspbiWidth;
+    rh = abs(header->aspbiHeight);
+  
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
+
+    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+  
+    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    //glFinish();
+    clock_gettime(CLOCK_REALTIME, &tmE);
+
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+          
+
+    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+    free(data2);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    //glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    //glBindFramebuffer(GL_FRAMEBUFFER, framebufferR8);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
+    glActiveTexture(GL_TEXTURE1);
+    //glBindTexture(GL_TEXTURE_2D, color_renderbuffer);
+    glBindTexture(GL_TEXTURE_2D, fbImageTexture);
+    glUniform1i(uTextureLocation, 1);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
+    //rtangle = 10.0f;
+    //glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
+    
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData3);
+
+    glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+    
+    clock_gettime(CLOCK_REALTIME, &tmS);
+    meacnt = 0;
+    while (1) {
+        wl_display_dispatch_pending(ESContext.native_display);
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("pending delay: %d.%d ms\n", tmCost/1000, tmCost%1000);
+        
+        // Clear the screen to black        
+        clock_gettime(CLOCK_REALTIME, &tmS);
+            
+        glClear(GL_COLOR_BUFFER_BIT); 
+
+        rtangle += 1.0f;
+        glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
+    
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glFinish();
+
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("draw cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        RefreshWindow();
+        clock_gettime(CLOCK_REALTIME, &tmE);
+
+        tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+        printf("refresh cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+
+        clock_gettime(CLOCK_REALTIME, &tmS);
+        
+        #if 0
+        break;
+        #else
+        if (meacnt >= 10) {
+            break;
+        } else {
+            meacnt ++;
+        }
+        #endif
+    }
+        
+    glFinish();
+    
+    //sleep(2);
+    
+    size = 4 * renderBufferHeight * renderBufferWidth;
+    printf("print size");
+    printf("size %d", size);
+
+    data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
+  
+   //glFinish();
+  
+    clock_gettime(CLOCK_REALTIME, &tmS);
+
     rx = 0;
     ry = 0;
     rw = renderBufferWidth;
@@ -1755,6 +1986,56 @@ int main(int argc, char *argv[])
           
 
     grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+    free(data2);
+    
+    #if 1
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+
+    wl_display_dispatch_pending(ESContext.native_display);
+
+    size = 4 * renderBufferHeight * renderBufferWidth;
+    printf("print size");
+    printf("size %d", size);
+
+    data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
+  
+    glFinish();
+  
+    clock_gettime(CLOCK_REALTIME, &tmS);
+
+//header->aspbiWidth, abs(header->aspbiHeight)
+
+    rx = 0;
+    ry = 0;
+    rw = header->aspbiWidth;
+    rh = abs(header->aspbiHeight);
+  
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
+
+    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+  
+    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    //glFinish();
+    clock_gettime(CLOCK_REALTIME, &tmE);
+
+    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
+    printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
+          
+
+    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+    free(data2);
+    #endif
+
   
     #elif 0
     GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
