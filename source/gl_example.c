@@ -27,6 +27,7 @@ struct _escontext
   /// Native System informations
   EGLNativeDisplayType native_display;
   EGLNativeWindowType native_window;
+  EGLNativePixmapType native_pixmap;
   uint16_t window_width, window_height;
   /// EGL display
   EGLDisplay  display;
@@ -89,6 +90,7 @@ void CreateNativeWindow(char *title, int width, int height)
   wl_region_add(region, 0, 0, width, height);
   wl_surface_set_opaque_region(surface, region);
 
+  #if 0
   struct wl_egl_window *egl_window = wl_egl_window_create(surface, width, height);
     
   if (egl_window == EGL_NO_SURFACE) {
@@ -98,10 +100,21 @@ void CreateNativeWindow(char *title, int width, int height)
   else {
     LOG("Window created !\n");
   }
+  #else
+  struct wl_egl_pixmap *egl_pixmap=0;
+  egl_pixmap = wl_egl_pixmap_create(width, height, 0);
+  if (egl_pixmap == EGL_NO_SURFACE) {
+      printf("Can't create egl_pixmap\n");
+      exit(1);
+  } else {
+      printf("Created egl_pixmap\n");
+  }
+  #endif
   
   ESContext.window_width = width;
   ESContext.window_height = height;
-  ESContext.native_window = egl_window;
+  //ESContext.native_window = egl_window;
+  ESContext.native_pixmap = egl_pixmap;
 
 }
 
@@ -123,7 +136,7 @@ EGLBoolean CreateEGLContext ()
        EGL_RED_SIZE,        8,
        EGL_GREEN_SIZE,      8,
        EGL_BLUE_SIZE,       8,
-       //EGL_ALPHA_SIZE,     8,
+       EGL_ALPHA_SIZE,     8,
        //EGL_DEPTH_SIZE,     16,
        EGL_NONE,
    };
@@ -144,6 +157,7 @@ EGLBoolean CreateEGLContext ()
    
    EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
    EGLDisplay display = eglGetDisplay(ESContext.native_display);
+   //EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
    
    if (display == EGL_NO_DISPLAY) {
       LOG("No EGL Display...ret: %d\n", ret);
@@ -202,7 +216,9 @@ EGLBoolean CreateEGLContext ()
    */
    
    // Create a surface
-   surface = eglCreateWindowSurface(display, *config, ESContext.native_window, NULL);
+   //surface = eglCreatePbufferSurface(display, *config, NULL);
+   //surface = eglCreateWindowSurface(display, *config, ESContext.native_window, NULL);
+   surface = eglCreatePixmapSurface(display, *config, ESContext.native_pixmap, NULL);
    if (surface == EGL_NO_SURFACE)
    {
       LOG("eglCreateWindowSurface failed...ret: 0x%x\n", (uint32_t)surface);
@@ -317,7 +333,8 @@ static void get_server_references() {
 
 void destroy_window() {
   eglDestroySurface(ESContext.display, ESContext.surface);
-  wl_egl_window_destroy(ESContext.native_window);
+  //wl_egl_window_destroy(ESContext.native_window);
+  wl_egl_pixmap_destroy(ESContext.native_pixmap);
   wl_shell_surface_destroy(shell_surface);
   wl_surface_destroy(surface);
   eglDestroyContext(ESContext.display, ESContext.context);
@@ -345,6 +362,10 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
         numclrp = 0;
         rawoffset = 54;
         calcuraw = w * h * 3;
+    } else if (clr == 32) {
+        numclrp = 0;
+        rawoffset = 54;
+        calcuraw = w * h * 4;
     } else {
         printf("[BMP] reset header ERROR!!! color bits is %d \n", clr);
         return -5;
@@ -377,7 +398,7 @@ static int bitmapHeaderSetup(struct bitmapHeader_s *ph, int clr, int w, int h, i
     ph->aspbiHeight = h; // H
     ph->aspbiCPP = 1;
     //ph->aspbiCPP = 0;
-    ph->aspbiCPP |= clr << 16;  // 8 or 24
+    ph->aspbiCPP |= clr << 16;  // 8 or 24 or 32
     ph->aspbiCompMethd = 0;
     ph->aspbiRawSize = rawsize; // size of raw
     ph->aspbiResoluH = (int)resH; // dpi x 39.27
@@ -405,6 +426,43 @@ static FILE *find_save(char *dst, char *tmple)
     }
     f = fopen(dst, "w");
     return f;
+}
+
+static int grapglbmp32bits(unsigned char *ptr, int width, int height, int dpp, int len)
+{
+    char ptfilepath[256];
+    static char ptfiledump[] = "/home/root/gldump_%.3d.bmp";
+    FILE *dumpFile=0;
+
+    struct bitmapHeader_s * bmpheader=0;
+    char *ph=0;
+    int hlen=0, ret=0;
+
+    bmpheader = malloc(sizeof(struct bitmapHeader_s));
+    memset(bmpheader, 0, sizeof(struct bitmapHeader_s));
+
+    ph = &bmpheader->aspbmpMagic[2];
+
+    bitmapHeaderSetup(bmpheader, dpp, width, height, 300, len);
+
+    dumpFile = find_save(ptfilepath, ptfiledump);
+    if (!dumpFile) {
+        return -3;
+    }
+
+    hlen = sizeof(struct bitmapHeader_s) - 2;
+
+    ret = fwrite(ph, 1, hlen, dumpFile);
+    printf("[GL] write file %s size: %d ret: %d \n", ptfilepath, hlen, ret);
+        
+    ret = fwrite(ptr, 1, len, dumpFile);    
+    printf("[GL] write file %s size: %d ret: %d \n", ptfilepath, len, ret);
+    
+    //sync();
+    fflush(dumpFile);
+    fclose(dumpFile);
+
+    return 0;
 }
 
 static int grapglbmp(unsigned char *ptr, int width, int height, int dpp, int len)
@@ -1328,7 +1386,8 @@ int main(int argc, char *argv[])
     screenwidth = header->aspbiWidth / 2;
     screenheight = abs(header->aspbiHeight) / 2;
     clrbits = header->aspbiCPP >> 16;
-    
+
+    #if 1
     get_server_references();
 
     surface = wl_compositor_create_surface(compositor);
@@ -1340,10 +1399,12 @@ int main(int argc, char *argv[])
 
     shell_surface = wl_shell_get_shell_surface(shell, surface);
     wl_shell_surface_set_toplevel(shell_surface);
+    #endif
 
     eglret = CreateWindowWithEGLContext("Nya", screenwidth, screenheight);
     
     printf("main() line: %d CreateWindowWithEGLContext ret: 0x%.8x\n", __LINE__, (unsigned int)eglret);
+
   
     // Step 1 - Get the default display.
     EGLDisplay eglDisplay =0;
@@ -1351,6 +1412,11 @@ int main(int argc, char *argv[])
     eglDisplay = ESContext.display;
 
     printf("main() line: %d eglDisplay: 0x%.8x\n", __LINE__, (unsigned int)eglDisplay);
+
+    if (!eglDisplay) {
+        return -1;
+    }
+    
 
     // Step 2 - Initialize EGL.
     //EGLint majorVersion=0, minorVersion=0;
@@ -1549,7 +1615,7 @@ int main(int argc, char *argv[])
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
     
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbImageTexture, 0);
@@ -1572,7 +1638,7 @@ int main(int argc, char *argv[])
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
     
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer_1);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbImageTexture_1, 0);
@@ -1686,7 +1752,7 @@ int main(int argc, char *argv[])
         }
         #endif
 
-        rtangle += 0.4f;
+        rtangle += 0.6f;
         glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
     
         glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -1719,36 +1785,37 @@ int main(int argc, char *argv[])
     }
 
 
-    #if 1
-    size = 4 * renderBufferHeight * renderBufferWidth;
-    printf("print size");
-    printf("size %d", size);
-
-    data2 = (unsigned char *) malloc(size);
-
-    memset(data2, 0, size);
-    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
-  
+    #if 1  
     glFinish();
   
     clock_gettime(CLOCK_REALTIME, &tmS);
 
     //header->aspbiWidth, abs(header->aspbiHeight)
     
-    rx = 400;
-    ry = 436;
+    rx = 389;
+    ry = 388;
     rw = 200;
     rh = 50;
-  
+
+    size = 4 * rw * rh;
+    printf("size %d = %d x %d\n", size, rw, rh);
+
+    data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);    
+
     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
-
-    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
     
+    LOG("readpixel  format: [0x%x] type: [0x%x] range: [%d, %d, %d, %d]\n", glrformat, glrdtype, rx, ry, rw, rh);
+
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
   
-    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+    glReadPixels(rx, ry, rw, rh, GL_RGBA, GL_UNSIGNED_BYTE, data2);
     
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
@@ -1759,12 +1826,13 @@ int main(int argc, char *argv[])
     printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
           
 
-    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
-
+    //grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+    grapglbmp32bits(data2, rw, rh, 32, 4 * rw * rh);
+    
     free(data2);
     #endif
         
-    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer_1);
     //glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
     //glBindFramebuffer(GL_FRAMEBUFFER, framebufferR8);
     
@@ -1824,7 +1892,7 @@ int main(int argc, char *argv[])
         #if 0
         break;
         #else
-        if (meacnt >= 10) {
+        if (meacnt >= 30) {
             break;
         } else {
             meacnt ++;
@@ -1834,16 +1902,6 @@ int main(int argc, char *argv[])
         
     glFinish();
     
-    //sleep(2);
-    
-    size = 4 * renderBufferHeight * renderBufferWidth;
-    printf("print size");
-    printf("size %d", size);
-
-    data2 = (unsigned char *) malloc(size);
-
-    memset(data2, 0, size);
-    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
   
    //glFinish();
   
@@ -1853,16 +1911,26 @@ int main(int argc, char *argv[])
     ry = 0;
     rw = header->aspbiWidth;
     rh = abs(header->aspbiHeight);
+
+    size = 4 * rw * rh;
+    printf("size %d = %d x %d\n", size, rw, rh);
+
+    data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
   
     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
 
-    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
+    LOG("readpixel  format: [0x%x] type: [0x%x] range: [%d, %d, %d, %d]\n", glrformat, glrdtype, rx, ry, rw, rh);
     
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-  
-    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+      
+    glReadPixels(rx, ry, rw, rh, GL_RGBA, GL_UNSIGNED_BYTE, data2);
     
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
@@ -1873,9 +1941,12 @@ int main(int argc, char *argv[])
     printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
           
 
-    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
-    free(data2);
+    //grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+    grapglbmp32bits(data2, rw, rh, 32, 4 * rw * rh);
     
+    free(data2);
+
+    #if 0
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     //glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
     //glBindFramebuffer(GL_FRAMEBUFFER, framebufferR8);
@@ -1948,15 +2019,6 @@ int main(int argc, char *argv[])
     
     //sleep(2);
     
-    size = 4 * renderBufferHeight * renderBufferWidth;
-    printf("print size");
-    printf("size %d", size);
-
-    data2 = (unsigned char *) malloc(size);
-
-    memset(data2, 0, size);
-    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
-  
    //glFinish();
   
     clock_gettime(CLOCK_REALTIME, &tmS);
@@ -1965,7 +2027,15 @@ int main(int argc, char *argv[])
     ry = 0;
     rw = renderBufferWidth;
     rh = renderBufferHeight;
-  
+
+    size = 4 * rw * rh;
+    printf("size %d = %d x %d\n", size, rw, rh);
+
+    data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
+    
     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
 
@@ -1987,21 +2057,13 @@ int main(int argc, char *argv[])
 
     grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
     free(data2);
+    #endif
     
     #if 1
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
 
     wl_display_dispatch_pending(ESContext.native_display);
 
-    size = 4 * renderBufferHeight * renderBufferWidth;
-    printf("print size");
-    printf("size %d", size);
-
-    data2 = (unsigned char *) malloc(size);
-
-    memset(data2, 0, size);
-    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
-  
     glFinish();
   
     clock_gettime(CLOCK_REALTIME, &tmS);
@@ -2012,16 +2074,26 @@ int main(int argc, char *argv[])
     ry = 0;
     rw = header->aspbiWidth;
     rh = abs(header->aspbiHeight);
-  
+
+    size = 4 * rw * rh;
+    printf("size %d = %d x %d\n", size, rw, rh);
+
+    data2 = (unsigned char *) malloc(size);
+
+    memset(data2, 0, size);
+    printf("allocate memory size: %d addr: 0x%.8x \n", size, (unsigned int)data2);
+    
     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &glrformat);
     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &glrdtype);
 
-    LOG("GL CLREAD format: [0x%x] type: [0x%x]\n", glrformat, glrdtype);
+    LOG("readpixel  format: [0x%x] type: [0x%x] range: [%d, %d, %d, %d]\n", glrformat, glrdtype, rx, ry, rw, rh);
     
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-  
-    glReadPixels(rx, ry, rw, rh, GL_RGB, GL_UNSIGNED_BYTE, data2);
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    
+    glReadPixels(rx, ry, rw, rh, GL_RGBA, GL_UNSIGNED_BYTE, data2);
     
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
@@ -2030,9 +2102,9 @@ int main(int argc, char *argv[])
 
     tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
     printf("readPixels cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
-          
 
-    grapglbmp(data2, rw, rh, 24, 3 * rw * rh);
+    grapglbmp32bits(data2, rw, rh, 32, 4 * rw * rh);
+    
     free(data2);
     #endif
 
@@ -2584,6 +2656,9 @@ int main(int argc, char *argv[])
     printf("main() line: %d location vertex: 0x%.8x \n", __LINE__, posAttrib);
     
     #endif
+
+  destroy_window();
+  wl_display_disconnect(ESContext.native_display);
 
   return 0;
 }

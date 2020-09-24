@@ -278,6 +278,7 @@ static int init_gl(void)
 		return -1;
 	}
 
+       //gl.surface = eglCreatePbufferSurface(gl.display, gl.config, NULL);
 	gl.surface = eglCreateWindowSurface(gl.display, gl.config, gbm.surface, NULL);
 	if (gl.surface == EGL_NO_SURFACE) {
 		printf("failed to create egl surface\n");
