@@ -84,13 +84,12 @@ extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
 
 void CreateNativeWindow(char *title, int width, int height) 
 {
-
+  #if 0
   region = wl_compositor_create_region(compositor);
 
   wl_region_add(region, 0, 0, width, height);
   wl_surface_set_opaque_region(surface, region);
 
-  #if 0
   struct wl_egl_window *egl_window = wl_egl_window_create(surface, width, height);
     
   if (egl_window == EGL_NO_SURFACE) {
@@ -1003,7 +1002,67 @@ int main() {
 }
 #endif
 
-#if 1/* franebuffer rotating */
+#if 1/* segmentation */
+    const GLchar* vertexShaderCodeNomal = {
+            "precision mediump float;\n"
+            "attribute vec4 a_position;\n"
+            "attribute vec2 a_textureCoordinate;    \n"
+            "varying vec2 v_textureCoordinate;     \n"
+            "\n" 
+            "void main() {\n" 
+            "   v_textureCoordinate = a_textureCoordinate;    \n"
+            "   vec4 p = a_position;\n" 
+            "   gl_Position = p;  \n"
+            "}                                \n"};
+    const GLchar* vertexShaderCode = {
+            "precision mediump float;\n"
+            "attribute vec4 a_position;\n"
+            "attribute vec2 a_textureCoordinate;    \n"
+            "varying vec2 v_textureCoordinate;     \n"
+            "uniform float u_Rotate;\n" 
+            "uniform float u_Ratio;\n" 
+            "\n" 
+            "void main() {\n" 
+            "   v_textureCoordinate = a_textureCoordinate;    \n"
+            "   vec4 p = a_position;\n" 
+            "   p.y = p.y / u_Ratio;\n" 
+            "   mat4 rotateMatrix = mat4(cos(u_Rotate), sin(u_Rotate), 0.0, 0.0,\n" 
+            "                         -sin(u_Rotate), cos(u_Rotate), 0.0, 0.0,\n" 
+            "                         0.0, 0.0, 1.0, 0.0,\n" 
+            "                         0.0, 0.0, 0.0, 1.0);\n" 
+            "    p = rotateMatrix * p;\n" 
+            "    p.y = p.y * u_Ratio;\n" 
+            "    gl_Position = p;  \n"
+            "}                                \n"};
+
+    const GLchar* fragmentShaderCodeThr = {
+            "precision mediump float;\n"
+            "uniform sampler2D u_texture;\n"
+            "varying vec2 v_textureCoordinate;\n"
+            "uniform float u_thrhld; \n"
+            "void main() {\n"
+                "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
+                "    if (color.r > u_thrhld) {   \n"
+                "        color = vec4(1.0, 1.0, 1.0, 1.0); "
+                "    } \n"
+                "    else {   \n"
+                "        color = vec4(0.0, 0.0, 0.0, 1.0); "
+                "    }    \n"
+                "    gl_FragColor = color;        \n" // texture2D(u_texture, v_textureCoordinate);\n
+            "}      \n"};
+
+    const GLchar* fragmentShaderCode = {
+            "precision mediump float;\n"
+            "uniform sampler2D u_texture;\n"
+            "varying vec2 v_textureCoordinate;\n"
+            "void main() {\n"
+                "    vec4 color = texture2D(u_texture, v_textureCoordinate);  \n"
+                "    float swap = color.r; \n"
+                "    color.r = color.b; \n"
+                "    color.b = swap;   \n"
+                "    gl_FragColor = color;        \n" // texture2D(u_texture, v_textureCoordinate);\n
+            "}      \n"};
+#elif 1/* franebuffer rotating */
     const GLchar* vertexShaderCode = {
             "precision mediump float;\n"
             "attribute vec4 a_position;\n"
@@ -1329,6 +1388,7 @@ int main(int argc, char *argv[])
     #define LOCATION_ATTRIBUTE_TEXTURE_COORDINATE 1
     #define LOCATION_UNIFORM_MVP 2
     #define LOCATION_UNIFORM_TEXTURE 0
+    #define TEXTURE_RENDER_TYPE rendertype //(GL_LINEAR)
     
     #define CONTEXT_ES20
     EGLBoolean eglret = 0;
@@ -1341,7 +1401,7 @@ int main(int argc, char *argv[])
     GLenum glerr=0;
     GLint glrformat=0, glrdtype=0;
     GLint rx=0, ry=0, rw=0, rh=0;
-    GLint size=0;
+    GLint size=0, rendertype=0;
     unsigned char *data2=0;
     GLenum statusR8=0;
     
@@ -1356,13 +1416,13 @@ int main(int argc, char *argv[])
     } else if (argc == 3) {
         imgidx = atoi(argv[1]);
         selectPage = atoi(argv[2]);
-        rotArix = 0;
+        rotArix = 50;
         
         printf("main() argv[1]: %d (%s) \n", imgidx, argv[1]);
     } else if (argc == 2) {
         imgidx = atoi(argv[1]);
         selectPage = 0;
-        rotArix = 0;
+        rotArix = 50;
         
         printf("main() argv[1]: %d (%s) \n", imgidx, argv[1]);
     } else {
@@ -1387,7 +1447,6 @@ int main(int argc, char *argv[])
     screenheight = abs(header->aspbiHeight) / 2;
     clrbits = header->aspbiCPP >> 16;
 
-    #if 1
     get_server_references();
 
     surface = wl_compositor_create_surface(compositor);
@@ -1399,7 +1458,6 @@ int main(int argc, char *argv[])
 
     shell_surface = wl_shell_get_shell_surface(shell, surface);
     wl_shell_surface_set_toplevel(shell_surface);
-    #endif
 
     eglret = CreateWindowWithEGLContext("Nya", screenwidth, screenheight);
     
@@ -1408,7 +1466,6 @@ int main(int argc, char *argv[])
   
     // Step 1 - Get the default display.
     EGLDisplay eglDisplay =0;
-    //eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     eglDisplay = ESContext.display;
 
     printf("main() line: %d eglDisplay: 0x%.8x\n", __LINE__, (unsigned int)eglDisplay);
@@ -1417,69 +1474,19 @@ int main(int argc, char *argv[])
         return -1;
     }
     
-
-    // Step 2 - Initialize EGL.
-    //EGLint majorVersion=0, minorVersion=0;
-    //eglret = eglInitialize(eglDisplay, &majorVersion, &minorVersion);
-    //printf("main() line: %d, minorVersion %d, minorVersion %d eglret: %d \n", __LINE__, majorVersion, minorVersion, eglret);
-    
-    // Step 3 - Make OpenGL ES the current API.
-
-    //printf("main() line: %d \n", __LINE__);
-    
-    //eglBindAPI(EGL_OPENGL_ES_API);
-    //eglInitialize(EGLDisplay dpy, EGLint * major, EGLint * minor)
-    
-    //EGLenum apiret = 0;
-    //apiret = eglQueryAPI ();
-    //printf("main() line: %d api: %d \n", __LINE__, apiret);
-    
-    // Step 4 - Specify the required configuration attributes.
-    /*
-    EGLint pi32ConfigAttribs[5];
-    pi32ConfigAttribs[0] = EGL_SURFACE_TYPE;
-    pi32ConfigAttribs[1] = EGL_WINDOW_BIT;
-    pi32ConfigAttribs[2] = EGL_RENDERABLE_TYPE;
-    pi32ConfigAttribs[3] = EGL_OPENGL_ES2_BIT;
-    pi32ConfigAttribs[4] = EGL_NONE;
-
-    EGLint egl_config_attr[] = {
-        EGL_BUFFER_SIZE,    16,
-        EGL_DEPTH_SIZE,     16,
-        EGL_STENCIL_SIZE,   0,
-        EGL_SURFACE_TYPE,
-        EGL_WINDOW_BIT,
-        EGL_NONE
-    };
-    */
-    
     GLuint fboId = 0;
     GLuint renderBufferWidth = screenwidth;
     GLuint renderBufferHeight = screenheight;
     
-    // Step 5 - Find a config that matches all requirements.
-
-    // Step 6 - Create a surface to draw to.
     EGLClientBuffer cbuffer=0;
     EGLSurface eglSurface=0;
-    //cbuffer = malloc(renderBufferWidth*renderBufferHeight*3);
 
     printf("main() line: %d \n", __LINE__);
     
     eglSurface = ESContext.surface;
     
-    //printf("main() line: %d cbuffer: 0x%.8x eglSurface: 0x%.8x \n", __LINE__, (uint32_t)cbuffer, (unsigned int)eglSurface);
-    
-    // Step 7 - Create a context.
     EGLContext eglContext=0;
     eglContext = ESContext.context;
-    
-    printf("main() line: %d eglContext: 0x%.8x \n", __LINE__, (unsigned int)eglContext);
-    
-    // Step 8 - Bind the context to the current thread
-    //eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
-
-   printf("main() line: %d \n", __LINE__);
 
     GLuint shaderProgram = glCreateProgram();
     GLint   compileStatus;    
@@ -1528,6 +1535,48 @@ int main(int argc, char *argv[])
             
     glUseProgram(shaderProgram);
 
+    GLuint shaderProgram2 = glCreateProgram();
+    
+    // Create and compile the vertex shader
+    GLuint vertexShader2 = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader2, 1, &vertexShaderCodeNomal, NULL);
+    glCompileShader(vertexShader2);
+
+    glGetShaderiv(vertexShader2, GL_COMPILE_STATUS, &compileStatus);
+    printf("main() line: %d compile vertex shader status: %d \n", __LINE__, compileStatus); 
+    if(compileStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(vertexShader2, sizeof(messages), 0,messages);
+        printf("main() line: %d compile log: %s \n", __LINE__, messages);
+    }
+   
+    // Create and compile the fragment shader
+    GLuint fragmentShader2 = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader2, 1, &fragmentShaderCodeThr, NULL);
+    glCompileShader(fragmentShader2);
+    glGetShaderiv(fragmentShader2, GL_COMPILE_STATUS, &compileStatus);
+    printf("main() line: %d compile fragment shader status: %d \n", __LINE__, compileStatus); 
+    if(compileStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(fragmentShader2, sizeof(messages), 0,messages);
+        printf("main() line: %d compile log: %s \n", __LINE__, messages);
+    }
+    
+   printf("main() line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader2, fragmentShader2, shaderProgram2);
+
+    // Link the vertex and fragment shader into a shader program
+    glAttachShader(shaderProgram2, vertexShader2);
+    glAttachShader(shaderProgram2, fragmentShader2);
+    // glBindFragDataLocation(shaderProgram, 0, "outColor");
+    glLinkProgram(shaderProgram2);
+
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkStatus);
+    printf("main() line: %d link program status: %d \n", __LINE__, linkStatus); 
+    if (linkStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetProgramInfoLog( shaderProgram, sizeof(messages), 0, messages);
+        printf("main() line: %d link error log: %s \n", __LINE__, messages);
+    }
 
     #if 1 /* framebuff rotating */
     
@@ -1537,11 +1586,13 @@ int main(int argc, char *argv[])
     GLfloat textureCoordinateData2[] = {1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
     GLfloat textureCoordinateData3[] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
     
-    GLint aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
+    GLint aPositionLocation;
+    aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
     glEnableVertexAttribArray(aPositionLocation);
     glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
 
-    GLint aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
+    GLint aTextureCoordinateLocation;
+    aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
     glEnableVertexAttribArray(aTextureCoordinateLocation);
     glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
 
@@ -1551,12 +1602,14 @@ int main(int argc, char *argv[])
     printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
     
     GLfloat rtangle=0.0f;
-    GLint uRotateLocation = glGetUniformLocation(shaderProgram, "u_Rotate");
+    GLint uRotateLocation;
+    uRotateLocation = glGetUniformLocation(shaderProgram, "u_Rotate");
     glEnableVertexAttribArray(uRotateLocation);
     glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
 
     // Get the location of u_Rotate in the shader
-    GLint uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
+    GLint uRatioLocation;
+    uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
     // Enable the parameter of the location
     glEnableVertexAttribArray(uRatioLocation);
     // Specify the vertex data of u_Ratio
@@ -1592,6 +1645,18 @@ int main(int argc, char *argv[])
 
     printf("main() line: %d color_renderbuffer: %d framebufferR8: %d statusR8: 0x%x\n", __LINE__, color_renderbuffer, framebufferR8, statusR8);
     #endif
+
+    switch (selectPage) {
+    case 1:
+        rendertype = GL_LINEAR;
+        break;
+    case 0:
+        rendertype = GL_NEAREST;
+        break;
+    default:
+        rendertype = GL_LINEAR;
+        break;
+    }
     
     #if 1
     GLint fbTextures[2];
@@ -1611,8 +1676,8 @@ int main(int argc, char *argv[])
     //glActiveTexture(GL_TEXTURE0);
     // Bind the texture to frame buffer
     glBindTexture(GL_TEXTURE_2D, fbImageTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, TEXTURE_RENDER_TYPE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, TEXTURE_RENDER_TYPE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
@@ -1634,8 +1699,8 @@ int main(int argc, char *argv[])
     //glActiveTexture(GL_TEXTURE1);
     // Bind the texture to frame buffer
     glBindTexture(GL_TEXTURE_2D, fbImageTexture_1);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, TEXTURE_RENDER_TYPE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, TEXTURE_RENDER_TYPE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, header->aspbiWidth, abs(header->aspbiHeight), 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
@@ -1663,8 +1728,8 @@ int main(int argc, char *argv[])
     glActiveTexture(GL_TEXTURE0);
     // Set texture parameters
     glBindTexture(GL_TEXTURE_2D, imageTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, TEXTURE_RENDER_TYPE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, TEXTURE_RENDER_TYPE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     
@@ -1699,9 +1764,11 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    GLint uTextureLocation;
+    
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, imageTexture);
-    GLint uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
+    uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
     glUniform1i(uTextureLocation, 0);
     
     glFinish();
@@ -1725,10 +1792,10 @@ int main(int argc, char *argv[])
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
     
-    rtangle = -10.0f;
+    rtangle = -4.0f;
     glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
 
-    glClearColor(0.7f, 0.9f, 0.8f, 1.0f);        
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);        
     glViewport(0, 0, header->aspbiWidth, abs(header->aspbiHeight));
 
     meacnt = 0;
@@ -1743,17 +1810,6 @@ int main(int argc, char *argv[])
         clock_gettime(CLOCK_REALTIME, &tmS);
             
         glClear(GL_COLOR_BUFFER_BIT);    
-
-        #if 0
-        if (meacnt % 2) {
-            glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
-        } else {
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        }
-        #endif
-
-        rtangle += 0.6f;
-        glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
     
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -1773,7 +1829,7 @@ int main(int argc, char *argv[])
 
         clock_gettime(CLOCK_REALTIME, &tmS);
         
-        #if 0
+        #if 1
         break;
         #else
         if (meacnt >= 10) {
@@ -1831,28 +1887,55 @@ int main(int argc, char *argv[])
     
     free(data2);
     #endif
+
+    glUseProgram(shaderProgram2);
+
+    aPositionLocation = glGetAttribLocation(shaderProgram2, "a_position");
+    glEnableVertexAttribArray(aPositionLocation);
+    glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
+
+    aTextureCoordinateLocation = glGetAttribLocation(shaderProgram2, "a_textureCoordinate");
+    glEnableVertexAttribArray(aTextureCoordinateLocation);
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData3);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
+    printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, fbImageTexture);
+    uTextureLocation = glGetUniformLocation(shaderProgram2, "u_texture");
+    glUniform1i(uTextureLocation, 0);
+
+    GLint uThrholdLocation;
+    GLfloat uThrholdf;
+    uThrholdLocation = glGetUniformLocation(shaderProgram2, "u_thrhld");
+    uThrholdf = (GLfloat)rotArix;
+    uThrholdf = uThrholdf / 100.0f;
+    glUniform1f(uThrholdLocation, uThrholdf);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d uThrholdf: %f\n", glerr, __LINE__, uThrholdf);
         
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer_1);
     //glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
     //glBindFramebuffer(GL_FRAMEBUFFER, framebufferR8);
-    
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
 
     //glActiveTexture(GL_TEXTURE0);
     //glBindTexture(GL_TEXTURE_2D, color_renderbuffer);
     //glBindTexture(GL_TEXTURE_2D, fbImageTexture);
-    //glUniform1i(uTextureLocation, 1);
+    //glUniform1i(uTextureLocation, 0);
 
     glerr = glGetError();
     LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
     
-    rtangle = -10.0f;
-    glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
-    
+    //rtangle = 0.0f;
+    //glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
     //glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData3);
 
-    //glViewport(0, 0, renderBufferWidth, renderBufferHeight);
+    glClearColor(0.9f, 0.9f, 0.9f, 1.0f);        
+    glViewport(0, 0, header->aspbiWidth, abs(header->aspbiHeight));
     
     clock_gettime(CLOCK_REALTIME, &tmS);
     meacnt = 0;
@@ -1868,8 +1951,8 @@ int main(int argc, char *argv[])
             
         glClear(GL_COLOR_BUFFER_BIT); 
 
-        rtangle += 0.4f;
-        glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
+        //rtangle += 0.4f;
+        //glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
     
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -1889,7 +1972,7 @@ int main(int argc, char *argv[])
 
         clock_gettime(CLOCK_REALTIME, &tmS);
         
-        #if 0
+        #if 1
         break;
         #else
         if (meacnt >= 30) {
@@ -2142,8 +2225,8 @@ int main(int argc, char *argv[])
 
     // Set texture parameters
     glBindTexture(GL_TEXTURE_2D, imageTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, TEXTURE_RENDER_TYPE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, TEXTURE_RENDER_TYPE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     
@@ -2439,8 +2522,8 @@ int main(int argc, char *argv[])
 
     // Set texture parameters
     glBindTexture(GL_TEXTURE_2D, imageTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, TEXTURE_RENDER_TYPE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, TEXTURE_RENDER_TYPE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
