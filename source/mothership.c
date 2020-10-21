@@ -139,7 +139,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (500) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (200) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -171,7 +171,7 @@ typedef struct
 #define MFOUR_SIM_MODE_BMP (0)
 
 #if GHP_EN
-#define SMP_EN (1)
+#define SMP_EN (0)
 #else
 #define SMP_EN (0)
 #endif
@@ -70729,14 +70729,14 @@ static int p8(struct procRes_s *rs)
     sprintf_f(rs->logs, "WPA network interface: %s \n", rs->pnetIntwpa);
     print_f(rs->plogs, "P8", rs->logs);
 
-    sprintf(syscmd, "rm /home/root/scan_in/cv_det_tw.txt");
-    ret = doSystemCmd(syscmd);
+    //sprintf(syscmd, "rm /home/root/scan_in/cv_det_tw.txt");
+    //ret = doSystemCmd(syscmd);
 
-    sprintf(syscmd, "dk2_ocr_scanin");
-    ret = doSystemCmd(syscmd);
+    //sprintf(syscmd, "dk2_ocr_scanin");
+    //ret = doSystemCmd(syscmd);
     
-    sprintf(syscmd, "cat /home/root/scan_in/cv_det_tw.txt");
-    ret = doSystemCmd(syscmd);
+    //sprintf(syscmd, "cat /home/root/scan_in/cv_det_tw.txt");
+    //ret = doSystemCmd(syscmd);
 
     //dbgShowTimeStamp("s7s-2", NULL, rs, 2, NULL);
     
