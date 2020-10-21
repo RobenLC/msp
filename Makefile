@@ -80,6 +80,7 @@ LIBS += -lwayland-server
 LIBS += -lwayland-egl
 LIBS += -lEGL
 LIBS += -lGLESv2
+LIBS += -lGLESv1_CM
 LIBS += -ljpeg
 #LIBS += -lturbojpeg
 #LIBS += -lopencv_core
@@ -115,6 +116,7 @@ EGLEX_SRCS = gl_example.c
 EGLEX_SRCS_PATH = source/$(EGLEX_SRCS)
 EGLEX_SRCS_PATH_OBJ = $(EGLEX_SRCS_PATH:.c=.o)
 EGLEX_COBJECTS = $(EGLEX_SRCS:.c=.o)
+EGLEX_COBJECTS += rotate.o
 
 
 SRCS = $(MOTHERSHIP_CSOURCES)
@@ -134,7 +136,7 @@ out/mainrot.bin : $(ROTATE_SRCS_PATH_OBJ) $(MAINROT_SRCS_PATH_OBJ) $(MAINROT_COB
 	$(CXX) $(CFLAGS) $(LIBS) $(MAINROT_COBJECTS) $(BKOCRTEST_CPPOBJECTS) $(INCLUDE) $(OPENCV_LIB) $(BKOCR_LIB) -o $@
 	@echo
 
-out/eglex.bin : $(EGLEX_SRCS_PATH_OBJ) $(EGLEX_COBJECTS)
+out/eglex.bin : $(EGLEX_SRCS_PATH_OBJ) $(EGLEX_COBJECTS) $(ROTATE_SRCS_PATH_OBJ)
 	$(CXX) $(CFLAGS) $(LIBS) $(EGLEX_COBJECTS) $(INCLUDE) -o $@
 	@echo
 

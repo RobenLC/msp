@@ -12,6 +12,7 @@ make
 
 
 ./enpocr.sh
-./enp.sh
+./enpgl.sh
+#./enp.sh
 
 ssh root@192.168.21.137 ls

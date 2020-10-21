@@ -35,6 +35,9 @@ struct _escontext
   EGLContext  context;
   /// EGL surface
   EGLSurface  surface;
+  GLuint program;
+  GLuint vector_shader;
+  GLuint fragment_shader;
 };
 
 struct wl_compositor *compositor = NULL;
@@ -430,7 +433,7 @@ static FILE *find_save(char *dst, char *tmple)
 static int grapglbmp32bits(unsigned char *ptr, int width, int height, int dpp, int len)
 {
     char ptfilepath[256];
-    static char ptfiledump[] = "/home/root/gldump_%.3d.bmp";
+    static char ptfiledump[] = "/home/root/sd/dump/gldump_%.3d.bmp";
     FILE *dumpFile=0;
 
     struct bitmapHeader_s * bmpheader=0;
@@ -467,7 +470,7 @@ static int grapglbmp32bits(unsigned char *ptr, int width, int height, int dpp, i
 static int grapglbmp(unsigned char *ptr, int width, int height, int dpp, int len)
 {
     char ptfilepath[256];
-    static char ptfiledump[] = "/home/root/gldump_%.3d.bmp";
+    static char ptfiledump[] = "/home/root/sd/dump/gldump_%.3d.bmp";
     FILE *dumpFile=0;
 
     struct bitmapHeader_s * bmpheader=0;
@@ -640,7 +643,7 @@ static int gleGetImage(char **dat, char **raw, int idx)
 {
     FILE *f;
     char filepath[256];
-    char bnotebmp[128]="/home/root/banknote/full_H%.3d.bmp";
+    char bnotebmp[128]="/home/root/sd/banknote/full_H%.3d.bmp";
     //char bnotebmp[128]="/home/root/banknote/char/%d.bmp";
     int ret=0;
 
@@ -1381,6 +1384,102 @@ char indices[] = {
     3, 0, 1, 3, 1, 2
 };
 
+int aspEgl_Init(int w, int h) 
+{
+    EGLBoolean eglret = 0;
+    
+    get_server_references();
+
+    surface = wl_compositor_create_surface(compositor);
+    if (surface == NULL) {
+        LOG("No Compositor surface ! Yay....\n");
+        return -1;
+    }
+    else LOG("Got a compositor surface !\n");
+
+    shell_surface = wl_shell_get_shell_surface(shell, surface);
+    wl_shell_surface_set_toplevel(shell_surface);
+    
+    eglret = CreateWindowWithEGLContext("Nya", w, h);
+    
+    printf("main() line: %d CreateWindowWithEGLContext ret: 0x%.8x\n", __LINE__, (unsigned int)eglret);
+
+    return 0;
+}
+
+int aspEgl_shaderRotate(void) 
+{
+
+    EGLDisplay eglDisplay =0;
+    eglDisplay = ESContext.display;
+
+    printf("line: %d eglDisplay: 0x%.8x\n", __LINE__, (unsigned int)eglDisplay);
+
+    if (!eglDisplay) {
+        return -1;
+    }
+    
+    EGLSurface eglSurface=0;
+    eglSurface = ESContext.surface;
+    
+    EGLContext eglContext=0;
+    eglContext = ESContext.context;
+
+    GLuint shaderProgram = glCreateProgram();
+    GLint   compileStatus;    
+
+    ESContext.program = shaderProgram;
+    
+    // Create and compile the vertex shader
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderCode, NULL);
+    glCompileShader(vertexShader);
+
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &compileStatus);
+    printf("line: %d compile vertex shader status: %d \n", __LINE__, compileStatus); 
+    if(compileStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(vertexShader, sizeof(messages), 0,messages);
+        printf("line: %d compile log: %s \n", __LINE__, messages);
+    }
+   
+    // Create and compile the fragment shader
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderCode, NULL);
+    glCompileShader(fragmentShader);
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &compileStatus);
+    printf("line: %d compile fragment shader status: %d \n", __LINE__, compileStatus); 
+    if(compileStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(fragmentShader, sizeof(messages), 0,messages);
+        printf("line: %d compile log: %s \n", __LINE__, messages);
+    }
+
+    ESContext.vector_shader = vertexShader;
+    ESContext.fragment_shader = fragmentShader;
+    
+    printf("line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader, fragmentShader, shaderProgram);
+
+    // Link the vertex and fragment shader into a shader program
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    // glBindFragDataLocation(shaderProgram, 0, "outColor");
+    glLinkProgram(shaderProgram);
+
+    GLint linkStatus;
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkStatus);
+    printf("line: %d link program status: %d \n", __LINE__, linkStatus); 
+    if (linkStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetProgramInfoLog( shaderProgram, sizeof(messages), 0, messages);
+        printf("line: %d link error log: %s \n", __LINE__, messages);
+    }
+            
+    glUseProgram(shaderProgram);
+
+    return 0;
+}
+
 #if 1
 int main(int argc, char *argv[])
 {
@@ -1391,7 +1490,6 @@ int main(int argc, char *argv[])
     #define TEXTURE_RENDER_TYPE rendertype //(GL_LINEAR)
     
     #define CONTEXT_ES20
-    EGLBoolean eglret = 0;
     int screenwidth  = 800, screenheight = 480, clrbits=0;
     int ret=0, imgidx=0;
     char *img=0, *raw=0;
@@ -1404,6 +1502,8 @@ int main(int argc, char *argv[])
     GLint size=0, rendertype=0;
     unsigned char *data2=0;
     GLenum statusR8=0;
+    GLint   compileStatus=0;
+    GLint linkStatus=0;
     
     printf("main() argc: %d \n", argc);
 
@@ -1447,93 +1547,8 @@ int main(int argc, char *argv[])
     screenheight = abs(header->aspbiHeight) / 2;
     clrbits = header->aspbiCPP >> 16;
 
-    get_server_references();
-
-    surface = wl_compositor_create_surface(compositor);
-    if (surface == NULL) {
-        LOG("No Compositor surface ! Yay....\n");
-        exit(1);
-    }
-    else LOG("Got a compositor surface !\n");
-
-    shell_surface = wl_shell_get_shell_surface(shell, surface);
-    wl_shell_surface_set_toplevel(shell_surface);
-
-    eglret = CreateWindowWithEGLContext("Nya", screenwidth, screenheight);
-    
-    printf("main() line: %d CreateWindowWithEGLContext ret: 0x%.8x\n", __LINE__, (unsigned int)eglret);
-
-  
-    // Step 1 - Get the default display.
-    EGLDisplay eglDisplay =0;
-    eglDisplay = ESContext.display;
-
-    printf("main() line: %d eglDisplay: 0x%.8x\n", __LINE__, (unsigned int)eglDisplay);
-
-    if (!eglDisplay) {
-        return -1;
-    }
-    
-    GLuint fboId = 0;
-    GLuint renderBufferWidth = screenwidth;
-    GLuint renderBufferHeight = screenheight;
-    
-    EGLClientBuffer cbuffer=0;
-    EGLSurface eglSurface=0;
-
-    printf("main() line: %d \n", __LINE__);
-    
-    eglSurface = ESContext.surface;
-    
-    EGLContext eglContext=0;
-    eglContext = ESContext.context;
-
-    GLuint shaderProgram = glCreateProgram();
-    GLint   compileStatus;    
-    
-    // Create and compile the vertex shader
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderCode, NULL);
-    glCompileShader(vertexShader);
-
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &compileStatus);
-    printf("main() line: %d compile vertex shader status: %d \n", __LINE__, compileStatus); 
-    if(compileStatus == GL_FALSE) {
-        GLchar messages[256];
-        glGetShaderInfoLog(vertexShader, sizeof(messages), 0,messages);
-        printf("main() line: %d compile log: %s \n", __LINE__, messages);
-    }
-   
-    // Create and compile the fragment shader
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderCode, NULL);
-    glCompileShader(fragmentShader);
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &compileStatus);
-    printf("main() line: %d compile fragment shader status: %d \n", __LINE__, compileStatus); 
-    if(compileStatus == GL_FALSE) {
-        GLchar messages[256];
-        glGetShaderInfoLog(fragmentShader, sizeof(messages), 0,messages);
-        printf("main() line: %d compile log: %s \n", __LINE__, messages);
-    }
-    
-   printf("main() line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader, fragmentShader, shaderProgram);
-
-    // Link the vertex and fragment shader into a shader program
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    // glBindFragDataLocation(shaderProgram, 0, "outColor");
-    glLinkProgram(shaderProgram);
-
-    GLint linkStatus;
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkStatus);
-    printf("main() line: %d link program status: %d \n", __LINE__, linkStatus); 
-    if (linkStatus == GL_FALSE) {
-        GLchar messages[256];
-        glGetProgramInfoLog( shaderProgram, sizeof(messages), 0, messages);
-        printf("main() line: %d link error log: %s \n", __LINE__, messages);
-    }
-            
-    glUseProgram(shaderProgram);
+    aspEgl_Init(screenwidth, screenheight);
+    aspEgl_shaderRotate();
 
     GLuint shaderProgram2 = glCreateProgram();
     
@@ -1570,11 +1585,11 @@ int main(int argc, char *argv[])
     // glBindFragDataLocation(shaderProgram, 0, "outColor");
     glLinkProgram(shaderProgram2);
 
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkStatus);
+    glGetProgramiv(shaderProgram2, GL_LINK_STATUS, &linkStatus);
     printf("main() line: %d link program status: %d \n", __LINE__, linkStatus); 
     if (linkStatus == GL_FALSE) {
         GLchar messages[256];
-        glGetProgramInfoLog( shaderProgram, sizeof(messages), 0, messages);
+        glGetProgramInfoLog( shaderProgram2, sizeof(messages), 0, messages);
         printf("main() line: %d link error log: %s \n", __LINE__, messages);
     }
 
@@ -1585,6 +1600,8 @@ int main(int argc, char *argv[])
     GLfloat textureCoordinateData1[] = {1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
     GLfloat textureCoordinateData2[] = {1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
     GLfloat textureCoordinateData3[] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
+    
+    GLuint shaderProgram = ESContext.program;
     
     GLint aPositionLocation;
     aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
@@ -1604,14 +1621,14 @@ int main(int argc, char *argv[])
     GLfloat rtangle=0.0f;
     GLint uRotateLocation;
     uRotateLocation = glGetUniformLocation(shaderProgram, "u_Rotate");
-    glEnableVertexAttribArray(uRotateLocation);
+    //glEnableVertexAttribArray(uRotateLocation);
     glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
 
     // Get the location of u_Rotate in the shader
     GLint uRatioLocation;
     uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
     // Enable the parameter of the location
-    glEnableVertexAttribArray(uRatioLocation);
+    //glEnableVertexAttribArray(uRatioLocation);
     // Specify the vertex data of u_Ratio
     glUniform1f(uRatioLocation, screenwidth * 1.0f / screenheight);
 
