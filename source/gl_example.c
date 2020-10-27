@@ -84,6 +84,7 @@ struct bitmapHeader_s {
 };
 
 extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
+extern int gleGetImage(char **dat, char **raw, char *filepath);
 
 void CreateNativeWindow(char *title, int width, int height) 
 {
@@ -558,108 +559,6 @@ static int shmem_dump(char *src, int size)
     printf("%s", str);
 
     return inc;
-}
-
-static int gleGetBmpFile(char **retbuf, char **retraw, FILE *f)
-{
-    int ret=0, size=0, err=0, offset=0;
-    char *buff=0, *rawbuf=0;
-    struct bitmapHeader_s *head=0;
-    
-    if (!f) {
-        err = -1;
-        goto end;
-    }
-
-    ret |= fseek(f, 0, SEEK_END);
-
-    size = ftell(f);
-
-    ret |= fseek(f, 0, SEEK_SET);
-
-    if (ret) {
-        err = -2;
-        goto end;
-    }
-
-    //size = sizeof(struct bitmapHeader_s);
-    head = (struct bitmapHeader_s *)malloc(size + 4); 
-    if (!head) {
-        err = -3;
-        goto end;
-    }
-
-    //size -= 2;
-    buff = &head->aspbmpMagic[2];
-    ret = fread(buff, 1, size, f);
-    if ((ret < 0) || (ret != size)) {
-        err = -4;
-        goto end;
-    }
-
-    dbgBitmapHeader(head, sizeof(struct bitmapHeader_s) - 2);
-
-    size = head->aspbiRawSize;
-    rawbuf = malloc(size);
-
-    offset = head->aspbhRawoffset;
-
-    #if 1
-    fseek(f, offset, SEEK_SET);
-    #else
-    fseek(f, 0, SEEK_SET);
-
-    ret = fread(rawbuf, 1, offset, f);
-    if ((ret < 0) || (ret != offset)) {
-        err = -5;
-        goto end;
-    }
-    #endif
-    
-    ret = fread(rawbuf, 1, size, f);
-    if ((ret < 0) || (ret != size)) {
-        err = -6;
-        goto end;
-    }
-    
-
-    end:
-
-    if (err) {
-        if (head) free(head);
-        if (rawbuf) free(rawbuf);
-        
-        head = 0;
-        rawbuf = 0;
-    }
-
-    *retbuf = (char *)head;
-    *retraw = rawbuf;
-   
-    return err;
-}
-
-static int gleGetImage(char **dat, char **raw, int idx)
-{
-    FILE *f;
-    char filepath[256];
-    char bnotebmp[128]="/home/root/sd/banknote/full_H%.3d.bmp";
-    //char bnotebmp[128]="/home/root/banknote/char/%d.bmp";
-    int ret=0;
-
-    sprintf(filepath, bnotebmp, idx);
-    f = fopen(filepath, "r");
-
-    if (!f) {
-        printf("get file [%s] failed!! \n", filepath);
-        return -1;
-    }
-
-    ret = gleGetBmpFile(dat, raw, f);
-
-    fclose(f);
-
-    return ret;
 }
 
 #define I(_i, _j) ((_j)+ 4*(_i))
@@ -1493,6 +1392,8 @@ int main(int argc, char *argv[])
     int screenwidth  = 800, screenheight = 480, clrbits=0;
     int ret=0, imgidx=0;
     char *img=0, *raw=0;
+    char filepath[256]={0};
+    char bnotebmp[128]="/home/root/sd/banknote/full_H%.3d.bmp";    
     struct bitmapHeader_s *header=0;
     struct timespec tmS, tmE;
     int tmCost=0, meacnt=0, selectPage=0, rotArix=0;
@@ -1529,7 +1430,8 @@ int main(int argc, char *argv[])
         imgidx = 24;
     }
 
-    ret = gleGetImage(&img, &raw, imgidx);
+    sprintf(filepath, bnotebmp, imgidx);
+    ret = gleGetImage(&img, &raw, filepath);
 
     if (ret) {
         printf("main() Error!!! can't load bmp ret: %d\n", ret);

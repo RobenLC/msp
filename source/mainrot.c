@@ -105,6 +105,7 @@ extern int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsr
 extern int dbgBitmapHeader(struct bitmapHeader_s *ph, int len);
 extern int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb);
 extern uint32_t msb2lsb32(struct intMbs32_s *msb);
+extern int gleGetImage(char **dat, char **raw, char *filepath);
 
 static int jpeg2rgbWHm(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *getW, int * getH, int bpp, int offsetWin, int widthWin, int offsetYWin, int heightWin)
 {
@@ -627,7 +628,7 @@ static int save2BMP(char *head, int ntd, int w, int h, int size, int idx)
 static int saveRot2BMP(char *raw, char *head, int ntd, int *dat, int idx)
 {
     int ret=0, err=0, len=0;
-    char ptfileInfo[] = "/home/root/rotate/rot_%d_%d_%d_%.2d";
+    char ptfileInfo[] = "/home/root/sd/rotate/rot_%d_%d_%d_%.2d";
     char filetail[] = "_%.3d.bmp";
     char ptfileSave[256]={0};
     char dumpath[256]={0};
@@ -656,7 +657,7 @@ static int saveRot2BMP(char *raw, char *head, int ntd, int *dat, int idx)
         bmph = bheader->aspbiHeight;
     }
     
-    abuf_size = bheader->aspbiWidth * bmph;
+    abuf_size = bheader->aspbiRawSize;
     bhlen = bheader->aspbhRawoffset;
     
     fdump = find_save(dumpath, ptfileSave);
@@ -787,7 +788,8 @@ static int get_image_in_jpg(char **retjpg, int *retw, int *reth, int *retsize, i
     crod = utmp & 0xffff;
     utmp = utmp >> 16;
     pmreal[2] = utmp;
-    pmreal[3] = crod;       
+    pmreal[3] = crod;
+    
     utmp = msb2lsb32(&pusbmeta->CROP_POS_F3);
     crod = utmp & 0xffff;
     utmp = utmp >> 16;
@@ -1051,11 +1053,59 @@ static void* aspSallocm(uint32_t slen)
 
 #define DUMP_FULL_BMP (1)
 #define DUMP_ROT_BMP (1)
+#define MUL_SAMPLE_TEST (1)
+
+#if MUL_SAMPLE_TEST
+int main(int argc, char *argv[]) 
+{
+    char *head=0, *raw=0;
+    int err=0, ret=0, rotlen=0;
+    FILE *f=0;
+    char bnotemulti[128]="/home/root/sd/banknote/ASP_111257s.bmp";
+    //int cropinfo[6]={64, 434, 200, 50, 0, 0};
+    int cropinfo[6]={0, 0, 1155, 533, 0, 0};
+    int breal[8]={154, 539, 154, 9, 1304, 9, 1304, 534};
+    //int breal[8]={53, 1, 34, 490, 1303, 530, 1323, 23};
+    char *rotraw=0, *rothead=0, *rotbuff=0;
+
+    ret = gleGetImage(&head, &raw, bnotemulti);
+    if (ret) {
+        printf("get file [%s] failed!! ret: %d \n", bnotemulti, ret);
+        err = -2;
+        goto end;
+    }
+
+    rotlen = (cropinfo[2] * cropinfo[3]) + 1078 + 4;
+    rotbuff = malloc(rotlen);
+
+    memset(rotbuff, 0, rotlen);
+    memcpy(rotbuff, head, 1080);
+    
+    rothead = rotbuff + 2;
+    rotraw = rothead + 1078;
+    
+    ret = doRot2BMP(rotraw, rothead, cropinfo, head+2, breal);
+
+    printf("get w: %d h: %d \n", cropinfo[4], cropinfo[5]);
+
+    #if DUMP_ROT_BMP
+    ret = saveRot2BMP(rotraw, rothead, 100, cropinfo, 0);
+    if (ret) {
+        err = -7 + ret*10;
+        goto end;
+    }
+    #endif
+
+    end:
+    return err;
+}
+#else
 int main(int argc, char *argv[]) 
 {
     char filepath[256];
-    char bnotefile[128]="/home/root/banknote/ASP_%d_%.2d_%.6d_org.bmp";
-    char bnotejpg[128]="/home/root/banknote/full_H%.3d.jpg";
+    char bnotefile[128]="/home/root/sd/banknote/ASP_%d_%.2d_%.6d_org.bmp";
+    char bnotejpg[128]="/home/root/sd/banknote/full_H%.3d.jpg";
+    char bnotemulti[128]="/home/root/sd/banknote/aspmulti.bmp";
     int data[3][5]={{100, 81, 350, 200, 50},{500, 141, 334, 200, 50},{1000, 177, 330, 200, 50}};
     int len=0, ret=0, err=0, cnt=0, nt=0, ntd=0, ix=0, dec=0, imgsize=0, runloop=0;
     FILE *f=0;
@@ -1100,6 +1150,7 @@ int main(int argc, char *argv[])
         printf("ntd: %d idx: %d (%d, %d, %d, %d, %d, %d)\n", ntd, cnt, cropinfo[0], cropinfo[1], cropinfo[2], cropinfo[3], cropinfo[4], cropinfo[5]);
 
         sprintf(filepath, bnotejpg, cnt);
+        //sprintf(filepath, bnotemulti);
         f = fopen(filepath, "r");
 
         if (!f) {
@@ -1142,6 +1193,8 @@ int main(int argc, char *argv[])
 
             fclose(f);
             f = 0;
+
+            printf("treal: (%d, %d, %d, %d, %d, %d, %d, %d) \n",treal[0], treal[1], treal[2], treal[3], treal[4], treal[5], treal[6], treal[7]);
             
             printf("get jpg file w:%d h:%d jpgsz: %d, meta address: [0x%.8x] \n", jpgw, jpgh, jpgsz, (uint32_t)jpgmeta);
             ptmetausb = (struct aspMetaDataviaUSB_s *)jpgmeta;
@@ -1626,5 +1679,5 @@ int main(int argc, char *argv[])
     return err;
     
 }
-
+#endif
 

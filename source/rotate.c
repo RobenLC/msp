@@ -96,6 +96,150 @@ struct aspMetaDataviaUSB_s{
   unsigned char EXTRA_POINT[4];    //byte[232]
 };
 
+int dbgBitmapHeader(struct bitmapHeader_s *ph, int len) 
+{
+
+    msync(ph, sizeof(struct bitmapHeader_s), MS_SYNC);
+
+    printf("[BMP]********************************************\n");
+
+    printf("[BMP]debug print bitmap header length: %d\n", len);
+
+    printf("[BMP]MAGIC NUMBER: [%c] [%c] \n",ph->aspbmpMagic[2], ph->aspbmpMagic[3]);         
+
+    printf("[BMP]FILE TOTAL LENGTH: [%d] \n",ph->aspbhSize);                                                 // mod
+
+    printf("[BMP]HEADER TOTAL LENGTH: [%d] \n",ph->aspbhRawoffset);          
+
+    printf("[BMP]INFO HEADER LENGTH: [%d] \n",ph->aspbiSize);          
+
+    printf("[BMP]WIDTH: [%d] \n",ph->aspbiWidth);                                                          // mod
+
+    printf("[BMP]HEIGHT: [%d] \n",ph->aspbiHeight);                                                        // mod
+    
+    printf("[BMP]NUM OF COLOR PLANES: [%d] \n",ph->aspbiCPP & 0xffff);          
+
+    printf("[BMP]BITS PER PIXEL: [%d] \n",ph->aspbiCPP >> 16);          
+
+    printf("[BMP]COMPRESSION METHOD: [%d] \n",ph->aspbiCompMethd);          
+
+    printf("[BMP]SIZE OF RAW: [%d] \n",ph->aspbiRawSize);                                            // mod
+
+    printf("[BMP]HORIZONTAL RESOLUTION: [%d] \n",ph->aspbiResoluH);          
+
+    printf("[BMP]VERTICAL RESOLUTION: [%d] \n",ph->aspbiResoluV);          
+
+    printf("[BMP]NUM OF COLORS IN CP: [%d] \n",ph->aspbiNumCinCP);          
+
+    printf("[BMP]NUM OF IMPORTANT COLORS: [%d] \n",ph->aspbiNumImpColor);          
+
+    printf("[BMP]********************************************\n");
+
+    return 0;
+}
+
+static int gleGetBmpFile(char **retbuf, char **retraw, FILE *f)
+{
+    int ret=0, size=0, err=0, offset=0;
+    char *buff=0, *rawbuf=0;
+    struct bitmapHeader_s *head=0;
+    
+    if (!f) {
+        err = -1;
+        goto end;
+    }
+
+    ret |= fseek(f, 0, SEEK_END);
+
+    size = ftell(f);
+
+    ret |= fseek(f, 0, SEEK_SET);
+
+    if (ret) {
+        err = -2;
+        goto end;
+    }
+
+    //size = sizeof(struct bitmapHeader_s);
+    head = (struct bitmapHeader_s *)malloc(size + 4); 
+    if (!head) {
+        err = -3;
+        goto end;
+    }
+
+    //size -= 2;
+    buff = &head->aspbmpMagic[2];
+    ret = fread(buff, 1, size, f);
+    if ((ret < 0) || (ret != size)) {
+        err = -4;
+        goto end;
+    }
+
+    dbgBitmapHeader(head, sizeof(struct bitmapHeader_s) - 2);
+
+    size = head->aspbiRawSize;
+    rawbuf = malloc(size);
+
+    offset = head->aspbhRawoffset;
+
+    #if 1
+    fseek(f, offset, SEEK_SET);
+    #else
+    fseek(f, 0, SEEK_SET);
+
+    ret = fread(rawbuf, 1, offset, f);
+    if ((ret < 0) || (ret != offset)) {
+        err = -5;
+        goto end;
+    }
+    #endif
+    
+    ret = fread(rawbuf, 1, size, f);
+    if ((ret < 0) || (ret != size)) {
+        err = -6;
+        goto end;
+    }
+    
+
+    end:
+
+    if (err) {
+        if (head) free(head);
+        if (rawbuf) free(rawbuf);
+        
+        head = 0;
+        rawbuf = 0;
+    }
+
+    *retbuf = (char *)head;
+    *retraw = rawbuf;
+   
+    return err;
+}
+
+int gleGetImage(char **dat, char **raw, char *filepath)
+{
+    FILE *f;
+    //char filepath[256];
+    //char bnotebmp[128]="/home/root/sd/banknote/full_H%.3d.bmp";
+    //char bnotebmp[128]="/home/root/banknote/char/%d.bmp";
+    int ret=0;
+
+    //sprintf(filepath, bnotebmp, idx);
+    f = fopen(filepath, "r");
+
+    if (!f) {
+        printf("get file [%s] failed!! \n", filepath);
+        return -1;
+    }
+
+    ret = gleGetBmpFile(dat, raw, f);
+
+    fclose(f);
+
+    return ret;
+}
+
 uint32_t msb2lsb32(struct intMbs32_s *msb)
 {
     uint32_t lsb=0;
@@ -200,48 +344,6 @@ int dbgMetaUsb(struct aspMetaDataviaUSB_s *pmetausb)
 
 
     printf("[METAU]********************************************\n");
-    return 0;
-}
-
-int dbgBitmapHeader(struct bitmapHeader_s *ph, int len) 
-{
-
-    msync(ph, sizeof(struct bitmapHeader_s), MS_SYNC);
-
-    printf("[BMP]********************************************\n");
-
-    printf("[BMP]debug print bitmap header length: %d\n", len);
-
-    printf("[BMP]MAGIC NUMBER: [%c] [%c] \n",ph->aspbmpMagic[2], ph->aspbmpMagic[3]);         
-
-    printf("[BMP]FILE TOTAL LENGTH: [%d] \n",ph->aspbhSize);                                                 // mod
-
-    printf("[BMP]HEADER TOTAL LENGTH: [%d] \n",ph->aspbhRawoffset);          
-
-    printf("[BMP]INFO HEADER LENGTH: [%d] \n",ph->aspbiSize);          
-
-    printf("[BMP]WIDTH: [%d] \n",ph->aspbiWidth);                                                          // mod
-
-    printf("[BMP]HEIGHT: [%d] \n",ph->aspbiHeight);                                                        // mod
-    
-    printf("[BMP]NUM OF COLOR PLANES: [%d] \n",ph->aspbiCPP & 0xffff);          
-
-    printf("[BMP]BITS PER PIXEL: [%d] \n",ph->aspbiCPP >> 16);          
-
-    printf("[BMP]COMPRESSION METHOD: [%d] \n",ph->aspbiCompMethd);          
-
-    printf("[BMP]SIZE OF RAW: [%d] \n",ph->aspbiRawSize);                                            // mod
-
-    printf("[BMP]HORIZONTAL RESOLUTION: [%d] \n",ph->aspbiResoluH);          
-
-    printf("[BMP]VERTICAL RESOLUTION: [%d] \n",ph->aspbiResoluV);          
-
-    printf("[BMP]NUM OF COLORS IN CP: [%d] \n",ph->aspbiNumCinCP);          
-
-    printf("[BMP]NUM OF IMPORTANT COLORS: [%d] \n",ph->aspbiNumImpColor);          
-
-    printf("[BMP]********************************************\n");
-
     return 0;
 }
 
