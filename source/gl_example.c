@@ -38,6 +38,7 @@ struct _escontext
   GLuint program;
   GLuint vector_shader;
   GLuint fragment_shader;
+  GLuint program2;
 };
 
 struct wl_compositor *compositor = NULL;
@@ -1317,12 +1318,6 @@ int aspEgl_shaderRotate(void)
     if (!eglDisplay) {
         return -1;
     }
-    
-    EGLSurface eglSurface=0;
-    eglSurface = ESContext.surface;
-    
-    EGLContext eglContext=0;
-    eglContext = ESContext.context;
 
     GLuint shaderProgram = glCreateProgram();
     GLint   compileStatus;    
@@ -1376,6 +1371,179 @@ int aspEgl_shaderRotate(void)
             
     glUseProgram(shaderProgram);
 
+    return 0;
+}
+
+int aspEgl_shaderThr(void) 
+{
+
+    GLuint shaderProgram2 = glCreateProgram();
+    GLint   compileStatus;    
+
+    ESContext.program2 = shaderProgram2;
+    
+    // Create and compile the vertex shader
+    GLuint vertexShader2 = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader2, 1, &vertexShaderCodeNomal, NULL);
+    glCompileShader(vertexShader2);
+
+    glGetShaderiv(vertexShader2, GL_COMPILE_STATUS, &compileStatus);
+    printf("main() line: %d compile vertex shader status: %d \n", __LINE__, compileStatus); 
+    if(compileStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(vertexShader2, sizeof(messages), 0,messages);
+        printf("main() line: %d compile log: %s \n", __LINE__, messages);
+    }
+   
+    // Create and compile the fragment shader
+    GLuint fragmentShader2 = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader2, 1, &fragmentShaderCodeThr, NULL);
+    glCompileShader(fragmentShader2);
+    glGetShaderiv(fragmentShader2, GL_COMPILE_STATUS, &compileStatus);
+    printf("main() line: %d compile fragment shader status: %d \n", __LINE__, compileStatus); 
+    if(compileStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetShaderInfoLog(fragmentShader2, sizeof(messages), 0,messages);
+        printf("main() line: %d compile log: %s \n", __LINE__, messages);
+    }
+    
+   printf("main() line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader2, fragmentShader2, shaderProgram2);
+
+    // Link the vertex and fragment shader into a shader program
+    glAttachShader(shaderProgram2, vertexShader2);
+    glAttachShader(shaderProgram2, fragmentShader2);
+    // glBindFragDataLocation(shaderProgram, 0, "outColor");
+    glLinkProgram(shaderProgram2);
+
+    GLint linkStatus;
+    glGetProgramiv(shaderProgram2, GL_LINK_STATUS, &linkStatus);
+    printf("main() line: %d link program status: %d \n", __LINE__, linkStatus); 
+    if (linkStatus == GL_FALSE) {
+        GLchar messages[256];
+        glGetProgramInfoLog( shaderProgram2, sizeof(messages), 0, messages);
+        printf("main() line: %d link error log: %s \n", __LINE__, messages);
+    }
+
+    return 0;
+}
+
+int aspEgl_setupProgram(GLfloat *vertexData, GLfloat *textureCoordinateData, GLfloat rtangle, GLfloat ratio)
+{
+    GLenum glerr=0;
+    GLuint shaderProgram = ESContext.program;
+    
+    GLint aPositionLocation;
+    GLint aTextureCoordinateLocation;
+    GLint uRotateLocation;
+    GLint uRatioLocation;
+    
+    aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
+    glEnableVertexAttribArray(aPositionLocation);
+    glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
+
+    aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
+    glEnableVertexAttribArray(aTextureCoordinateLocation);
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
+    printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
+    
+    uRotateLocation = glGetUniformLocation(shaderProgram, "u_Rotate");
+    //glEnableVertexAttribArray(uRotateLocation);
+    glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
+
+    // Get the location of u_Rotate in the shader
+    uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
+    glUniform1f(uRatioLocation, ratio);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
+    return 0;
+}
+
+int aspEgl_setupFramebuffer(GLuint shaderProgram, GLint imageTexture, GLint frameBuffer)
+{
+    GLenum glerr=0;
+    GLint uTextureLocation;
+    
+    glUseProgram(shaderProgram);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, imageTexture);
+    uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
+    glUniform1i(uTextureLocation, 0);
+        
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
+    return 0;
+}
+
+int aspEgl_setupProgram2(GLfloat *vertexData, GLfloat *textureCoordinateData3, GLuint fbImageTexture, int rotArix)
+{
+    GLenum glerr=0;
+    GLuint shaderProgram2 = ESContext.program2;
+    
+    glUseProgram(shaderProgram2);
+
+    GLint aPositionLocation;
+    GLint aTextureCoordinateLocation;
+    GLint uTextureLocation;
+    
+    aPositionLocation = glGetAttribLocation(shaderProgram2, "a_position");
+    glEnableVertexAttribArray(aPositionLocation);
+    glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
+
+    aTextureCoordinateLocation = glGetAttribLocation(shaderProgram2, "a_textureCoordinate");
+    glEnableVertexAttribArray(aTextureCoordinateLocation);
+    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData3);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+
+    GLint uThrholdLocation;
+    GLfloat uThrholdf;
+    uThrholdLocation = glGetUniformLocation(shaderProgram2, "u_thrhld");
+    uThrholdf = (GLfloat)rotArix;
+    uThrholdf = uThrholdf / 100.0f;
+    glUniform1f(uThrholdLocation, uThrholdf);
+    
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d uThrholdf: %f\n", glerr, __LINE__, uThrholdf);
+        
+
+
+    return 0;
+}
+
+int aspEgl_setupFramebuffer2(GLuint shaderProgram2, GLint fbImageTexture, GLint frameBuffer_1)
+{
+    GLenum glerr=0;
+    GLint uTextureLocation;
+    
+    glUseProgram(shaderProgram2);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, fbImageTexture);
+    uTextureLocation = glGetUniformLocation(shaderProgram2, "u_texture");
+    glUniform1i(uTextureLocation, 0);
+        
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer_1);
+
+    glerr = glGetError();
+    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    
     return 0;
 }
 
@@ -1451,49 +1619,7 @@ int main(int argc, char *argv[])
 
     aspEgl_Init(screenwidth, screenheight);
     aspEgl_shaderRotate();
-
-    GLuint shaderProgram2 = glCreateProgram();
-    
-    // Create and compile the vertex shader
-    GLuint vertexShader2 = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader2, 1, &vertexShaderCodeNomal, NULL);
-    glCompileShader(vertexShader2);
-
-    glGetShaderiv(vertexShader2, GL_COMPILE_STATUS, &compileStatus);
-    printf("main() line: %d compile vertex shader status: %d \n", __LINE__, compileStatus); 
-    if(compileStatus == GL_FALSE) {
-        GLchar messages[256];
-        glGetShaderInfoLog(vertexShader2, sizeof(messages), 0,messages);
-        printf("main() line: %d compile log: %s \n", __LINE__, messages);
-    }
-   
-    // Create and compile the fragment shader
-    GLuint fragmentShader2 = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader2, 1, &fragmentShaderCodeThr, NULL);
-    glCompileShader(fragmentShader2);
-    glGetShaderiv(fragmentShader2, GL_COMPILE_STATUS, &compileStatus);
-    printf("main() line: %d compile fragment shader status: %d \n", __LINE__, compileStatus); 
-    if(compileStatus == GL_FALSE) {
-        GLchar messages[256];
-        glGetShaderInfoLog(fragmentShader2, sizeof(messages), 0,messages);
-        printf("main() line: %d compile log: %s \n", __LINE__, messages);
-    }
-    
-   printf("main() line: %d vshader: 0x%.8x, fshader: 0x%.8x, programid: 0x%.8x\n", __LINE__, vertexShader2, fragmentShader2, shaderProgram2);
-
-    // Link the vertex and fragment shader into a shader program
-    glAttachShader(shaderProgram2, vertexShader2);
-    glAttachShader(shaderProgram2, fragmentShader2);
-    // glBindFragDataLocation(shaderProgram, 0, "outColor");
-    glLinkProgram(shaderProgram2);
-
-    glGetProgramiv(shaderProgram2, GL_LINK_STATUS, &linkStatus);
-    printf("main() line: %d link program status: %d \n", __LINE__, linkStatus); 
-    if (linkStatus == GL_FALSE) {
-        GLchar messages[256];
-        glGetProgramInfoLog( shaderProgram2, sizeof(messages), 0, messages);
-        printf("main() line: %d link error log: %s \n", __LINE__, messages);
-    }
+    aspEgl_shaderThr();
 
     #if 1 /* framebuff rotating */
     
@@ -1502,43 +1628,18 @@ int main(int argc, char *argv[])
     GLfloat textureCoordinateData1[] = {1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
     GLfloat textureCoordinateData2[] = {1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
     GLfloat textureCoordinateData3[] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
-    
+
     GLuint shaderProgram = ESContext.program;
-    
     GLint aPositionLocation;
-    aPositionLocation = glGetAttribLocation(shaderProgram, "a_position");
-    glEnableVertexAttribArray(aPositionLocation);
-    glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
-
     GLint aTextureCoordinateLocation;
-    aTextureCoordinateLocation = glGetAttribLocation(shaderProgram, "a_textureCoordinate");
-    glEnableVertexAttribArray(aTextureCoordinateLocation);
-    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData);
-
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-
-    printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
-    
-    GLfloat rtangle=0.0f;
+    GLfloat rtangle=0.0f, ratio=0.0f;
     GLint uRotateLocation;
-    uRotateLocation = glGetUniformLocation(shaderProgram, "u_Rotate");
-    //glEnableVertexAttribArray(uRotateLocation);
-    glUniform1f(uRotateLocation, (rtangle * 3.1415f) / 180.0f);
-
-    // Get the location of u_Rotate in the shader
     GLint uRatioLocation;
-    uRatioLocation = glGetUniformLocation(shaderProgram, "u_Ratio");
-    // Enable the parameter of the location
-    //glEnableVertexAttribArray(uRatioLocation);
-    // Specify the vertex data of u_Ratio
-    glUniform1f(uRatioLocation, screenwidth * 1.0f / screenheight);
 
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-
-    printf("main() line: %d uRotateLocation: %d uRatioLocation: %d \n", __LINE__, uRotateLocation, uRatioLocation);
-
+    ratio = screenwidth * 1.0f/ screenheight;
+    
+    aspEgl_setupProgram(vertexData, textureCoordinateData, rtangle, ratio);
+    
     #if 0
     GLuint color_renderbuffer;
     glGenRenderbuffers(1, &color_renderbuffer);
@@ -1683,36 +1784,9 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    GLint uTextureLocation;
-    
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, imageTexture);
-    uTextureLocation = glGetUniformLocation(shaderProgram, "u_texture");
-    glUniform1i(uTextureLocation, 0);
-    
-    glFinish();
-    
-    clock_gettime(CLOCK_REALTIME, &tmE);
-
-    tmCost = asgltime_diff(&tmS, &tmE, 1000);                                                
-    printf("texture in cost: %d.%d ms\n", tmCost/1000, tmCost%1000);
-            
-    printf("main() line: %d textureid: %d, texturelocation: %d \n", __LINE__, imageTexture, uTextureLocation);
-    
-    clock_gettime(CLOCK_REALTIME, &tmS);   
-    
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-    
-    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
-    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-    
     rtangle = -4.0f;
-    glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
+    aspEgl_setupProgram(vertexData, textureCoordinateData, rtangle, ratio);
+    aspEgl_setupFramebuffer(shaderProgram, imageTexture, frameBuffer);
 
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);        
     glViewport(0, 0, header->aspbiWidth, abs(header->aspbiHeight));
@@ -1807,52 +1881,11 @@ int main(int argc, char *argv[])
     free(data2);
     #endif
 
-    glUseProgram(shaderProgram2);
-
-    aPositionLocation = glGetAttribLocation(shaderProgram2, "a_position");
-    glEnableVertexAttribArray(aPositionLocation);
-    glVertexAttribPointer(aPositionLocation, 2, GL_FLOAT, false,0, vertexData);
-
-    aTextureCoordinateLocation = glGetAttribLocation(shaderProgram2, "a_textureCoordinate");
-    glEnableVertexAttribArray(aTextureCoordinateLocation);
-    glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData3);
-
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
-
-    printf("main() line: %d aPositionLocation: %d aTextureCoordinateLocation: %d \n", __LINE__, aPositionLocation, aTextureCoordinateLocation);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, fbImageTexture);
-    uTextureLocation = glGetUniformLocation(shaderProgram2, "u_texture");
-    glUniform1i(uTextureLocation, 0);
-
-    GLint uThrholdLocation;
-    GLfloat uThrholdf;
-    uThrholdLocation = glGetUniformLocation(shaderProgram2, "u_thrhld");
-    uThrholdf = (GLfloat)rotArix;
-    uThrholdf = uThrholdf / 100.0f;
-    glUniform1f(uThrholdLocation, uThrholdf);
+    GLuint shaderProgram2 = ESContext.program2;
     
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d uThrholdf: %f\n", glerr, __LINE__, uThrholdf);
-        
-    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer_1);
-    //glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
-    //glBindFramebuffer(GL_FRAMEBUFFER, framebufferR8);
-
-    //glActiveTexture(GL_TEXTURE0);
-    //glBindTexture(GL_TEXTURE_2D, color_renderbuffer);
-    //glBindTexture(GL_TEXTURE_2D, fbImageTexture);
-    //glUniform1i(uTextureLocation, 0);
-
-    glerr = glGetError();
-    LOG("GL ERR: 0x%x line %d\n", glerr, __LINE__);
+    aspEgl_setupProgram2(vertexData, textureCoordinateData3, fbImageTexture, rotArix);
+    aspEgl_setupFramebuffer2(shaderProgram2, fbImageTexture, frameBuffer_1);
     
-    //rtangle = 0.0f;
-    //glUniform1f(uRotateLocation, (rtangle * M_PI) / 180.0f);
-    //glVertexAttribPointer(aTextureCoordinateLocation, 2, GL_FLOAT, false,0, textureCoordinateData3);
-
     glClearColor(0.9f, 0.9f, 0.9f, 1.0f);        
     glViewport(0, 0, header->aspbiWidth, abs(header->aspbiHeight));
     
