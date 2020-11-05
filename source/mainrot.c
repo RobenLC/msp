@@ -1059,15 +1059,17 @@ static void* aspSallocm(uint32_t slen)
 int main(int argc, char *argv[]) 
 {
     char *head=0, *raw=0;
-    int err=0, ret=0, rotlen=0;
+    int err=0, ret=0, rotlen=0, laycnt=0, laytot=0;
     FILE *f=0;
-    char bnotemulti[128]="/home/root/sd/banknote/ASP_111257s.bmp";
-    //int cropinfo[6]={64, 434, 200, 50, 0, 0};
-    int cropinfo[6]={0, 0, 1155, 533, 0, 0};
+    char bnotemulti[128]="/home/root/sd/banknote/ASP_111257.bmp";
+    int cropinfo[8]={64, 434, 200, 50, 0, 0, 0, 0};
+    //int cropinfo[8]={0, 0, 1155, 533, 0, 0, 0, 4};
     int breal[8]={154, 539, 154, 9, 1304, 9, 1304, 534};
     //int breal[8]={53, 1, 34, 490, 1303, 530, 1323, 23};
     char *rotraw=0, *rothead=0, *rotbuff=0;
-
+    struct timespec rotS, rotE;
+    int tmCost=0;
+            
     ret = gleGetImage(&head, &raw, bnotemulti);
     if (ret) {
         printf("get file [%s] failed!! ret: %d \n", bnotemulti, ret);
@@ -1083,18 +1085,37 @@ int main(int argc, char *argv[])
     
     rothead = rotbuff + 2;
     rotraw = rothead + 1078;
+
+    laytot = 4;
+    laycnt = 0;
+    cropinfo[7] = laytot;
     
-    ret = doRot2BMP(rotraw, rothead, cropinfo, head+2, breal);
+    while (laycnt < laytot) {
 
-    printf("get w: %d h: %d \n", cropinfo[4], cropinfo[5]);
+        cropinfo[6] = laycnt;
 
-    #if DUMP_ROT_BMP
-    ret = saveRot2BMP(rotraw, rothead, 100, cropinfo, 0);
-    if (ret) {
-        err = -7 + ret*10;
-        goto end;
+        clock_gettime(CLOCK_REALTIME, &rotS);
+
+        ret = doRot2BMP(rotraw, rothead, cropinfo, head+2, breal);
+
+        clock_gettime(CLOCK_REALTIME, &rotE);
+        tmCost = time_diffm(&rotS, &rotE, 1000);   
+     
+        printf("get w: %d h: %d time cost: %d.%d ms layer%d\n", cropinfo[4], cropinfo[5], tmCost/1000, tmCost%1000, laycnt);
+
+        #if DUMP_ROT_BMP
+        ret = saveRot2BMP(rotraw, rothead, 100, cropinfo, 0);
+        if (ret) {
+            err = -7 + ret*10;
+            goto end;
+        }
+        #endif
+
+        memset(rotbuff, 0, rotlen);
+        memcpy(rotbuff, head, 1080);
+
+        laycnt++;
     }
-    #endif
 
     end:
     return err;
