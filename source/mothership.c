@@ -51,11 +51,11 @@ int pipe2(int pipefd[2], int flags);
 #include <EGL/eglext.h>
 //#include <GL/glx.h>
 #include "BKImage.h"
+#include <linux/membarrier.h>
 #endif
 
 //#include <arch/arm/include/asm/barriers.h>
 //#include <arm/include/asm/barriers.h>
-#include <linux/membarrier.h>
 //#include <asm-generic/barrier.h>
 //#include <linux/compiler-gcc.h>
 //#include <linux/memcontrol.h>
@@ -19659,6 +19659,11 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin)
     return 0;
 }
 
+static inline char* getPixelN(char *rawCpy, int dx, int dy, int rowsz, int bitset, int n) 
+{
+    return (rawCpy + dx * bitset + dy * rowsz * n);
+}
+
 static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset) 
 {
     return (rawCpy + dx * bitset + dy * rowsz);
@@ -19678,6 +19683,9 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
  *                      algorithm's estimating value if the input value is zero
  *    cropinfo[5]: height of banknote area, could be estimating value, the value will be overwrited by 
  *                      algorithm's estimating value if the input value is zero
+ *    cropinfo[6]: layer id ex: 0 to 3
+ *    cropinfo[7]: layer number ex: 4
+ *
  * @bmpsrc: memory address of raw image for BMP
  * @pmreal: four coordinates of scaned image comes from croping algorithm 
  *    pmreal[0]: x of point 1
@@ -19760,7 +19768,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     int ublen=0, ubret=0, ubrst=0;
     uint32_t val=0;
     int cxm, cxn;
-    int deg=0;
+    int deg=0, layerId=-1, layerN=0;
     struct aspRectObj *pRectin=0, *pRectROI=0, *pRectinR=0;
     CFLOAT distH, distW;
     
@@ -19859,6 +19867,9 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
     #if LOG_ROTMF_DBG    
     dbgprintRect(pRectinR);
     #endif
+
+    layerId = cropinfo[6];
+    layerN = cropinfo[7];
 
     if ((cropinfo[4] == 0) && (cropinfo[5] == 0)) {
         distH = calcuDistance(pRectinR->aspRectLU, pRectinR->aspRectLD);
@@ -20830,6 +20841,8 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
 
     msync(crsAry, expCAsize*3*4, MS_SYNC);
     
+    rawCpy += oldRowsz * layerId;
+    
     cnt = 0;
     
     for (id=0; id < expCAsize; id++) {
@@ -20863,7 +20876,7 @@ int rotateBMPMf(char *rotbuff, char *headbuff, int *cropinfo, char *bmpsrc, int 
                 //printf("ob dx: %d, dy: %d, ix: %d, iy: %d colr: 0x%.2x\n", dx, dy, ix, iy, src[0]);
                 //continue;
             } else {
-                src = getPixel(rawCpy, dx, dy, oldRowsz, bitset);
+                src = getPixelN(rawCpy, dx, dy, oldRowsz, bitset, layerN);
             }
 
             #if VIB_FILTER_EN
@@ -86189,7 +86202,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //sprintf_f(rs->logs, "raw size: %d, dst size: %d \n", rawlen, dstlen);
     //print_f(rs->plogs, "CLIP", rs->logs);    
 
-    int cropinfo[6]; // x, y, w, h, imgW, imgH
+    int cropinfo[8]; // x, y, w, h, imgW, imgH
 
     #if 1
     cropinfo[0] = (int)pDeRect->mfourRectX;
@@ -86198,6 +86211,8 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     cropinfo[3] = (int)pDeRect->mfourRectH;
     cropinfo[4] = 0;
     cropinfo[5] = 0;
+    cropinfo[6] = 0;
+    cropinfo[7] = 1;
     #else
     idxA = cutsides[cutcnt*2];
 
