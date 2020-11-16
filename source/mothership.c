@@ -139,7 +139,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (200) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (220) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -150,8 +150,8 @@ typedef struct
 #define USB_ALIVE_POLLING (1)               // notice this 
 #define USB_PC_IDLE_CHK (0)
 #define USB_RECVLEN_ZERO_HANDLE   (1)
-#define USB_AUTO_PAUSE    (1)
-#define USB_AUTO_RESUME  (1)
+#define USB_AUTO_PAUSE    (0)
+#define USB_AUTO_RESUME  (0)
 #define DBG_PAUSE_RESUME (0)
 
 #if 1                                                          // notice this 
@@ -171,7 +171,7 @@ typedef struct
 #define MFOUR_SIM_MODE_BMP (0)
 
 #if GHP_EN
-#define SMP_EN (0)
+#define SMP_EN (1)
 #else
 #define SMP_EN (0)
 #endif
@@ -1352,7 +1352,13 @@ struct aspMetaDataviaUSB_s{
   unsigned char PRI_O_SEC;                 // byte[16]
   unsigned char Scaned_Page[2];                            //byte[18]
   unsigned char BKNote_Total_Layers;                    //byte[19]
-  unsigned char MUSE_RESERVE[16];   // byte[35]
+  unsigned char   LEDMode;                                                                             //byte[20]
+  unsigned char   LEDH2L1;            //if BMP/4_layers, it only use the first 4 LEDs     //byte[21]
+  unsigned char   LEDH4L3;                                                                             //byte[22]
+  unsigned char   LEDH6L5;                                                                             //byte[23]
+  unsigned char   LEDH8L7;                                                                             //byte[24]
+  unsigned char   LEDRsvd;                                                                             //byte[25]
+  unsigned char MUSE_RESERVE[10];   // byte[35]
   unsigned char BKNote_Slice_idx;   // current image slice index of this Bank Note                            //byte[36]
   unsigned char BKNote_Block_idx;   // current image block index of this Bank Note                            //byte[37]
   unsigned char MCROP_RESERVE[9];   // byte[46]
@@ -2560,7 +2566,7 @@ static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int
     *getW = cinfo.output_width;
     *getH = cinfo.output_height;
 
-    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d \n", cinfo.output_width, cinfo.output_height, row_stride); 
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d \n", cinfo.output_width, cinfo.output_height, row_stride); 
     
     #if 1
     offsetx = offsetWin;
@@ -2573,7 +2579,7 @@ static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int
     //row_stride = cinfo.output_width * cinfo.output_components;
     row_stride = ((cinfo.output_width * bpp + 31) / 32) * 4;
 
-    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 1\n", cinfo.output_width, cinfo.output_height, row_stride); 
 
     lnum = cinfo.output_height;
     if (lnum > MAX_LINE_NUM) {
@@ -2588,7 +2594,7 @@ static int jpeg2rgbWH(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int
         tmpbuff += row_stride_org;
     }
 
-    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 2\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d after 2\n", cinfo.output_width, cinfo.output_height, row_stride); 
     
     //*getW = cinfo.output_width;
     //*getH = cinfo.output_height;
@@ -3760,7 +3766,7 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
 
 static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
 {
-#define SCAN_IMAGE_SIZE (5 * 1024 * 1024)
+#define SCAN_IMAGE_SIZE (9 * 1024 * 512)
 
     int len=0, ix=0, totsz=0;
     struct bitmapDecodeMfour_s *pdec=0;
@@ -18913,10 +18919,10 @@ void doCalculate(int *result, int *org, int org_len, int *mass, int mass_len, st
 
 }
 
-static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs) 
+static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs, int lyertot) 
 {
     uint32_t cord=0, tmp=0;
-    int len=0, val=0, hval=0, ret=0, ix=0, mlt=0, div=300, dpi=0;
+    int len=0, val=0, hval=0, ret=0, ix=0, mlt=0, div=300, dpi=0, vdiv=1, inc=0;
     struct aspConfig_s *pct=0;
     struct aspMetaDataviaUSB_s *pscanInfo=0;
     struct intMbs32_s *pt=0;
@@ -18945,6 +18951,10 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
         return -3;
     }
 
+    if (lyertot > 1) {
+        vdiv = lyertot;
+    }
+
     tmp = 0;
     ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_CON);    
     dpi = tmp;
@@ -18964,6 +18974,13 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
             val = mlt / div;
         }
 
+        inc = hval % vdiv;
+            
+        hval = hval / vdiv;
+        if (inc > (vdiv/2)) {
+            hval += 1;
+        }
+
         org[ix*2+0] = val;
         org[ix*2+1] = hval;
 
@@ -18978,7 +18995,7 @@ static int getOrg(int *org, char *indat, int maxs, struct procRes_s *rs)
     return 0;
 }
 
-static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs) 
+static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs, int lyertot) 
 {
     uint32_t tmp=0;
     struct aspConfig_s *pct=0;
@@ -18986,7 +19003,7 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
     struct aspCrop36_s *ppt36 = 0;
     char *ptext=0, *pch=0;
     unsigned short *shtbuf=0;
-    int adpi=0, len=0, val=0, mlt=0, div=300, ret=0, dpi=0;
+    int adpi=0, len=0, val=0, mlt=0, div=300, ret=0, dpi=0, vdiv=1, inc=0, vrlt=0;
     int gap=0, cy=0, lnrec=0, lnlength=0, masUsed=0, masRecd=0;
     int ix=0, cxm=0, cxn=0, ipx=0;
 
@@ -18996,6 +19013,10 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
 
     if (!mass) {
         return -2;
+    }
+
+    if (lyertot > 1) {
+        vdiv = lyertot;
     }
     
     msync(indat, maxs, MS_SYNC);
@@ -19062,12 +19083,19 @@ static int getExtra(int *mass, char *indat, int maxs, struct procRes_s *rs)
             mlt = dpi * cxn;
             cxn = mlt / div;
         }
+
+        inc = cy % vdiv;
+        vrlt = cy / vdiv;
+            
+        if (inc > (vdiv/2)) {
+            vrlt += 1;
+        }
         
         mass[ipx*4+0] = cxm;
-        mass[ipx*4+1] = cy;
+        mass[ipx*4+1] = vrlt;
     
         mass[ipx*4+2] = cxn;
-        mass[ipx*4+3] = cy;
+        mass[ipx*4+3] = vrlt;
     
         ipx ++;
         cy += gap;
@@ -61017,7 +61045,8 @@ static int p3(struct procRes_s *rs)
     struct aspDoCropCalcu *pcrpdo=0;
     CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
     int *result=0, *org=0, *mass=0;
-    int org_len=0, mass_len=0, mbfidx=0, imgidx=0, mfbstat=0, exlen=0, yllen=0, val=0, mtlen=0;
+    int org_len=0, mass_len=0, mbfidx=0, imgidx=0, mfbstat=0, exlen=0, yllen=0, val=0, mtlen=0, layeTot=0;
+    char colrBits_L12=0, colrBits_L34=0, *colrBits_pt=0;
     struct bitmapDecodeMfour_s *pdec=0;
     struct bitmapDecodeItem_s *decjpg=0, *decmeta=0, *decexmt=0;
     char *pmeta=0, *pexmt=0;
@@ -61533,9 +61562,14 @@ static int p3(struct procRes_s *rs)
                             tch = (char *)&pusbmeta->YLines_Recorded;
                             mass_len = (int) ((tch[0]<<8) | tch[1]);
 
+                            layeTot = (int)((pusbmeta->BKNote_Total_Layers > 0) && (pusbmeta->BKNote_Total_Layers < 9)) ? pusbmeta->BKNote_Total_Layers:1;
+                            colrBits_pt = &pusbmeta->LEDMode;
+                            
                             //shmem_dump(addr, totsz);
-                            sprintf_f(rs->logs, "get total len: %d parsing len: %d, M_LEN: %d, yLine_rec: %d \n", totsz, org_len, (int)pusbmeta->MPIONT_LEN, mass_len);
+                            sprintf_f(rs->logs, "get total len: %d parsing len: %d, M_LEN: %d, yLine_rec: %d layeTot: %d, \n", totsz, org_len, (int)pusbmeta->MPIONT_LEN, mass_len, layeTot);
                             print_f(rs->plogs, "P3", rs->logs);
+
+                            shmem_dump(colrBits_pt, 8);
 
                             if (pusbmeta->MPIONT_LEN > 4) {
 
@@ -61559,13 +61593,13 @@ static int p3(struct procRes_s *rs)
                                 
                                 clock_gettime(CLOCK_REALTIME, &crpS);
                         
-                                ret = getOrg(org, addr, totsz, rs);
+                                ret = getOrg(org, addr, totsz, rs, layeTot);
                                 if (ret) {
                                     sprintf_f(rs->logs, "getOrg ret: %d \n", ret);
                                     print_f(rs->plogs, "P3", rs->logs);
                                 }
                                 
-                                ret = getExtra(mass, addr, totsz, rs);
+                                ret = getExtra(mass, addr, totsz, rs, layeTot);
                                 if (ret) {
                                     sprintf_f(rs->logs, "getExtra ret: %d \n", ret);
                                     print_f(rs->plogs, "P3", rs->logs);
@@ -61804,9 +61838,14 @@ static int p3(struct procRes_s *rs)
                     tch = (char *)&pusbmeta->YLines_Recorded;
                     mass_len = (int) ((tch[0]<<8) | tch[1]);
 
-                    sprintf_f(rs->logs, "get meta info total len: %d  masslen: %d, M_LEN: %d, ylrec: %d \n", totsz, org_len, (int)pusbmeta->MPIONT_LEN, mass_len*4+4);
+                    layeTot = (int)((pusbmeta->BKNote_Total_Layers > 0) && (pusbmeta->BKNote_Total_Layers < 9)) ? pusbmeta->BKNote_Total_Layers:1;
+                    colrBits_pt = &pusbmeta->LEDMode;
+                            
+                    sprintf_f(rs->logs, "get meta info total len: %d  masslen: %d, M_LEN: %d, ylrec: %d, layerTot: %d\n", totsz, org_len, (int)pusbmeta->MPIONT_LEN, mass_len*4+4, layeTot);
                     print_f(rs->plogs, "P3", rs->logs);
 
+                    shmem_dump(colrBits_pt, 8);
+                            
                     if (pusbmeta->MPIONT_LEN > 4) {
 
                         org_len = 18*2;
@@ -61829,15 +61868,15 @@ static int p3(struct procRes_s *rs)
 
                         clock_gettime(CLOCK_REALTIME, &crpS);
 
-                        ret = getOrg(org, addr, totsz, rs);
+                        ret = getOrg(org, addr, totsz, rs, layeTot);
                         if (ret) {
-                            sprintf_f(rs->logs, "m4 getOrg ret: %d \n", ret);
+                            sprintf_f(rs->logs, "m4 getOrg ret: %d layeTot: %d\n", ret, layeTot);
                             print_f(rs->plogs, "P3", rs->logs);
                         }
 
-                        ret = getExtra(mass, addr, totsz, rs);
+                        ret = getExtra(mass, addr, totsz, rs, layeTot);
                         if (ret) {
-                            sprintf_f(rs->logs, "m4 getExtra ret: %d \n", ret);
+                            sprintf_f(rs->logs, "m4 getExtra ret: %d layeTot: %d\n", ret, layeTot);
                             print_f(rs->plogs, "P3", rs->logs);
                         }
                         else {
@@ -74296,7 +74335,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             #if 1 /* test code before MCU ready */
             if (opc == 0x0f) {
-                opc = 0x0a;
+                //opc = 0x0a;
+                opc = 0x0e;
             }
             #endif
             
@@ -79867,7 +79907,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 //sprintf_f(rs->logs, "[DV] the meta size: %d dump: \n", rlen);
                 //print_f(rs->plogs, "P11", rs->logs);
                 //shmem_dump(addrd+(lens-rlen), 16);
-                //dbgMetaUsb((struct aspMetaDataviaUSB_s *)(addrd+(lens-rlen)));
+                dbgMetaUsb((struct aspMetaDataviaUSB_s *)(addrd+(lens-rlen)));
                 
                 if (!rlen) {
                     sprintf_f(rs->logs, "[DV] WARNING!!! the image size is multiplex of trunk size  !!!size: %d - 1 \n", lens);
@@ -86212,7 +86252,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     cropinfo[4] = 0;
     cropinfo[5] = 0;
     cropinfo[6] = 0;
-    cropinfo[7] = 1;
+    cropinfo[7] = ((pusbmeta->BKNote_Total_Layers > 0) && (pusbmeta->BKNote_Total_Layers < 9)) ? pusbmeta->BKNote_Total_Layers:1;
     #else
     idxA = cutsides[cutcnt*2];
 
@@ -88611,7 +88651,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                         
                     }
         
-                    #if 1//LOG_JPGH_EN
+                    #if LOG_JPGH_EN
                     sprintf_f(rs->logs, "[DV] addr: 0x%.8x lens: %d, cyclecnt: %d, lastCylen: %d dist: %d lastflag: 0x%.5x count: %d\n", (uint32_t)addrd, lens, uimCylcnt, lastCylen, distCylcnt, lastflag, cntTx);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
@@ -88901,9 +88941,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
     
                     //err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
-                    //err = jpeg2rgbRvs(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
+                    err = jpeg2rgbRvs(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
                     //err = jpeg2rgbW(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw);
-                    err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
+                    //err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
 
                     sprintf(rs->logs, "__JPG_DECODE_END(%d)__", buffidx); 
                     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
