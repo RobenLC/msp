@@ -139,7 +139,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (220) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (500) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -165,7 +165,7 @@ typedef struct
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
 
-#define MFOUR_IMG_SEND_BACK (1)
+#define MFOUR_IMG_SEND_BACK (0)
 #define MFOUR_BMP_SEND_BACK (1)
 #define MFOUR_SIM_MODE (0)
 #define MFOUR_SIM_MODE_BMP (0)
@@ -1571,7 +1571,7 @@ struct bitmapDecodeItem_s {
     mfour_image_param_st *aspDcData;
 };
 
-#define BMP_DECODE_PIC_SIZE (5)
+#define BMP_DECODE_PIC_SIZE (4)
 struct bitmapDecodeMfour_s {
     int         aspDecStatus;
     struct timespec   aspDecPostime[2];
@@ -3766,10 +3766,11 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
 
 static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
 {
-#define SCAN_IMAGE_SIZE (9 * 1024 * 512)
+#define SCAN_IMAGE_SIZE (10 * 512 * 1024)
 
     int len=0, ix=0, totsz=0;
     struct bitmapDecodeMfour_s *pdec=0;
+    int lens[BMP_DECODE_PIC_SIZE]={0};
 
     pdec = &pmrs->bmpDecMfour[idx];
 
@@ -3834,9 +3835,19 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
     pdec->aspDecRaw.aspDcMax = len;
     
     //len = 1024 * 100;
-    len = SCAN_IMAGE_SIZE;
-    totsz = len + sizeof(mfour_image_param_st) + 32;
+    #define M4_PIC_SIZE (12*1024)
+    lens[0] = M4_PIC_SIZE;
+    lens[1] = M4_PIC_SIZE;
+    lens[2] = SCAN_IMAGE_SIZE;
+    lens[3] = SCAN_IMAGE_SIZE;
+
+    //len = SCAN_IMAGE_SIZE;
+    
     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
+
+        len = lens[ix];
+        totsz = len + sizeof(mfour_image_param_st) + 32;
+        
         pdec->aspDecMfPiRaw[ix].aspDcData = (mfour_image_param_st *)aspSalloc(totsz);
         if (pdec->aspDecMfPiRaw[ix].aspDcData) {
             //sprintf_f(pmrs->log, "allocate memory for M4 piece raw %.d for id%d succeed !! size: %d KB\n", ix, idx, len / 1024); 
@@ -7354,7 +7365,7 @@ static int aspMetafs145GetlenviaUsb(struct mainRes_s *mrs)
     return val;
 }
 
-static int aspMetaReleaseviaUsbdlBmpUpd(struct aspMetaDataviaUSB_s *pmetausb, int updw, int updh, int sid, int aid) 
+static int aspMetaReleaseviaUsbdlBmpUpd(struct aspMetaDataviaUSB_s *pmetausb, int updw, int updh, int sid, int aid, int lyn, int clrocr) 
 {
     struct intMbs32_s *pt=0;
     unsigned int val=0;
@@ -7373,6 +7384,14 @@ static int aspMetaReleaseviaUsbdlBmpUpd(struct aspMetaDataviaUSB_s *pmetausb, in
     pmetausb->BKNote_Slice_idx = sid;
     pmetausb->BKNote_Block_idx = aid;
 
+    if (lyn) {
+        pmetausb->BKNote_Total_Layers = lyn;
+    }
+
+    if (clrocr) {
+        pmetausb->OCR_strlen = 0;
+    }
+    
     msync(pmetausb, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
     
     return 0;
@@ -71676,6 +71695,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     goto end;
                 }
                 #endif
+                
                 if (puhsinfo->ushostid)
                 if ((!puhsinfo->ushostblvir) || (!puhsinfo->ushostblphy)) {
                     sprintf_f(rs->logs,  "no vir table and phy table \n"); 
@@ -79907,7 +79927,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 //sprintf_f(rs->logs, "[DV] the meta size: %d dump: \n", rlen);
                 //print_f(rs->plogs, "P11", rs->logs);
                 //shmem_dump(addrd+(lens-rlen), 16);
-                dbgMetaUsb((struct aspMetaDataviaUSB_s *)(addrd+(lens-rlen)));
+                
+                //dbgMetaUsb((struct aspMetaDataviaUSB_s *)(addrd+(lens-rlen)));
                 
                 if (!rlen) {
                     sprintf_f(rs->logs, "[DV] WARNING!!! the image size is multiplex of trunk size  !!!size: %d - 1 \n", lens);
@@ -86063,7 +86084,7 @@ static int AllocateImgParamImgDataR(t_ImageParam	*SrcBKJobImg_Param)
 }
 
 #define DUMP_ROT_BMP (0)
-#define LOG_ROT_EN (1)
+#define LOG_ROT_EN (0)
 static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, int midx)
 {
     int ret=0;
@@ -89157,7 +89178,7 @@ static int p15(struct procRes_s *rs)
     struct aspMetaData_s *metaRx = 0;
     struct aspConfig_s *pct=0, *pdt=0;
     struct bitmapHeader_s *bheader=0, bmpheader, *rawheader=0;
-    struct aspMetaDataviaUSB_s *ptmetausb=0;
+    struct aspMetaDataviaUSB_s *ptmetausb=0, *metatmp=0;
     struct bitmapDecodeItem_s *pdecroi=0, *penroi=0, *pdecraw=0;
     char pinfo[2];
     char *buffraw=0;
@@ -89481,15 +89502,17 @@ static int p15(struct procRes_s *rs)
                     bmpbufc = jpgrlt;
 
                     //shmem_dump(bmpbufc, 512);
+                    metatmp = aspMemalloc(bmtlen, 15);
+                    memcpy(metatmp, ptmetausb, bmtlen);
                     
-                    aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, cutcnt+1);
+                    aspMetaReleaseviaUsbdlBmpUpd(metatmp, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, cutcnt+1, 1, ((cutcnt+1) == cutnum) ? 0:1);
                     //sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight);
                     //print_f(rs->plogs, "P15", rs->logs);
                     
-                    lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                    lenbs = &metatmp->EPOINT_RESERVE1[0] - &metatmp->ASP_MAGIC_ASPC[0];
                     
                     bmpcpy = bmpbufc + rotlen;
-                    memcpy(bmpcpy, ptmetausb, bmtlen);
+                    memcpy(bmpcpy, metatmp, bmtlen);
                     
                     //shmem_dump(bmpbufc+rotlen-512, 1024);
                     //dbgMetaUsb(ptmetausb);
@@ -89534,7 +89557,10 @@ static int p15(struct procRes_s *rs)
                             //shmem_dump(bufftmp, 512);
                             #endif
 
-                            aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecraw->aspDcWidth, pdecraw->aspDcHeight, 1, ix+1);
+                            metatmp = aspMemalloc(bmtlen, 15);
+                            memcpy(metatmp, ptmetausb, bmtlen);
+                    
+                            aspMetaReleaseviaUsbdlBmpUpd(metatmp, pdecraw->aspDcWidth, pdecraw->aspDcHeight, 1, ix+1, 0, 1);
                             sprintf_f(rs->logs, "[BMP] raw to update w and h: %d, %d len: %d \n", pdecraw->aspDcWidth, pdecraw->aspDcHeight, rawlen);
                             print_f(rs->plogs, "P15", rs->logs);
                             
@@ -89550,7 +89576,7 @@ static int p15(struct procRes_s *rs)
                             //bmpcpy = bmpcpy + rawlen;
                             //rawlen += rawlen;
                             
-                            memcpy(bmpcpy, ptmetausb, bmtlen);
+                            memcpy(bmpcpy, metatmp, bmtlen);
                             rawlen += bmtlen;
                             
                             //shmem_dump(bmpbufc+rotlen-512, 1024);
@@ -89586,7 +89612,10 @@ static int p15(struct procRes_s *rs)
                             
                             //shmem_dump(bufftmp, 512);
 
-                            aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, ix+1);
+                            metatmp = aspMemalloc(bmtlen, 15);
+                            memcpy(metatmp, ptmetausb, bmtlen);
+                            
+                            aspMetaReleaseviaUsbdlBmpUpd(metatmp, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, ix+1, 1, 1);
                             sprintf_f(rs->logs, "[BMP] to update w and h: %d, %d len: %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight, orglen);
                             print_f(rs->plogs, "P15", rs->logs);
                             
@@ -89602,7 +89631,7 @@ static int p15(struct procRes_s *rs)
                             //bmpcpy = bmpcpy + rawlen;
                             //orglen += rawlen;
                             
-                            memcpy(bmpcpy, ptmetausb, bmtlen);
+                            memcpy(bmpcpy, metatmp, bmtlen);
                             orglen += bmtlen;
                             
                             //shmem_dump(bmpbufc+rotlen-512, 1024);
@@ -89914,18 +89943,21 @@ static int p15(struct procRes_s *rs)
                     }
                     sprintf_f(rs->logs, "[BMP] updn: %d, side: %d cutcnt: %d\n", updn, sides[prisec], cutcnt);
                     print_f(rs->plogs, "P15", rs->logs);
-                    
-                    aspMetaReleaseviaUsbdlBmpUpd(ptmetausb, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1);
+
+                    metatmp = aspMemalloc(bmtlen, 15);
+                    memcpy(metatmp, ptmetausb, bmtlen);
+                            
+                    aspMetaReleaseviaUsbdlBmpUpd(metatmp, bheader->aspbiWidth, bheader->aspbiHeight, cutlayers[cutcnt*2+updn], cutcnt+1, 0, 1);
                     sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", bheader->aspbiWidth, bheader->aspbiHeight);
                     print_f(rs->plogs, "P15", rs->logs);
                     
-                    lenbs = &ptmetausb->EPOINT_RESERVE1[0] - &ptmetausb->ASP_MAGIC_ASPC[0];
+                    lenbs = &metatmp->EPOINT_RESERVE1[0] - &metatmp->ASP_MAGIC_ASPC[0];
                     
                     bmpcpy = bmpbufc + rotlen;
-                    memcpy(bmpcpy, ptmetausb, bmtlen);
+                    memcpy(bmpcpy, metatmp, bmtlen);
                     
                     //shmem_dump(bmpbufc+rotlen-512, 1024);
-                    dbgMetaUsb(ptmetausb);
+                    dbgMetaUsb(metatmp);
                     dbgMetaUsb((struct aspMetaDataviaUSB_s *)bmpcpy);
 
                     aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[cutcnt], bheader->aspbiWidth, bheader->aspbiHeight, rotlen+bmtlen);
@@ -90266,8 +90298,10 @@ static int p17(struct procRes_s *rs)
         ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
 
         if (ret > 0) {
+            #if LOG_P17_EN
             sprintf_f(rs->logs, "m4r get ch[0x%.2x] \n", ch);
             print_f(rs->plogs, "P17", rs->logs);
+            #endif
         } else {
             //sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
             //print_f(rs->plogs, "P17", rs->logs);
@@ -90330,7 +90364,6 @@ static int p17(struct procRes_s *rs)
                     
                     //sprintf_f(rs->logs, "m4rx print the cmd recv in:\n");
                     //print_f(rs->plogs, "P17", rs->logs);
-
 
                     clock_gettime(CLOCK_REALTIME, rs->rtpBk[0]);
                     msync(rs->rtpBk[0], sizeof(struct timespec), MS_SYNC);
