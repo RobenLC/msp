@@ -139,7 +139,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (500) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (400) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -2880,7 +2880,7 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     *getW = cinfo.output_width;
     *getH = cinfo.output_height;
     
-    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines S1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines S1\n", cinfo.output_width, cinfo.output_height, row_stride); 
     //skipf = 100;
     //skipb = 200;
     //jpeg_skip_scanlines(&cinfo, skipf);
@@ -3766,7 +3766,7 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
 
 static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
 {
-#define SCAN_IMAGE_SIZE (10 * 512 * 1024)
+#define SCAN_IMAGE_SIZE (13 * 512 * 1024)
 
     int len=0, ix=0, totsz=0;
     struct bitmapDecodeMfour_s *pdec=0;
@@ -87232,7 +87232,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     unsigned char *jpgrlt=0;
     int uimCylcnt=0, seqtx=0, maxsz=0, lens=0, pipRet=0, idlet=0, cindex=0, ix=0, waitCylen=0, chr=0, sendsz=0;
     int usbfd=0, ret=0, act=0, lastCylen=0, cmdprisec=0, bmplen=0, bmpmax=0, uselen=0, cpylen=0, distCylcnt=0, cntTx=0, lenbs=0, shfmeta=0;
-    int udist=0, uthrhld=0, upas=0, ursm=0, upasd=0, ursmd=0, udistd=0, lrst=0, opsz=0, rawlen=0, val=0, bmph=0, bhlen=0;
+    int udist=0, uthrhld=0, upas=0, ursm=0, upasd=0, ursmd=0, udistd=0, lrst=0, opsz=0, rawlen=0, val=0, bmph=0, bhlen=0, bmphmax=0;
     int colr=0, tmp=0, bmpw=0, bdpi=0, jpgetW=0, jpgetH=0, err=0, tmCost=0, blen=0, bdpp=0, prisec=0, cutcnt=0, cutnum=0;
     int mreal[2]={0}, recvsz=0, sides[2]={0}, rotlen=0, jpgLen=0, updn=0, rotlast=0, cntsent=0, bret=0, wrtsz=0, retry=0;
     int acusz=0, maxCylcnt=0, errcnt=0, lastflag=0, buffidx=-1, outmax=0, imgdex=0, mbstat=0, exmax=0, extlen=0, mtlen=0;
@@ -88483,17 +88483,17 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         
                     #if GHP_EN_JPGH
                     if (bmpbufc) {
+                        cpylen += lens;
 
-                        bmpcpy = memcpy(bmpbufc, addrd, lens);
-        
-                        msync(bmpcpy, lens, MS_SYNC);    
+                        if (cpylen < bmpmax) {
+                            bmpcpy = memcpy(bmpbufc, addrd, lens);
+                            msync(bmpcpy, lens, MS_SYNC);    
+                            bmpbufc = bmpcpy + lens;
+                        }
         
                         //shmem_dump(bmpcpy, 128);
                         //sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d \n", lens, cpylen);
                         //print_f(rs->plogs, sp, rs->logs);
-        
-                        cpylen += lens;
-                        bmpbufc = bmpcpy + lens;
                     }
                     #endif //#if GHP_EN_JPGH
                     
@@ -88797,7 +88797,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             print_f(rs->plogs, sp, rs->logs);
             bmph = val;
         
-            bhlen = 0;
+            //bhlen = 0;
             
             if (act || (bmph == 0)) {
                 sprintf_f(rs->logs, "[BMP] pop usb meta failed ret: %d bmph: %d addr: 0x%.8x lens: %d\n", act, bmph, (uint32_t)addrd, lens);
@@ -88844,6 +88844,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 bdpi = tmp;
                 //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 //print_f(rs->plogs, sp, rs->logs);
+
+                tmp = ((bmpw * colr + 31) / 32) * 4;
+                bmphmax = bmpmax / tmp;
                 
                 jpgout = 0;
                 
@@ -88876,17 +88879,35 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 //sprintf_f(rs->logs, "[BMP] hack image length: %d \n", val);
                 //print_f(rs->plogs, sp, rs->logs);                
                 #else
+                
+                sprintf_f(rs->logs, "[BMP] bmphmax: %d, bmph: %d\n", bmphmax, bmph);
+                print_f(rs->plogs, sp, rs->logs);
+                
+                if (bmphmax < bmph) {
+                    val = bmphmax;
+                } else {
+                    val = bmph;
+                }
+
+                if (rawlen > bmpmax) {
+                    bhlen = bmpmax;
+                } else {
+                    bhlen = rawlen;                    
+                }
+                    
                 switch (fformat) {
                 case FILE_FORMAT_JPG:
-                    aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, bmph, rawlen);
+                    
+                    aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, val, bhlen);
                     break;
                 case FILE_FORMAT_RAW:
                     pdecraw = &rs->pbDecMfour[buffidx]->aspDecRaw;
                     pdecraw->aspDcData->mfourAttb.ImageRect.xc = bmpw;
-                    pdecraw->aspDcData->mfourAttb.ImageRect.yr = bmph;
+                    pdecraw->aspDcData->mfourAttb.ImageRect.yr = val;
                     pdecraw->aspDcData->mfourIdx = buffidx;
+
                     
-                    aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, bmph, rawlen);
+                    aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, val, bhlen);
                     jpgout = bmpbuff;
                     break;
                 default:
@@ -88960,11 +88981,18 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 
                     sprintf(rs->logs, "__JPG_DECODE_START(%d)__", buffidx); 
                     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
-    
-                    //err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
-                    err = jpeg2rgbRvs(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
-                    //err = jpeg2rgbW(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw);
-                    //err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
+
+                    if ((bmphmax > bmph)) {
+                        err = jpeg2rgb(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
+                        //err = jpeg2rgbRvs(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr);
+                        //err = jpeg2rgbW(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw);
+                        //err = jpeg2rgbWH(bmpbuff, bmplen, jpgout + 1078, tmp, &jpgetW, &jpgetH, colr, coffsetx, coffsetw, coffsety, coffseth);
+                    } else {
+                        jpgetW = bmpw;
+                        jpgetH = bmphmax;
+
+                        memset(jpgout, 0xff, bmpmax);
+                    }
 
                     sprintf(rs->logs, "__JPG_DECODE_END(%d)__", buffidx); 
                     tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
@@ -88999,7 +89027,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     print_f(rs->plogs, sp, rs->logs);   
                 }
                 
-                bhlen = blen;
+                //bhlen = blen;
                 val = ((bmpw * colr + 31) / 32) * 4;
                 val = val * bmph;
         
@@ -89019,7 +89047,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 }
         
                 if (blen) {
-                    sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
+                    sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", blen);
                     print_f(rs->plogs, sp, rs->logs);
                 } 
                     
