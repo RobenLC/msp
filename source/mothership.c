@@ -139,7 +139,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (400) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (500) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -166,7 +166,7 @@ typedef struct
 #define AP_CLR_STATUS (1)
 
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (1)
+#define MFOUR_BMP_SEND_BACK (0)
 #define MFOUR_SIM_MODE (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
@@ -2880,7 +2880,7 @@ static int jpeg2rgb(unsigned char *pjpg, int jpgsz, char *prgb, int rgbsz, int *
     *getW = cinfo.output_width;
     *getH = cinfo.output_height;
     
-    printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines S1\n", cinfo.output_width, cinfo.output_height, row_stride); 
+    //printf("[JPG] jpeg_read_header. width: %d height: %d row_stride: %d jpeg_skip_scanlines S1\n", cinfo.output_width, cinfo.output_height, row_stride); 
     //skipf = 100;
     //skipb = 200;
     //jpeg_skip_scanlines(&cinfo, skipf);
@@ -3013,11 +3013,16 @@ static int insert_filecbw(char *cbw, struct usbCBWfile_s *dwfile)
     return 0;
 }
 
+#if SMP_EN
+#define USBC_PHY_EN (0)
+#else
+#define USBC_PHY_EN (1)
+#endif
 static inline int usbcphy_write(int usbfd, char *vir, char *phy, int len)
 {
     int ret=0;
     
-    #if 1
+    #if USBC_PHY_EN
     if (len == USB_BUF_SIZE) {
 
         ret = GADGET_IOCT_SET_OUT(usbfd, phy);
@@ -3031,7 +3036,7 @@ static inline int usbcphy_write(int usbfd, char *vir, char *phy, int len)
     }
     #else
     
-    printf("[USBC] wt len: %d write\n", len);
+    //printf("[USBC] wt len: %d write\n", len);
     
     ret = write(usbfd, vir, len);
     #endif
@@ -3766,7 +3771,7 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
 
 static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
 {
-#define SCAN_IMAGE_SIZE (13 * 512 * 1024)
+#define SCAN_IMAGE_SIZE (8 * 512 * 1024)
 
     int len=0, ix=0, totsz=0;
     struct bitmapDecodeMfour_s *pdec=0;
@@ -19731,7 +19736,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
  *    cropinfo[5]: height of banknote area, could be estimating value, the value will be overwrited by 
  *                      algorithm's estimating value if the input value is zero
  *    cropinfo[6]: layer id ex: 0 to 3
- *    cropinfo[7]: layer number ex: 4
+ *    cropinfo[7]: total layer number ex: 4
  *
  * @bmpsrc: memory address of raw image for BMP
  * @pmreal: four coordinates of scaned image comes from croping algorithm 
@@ -23021,8 +23026,8 @@ static void* aspSalloc(uint32_t slen)
     tot += slen;
     
     //printf("*******************  salloc size: %d / %d\n", slen, tot);
-    sprintf_f(logbuf, "*******************  salloc size: %d / %d\n", slen, tot);
-    print_f(mlogPool, "SHM", logbuf);    
+    //sprintf_f(logbuf, "*******************  salloc size: %d / %d\n", slen, tot);
+    //print_f(mlogPool, "SHM", logbuf);    
     
     *totSalloc = tot;
     
@@ -71895,7 +71900,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         ptfd[0].events = POLLIN;
         while(1) {
             tcnt++;
-            ptret = poll(ptfd, 1, 500);
+            ptret = poll(ptfd, 1, 100);
 
             #if DBG_USB_HS
             sprintf_f(rs->logs, "poll id:%d evt: 0x%.2x ret: %d - %d [0x%.2x 0x%.2x 0x%.8x]\n", ptfd[0].fd ,ptfd[0].revents, ptret, tcnt, uubs->opcode, uubs->data, uubs->opinfo);
@@ -72777,6 +72782,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             puhs->pushrmcnt = 0;
             puhs->pushcswerr = -1;
 
+            buffstep = 0;
             
             //sprintf_f(rs->logs, "poll status: 0x%.2x \n", pllst); 
             //print_f(rs->plogs, sp, rs->logs);
@@ -88846,7 +88852,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 //print_f(rs->plogs, sp, rs->logs);
 
                 tmp = ((bmpw * colr + 31) / 32) * 4;
-                bmphmax = bmpmax / tmp;
+                bmphmax = (bmpmax - 1078) / tmp;
                 
                 jpgout = 0;
                 
@@ -88884,7 +88890,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 print_f(rs->plogs, sp, rs->logs);
                 
                 if (bmphmax < bmph) {
-                    val = bmphmax;
+                    rotlast = bmphmax % ptmetausb->BKNote_Total_Layers;
+                    val = bmphmax - rotlast;
                 } else {
                     val = bmph;
                 }
@@ -88990,8 +88997,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     } else {
                         jpgetW = bmpw;
                         jpgetH = bmphmax;
-
-                        memset(jpgout, 0xff, bmpmax);
+                    
+                        memset(jpgout + 1078, 0xff, bmpmax - 1078);
                     }
 
                     sprintf(rs->logs, "__JPG_DECODE_END(%d)__", buffidx); 
@@ -89000,19 +89007,28 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     clock_gettime(CLOCK_REALTIME, &jpgE);
         
                     tmCost = time_diff(&jpgS, &jpgE, 1000);
-                                                
+
+                    if (bmphmax < bmph) {
+                        val = ptmetausb->BKNote_Total_Layers;
+                        rotlast = jpgetH % val;
+                        jpgetH = jpgetH - rotlast;
+
+                        tmp = ((bmpw * colr + 31) / 32) * 4;
+                        tmp = tmp * jpgetH + 1078;
+                    }
+                        
                     sprintf_f(rs->logs, "[JPG] decode jpg ret: %d w: %d h: %d cost: %d.%d ms\n", err, jpgetW, jpgetH, tmCost/1000, tmCost%1000);
                     print_f(rs->plogs, sp, rs->logs);
                 
+                    pdecraw->aspDcData->mfourAttb.ImageRect.xc = jpgetW;
+                    pdecraw->aspDcData->mfourAttb.ImageRect.yr = jpgetH;
+                    pdecraw->aspDcData->mfourIdx = buffidx;
+
+                    aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, jpgetW, jpgetH, tmp);
+
                     bmpw = jpgetW;
                     bmph = jpgetH;
 
-                    pdecraw->aspDcData->mfourAttb.ImageRect.xc = bmpw;
-                    pdecraw->aspDcData->mfourAttb.ImageRect.yr = bmph;
-                    pdecraw->aspDcData->mfourIdx = buffidx;
-
-                    aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, bmph, tmp);
-                
                 }
                 #endif
                 
@@ -89025,6 +89041,12 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 } else {
                     sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
                     print_f(rs->plogs, sp, rs->logs);   
+                }
+
+                if (bmphmax < bmph) {
+                    val = ptmetausb->BKNote_Total_Layers;
+                    rotlast = bmphmax % val;
+                    bmph = bmphmax - rotlast;
                 }
                 
                 //bhlen = blen;
@@ -89187,6 +89209,7 @@ static int p14(struct procRes_s *rs)
     return 0;
 }
 
+#define PIC_ALL_SEND (0)
 #define LOG_P15_EN (1)
 static int p15(struct procRes_s *rs)
 {
@@ -89532,8 +89555,15 @@ static int p15(struct procRes_s *rs)
                     //shmem_dump(bmpbufc, 512);
                     metatmp = aspMemalloc(bmtlen, 15);
                     memcpy(metatmp, ptmetausb, bmtlen);
-                    
+                    #if PIC_ALL_SEND
                     aspMetaReleaseviaUsbdlBmpUpd(metatmp, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, cutcnt+1, 1, ((cutcnt+1) == cutnum) ? 0:1);
+                    #else
+                    if ((cutcnt+1) == cutnum) {
+                        aspMetaReleaseviaUsbdlBmpUpd(metatmp, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, 1, 1, 0);
+                    } else {
+                        aspMetaReleaseviaUsbdlBmpUpd(metatmp, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, 0, 1, 1);
+                    }
+                    #endif
                     //sprintf_f(rs->logs, "[BMP] update new width and height: %d, %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight);
                     //print_f(rs->plogs, "P15", rs->logs);
                     
@@ -89546,7 +89576,15 @@ static int p15(struct procRes_s *rs)
                     //dbgMetaUsb(ptmetausb);
                     //dbgMetaUsb((struct aspMetaDataviaUSB_s *)bmpcpy);
 
+                    #if PIC_ALL_SEND
                     aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[cutcnt], pdecroi->aspDcWidth, pdecroi->aspDcHeight, rotlen+bmtlen);
+                    #else
+                    if ((cutcnt+1) == cutnum) {
+                        aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[cutcnt], pdecroi->aspDcWidth, pdecroi->aspDcHeight, rotlen+bmtlen);
+                    } else {
+                        aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[cutcnt], pdecroi->aspDcWidth, pdecroi->aspDcHeight, 0);
+                    }
+                    #endif
                                         
                     //sprintf_f(rs->logs, "[BMP] usb meta size check, meta size: %d : sizeofmeta: %d jpglen: %d \n", bmtlen, lenbs, rotlen+bmtlen);
                     //print_f(rs->plogs, "P15", rs->logs);
@@ -89557,7 +89595,7 @@ static int p15(struct procRes_s *rs)
 
                 orglen = 0;
                 rawlen = 0;
-                for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
+                for (ix=cutnum; ix < BMP_DECODE_PIC_SIZE; ix++) {
 
                     penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
 
@@ -89643,7 +89681,7 @@ static int p15(struct procRes_s *rs)
                             metatmp = aspMemalloc(bmtlen, 15);
                             memcpy(metatmp, ptmetausb, bmtlen);
                             
-                            aspMetaReleaseviaUsbdlBmpUpd(metatmp, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, ix+1, 1, 1);
+                            aspMetaReleaseviaUsbdlBmpUpd(metatmp, pdecroi->aspDcWidth, pdecroi->aspDcHeight, 1, ix+1, 0, 1);
                             sprintf_f(rs->logs, "[BMP] to update w and h: %d, %d len: %d \n", pdecroi->aspDcWidth, pdecroi->aspDcHeight, orglen);
                             print_f(rs->plogs, "P15", rs->logs);
                             
@@ -92106,6 +92144,9 @@ int main(int argc, char *argv[])
 
             #if SMP_EN
             vt32 = (uint32_t)aspSalloc(USB_BUF_SIZE);
+            chvir = (char *)vt32;
+            memset(chvir, 0x00, USB_BUF_SIZE);
+            chvir[0] = ix;
             #else
             ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
             #endif
@@ -92237,6 +92278,9 @@ int main(int argc, char *argv[])
 
             #if SMP_EN
             vt32 = (uint32_t)aspSalloc(USB_BUF_SIZE);
+            chvir = (char *)vt32;
+            memset(chvir, 0x00, USB_BUF_SIZE);
+            chvir[0] = ix;
             #else
             ret = phy2vir(&vt32, ut32, USB_BUF_SIZE, pmrs->usbmfd);
             #endif
