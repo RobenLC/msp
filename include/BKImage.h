@@ -48,7 +48,16 @@ typedef struct
 	unsigned char 	**imgData;           		/* Pixel values */
 }	t_imageIP;
 
-
+typedef struct	
+{
+		unsigned char	BKNote_Layers;			//number of color layer in each page of scan
+		unsigned char	LEDMode;				//?
+		unsigned char	LEDH2L1;				//if BMP/4_layers, it only use the first 4 LEDs
+		unsigned char	LEDH4L3;
+		unsigned char	LEDH6L5;
+		unsigned char	LEDH8L7;
+		unsigned char	SelLayerNum;
+}	t_ImageLayers;
 //
 //this data structure is used for passs the image parameter in the Jobcmd.
 //the host send the image block information with this data structure
@@ -59,6 +68,7 @@ typedef struct
     int			 	iJobIdx;			//assigned for the image processing job
 	t_Imgheader		ImageRect;			//the rectagle information for the image using in the assigned iJobIdx, valid if width not equal to zero
     int			 	iJobRtnCode;		//The return status code for the iJobIdx
+	t_ImageLayers	ImageLayerInfo; 	//Provide the LED information for each layer
     int			 	IpPAMemorySize;		//The size of the attached memory 
     unsigned char  	*AttImgData;    	//usually, pointer to the t_imageIP	if there is an image data attached
 }   t_ImageParam;       
