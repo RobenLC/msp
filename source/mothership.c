@@ -114,6 +114,19 @@ typedef struct
 	int oyi; 			 //y, 		// Origin 
 	int	oxj;             //x, 
 }	t_Imgheader;
+typedef struct	
+{
+		unsigned char	BKNote_Layers;			//number of color layer in each page of scan
+		unsigned char	LEDMode;				//?
+		unsigned char	LEDH2L1;				//if BMP/4_layers, it only use the first 4 LEDs
+		unsigned char	LEDH4L3;
+		unsigned char	LEDH6L5;
+		unsigned char	LEDH8L7;
+		unsigned char	SelLayerNum;
+}	t_ImageLayers;
+//
+//this data structure is used for passs the image parameter in the Jobcmd.
+//the host send the image block information with this data structure
 typedef struct		
 {
 	t_Imgheader		BKNoteImageRect;	//the rectangle information of the BKNote, the orginal point (0,0) is the bottom left cornor.
@@ -121,9 +134,10 @@ typedef struct
     int			 	iJobIdx;			//assigned for the image processing job
 	t_Imgheader		ImageRect;			//the rectagle information for the image using in the assigned iJobIdx, valid if width not equal to zero
     int			 	iJobRtnCode;		//The return status code for the iJobIdx
+	t_ImageLayers	ImageLayerInfo; 	//Provide the LED information for each layer
     int			 	IpPAMemorySize;		//The size of the attached memory 
     unsigned char  	*AttImgData;    	//usually, pointer to the t_imageIP	if there is an image data attached
-}   t_ImageParam;     
+}   t_ImageParam;  
 #endif
 
 #define LOG_ALL_DISABLE (0)
@@ -1544,6 +1558,7 @@ typedef struct
     unsigned short mfourRectY;
     unsigned short mfourRectW;
     unsigned short mfourRectH;
+    unsigned int     mfourLayer;
 }   mfour_rect_st;
 
 typedef struct
@@ -86090,7 +86105,7 @@ static int AllocateImgParamImgDataR(t_ImageParam	*SrcBKJobImg_Param)
 }
 
 #define DUMP_ROT_BMP (0)
-#define LOG_ROT_EN (0)
+#define LOG_ROT_EN (1)
 static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, int midx)
 {
     int ret=0;
@@ -86149,7 +86164,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     abuf_size = pDeRect->mfourRectW * pDeRect->mfourRectH + sizeof(mfour_image_param_st);
 
     #if LOG_ROT_EN        
-    sprintf_f(rs->logs,"require area x: %d y: %d w: %d h: %d  \n", pDeRect->mfourRectX, pDeRect->mfourRectY, pDeRect->mfourRectW, pDeRect->mfourRectH);
+    sprintf_f(rs->logs,"require area x: %d y: %d w: %d h: %d Layer: %d \n", pDeRect->mfourRectX, pDeRect->mfourRectY, pDeRect->mfourRectW, pDeRect->mfourRectH, pDeRect->mfourLayer);
     print_f(rs->plogs, "CLIP", rs->logs);
     #endif
     
@@ -86158,7 +86173,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
         print_f(rs->plogs, "CLIP", rs->logs);
     }
 
-    imgbuf =  decpic->aspDcData;
+    imgbuf = decpic->aspDcData;
     imgbuf->mfourIdx = clidx;
     imgbuf->mfourAttb.ImageRect.xc = pDeRect->mfourRectW;
     imgbuf->mfourAttb.ImageRect.yr = pDeRect->mfourRectH;
@@ -86278,7 +86293,7 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     cropinfo[3] = (int)pDeRect->mfourRectH;
     cropinfo[4] = 0;
     cropinfo[5] = 0;
-    cropinfo[6] = 0;
+    cropinfo[6] = ((pDeRect->mfourLayer >= 1) && (pDeRect->mfourLayer <= pusbmeta->BKNote_Total_Layers)) ? (pDeRect->mfourLayer - 1):0;
     cropinfo[7] = ((pusbmeta->BKNote_Total_Layers > 0) && (pusbmeta->BKNote_Total_Layers < 9)) ? pusbmeta->BKNote_Total_Layers:1;
     #else
     idxA = cutsides[cutcnt*2];
@@ -88913,6 +88928,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     pdecraw->aspDcData->mfourAttb.ImageRect.yr = val;
                     pdecraw->aspDcData->mfourIdx = buffidx;
 
+                    shmem_dump((char *)&pdecraw->aspDcData->mfourAttb.ImageLayerInfo, 8);
+
+                    memcpy(&pdecraw->aspDcData->mfourAttb.ImageLayerInfo, &ptmetausb->BKNote_Total_Layers, sizeof(t_ImageLayers));
+
+                    shmem_dump((char *)&pdecraw->aspDcData->mfourAttb.ImageLayerInfo, 8);
                     
                     aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, val, bhlen);
                     jpgout = bmpbuff;
@@ -89024,6 +89044,12 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     pdecraw->aspDcData->mfourAttb.ImageRect.yr = jpgetH;
                     pdecraw->aspDcData->mfourIdx = buffidx;
 
+                    shmem_dump((char *)&pdecraw->aspDcData->mfourAttb.ImageLayerInfo, 8);
+
+                    memcpy(&pdecraw->aspDcData->mfourAttb.ImageLayerInfo, &ptmetausb->BKNote_Total_Layers, sizeof(t_ImageLayers));
+
+                    shmem_dump((char *)&pdecraw->aspDcData->mfourAttb.ImageLayerInfo, 8);
+                    
                     aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, jpgetW, jpgetH, tmp);
 
                     bmpw = jpgetW;
@@ -90223,7 +90249,7 @@ static int p16(struct procRes_s *rs)
                             rjcmd.dPtr = &img_param->mfourAttb;
                             rjcmd.dSize = decrect->aspDcLen;
 
-                            sprintf_f(rs->logs, "ocr img_param info w: %d h: %d id: %d\n", img_param->mfourAttb.ImageRect.xc, img_param->mfourAttb.ImageRect.yr, img_param->mfourAttb.iJobIdx);
+                            sprintf_f(rs->logs, "ocr img_param info w: %d h: %d id: %d totalayer: %d\n", img_param->mfourAttb.ImageRect.xc, img_param->mfourAttb.ImageRect.yr, img_param->mfourAttb.iJobIdx, img_param->mfourAttb.ImageLayerInfo.BKNote_Layers);
                             print_f(rs->plogs, "P16", rs->logs);
 
                             //dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
@@ -90511,7 +90537,8 @@ static int p17(struct procRes_s *rs)
                             //outcmd.dPtr  = rx_buf;
                             #if 1
                             pImgArea = (t_ImageParam *)outcmd.dPtr;
-                            sprintf_f(rs->logs, "ImgArea area seqid = %d jobid = %d (x:%d, y:%d, w:%d, h:%d) \n", pImgArea->SeqIdx, pImgArea->iJobIdx, pImgArea->ImageRect.oxj, pImgArea->ImageRect.oyi, pImgArea->ImageRect.xc, pImgArea->ImageRect.yr);
+                            sprintf_f(rs->logs, "ImgArea area seqid = %d jobid = %d (x:%d, y:%d, w:%d, h:%d, totalayer: %d, selayer: %d) \n", pImgArea->SeqIdx, pImgArea->iJobIdx, pImgArea->ImageRect.oxj, 
+                                pImgArea->ImageRect.oyi, pImgArea->ImageRect.xc, pImgArea->ImageRect.yr, pImgArea->ImageLayerInfo.BKNote_Layers, pImgArea->ImageLayerInfo.SelLayerNum);
                             print_f(rs->plogs, "P17", rs->logs);
 
                             #if 1
@@ -90530,6 +90557,7 @@ static int p17(struct procRes_s *rs)
                                     pRect->mfourRectY = pImgArea->ImageRect.oyi;
                                     pRect->mfourRectW = pImgArea->ImageRect.xc;
                                     pRect->mfourRectH = pImgArea->ImageRect.yr;
+                                    pRect->mfourLayer = pImgArea->ImageLayerInfo.SelLayerNum;
                                     #endif
 
                                     //sprintf_f(rs->logs, "    search find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
@@ -90857,7 +90885,6 @@ static int p17(struct procRes_s *rs)
                                     pusbmeta->OCR_strlen = strlen(outchr[2]);
                                     if (pusbmeta->OCR_strlen < 16) {
                                         memcpy(pusbmeta->OCR_chars, outchr[2], pusbmeta->OCR_strlen);
-
                                     }
 
                                     msync(&pusbmeta->OCR_strlen, 16, MS_SYNC);
