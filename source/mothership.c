@@ -179,6 +179,7 @@ typedef struct
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
 
+#define PIC_ALL_SEND (0)
 #define MFOUR_IMG_SEND_BACK (0)
 #define MFOUR_BMP_SEND_BACK (0)
 #define MFOUR_SIM_MODE (0)
@@ -89235,7 +89236,6 @@ static int p14(struct procRes_s *rs)
     return 0;
 }
 
-#define PIC_ALL_SEND (0)
 #define LOG_P15_EN (1)
 static int p15(struct procRes_s *rs)
 {
@@ -92212,9 +92212,11 @@ int main(int argc, char *argv[])
                 printf("[DVF] 0e: %d-0x%.2x not match ", ix, chvir[0]);            
             }   
 
+            #if 0
             if (((ix+1) % 4) == 0) {
                 printf("\n\r");
             }
+            #endif
         }
         
         pmrs->usbmh[0] = usbh[0];
@@ -92345,9 +92347,11 @@ int main(int argc, char *argv[])
                 printf("[DVF] 0e: %d-0x%.2x not match ", ix, chvir[0]);            
             }   
 
+            #if 0
             if (((ix+1) % 4) == 0) {
                 printf("\n\r");
             }
+            #endif
 
         }
         
