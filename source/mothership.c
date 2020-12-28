@@ -2089,6 +2089,8 @@ static CFLOAT aspMin(CFLOAT d1, CFLOAT d2);
 static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset);
 static int cfgTableGetChkDPI(struct aspConfig_s *table, int idx, uint32_t *rval, uint32_t stat);
 
+int m4_enter(int id);
+
 #if GHP_EN
 #define	MaxCount_SRN	20
 void *BKOCR_Check( void * img_buf, int img_size, char *out_buf, int buf_size );
@@ -90105,6 +90107,8 @@ static int p16(struct procRes_s *rs)
 
     //sprintf(m4startcmd, "ls /dev | grep rjob");
     //ret = doSystemCmd(m4startcmd);
+
+    m4_enter(1105);
 
     while (rj0id <= 0) {
         usleep(100000);

@@ -92,6 +92,7 @@ TARGET_FILE =  out/st_mothership.bin out/mainrot.bin out/eglex.bin
 TARGET : $(TARGET_FILE)
 
 BKOCR_LIB = ./ocr/libbkocr.a ./ocr/libmakemodel.a
+M4_LIB = ./m4/m4_process.a
 
 BKOCRTEST_CPPSOURCES = ocr_agent.cpp
 BKOCRTEST_CPPOBJECTS = $(BKOCRTEST_CPPSOURCES:.cpp=.o)
@@ -127,9 +128,13 @@ SRCS += $(ROTATE_SRCS)
 $(BKOCR_LIB) :
 	$(MAKE) -C ./ocr -f makefilelib
 	@echo
+
+$(M4_LIB):
+	$(MAKE) -C ./m4
+	@echo
 	
-out/st_mothership.bin : $(MOTHERSHIP_COBJECTS_PATH) $(MOTHERSHIP_COBJECTS) $(BKOCRTEST_CPPOBJECTS) $(BKOCR_LIB)
-	$(CXX) $(CFLAGS) $(LIBS) $(MOTHERSHIP_COBJECTS) $(BKOCRTEST_CPPOBJECTS) $(INCLUDE) $(OPENCV_LIB) $(BKOCR_LIB) -o $@
+out/st_mothership.bin : $(MOTHERSHIP_COBJECTS_PATH) $(MOTHERSHIP_COBJECTS) $(BKOCRTEST_CPPOBJECTS) $(BKOCR_LIB) $(M4_LIB)
+	$(CXX) $(CFLAGS) $(LIBS) $(MOTHERSHIP_COBJECTS) $(BKOCRTEST_CPPOBJECTS) $(INCLUDE) $(OPENCV_LIB) $(BKOCR_LIB) $(M4_LIB) -o $@
 	@echo
 
 out/mainrot.bin : $(ROTATE_SRCS_PATH_OBJ) $(MAINROT_SRCS_PATH_OBJ) $(MAINROT_COBJECTS) $(BKOCRTEST_CPPOBJECTS) $(BKOCR_LIB)

@@ -1,6 +1,6 @@
 	/* Includes ------------------------------------------------------------------*/
-#include "main.h"
-#include "log.h"
+#include "../Inc/main.h"
+//#include "log.h"
 #include "arrayed_queue.h"
 #include <string.h>
 

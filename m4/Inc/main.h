@@ -8,15 +8,24 @@ extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "stm32mp1xx_hal.h"
-#include "openamp.h"
-#include "lock_resource.h"
+//#include "stm32mp1xx_hal.h"
+//#include "openamp.h"
+//#include "lock_resource.h"
 
-#include "stm32mp15xx_disco.h"
-#include "log.h"
+//#include "stm32mp15xx_disco.h"
+//#include "log.h"
+#include <linux/types.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 
 /* Define   ------------------------------------------------------------------*/
+#define log_dbg(fmt, ...)  printf("[DBG]" fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...)   printf("[INF]" fmt, ##__VA_ARGS__)
+#define log_err(fmt, ...)   printf("[ERR]" fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...)   printf("[WRN]" fmt, ##__VA_ARGS__)
+#define log_sys(fmt, ...)   printf("[SYS]" fmt, ##__VA_ARGS__)
+
 #define RJOB_MAX_BUFSIZE    (16384)
 #define RJOB_TX_OFFSET      (16384)
 
@@ -131,8 +140,8 @@ extern unsigned char __RJob_ShareMem_end[];
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 void wait_rjob_cmd();
-int8_t send_rjob_rsp( t_rjob_cmd *rsp );
-int8_t send_rjob_cmd( t_rjob_cmd *pcmd );
+int send_rjob_rsp( t_rjob_cmd *rsp );
+int send_rjob_cmd( t_rjob_cmd *pcmd );
 void *wait_rjob1_rsp();
 void remove_rjob1_rsp();
 void cmd_dispatcher( t_rjob_cmd *p_rjob_cmd );

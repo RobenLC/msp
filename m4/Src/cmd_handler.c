@@ -1,7 +1,9 @@
 
-#include "main.h"
-#include "log.h"
+#include "../Inc/main.h"
+//#include "log.h"
 #include <string.h>
+#include <sys/types.h>
+#include <linux/types.h>
 
 #include "BasicSet.h"
 #include "Image_PreProcess.h"
@@ -363,6 +365,11 @@ void cmd00_handler( t_rjob_cmd *pcmd )
     send_rjob_rsp( &rsp );
 }
 
+int m4_enter(int id) {
+
+    log_info("[R] %s id: %d\n", __LINE__, id);
+    return 0;
+}
 
 //*****************************************************************************
 //  cmd_dispatcher
