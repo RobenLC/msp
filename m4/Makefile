@@ -1,5 +1,6 @@
 
 INCLUDE = -include ./Inc/main.h
+INCDIR = -I ./Src
 #INCLUDE += -I ../../STM32CUBE/Drivers/STM32MP1xx_HAL_Driver/Inc/
 #INCLUDE += -I ../../STM32CUBE/Drivers/CMSIS/Device/ST/STM32MP1xx/Include/
 #INCLUDE += -I ../../STM32CUBE/Middlewares/Third_Party/OpenAMP/open-amp/lib/include/
@@ -27,7 +28,7 @@ CFLAGS += -Wno-unused-function
 TARGET_LIB = m4_process.a
 TARGET_BIN = m4_process.bin
 
-TARGET: $(TARGET_BIN)
+TARGET: $(TARGET_LIB)
 
 #M4_SOURCES = $(wildcard ./Src/*.c)
 M4_SOURCES = ./Src/cmd_handler.c
@@ -39,21 +40,23 @@ M4_SOURCES += ./Src/BKNote_PreSet.c
 
 M4_OBJECTS = $(patsubst %.c,%.o,$(M4_SOURCES))
 
-$(TARGET_BIN): $(M4_OBJECTS) $(M4_SOURCES) 
-	$(CC) $< -o $@
+$(TARGET_BIN): $(M4_OBJECTS)
+	$(CC) $^ -o $@
 	@echo
 
-$(TARGET_LIB): $(M4_SOURCES) $(M4_OBJECTS)
-	ar -rcs $@ $(M4_OBJECTS)
+$(TARGET_LIB): $(M4_OBJECTS)
+	ar -rcs $@ $^
 	@echo
 
 $(M4_OBJECTS): %.o : %.c
-	$(CC) -D MAKELIB -c $< -o $@ $(INCLUDE) $(CFLAGS)
+	$(CC) -c $< -o $@ $(INCLUDE) $(CFLAGS) $(INCDIR)
 	@echo
+
+#	$(CC) -D MAKELIB -c $< -o $@ $(INCLUDE) $(CFLAGS) $(INCDIR)
 
 clean:
 	rm -f *.o $(M4_OBJECTS)
-	rm $(TARGET_BIN)
+	rm $(TARGET_LIB)
 
 
 

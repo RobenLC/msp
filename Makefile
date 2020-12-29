@@ -129,7 +129,8 @@ $(BKOCR_LIB) :
 	$(MAKE) -C ./ocr -f makefilelib
 	@echo
 
-$(M4_LIB):
+$(M4_LIB): FORCE
+	$(MAKE) -C ./m4 clean
 	$(MAKE) -C ./m4
 	@echo
 	

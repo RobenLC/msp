@@ -56,8 +56,8 @@ typedef struct
     int tx_len;
 }   t_rpmsg_status;
 
-
-typedef struct __attribute__((__packed__))
+#define ABC __attribute__((__packed__))
+typedef struct ABC
 {
     long            msgtype;    // for msg , don't modify
     unsigned long   tag;        // for user
@@ -124,13 +124,16 @@ typedef struct		//total
 
 
 /* Exported constants --------------------------------------------------------*/
+#define RJOB_BUFF_SIZE (64*1024)
 
-extern unsigned char __RJob_ShareMem[];
-extern unsigned char __RJob_ShareMem_end[];
-#define RJOB_RX_SIZE (((unsigned int)(__RJob_ShareMem_end-__RJob_ShareMem))/2)
-#define RJOB_TX_SIZE (((unsigned int)(__RJob_ShareMem_end-__RJob_ShareMem))/2)
+extern unsigned int __RJob_ShareMem;
+extern unsigned int __RJob_ShareMem_end;
+extern unsigned int RJob_TX_ShareMem;
 
-#define RJob_TX_ShareMem &(__RJob_ShareMem[RJOB_RX_SIZE])
+#define RJOB_RX_SIZE (RJOB_BUFF_SIZE / 2)// (((unsigned int)(__RJob_ShareMem_end-__RJob_ShareMem))/2)
+#define RJOB_TX_SIZE (RJOB_BUFF_SIZE / 2)// (((unsigned int)(__RJob_ShareMem_end-__RJob_ShareMem))/2)
+
+
 
 
 /* Exported macro ------------------------------------------------------------*/

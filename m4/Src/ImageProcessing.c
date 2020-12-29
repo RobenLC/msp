@@ -313,7 +313,7 @@ void ImageJobDispatch(t_rjob_cmd *BKJobcmd)
 
 	SrcBKJobIMG_Param=BKJobcmd->mPtr ;
 	SrcBKJob_Param=(t_ImageParam *)SrcBKJobIMG_Param; 
-	log_dbg("JobDispatch iJobIdx= %p\n", SrcBKJob_Param->iJobIdx);
+	log_dbg("JobDispatch iJobIdx= %d\n", SrcBKJob_Param->iJobIdx);
 	OrgAtTF=1;	//set 1 with rotate.c getting image data from low memory of block(upside down)
 	switch (SrcBKJob_Param->iJobIdx)
 	{

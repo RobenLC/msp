@@ -11,6 +11,17 @@
 #include "BKNote_PreSet.h"
 #include "ImageProcessing.h"
 
+const char Rjob_Buffer[RJOB_BUFF_SIZE];
+
+unsigned int __RJob_ShareMem = (unsigned int)&Rjob_Buffer[0];
+unsigned int __RJob_ShareMem_end = (unsigned int)&Rjob_Buffer[RJOB_BUFF_SIZE - 1];
+unsigned int RJob_TX_ShareMem = (unsigned int)&(Rjob_Buffer[RJOB_BUFF_SIZE/2]);
+
+//#define RJOB_RX_SIZE (((unsigned int)(__RJob_ShareMem_end-__RJob_ShareMem))/2)
+//#define RJOB_TX_SIZE (((unsigned int)(__RJob_ShareMem_end-__RJob_ShareMem))/2)
+
+//#define RJob_TX_ShareMem &(Rjob_Buffer[RJOB_BUFF_SIZE/2])
+
 /*
 typedef struct
 {
@@ -24,6 +35,101 @@ typedef struct
 t_image_task_status img_task_status = {
     .total_area = 2
 };
+
+//*****************************************************************************
+//  send_rjob_cmd
+//  Note :  resmgr_ept.dest_addr is 0xfffffff when begining ,
+//          it need to receive a command from A7 to update it to correct value
+//          otherwise OPENAMP_send() will fail
+//*****************************************************************************
+int send_rjob_cmd( t_rjob_cmd *pcmd )
+{
+    #if 0
+    int ret;
+    if( pcmd->mPtr != 0 )
+        pcmd->mPtr = pcmd->mPtr - (int)__RJob_ShareMem;
+    if ((ret = OPENAMP_send(&resmgr_ept2, pcmd, sizeof( t_rjob_cmd) )) < 0)
+    {
+        log_err("Failed to send cmdmessage ret=%d 2:name:%s src: 0x%.8x dst: 0x%.8x \r\n", ret, resmgr_ept2.name, resmgr_ept2.addr, resmgr_ept2.dest_addr);
+        log_err("try to send cmdmessage ret=%d 1:name:%s src: 0x%.8x dst: 0x%.8x \r\n", ret, resmgr_ept.name, resmgr_ept.addr, resmgr_ept.dest_addr);
+        //Error_Handler();
+        if ((ret = OPENAMP_send(&resmgr_ept, pcmd, sizeof( t_rjob_cmd) )) < 0)
+        {
+            log_err("Failed to send cmdmessage ret=%d 1:name:%s src: 0x%.8x dst: 0x%.8x \r\n", ret, resmgr_ept.name, resmgr_ept.addr, resmgr_ept.dest_addr);
+        }
+    }
+    log_info("rjob  send cmd %d byte (cmd=%04x tag=%04lx rsp=%04x dsize=%5d dPtr=%08x mPtr=%08x)\r\n",
+            sizeof(t_rjob_cmd),
+            pcmd->cmd,
+            pcmd->tag,
+            pcmd->rsp,
+            pcmd->dSize,
+            (int)pcmd->dPtr,
+            (int)pcmd->mPtr);
+    #endif
+    return 0;
+}
+
+//*****************************************************************************
+//  wait_rjob_cmd
+//  blocking when cmd not reveived
+//*****************************************************************************
+void *wait_rjob1_rsp(void)
+{
+    #if 0
+    t_rjob_cmd *pcmd;
+    while( AQ_Size(&rjob1_queue) == 0 )
+    {
+        OPENAMP_check_for_message();
+    };
+
+    pcmd = AQ_Front(&rjob1_queue);
+    return pcmd;
+    #endif
+    return 0;
+}
+
+void remove_rjob1_rsp(void)
+{
+    #if 0
+    AQ_DropFront(&rjob1_queue);
+    #endif
+}
+
+//*****************************************************************************
+//  send_rjob_rsp
+//  send "cmd" response "rsp" to host
+//  Note :  resmgr_ept.dest_addr is 0xfffffff when begining ,
+//          it need to receive a command from A7 to update it to correct value
+//          otherwise OPENAMP_send() will fail
+//*****************************************************************************
+int send_rjob_rsp(  t_rjob_cmd *rsp )
+{
+    #if 0
+    int ret;
+    if( rsp->mPtr != 0 )
+        rsp->mPtr = rsp->mPtr - (int)__RJob_ShareMem;
+    if ((ret = OPENAMP_send(&resmgr_ept2, rsp, sizeof( t_rjob_cmd) )) < 0)
+    {
+        log_err("Failed to send rspmessage ret=%d 2:name:%s src: 0x%.8x dst: 0x%.8x \r\n", ret, resmgr_ept2.name, resmgr_ept2.addr, resmgr_ept2.dest_addr);
+        log_err("try to send rspmessage ret=%d 1:name:%s src: 0x%.8x dst: 0x%.8x \r\n", ret, resmgr_ept.name, resmgr_ept.addr, resmgr_ept.dest_addr);
+        //Error_Handler()
+        if ((ret = OPENAMP_send(&resmgr_ept, rsp, sizeof( t_rjob_cmd) )) < 0)
+        {
+            log_err("Failed to send rspmessage ret=%d 1:name:%s src: 0x%.8x dst: 0x%.8x \r\n", ret, resmgr_ept.name, resmgr_ept.addr, resmgr_ept.dest_addr);
+        }
+    }
+    log_info("rjob  send rsp %d byte (cmd=%04x tag=%04lx rsp=%04x dsize=%5d dPtr=%08x mPtr=%08x)\r\n",
+            sizeof(t_rjob_cmd),
+            rsp->cmd,
+            rsp->tag,
+            rsp->rsp,
+            rsp->dSize,
+            (int)rsp->dPtr,
+            (int)rsp->mPtr);
+    #endif
+    return 0;
+}
 
 //request two image blocks first for every new page in
 void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
@@ -367,7 +473,9 @@ void cmd00_handler( t_rjob_cmd *pcmd )
 
 int m4_enter(int id) {
 
-    log_info("[R] %s id: %d\n", __LINE__, id);
+    log_info("[R] %s line: %d input: %d\n", __func__, __LINE__, id);
+    
+    //printf("[R] line:%d id: %d\n", __LINE__, id);
     return 0;
 }
 
@@ -398,5 +506,10 @@ void cmd_dispatcher( t_rjob_cmd *pcmd )
             cmd_BKCMD_SEND_AREA_handler( pcmd );
             break;
     }
+}
+
+int maind(int argc, char **argv) {
+
+    return 0;
 }
 
