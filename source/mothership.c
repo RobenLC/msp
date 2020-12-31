@@ -187,8 +187,10 @@ typedef struct
 
 #if GHP_EN
 #define SMP_EN (1)
+#define MFOUR_API (1)
 #else
 #define SMP_EN (0)
+#define MFOUR_API (1)
 #endif
 
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
@@ -198,8 +200,14 @@ typedef struct
 #define IOCNR_RJOB_RCMD     3
 #define IOCTL_RJOB_WCMD     _IOW(0xb5,IOCNR_RJOB_WCMD,mfour_rjob_cmd)
 #define IOCTL_RJOB_RCMD     _IOR(0xb5,IOCNR_RJOB_RCMD,mfour_rjob_cmd)
+
+#if MFOUR_API
+#define RJOB_IOCT_WT_CMD(a, b)    RJOB_IOCT_WT_CMD_API(a, b)
+#define RJOB_IOCT_RD_CMD(a, b)    RJOB_IOCT_RD_CMD_API(a, b)
+#else
 #define RJOB_IOCT_WT_CMD(a, b)    ioctl(a, IOCTL_RJOB_WCMD, b)
 #define RJOB_IOCT_RD_CMD(a, b)    ioctl(a, IOCTL_RJOB_RCMD, b)
+#endif
 
 #define BKCMD_ABORT              0x0030
 #define BKCMD_IMAGE_IN           0x0031
@@ -1738,7 +1746,7 @@ struct usbfileid_s{
 struct mainRes_s{
     char nmrs[32];
     uint32_t mspconfig;
-    int sid[17];
+    int sid[19];
     int sfm[2];
     int smode;
     int usbmfd;
@@ -1798,7 +1806,9 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
     struct bitmapDecodeMfour_s bmpDecMfour[4];
-    
+    char       *bmpMfourRxbuff;
+    int          *bmpMfourPipTx;
+    int          *bmpMfourPipRx;
     char netIntfs[32];
     char netIntwpa[32];
     char *dbglog;
@@ -1877,6 +1887,7 @@ struct procRes_s{
     struct bitmapHeader_s *pbheaderDuo;
     struct bitmapRotate_s *pbrotate;
     struct bitmapDecodeMfour_s *pbDecMfour[4];
+    char *pbMfRxBuff;
     struct logPool_s *plogs;
     char *pnetIntfs;
     char *pnetIntwpa;
@@ -2089,7 +2100,21 @@ static CFLOAT aspMin(CFLOAT d1, CFLOAT d2);
 static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset);
 static int cfgTableGetChkDPI(struct aspConfig_s *table, int idx, uint32_t *rval, uint32_t stat);
 
+#if MFOUR_API
+int mfourmaind(void);
+int mfourSetPipEpt1(int *pip);
+int mfourSetPipEpt2(int *pip);
 int m4_enter(int id);
+
+static int *pipMfTx=0;
+static int *pipMfRx=0;
+
+static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd);
+static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd);
+
+#define RJOB_IOCT_WT_CMD_API    mfourWtCmd
+#define RJOB_IOCT_RD_CMD_API    mfourRdCmd
+#endif
 
 #if GHP_EN
 #define	MaxCount_SRN	20
@@ -2325,6 +2350,72 @@ static int draw(void)
     
     return 0;
 }
+
+#if MFOUR_API
+static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd)
+{
+    char ch2[2]={0};
+
+    if (!pipMfTx) return -1;
+
+    ch2[0] = 's';
+    ch2[1] = sizeof(mfour_rjob_cmd);
+
+    if (fcmd->dSize && fcmd->dPtr) {
+        fcmd->mPtr = fcmd->dPtr;
+    }
+
+    printf("[m4] dPtr:0x%.8x, mPtf:0x%.8x, dsize: %d \n", fcmd->dPtr, fcmd->mPtr, fcmd->dSize);
+    
+    write(pipMfTx[1], ch2, 2);
+    
+    write(pipMfTx[1], fcmd, sizeof(mfour_rjob_cmd));
+
+    return 0;
+}
+
+static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
+{
+    int pipRet=0, len=0;
+    char ch2[2]={0};
+    struct pollfd pllfd[2]={0};
+
+    pllfd[0].fd = pipMfRx[0];
+    pllfd[0].events = POLLIN;
+
+    while (1) {
+        pipRet = poll(pllfd, 1, 1000);
+
+        printf("%s line: %d ret: %d \n", __func__, __LINE__, pipRet);
+        
+        if (pipRet <= 0) {
+            continue;
+        }
+
+        pipRet = read(pllfd[0].fd, ch2, 2);
+        if (pipRet != 2) {
+            continue;;
+        }
+
+        printf("%s line: %d 0x%.2x 0x%.2x \n", __func__, __LINE__, ch2[0], ch2[1]);
+
+        if (ch2[0] != 'r') {
+            continue;
+        }
+
+        len = ch2[1];
+
+        pipRet = read(pllfd[0].fd, fcmd, len);
+        if (pipRet != len) {
+            continue;
+        }
+
+        break;
+    }
+    
+    return 0;
+}
+#endif
 
 static int grapjpg(unsigned char *ptr, int len)
 {
@@ -3900,6 +3991,7 @@ static void aspBMPdecodeAllocate(struct mainRes_s *pmrs, int idx)
         }
         pdec->aspDecMfPiJpg[ix].aspDcMax = len;
     }
+    
 }
 
 static inline int setDefaultConfFile(struct aspConfig_s *conftb)
@@ -39647,6 +39739,20 @@ static int p17_init(struct procRes_s *rs)
 }
 
 static int p17_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p18_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p18_end(struct procRes_s *rs)
 {
     int ret;
     ret = pn_end(rs);
@@ -90374,7 +90480,8 @@ static int p17(struct procRes_s *rs)
 
     memset(&outcmd, 0, sizeof(mfour_rjob_cmd));
     memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
-    rx_buf = malloc(RJOB_RX_BLOCK_SIZE+sizeof(mfour_image_param_st));
+    //rx_buf = malloc(RJOB_RX_BLOCK_SIZE+sizeof(mfour_image_param_st));
+    rx_buf = rs->pbMfRxBuff;
     img_rxbuf = (mfour_image_param_st *)rx_buf;
     
     sprintf_f(rs->logs, "memory allocate succeed addr: 0x%.8x size: %d \n", (uint32_t)rx_buf, RJOB_RX_BLOCK_SIZE/1024);
@@ -91077,6 +91184,38 @@ static int p17(struct procRes_s *rs)
     return 0;
 }
 
+#define LOG_P18_EN (1)
+static int p18(struct procRes_s *rs)
+{
+    int ret=0;
+    char ch=0;
+    
+    sprintf_f(rs->logs, "p18\n");
+    print_f(rs->plogs, "P18", rs->logs);
+
+    p18_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p18");
+
+    mfourSetPipEpt1(pipMfTx);
+    mfourSetPipEpt2(pipMfRx);
+    
+    while (1) {
+        #if 0
+        ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+        if (ret <= 0) {
+            continue;
+        }
+        #endif
+
+        mfourmaind();
+    }
+    
+    p18_end(rs);
+
+    return 0;
+}
+
 #define DATA_RX_SIZE RING_BUFF_NUM
 #define DATA_TX_SIZE RING_BUFF_NUM
 #define CMD_RX_SIZE RING_BUFF_NUM
@@ -91088,7 +91227,7 @@ int main(int argc, char *argv[])
     char dir[256] = "/mnt/mmc2";
     char wfssid[128] = "/root/scaner/ssid.gen";
     struct mainRes_s *pmrs;
-    struct procRes_s rs[21];
+    struct procRes_s rs[22];
     int ix, ret, len;
     char *log;
     int tdiff;
@@ -92691,6 +92830,24 @@ int main(int argc, char *argv[])
     aspBMPdecodeAllocate(pmrs, 1);
     aspBMPdecodeAllocate(pmrs, 2);
     aspBMPdecodeAllocate(pmrs, 3);
+
+    len = 128 * 1024;
+    pmrs->bmpMfourRxbuff = aspSalloc(len);
+    if (pmrs->bmpMfourRxbuff) {
+        memset(pmrs->bmpMfourRxbuff, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 rx buff failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    pmrs->bmpMfourPipTx = aspSalloc(sizeof(int) * 2);
+    pipe2(pmrs->bmpMfourPipTx, O_NONBLOCK);    
+    pmrs->bmpMfourPipRx = aspSalloc(sizeof(int) * 2);
+    pipe2(pmrs->bmpMfourPipRx, O_NONBLOCK);
+
+    pipMfTx = pmrs->bmpMfourPipTx;
+    pipMfRx = pmrs->bmpMfourPipRx;
+    
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[0]);
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[1]);
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[2]);
@@ -92735,13 +92892,16 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipedn[12].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[13].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[14].rt, O_NONBLOCK);
+#if GHP_EN
     pipe2(pmrs->pipedn[15].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[16].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[17].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[18].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[19].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[20].rt, O_NONBLOCK);
-    
+    pipe2(pmrs->pipedn[21].rt, O_NONBLOCK);
+#endif
+
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[1].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[2].rt, O_NONBLOCK);
@@ -92764,6 +92924,7 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipeup[18].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[19].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[20].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[21].rt, O_NONBLOCK);
 #endif
 
     res_put_in(&rs[0], pmrs, 0);
@@ -92788,6 +92949,7 @@ int main(int argc, char *argv[])
     res_put_in(&rs[18], pmrs, 18);
     res_put_in(&rs[19], pmrs, 19);
     res_put_in(&rs[20], pmrs, 20);
+    res_put_in(&rs[21], pmrs, 21);
 #endif
   
 //  Share memory init
@@ -92924,7 +93086,6 @@ int main(int argc, char *argv[])
                                                                     if (!pmrs->sid[16]) {
                                                                         p16(&rs[19]);
                                                                     } else {
-                                                                    
                                                                         len = strlen(argv[0]);
                                                                         memset(argv[0], 0, len);
                                                                         sprintf(argv[0], "m4r");
@@ -92932,11 +93093,19 @@ int main(int argc, char *argv[])
                                                                         if (!pmrs->sid[17]) {
                                                                             p17(&rs[20]);
                                                                         } else {
-                                                                        
                                                                             len = strlen(argv[0]);
                                                                             memset(argv[0], 0, len);
-                                                                            sprintf(argv[0], "func");
-                                                                            p0(pmrs);
+                                                                            sprintf(argv[0], "m4");
+                                                                            pmrs->sid[18] = fork();
+                                                                            if (!pmrs->sid[18]) {
+                                                                                p18(&rs[21]);
+                                                                            } else {                                                                        
+                                                                                len = strlen(argv[0]);
+                                                                                memset(argv[0], 0, len);
+                                                                                sprintf(argv[0], "func");
+                                                                                p0(pmrs);
+
+                                                                            }
                                                                         }                                                                        
                                                                     }                                                                
                                                                 }                                                               
@@ -93364,6 +93533,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbDecMfour[1] = &mrs->bmpDecMfour[1];
     rs->pbDecMfour[2] = &mrs->bmpDecMfour[2];
     rs->pbDecMfour[3] = &mrs->bmpDecMfour[3];
+    rs->pbMfRxBuff = mrs->bmpMfourRxbuff;
     #endif
     
     rs->usbdvid = mrs->usbdv;
