@@ -187,7 +187,7 @@ typedef struct
 
 #if GHP_EN
 #define SMP_EN (1)
-#define MFOUR_API (1)
+#define MFOUR_API (0)
 #else
 #define SMP_EN (0)
 #define MFOUR_API (1)
@@ -1806,9 +1806,11 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
     struct bitmapDecodeMfour_s bmpDecMfour[4];
+#if MFOUR_API
     char       *bmpMfourRxbuff;
     int          *bmpMfourPipTx;
     int          *bmpMfourPipRx;
+#endif
     char netIntfs[32];
     char netIntwpa[32];
     char *dbglog;
@@ -1887,7 +1889,9 @@ struct procRes_s{
     struct bitmapHeader_s *pbheaderDuo;
     struct bitmapRotate_s *pbrotate;
     struct bitmapDecodeMfour_s *pbDecMfour[4];
+#if MFOUR_API
     char *pbMfRxBuff;
+#endif
     struct logPool_s *plogs;
     char *pnetIntfs;
     char *pnetIntwpa;
@@ -2114,6 +2118,11 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd);
 
 #define RJOB_IOCT_WT_CMD_API    mfourWtCmd
 #define RJOB_IOCT_RD_CMD_API    mfourRdCmd
+#else
+#define mfourmaind(x)
+#define m4_enter(x) 
+#define mfourSetPipEpt1(x)
+#define mfourSetPipEpt2(x)
 #endif
 
 #if GHP_EN
@@ -2376,7 +2385,7 @@ static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd)
 
 static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
 {
-    int pipRet=0, len=0;
+    int pipRet=0, len=0, op=0;
     char ch2[2]={0};
     struct pollfd pllfd[2]={0};
 
@@ -2386,31 +2395,47 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
     while (1) {
         pipRet = poll(pllfd, 1, 1000);
 
-        printf("%s line: %d ret: %d \n", __func__, __LINE__, pipRet);
+        printf("%s line: %d ret: %d - 1\n", __func__, __LINE__, pipRet);
         
         if (pipRet <= 0) {
             continue;
         }
 
         pipRet = read(pllfd[0].fd, ch2, 2);
-        if (pipRet != 2) {
-            continue;;
-        }
+        printf("%s line: %d 0x%.2x 0x%.2x ret: %d \n", __func__, __LINE__, ch2[0], ch2[1], pipRet);
+        
+        if (pipRet == 2) {
+            break;
+        }        
+    }
 
-        printf("%s line: %d 0x%.2x 0x%.2x \n", __func__, __LINE__, ch2[0], ch2[1]);
+    op = ch2[0];
+    len = ch2[1];
+    printf("%s line: %d 0x%.2x 0x%.2x (0x%.2x) len: %d \n", __func__, __LINE__, ch2[0], ch2[1], op, len);
 
-        if (ch2[0] != 'r') {
+    if (op != 0x72) { // 0x72 == r
+        return 0;
+    }
+
+    while (1) {
+        pipRet = poll(pllfd, 1, 500);
+
+        printf("%s line: %d ret: %d - 2\n", __func__, __LINE__, pipRet);
+        
+        if (pipRet <= 0) {
             continue;
         }
-
-        len = ch2[1];
 
         pipRet = read(pllfd[0].fd, fcmd, len);
-        if (pipRet != len) {
-            continue;
+        printf("%s read len: %d ret: %d \n", __func__, len, pipRet);
+
+        if (pipRet > 0) {
+            len -= pipRet;
         }
 
-        break;
+        if (len == 0) {
+            break;
+        }
     }
     
     return 0;
@@ -90480,8 +90505,12 @@ static int p17(struct procRes_s *rs)
 
     memset(&outcmd, 0, sizeof(mfour_rjob_cmd));
     memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
-    //rx_buf = malloc(RJOB_RX_BLOCK_SIZE+sizeof(mfour_image_param_st));
+    
+    #if MFOUR_API
     rx_buf = rs->pbMfRxBuff;
+    #else
+    rx_buf = malloc(RJOB_RX_BLOCK_SIZE+sizeof(mfour_image_param_st));
+    #endif
     img_rxbuf = (mfour_image_param_st *)rx_buf;
     
     sprintf_f(rs->logs, "memory allocate succeed addr: 0x%.8x size: %d \n", (uint32_t)rx_buf, RJOB_RX_BLOCK_SIZE/1024);
@@ -92831,6 +92860,7 @@ int main(int argc, char *argv[])
     aspBMPdecodeAllocate(pmrs, 2);
     aspBMPdecodeAllocate(pmrs, 3);
 
+    #if MFOUR_API
     len = 128 * 1024;
     pmrs->bmpMfourRxbuff = aspSalloc(len);
     if (pmrs->bmpMfourRxbuff) {
@@ -92847,6 +92877,7 @@ int main(int argc, char *argv[])
 
     pipMfTx = pmrs->bmpMfourPipTx;
     pipMfRx = pmrs->bmpMfourPipRx;
+    #endif
     
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[0]);
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[1]);
@@ -93533,7 +93564,9 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbDecMfour[1] = &mrs->bmpDecMfour[1];
     rs->pbDecMfour[2] = &mrs->bmpDecMfour[2];
     rs->pbDecMfour[3] = &mrs->bmpDecMfour[3];
+    #if MFOUR_API
     rs->pbMfRxBuff = mrs->bmpMfourRxbuff;
+    #endif
     #endif
     
     rs->usbdvid = mrs->usbdv;
