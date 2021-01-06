@@ -179,9 +179,9 @@ typedef struct
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
 
-#define PIC_ALL_SEND (0)
+#define PIC_ALL_SEND (1)
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (0)
+#define MFOUR_BMP_SEND_BACK (1)
 #define MFOUR_SIM_MODE (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
@@ -1806,11 +1806,11 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
     struct bitmapDecodeMfour_s bmpDecMfour[4];
-#if MFOUR_API
+
     char       *bmpMfourRxbuff;
     int          *bmpMfourPipTx;
     int          *bmpMfourPipRx;
-#endif
+
     char netIntfs[32];
     char netIntwpa[32];
     char *dbglog;
@@ -1889,9 +1889,9 @@ struct procRes_s{
     struct bitmapHeader_s *pbheaderDuo;
     struct bitmapRotate_s *pbrotate;
     struct bitmapDecodeMfour_s *pbDecMfour[4];
-#if MFOUR_API
+
     char *pbMfRxBuff;
-#endif
+
     struct logPool_s *plogs;
     char *pnetIntfs;
     char *pnetIntwpa;
@@ -2118,11 +2118,6 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd);
 
 #define RJOB_IOCT_WT_CMD_API    mfourWtCmd
 #define RJOB_IOCT_RD_CMD_API    mfourRdCmd
-#else
-#define mfourmaind(x)
-#define m4_enter(x) 
-#define mfourSetPipEpt1(x)
-#define mfourSetPipEpt2(x)
 #endif
 
 #if GHP_EN
@@ -90239,7 +90234,9 @@ static int p16(struct procRes_s *rs)
     //sprintf(m4startcmd, "ls /dev | grep rjob");
     //ret = doSystemCmd(m4startcmd);
 
+    #if MFOUR_API
     m4_enter(1105);
+    #endif
 
     while (rj0id <= 0) {
         usleep(100000);
@@ -90306,7 +90303,9 @@ static int p16(struct procRes_s *rs)
 
                 sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_IMAGE_IN \n");
                 print_f(rs->plogs, "P16", rs->logs);
-                //dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
+                
+                dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
+                
                 clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
                 msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
 
@@ -91213,6 +91212,7 @@ static int p17(struct procRes_s *rs)
     return 0;
 }
 
+#if MFOUR_API
 #define LOG_P18_EN (1)
 static int p18(struct procRes_s *rs)
 {
@@ -91230,20 +91230,14 @@ static int p18(struct procRes_s *rs)
     mfourSetPipEpt2(pipMfRx);
     
     while (1) {
-        #if 0
-        ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
-        if (ret <= 0) {
-            continue;
-        }
-        #endif
-
-        mfourmaind();
+        mfourmaind();        
     }
     
     p18_end(rs);
 
     return 0;
 }
+#endif
 
 #define DATA_RX_SIZE RING_BUFF_NUM
 #define DATA_TX_SIZE RING_BUFF_NUM
@@ -93124,6 +93118,7 @@ int main(int argc, char *argv[])
                                                                         if (!pmrs->sid[17]) {
                                                                             p17(&rs[20]);
                                                                         } else {
+                                                                            #if MFOUR_API
                                                                             len = strlen(argv[0]);
                                                                             memset(argv[0], 0, len);
                                                                             sprintf(argv[0], "m4");
@@ -93135,8 +93130,13 @@ int main(int argc, char *argv[])
                                                                                 memset(argv[0], 0, len);
                                                                                 sprintf(argv[0], "func");
                                                                                 p0(pmrs);
-
                                                                             }
+                                                                            #else 
+                                                                            len = strlen(argv[0]);
+                                                                            memset(argv[0], 0, len);
+                                                                            sprintf(argv[0], "func");
+                                                                            p0(pmrs);
+                                                                            #endif
                                                                         }                                                                        
                                                                     }                                                                
                                                                 }                                                               
