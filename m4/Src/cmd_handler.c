@@ -23,10 +23,35 @@ unsigned int __RJob_ShareMem = (unsigned int)&Rjob_Buffer[0];
 unsigned int __RJob_ShareMem_end = (unsigned int)&Rjob_Buffer[RJOB_BUFF_SIZE - 1];
 //unsigned int RJob_TX_ShareMem = (unsigned int)&(Rjob_Buffer[RJOB_BUFF_SIZE/2]);
 unsigned int RJob_TX_ShareMem = 0;
-static char *Rjob_RX_mem = 0;
+unsigned int RJob_TX_ShareMemDuo = 0;
 
 static int mfourPipEpt1[2] = {0};
 static int mfourPipEpt2[2] = {0};
+
+static int dbg_rjob_cmd(t_rjob_cmd *rjcmd, int len)
+{  
+    printf("********************************************\n");
+
+    printf(" [M4] RJCMD[0x%.8x] len: %d (%d) \n", (u_int32_t)rjcmd, len, sizeof(rjcmd));
+
+    printf(" [M4] [0x%.8x]MSG_TYPE: [%ld](%d) \n", (u_int32_t)&rjcmd->msgtype, rjcmd->msgtype, sizeof(rjcmd->msgtype));
+
+    printf(" [M4] [0x%.8x]TAG: [0x%.8x](%d) \n", (u_int32_t)&rjcmd->tag, (u_int32_t)rjcmd->tag, sizeof(rjcmd->tag));
+
+    printf(" [M4] [0x%.8x]COMMAND: [0x%.4x](%d) \n", (u_int32_t)&rjcmd->cmd, rjcmd->cmd, sizeof(rjcmd->cmd));
+
+    printf(" [M4] [0x%.8x]RESPONSE: [%d](%d) \n", (u_int32_t)&rjcmd->rsp, rjcmd->rsp, sizeof(rjcmd->rsp));
+
+    printf(" [M4] [0x%.8x]SIZE: [%d](%d) \n", (u_int32_t)&rjcmd->dSize, rjcmd->dSize, sizeof(rjcmd->dSize));
+
+    printf(" [M4] [0x%.8x]DATA_PT: [0x%.8x](%d) \n", (u_int32_t)&rjcmd->dPtr, (u_int32_t)rjcmd->dPtr, sizeof(rjcmd->dPtr));
+
+    printf(" [M4] [0x%.8x]SHARE_PT: [0x%.8x](%d) \n", (u_int32_t)&rjcmd->mPtr, (u_int32_t)rjcmd->mPtr, sizeof(rjcmd->mPtr));
+
+    printf("********************************************\n");
+
+    return 0;
+}
 
 int mfourSetPipEpt1(int *pip)
 {
@@ -48,6 +73,15 @@ static int OPENAMP_send(int *pip, t_rjob_cmd *pc, int sizec)
 {
     int ret=0;
     char cmd[2]={0};
+    char *dst=0;
+
+    if (RJob_TX_ShareMemDuo && pc->mPtr && pc->dSize) {
+        dst = (char *)RJob_TX_ShareMemDuo;
+        memcpy(dst, pc->mPtr, pc->dSize);
+        pc->mPtr = dst;;
+    }
+
+    dbg_rjob_cmd(pc, sizec);
 
     log_info("%s - cmd: 0x%.2x, size: %d\n",__func__, pc->cmd, sizec);
 
@@ -86,24 +120,13 @@ t_image_task_status img_task_status = {
 int send_rjob_cmd(t_rjob_cmd *pcmd)
 {
     int ret;
-    char *cpysrc=0, *cpydst=0;
     
-    if( pcmd->mPtr != 0 ) {
-        //pcmd->mPtr = pcmd->mPtr - (int)__RJob_ShareMem;
-
-        pcmd->dPtr = Rjob_RX_mem;
-        cpysrc = pcmd->mPtr;
-        cpydst = pcmd->dPtr;
-
-        memcpy(cpydst, cpysrc, pcmd->dSize);
-    }
-
     ret = OPENAMP_send(mfourPipEpt2, pcmd, sizeof(t_rjob_cmd));
     if (ret < 0) {
         log_err("Failed to send cmdmessage ret=%d \n", ret);
     }
     
-    log_info("rjob send cmd %d byte (cmd=%04x tag=%04lx rsp=%04x dsize=%5d dPtr=%08x mPtr=%08x)\r\n",
+    log_info("%s(%d) %d byte (cmd=%04x tag=%04lx rsp=%04x dsize=%5d dPtr=%08x mPtr=%08x)\r\n", __func__, __LINE__,
             sizeof(t_rjob_cmd),
             pcmd->cmd,
             pcmd->tag,
@@ -122,52 +145,65 @@ int send_rjob_cmd(t_rjob_cmd *pcmd)
 void *wait_rjob_cmd(void)
 {
     struct pollfd pllfd[2]={0};
-    int pipRet=0, len=0, ret=0;
+    int pipRet=0, len=0, ret=0, txd=0;
     char ch2[2];
     char *cinfo=0;
-
+    t_rjob_cmd *rjcmd=0;
+    
     pllfd[0].fd = mfourPipEpt1[0];
     pllfd[0].events = POLLIN;
 
     while (1) {
-        pipRet = poll(pllfd, 1, 500);
+        pipRet = poll(pllfd, 1, 1000);
+
+        log_dbg("%s(%d) poll fd ret: %d \n", __func__, __LINE__, pipRet);
         if (pipRet <= 0) {
             continue;
         }
 
         ret = read(pllfd[0].fd, ch2, 2);
         if (ret != 2) {
-            log_err("%s read failed line: %d \n", __func__, __LINE__);
+            log_err("%s(%d) read failed ret: %d \n", __func__, __LINE__, ret);
             continue;;
         }
 
-        log_dbg("wait and recv cmd [0x%.2x] [0x%.2x] \n", ch2[0], ch2[1]);
+        log_dbg("%s(%d) wait and recv cmd [0x%.2x] [0x%.2x] \n", __func__, __LINE__, ch2[0], ch2[1]);
 
-        if (ch2[0] != 's') {
-            log_err("%s read char not match ch: 0x%.2x 0x%.2x line: %d \n", __func__, ch2[0], ch2[1], __LINE__);
-            continue;;
+        if (ch2[0] == 's') {
+            break;
         }
 
-        len = ch2[1];
-
-        cinfo = malloc(256);
-        if (!cinfo) {
-            log_err("%s malloc failed line: %d \n", __func__, __LINE__);
-            continue;
-        }
-
-        pipRet = read(pllfd[0].fd, cinfo, len);
-        if (pipRet != len) {
-            log_err("%s read failed len: %d line: %d \n", __func__, len, __LINE__);
-
-            free(cinfo);
-            continue;
-        }
-
-        break;
+        log_err("%s(%d) read char not match ch: 0x%.2x 0x%.2x \n", __func__, __LINE__, ch2[0], ch2[1]);
     }
 
-    return cinfo;
+    len = ch2[1];
+    rjcmd = malloc(sizeof(t_rjob_cmd));
+    if (!rjcmd) {
+        log_err("%s(%d) malloc command failed \n", __func__, __LINE__);
+        return 0;
+    }        
+
+    log_dbg("%s(%d) check len: %d sizeof: %d \n", __func__, __LINE__, len, sizeof(t_rjob_cmd));
+    
+    cinfo = (char *)rjcmd;
+    txd = len;
+    while (1) {
+        pipRet = read(pllfd[0].fd, cinfo, txd);
+
+        if (pipRet <= 0) {
+            continue;
+        }
+
+        txd -= pipRet;
+
+        if (txd == 0) break;
+
+        cinfo += pipRet;
+    }
+
+    dbg_rjob_cmd(rjcmd, len);
+
+    return rjcmd;
 }
 
 //*****************************************************************************
@@ -177,52 +213,64 @@ void *wait_rjob_cmd(void)
 void *wait_rjob1_rsp(void)
 {
     struct pollfd pllfd[2]={0};
-    int pipRet=0, len=0;
+    int pipRet=0, len=0, txd=0;
     char ch2[2];
     char *cinfo=0;
-
+    t_rjob_cmd *rjcmd=0;
+    
     pllfd[0].fd = mfourPipEpt1[0];
     pllfd[0].events = POLLIN;
 
     while (1) {
-        pipRet = poll(pllfd, 1, 500);
+        pipRet = poll(pllfd, 1, 1000);
+
+        log_dbg("%s(%d) poll fd ret: %d \n", __func__, __LINE__, pipRet);
         if (pipRet <= 0) {
             continue;
         }
 
         pipRet = read(pllfd[0].fd, ch2, 2);
         if (pipRet != 2) {
-            log_err("%s read failed line: %d \n", __func__, __LINE__);
+            log_err("%s(%d) read failed \n", __func__, __LINE__);
             continue;
         }
 
-        log_dbg("wait and recv rsp [0x%.2x] [0x%.2x] \n", ch2[0], ch2[1]);
+        log_dbg("%s(%d)wait and recv rsp [0x%.2x] [0x%.2x] \n", __func__, __LINE__, ch2[0], ch2[1]);
         
-        if (ch2[0] != 's') {
-            log_err("%s read char not match ch: %c line: %d \n", __func__, ch2[0], __LINE__);
-            continue;
+        if (ch2[0] == 's') {
+            break;;
         }
 
-        len = ch2[1];
-
-        cinfo = malloc(256);
-        if (!cinfo) {
-            log_err("%s malloc failed line: %d \n", __func__, __LINE__);
-            continue;
-        }
-
-        pipRet = read(pllfd[0].fd, cinfo, len);
-        if (pipRet != len) {
-            log_err("%s read failed len: %d line: %d \n", __func__, len, __LINE__);
-
-            free(cinfo);
-            continue;
-        }
-
-        break;
+        log_err("%s(%d) read char not match ch: %c \n", __func__, __LINE__, ch2[0]);
     }
 
-    return cinfo;
+    len = ch2[1];
+    rjcmd = malloc(sizeof(t_rjob_cmd));
+    if (!rjcmd) {
+        log_err("%s(%d) malloc failed \n", __func__, __LINE__);
+        return 0;
+    }
+
+    log_dbg("%s(%d) check len: %d sizeof: %d \n", __func__, __LINE__, len, sizeof(t_rjob_cmd));
+
+    cinfo = (char *)rjcmd;
+    txd = len;
+    while (1) {
+        pipRet = read(pllfd[0].fd, cinfo, txd);
+        if (pipRet < 0) {
+            continue;
+        }
+
+        txd -= pipRet;
+
+        if (txd == 0) break;
+
+        cinfo += pipRet;
+    }
+
+    dbg_rjob_cmd(rjcmd, len);
+    
+    return rjcmd;
 }
 
 void remove_rjob1_rsp(void)
@@ -242,24 +290,13 @@ void remove_rjob1_rsp(void)
 int send_rjob_rsp( t_rjob_cmd *rsp)
 {
     int ret=0;
-    char *cpysrc=0, *cpydst=0;
-    
-    if( rsp->mPtr != 0 ) {
-        //rsp->mPtr = rsp->mPtr - (int)__RJob_ShareMem;
-        rsp->dPtr = Rjob_RX_mem;
-        
-        cpysrc = rsp->mPtr;
-        cpydst = rsp->dPtr;
-
-        memcpy(cpydst, cpysrc, rsp->dSize);
-    }
 
     ret = OPENAMP_send(mfourPipEpt2, rsp, sizeof(t_rjob_cmd));
     if (ret < 0) {
         log_err("Failed to send rspmessage ret=%d \n", ret);
     }
     
-    log_info("rjob  send rsp %d byte (cmd=%04x tag=%04lx rsp=%04x dsize=%5d dPtr=%08x mPtr=%08x)\r\n",
+    log_info("%s(%d) %d byte (cmd=%04x tag=%04lx rsp=%04x dsize=%5d dPtr=%08x mPtr=%08x)\r\n", __func__, __LINE__,
             sizeof(t_rjob_cmd),
             rsp->cmd,
             rsp->tag,
@@ -287,7 +324,12 @@ void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
     Bkjobcmd.dSize = 0;
     Bkjobcmd.dPtr = NULL;
     Bkjobcmd.mPtr = 0;
-    send_rjob_cmd( &Bkjobcmd );  //response to the Image_In command
+
+    dbg_rjob_cmd(&Bkjobcmd, sizeof(Bkjobcmd));
+    
+    send_rjob_cmd(&Bkjobcmd);  //response to the Image_In command
+
+    dbg_rjob_cmd(&Bkjobcmd, sizeof(Bkjobcmd));
     
 //following with the new commnad to request image areas
 	
@@ -299,7 +341,7 @@ void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
 	DstImageIP_Param=(t_ImageParam *)RJob_TX_ShareMem;
     BKimage_param = (t_ImageParam *)pcmd->mPtr;
     
-    log_dbg("%s send RSP line %d dst: 0x%.8x src: 0x%.8x \n", __func__, __LINE__, DstImageIP_Param, BKimage_param);
+    log_dbg("%s send RSP line %d dst: 0x%.8x src: 0x%.8x \n", __func__, __LINE__, (unsigned int)DstImageIP_Param, (unsigned int)BKimage_param);
     
     //Duplicate_imageparam(BKimage_param, DstImageIP_Param);
 
@@ -423,7 +465,7 @@ void cmd_BKCMD_SEND_AREA_handler( t_rjob_cmd *pcmd )
 
     int i1;
 
-    log_dbg("%s area enter line %d\n", __func__, __LINE__);
+    log_dbg("%s(%d) area Enter\n", __func__, __LINE__);
     
 	BkJobImg_Para  = pcmd->mPtr;
 //	log_info("BkJobImg_Para= %p\n", BkJobImg_Para);
@@ -666,24 +708,30 @@ void cmd_dispatcher(t_rjob_cmd *pcmd)
 
 }
 
-int mfourmaind(void) 
+int mfourmaind(char *shmtx) 
 {
     t_rjob_cmd *pcmd=0;
 
     log_info("%s ENTER line %d [0x%.8x]\n", __func__, __LINE__, RJob_TX_ShareMem);
 
     if (RJob_TX_ShareMem == 0) {
-        RJob_TX_ShareMem = (unsigned int)malloc(64*1024);
+        RJob_TX_ShareMem = malloc(64*1024);
     }
-    
-    pcmd = wait_rjob_cmd();
 
-    if (Rjob_RX_mem == 0) {
-        if (pcmd->dPtr) {
-            Rjob_RX_mem = pcmd->dPtr;
+    if (!RJob_TX_ShareMem) return -1;
+
+    if (RJob_TX_ShareMemDuo == 0) {
+        if (shmtx) {
+            RJob_TX_ShareMemDuo = shmtx;
         }
     }
 
+    if (!RJob_TX_ShareMemDuo) return -2;
+
+    pcmd = wait_rjob_cmd();
+
+    dbg_rjob_cmd(pcmd, sizeof(pcmd));
+    
     cmd_dispatcher(pcmd);
 
     free(pcmd);

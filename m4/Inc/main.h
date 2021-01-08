@@ -20,11 +20,11 @@ extern "C" {
 
 
 /* Define   ------------------------------------------------------------------*/
-#define log_dbg(fmt, ...)  printf("[DBG] " fmt, ##__VA_ARGS__)
-#define log_info(fmt, ...)   printf("[INF] " fmt, ##__VA_ARGS__)
-#define log_err(fmt, ...)   printf("[ERR] " fmt, ##__VA_ARGS__)
-#define log_warn(fmt, ...)   printf("[WRN] " fmt, ##__VA_ARGS__)
-#define log_sys(fmt, ...)   printf("[SYS] " fmt, ##__VA_ARGS__)
+#define log_dbg(fmt, ...)  printf("[m4]d " fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...)   printf("[m4]i " fmt, ##__VA_ARGS__)
+#define log_err(fmt, ...)   printf("[m4]e " fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...)   printf("[m4]w " fmt, ##__VA_ARGS__)
+#define log_sys(fmt, ...)   printf("[m4]s " fmt, ##__VA_ARGS__)
 
 #define RJOB_MAX_BUFSIZE    (16384)
 #define RJOB_TX_OFFSET      (16384)
