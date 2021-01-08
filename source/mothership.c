@@ -187,7 +187,7 @@ typedef struct
 
 #if GHP_EN
 #define SMP_EN (1)
-#define MFOUR_API (0)
+#define MFOUR_API (1)
 #else
 #define SMP_EN (0)
 #define MFOUR_API (1)
@@ -202,8 +202,8 @@ typedef struct
 #define IOCTL_RJOB_RCMD     _IOR(0xb5,IOCNR_RJOB_RCMD,mfour_rjob_cmd)
 
 #if MFOUR_API
-#define RJOB_IOCT_WT_CMD(a, b)    RJOB_IOCT_WT_CMD_API(a, b)
-#define RJOB_IOCT_RD_CMD(a, b)    RJOB_IOCT_RD_CMD_API(a, b)
+#define RJOB_IOCT_WT_CMD(a, b)    RJOB_IOCT_WT_CMD_API(a, (void *)b)
+#define RJOB_IOCT_RD_CMD(a, b)    RJOB_IOCT_RD_CMD_API(a, (void *)b)
 #else
 #define RJOB_IOCT_WT_CMD(a, b)    ioctl(a, IOCTL_RJOB_WCMD, b)
 #define RJOB_IOCT_RD_CMD(a, b)    ioctl(a, IOCTL_RJOB_RCMD, b)
@@ -1761,8 +1761,8 @@ struct mainRes_s{
     struct folderQueue_s *folder_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
-    struct pipe_s pipedn[21];
-    struct pipe_s pipeup[21];
+    struct pipe_s pipedn[22];
+    struct pipe_s pipeup[22];
     // data mode share memory
     struct shmem_s dataRx;
     // command mode share memory
@@ -1806,7 +1806,7 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
     struct bitmapDecodeMfour_s bmpDecMfour[4];
-
+    char       *bmpMfourTxbuff;
     char       *bmpMfourRxbuff;
     int          *bmpMfourPipTx;
     int          *bmpMfourPipRx;
@@ -1889,7 +1889,8 @@ struct procRes_s{
     struct bitmapHeader_s *pbheaderDuo;
     struct bitmapRotate_s *pbrotate;
     struct bitmapDecodeMfour_s *pbDecMfour[4];
-
+    
+    char *pbMfTxBuff;
     char *pbMfRxBuff;
 
     struct logPool_s *plogs;
@@ -2103,9 +2104,9 @@ static int findRectOrient(struct aspRectObj *pRout, struct aspRectObj *pRin);
 static CFLOAT aspMin(CFLOAT d1, CFLOAT d2);
 static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset);
 static int cfgTableGetChkDPI(struct aspConfig_s *table, int idx, uint32_t *rval, uint32_t stat);
-
+static int dbgRjobCmd(mfour_rjob_cmd *rjcmd, int len);
 #if MFOUR_API
-int mfourmaind(void);
+int mfourmaind(char *shmtx);
 int mfourSetPipEpt1(int *pip);
 int mfourSetPipEpt2(int *pip);
 int m4_enter(int id);
@@ -2132,6 +2133,7 @@ static void *BKOCR_NULL( void * img_buf, int img_size, char *out_buf, int buf_si
 {
     return 0l;
 }
+
 
 #define BKOCR_Check BKOCR_NULL
 #define BKOCR_Check6 BKOCR_NULL
@@ -2358,31 +2360,39 @@ static int draw(void)
 #if MFOUR_API
 static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd)
 {
+    int len=0;
     char ch2[2]={0};
 
     if (!pipMfTx) return -1;
 
-    ch2[0] = 's';
-    ch2[1] = sizeof(mfour_rjob_cmd);
+    len = sizeof(mfour_rjob_cmd);
 
-    if (fcmd->dSize && fcmd->dPtr) {
-        fcmd->mPtr = fcmd->dPtr;
+    ch2[0] = 's';
+    ch2[1] = len;
+
+    if (fcmd->dSize && fcmd->dPtr && fcmd->mPtr) {
+        memcpy(fcmd->mPtr, fcmd->dPtr, fcmd->dSize);
     }
 
-    printf("[m4] dPtr:0x%.8x, mPtf:0x%.8x, dsize: %d \n", fcmd->dPtr, fcmd->mPtr, fcmd->dSize);
+    printf("[m4] dPtr:0x%.8x, mPtf:0x%.8x, dsize: %d \n", (uint32_t)fcmd->dPtr, (uint32_t)fcmd->mPtr, fcmd->dSize);
+
+    dbgRjobCmd(fcmd, len);
     
     write(pipMfTx[1], ch2, 2);
     
-    write(pipMfTx[1], fcmd, sizeof(mfour_rjob_cmd));
+    write(pipMfTx[1], fcmd, len);
 
     return 0;
 }
 
 static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
 {
-    int pipRet=0, len=0, op=0;
+    int pipRet=0, len=0, op=0, txd=0;
     char ch2[2]={0};
     struct pollfd pllfd[2]={0};
+    char *recvptr=0;
+
+    recvptr = fcmd->dPtr;
 
     pllfd[0].fd = pipMfRx[0];
     pllfd[0].events = POLLIN;
@@ -2412,6 +2422,7 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
         return 0;
     }
 
+    txd = len;
     while (1) {
         pipRet = poll(pllfd, 1, 500);
 
@@ -2421,16 +2432,24 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
             continue;
         }
 
-        pipRet = read(pllfd[0].fd, fcmd, len);
-        printf("%s read len: %d ret: %d \n", __func__, len, pipRet);
+        pipRet = read(pllfd[0].fd, fcmd, txd);
+        printf("%s read len: %d ret: %d \n", __func__, txd, pipRet);
 
         if (pipRet > 0) {
-            len -= pipRet;
+            txd -= pipRet;
         }
 
-        if (len == 0) {
+        if (txd == 0) {
             break;
         }
+    }
+
+    dbgRjobCmd(fcmd, len);
+
+     fcmd->dPtr = recvptr;
+
+    if (fcmd->dSize && fcmd->dPtr && fcmd->mPtr) {
+        memcpy(fcmd->dPtr, fcmd->mPtr, fcmd->dSize);
     }
     
     return 0;
@@ -90301,6 +90320,10 @@ static int p16(struct procRes_s *rs)
                 rjcmd.dPtr = &img_param->mfourAttb;
                 rjcmd.dSize = (decraw->aspDcLen > 16 * 1024) ? 16*1024:decraw->aspDcLen;
 
+                #if MFOUR_API
+                rjcmd.mPtr = rs->pbMfRxBuff;
+                #endif
+
                 sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_IMAGE_IN \n");
                 print_f(rs->plogs, "P16", rs->logs);
                 
@@ -90382,6 +90405,9 @@ static int p16(struct procRes_s *rs)
                             rjcmd.rsp = 0;
                             rjcmd.dPtr = &img_param->mfourAttb;
                             rjcmd.dSize = decrect->aspDcLen;
+                            #if MFOUR_API
+                            rjcmd.mPtr = rs->pbMfRxBuff;
+                            #endif
 
                             sprintf_f(rs->logs, "ocr img_param info w: %d h: %d id: %d totalayer: %d\n", img_param->mfourAttb.ImageRect.xc, img_param->mfourAttb.ImageRect.yr, img_param->mfourAttb.iJobIdx, img_param->mfourAttb.ImageLayerInfo.BKNote_Layers);
                             print_f(rs->plogs, "P16", rs->logs);
@@ -90505,11 +90531,8 @@ static int p17(struct procRes_s *rs)
     memset(&outcmd, 0, sizeof(mfour_rjob_cmd));
     memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
     
-    #if MFOUR_API
-    rx_buf = rs->pbMfRxBuff;
-    #else
     rx_buf = malloc(RJOB_RX_BLOCK_SIZE+sizeof(mfour_image_param_st));
-    #endif
+    
     img_rxbuf = (mfour_image_param_st *)rx_buf;
     
     sprintf_f(rs->logs, "memory allocate succeed addr: 0x%.8x size: %d \n", (uint32_t)rx_buf, RJOB_RX_BLOCK_SIZE/1024);
@@ -90526,7 +90549,7 @@ static int p17(struct procRes_s *rs)
     }
 
     while (1) {
-        ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+        ret = rs_ipc_get_ms(rs, &ch, 1, 1000);
 
         if (ret > 0) {
             #if LOG_P17_EN
@@ -90534,8 +90557,8 @@ static int p17(struct procRes_s *rs)
             print_f(rs->plogs, "P17", rs->logs);
             #endif
         } else {
-            //sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
-            //print_f(rs->plogs, "P17", rs->logs);
+            sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
+            print_f(rs->plogs, "P17", rs->logs);
 
             continue;
         }
@@ -90544,8 +90567,11 @@ static int p17(struct procRes_s *rs)
 
         switch (tcmd) {
         case 'i':
-            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
-            if (ret > 0) {
+            ret = rs_ipc_get_ms(rs, &ch, 1, 1000);
+            if (ret <= 0) {
+                sprintf_f(rs->logs, "rjob1 waitting cont ch \n");
+                print_f(rs->plogs, "P17", rs->logs);
+            } else {   //if (ret > 0) {
                 sprintf_f(rs->logs, "rjob1 get cont ch[0x%.2x] \n", ch);
                 print_f(rs->plogs, "P17", rs->logs);
 
@@ -90585,7 +90611,7 @@ static int p17(struct procRes_s *rs)
                 
                     outcmd.dSize = RJOB_RX_BLOCK_SIZE;
                     outcmd.dPtr  = &img_rxbuf->mfourAttb;
-                
+                    
                     ret = RJOB_IOCT_RD_CMD(rj1id, (unsigned long)&outcmd);
                     if (ret <0) {
                         sprintf_f(rs->logs, "Error!!! read rjob command ret: %d !!!\n", ret);
@@ -91230,7 +91256,7 @@ static int p18(struct procRes_s *rs)
     mfourSetPipEpt2(pipMfRx);
     
     while (1) {
-        mfourmaind();        
+        mfourmaind(rs->pbMfTxBuff);        
     }
     
     p18_end(rs);
@@ -92855,7 +92881,16 @@ int main(int argc, char *argv[])
     aspBMPdecodeAllocate(pmrs, 3);
 
     #if MFOUR_API
-    len = 128 * 1024;
+    len = 64 * 1024;
+    pmrs->bmpMfourTxbuff = aspSalloc(len);
+    if (pmrs->bmpMfourTxbuff) {
+        memset(pmrs->bmpMfourTxbuff, 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 tx buff failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    len = 64 * 1024;
     pmrs->bmpMfourRxbuff = aspSalloc(len);
     if (pmrs->bmpMfourRxbuff) {
         memset(pmrs->bmpMfourRxbuff, 0, len);
@@ -93565,6 +93600,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbDecMfour[2] = &mrs->bmpDecMfour[2];
     rs->pbDecMfour[3] = &mrs->bmpDecMfour[3];
     #if MFOUR_API
+    rs->pbMfTxBuff = mrs->bmpMfourTxbuff;
     rs->pbMfRxBuff = mrs->bmpMfourRxbuff;
     #endif
     #endif
