@@ -30,6 +30,7 @@ static int mfourPipEpt2[2] = {0};
 
 static int dbg_rjob_cmd(t_rjob_cmd *rjcmd, int len)
 {  
+#if !LOG_ZERO
     printf("********************************************\n");
 
     printf(" [M4] RJCMD[0x%.8x] len: %d (%d) \n", (u_int32_t)rjcmd, len, sizeof(rjcmd));
@@ -49,7 +50,7 @@ static int dbg_rjob_cmd(t_rjob_cmd *rjcmd, int len)
     printf(" [M4] [0x%.8x]SHARE_PT: [0x%.8x](%d) \n", (u_int32_t)&rjcmd->mPtr, (u_int32_t)rjcmd->mPtr, sizeof(rjcmd->mPtr));
 
     printf("********************************************\n");
-
+#endif
     return 0;
 }
 

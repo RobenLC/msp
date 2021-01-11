@@ -179,9 +179,9 @@ typedef struct
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
 
-#define PIC_ALL_SEND (1)
+#define PIC_ALL_SEND (0)
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (1)
+#define MFOUR_BMP_SEND_BACK (0)
 #define MFOUR_SIM_MODE (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
@@ -2358,6 +2358,7 @@ static int draw(void)
 }
 
 #if MFOUR_API
+#define MOUR_WTCMD_LOG_EN 0
 static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd)
 {
     int len=0;
@@ -2374,7 +2375,9 @@ static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd)
         memcpy(fcmd->mPtr, fcmd->dPtr, fcmd->dSize);
     }
 
+    #if MOUR_WTCMD_LOG_EN
     printf("[m4] dPtr:0x%.8x, mPtf:0x%.8x, dsize: %d \n", (uint32_t)fcmd->dPtr, (uint32_t)fcmd->mPtr, fcmd->dSize);
+    #endif
 
     dbgRjobCmd(fcmd, len);
     
@@ -2385,6 +2388,7 @@ static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd)
     return 0;
 }
 
+#define MOUR_RDCMD_LOG_EN 0
 static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
 {
     int pipRet=0, len=0, op=0, txd=0;
@@ -2400,14 +2404,18 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
     while (1) {
         pipRet = poll(pllfd, 1, 1000);
 
+        #if MOUR_RDCMD_LOG_EN
         printf("%s line: %d ret: %d - 1\n", __func__, __LINE__, pipRet);
+        #endif
         
         if (pipRet <= 0) {
             continue;
         }
 
         pipRet = read(pllfd[0].fd, ch2, 2);
+        #if MOUR_RDCMD_LOG_EN
         printf("%s line: %d 0x%.2x 0x%.2x ret: %d \n", __func__, __LINE__, ch2[0], ch2[1], pipRet);
+        #endif
         
         if (pipRet == 2) {
             break;
@@ -2416,7 +2424,9 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
 
     op = ch2[0];
     len = ch2[1];
+    #if MOUR_RDCMD_LOG_EN
     printf("%s line: %d 0x%.2x 0x%.2x (0x%.2x) len: %d \n", __func__, __LINE__, ch2[0], ch2[1], op, len);
+    #endif
 
     if (op != 0x72) { // 0x72 == r
         return 0;
@@ -2426,14 +2436,19 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
     while (1) {
         pipRet = poll(pllfd, 1, 500);
 
+        #if MOUR_RDCMD_LOG_EN
         printf("%s line: %d ret: %d - 2\n", __func__, __LINE__, pipRet);
+        #endif
         
         if (pipRet <= 0) {
             continue;
         }
 
         pipRet = read(pllfd[0].fd, fcmd, txd);
+        
+        #if MOUR_RDCMD_LOG_EN
         printf("%s read len: %d ret: %d \n", __func__, txd, pipRet);
+        #endif
 
         if (pipRet > 0) {
             txd -= pipRet;
@@ -90725,12 +90740,14 @@ static int p17(struct procRes_s *rs)
                                     pRect->mfourLayer = pImgArea->ImageLayerInfo.SelLayerNum;
                                     #endif
 
-                                    //sprintf_f(rs->logs, "    search find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
-                                    //print_f(rs->plogs, "P17", rs->logs);    
+                                    sprintf_f(rs->logs, "    search find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
+                                    print_f(rs->plogs, "P17", rs->logs);    
 
                                     aspBMPdecodeItemSet(decpic, pRect->mfourRectW, pRect->mfourRectH, 0);
 
                                     rs->pbDecMfour[mfbidx]->aspDecRectSt[ix] = BKCMD_REQUIRE_AREA;
+                                    msync(&rs->pbDecMfour[mfbidx]->aspDecRectSt[ix], sizeof(int), MS_SYNC);
+                                    
                                     m4id = ix;
                                                                 
                                     minfo[0] = 'c';
@@ -90759,6 +90776,15 @@ static int p17(struct procRes_s *rs)
                                 }
 
                             }
+
+                            #if 0 /* debug */
+                            for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
+                                decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                                
+                                sprintf_f(rs->logs, "check area state %d: 0x%.4x \n", ix, rs->pbDecMfour[mfbidx]->aspDecRectSt[ix]);
+                                print_f(rs->plogs, "P17", rs->logs);    
+                            }
+                            #endif
 
                             //sprintf_f(rs->logs, "Error!!! can't find available area \n");
                             //print_f(rs->plogs, "P17", rs->logs);    
@@ -90910,7 +90936,7 @@ static int p17(struct procRes_s *rs)
                             
                             //outcmd.dPtr  = rx_buf;
 
-                            #if 1
+                            #if 0 /*debug*/
                             //cid = img_out->mfourIdx;
                             cid = -1;
                             for (ix=0; ix <BMP_DECODE_PIC_SIZE; ix++) {
@@ -90918,8 +90944,8 @@ static int p17(struct procRes_s *rs)
                                 m4dst = rs->pbDecMfour[mfbidx]->aspDecRectSt[ix];
                                 img_param = decpic->aspDcData;
 
-                                //sprintf_f(rs->logs, "    search match buff info %d. %d, %d (seqid: %d jobid: %d) len: %d st: 0x%.4x cid: %d\n", ix, img_param->mfourAttb.SeqIdx, img_param->mfourAttb.iJobIdx, seqid, jid, decpic->aspDcLen, m4dst, cid);
-                                //print_f(rs->plogs, "P17", rs->logs);
+                                sprintf_f(rs->logs, "    search match buff info %d. %d, %d (seqid: %d jobid: %d) len: %d st: 0x%.4x cid: %d\n", ix, img_param->mfourAttb.SeqIdx, img_param->mfourAttb.iJobIdx, seqid, jid, decpic->aspDcLen, m4dst, cid);
+                                print_f(rs->plogs, "P17", rs->logs);
                                 
                                 if ((decpic->aspDcLen > 0) && (cid < 0) && (m4dst == BKCMD_REQUIRE_AREA)) {
                                     cid = ix;
