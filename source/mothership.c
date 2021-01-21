@@ -140,7 +140,7 @@ typedef struct
 }   t_ImageParam;  
 #endif
 
-#define LOG_ALL_DISABLE (0)
+#define LOG_ALL_DISABLE (1)
 
 #define ONLY_ONE_USB (0)
 #if DISABLE_USB
@@ -153,7 +153,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (500) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (1600) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -189,8 +189,8 @@ typedef struct
 #define SMP_EN (1)
 #define MFOUR_API (1)
 #else
-#define SMP_EN (0)
-#define MFOUR_API (1)
+#define SMP_EN (1)
+#define MFOUR_API (0)
 #endif
 
 #define RJOB_TX_BLOCK_SIZE   (16*1024)
@@ -90272,6 +90272,7 @@ static int p16(struct procRes_s *rs)
     m4_enter(1105);
     #endif
 
+    #if !MFOUR_API
     while (rj0id <= 0) {
         usleep(100000);
         rj0id = open("/dev/rjob0", O_RDWR);
@@ -90281,6 +90282,7 @@ static int p16(struct procRes_s *rs)
 
         errcnt++;
     }
+    #endif
     
     while (1) {
         ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
@@ -90489,7 +90491,7 @@ static int p16(struct procRes_s *rs)
 }
 
 #define DUMP_MFOUR_BMP (0)
-#define LOG_P17_EN (1)
+#define LOG_P17_EN (0)
 static int p17(struct procRes_s *rs)
 {
 #define MFOUR_WAIT_LIST_SIZE (8)
@@ -90553,7 +90555,7 @@ static int p17(struct procRes_s *rs)
     sprintf_f(rs->logs, "memory allocate succeed addr: 0x%.8x size: %d \n", (uint32_t)rx_buf, RJOB_RX_BLOCK_SIZE/1024);
     print_f(rs->plogs, "P17", rs->logs);
     
-    
+    #if !MFOUR_API
     while (rj1id <= 0) {
         usleep(100000);
         rj1id = open("/dev/rjob1", O_RDWR);
@@ -90562,6 +90564,7 @@ static int p17(struct procRes_s *rs)
 
         errcnt++;
     }
+    #endif
 
     while (1) {
         ret = rs_ipc_get_ms(rs, &ch, 1, 1000);
@@ -90572,9 +90575,10 @@ static int p17(struct procRes_s *rs)
             print_f(rs->plogs, "P17", rs->logs);
             #endif
         } else {
+            #if LOG_P17_EN
             sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
             print_f(rs->plogs, "P17", rs->logs);
-
+            #endif
             continue;
         }
 
