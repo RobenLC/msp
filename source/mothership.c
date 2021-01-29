@@ -56154,6 +56154,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 #define DBG_BKN_GATE (0)
 #define MAX_152_EVENT (19)
+#define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     sprintf_f(mrs->log, "usb gate !!!\n");
@@ -56206,7 +56207,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     int prisec=0;
     struct sdFAT_s *pfat=0;
     struct aspConfig_s *pct=0;
-    struct aspMetaDataviaUSB_s *ptscaninfo=0, *ptscaninfoduo=0;
+    struct aspMetaDataviaUSB_s *ptscaninfo=0, *ptscaninfoduo=0, *ptusbmeta=0;
     struct aspMetaDataviaUSB_s *ptinfomod=0;
     int ix=0, iv=0;
     char *exptbuff=0;
@@ -58252,11 +58253,17 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 
                                 if (ins == 1) {
                                     memset(ptscaninfo, 0xff, sizeof(struct aspMetaDataviaUSB_s));
-                                    memcpy(ptscaninfo, addrd, mlen);    
+                                    memcpy(ptscaninfo, addrd, mlen);
+
+                                    ptusbmeta = ptscaninfo;
                                 } else {
                                     memset(ptscaninfoduo, 0xff, sizeof(struct aspMetaDataviaUSB_s));
                                     memcpy(ptscaninfoduo, addrd, mlen);    
+                                    
+                                    ptusbmeta = ptscaninfoduo;
                                 }
+
+                                //dbgMetaUsb(ptusbmeta);
 
                             }
                             else if ((lens < USB_BUF_SIZE) && (lasflag)) {
@@ -58311,11 +58318,12 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 }
                                 
                                 #if DBG_BKN_GATE
-                                sprintf_f(mrs->log, "[GW] get image length: %d max: %d \n", dlen, maxsz);
+                                sprintf_f(mrs->log, "[GW] get image length: %d max: %d [%s] PRI_O_SEC: %d \n", dlen, maxsz, ptusbmeta->ASP_MAGIC_ASPC, ptusbmeta->PRI_O_SEC);
                                 print_f(mrs->plog, "fs152", mrs->log);
                                 #endif
                                 
-                                if (((dlen > 0) && (dlen > maxsz)) || (dlen == 0)) {
+                                if ((((dlen > 0) && (dlen > maxsz)) || (dlen == 0)) && 
+                                     ((PRI_O_SEC_SELECT < 0) || ((PRI_O_SEC_SELECT >= 0) && (PRI_O_SEC_SELECT == ptusbmeta->PRI_O_SEC)))) {
                                     //pllcmd[ins] = (pubffcd[ins]->ubindex & 0x7f) | 0x80;
                                     if (ins == 3) {
                                         pubffcd[ins]->ubindex |= 0x400;
@@ -58427,7 +58435,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 }
                                 else {
                                     pubffcd[ins]->ubindex |= 0x800;
-                                    sprintf_f(mrs->log, "[GW] WARNNING!!! image too short skip this page!!! scanlen: %d min: %d\n", dlen, maxsz);                                
+                                    sprintf_f(mrs->log, "[GW] WARNNING!!! image too short skip this page!!! scanlen: %d min: %d, PRI_O_SEC: %d / %d\n", dlen, maxsz, ptusbmeta->PRI_O_SEC, PRI_O_SEC_SELECT);                                
                                     print_f(mrs->plog, "fs152", mrs->log);
                                 }
                                 
@@ -80112,7 +80120,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 //print_f(rs->plogs, "P11", rs->logs);
                 //shmem_dump(addrd+(lens-rlen), 16);
                 
-                //dbgMetaUsb((struct aspMetaDataviaUSB_s *)(addrd+(lens-rlen)));
+                dbgMetaUsb((struct aspMetaDataviaUSB_s *)(addrd+(lens-rlen)));
                 
                 if (!rlen) {
                     sprintf_f(rs->logs, "[DV] WARNING!!! the image size is multiplex of trunk size  !!!size: %d - 1 \n", lens);
@@ -86678,6 +86686,7 @@ static int save_done_area(struct procRes_s *rs, int clidx, int mfidx)
 }
 
 #define SAVE_DONE_IMG (0)
+#define LOG_P12_EN (1)
 static int p12(struct procRes_s *rs)
 {
     char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
@@ -86729,8 +86738,10 @@ static int p12(struct procRes_s *rs)
         ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
 
         if (ret > 0) {
-            //sprintf_f(rs->logs, "m4 get ch[0x%.2x] \n", ch);
-            //print_f(rs->plogs, "P12", rs->logs);
+            #if LOG_P12_EN
+            sprintf_f(rs->logs, "m4 get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, "P12", rs->logs);
+            #endif
         } else {
             //rs_ipc_put(rs, "h", 1);
         
@@ -86753,8 +86764,11 @@ static int p12(struct procRes_s *rs)
         case 'f':
             ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
             if (ret > 0) {
-                //sprintf_f(rs->logs, "f get cont ch[0x%.2x] \n", ch);
-                //print_f(rs->plogs, "P12", rs->logs);
+            
+                #if LOG_P12_EN
+                sprintf_f(rs->logs, "f get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P12", rs->logs);
+                #endif
 
                 if (ch == 0x80) {
                     mfbidx = 0;
@@ -86799,8 +86813,11 @@ static int p12(struct procRes_s *rs)
                         pipRet = poll(pllfd, 1, 500);
                         if (pipRet > 0) {
                             ret = read(pllfd[0].fd, &chm, 1);
-                            //sprintf_f(rs->logs, "m4crop get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
-                            //print_f(rs->plogs, "P12", rs->logs);
+
+                            #if LOG_P12_EN
+                            sprintf_f(rs->logs, "m4crop get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                            print_f(rs->plogs, "P12", rs->logs);
+                            #endif
                         
                             mfcmd = chm;
                         
@@ -86809,8 +86826,11 @@ static int p12(struct procRes_s *rs)
                             //    break;
                             case 'C': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
                                 ret = read(pllfd[0].fd, &chm, 1);
-                                //sprintf_f(rs->logs, "C get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
-                                //print_f(rs->plogs, "P12", rs->logs);
+                                
+                                #if LOG_P12_EN
+                                sprintf_f(rs->logs, "C get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P12", rs->logs);
+                                #endif
 
                                 if (chm == 0x80) {
                                     cid = 0;
@@ -86835,8 +86855,11 @@ static int p12(struct procRes_s *rs)
                                 break;
                             case 'c': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
                                 ret = read(pllfd[0].fd, &chm, 1);
-                                //sprintf_f(rs->logs, "c get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
-                                //print_f(rs->plogs, "P12", rs->logs);
+                                
+                                #if LOG_P12_EN
+                                sprintf_f(rs->logs, "c get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P12", rs->logs);
+                                #endif
 
                                 if (chm == 0x80) {
                                     cid = 0;
@@ -86865,8 +86888,11 @@ static int p12(struct procRes_s *rs)
                                 break;
                             case 'd': //BKCMD_DONE_AREA:           // receive M4-postman cmd
                                 ret = read(pllfd[0].fd, &chm, 1);
-                                //sprintf_f(rs->logs, "d get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
-                                //print_f(rs->plogs, "P12", rs->logs);
+
+                                #if LOG_P12_EN
+                                sprintf_f(rs->logs, "d get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P12", rs->logs);
+                                #endif
 
                                 if (chm == 0x80) {
                                     cid = 0;
@@ -86898,9 +86924,11 @@ static int p12(struct procRes_s *rs)
                                 pinfo[0] = 'e';
 
                                 write(pipeMfTx[1], pinfo, 1);
-                                
-                                //sprintf_f(rs->logs, "end image idx: %d \n", mfbidx);
-                                //print_f(rs->plogs, "P12", rs->logs);
+
+                                #if LOG_P12_EN
+                                sprintf_f(rs->logs, "end image idx: %d \n", mfbidx);
+                                print_f(rs->plogs, "P12", rs->logs);
+                                #endif
                                 
                                 break;
                             default:
