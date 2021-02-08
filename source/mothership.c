@@ -186,9 +186,11 @@ typedef struct
 #define MFOUR_SIM_MODE_BMP (0)
 
 #if GHP_EN
+#define BMP_NO_CPY (1)
 #define SMP_EN (1)
 #define MFOUR_API (1)
 #else
+#define BMP_NO_CPY (0)
 #define SMP_EN (1)
 #define MFOUR_API (0)
 #endif
@@ -1592,6 +1594,7 @@ struct bitmapDecodeItem_s {
     int aspDcWidth;
     int aspDcHeight;
     int aspDcLen;
+    char *aspDcRingAddr;
     mfour_image_param_st *aspDcData;
 };
 
@@ -39015,7 +39018,7 @@ static int ring_buf_cons_tag(struct shmem_s *pp)
     return dist;
 }
 
-static int ring_buf_cons_up(struct shmem_s *pp, char **addr, char **phyr)
+static int ring_buf_cons_up(struct shmem_s *pp, char **addr, char **phyr, int *ridx)
 {
     char str[128];
     int leadn = 0;
@@ -39091,6 +39094,8 @@ static int ring_buf_cons_up(struct shmem_s *pp, char **addr, char **phyr)
 
     *addr = pp->pp[idx];
     *phyr = pp->bb[idx];
+
+    *ridx = idx;
 
     msync(pp, sizeof(struct shmem_s), MS_SYNC);
 
@@ -56154,7 +56159,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 #define DBG_BKN_GATE (0)
 #define MAX_152_EVENT (19)
-#define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
+#define PRI_O_SEC_SELECT (0)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     sprintf_f(mrs->log, "usb gate !!!\n");
@@ -75834,7 +75839,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct pollfd ptfd[1];
     struct pollfd ptfdc[2];
     
-    int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0;
+    int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0, ringidx=0;
     #if 1 /* save meta */
     char ptfilepath[128];
     static char ptfileSaveMeta[] = "/mnt/mmc2/usb/meta_%.3d.bin";
@@ -81373,13 +81378,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         if (uimCylcnt) {
                             lens = 0;
-                            lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
+                            lens = ring_buf_cons_up(usbCur, &addrd, &addrb, &ringidx);                
                             while (lens < 0) {
                                 sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
                                 print_f(rs->plogs, "P11", rs->logs);
 
                                 usleep(500);
-                                lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
+                                lens = ring_buf_cons_up(usbCur, &addrd, &addrb, &ringidx);                
                             }
 
                             //sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
@@ -86420,8 +86425,17 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
 
     //sprintf_f(rs->logs, "meta size: %d, P1: (%4d, %4d) P2: (%4d, %4d) P3: (%4d, %4d) P4: (%4d, %4d) \n", mtlen, mreal[0], mreal[1], mreal[2], mreal[3], mreal[4], mreal[5], mreal[6], mreal[7]);
     //print_f(rs->plogs, "CLIP", rs->logs);    
-    
+
+    #if BMP_NO_CPY
+    if (decraw->aspDcRingAddr) {
+        bmpbuff = decraw->aspDcRingAddr;
+    } else {
+        aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
+    }
+    #else
     aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
+    #endif
+
     msync(bmpbuff, rawlen, MS_SYNC);
     
     bmpcolrtb = aspMemalloc(1080, midx);
@@ -87439,10 +87453,10 @@ static int p12(struct procRes_s *rs)
 static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 {
     char chq=0, chd=0, che=0, cindexfo[2], mindexfo[2], cinfo[12], cswerr=0, pagerst=2, ch=0, mfourinfo[2];
-    char *addrd=0, *palloc=0, *endf=0, *endm=0, *bmpbufc=0, *bmpbuff=0, *addrb=0, *buffmeta=0;
+    char *addrd=0, *palloc=0, *endf=0, *endm=0, *bmpbufc=0, *bmpbuff=0, *addrb=0, *buffmeta=0, *addfirst=0, *addlast=0;
     char *bmpcpy=0, *pshfmeta=0, *jpgout=0, *bmpcolrtb=0, *ph=0, *exmtaout=0, *bmprot=0, *metaPt=0;
     unsigned char *jpgrlt=0;
-    int uimCylcnt=0, seqtx=0, maxsz=0, lens=0, pipRet=0, idlet=0, cindex=0, ix=0, waitCylen=0, chr=0, sendsz=0;
+    int uimCylcnt=0, seqtx=0, maxsz=0, lens=0, pipRet=0, idlet=0, cindex=0, ix=0, waitCylen=0, chr=0, sendsz=0, cpysz=0, ringidx=0, ringcons=0;
     int usbfd=0, ret=0, act=0, lastCylen=0, cmdprisec=0, bmplen=0, bmpmax=0, uselen=0, cpylen=0, distCylcnt=0, cntTx=0, lenbs=0, shfmeta=0;
     int udist=0, uthrhld=0, upas=0, ursm=0, upasd=0, ursmd=0, udistd=0, lrst=0, opsz=0, rawlen=0, val=0, bmph=0, bhlen=0, bmphmax=0;
     int colr=0, tmp=0, bmpw=0, bdpi=0, jpgetW=0, jpgetH=0, err=0, tmCost=0, blen=0, bdpp=0, prisec=0, cutcnt=0, cutnum=0;
@@ -87578,8 +87592,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             print_f(rs->plogs, sp, rs->logs);
             #endif
 
-            while (1) {
-                aspMemClear(aspMemAsign, asptotMalloc, midx);
+            aspMemClear(aspMemAsign, asptotMalloc, midx);
+            
+            while (1) {    
         
                 while (1) {
                     if (uimCylcnt > 0) {
@@ -88293,6 +88308,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             bmplen = (uimCylcnt - 2) * USB_BUF_SIZE;
                             bmplen += lastCylen;
 
+                            ringcons = uimCylcnt;
+
                             #if 0// test code
                             if (buffidx >= 0) {
                                 ret = aspBMPdecodeItemGet(&rs->pbDecMfour[buffidx]->aspDecJpeg, &bmpbuff);
@@ -88313,6 +88330,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         
                             bmpbufc = 0;
                             cpylen = 0;
+                            addfirst = 0;
+                            addlast = 0;
         
                             ret = cfgTableGetChk(pct, ASPOP_FILE_FORMAT, &fformat, ASPOP_STA_CON);    
                             //sprintf_f(rs->logs, "[BMP] get file format ret: %d format: 0x%.2x !!!\n", ret, fformat);
@@ -88667,16 +88686,20 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                         }
                     }
                 }
-        
+
+                //sprintf(rs->logs, "__MEMCOPY_ING__(%d)__", (ringidx + ringcons)); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 36, rs->logs);
+                                    
+
                 if (uimCylcnt) {
                     lens = 0;
-                    lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
+                    lens = ring_buf_cons_up(usbCur, &addrd, &addrb, &ringidx);                
                     while (lens < 0) {
                         //sprintf_f(rs->logs, "[DV] cons ring buff ret: %d \n", lens);
                         //print_f(rs->plogs, sp, rs->logs);
         
                         usleep(500);
-                        lens = ring_buf_cons_up(usbCur, &addrd, &addrb);                
+                        lens = ring_buf_cons_up(usbCur, &addrd, &addrb, &ringidx);
                     }
         
                     if (lens & 0x40000) {
@@ -88694,19 +88717,67 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     msync(pinfcur, sizeof(struct usbHostmem_s), MS_SYNC);
         
                     #if GHP_EN_JPGH
+
+                    #if 0 //BMP_NO_CPY
+                    sprintf(rs->logs, "__MEMCOPY_ING_S(%d)__", uimCylcnt); 
+                    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 36, rs->logs);
+                    #endif
+                                
                     if (bmpbufc) {
                         cpylen += lens;
 
                         if (cpylen < bmpmax) {
+
+                            #if BMP_NO_CPY
+                            if (fformat == FILE_FORMAT_RAW) {
+                                if ((ringidx + ringcons) > RING_BUFF_NUM_USB) {
+                                    bmpcpy = memcpy(bmpbufc, addrd, lens);
+                                    msync(bmpcpy, lens, MS_SYNC);
+                                    bmpbufc = bmpcpy + lens;
+
+                                    //sprintf(rs->logs, "__MEMCOPY_NG__(%d)__", (ringidx + ringcons)); 
+                                    //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 36, rs->logs);
+                                    
+                                }
+                            } else {
+                                bmpcpy = memcpy(bmpbufc, addrd, lens);
+                                msync(bmpcpy, lens, MS_SYNC);    
+                                bmpbufc = bmpcpy + lens;                        
+                            }
+
+                            if (uimCylcnt > 0) {
+                                if (!addfirst) {
+                                    addfirst = addrd;
+                                    addlast = addrd;
+                                
+                                    cpysz = lens;
+                                } else {
+                                    addlast = addrd;
+                                
+                                    cpysz += lens;
+                                }
+                            }
+
+                            sprintf_f(rs->logs, "[BMP] addrd copy len: %d, offset: %d \n", cpysz, (addlast - addfirst) + lens);
+                            print_f(rs->plogs, sp, rs->logs);
+                            #else
                             bmpcpy = memcpy(bmpbufc, addrd, lens);
                             msync(bmpcpy, lens, MS_SYNC);    
-                            bmpbufc = bmpcpy + lens;
+                            bmpbufc = bmpcpy + lens;        
+                            #endif
                         }
+
         
                         //shmem_dump(bmpcpy, 128);
-                        //sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d \n", lens, cpylen);
-                        //print_f(rs->plogs, sp, rs->logs);
+                        sprintf_f(rs->logs, "[BMP] copy len: %d, total: %d \n", lens, cpylen);
+                        print_f(rs->plogs, sp, rs->logs);
                     }
+
+                    #if 0 //BMP_NO_CPY
+                    sprintf(rs->logs, "__MEMCOPY_ING_E(%d)__", uimCylcnt); 
+                    tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 36, rs->logs);
+                    #endif
+
                     #endif //#if GHP_EN_JPGH
                     
                     upas = pinfcur->ushostpause;
@@ -88928,7 +88999,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 
                 if (che == 'E') break;
             }
-
+            
             sprintf(rs->logs, "__MEMCOPY_END(%d)__", buffidx); 
             tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
 
@@ -89081,7 +89152,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     } else {
                         aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, bmph, rawlen);
                     }
-                    jpgout = bmpbuff;
+                    jpgout = bmpbuff;                    
                     break;
                 }
                 
@@ -89112,6 +89183,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 case FILE_FORMAT_JPG:
                     
                     aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecJpeg, bmpw, val, bhlen);
+
+                    #if BMP_NO_CPY
+                    rs->pbDecMfour[buffidx]->aspDecRaw.aspDcRingAddr = 0;
+                    #endif
+                    
                     break;
                 case FILE_FORMAT_RAW:
                     pdecraw = &rs->pbDecMfour[buffidx]->aspDecRaw;
@@ -89127,6 +89203,14 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     
                     aspBMPdecodeItemSet(&rs->pbDecMfour[buffidx]->aspDecRaw, bmpw, val, bhlen);
                     jpgout = bmpbuff;
+
+                    #if BMP_NO_CPY
+                    if ((ringidx + ringcons) <= RING_BUFF_NUM_USB) {
+                        rs->pbDecMfour[buffidx]->aspDecRaw.aspDcRingAddr = addfirst;                    
+                        jpgout = addfirst;
+                    }
+                    #endif
+                    
                     break;
                 default:
                     break;
@@ -89823,6 +89907,13 @@ static int p15(struct procRes_s *rs)
                     if ((!ret) && (tmplen == 0) && (rawlen == 0)) {
                         pdecraw = &rs->pbDecMfour[mfbidx]->aspDecRaw;     
                         err = aspBMPdecodeItemGet(pdecraw, &buffraw, &rawlen);
+
+                        #if BMP_NO_CPY
+                        if (pdecraw->aspDcRingAddr) {
+                            buffraw = pdecraw->aspDcRingAddr;
+                        }
+                        #endif
+                        
                         if ((!err) && (rawlen > 0)) {
                         
                             memcpy(bufftmp, buffraw, rawlen);
@@ -92409,7 +92500,8 @@ int main(int argc, char *argv[])
         ix = 0;
         sprintf_f(pmrs->log, "[%s] table size: %d, addr0: \n", usbhostpath1, RING_BUFF_NUM_USB);
         print_f(pmrs->plog, "USB", pmrs->log);
-        for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+       // for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+        for (ix=RING_BUFF_NUM_USB - 1; ix >= 0; ix--) {        
             ut32 = usbh[0]->ushostblphy[ix];
         
             #if LOG_PHY_MEM
@@ -92545,7 +92637,8 @@ int main(int argc, char *argv[])
         ix = 0;
         sprintf_f(pmrs->log, "[%s] table size: %d, addr0: \n", usbhostpath2, RING_BUFF_NUM_USB);
         print_f(pmrs->plog, "USB", pmrs->log);
-        for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+        //for (ix=0; ix < RING_BUFF_NUM_USB; ix++) {
+        for (ix=RING_BUFF_NUM_USB - 1; ix >= 0; ix--) {
             ut32 = usbh[1]->ushostblphy[ix];
         
             #if LOG_PHY_MEM
